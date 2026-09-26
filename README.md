@@ -51,14 +51,7 @@ build の経過は `${XDG_STATE_HOME:-~/.local/state}/agents-daemon/logs/build.l
 ## セットアップ
 
 install 後に herdr の pane の中で Claude Code を起動し､`/agents-daemon:setup` を実行する｡
-skill が次を確かめ､足りないものの直し方を示す｡利用者のファイルを書き換えるときは先に確認を取る｡
-
-- herdr / go / jq があるか
-- herdr の server が動いていて､このセッションの pane が見えるか
-- statusline が `rate-limits/` と `context/` の state file を書いているか｡書いていなければ statusline に貼るスニペットを示す
-- バイナリが建っているか
-
-state file の書式は `skills/agents-daemon/references/architecture.md` の「statusline が書く state」にある｡
+前提がそろっているかを確かめ､statusline への書き込みが無ければ足す案を出す｡
 
 ## 設定
 

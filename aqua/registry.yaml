@@ -1,0 +1,17 @@
+---
+# yaml-language-server: $schema=https://raw.githubusercontent.com/aquaproj/aqua/main/json-schema/registry.json
+# aqua の標準レジストリに存在しないパッケージだけを定義するローカルレジストリ｡
+# aqua.yaml から `registry: local` で参照する｡
+packages:
+  # fdaines/spm-go は標準レジストリに owner ごと存在せず (pkgs/fdaines/ が無い)､
+  # GitHub Releases もタグしか無いため go_install で入れる｡
+  - name: fdaines/spm-go
+    type: go_install
+    path: github.com/fdaines/spm-go
+    repo_owner: fdaines
+    repo_name: spm-go
+    description: Software Package Metrics tool for Go
+    link: https://github.com/fdaines/spm-go
+    version_source: github_tag
+    files:
+      - name: spm-go

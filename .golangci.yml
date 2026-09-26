@@ -1,0 +1,66 @@
+# .golangci.yml
+# アーキテクチャメトリクス向け golangci-lint v2 設定
+# 参考: ソフトウェアアーキテクチャメトリクス (ISBN: 9784814400607)
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    # --- テスト可能性メトリクス ---
+    - gocognit   # 認知的複雑度: コードの理解しやすさを数値化
+    - gocyclo    # 循環複雑度: 分岐の多さを数値化 (McCabe)
+    - cyclop     # 循環複雑度: パッケージ全体も対象
+    - funlen     # 関数の長さ: 行数と文数の上限
+    - nestif     # ネストの深さ: if/for の入れ子レベル
+    # --- 保守性メトリクス ---
+    - maintidx   # 保守性指数: 複雑度・行数・Halstead の複合指標
+    # --- 高度な静的解析 ---
+    - staticcheck  # standard に含まれるが明示的に指定
+
+  # しきい値は目標値 (gocognit 20 / gocyclo 15 / cyclop 15 / funlen 80 行 40 文 /
+  # nestif 5 / maintidx 20) で測り、
+  # 超えたものだけ実測最大値の直上へ置いた｡ここから上がる変更はレビューで理由を問う｡
+  settings:
+    # 認知的複雑度: 実測最大値 28 (RunForeground)
+    gocognit:
+      min-complexity: 29
+
+    # 循環複雑度 (McCabe): 実測最大値 21 (Outcome.String)
+    # Outcome.String は列挙値を文字列へ写す switch で、分岐の数がそのまま値になる｡
+    # 次点は logOutcome / RunForeground の 18
+    gocyclo:
+      min-complexity: 22
+
+    # 循環複雑度 (cyclop): 実測最大値 22 (Outcome.String)｡次点は logOutcome の 19
+    cyclop:
+      max-complexity: 23
+
+    # 関数の長さ: 行数は実測最大値 106 (daemonRuntime.tick)｡次点は RunForeground の 93｡
+    # 文数は実測最大値 51 (RunInspect)｡次点は tick の 49
+    funlen:
+      lines: 107
+      statements: 52
+
+    # ネストの深さ: 目標値のまま違反なし
+    nestif:
+      min-complexity: 5
+
+    # 保守性指数: 20 未満は保守困難｡目標値のまま違反なし
+    maintidx:
+      under: 20
+
+  exclusions:
+    # 生成コードは全チェックを除外
+    paths:
+      - ".*\\.pb\\.go$"
+      - ".*_gen\\.go$"
+    # テーブル駆動テストは長さと複雑度が膨らみやすいので、メトリクス系は本体コードだけに効かせる
+    rules:
+      - path: "_test\\.go"
+        linters:
+          - cyclop
+          - errcheck   # テストセットアップ関数 (os.MkdirAll 等) の戻り値チェックを緩める
+          - funlen
+          - gocognit
+          - gocyclo
+          - maintidx

@@ -1,0 +1,37 @@
+#!/bin/bash
+# テスト用の go の代役｡`go build ... -o <path> ...` だけを模す｡
+#
+# - 呼び出しの引数を $TEST_TMPDIR/go.calls へ記録する
+# - <path> に､呼び出しを $TEST_TMPDIR/daemon.calls へ記録する fake daemon を作る
+# - GO_STUB_EXIT が 0 以外なら何も作らずその値で終わる
+# - GO_STUB_WAIT_FOR が指すファイルが現れるまで終わらない (detach の検証用､最大 10 秒)
+set -euo pipefail
+
+printf '%s\n' "$*" >>"$TEST_TMPDIR/go.calls"
+
+if [ -n "${GO_STUB_WAIT_FOR:-}" ]; then
+  for ((i = 0; i < 200; i++)); do
+    [ -e "$GO_STUB_WAIT_FOR" ] && break
+    sleep 0.05
+  done
+fi
+
+if [ "${GO_STUB_EXIT:-0}" != 0 ]; then
+  exit "$GO_STUB_EXIT"
+fi
+
+out=""
+while [ $# -gt 0 ]; do
+  if [ "$1" = "-o" ]; then
+    out="$2"
+    shift
+  fi
+  shift
+done
+if [ -z "$out" ]; then
+  printf 'fake-go: -o not given\n' >&2
+  exit 2
+fi
+
+printf '#!/bin/bash\nprintf "%%s\\n" "$*" >>"%s"\n' "$TEST_TMPDIR/daemon.calls" >"$out"
+chmod +x "$out"

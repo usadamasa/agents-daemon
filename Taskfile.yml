@@ -1,0 +1,51 @@
+version: '3'
+
+tasks:
+  build:
+    desc: cmd/ の全 Go バイナリを bin/ にビルド
+    # -o に末尾スラッシュ付きのディレクトリを渡すと､go は main パッケージだけを選んで出力する｡
+    cmds:
+      - go build -o ./bin/ ./...
+
+  install:
+    desc: agents-daemon を hook と同じキャッシュ上の場所へビルドする
+    # SessionStart hook が使うビルドスクリプトをそのまま呼ぶ｡置き場所と stamp の書き方を
+    # 1 箇所に閉じるため｡動作中の daemon は実行ファイルの差し替えを検知して入れ替わる
+    # (internal/daemon/selfupdate.go)｡
+    cmds:
+      - hooks/build-daemon.sh
+
+  test:
+    desc: Go テストと bats テストを実行
+    cmds:
+      - go test ./...
+      - bats tests/
+
+  test-cover:
+    desc: カバレッジ付きテスト
+    cmds:
+      - go test -coverprofile=coverage.out ./...
+      - go tool cover -func=coverage.out
+
+  vet:
+    desc: go vet を実行
+    cmds:
+      - go vet ./...
+
+  lint:
+    desc: Go の全静的解析を実行
+    env:
+      # spm-go がローカルレジストリ由来なので policy を渡す (CI は direnv を通らない)｡
+      # 絶対パスにするのは､go-arch-lint が各パッケージのディレクトリを cwd にして go を起動するため｡
+      AQUA_POLICY_CONFIG: '{{.TASKFILE_DIR}}/aqua/policy.yaml'
+    cmds:
+      - golangci-lint run --timeout 5m ./...
+      - go-arch-lint check
+      # go-arch-lint はコードが設定に違反していないかしか見ない｡設定そのものが
+      # パッケージツリーの転記へ劣化していく方向はこちらが止める｡指標の意味と対処は
+      # `go tool analyze-arch-lint --metrics`｡
+      - go tool analyze-arch-lint --strict .
+      - govulncheck ./...
+      - gosec ./...
+      - go tool analyze-modularity --strict .
+      - spm-go all

@@ -16,13 +16,14 @@ statusline の中身を grep して判定しない (書き方は人によって�
 
 各段の結果を OK / NG / 情報 で控え､最後にまとめて報告する｡
 NG の段は直し方を示すが､利用者のファイル (statusline のスクリプト､settings.json) を書き換える前に必ず確認を取る｡
+
 ## 1. コマンドの有無
 
 ```sh
 command -v herdr go jq
 ```
 
-- `herdr`: 無ければ NG｡daemon は herdr の CLI で pane を見て送信するので､代わりが無い｡<https://herdr.dev> を案内する｡
+- `herdr`: 無ければ NG｡daemon は herdr の CLI で pane の画面を読み､プロンプトを送る｡herdr の代わりになる経路は無い｡<https://herdr.dev> を案内する｡
 - `go`: 無ければ NG｡SessionStart hook が plugin のソースから `go build` する｡
   hook は Claude Code を起動したシェルの PATH で探すので､入れた後は Claude Code を起動し直す｡
 - `jq`: 無ければ NG｡hook と下の statusline のスニペットが使う｡
@@ -52,8 +53,8 @@ herdr pane list | jq -c --arg sid "$sid" \
 ## 3. statusline が state file を書いているか
 
 置き場は `${XDG_STATE_HOME:-$HOME/.local/state}/agents-daemon/`｡
-statusline は描画のたびに `context/<session_id>.json` を書くので､
-この skill を動かしているセッション自身のファイルがあり､`observed_at` が新しければ配線は生きている｡
+statusline は描画のたびに `context/<session_id>.json` を書く｡
+この skill を動かしているセッションのファイルを開き､その `observed_at` が新しければ配線は生きている｡
 
 ```sh
 sid=$("${CLAUDE_PLUGIN_ROOT}/scripts/get-session-id.sh")
@@ -80,7 +81,8 @@ jq -c . "$state/rate-limits/$sid.json"
 
 ### statusline へ足す
 
-まず statusline がどこに設定されているかを見る｡後に書いたものが勝つ｡
+まず statusline がどこに設定されているかを見る｡
+複数のファイルに書かれていれば､下のループで後に出たファイルの設定が効く｡
 
 ```sh
 for f in "$HOME/.claude/settings.json" .claude/settings.json .claude/settings.local.json; do
@@ -91,7 +93,7 @@ done
 - `statusLine` がどこにも無い: statusline のスクリプトを新しく作り､`statusLine` に登録する案を示す｡
 - `statusLine.command` がスクリプトを指している: そのスクリプトを Read し､stdin の JSON を変数へ読んでいる箇所の後ろに
   下のスニペットを足す案を示す｡既に `agents-daemon` の state を書く処理があるのにファイルができていないなら､
-  足さずにその処理の置き場 (早期 return の後ろにある､書き込み先が違う､など) を調べる｡
+  足さずに､その処理が効いていない理由 (早期 return の後ろにある､書き込み先が違う､など) を調べる｡
 
 どちらも差分を見せて確認を取ってから書き換える｡
 
@@ -128,8 +130,8 @@ if [ -n "$ad_sid" ]; then
 fi
 ```
 
-- statusline から plugin の中のスクリプト (`${CLAUDE_PLUGIN_ROOT}/...`) を呼ばせない｡plugin の install 先は version ごとに変わり､
-  更新した日から黙って書かれなくなる｡スニペットは statusline 側へ直接置く｡
+- statusline から plugin の中のスクリプト (`${CLAUDE_PLUGIN_ROOT}/...`) を呼ばせない｡plugin の install 先は version ごとに変わるので､
+  plugin を更新した日から state file が黙って書かれなくなる｡スニペットは statusline 側へ直接置く｡
 - 一時ファイルは書き込み先と同じディレクトリに作る｡別のファイルシステムだと `mv` が原子的でなくなり､daemon が書きかけを読む｡
 
 足した後は statusline が 1 回描画されるのを待ってから (次の応答の後)､この段の確認をやり直す｡
@@ -142,7 +144,7 @@ ls -l "$bin/agents-daemon" "$bin/agents-daemon.version"
 cat "$bin/agents-daemon.version"
 ```
 
-- 両方あれば OK｡stamp の値を報告に書く｡
+- 両方あれば OK｡`agents-daemon.version` (建てた元の plugin version を書いた stamp) の値を報告に書く｡
 - 無ければ NG｡`${XDG_STATE_HOME:-$HOME/.local/state}/agents-daemon/logs/build.log` の末尾を読む｡
   install 直後のセッションなら build がまだ走っている途中かもしれない｡`go not found in PATH` なら 1 段目へ戻る｡
   それ以外の失敗は `agents-daemon:agents-daemon` skill の「daemon が起きない・バイナリがビルドされない」から追う｡
@@ -157,8 +159,8 @@ cat "$bin/agents-daemon.version"
 
 pane 一覧､セッションごとの rate-limits の鮮度､config.json の実効値､daemon の稼働を出す｡
 `daemon は起動していません` なら､次のセッションの SessionStart で起きる｡
-すぐ起こしたいときは､利用者に次の 1 行をプロンプトへ打ってもらう｡
-Claude の Bash が sandbox の中で動く環境では､そこから起こした daemon が sandbox の制限を引き継ぐ｡
+すぐ起こしたいときも､Claude の Bash からは起こさない｡Bash が sandbox の中で動く環境では､
+そこから起こした daemon が sandbox の制限を引き継ぐ｡代わりに､利用者に次の 1 行をプロンプトへ打ってもらう｡
 
 ```sh
 ! "${XDG_CACHE_HOME:-$HOME/.cache}/agents-daemon/bin/agents-daemon" daemon --ensure
@@ -180,6 +182,7 @@ agents-daemon setup
 - 残っていること: <利用者の作業 | なし>
 ```
 
-context の自動 compact は既定で off｡使うかを聞き､使うなら `${XDG_CONFIG_HOME:-~/.config}/agents-daemon/config.json` に
+context の自動 compact は既定で off｡使うかを聞き､
+使うなら `${XDG_CONFIG_HOME:-$HOME/.config}/agents-daemon/config.json` に
 `{"compactAutoEnabled": true}` を書く案を示す (既存のファイルがあればキーを足す)｡他の設定キーは
 `agents-daemon:agents-daemon` skill の [operations.md](../agents-daemon/references/operations.md) にある｡

@@ -16,8 +16,6 @@ statusline の中身を grep して判定しない (書き方は人によって�
 
 各段の結果を OK / NG / 情報 で控え､最後にまとめて報告する｡
 NG の段は直し方を示すが､利用者のファイル (statusline のスクリプト､settings.json) を書き換える前に必ず確認を取る｡
-Bash の呼び出しをまたぐとシェル変数は消えるので､`sid` `state` `bin` は使う段ごとに取り直す｡
-
 ## 1. コマンドの有無
 
 ```sh
@@ -58,11 +56,14 @@ statusline は描画のたびに `context/<session_id>.json` を書くので､
 この skill を動かしているセッション自身のファイルがあり､`observed_at` が新しければ配線は生きている｡
 
 ```sh
+sid=$("${CLAUDE_PLUGIN_ROOT}/scripts/get-session-id.sh")
 state="${XDG_STATE_HOME:-$HOME/.local/state}/agents-daemon"
 jq -c --argjson now "$(date +%s)" '. + {age_seconds: ($now - .observed_at)}' "$state/context/$sid.json"
 ```
 
 ```sh
+sid=$("${CLAUDE_PLUGIN_ROOT}/scripts/get-session-id.sh")
+state="${XDG_STATE_HOME:-$HOME/.local/state}/agents-daemon"
 jq -c . "$state/rate-limits/$sid.json"
 ```
 
@@ -151,12 +152,17 @@ cat "$bin/agents-daemon.version"
 バイナリがあるときだけ､最後にまとめとして回す｡PATH には入っていないので絶対パスで呼ぶ｡
 
 ```sh
-"$bin/agents-daemon" doctor
+"${XDG_CACHE_HOME:-$HOME/.cache}/agents-daemon/bin/agents-daemon" doctor
 ```
 
 pane 一覧､セッションごとの rate-limits の鮮度､config.json の実効値､daemon の稼働を出す｡
 `daemon は起動していません` なら､次のセッションの SessionStart で起きる｡
-すぐ起こしたいなら `"$bin/agents-daemon" daemon --ensure`｡
+すぐ起こしたいときは､利用者に次の 1 行をプロンプトへ打ってもらう｡
+Claude の Bash が sandbox の中で動く環境では､そこから起こした daemon が sandbox の制限を引き継ぐ｡
+
+```sh
+! "${XDG_CACHE_HOME:-$HOME/.cache}/agents-daemon/bin/agents-daemon" daemon --ensure
+```
 
 ## 報告
 

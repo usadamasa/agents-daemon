@@ -1,7 +1,7 @@
 # AGENTS.md
 
 利用上限からの自動再開と context の自動 compact を担う常駐デーモンの Claude Code plugin｡
-Go のデーモン 1 本と､それを配線する hook 3 本・skill 3 本を持つ｡
+Go のデーモンと､それを配線する hook・skill を持つ｡
 
 ## レイアウト
 
@@ -15,7 +15,7 @@ Go のデーモン 1 本と､それを配線する hook 3 本・skill 3 本を�
 | `scripts/get-session-id.sh` | compact-prep / setup skill が呼ぶ session_id の取得 |
 | `skills/compact-prep/` | `/compact` 前の state file 保存 |
 | `skills/agents-daemon/` | 運用と切り分けの手引き｡配線・判定・設定キーの詳細は `references/` |
-| `skills/setup/` | install 後の前提確認 (herdr､go/jq､statusline の state file､バイナリ) と statusline への配線 |
+| `skills/setup/` | install 後の前提確認 (herdr､go/jq､statusline の state file､バイナリ)｡statusline へのスニペットは `references/` |
 | `cmd/agents-daemon/` | Go の main (cobra) |
 | `internal/` | daemon の本体｡パス定数は `internal/apppath` |
 | `tests/` | hook と script の bats テスト (`tests/lib/`､`tests/fixtures/`) |

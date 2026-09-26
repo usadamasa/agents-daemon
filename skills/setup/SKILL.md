@@ -14,7 +14,14 @@ agents-daemon が動くのに要る前提を上から順に確かめ､欠けて
 確かめるのは「設定が書いてあるか」ではなく「実際に動いた跡があるか」｡
 statusline の中身を grep して判定しない (書き方は人によって違い､書いてあっても動いていないことがある)｡
 
-各段の結果を OK / NG / 情報 で控え､最後にまとめて報告する｡
+各段の結果を次の 3 つのどれかで控え､最後にまとめて報告する｡
+
+| 判定 | 意味 |
+| ---- | ---- |
+| OK | 前提がそろっている |
+| NG | 欠けていて､daemon の役目のどれかが働かない｡直し方を示す |
+| 情報 | 欠けているが､利用者の環境ではそれが正常なこともある｡直さず､何が効かなくなるかだけ伝える |
+
 NG の段は直し方を示すが､利用者のファイル (statusline のスクリプト､settings.json) を書き換える前に必ず確認を取る｡
 
 ## 1. コマンドの有無
@@ -26,7 +33,7 @@ command -v herdr go jq
 - `herdr`: 無ければ NG｡daemon は herdr の CLI で pane の画面を読み､プロンプトを送る｡herdr の代わりになる経路は無い｡<https://herdr.dev> を案内する｡
 - `go`: 無ければ NG｡SessionStart hook が plugin のソースから `go build` する｡
   hook は Claude Code を起動したシェルの PATH で探すので､入れた後は Claude Code を起動し直す｡
-- `jq`: 無ければ NG｡hook と下の statusline のスニペットが使う｡
+- `jq`: 無ければ NG｡hook と､statusline に貼るスニペット ([statusline.md](references/statusline.md)) が使う｡
 
 ## 2. herdr の到達性と､このセッションの pane
 
@@ -53,8 +60,10 @@ herdr pane list | jq -c --arg sid "$sid" \
 ## 3. statusline が state file を書いているか
 
 置き場は `${XDG_STATE_HOME:-$HOME/.local/state}/agents-daemon/`｡
-statusline は描画のたびに `context/<session_id>.json` を書く｡
-この skill を動かしているセッションのファイルを開き､その `observed_at` が新しければ配線は生きている｡
+[architecture.md](../agents-daemon/references/architecture.md) の「statusline が書く state」は､
+statusline に描画のたびに `context/<session_id>.json` を書き直すよう求めている｡
+statusline がそのとおりに書かれていれば､この skill を動かしているセッションのファイルがあり､`observed_at` も新しい｡
+ファイルが無い､または古ければ､statusline が書いていないか､書き方が求めと違う｡
 
 ```sh
 sid=$("${CLAUDE_PLUGIN_ROOT}/scripts/get-session-id.sh")
@@ -73,7 +82,7 @@ jq -c . "$state/rate-limits/$sid.json"
 | `context/<sid>.json` があり､`age_seconds` が数分以内 | OK |
 | `context/<sid>.json` が無い､または古い | NG｡下の「statusline へ足す」へ進む |
 | `rate-limits/<sid>.json` がある | OK |
-| `rate-limits/<sid>.json` が無い | 情報｡NG にしない (下を参照) |
+| `rate-limits/<sid>.json` が無い | 情報 (下を参照) |
 
 `rate-limits/` は stdin に `rate_limits.five_hour.resets_at` が来たときだけ書かれる｡
 初回の API レスポンス前には来ないし､`rate_limits` が届かない契約 (Enterprise の seat など) ではずっと来ない｡
@@ -81,60 +90,8 @@ jq -c . "$state/rate-limits/$sid.json"
 
 ### statusline へ足す
 
-まず statusline がどこに設定されているかを見る｡
-複数のファイルに書かれていれば､下のループで後に出たファイルの設定が効く｡
-
-```sh
-for f in "$HOME/.claude/settings.json" .claude/settings.json .claude/settings.local.json; do
-  [ -f "$f" ] && jq -c --arg f "$f" 'select(.statusLine) | {file: $f, statusLine}' "$f"
-done
-```
-
-- `statusLine` がどこにも無い: statusline のスクリプトを新しく作り､`statusLine` に登録する案を示す｡
-- `statusLine.command` がスクリプトを指している: そのスクリプトを Read し､stdin の JSON を変数へ読んでいる箇所の後ろに
-  下のスニペットを足す案を示す｡既に `agents-daemon` の state を書く処理があるのにファイルができていないなら､
-  足さずに､その処理が効いていない理由 (早期 return の後ろにある､書き込み先が違う､など) を調べる｡
-
-どちらも差分を見せて確認を取ってから書き換える｡
-
-スニペットは stdin の JSON が `$input` に入っている前提｡state file の書式は
-[architecture.md](../agents-daemon/references/architecture.md) の「statusline が書く state」に従う｡
-
-```sh
-# agents-daemon の daemon が読む state file｡描画を壊さないよう失敗は握りつぶす
-ad_state="${XDG_STATE_HOME:-$HOME/.local/state}/agents-daemon"
-ad_sid=$(jq -r '.session_id // empty' <<<"$input" 2>/dev/null)
-if [ -n "$ad_sid" ]; then
-  {
-    ad_dir="$ad_state/context"
-    mkdir -p "$ad_dir" &&
-      ad_tmp=$(mktemp "$ad_dir/.context.XXXXXX") &&
-      jq -c '{session_id, used_percentage: ((.context_window.used_percentage // 0) | round), observed_at: (now | floor)}' \
-        <<<"$input" >"$ad_tmp" &&
-      mv "$ad_tmp" "$ad_dir/$ad_sid.json"
-  } 2>/dev/null || :
-  # five_hour が null の描画 (初回・ウィンドウの切り替わり) では書かず､既存ファイルも残す
-  if jq -e '.rate_limits.five_hour.resets_at // empty' <<<"$input" >/dev/null 2>&1; then
-    {
-      ad_dir="$ad_state/rate-limits"
-      mkdir -p "$ad_dir" &&
-        ad_tmp=$(mktemp "$ad_dir/.rate-limits.XXXXXX") &&
-        jq -c '.rate_limits as $r
-          | {five_hour: {used_percentage: ($r.five_hour.used_percentage // 0 | round), resets_at: $r.five_hour.resets_at}}
-          + (if $r.seven_day.resets_at then {seven_day: {used_percentage: ($r.seven_day.used_percentage // 0 | round), resets_at: $r.seven_day.resets_at}} else {} end)
-          + {observed_at: (now | floor), session_id}' \
-          <<<"$input" >"$ad_tmp" &&
-        mv "$ad_tmp" "$ad_dir/$ad_sid.json"
-    } 2>/dev/null || :
-  fi
-fi
-```
-
-- statusline から plugin の中のスクリプト (`${CLAUDE_PLUGIN_ROOT}/...`) を呼ばせない｡plugin の install 先は version ごとに変わるので､
-  plugin を更新した日から state file が黙って書かれなくなる｡スニペットは statusline 側へ直接置く｡
-- 一時ファイルは書き込み先と同じディレクトリに作る｡別のファイルシステムだと `mv` が原子的でなくなり､daemon が書きかけを読む｡
-
-足した後は statusline が 1 回描画されるのを待ってから (次の応答の後)､この段の確認をやり直す｡
+`context/<sid>.json` が NG なら､[statusline.md](references/statusline.md) を `Read` で開いて従う｡
+statusline の設定の置き場の調べ方､貼るスニペット､書き換えた後の確かめ方がある｡
 
 ## 4. バイナリ
 

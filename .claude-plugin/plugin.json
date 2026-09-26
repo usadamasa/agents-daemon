@@ -9,6 +9,7 @@
   "license": "MIT",
   "skills": [
     "./skills/compact-prep",
-    "./skills/agents-daemon"
+    "./skills/agents-daemon",
+    "./skills/setup"
   ]
 }

@@ -20,6 +20,7 @@ plugin が持つもの:
 | UserPromptSubmit hook | marker を見て､圧縮直後の 1 ターンだけ復旧ガイドを注入する |
 | `agents-daemon:compact-prep` skill | `/compact` 前に作業状態を state file へ保存する |
 | `agents-daemon:agents-daemon` skill | 運用と切り分けの手引き (症状から引く) |
+| `agents-daemon:setup` skill | 前提の確認と statusline への配線 |
 
 ## 前提
 
@@ -46,6 +47,10 @@ claude plugin install agents-daemon@agents-marketplace
 plugin を更新すると次の SessionStart で建て直される｡動作中の daemon は実行ファイルの差し替えを検知して自分で入れ替わる｡
 
 build の経過は `${XDG_STATE_HOME:-~/.local/state}/agents-daemon/logs/build.log` に残る｡
+
+install 後に herdr の pane の中で Claude Code を起動し､`/agents-daemon:setup` を実行する｡
+herdr と go / jq の有無､statusline が state file を書いているか､バイナリが建ったかを確かめ､
+statusline に書き込みが無ければ足す案を出す｡
 
 ## 設定
 

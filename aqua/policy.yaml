@@ -1,0 +1,22 @@
+---
+# yaml-language-server: $schema=https://raw.githubusercontent.com/aquaproj/aqua/main/json-schema/policy.json
+# aqua v2 は標準レジストリ以外のパッケージを既定で拒否する (code 002)｡
+# aqua/registry.yaml のローカルレジストリを明示的に許可する｡
+#
+# ファイル名を `aqua-policy.yaml` にしないのは意図的｡その名前だと aqua が
+# ディレクトリを遡って自動探索し､`aqua policy allow` するまで aqua 管理下の
+# 全コマンド (task, shellcheck …) が起動のたびに警告を出す｡端末ごとの
+# 許可状態を作らず Taskfile.yml の AQUA_POLICY_CONFIG だけで渡すため､
+# 自動探索されない場所に置く｡
+registries:
+  - type: standard
+    ref: semver(">= 4.0.0")
+  - name: local
+    type: local
+    # path はこのファイルからの相対で解決する (aqua.yaml からの相対ではない)｡
+    # 食い違うと照合が外れ､許可したはずのパッケージが code 002 で拒否される｡
+    path: registry.yaml
+
+packages:
+  - registry: standard
+  - registry: local

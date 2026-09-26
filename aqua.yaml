@@ -1,0 +1,22 @@
+---
+# yaml-language-server: $schema=https://raw.githubusercontent.com/aquaproj/aqua/main/json-schema/aqua-yaml.json
+aqua_version: ">=2.0.0"
+
+registries:
+  - type: standard
+    ref: v4.564.0
+  # 標準レジストリに存在しないパッケージ用｡定義は aqua/registry.yaml
+  - name: local
+    type: local
+    path: aqua/registry.yaml
+
+packages:
+  - name: go-task/task@v3.51.1
+  - name: fe3dback/go-arch-lint@v1.18.0
+  - name: koalaman/shellcheck@v0.10.0
+  - name: securego/gosec@v2.28.0
+  - name: golangci/golangci-lint@v2.13.1
+  - name: golang/vuln/govulncheck@v1.7.0
+  - name: suzuki-shunsuke/pinact@v4.1.0
+  - name: fdaines/spm-go@v0.11.1
+    registry: local

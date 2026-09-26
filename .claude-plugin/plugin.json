@@ -1,6 +1,6 @@
 {
   "name": "agents-daemon",
-  "version": "2026.0926.0",
+  "version": "2026.0926.01",
   "description": "Resume Claude Code sessions stopped by usage limits and drive /compact-prep then /compact when context runs high, via a resident daemon watching herdr panes",
   "author": {
     "name": "usadamasa"

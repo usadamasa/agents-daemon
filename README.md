@@ -20,13 +20,14 @@ plugin が持つもの:
 | UserPromptSubmit hook | marker を見て､圧縮直後の 1 ターンだけ復旧ガイドを注入する |
 | `agents-daemon:compact-prep` skill | `/compact` 前に作業状態を state file へ保存する |
 | `agents-daemon:agents-daemon` skill | 運用と切り分けの手引き (症状から引く) |
+| `agents-daemon:setup` skill | 前提の確認と statusline への配線 |
 
 ## 前提
 
 - **[herdr](https://herdr.dev)**: daemon は `herdr pane list` / `pane read` / `pane send-text` で pane を見て送信する｡
   herdr の外で動く Claude Code には何も届かない｡
 - **statusline が state file を書くこと**: 使用率と解除時刻は statusline の stdin にしか来ない｡
-  この plugin は statusline を含まないので､利用者の statusline が下の「statusline が書く state file」を書く｡
+  この plugin は statusline を含まないので､利用者の statusline に書き込みを足す (下の「セットアップ」で行う)｡
   書かれていなければ､上限側のゲートは働かず､compact の自動投入は動かない｡
 - **Go toolchain**: SessionStart hook が plugin のソースから `go build` でバイナリを建てる｡
   hook は Claude Code を起動したシェルの PATH で `go` を探す｡無ければ `brew install go` などで入れる｡
@@ -47,6 +48,11 @@ plugin を更新すると次の SessionStart で建て直される｡動作中�
 
 build の経過は `${XDG_STATE_HOME:-~/.local/state}/agents-daemon/logs/build.log` に残る｡
 
+## セットアップ
+
+install 後に herdr の pane の中で Claude Code を起動し､`/agents-daemon:setup` を実行する｡
+前提がそろっているかを確かめ､statusline への書き込みが無ければ足す案を出す｡
+
 ## 設定
 
 `${XDG_CONFIG_HOME:-~/.config}/agents-daemon/config.json`｡ファイルが無ければ全て既定値で動く｡
@@ -60,44 +66,6 @@ context の自動 compact を使う最小例:
 
 設定キーの一覧は `skills/agents-daemon/references/operations.md` にある｡
 
-## statusline が書く state file
-
-置き場は `${XDG_STATE_HOME:-~/.local/state}/agents-daemon/`｡どちらもセッションごとに別ファイルへ書き､
-同一ディレクトリの一時ファイルへ書いてから `mv` で置き換える (daemon が書きかけを読まないため)｡
-statusline の描画を壊さないよう､書き込みの失敗は握りつぶしてよい｡
-
-`rate-limits/<session_id>.json`: stdin の `rate_limits.five_hour.resets_at` があるときだけ書く｡
-null のとき (初回 API レスポンス前､ウィンドウ切り替えの瞬間) は書かず､既存ファイルも消さない｡
-
-```json
-{
-  "five_hour": {"used_percentage": 42, "resets_at": 1786851000},
-  "seven_day": {"used_percentage": 18, "resets_at": 1787300000},
-  "observed_at": 1786840000,
-  "session_id": "0f8e2a4c-1b3d-4e5f-8a9b-0c1d2e3f4a5b"
-}
-```
-
-`context/<session_id>.json`: 描画のたびに必ず書く｡`used_percentage` は stdin の `context_window.used_percentage`｡
-
-```json
-{"session_id": "0f8e2a4c-1b3d-4e5f-8a9b-0c1d2e3f4a5b", "used_percentage": 63, "observed_at": 1786840000}
-```
-
-`used_percentage` は整数に丸め､`resets_at` と `observed_at` は Unix epoch 秒で書く｡
-`seven_day` は入力にあるときだけ付ける｡
-
-jq で組み立てる例:
-
-```sh
-dir="${XDG_STATE_HOME:-$HOME/.local/state}/agents-daemon/context"
-mkdir -p "$dir" &&
-  tmp=$(mktemp "$dir/.context.XXXXXX") &&
-  jq -c '{session_id, used_percentage: ((.context_window.used_percentage // 0) | round), observed_at: (now | floor)}' \
-    <<<"$input" >"$tmp" &&
-  mv "$tmp" "$dir/$(jq -r .session_id <<<"$input").json"
-```
-
 ## コマンド
 
 バイナリは PATH に入らないので､絶対パスで呼ぶかそのディレクトリを PATH に足す｡
@@ -110,17 +78,6 @@ agents-daemon inspect --pane <id>        # 生きた pane の画面を分類す�
 agents-daemon daemon --foreground --dry-run  # 送信せずに判定だけ回す
 agents-daemon stop                       # 停止
 ```
-
-## 旧 claude-auto-retry からの移行
-
-1. 旧 daemon を止める (`claude-auto-retry stop`､または自己終了を待つ)｡
-2. 旧 hook と旧 `compact-prep` skill を `~/.claude/` から外す｡同名の skill が `~/.claude/skills/` に残っていると､
-   plugin の skill より先に当たる｡
-3. `~/.claude/auto-retry.json` の中身を `${XDG_CONFIG_HOME:-~/.config}/agents-daemon/config.json` へ移す｡
-   `compactAutoPrepMessage` を明示していたら `/agents-daemon:compact-prep` に変える (既定値はすでにこれ)｡
-4. statusline の書き込み先を `claude-auto-retry` から `agents-daemon` のディレクトリへ変える｡
-5. `~/.local/state/claude-auto-retry/` は読まれない｡消してよい｡
-6. plugin を install する (上の「インストール」)｡
 
 ## 開発
 

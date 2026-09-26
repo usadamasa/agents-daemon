@@ -72,6 +72,7 @@ herdr のペインを経由して動く常駐デーモン｡役目は 2 つ｡
 
 | 症状 | 見るところ |
 | ---- | ---- |
+| install したばかり､前提がそろっているか分からない | `agents-daemon:setup` skill |
 | 上限が解除されても再開しない | rate-limit.md の「待機時刻の決め方」「ゲート」 |
 | 関係ない pane にプロンプトが打ち込まれた | rate-limit.md の「limit の判定は 2 つの手がかりを要求する」「ゲート」 |
 | context が閾値を超えても compact が走らない | compact.md の「送信の条件」､operations.md の「既知の制約」 |

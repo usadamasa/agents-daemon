@@ -56,7 +56,7 @@ func TestClassify_実機で観測した上限到達画面(t *testing.T) {
 	})
 
 	t.Run("絶対時刻は statusline の resets_at と同じ時刻に読める", func(t *testing.T) {
-		// 同じ事象の statusline は resets_at = 1786851000 を渡していた (README 参照)｡
+		// 同じ事象の statusline は resets_at = 1786851000 を渡していた (skills/agents-daemon/references/architecture.md 参照)｡
 		// 画面の 12:30pm (Asia/Tokyo) がその epoch に一致することを固定する｡
 		now := time.Date(2026, 8, 16, 1, 0, 0, 0, time.UTC) // 10:00 JST
 		got, ok := ParseAbsoluteReset(realLimitScreen, 15, now, time.UTC)

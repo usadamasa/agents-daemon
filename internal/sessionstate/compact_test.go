@@ -95,7 +95,7 @@ func TestContextFresh(t *testing.T) {
 		{"context が無ければ false", &Compact{}, false},
 		{"maxAge 以内なら true", &Compact{HasContext: true, ObservedAt: now.Add(-time.Minute)}, true},
 		{"maxAge を超えたら false", &Compact{HasContext: true, ObservedAt: now.Add(-10 * time.Minute)}, false},
-		// IsFresh と揃えた挙動。クロックスキューのある state で compact を送らない側へ倒す。
+		// IsFresh と揃えた挙動｡クロックスキューのある state で compact を送らない側へ倒す｡
 		{"未来の観測は信用しない", &Compact{HasContext: true, ObservedAt: now.Add(time.Second)}, false},
 	} {
 		if got := tt.state.ContextFresh(now, 5*time.Minute); got != tt.want {

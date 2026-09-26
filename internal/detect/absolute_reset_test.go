@@ -5,13 +5,13 @@ import (
 	"time"
 )
 
-// 上限の画面に出る `resets 8:10am (Asia/Tokyo)` のような絶対時刻を読む。
-// statusline の resets_at (epoch) が無いセッション (上限中に開いた新規セッション、
-// 429 で弾かれた turn は state を書かない) の起床時刻はここから取る。
+// 上限の画面に出る `resets 8:10am (Asia/Tokyo)` のような絶対時刻を読む｡
+// statusline の resets_at (epoch) が無いセッション (上限中に開いた新規セッション､
+// 429 で弾かれた turn は state を書かない) の起床時刻はここから取る｡
 //
-// 実際の時刻の数字をこのファイルに書いてよいのは、テストコードは pane に表示され
-// にくく、表示されても Classify の二重シグナルを満たさない断片だけにしてあるため。
-// README には数字を書かない (real_sample_test.go と同じ理由)。
+// 実際の時刻の数字をこのファイルに書いてよいのは､テストコードは pane に表示され
+// にくく､表示されても Classify の二重シグナルを満たさない断片だけにしてあるため｡
+// README には数字を書かない (real_sample_test.go と同じ理由)｡
 
 var tokyo = time.FixedZone("Asia/Tokyo", 9*60*60)
 
@@ -42,7 +42,7 @@ func TestParseAbsoluteReset(t *testing.T) {
 			ok:     true,
 		},
 		{
-			name:   "既に過ぎた時刻は今日のまま返す (09:00 に 8:10am、明日の 8:10 は 6 時間より先)",
+			name:   "既に過ぎた時刻は今日のまま返す (09:00 に 8:10am､明日の 8:10 は 6 時間より先)",
 			screen: "⏺ You've hit your session limit · resets 8:10am (Asia/Tokyo)",
 			now:    jst(2026, 8, 28, 9, 0),
 			want:   jst(2026, 8, 28, 8, 10),

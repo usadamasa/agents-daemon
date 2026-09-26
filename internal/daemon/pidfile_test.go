@@ -8,9 +8,9 @@ import (
 	"testing"
 )
 
-// deadPID は「確実に生存していない」PID を用意する。ハードコードした数値を
-// 期待するのではなく、実際にプロセスを起動して終了を待つことで、テスト実行時の
-// PID 空間の状態に依存せず確実に dead な PID を得る。
+// deadPID は「確実に生存していない」PID を用意する｡ハードコードした数値を
+// 期待するのではなく､実際にプロセスを起動して終了を待つことで､テスト実行時の
+// PID 空間の状態に依存せず確実に dead な PID を得る｡
 func deadPID(t *testing.T) int {
 	t.Helper()
 	cmd := exec.Command("true")

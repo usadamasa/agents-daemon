@@ -8,13 +8,13 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/herdrcli"
 )
 
-// dryRunClient は herdrcli.Client のうち pane を書き換える操作だけを握りつぶし、
-// 「本来なら何を送っていたか」をログに残すデコレータ。読み取り (pane list /
-// pane read / 到達性確認) はそのまま通すので、検知と判定は本番と同じ経路を通る。
+// dryRunClient は herdrcli.Client のうち pane を書き換える操作だけを握りつぶし､
+// 「本来なら何を送っていたか」をログに残すデコレータ｡読み取り (pane list /
+// pane read / 到達性確認) はそのまま通すので､検知と判定は本番と同じ経路を通る｡
 //
-// 実環境で初めて daemon を回すときの安全弁として用意している。稼働中の
-// Claude セッションへ誤ってプロンプトを打ち込む事故は取り返しがつかないため、
-// 「送信だけしない」状態を作れることを検証手順の入口に据えている。
+// 実環境で初めて daemon を回すときの安全弁として用意している｡稼働中の
+// Claude セッションへ誤ってプロンプトを打ち込む事故は取り返しがつかないため､
+// 「送信だけしない」状態を作れることを検証手順の入口に据えている｡
 type dryRunClient struct {
 	inner herdrcli.Client
 	log   *applog.Logger

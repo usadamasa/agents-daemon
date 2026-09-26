@@ -1,7 +1,7 @@
 #!/usr/bin/env bats
 # compact-prep skill が state file の名前に使う session_id の取得を検証する｡
 #
-# 値はファイル名になるため、環境変数が無いときやパス区切りを含むときは推測せずに失敗させる｡
+# 値はファイル名になるため､環境変数が無いときやパス区切りを含むときは推測せずに失敗させる｡
 
 bats_require_minimum_version 1.5.0
 
@@ -10,7 +10,7 @@ setup() {
   SCRIPT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)/scripts/get-session-id.sh"
 }
 
-@test "CLAUDE_CODE_SESSION_ID が無ければ exit 1 し、何も出さない" {
+@test "CLAUDE_CODE_SESSION_ID が無ければ exit 1 し､何も出さない" {
   unset CLAUDE_CODE_SESSION_ID
   run_hook --separate-stderr "$SCRIPT"
   [ "$status" -eq 1 ]

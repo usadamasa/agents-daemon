@@ -1,8 +1,8 @@
 #!/bin/bash
-# UserPromptSubmit hook: PostCompact hook が残した marker を検出し、
+# UserPromptSubmit hook: PostCompact hook が残した marker を検出し､
 # 直後のユーザープロンプトに additionalContext で復旧ガイドを注入する｡
 #
-# PostCompact は additionalContext を返せないため、この 2 段構成で
+# PostCompact は additionalContext を返せないため､この 2 段構成で
 # 「圧縮直後の 1 ターンだけ復旧手順を Claude に伝える」を実現する｡
 # marker は一度読んだら削除する (one-shot)｡
 #
@@ -30,16 +30,16 @@ MARKER_FILE="$COMPACTED_DIR/$SESSION_ID"
 
 STATE_FILE=$(compact_state_file "$SESSION_ID")
 
-# 復旧ガイドは 1 本にまとめ、state file の有無だけ変数で埋める｡
+# 復旧ガイドは 1 本にまとめ､state file の有無だけ変数で埋める｡
 if [[ -f "$STATE_FILE" ]]; then
   STATE_STATUS="**あり**: \`$STATE_FILE\` を Read すると Active Plan / Current Phase / TaskList Summary / Session Decisions / Constraints and Blockers / Worker Topology / Editing Files / Recovery Notes の 8 セクションから現状を復元できます｡"
 else
-  STATE_STATUS="**なし**: 事前に \`/agents-daemon:compact-prep\` が呼ばれていません｡\`~/.claude/plans/\` から作業中の plan を探し、必要ならユーザーに現在のフェーズを確認してください｡次回は \`/compact\` 前に \`/agents-daemon:compact-prep\` を推奨します｡"
+  STATE_STATUS="**なし**: 事前に \`/agents-daemon:compact-prep\` が呼ばれていません｡\`~/.claude/plans/\` から作業中の plan を探し､必要ならユーザーに現在のフェーズを確認してください｡次回は \`/compact\` 前に \`/agents-daemon:compact-prep\` を推奨します｡"
 fi
 
 GUIDE=$(cat <<EOF
 [compact-recovery]
-直前のターンで /compact が実行されました｡圧縮サマリーは大意しか残っていないため、
+直前のターンで /compact が実行されました｡圧縮サマリーは大意しか残っていないため､
 以下の順で作業状態を復旧してください｡
 
 1. state file: $STATE_STATUS

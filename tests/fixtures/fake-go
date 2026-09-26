@@ -2,9 +2,9 @@
 # テスト用の go の代役｡`go build ... -o <path> ...` だけを模す｡
 #
 # - 呼び出しの引数を $TEST_TMPDIR/go.calls へ記録する
-# - <path> に、呼び出しを $TEST_TMPDIR/daemon.calls へ記録する fake daemon を作る
+# - <path> に､呼び出しを $TEST_TMPDIR/daemon.calls へ記録する fake daemon を作る
 # - GO_STUB_EXIT が 0 以外なら何も作らずその値で終わる
-# - GO_STUB_WAIT_FOR が指すファイルが現れるまで終わらない (detach の検証用、最大 10 秒)
+# - GO_STUB_WAIT_FOR が指すファイルが現れるまで終わらない (detach の検証用､最大 10 秒)
 set -euo pipefail
 
 printf '%s\n' "$*" >>"$TEST_TMPDIR/go.calls"

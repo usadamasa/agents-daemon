@@ -10,10 +10,10 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 )
 
-// defaultLogTailLines は `logs` が既定で表示する行数。
+// defaultLogTailLines は `logs` が既定で表示する行数｡
 const defaultLogTailLines = 80
 
-// newLogsCmd は `agents-daemon logs` を組み立てる。
+// newLogsCmd は `agents-daemon logs` を組み立てる｡
 func newLogsCmd() *cobra.Command {
 	var lines int
 	cmd := &cobra.Command{
@@ -34,9 +34,9 @@ func newLogsCmd() *cobra.Command {
 	return cmd
 }
 
-// printLogs は現行ログの末尾 n 行を w へ書く。ログが無いこと自体は異常では
-// ないので (daemon 未起動、あるいは報告すべき出来事が何も起きていない)、
-// エラーにせずその旨を伝える。
+// printLogs は現行ログの末尾 n 行を w へ書く｡ログが無いこと自体は異常では
+// ないので (daemon 未起動､あるいは報告すべき出来事が何も起きていない)､
+// エラーにせずその旨を伝える｡
 func printLogs(w io.Writer, p apppath.Paths, n int) error {
 	tail, err := applog.TailLogLines(p.LogFile(), n)
 	if err != nil {

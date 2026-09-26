@@ -9,40 +9,40 @@ import (
 	"time"
 )
 
-// windowFile は 1 つの利用上限ウィンドウの生の形。
+// windowFile は 1 つの利用上限ウィンドウの生の形｡
 type windowFile struct {
 	UsedPercentage float64 `json:"used_percentage"`
 	ResetsAt       int64   `json:"resets_at"` // Unix epoch 秒
 }
 
-// rateLimitFile は rate-limits/<session_id>.json の生の形。
-// seven_day も書かれているが読み手が無いので受けない。
+// rateLimitFile は rate-limits/<session_id>.json の生の形｡
+// seven_day も書かれているが読み手が無いので受けない｡
 type rateLimitFile struct {
 	FiveHour   windowFile `json:"five_hour"`
 	ObservedAt int64      `json:"observed_at"`
 	SessionID  string     `json:"session_id"`
 }
 
-// RateLimit は 1 セッションぶんの利用上限の状態。
+// RateLimit は 1 セッションぶんの利用上限の状態｡
 //
-// 5 時間ウィンドウが切り替わる瞬間、Claude Code は statusline に
-// five_hour: {used_percentage: null, resets_at: null} を渡す (実機で観測)。
-// encoding/json は null をゼロ値に読むため、そのままでは「使用率 0% / resets_at が
-// epoch 0」と区別が付かない。resets_at が 0 のウィンドウは実在しないので、
-// その場合は FiveHourResetsAt をゼロ値のままにして HasFiveHour で区別する。
+// 5 時間ウィンドウが切り替わる瞬間､Claude Code は statusline に
+// five_hour: {used_percentage: null, resets_at: null} を渡す (実機で観測)｡
+// encoding/json は null をゼロ値に読むため､そのままでは「使用率 0% / resets_at が
+// epoch 0」と区別が付かない｡resets_at が 0 のウィンドウは実在しないので､
+// その場合は FiveHourResetsAt をゼロ値のままにして HasFiveHour で区別する｡
 type RateLimit struct {
-	// SessionID はファイルの中身が名乗るセッション ID。
+	// SessionID はファイルの中身が名乗るセッション ID｡
 	SessionID string
-	// ObservedAt は statusline がその値を観測した時刻。
+	// ObservedAt は statusline がその値を観測した時刻｡
 	ObservedAt time.Time
-	// FiveHourUsed は 5 時間ウィンドウの使用率 (0..100)。
+	// FiveHourUsed は 5 時間ウィンドウの使用率 (0..100)｡
 	FiveHourUsed float64
-	// FiveHourResetsAt は 5 時間ウィンドウのリセット時刻。値が無ければゼロ値。
+	// FiveHourResetsAt は 5 時間ウィンドウのリセット時刻｡値が無ければゼロ値｡
 	FiveHourResetsAt time.Time
 }
 
-// IsFresh は観測が maxAge 以内かを返す。
-// statusline は画面に変化が無いと再描画を止めるため、古い state を検出できる必要がある。
+// IsFresh は観測が maxAge 以内かを返す｡
+// statusline は画面に変化が無いと再描画を止めるため､古い state を検出できる必要がある｡
 func (r *RateLimit) IsFresh(now time.Time, maxAge time.Duration) bool {
 	if r == nil {
 		return false
@@ -50,28 +50,28 @@ func (r *RateLimit) IsFresh(now time.Time, maxAge time.Duration) bool {
 	return fresh(r.ObservedAt, now, maxAge)
 }
 
-// HasFiveHour は 5 時間ウィンドウの有効な値を持つかを返す。
+// HasFiveHour は 5 時間ウィンドウの有効な値を持つかを返す｡
 func (r *RateLimit) HasFiveHour() bool {
 	return r != nil && !r.FiveHourResetsAt.IsZero()
 }
 
-// FiveHourExhausted は 5 時間ウィンドウの使用率が threshold 以上かを返す。
-// 「上限に達していそうか」の判定に使う。
+// FiveHourExhausted は 5 時間ウィンドウの使用率が threshold 以上かを返す｡
+// 「上限に達していそうか」の判定に使う｡
 func (r *RateLimit) FiveHourExhausted(threshold float64) bool {
 	return r != nil && r.FiveHourUsed >= threshold
 }
 
-// RateLimitFile は sessionID に対応する利用上限 state のパスを返す。
-// sessionID が空、または不正な文字を含む場合はエラーを返す。
+// RateLimitFile は sessionID に対応する利用上限 state のパスを返す｡
+// sessionID が空､または不正な文字を含む場合はエラーを返す｡
 func (s Store) RateLimitFile(sessionID string) (string, error) {
 	return sessionPath(s.RateLimits, sessionID, ".json")
 }
 
-// LoadRateLimit は sessionID に対応する利用上限 state を読み込む。
+// LoadRateLimit は sessionID に対応する利用上限 state を読み込む｡
 //
-// sessionID が空 (herdr が pane に agent session を紐づけていない) 場合は、
-// 判断材料が無いという正常系として (nil, nil) を返す。呼び出し元は nil の state を
-// 「ゲートを適用しない」として扱う。ファイルが無い場合も同じく (nil, nil)。
+// sessionID が空 (herdr が pane に agent session を紐づけていない) 場合は､
+// 判断材料が無いという正常系として (nil, nil) を返す｡呼び出し元は nil の state を
+// 「ゲートを適用しない」として扱う｡ファイルが無い場合も同じく (nil, nil)｡
 func (s Store) LoadRateLimit(sessionID string) (*RateLimit, error) {
 	path, err := s.RateLimitFile(sessionID)
 	if err != nil || path == "" {
@@ -80,9 +80,9 @@ func (s Store) LoadRateLimit(sessionID string) (*RateLimit, error) {
 	return readRateLimit(path)
 }
 
-// readRateLimit は path から利用上限 state を読み込む。
-// ファイルが存在しない場合は正常系として (nil, nil)、JSON が壊れている場合は
-// それと区別してエラーを返す。
+// readRateLimit は path から利用上限 state を読み込む｡
+// ファイルが存在しない場合は正常系として (nil, nil)､JSON が壊れている場合は
+// それと区別してエラーを返す｡
 func readRateLimit(path string) (*RateLimit, error) {
 	data, err := os.ReadFile(path) // #nosec G304 -- 呼び出し元が session ID を検証済みのパスを渡す
 	if err != nil {
@@ -107,22 +107,22 @@ func readRateLimit(path string) (*RateLimit, error) {
 	return state, nil
 }
 
-// maxResetAhead は LatestWindow が候補として受け付ける resets_at の上限 (now からの距離)。
-// 5 時間ウィンドウの解除が 5 時間より先になることは無い。他セッションの state まで
-// 信用する以上、1 ファイルのゴミが全 pane の起床時刻を汚さないよう、あり得ない値は弾く。
+// maxResetAhead は LatestWindow が候補として受け付ける resets_at の上限 (now からの距離)｡
+// 5 時間ウィンドウの解除が 5 時間より先になることは無い｡他セッションの state まで
+// 信用する以上､1 ファイルのゴミが全 pane の起床時刻を汚さないよう､あり得ない値は弾く｡
 const maxResetAhead = 6 * time.Hour
 
-// LatestWindow は全セッションの state のうち、5 時間ウィンドウの resets_at が
-// 最大のものを返す (同値なら observed_at が新しい方)。
+// LatestWindow は全セッションの state のうち､5 時間ウィンドウの resets_at が
+// 最大のものを返す (同値なら observed_at が新しい方)｡
 //
-// resets_at はアカウント全体で共通の値で、同じウィンドウ内に観測された全セッションが
-// 同じ resets_at を持つ (rate-limits/ 配下の実ファイルで確認済み)。だで自分の state を
-// 持たない pane (上限中に開いた新規セッション、429 で弾かれた turn は state を書かない)
-// でも、他セッションの state から現在のウィンドウの解除時刻を引ける。
+// resets_at はアカウント全体で共通の値で､同じウィンドウ内に観測された全セッションが
+// 同じ resets_at を持つ (rate-limits/ 配下の実ファイルで確認済み)｡だで自分の state を
+// 持たない pane (上限中に開いた新規セッション､429 で弾かれた turn は state を書かない)
+// でも､他セッションの state から現在のウィンドウの解除時刻を引ける｡
 //
-// 壊れたファイル、five_hour が null のファイル、now+maxResetAhead より先の resets_at を
-// 持つファイルは飛ばす。1 ファイルの不良で走査全体を失敗させない。ディレクトリが無い、
-// または有効なファイルが無ければ (nil, nil) を返す。
+// 壊れたファイル､five_hour が null のファイル､now+maxResetAhead より先の resets_at を
+// 持つファイルは飛ばす｡1 ファイルの不良で走査全体を失敗させない｡ディレクトリが無い､
+// または有効なファイルが無ければ (nil, nil) を返す｡
 func (s Store) LatestWindow(now time.Time) (*RateLimit, error) {
 	entries, err := os.ReadDir(s.RateLimits)
 	if err != nil {
@@ -152,7 +152,7 @@ func (s Store) LatestWindow(now time.Time) (*RateLimit, error) {
 	return best, nil
 }
 
-// newerWindow は a が b より新しいウィンドウ (resets_at が後、同値なら観測が後) かを返す。
+// newerWindow は a が b より新しいウィンドウ (resets_at が後､同値なら観測が後) かを返す｡
 func newerWindow(a, b *RateLimit) bool {
 	if !a.FiveHourResetsAt.Equal(b.FiveHourResetsAt) {
 		return a.FiveHourResetsAt.After(b.FiveHourResetsAt)

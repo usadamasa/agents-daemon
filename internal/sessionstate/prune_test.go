@@ -13,8 +13,8 @@ func TestPrune(t *testing.T) {
 	t.Run("保持期間を過ぎたものだけを消す", func(t *testing.T) {
 		s := New(t.TempDir())
 
-		// 利用上限 state は 24 時間。mktemp の残骸 (statusline が mv の前に殺されると残る)
-		// も同じ規則で消える。
+		// 利用上限 state は 24 時間｡mktemp の残骸 (statusline が mv の前に殺されると残る)
+		// も同じ規則で消える｡
 		fresh := filepath.Join(s.RateLimits, "fresh.json")
 		stale := filepath.Join(s.RateLimits, "stale.json")
 		leftover := filepath.Join(s.RateLimits, ".rate-limits.XXXX")
@@ -24,7 +24,7 @@ func TestPrune(t *testing.T) {
 		ageFile(t, stale, 25*time.Hour, now)
 		ageFile(t, leftover, 25*time.Hour, now)
 
-		// compact 系は 7 日。24 時間では消えないことが利用上限との差になる。
+		// compact 系は 7 日｡24 時間では消えないことが利用上限との差になる｡
 		keep := filepath.Join(s.CompactState, "recent.md")
 		drop := filepath.Join(s.Compacted, "old")
 		writeFile(t, keep, "")

@@ -6,12 +6,12 @@ import (
 	"testing"
 )
 
-// herdr 0.8.0 の send-text / send-keys / report-metadata は、成功したとき
-// stdout にも stderr にも何も出さず終了コード 0 だけを返す (実機で確認)。
+// herdr 0.8.0 の send-text / send-keys / report-metadata は､成功したとき
+// stdout にも stderr にも何も出さず終了コード 0 だけを返す (実機で確認)｡
 //
-// この応答に envelope を要求していたため、送信が届いているのに毎回失敗と判定され、
-// 再試行上限まで突き進んで自動再開が丸ごと機能しない状態になった。実運用で
-// 踏んだ回帰なので、現物の応答形をテストに固定しておく。
+// この応答に envelope を要求していたため､送信が届いているのに毎回失敗と判定され､
+// 再試行上限まで突き進んで自動再開が丸ごと機能しない状態になった｡実運用で
+// 踏んだ回帰なので､現物の応答形をテストに固定しておく｡
 func TestSendCommands_成功時は無出力で終了コード0(t *testing.T) {
 	ctx := context.Background()
 
@@ -40,7 +40,7 @@ func TestSendCommands_成功時は無出力で終了コード0(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name+" は無出力でも成功として扱う", func(t *testing.T) {
-			// 何も出力せず 0 で抜ける = herdr の成功時の振る舞い。
+			// 何も出力せず 0 で抜ける = herdr の成功時の振る舞い｡
 			c := newExecClientForTest(t, "exit 0", noCommandTimeout)
 			if err := tt.call(c); err != nil {
 				t.Errorf("%s() error = %v, want nil (無出力の終了コード 0 は成功)", tt.name, err)

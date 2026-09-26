@@ -13,23 +13,23 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 )
 
-// 画面テキストのテストフィクスチャ。
+// 画面テキストのテストフィクスチャ｡
 // detect パッケージの二重シグナル要件 (limit パターン + 近傍の reset パターン) を
-// 満たすものだけを使う。単発の "limit" という単語だけでは KindLimit にならない。
+// 満たすものだけを使う｡単発の "limit" という単語だけでは KindLimit にならない｡
 const (
-	// limitAndRelativeScreen は 1 行で limit + 相対時刻表現の両方を満たす。
-	// classify では KindLimit、ParseRelativeWait では 5 分と解釈される。
+	// limitAndRelativeScreen は 1 行で limit + 相対時刻表現の両方を満たす｡
+	// classify では KindLimit､ParseRelativeWait では 5 分と解釈される｡
 	limitAndRelativeScreen = "Try again in 5 minutes"
-	// limitAbsoluteScreen は limit フレーズと、相対表現でも am/pm の絶対時刻でもない
-	// reset 表現の組み合わせ。ParseRelativeWait も ParseAbsoluteReset も解釈できない
-	// (fallback 経路のテストに使う)。
+	// limitAbsoluteScreen は limit フレーズと､相対表現でも am/pm の絶対時刻でもない
+	// reset 表現の組み合わせ｡ParseRelativeWait も ParseAbsoluteReset も解釈できない
+	// (fallback 経路のテストに使う)｡
 	limitAbsoluteScreen = "Claude usage limit reached.\nYour limit resets at 15:00."
-	// limitAmPmScreen は実機と同じ形の絶対時刻 (am/pm + tz) を含む。
-	// ParseAbsoluteReset が読める (相対表現は無い)。
+	// limitAmPmScreen は実機と同じ形の絶対時刻 (am/pm + tz) を含む｡
+	// ParseAbsoluteReset が読める (相対表現は無い)｡
 	limitAmPmScreen = "⏺ You've hit your session limit · resets 8:10am (Asia/Tokyo)"
-	// transientScreen は直近出力ブロック内の 5xx エラー文言。
+	// transientScreen は直近出力ブロック内の 5xx エラー文言｡
 	transientScreen = "⏺ API Error: 500 Internal Server Error"
-	// cleanScreen は limit にも transient にも該当しない通常の画面。
+	// cleanScreen は limit にも transient にも該当しない通常の画面｡
 	cleanScreen = "$ some normal claude output\n⏺ done"
 )
 
@@ -71,13 +71,13 @@ func readReturning(screen string, err error) func(ctx context.Context, paneID st
 }
 
 func TestTick_AgentStatusNeverGatesDetection(t *testing.T) {
-	// herdr の agent_status は PTY の出力活動から推定される値で、上限で止まった
+	// herdr の agent_status は PTY の出力活動から推定される値で､上限で止まった
 	// pane を working と報告し続けることがある (teammate ウィジェットの経過時間
-	// カウンタのように毎秒再描画される要素があると idle へ落ちない)。
+	// カウンタのように毎秒再描画される要素があると idle へ落ちない)｡
 	//
-	// 上限で止まった pane は「working に見える pane」と区別できないため、
-	// agent_status を判定に使うと上限を取りこぼす。判定は画面テキストの分類
-	// (detect.Classifier) だけで行う。
+	// 上限で止まった pane は「working に見える pane」と区別できないため､
+	// agent_status を判定に使うと上限を取りこぼす｡判定は画面テキストの分類
+	// (detect.Classifier) だけで行う｡
 	for _, status := range []herdrcli.AgentStatus{
 		herdrcli.AgentStatusWorking,
 		herdrcli.AgentStatusIdle,
@@ -166,9 +166,9 @@ func TestTick_LimitDetected_ResetsAtWinsOverFallback(t *testing.T) {
 }
 
 func TestTick_StaleState_StillUsesResetsAt(t *testing.T) {
-	// 上限で止まったセッションは statusline を再描画しないため、state は必ず古くなる。
-	// resets_at は絶対時刻なので古くても正しい。ここで捨てると、正確な解除時刻を
-	// 持っているのに画面スクレイプへ後退してしまう。
+	// 上限で止まったセッションは statusline を再描画しないため､state は必ず古くなる｡
+	// resets_at は絶対時刻なので古くても正しい｡ここで捨てると､正確な解除時刻を
+	// 持っているのに画面スクレイプへ後退してしまう｡
 	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
 	rateState := &sessionstate.RateLimit{
 		FiveHourUsed:     95,
@@ -225,8 +225,8 @@ func TestTick_NoStateNoRelative_FallsBackToFallbackHours(t *testing.T) {
 }
 
 func TestTick_Gate_FreshStateThreshold(t *testing.T) {
-	// ゲートは「fresh な state があり、かつ使用率が閾値未満」の場合だけ発火を見送る。
-	// state が陳腐化していれば使用率に関わらず判断材料が無いとみなし、画面だけで判定する。
+	// ゲートは「fresh な state があり､かつ使用率が閾値未満」の場合だけ発火を見送る｡
+	// state が陳腐化していれば使用率に関わらず判断材料が無いとみなし､画面だけで判定する｡
 	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
 	cfg := config.Default() // UsedPercentageThreshold = 90, StateMaxAgeSeconds = 900
 
@@ -281,12 +281,12 @@ func TestTick_Gate_FreshStateThreshold(t *testing.T) {
 
 // TestTick_Gate_NullFiveHour_DoesNotSuppress は five_hour が null で書かれた state
 // (5 時間ウィンドウの切り替わり瞬間の statusline 描画) を「fresh な 0%」と読んで
-// ゲートで抑制しないことを確かめる。判断材料が無いのだから、state 無しと同じ扱いで
-// 画面判定をそのまま通す。
+// ゲートで抑制しないことを確かめる｡判断材料が無いのだから､state 無しと同じ扱いで
+// 画面判定をそのまま通す｡
 func TestTick_Gate_NullFiveHour_DoesNotSuppress(t *testing.T) {
 	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
 	rateState := &sessionstate.RateLimit{
-		// five_hour が null で書かれた state。FiveHourResetsAt がゼロ値のままになる。
+		// five_hour が null で書かれた state｡FiveHourResetsAt がゼロ値のままになる｡
 		ObservedAt: now.Add(-time.Minute), // fresh
 	}
 	client := &herdrclifake.Client{
@@ -307,13 +307,13 @@ func TestTick_Gate_NullFiveHour_DoesNotSuppress(t *testing.T) {
 }
 
 // TestTick_WakeWithLimitScreen_SendsDespiteFreshGate は待機明けに画面がまだ上限表示の
-// とき、fresh な state の使用率が閾値未満でも送信することを確かめる。
+// とき､fresh な state の使用率が閾値未満でも送信することを確かめる｡
 //
-// 解除時刻を過ぎると 5 時間ウィンドウは切り替わり使用率は下がるが、Claude Code は
-// 上限の画面のままキー入力を待つ。ここでゲートを効かせると「ユーザー自身が復帰した」と
-// 取り違えて監視へ戻り、15 分後に state が古くなってから改めて検知して、次のウィンドウの
-// resets_at (5 時間先) まで寝てしまう (2026-08-28 03:11 の取りこぼし)。
-// ゲートは待機に入るときの誤検知よけであって、待機明けの送信を止めるものではない。
+// 解除時刻を過ぎると 5 時間ウィンドウは切り替わり使用率は下がるが､Claude Code は
+// 上限の画面のままキー入力を待つ｡ここでゲートを効かせると「ユーザー自身が復帰した」と
+// 取り違えて監視へ戻り､15 分後に state が古くなってから改めて検知して､次のウィンドウの
+// resets_at (5 時間先) まで寝てしまう (2026-08-28 03:11 の取りこぼし)｡
+// ゲートは待機に入るときの誤検知よけであって､待機明けの送信を止めるものではない｡
 func TestTick_WakeWithLimitScreen_SendsDespiteFreshGate(t *testing.T) {
 	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
 	rateState := &sessionstate.RateLimit{
@@ -664,8 +664,8 @@ func TestTick_CleanScreen_StaysMonitoring(t *testing.T) {
 	}
 }
 
-// detect.Kind を直接参照して分類フィクスチャの前提が崩れていないことを確認する。
-// フィクスチャの文言を変えたときに、意図した Kind から静かにズレるのを防ぐ。
+// detect.Kind を直接参照して分類フィクスチャの前提が崩れていないことを確認する｡
+// フィクスチャの文言を変えたときに､意図した Kind から静かにズレるのを防ぐ｡
 func TestFixtures_ClassifyAsExpected(t *testing.T) {
 	c := newTestClassifier(t)
 	tests := []struct {
@@ -688,11 +688,11 @@ func TestFixtures_ClassifyAsExpected(t *testing.T) {
 }
 
 // TestTick_PastResetsAt_WakesImmediately は resets_at を過ぎているのに画面が上限
-// 表示のまま止まっている pane を、待たずに起こすことを確かめる。
+// 表示のまま止まっている pane を､待たずに起こすことを確かめる｡
 //
-// 解除時刻を過ぎても Claude Code はキー入力を待って止まったままになる。ここで
-// fallbackWaitHours へ落ちると、待つ理由が無いのに数時間寝てしまう
-// (2026-08-19 の pane が実際にこの状態だった)。
+// 解除時刻を過ぎても Claude Code はキー入力を待って止まったままになる｡ここで
+// fallbackWaitHours へ落ちると､待つ理由が無いのに数時間寝てしまう
+// (2026-08-19 の pane が実際にこの状態だった)｡
 func TestTick_PastResetsAt_WakesImmediately(t *testing.T) {
 	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
 	rateState := &sessionstate.RateLimit{
@@ -724,8 +724,8 @@ func TestTick_PastResetsAt_WakesImmediately(t *testing.T) {
 }
 
 // TestTick_StateWithoutResetsAt_FallsBackToRelativeParse は resets_at を持たない
-// state (7 日ウィンドウしか入っていない等) では画面の相対表現へ落ちることを確かめる。
-// epoch 0 を「過去の解除時刻」と読み違えて即起床させないための境界。
+// state (7 日ウィンドウしか入っていない等) では画面の相対表現へ落ちることを確かめる｡
+// epoch 0 を「過去の解除時刻」と読み違えて即起床させないための境界｡
 func TestTick_StateWithoutResetsAt_FallsBackToRelativeParse(t *testing.T) {
 	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
 	rateState := &sessionstate.RateLimit{

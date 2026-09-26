@@ -27,7 +27,7 @@ log_info() {
   printf '%s INFO   %s\n' "$_LOG_PREFIX" "$msg" >&2
 }
 
-# エラーメッセージ (常に出力、重大度: ERROR)
+# エラーメッセージ (常に出力､重大度: ERROR)
 log_error() {
   local msg="$1"
   printf '%s ERROR  %s\n' "$_LOG_PREFIX" "$msg" >&2

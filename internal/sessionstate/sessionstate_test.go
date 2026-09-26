@@ -7,10 +7,10 @@ import (
 	"time"
 )
 
-// TestNew_ディレクトリ名がシェル側の定数と一致する は protocol の固定。
+// TestNew_ディレクトリ名がシェル側の定数と一致する は protocol の固定｡
 // 書き出し側は利用者の statusline スクリプト (rate-limits / context) と
-// この plugin の skill・hook (compact-state / compacted) で、
-// 名前が片方だけ変わると daemon が黙って何も読めなくなる。
+// この plugin の skill・hook (compact-state / compacted) で､
+// 名前が片方だけ変わると daemon が黙って何も読めなくなる｡
 func TestNew_ディレクトリ名がシェル側の定数と一致する(t *testing.T) {
 	s := New("/state")
 
@@ -47,8 +47,8 @@ func TestRateLimitFile_不正なsessionIDを拒否する(t *testing.T) {
 	})
 }
 
-// fresh は IsFresh と ContextFresh の共通部。未来の観測を拒むことが要点で、
-// 拒まないとクロックスキューのある state で送信が起きる。
+// fresh は IsFresh と ContextFresh の共通部｡未来の観測を拒むことが要点で､
+// 拒まないとクロックスキューのある state で送信が起きる｡
 func Test_fresh(t *testing.T) {
 	now := time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)
 	maxAge := 5 * time.Minute

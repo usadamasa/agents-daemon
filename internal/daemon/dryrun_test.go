@@ -14,9 +14,9 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/herdrcli/herdrclifake"
 )
 
-// dryRunClient は稼働中の Claude セッションへの誤送信を防ぐ安全弁そのものなので、
+// dryRunClient は稼働中の Claude セッションへの誤送信を防ぐ安全弁そのものなので､
 // 「読み取り系はそのまま inner へ通す」「書き込み系は inner に絶対到達しない」を
-// 直接検証する。inner 側の FakeClient に到達したかどうかを Calls で確認する。
+// 直接検証する｡inner 側の FakeClient に到達したかどうかを Calls で確認する｡
 
 func TestDryRunClient_ReadOperationsPassThrough(t *testing.T) {
 	inner := &herdrclifake.Client{

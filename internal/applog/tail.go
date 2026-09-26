@@ -7,8 +7,8 @@ import (
 	"os"
 )
 
-// TailLogLines は path の末尾 n 行を返す。ファイルが存在しない場合は
-// (まだログが無い、あるいは daemon が動いていない) 空スライスを返す。
+// TailLogLines は path の末尾 n 行を返す｡ファイルが存在しない場合は
+// (まだログが無い､あるいは daemon が動いていない) 空スライスを返す｡
 func TailLogLines(path string, n int) ([]string, error) {
 	f, err := os.Open(path) // #nosec G304 -- 呼び出し元が固定パスを渡す
 	if err != nil {

@@ -11,9 +11,9 @@ import (
 	"time"
 )
 
-// writeFakeHerdr は HERDR_BIN_PATH に指せる shell script を作り、そのパスを返す。
+// writeFakeHerdr は HERDR_BIN_PATH に指せる shell script を作り､そのパスを返す｡
 // 実 herdr を使わずに exec 経路 (タイムアウト・非 0 exit・stdout/stderr 分離・
-// 引数の組み立て) を検証するため、実行可能な fake として振る舞わせる。
+// 引数の組み立て) を検証するため､実行可能な fake として振る舞わせる｡
 func writeFakeHerdr(t *testing.T, script string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -25,10 +25,10 @@ func writeFakeHerdr(t *testing.T, script string) string {
 	return path
 }
 
-// noCommandTimeout はタイムアウトを課さないことを表す。マシンの負荷で fake の
-// shell 起動が遅れただけでテストが落ちる (実際に落ちた) のを、制限時間を延ばして
-// 誤魔化すのではなく、時間の制約そのものを外して断ち切る。タイムアウトの挙動を
-// 検証するテストだけが、意図的に短い値を渡す。
+// noCommandTimeout はタイムアウトを課さないことを表す｡マシンの負荷で fake の
+// shell 起動が遅れただけでテストが落ちる (実際に落ちた) のを､制限時間を延ばして
+// 誤魔化すのではなく､時間の制約そのものを外して断ち切る｡タイムアウトの挙動を
+// 検証するテストだけが､意図的に短い値を渡す｡
 const noCommandTimeout = 0
 
 func newExecClientForTest(t *testing.T, script string, timeout time.Duration) *execClient {
@@ -56,7 +56,7 @@ func TestExecClient_PaneList_Success(t *testing.T) {
 }
 
 func TestExecClient_PaneGet_ErrorEnvelopeSurfacesAsError(t *testing.T) {
-	// pane_not_found を実機で確認したそのままの応答: exit 1 + JSON envelope。
+	// pane_not_found を実機で確認したそのままの応答: exit 1 + JSON envelope｡
 	script := `echo '{"error":{"code":"pane_not_found","message":"pane nonexistent-pane-id not found"},"id":"cli:pane:get"}'
 exit 1`
 	c := newExecClientForTest(t, script, noCommandTimeout)
@@ -108,7 +108,7 @@ func TestExecClient_Run_Timeout(t *testing.T) {
 }
 
 func TestExecClient_PaneRead_ReturnsRawText(t *testing.T) {
-	// pane read は envelope に包まれない生テキストを返す。JSON parse を試みてはいけない。
+	// pane read は envelope に包まれない生テキストを返す｡JSON parse を試みてはいけない｡
 	rawText := "  ⏺ main\n  ◯ impl-herdrcli\n"
 	script := "printf '%s' " + shellQuote(rawText)
 	c := newExecClientForTest(t, script, noCommandTimeout)
@@ -233,9 +233,9 @@ func TestNewExecClient_DefaultsToHerdrOnPath(t *testing.T) {
 	}
 }
 
-// captureArgsScript は受け取った引数をそのまま 1 行 1 引数で CAPTURE_FILE へ書き出す。
-// echo "$@" は引数間のスペースと引数内のスペースを区別できないため、
-// 値にスペースを含むケース (--title の日本語文言等) を正しく検証するために for ループで書く。
+// captureArgsScript は受け取った引数をそのまま 1 行 1 引数で CAPTURE_FILE へ書き出す｡
+// echo "$@" は引数間のスペースと引数内のスペースを区別できないため､
+// 値にスペースを含むケース (--title の日本語文言等) を正しく検証するために for ループで書く｡
 const captureArgsScript = `: > "$CAPTURE_FILE"
 for a in "$@"; do
   printf '%s\n' "$a" >> "$CAPTURE_FILE"
@@ -254,7 +254,7 @@ func readCapturedArgs(t *testing.T, path string) []string {
 	return strings.Split(s, "\n")
 }
 
-// shellQuote は sh の単一引用符リテラルとして安全な文字列に変換する。
+// shellQuote は sh の単一引用符リテラルとして安全な文字列に変換する｡
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }

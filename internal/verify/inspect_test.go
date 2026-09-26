@@ -15,8 +15,8 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/herdrcli/herdrclifake"
 )
 
-// 2026-08-16 に実機 (Claude Code 2.1.224) で採取した通常のフッター。
-// internal/detect のテストと同じ現物 (誤検知しないことの確認が主目的)。
+// 2026-08-16 に実機 (Claude Code 2.1.224) で採取した通常のフッター｡
+// internal/detect のテストと同じ現物 (誤検知しないことの確認が主目的)｡
 const inspectSampleNormalScreen = `  Bash(herdr pane read "$HERDR_PANE_ID" --source detection --lines 12)
 
 · Tinkering… (2m 52s · ↓ 9.0k tokens · thought for 8s)
@@ -28,8 +28,8 @@ const inspectSampleNormalScreen = `  Bash(herdr pane read "$HERDR_PANE_ID" --sou
   🌸 Opus 5 💎 ･ﾟ 💰 $1.60 ･ﾟ 🧠 104k (10%) ･ﾟ ⚡ high ･ﾟ 🎀 Mikawa ･ﾟ 🐣 v2.1.224
   ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents`
 
-// 2026-08-16 に実機で観測した実際の上限到達画面。internal/detect/real_sample_test.go
-// の realLimitScreen と同じ現物。
+// 2026-08-16 に実機で観測した実際の上限到達画面｡internal/detect/real_sample_test.go
+// の realLimitScreen と同じ現物｡
 const inspectSampleLimitScreen = `  ⏺ Bash(task test)
   ⎿  ✅ テスト完了
 
@@ -45,7 +45,7 @@ const inspectSampleLimitScreen = `  ⏺ Bash(task test)
 `
 
 // inspectTestSessionID は --file 経由のテストで利用上限 state を引くための
-// ダミーのセッション ID。
+// ダミーのセッション ID｡
 const inspectTestSessionID = "inspect-test-session"
 
 func TestRunInspect_サンプル画面での分類(t *testing.T) {
@@ -61,7 +61,7 @@ func TestRunInspect_サンプル画面での分類(t *testing.T) {
 		}
 		out := buf.String()
 		if !strings.Contains(out, "判定結果: none") {
-			t.Errorf("none 判定の報告が無い。出力:\n%s", out)
+			t.Errorf("none 判定の報告が無い｡出力:\n%s", out)
 		}
 		if strings.Contains(out, "起床時刻の算出") {
 			t.Errorf("none 判定なのに起床時刻の算出が出力されている: %s", out)
@@ -78,17 +78,17 @@ func TestRunInspect_サンプル画面での分類(t *testing.T) {
 		}
 		out := buf.String()
 		if !strings.Contains(out, "判定結果: limit") {
-			t.Errorf("limit 判定の報告が無い。出力:\n%s", out)
+			t.Errorf("limit 判定の報告が無い｡出力:\n%s", out)
 		}
 		if !strings.Contains(out, "起床時刻の算出") {
 			t.Errorf("limit 判定なのに起床時刻の算出が出力されていない: %s", out)
 		}
-		if !strings.Contains(out, "state ファイルが無いため、ゲートは働きません") {
+		if !strings.Contains(out, "state ファイルが無いため､ゲートは働きません") {
 			t.Errorf("state 無しのゲート報告が無い: %s", out)
 		}
-		// state が無くても、実機の画面には絶対時刻 (12:30pm (Asia/Tokyo)) があるので
-		// そこから起床時刻を決める。fixedNow (21:00 JST) では既に過ぎているため
-		// 解除済み扱いになる。fallback (5 時間待ち) へは落ちない。
+		// state が無くても､実機の画面には絶対時刻 (12:30pm (Asia/Tokyo)) があるので
+		// そこから起床時刻を決める｡fixedNow (21:00 JST) では既に過ぎているため
+		// 解除済み扱いになる｡fallback (5 時間待ち) へは落ちない｡
 		if !strings.Contains(out, "出所: 画面の絶対時刻 (既に経過") {
 			t.Errorf("画面の絶対時刻由来の起床時刻の報告が無い: %s", out)
 		}
@@ -152,13 +152,13 @@ func TestRunInspect_サンプル画面での分類(t *testing.T) {
 		if err := RunInspect(context.Background(), &buf, client, apppath.New(home, "", ""), "wH:p9", "", "", fixedNow); err != nil {
 			t.Fatalf("RunInspect() error = %v", err)
 		}
-		// PaneRead (画面) と PaneGet (どのセッションの利用上限 state を引くか) の 2 回。
-		// state はセッションごとに別ファイルなので、pane→session の解決が要る。
+		// PaneRead (画面) と PaneGet (どのセッションの利用上限 state を引くか) の 2 回｡
+		// state はセッションごとに別ファイルなので､pane→session の解決が要る｡
 		if got, want := len(client.Calls), 2; got != want {
 			t.Fatalf("Client への呼び出し回数 = %d, want %d (%v)", got, want, client.Calls)
 		}
-		// 期待値は設定の既定から引く。読み取り元の既定は viewport 制限を避けるために
-		// 変わりうるので、ここに値を直書きすると既定を変えるたびに嘘になる。
+		// 期待値は設定の既定から引く｡読み取り元の既定は viewport 制限を避けるために
+		// 変わりうるので､ここに値を直書きすると既定を変えるたびに嘘になる｡
 		wantSource := herdrcli.PaneReadSource(config.Default().ReadSource)
 		if gotOpts.Source != wantSource {
 			t.Errorf("PaneReadOptions.Source = %v, want %v (config.Default() の readSource)", gotOpts.Source, wantSource)

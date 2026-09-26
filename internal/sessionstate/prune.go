@@ -8,24 +8,24 @@ import (
 	"time"
 )
 
-// sidecar file は揮発物として扱い、daemon が古いものを消す。保持期間を設定キーに
-// せず定数に置くのは、config.json のキーを増やすほどの調整余地が無いため。
-// 「この state がいつまで意味を持つか」は書き出し側の protocol の知識なので、
-// 消す側 (daemon) ではなく読む側のここに置く。
+// sidecar file は揮発物として扱い､daemon が古いものを消す｡保持期間を設定キーに
+// せず定数に置くのは､config.json のキーを増やすほどの調整余地が無いため｡
+// 「この state がいつまで意味を持つか」は書き出し側の protocol の知識なので､
+// 消す側 (daemon) ではなく読む側のここに置く｡
 const (
-	// rateLimitRetention は利用上限 state を残す期間。resets_at は観測から高々
-	// 5 時間先で、LatestWindow は未来の resets_at しか使わないため、24 時間より
-	// 古い state が判定に効くことは無い。
+	// rateLimitRetention は利用上限 state を残す期間｡resets_at は観測から高々
+	// 5 時間先で､LatestWindow は未来の resets_at しか使わないため､24 時間より
+	// 古い state が判定に効くことは無い｡
 	rateLimitRetention = 24 * time.Hour
-	// compactRetention は compact 関連の state を残す期間。利用上限より長く取るのは、
-	// 復旧用 state file が「次のプロンプトで注入される」まで待つ側であり、
-	// セッションが放置されている間に消すと復旧材料そのものを失うため。
+	// compactRetention は compact 関連の state を残す期間｡利用上限より長く取るのは､
+	// 復旧用 state file が「次のプロンプトで注入される」まで待つ側であり､
+	// セッションが放置されている間に消すと復旧材料そのものを失うため｡
 	compactRetention = 7 * 24 * time.Hour
 )
 
-// Prune は保持期間を過ぎた sidecar file を削除し、消した数を利用上限 state と
-// compact state に分けて返す。ディレクトリが空文字列 (ゼロ値の Store) または
-// 存在しない場合は何もしない。
+// Prune は保持期間を過ぎた sidecar file を削除し､消した数を利用上限 state と
+// compact state に分けて返す｡ディレクトリが空文字列 (ゼロ値の Store) または
+// 存在しない場合は何もしない｡
 func (s Store) Prune(now time.Time) (rateLimits, compacts int, err error) {
 	var errs []error
 
@@ -43,15 +43,15 @@ func (s Store) Prune(now time.Time) (rateLimits, compacts int, err error) {
 	return rateLimits, compacts, errors.Join(errs...)
 }
 
-// pruneDir は dir 直下の通常ファイルのうち、mtime が now から maxAge より古いものを
-// 削除し、消した数を返す。
+// pruneDir は dir 直下の通常ファイルのうち､mtime が now から maxAge より古いものを
+// 削除し､消した数を返す｡
 //
-// 拡張子で絞らないのは、この 4 ディレクトリの中身が全てこの仕組みの書き出しで
-// あり (json / md / 拡張子なしの marker / statusline の mktemp の残骸)、名前で
-// 選り分ける意味が無いため。サブディレクトリは触らない。
+// 拡張子で絞らないのは､この 4 ディレクトリの中身が全てこの仕組みの書き出しで
+// あり (json / md / 拡張子なしの marker / statusline の mktemp の残骸)､名前で
+// 選り分ける意味が無いため｡サブディレクトリは触らない｡
 //
-// 判定に mtime を使うのは、中身 (observed_at) をパースせずに済ませるため。
-// 壊れた JSON も同じ規則で消える。
+// 判定に mtime を使うのは､中身 (observed_at) をパースせずに済ませるため｡
+// 壊れた JSON も同じ規則で消える｡
 func pruneDir(dir string, now time.Time, maxAge time.Duration) (int, error) {
 	if dir == "" {
 		return 0, nil

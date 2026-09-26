@@ -11,14 +11,14 @@ import (
 )
 
 const (
-	// nativeArmedScreen は Claude Code 自身の auto-continue がカウントダウン中の画面。
-	// 上限に当たった元の行も残っているので、二重シグナルは揃っている。
+	// nativeArmedScreen は Claude Code 自身の auto-continue がカウントダウン中の画面｡
+	// 上限に当たった元の行も残っているので､二重シグナルは揃っている｡
 	nativeArmedScreen = "⏺ You've hit your session limit · resets 5:00pm (Asia/Tokyo)\n\n" +
 		"Usage limit reached · continuing automatically at 5:00pm · esc or type to cancel"
-	// resumeReadyScreen は解除済みで Enter だけを待っている画面。
+	// resumeReadyScreen は解除済みで Enter だけを待っている画面｡
 	resumeReadyScreen = "Usage limit has reset · press enter to continue"
-	// hardCapScreen は待っても解除されない上限。2.1.239 でリセット時刻が併記される
-	// ようになり、二重シグナル要件を満たしてしまう。
+	// hardCapScreen は待っても解除されない上限｡2.1.239 でリセット時刻が併記される
+	// ようになり､二重シグナル要件を満たしてしまう｡
 	hardCapScreen = "⏺ You've hit your monthly spend limit · Your session limit resets 5:00pm"
 )
 
@@ -43,7 +43,7 @@ func TestTick_ネイティブauto_continue中は送信も待機もしない(t *t
 
 func TestTick_待機中にネイティブが再度予約したら送らず監視へ戻る(t *testing.T) {
 	// ここで Escape を送るとネイティブの継続そのものが取り消される
-	// ("esc or type to cancel")。起床時刻に達していても手を出さない。
+	// ("esc or type to cancel")｡起床時刻に達していても手を出さない｡
 	client := &herdrclifake.Client{PaneReadFunc: readReturning(nativeArmedScreen, nil)}
 	deps := newTestDeps(t, config.Default(), client)
 	pane := newTestPane(herdrcli.AgentStatusWorking, true)
@@ -99,7 +99,7 @@ func TestTick_enter待ちにはenterだけを送る(t *testing.T) {
 	ps := &PaneState{}
 	now := time.Now()
 
-	// 通常の上限と同じ状態機械に乗せる。待つ理由は無いので即座に起床時刻になる。
+	// 通常の上限と同じ状態機械に乗せる｡待つ理由は無いので即座に起床時刻になる｡
 	outcome, err := Tick(context.Background(), deps, pane, ps, nil, now)
 	if err != nil {
 		t.Fatalf("Tick() error = %v", err)
@@ -127,8 +127,8 @@ func TestTick_enter待ちにはenterだけを送る(t *testing.T) {
 }
 
 func TestTick_enterが効かないままなら最終的に打ち切る(t *testing.T) {
-	// Enter を押しても画面が変わらないことがある。ここで数え上げが効かないと
-	// 30 秒おきに永久に Enter を押し続ける pane ができる。
+	// Enter を押しても画面が変わらないことがある｡ここで数え上げが効かないと
+	// 30 秒おきに永久に Enter を押し続ける pane ができる｡
 	client := &herdrclifake.Client{PaneReadFunc: readReturning(resumeReadyScreen, nil)}
 	cfg := config.Default()
 	deps := newTestDeps(t, cfg, client)

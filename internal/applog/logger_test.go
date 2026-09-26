@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// newTestLogger は一時ディレクトリ配下の daemon.log へ書く Logger と、そのパスを返す。
+// newTestLogger は一時ディレクトリ配下の daemon.log へ書く Logger と､そのパスを返す｡
 func newTestLogger(t *testing.T, now func() time.Time) (*Logger, string) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "daemon.log")
@@ -80,8 +80,8 @@ func TestLogger_RotatesAtMidnight(t *testing.T) {
 }
 
 func TestLogger_RotatesStaleFileLeftByPreviousProcess(t *testing.T) {
-	// daemon の再起動を跨いで日付が変わっていた場合、前のプロセスが残した
-	// daemon.log は最終更新日 (mtime) の名前へ退避してから書き始める。
+	// daemon の再起動を跨いで日付が変わっていた場合､前のプロセスが残した
+	// daemon.log は最終更新日 (mtime) の名前へ退避してから書き始める｡
 	cur := time.Date(2026, 1, 3, 9, 0, 0, 0, time.UTC)
 	log, path := newTestLogger(t, func() time.Time { return cur })
 	touch(t, path, "前のプロセスの行\n", time.Date(2026, 1, 1, 20, 0, 0, 0, time.UTC))
@@ -99,7 +99,7 @@ func TestLogger_RotatesStaleFileLeftByPreviousProcess(t *testing.T) {
 }
 
 func TestLogger_AppendsAcrossInstancesWithinSameDay(t *testing.T) {
-	// 同じ日のうちの再起動では rotate せず追記する。
+	// 同じ日のうちの再起動では rotate せず追記する｡
 	day := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
 	now := func() time.Time { return day }
 	log1, path := newTestLogger(t, now)
@@ -107,7 +107,7 @@ func TestLogger_AppendsAcrossInstancesWithinSameDay(t *testing.T) {
 	if err := log1.Close(); err != nil {
 		t.Fatalf("Close() error = %v", err)
 	}
-	// mtime を「当日」に固定する (テストの実時刻とロガーの now がずれるため)。
+	// mtime を「当日」に固定する (テストの実時刻とロガーの now がずれるため)｡
 	if err := os.Chtimes(path, day, day); err != nil {
 		t.Fatalf("mtime の設定に失敗: %v", err)
 	}
@@ -132,7 +132,7 @@ func TestLogger_AppendsAcrossInstancesWithinSameDay(t *testing.T) {
 }
 
 func TestLogger_KeepsAppendingWhenRotatedNameIsTaken(t *testing.T) {
-	// 退避先が既にあるときは上書きせず、次の日付境界まで daemon.log へ追記し続ける。
+	// 退避先が既にあるときは上書きせず､次の日付境界まで daemon.log へ追記し続ける｡
 	cur := time.Date(2026, 1, 1, 23, 0, 0, 0, time.UTC)
 	log, path := newTestLogger(t, func() time.Time { return cur })
 	taken := RotatedPath(path, "2026-01-01")

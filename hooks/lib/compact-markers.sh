@@ -11,11 +11,11 @@
 # shellcheck disable=SC2034
 # 以下の定数は source した外部スクリプトから参照される｡この file 内では未使用に見えるが正常｡
 
-# base は agents-daemon の XDG state ディレクトリ｡daemon 側の internal/apppath と同じ規則で、
+# base は agents-daemon の XDG state ディレクトリ｡daemon 側の internal/apppath と同じ規則で､
 # rate-limits/ と兄弟になる｡片方だけ変えると protocol が黙って壊れる｡
 #
 # cwd 相対にはしない｡producer (statusline / hook / skill) と consumer (daemon) が
-# 別プロセスであり、hook に渡る cwd は Claude が cd したり worktree に入ると動くため、
+# 別プロセスであり､hook に渡る cwd は Claude が cd したり worktree に入ると動くため､
 # 書く場所と読む場所が食い違って protocol が黙って壊れる｡
 # $TMPDIR も使えない (sandboxed な skill と excluded で起動する hook とで解決値が違う)｡
 _CM_BASE="${XDG_STATE_HOME:-$HOME/.local/state}/agents-daemon"

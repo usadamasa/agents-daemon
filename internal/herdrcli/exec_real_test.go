@@ -7,9 +7,9 @@ import (
 	"time"
 )
 
-// TestExecClient_RealHerdr_PaneList は実 herdr バイナリに対する統合テスト。
-// herdr が PATH に無い、または server が起動していないマシンでは skip する
-// (このリポジトリの CI・他の開発機を壊さないため)。
+// TestExecClient_RealHerdr_PaneList は実 herdr バイナリに対する統合テスト｡
+// herdr が PATH に無い､または server が起動していないマシンでは skip する
+// (このリポジトリの CI・他の開発機を壊さないため)｡
 func TestExecClient_RealHerdr_PaneList(t *testing.T) {
 	if _, err := exec.LookPath("herdr"); err != nil {
 		t.Skip("herdr が PATH に無いので skip する")

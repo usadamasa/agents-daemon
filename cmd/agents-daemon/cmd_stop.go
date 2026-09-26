@@ -12,10 +12,10 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/daemon"
 )
 
-// stopTimeout は SIGTERM 送信後、daemon の終了を待つ最大時間。
+// stopTimeout は SIGTERM 送信後､daemon の終了を待つ最大時間｡
 const stopTimeout = 10 * time.Second
 
-// newStopCmd は `agents-daemon stop` を組み立てる。
+// newStopCmd は `agents-daemon stop` を組み立てる｡
 func newStopCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "stop",
@@ -30,9 +30,9 @@ func newStopCmd() *cobra.Command {
 	}
 }
 
-// stopDaemon は PID ファイルの daemon へ SIGTERM を送り、終了を確認してから
-// 戻る。daemon 自身の SIGTERM ハンドラが正常系では PID ファイルを削除するが、
-// 既に死んでいるプロセスの stale な PID ファイルはここで片付ける。
+// stopDaemon は PID ファイルの daemon へ SIGTERM を送り､終了を確認してから
+// 戻る｡daemon 自身の SIGTERM ハンドラが正常系では PID ファイルを削除するが､
+// 既に死んでいるプロセスの stale な PID ファイルはここで片付ける｡
 func stopDaemon(w io.Writer, p apppath.Paths, timeout time.Duration) error {
 	pid, err := daemon.ReadPIDFile(p.PIDFile())
 	if err != nil {
@@ -48,8 +48,8 @@ func stopDaemon(w io.Writer, p apppath.Paths, timeout time.Duration) error {
 
 	if err := syscall.Kill(pid, syscall.SIGTERM); err != nil {
 		return fmt.Errorf("daemon (pid %d) への SIGTERM 送信に失敗: %w\n"+
-			"Claude Code のセッション内 (sandbox) から実行するとシグナル送信がブロックされることがあります。"+
-			"通常のターミナルから実行するか、daemon のアイドル自動終了を待ってください。", pid, err)
+			"Claude Code のセッション内 (sandbox) から実行するとシグナル送信がブロックされることがあります｡"+
+			"通常のターミナルから実行するか､daemon のアイドル自動終了を待ってください｡", pid, err)
 	}
 
 	deadline := time.Now().Add(timeout)

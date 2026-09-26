@@ -37,7 +37,7 @@ func TestPaths_ConfigFile(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			// 設定と state の起点は独立している。XDG_STATE_HOME を指定しても設定の場所は動かない。
+			// 設定と state の起点は独立している｡XDG_STATE_HOME を指定しても設定の場所は動かない｡
 			p := New("/Users/x", "/xdg/state", tc.xdgConfigHome)
 			if got := p.ConfigFile(); got != tc.want {
 				t.Errorf("ConfigFile() = %q, want %q", got, tc.want)

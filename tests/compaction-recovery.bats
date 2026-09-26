@@ -1,8 +1,8 @@
 #!/usr/bin/env bats
-# PostCompact の marker 書き出しと、UserPromptSubmit の復旧ガイド注入の 2 段構成を検証する｡
+# PostCompact の marker 書き出しと､UserPromptSubmit の復旧ガイド注入の 2 段構成を検証する｡
 #
-# この 2 本が繋がらないと、daemon が compact を投入しても復旧材料が会話へ届かない｡
-# marker と state file の置き場は compact-markers.sh が XDG state 配下へ解決するため、
+# この 2 本が繋がらないと､daemon が compact を投入しても復旧材料が会話へ届かない｡
+# marker と state file の置き場は compact-markers.sh が XDG state 配下へ解決するため､
 # テストは XDG_STATE_HOME を一時ディレクトリへ差し替える｡
 
 setup() {

@@ -12,10 +12,10 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/daemon"
 )
 
-// statusLogTailLines は `status` が末尾に表示する現行ログの行数。
+// statusLogTailLines は `status` が末尾に表示する現行ログの行数｡
 const statusLogTailLines = 20
 
-// newStatusCmd は `agents-daemon status` を組み立てる。
+// newStatusCmd は `agents-daemon status` を組み立てる｡
 func newStatusCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
@@ -30,8 +30,8 @@ func newStatusCmd() *cobra.Command {
 	}
 }
 
-// printStatus は daemon の稼働状況、status.json のスナップショット、現行ログの
-// 末尾を w へ書く。daemon が起動していない場合はそれを明言して即座に戻る。
+// printStatus は daemon の稼働状況､status.json のスナップショット､現行ログの
+// 末尾を w へ書く｡daemon が起動していない場合はそれを明言して即座に戻る｡
 func printStatus(w io.Writer, p apppath.Paths, now time.Time) error {
 	pid, err := daemon.ReadPIDFile(p.PIDFile())
 	if err != nil {
@@ -64,12 +64,12 @@ func printStatus(w io.Writer, p apppath.Paths, now time.Time) error {
 	return nil
 }
 
-// printSnapshot は status.json の内容を書く。
+// printSnapshot は status.json の内容を書く｡
 //
-// snap.PID を現に動いている pid と突き合わせるのは、前のデーモンが残した
-// スナップショットを今のデーモンのものとして見せないため。突き合わせないと
-// 「起動: 16 分前」のように、実際には数秒前に起きたデーモンの情報として
-// 古い時刻が表示される (実際に踏んだ)。
+// snap.PID を現に動いている pid と突き合わせるのは､前のデーモンが残した
+// スナップショットを今のデーモンのものとして見せないため｡突き合わせないと
+// 「起動: 16 分前」のように､実際には数秒前に起きたデーモンの情報として
+// 古い時刻が表示される (実際に踏んだ)｡
 func printSnapshot(w io.Writer, snap *daemon.StatusSnapshot, pid int, now time.Time) {
 	if snap == nil || snap.PID != pid {
 		_, _ = fmt.Fprintln(w, "status snapshot がまだありません (起動直後の可能性があります)")

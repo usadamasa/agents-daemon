@@ -2,12 +2,12 @@
 # ensure-daemon.sh / build-daemon.sh のテスト用フィクスチャ｡
 #
 # PATH は差し引きではなく組み立てる｡hook が呼ぶコマンドだけを symlink した
-# ディレクトリを PATH にすれば、開発機でも CI でも `go` が無い状態を同じ形で作れる｡
+# ディレクトリを PATH にすれば､開発機でも CI でも `go` が無い状態を同じ形で作れる｡
 
 # hook・build・fake go が呼ぶ外部コマンド (bash の builtin は含めない)｡
 DAEMON_FIXTURE_COMMANDS=(jq mkdir mv mktemp nohup dirname rm rmdir chmod sleep date)
 
-# HOME と XDG の各ディレクトリを一時ディレクトリへ向け、PATH 用のディレクトリを作る｡
+# HOME と XDG の各ディレクトリを一時ディレクトリへ向け､PATH 用のディレクトリを作る｡
 # setup から呼ぶ｡呼んだ後は FIXTURE_PATH・BIN_DIR・BIN・STAMP・BUILD_LOG・LOCK が使える｡
 # shellcheck disable=SC2034 # 設定する変数は load した .bats 側が参照する
 setup_daemon_fixture() {

@@ -11,12 +11,12 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 )
 
-// 起床時刻の情報源は 3 つある: その pane のセッションの state (own)、画面の絶対時刻、
-// アカウント全体で最も新しいウィンドウの state (account)。優先順位は
-// ComputeLimitWake のコメントにあり、ここではその順位を表で固定する。
+// 起床時刻の情報源は 3 つある: その pane のセッションの state (own)､画面の絶対時刻､
+// アカウント全体で最も新しいウィンドウの state (account)｡優先順位は
+// ComputeLimitWake のコメントにあり､ここではその順位を表で固定する｡
 //
-// テストの時刻は全て JST で組む。画面の絶対時刻は tz 付き (Asia/Tokyo) で、
-// ComputeLimitWake は daemon のローカル tz を使うため、テストは local を差し込む。
+// テストの時刻は全て JST で組む｡画面の絶対時刻は tz 付き (Asia/Tokyo) で､
+// ComputeLimitWake は daemon のローカル tz を使うため､テストは local を差し込む｡
 
 var tokyo = time.FixedZone("Asia/Tokyo", 9*60*60)
 
@@ -142,9 +142,9 @@ func TestComputeLimitWake_Priority(t *testing.T) {
 	}
 }
 
-// 上限中に開いた新規セッションには state ファイルが無い。2026-08-28 07:35:55 に
-// 実際にこの形の pane を検知し、起床時刻が fallback (5 時間後) に落ちた。
-// アカウント全体の state を渡せば現在のウィンドウの解除時刻で起きる。
+// 上限中に開いた新規セッションには state ファイルが無い｡2026-08-28 07:35:55 に
+// 実際にこの形の pane を検知し､起床時刻が fallback (5 時間後) に落ちた｡
+// アカウント全体の state を渡せば現在のウィンドウの解除時刻で起きる｡
 func TestTick_FreshSession_NoOwnState_UsesAccountWindow(t *testing.T) {
 	now := jst(7, 35)
 	account := stateAt(jst(8, 10), 96)
@@ -172,8 +172,8 @@ func TestTick_FreshSession_NoOwnState_UsesAccountWindow(t *testing.T) {
 	}
 }
 
-// 画面の絶対時刻は daemon のローカル tz で読む。ComputeLimitWake (公開版) が
-// time.Local を使うことを、tz 付き画面で確かめる (tz 付きなら local に依らない)。
+// 画面の絶対時刻は daemon のローカル tz で読む｡ComputeLimitWake (公開版) が
+// time.Local を使うことを､tz 付き画面で確かめる (tz 付きなら local に依らない)｡
 func TestComputeLimitWake_ScreenAbsoluteWithTZ(t *testing.T) {
 	cfg := config.Default()
 	now := jst(7, 35)

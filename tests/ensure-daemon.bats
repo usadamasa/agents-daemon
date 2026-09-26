@@ -3,9 +3,9 @@
 #
 # - cache のバイナリと stamp が plugin の version と揃っていれば daemon --ensure を exec する
 # - 揃っていなければ build-daemon.sh を detach して即座に戻る (go build を前景で回さない)
-# - go が無ければ build.log に ERROR を残し、バイナリを作らない
+# - go が無ければ build.log に ERROR を残し､バイナリを作らない
 #
-# SessionStart hook の stdout は会話の context へ注入されるため、どの分岐でも stdout を空に保つ｡
+# SessionStart hook の stdout は会話の context へ注入されるため､どの分岐でも stdout を空に保つ｡
 
 bats_require_minimum_version 1.5.0
 
@@ -20,7 +20,7 @@ teardown() {
   teardown_daemon_fixture
 }
 
-@test "バイナリと stamp が揃っていれば daemon --ensure を exec し、build しない" {
+@test "バイナリと stamp が揃っていれば daemon --ensure を exec し､build しない" {
   make_fake_daemon "$TEST_TMPDIR/daemon.calls" "$BIN"
   printf '%s\n' "$PLUGIN_VERSION" >"$STAMP"
   install_fake_go
@@ -33,7 +33,7 @@ teardown() {
   [ ! -e "$BUILD_LOG" ]
 }
 
-@test "stamp が plugin の version と違えば build を detach し、完了後に新しいバイナリで daemon --ensure する" {
+@test "stamp が plugin の version と違えば build を detach し､完了後に新しいバイナリで daemon --ensure する" {
   make_fake_daemon "$TEST_TMPDIR/old-daemon.calls" "$BIN"
   printf '%s\n' "0000.0000.0" >"$STAMP"
   install_fake_go
@@ -50,7 +50,7 @@ teardown() {
   wait_until stamp_is_current
   wait_until daemon_ensured
 
-  # 古いバイナリは起動されず、go build が plugin の root で cmd/agents-daemon を建てた
+  # 古いバイナリは起動されず､go build が plugin の root で cmd/agents-daemon を建てた
   [ ! -e "$TEST_TMPDIR/old-daemon.calls" ]
   grep -q -- "build -C $REPO_ROOT -o " "$TEST_TMPDIR/go.calls"
   grep -q -- " ./cmd/agents-daemon" "$TEST_TMPDIR/go.calls"
@@ -71,7 +71,7 @@ teardown() {
   [ -x "$BIN" ]
 }
 
-@test "go が PATH に無ければ build.log に ERROR を残し、バイナリを作らない" {
+@test "go が PATH に無ければ build.log に ERROR を残し､バイナリを作らない" {
   PATH="$FIXTURE_PATH" run_hook --separate-stderr "$HOOK"
   [ "$status" -eq 0 ]
   [ -z "$output" ]

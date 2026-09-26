@@ -138,7 +138,7 @@ func TestLoad(t *testing.T) {
 	})
 
 	t.Run("compactStallQuietSeconds が短すぎる値なら既定へ落ちる", func(t *testing.T) {
-		// 数秒で突くと compact 直後に考え始めた Claude へ割り込む。
+		// 数秒で突くと compact 直後に考え始めた Claude へ割り込む｡
 		path := writeTestFile(t, `{"compactStallQuietSeconds": 3}`)
 		cfg, err := Load(path)
 		if err != nil {

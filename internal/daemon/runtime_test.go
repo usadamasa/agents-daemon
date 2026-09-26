@@ -16,18 +16,18 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 )
 
-// newTestRuntime は daemonRuntime を t.TempDir() の下だけで完結させて組み立てる。
-// statusPath はログディレクトリと同じ一時ディレクトリ内に置く。
+// newTestRuntime は daemonRuntime を t.TempDir() の下だけで完結させて組み立てる｡
+// statusPath はログディレクトリと同じ一時ディレクトリ内に置く｡
 func newTestRuntime(t *testing.T, client herdrcli.Client, startedAt time.Time) (*daemonRuntime, string) {
 	t.Helper()
 	dir := t.TempDir()
 	log := applog.NewLogger(filepath.Join(dir, "daemon.log"), time.Now)
 	t.Cleanup(func() { _ = log.Close() })
 	statusPath := filepath.Join(dir, "status.json")
-	// sidecar file のディレクトリは一時ディレクトリ配下を指すだけで作らない。
-	// 存在しないディレクトリは「state 無し」として扱われ、compact の段は
-	// 何もしない (ここで検証したいのは上限周りの遷移なので)。
-	// 利用上限 state が要るテストは r.store.RateLimits へ書く。
+	// sidecar file のディレクトリは一時ディレクトリ配下を指すだけで作らない｡
+	// 存在しないディレクトリは「state 無し」として扱われ､compact の段は
+	// 何もしない (ここで検証したいのは上限周りの遷移なので)｡
+	// 利用上限 state が要るテストは r.store.RateLimits へ書く｡
 	return newDaemonRuntime(client, log, statusPath, sessionstate.New(dir), func(time.Duration) {}, startedAt), statusPath
 }
 
@@ -50,8 +50,8 @@ func nonClaudePane(paneID, terminalID string) herdrcli.Pane {
 	}
 }
 
-// missingConfigPath は「まだファイルが無い」正常系を意図的に使う場合の共通パス。
-// config.Load は os.ErrNotExist をエラー扱いしない。
+// missingConfigPath は「まだファイルが無い」正常系を意図的に使う場合の共通パス｡
+// config.Load は os.ErrNotExist をエラー扱いしない｡
 func missingConfigPath(t *testing.T) string {
 	t.Helper()
 	return filepath.Join(t.TempDir(), "config.json")
@@ -138,27 +138,27 @@ func TestDaemonRuntimeTick_NonClaudePaneNeverGetsEntry(t *testing.T) {
 	if len(r.panes) != 0 {
 		t.Errorf("non-Claude pane にエントリが作られた: %v", r.panes)
 	}
-	// PaneRead 等が呼ばれていれば、non-Claude pane を素通りできていない証拠になる。
+	// PaneRead 等が呼ばれていれば､non-Claude pane を素通りできていない証拠になる｡
 	if len(client.Calls) != 1 || client.Calls[0] != "PaneList" {
 		t.Errorf("client.Calls = %v, want [PaneList] のみ (non-Claude pane は読みに行かない)", client.Calls)
 	}
 }
 
-// TestDaemonRuntimeTick_RateStateLoadedOnceIsSharedAcrossPanes は、1 tick 内で
-// rate-limits.json を読み込むのが 1 回だけであり、その結果 (*limitstate.State) が
-// 全 pane の monitor.Tick 呼び出しへそのまま使い回されることを検証する。
+// TestDaemonRuntimeTick_RateStateLoadedOnceIsSharedAcrossPanes は､1 tick 内で
+// rate-limits.json を読み込むのが 1 回だけであり､その結果 (*limitstate.State) が
+// 全 pane の monitor.Tick 呼び出しへそのまま使い回されることを検証する｡
 //
-// pane 単位で毎回読み直す実装だと、1 pane 目の処理中にファイルが書き換わった
-// (あるいは消えた) 場合、同じ tick 内の 2 pane 目が別の瞬間の state を見てしまう。
-// これを検出するため、1 pane 目の PaneRead 呼び出し (screen 読み取り自体が
-// tick 処理の一部) の副作用として rate-limits.json を削除し、2 pane 目の判定が
-// 削除前の値のまま (= 1回だけ読み込んだ値を使い回している) であることを確認する。
-// TestDaemonRuntimeTick_MissingSessionStateDoesNotLeakToOtherPanes は、片方の
-// セッションの state が無い (statusline がまだ書いていない) ときに、もう片方の判定が
-// 巻き込まれないことを確かめる。
+// pane 単位で毎回読み直す実装だと､1 pane 目の処理中にファイルが書き換わった
+// (あるいは消えた) 場合､同じ tick 内の 2 pane 目が別の瞬間の state を見てしまう｡
+// これを検出するため､1 pane 目の PaneRead 呼び出し (screen 読み取り自体が
+// tick 処理の一部) の副作用として rate-limits.json を削除し､2 pane 目の判定が
+// 削除前の値のまま (= 1回だけ読み込んだ値を使い回している) であることを確認する｡
+// TestDaemonRuntimeTick_MissingSessionStateDoesNotLeakToOtherPanes は､片方の
+// セッションの state が無い (statusline がまだ書いていない) ときに､もう片方の判定が
+// 巻き込まれないことを確かめる｡
 //
-// state をセッションごとに分ける前は 1 ファイルを全 pane で共有していたため、
-// 片方の事情がもう片方の判定を左右した。
+// state をセッションごとに分ける前は 1 ファイルを全 pane で共有していたため､
+// 片方の事情がもう片方の判定を左右した｡
 func TestDaemonRuntimeTick_MissingSessionStateDoesNotLeakToOtherPanes(t *testing.T) {
 	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 
@@ -177,7 +177,7 @@ func TestDaemonRuntimeTick_MissingSessionStateDoesNotLeakToOtherPanes(t *testing
 	}
 
 	r, _ := newTestRuntime(t, client, now)
-	// session-a の state だけ書く。session-b には対応するファイルが無い。
+	// session-a の state だけ書く｡session-b には対応するファイルが無い｡
 	writeSessionRateState(t, r.store.RateLimits, "session-a", 10, now, now.Add(time.Hour))
 
 	if _, _, err := r.tick(context.Background(), missingConfigPath(t), now); err != nil {
@@ -206,7 +206,7 @@ func TestDaemonRuntimeTick_IdleShutdown(t *testing.T) {
 	r, _ := newTestRuntime(t, client, t0)
 	ctx := context.Background()
 
-	// 1回目: Claude pane 0件 → idleSince が t0 にセットされる。
+	// 1回目: Claude pane 0件 → idleSince が t0 にセットされる｡
 	panesNow = nil
 	if shutdown, _, err := r.tick(ctx, cfgPath, t0); err != nil || shutdown {
 		t.Fatalf("1回目の tick: shutdown=%v, err=%v, want false, nil", shutdown, err)
@@ -215,7 +215,7 @@ func TestDaemonRuntimeTick_IdleShutdown(t *testing.T) {
 		t.Fatalf("1回目の tick 後 r.idleSince = %v, want %v", r.idleSince, t0)
 	}
 
-	// 2回目: 9分後、まだ閾値 (10分) 未満 → shutdown しない、idleSince は据え置き。
+	// 2回目: 9分後､まだ閾値 (10分) 未満 → shutdown しない､idleSince は据え置き｡
 	t1 := t0.Add(9 * time.Minute)
 	if shutdown, _, err := r.tick(ctx, cfgPath, t1); err != nil || shutdown {
 		t.Fatalf("2回目の tick (閾値未満): shutdown=%v, err=%v, want false, nil", shutdown, err)
@@ -224,7 +224,7 @@ func TestDaemonRuntimeTick_IdleShutdown(t *testing.T) {
 		t.Fatalf("2回目の tick 後 r.idleSince = %v, want %v (据え置きのはず)", r.idleSince, t0)
 	}
 
-	// 3回目: Claude pane が再出現 → idleSince がリセットされる (ゼロ値に戻る)。
+	// 3回目: Claude pane が再出現 → idleSince がリセットされる (ゼロ値に戻る)｡
 	t2 := t1.Add(time.Second)
 	panesNow = []herdrcli.Pane{claudePane("p1", "t1", herdrcli.AgentStatusIdle)}
 	if shutdown, _, err := r.tick(ctx, cfgPath, t2); err != nil || shutdown {
@@ -234,7 +234,7 @@ func TestDaemonRuntimeTick_IdleShutdown(t *testing.T) {
 		t.Fatalf("pane 再出現後 r.idleSince = %v, want ゼロ値", r.idleSince)
 	}
 
-	// 4回目: 再び 0 件 → idleSince が t3 (新しい基準点) にセットされる。
+	// 4回目: 再び 0 件 → idleSince が t3 (新しい基準点) にセットされる｡
 	t3 := t2.Add(time.Second)
 	panesNow = nil
 	if shutdown, _, err := r.tick(ctx, cfgPath, t3); err != nil || shutdown {
@@ -244,7 +244,7 @@ func TestDaemonRuntimeTick_IdleShutdown(t *testing.T) {
 		t.Fatalf("4回目の tick 後 r.idleSince = %v, want %v (t0 ではなく t3 が新しい基準点)", r.idleSince, t3)
 	}
 
-	// 5回目: t3 から 10分1秒後 → 閾値に達し shutdown。
+	// 5回目: t3 から 10分1秒後 → 閾値に達し shutdown｡
 	t4 := t3.Add(10*time.Minute + time.Second)
 	shutdown, cfg, err := r.tick(ctx, cfgPath, t4)
 	if err != nil {
@@ -322,7 +322,7 @@ func TestDaemonRuntimeTick_ConsecutiveFailures(t *testing.T) {
 			t.Fatalf("成功後 r.consecutiveFailures = %d, want 0 (リセットされるはず)", r.consecutiveFailures)
 		}
 
-		// リセット後、閾値未満の失敗では shutdown しないことを確認する。
+		// リセット後､閾値未満の失敗では shutdown しないことを確認する｡
 		mode = "fail"
 		for i := 1; i < maxConsecutiveTickFailures; i++ {
 			shutdown, _, err := r.tick(ctx, cfgPath, successAt.Add(time.Duration(i)*time.Second))
@@ -334,19 +334,19 @@ func TestDaemonRuntimeTick_ConsecutiveFailures(t *testing.T) {
 			}
 		}
 
-		// リセット後ちょうど閾値回目の失敗で shutdown する。
+		// リセット後ちょうど閾値回目の失敗で shutdown する｡
 		shutdown, _, err := r.tick(ctx, cfgPath, successAt.Add(time.Duration(maxConsecutiveTickFailures)*time.Second))
 		if !shutdown {
-			t.Fatal("リセット後、閾値回目の失敗で shutdown = false, want true")
+			t.Fatal("リセット後､閾値回目の失敗で shutdown = false, want true")
 		}
 		if !errors.Is(err, sentinelErr) {
-			t.Fatalf("リセット後、閾値回目の tick() error = %v, want sentinelErr", err)
+			t.Fatalf("リセット後､閾値回目の tick() error = %v, want sentinelErr", err)
 		}
 	})
 }
 
-// claudePaneWithSession は agent_session まで埋めた Claude pane を作る。
-// pane と Claude セッションの対応付けは AgentSession.Value だけが持つ。
+// claudePaneWithSession は agent_session まで埋めた Claude pane を作る｡
+// pane と Claude セッションの対応付けは AgentSession.Value だけが持つ｡
 func claudePaneWithSession(paneID, terminalID, sessionID string, status herdrcli.AgentStatus) herdrcli.Pane {
 	pane := claudePane(paneID, terminalID, status)
 	pane.AgentSession = &herdrcli.AgentSession{
@@ -358,14 +358,14 @@ func claudePaneWithSession(paneID, terminalID, sessionID string, status herdrcli
 	return pane
 }
 
-// writeSessionRateState は 1 セッション分の rate-limits state を dir へ書く。
+// writeSessionRateState は 1 セッション分の rate-limits state を dir へ書く｡
 func writeSessionRateState(t *testing.T, dir, sessionID string, usedPercentage float64, observedAt, resetsAt time.Time) {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("state ディレクトリの作成に失敗: %v", err)
 	}
-	// statusline.sh が書く生の形をそのまま組む (sessionstate が読む側の唯一の実装なので、
-	// テストの入力を Go の型から作ると wire format のずれを検出できなくなる)。
+	// statusline.sh が書く生の形をそのまま組む (sessionstate が読む側の唯一の実装なので､
+	// テストの入力を Go の型から作ると wire format のずれを検出できなくなる)｡
 	data, err := json.Marshal(map[string]any{
 		"five_hour":   map[string]any{"used_percentage": usedPercentage, "resets_at": resetsAt.Unix()},
 		"observed_at": observedAt.Unix(),
@@ -379,12 +379,12 @@ func writeSessionRateState(t *testing.T, dir, sessionID string, usedPercentage f
 	}
 }
 
-// TestDaemonRuntimeTick_RateStateIsMatchedPerSession は、statusline が書く
-// 利用上限 state が pane ごとに正しいセッションのものへ対応付けられることを確かめる。
+// TestDaemonRuntimeTick_RateStateIsMatchedPerSession は､statusline が書く
+// 利用上限 state が pane ごとに正しいセッションのものへ対応付けられることを確かめる｡
 //
-// rate-limits state は「そのセッションの」使用率とリセット時刻であって、全 pane に
-// 共通の値ではない。1 ファイルを全 pane で共有すると、別セッションの使用率で
-// ゲートが働いて上限に達した pane を取りこぼす (2026-08-19 の取りこぼしの原因)。
+// rate-limits state は「そのセッションの」使用率とリセット時刻であって､全 pane に
+// 共通の値ではない｡1 ファイルを全 pane で共有すると､別セッションの使用率で
+// ゲートが働いて上限に達した pane を取りこぼす (2026-08-19 の取りこぼしの原因)｡
 func TestDaemonRuntimeTick_RateStateIsMatchedPerSession(t *testing.T) {
 	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 	resetsAt := now.Add(time.Hour)
@@ -404,7 +404,7 @@ func TestDaemonRuntimeTick_RateStateIsMatchedPerSession(t *testing.T) {
 	}
 
 	r, _ := newTestRuntime(t, client, now)
-	// session-a は使い切っている。session-b はまだ余裕がある。
+	// session-a は使い切っている｡session-b はまだ余裕がある｡
 	writeSessionRateState(t, r.store.RateLimits, "session-a", 100, now, resetsAt)
 	writeSessionRateState(t, r.store.RateLimits, "session-b", 10, now, resetsAt)
 

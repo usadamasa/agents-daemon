@@ -20,14 +20,14 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 )
 
-// simulateMetadataSource は simulate が herdr へ渡す --source 識別子。
-// daemon パッケージ本体の metadataSource ("agents-daemon") とは別の値にして、
-// 本番の daemon が書いたラベルと simulate の後始末を取り違えないようにする。
+// simulateMetadataSource は simulate が herdr へ渡す --source 識別子｡
+// daemon パッケージ本体の metadataSource ("agents-daemon") とは別の値にして､
+// 本番の daemon が書いたラベルと simulate の後始末を取り違えないようにする｡
 const simulateMetadataSource = "agents-daemon-simulate"
 
-// defaultSimulateScreen は --screen-file を省略した場合に使う内蔵の limit 画面。
+// defaultSimulateScreen は --screen-file を省略した場合に使う内蔵の limit 画面｡
 // 2026-08-16 に実機 (Claude Code 2.1.224) で観測した文面と同じ形
-// (internal/detect/real_sample_test.go の realLimitScreen 参照)。
+// (internal/detect/real_sample_test.go の realLimitScreen 参照)｡
 const defaultSimulateScreen = `  ⏺ Bash(task test)
   ⎿  ✅ テスト完了
 
@@ -39,14 +39,14 @@ const defaultSimulateScreen = `  ⏺ Bash(task test)
 ────────────────────────────────────────────────────────────────────────────
 `
 
-// SimulateOptions は RunSimulate の呼び出しオプション。
+// SimulateOptions は RunSimulate の呼び出しオプション｡
 type SimulateOptions struct {
 	Send       bool
 	Keep       bool
 	ScreenFile string
 }
 
-// RunSimulate は simulate の本体。使い捨て pane の作成から後始末まで一貫して行う。
+// RunSimulate は simulate の本体｡使い捨て pane の作成から後始末まで一貫して行う｡
 func RunSimulate(ctx context.Context, w io.Writer, p apppath.Paths, opts SimulateOptions) error {
 	if os.Getenv("HERDR_ENV") != "1" {
 		return errors.New("HERDR_ENV=1 の herdr セッション内で実行してください (使い捨て pane を割り出す基準になる自分の pane が要ります)")
@@ -70,9 +70,9 @@ func RunSimulate(ctx context.Context, w io.Writer, p apppath.Paths, opts Simulat
 	}
 	_, _ = fmt.Fprintf(w, "  pane %s を Claude agent として herdr に登録しました (agent=claude, state=idle)\n", ownedPaneID)
 
-	// 作りたての pane は shell 起動処理 (direnv の読み込み等) の途中のことがあり、
+	// 作りたての pane は shell 起動処理 (direnv の読み込み等) の途中のことがあり､
 	// その間に送った `herdr pane run` のコマンドが消化されず失われることがある
-	// (実測)。起動が落ち着くまで少し待ってから画面テキストを書き込む。
+	// (実測)｡起動が落ち着くまで少し待ってから画面テキストを書き込む｡
 	time.Sleep(shellStartupDelay)
 
 	screenContent := defaultSimulateScreen
@@ -91,8 +91,8 @@ func RunSimulate(ctx context.Context, w io.Writer, p apppath.Paths, opts Simulat
 	return runSimulateTicks(ctx, w, p, ownedPaneID, execClient, opts)
 }
 
-// splitSimulatePane は自分専用の使い捨て pane を作り、その pane_id を返す。
-// 現在の pane (--current) から分割するだけなので、現在の pane の内容には影響しない。
+// splitSimulatePane は自分専用の使い捨て pane を作り､その pane_id を返す｡
+// 現在の pane (--current) から分割するだけなので､現在の pane の内容には影響しない｡
 func splitSimulatePane(ctx context.Context) (string, error) {
 	out, err := runHerdrRaw(ctx, "pane", "split", "--current", "--direction", "down", "--ratio", "0.2", "--no-focus")
 	if err != nil {
@@ -121,9 +121,9 @@ func splitSimulatePane(ctx context.Context) (string, error) {
 	return env.Result.Pane.PaneID, nil
 }
 
-// markAsClaudeAgent は herdr pane report-agent で paneID を Claude agent に見せかける。
-// これにより herdrcli.IsClaudeAgent(pane) が true になり、monitor.Tick が daemon と
-// 同じ経路でこの pane を対象として扱うようになる。
+// markAsClaudeAgent は herdr pane report-agent で paneID を Claude agent に見せかける｡
+// これにより herdrcli.IsClaudeAgent(pane) が true になり､monitor.Tick が daemon と
+// 同じ経路でこの pane を対象として扱うようになる｡
 func markAsClaudeAgent(ctx context.Context, paneID string) error {
 	if _, err := runHerdrRaw(ctx, "pane", "report-agent", paneID, "--source", simulateMetadataSource, "--agent", "claude", "--state", "idle"); err != nil {
 		return fmt.Errorf("pane %s を Claude agent として登録できませんでした: %w", paneID, err)
@@ -131,18 +131,18 @@ func markAsClaudeAgent(ctx context.Context, paneID string) error {
 	return nil
 }
 
-// writeScreenTimeout は writeScreenIntoPane が画面への反映を待つ最大時間。
+// writeScreenTimeout は writeScreenIntoPane が画面への反映を待つ最大時間｡
 const writeScreenTimeout = 5 * time.Second
 
-// shellStartupDelay は使い捨て pane を作ってから画面テキストを書き込むまで待つ時間。
+// shellStartupDelay は使い捨て pane を作ってから画面テキストを書き込むまで待つ時間｡
 const shellStartupDelay = 1500 * time.Millisecond
 
-// writeScreenIntoPane は herdr pane run で paneID のシェルに画面テキストを cat させ、
-// 実際に画面へ反映されるまで待つ。send-text だと文字ごとの入力になり、内容によっては
+// writeScreenIntoPane は herdr pane run で paneID のシェルに画面テキストを cat させ､
+// 実際に画面へ反映されるまで待つ｡send-text だと文字ごとの入力になり､内容によっては
 // シェルへのコマンドとして解釈されかねない (実機確認済み: `herdr pane run <id> cat <file>`
-// なら静的な表示に留まる)。`herdr pane run` はレンダリング完了を待たずに戻ることがある
-// (実測: 固定 500ms 待機では画面反映前に読んでしまい none 判定になることがあった) ため、
-// 固定 sleep ではなく画面に内容が現れたことを client.PaneRead で確認してから返す。
+// なら静的な表示に留まる)｡`herdr pane run` はレンダリング完了を待たずに戻ることがある
+// (実測: 固定 500ms 待機では画面反映前に読んでしまい none 判定になることがあった) ため､
+// 固定 sleep ではなく画面に内容が現れたことを client.PaneRead で確認してから返す｡
 func writeScreenIntoPane(ctx context.Context, client herdrcli.Client, paneID, content string) error {
 	tmp, err := os.CreateTemp("", "agents-daemon-simulate-*.txt")
 	if err != nil {
@@ -162,8 +162,8 @@ func writeScreenIntoPane(ctx context.Context, client herdrcli.Client, paneID, co
 	if _, err := runHerdrRaw(ctx, "pane", "run", paneID, "cat", tmpPath); err != nil {
 		return fmt.Errorf("pane %s への画面テキスト書き込みに失敗: %w", paneID, err)
 	}
-	// herdr pane run はコマンド文字列を pane に入力するだけで Enter は押さない (実測)。
-	// これを送らないと cat が実行されないまま画面には何も反映されない。
+	// herdr pane run はコマンド文字列を pane に入力するだけで Enter は押さない (実測)｡
+	// これを送らないと cat が実行されないまま画面には何も反映されない｡
 	time.Sleep(300 * time.Millisecond)
 	if _, err := runHerdrRaw(ctx, "pane", "send-keys", paneID, "enter"); err != nil {
 		return fmt.Errorf("pane %s への enter 送信に失敗: %w", paneID, err)
@@ -176,9 +176,9 @@ func writeScreenIntoPane(ctx context.Context, client herdrcli.Client, paneID, co
 	return waitForScreenContent(ctx, client, paneID, marker, writeScreenTimeout)
 }
 
-// lastNonEmptyLine は s の最後の空白以外を含む行を trim して返す。--source detection は
-// pane の viewport に収まる範囲しか見せない (実測)。中身が viewport より長いと先頭の行から
-// 順にスクロールアウトするため、待ち受けの目印には終端側の行を使う方が生き残りやすい。
+// lastNonEmptyLine は s の最後の空白以外を含む行を trim して返す｡--source detection は
+// pane の viewport に収まる範囲しか見せない (実測)｡中身が viewport より長いと先頭の行から
+// 順にスクロールアウトするため､待ち受けの目印には終端側の行を使う方が生き残りやすい｡
 func lastNonEmptyLine(s string) string {
 	lines := strings.Split(s, "\n")
 	for i := len(lines) - 1; i >= 0; i-- {
@@ -190,7 +190,7 @@ func lastNonEmptyLine(s string) string {
 }
 
 // waitForScreenContent は paneID の画面 (detection source) に substr が現れるまで
-// ポーリングする。
+// ポーリングする｡
 func waitForScreenContent(ctx context.Context, client herdrcli.Client, paneID, substr string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	var lastScreen string
@@ -209,10 +209,10 @@ func waitForScreenContent(ctx context.Context, client herdrcli.Client, paneID, s
 	}
 }
 
-// cleanupSimulatePane は使い捨て pane の後始末をする。ownedPaneID は必ず
-// splitSimulatePane がこのプロセス自身で作った値であり、呼び出し元にそれ以外の
-// pane_id を渡す手段は無い。失敗しても simulate 全体は失敗させず、手動での
-// 後始末コマンドを案内するだけに留める。
+// cleanupSimulatePane は使い捨て pane の後始末をする｡ownedPaneID は必ず
+// splitSimulatePane がこのプロセス自身で作った値であり､呼び出し元にそれ以外の
+// pane_id を渡す手段は無い｡失敗しても simulate 全体は失敗させず､手動での
+// 後始末コマンドを案内するだけに留める｡
 func cleanupSimulatePane(ctx context.Context, w io.Writer, ownedPaneID string, keep bool) {
 	if keep {
 		_, _ = fmt.Fprintf(w, "--keep が指定されたため pane %s は残しています (`herdr pane close %s` で手動削除してください)\n", ownedPaneID, ownedPaneID)
@@ -232,11 +232,11 @@ func cleanupSimulatePane(ctx context.Context, w io.Writer, ownedPaneID string, k
 	_, _ = fmt.Fprintf(w, "pane %s を閉じました\n", ownedPaneID)
 }
 
-// runHerdrRaw は herdr CLI を直接叩く。simulate が使う pane split / report-agent /
+// runHerdrRaw は herdr CLI を直接叩く｡simulate が使う pane split / report-agent /
 // release-agent / close は herdrcli.Client interface (PaneList/PaneRead/SendText/
-// SendKeys/ReportMetadata/Reachable) に含まれない pane ライフサイクル操作なので、
+// SendKeys/ReportMetadata/Reachable) に含まれない pane ライフサイクル操作なので､
 // このファイル専用の最小限のラッパーとして実装している
-// (internal/herdrcli は本タスクの変更対象外)。
+// (internal/herdrcli は本タスクの変更対象外)｡
 func runHerdrRaw(ctx context.Context, args ...string) ([]byte, error) {
 	bin := os.Getenv("HERDR_BIN_PATH")
 	if bin == "" {
@@ -245,7 +245,7 @@ func runHerdrRaw(ctx context.Context, args ...string) ([]byte, error) {
 	runCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(runCtx, bin, args...) // #nosec G204,G702 -- bin は固定既定値/環境変数、args はこのファイル内で組み立てた定数引数のみ
+	cmd := exec.CommandContext(runCtx, bin, args...) // #nosec G204,G702 -- bin は固定既定値/環境変数､args はこのファイル内で組み立てた定数引数のみ
 	var outBuf, errBuf bytes.Buffer
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf
@@ -255,14 +255,14 @@ func runHerdrRaw(ctx context.Context, args ...string) ([]byte, error) {
 	return outBuf.Bytes(), nil
 }
 
-// runSimulateTicks は monitor.Tick を daemon と同じ設定で実行し、結果を w へ表示する。
-// 1 回目の Tick で limit を検知して待機状態に入った場合、2 回目は起床時刻を過ぎたと
+// runSimulateTicks は monitor.Tick を daemon と同じ設定で実行し､結果を w へ表示する｡
+// 1 回目の Tick で limit を検知して待機状態に入った場合､2 回目は起床時刻を過ぎたと
 // 仮定した合成の now を渡して再送信の経路 (recoverPane 経由の SendText/SendKeys) まで
-// 確認する。実時間では待たない (上限解除まで数時間かかるため)。
+// 確認する｡実時間では待たない (上限解除まで数時間かかるため)｡
 func runSimulateTicks(ctx context.Context, w io.Writer, p apppath.Paths, ownedPaneID string, execClient herdrcli.Client, opts SimulateOptions) error {
 	cfg, cfgErr := config.Load(p.ConfigFile())
 	if cfgErr != nil {
-		_, _ = fmt.Fprintf(w, "設定の読み込みに失敗、デフォルト値で継続します: %v\n", cfgErr)
+		_, _ = fmt.Fprintf(w, "設定の読み込みに失敗､デフォルト値で継続します: %v\n", cfgErr)
 		cfg = config.Default()
 	}
 	classifier, err := detect.NewClassifier(cfg.CustomPatterns, cfg.CustomTransientPatterns)
@@ -272,12 +272,12 @@ func runSimulateTicks(ctx context.Context, w io.Writer, p apppath.Paths, ownedPa
 	store := sessionstate.New(p.StateDir())
 	rateState, stateErr := store.LoadRateLimit(paneSessionID(ctx, execClient, ownedPaneID))
 	if stateErr != nil {
-		_, _ = fmt.Fprintf(w, "利用上限 state の読み込みに失敗、state 無しとして扱います: %v\n", stateErr)
+		_, _ = fmt.Fprintf(w, "利用上限 state の読み込みに失敗､state 無しとして扱います: %v\n", stateErr)
 		rateState = nil
 	}
 	account, accountErr := store.LatestWindow(time.Now())
 	if accountErr != nil {
-		_, _ = fmt.Fprintf(w, "アカウント全体の利用上限 state の走査に失敗、無しとして扱います: %v\n", accountErr)
+		_, _ = fmt.Fprintf(w, "アカウント全体の利用上限 state の走査に失敗､無しとして扱います: %v\n", accountErr)
 		account = nil
 	}
 
@@ -321,10 +321,10 @@ func runSimulateTicks(ctx context.Context, w io.Writer, p apppath.Paths, ownedPa
 	return nil
 }
 
-// scopedClient は herdrcli.Client を包み、ownedPaneID 以外の pane を対象にした呼び出しを
-// 全て拒否する。simulate は自分が作った使い捨て pane 以外に絶対に触れてはいけないので、
-// 「呼び出し側が正しい pane_id を渡す」という規律に頼るのではなく、型システムの外側で
-// 機械的に強制できるガードとして実装する。
+// scopedClient は herdrcli.Client を包み､ownedPaneID 以外の pane を対象にした呼び出しを
+// 全て拒否する｡simulate は自分が作った使い捨て pane 以外に絶対に触れてはいけないので､
+// 「呼び出し側が正しい pane_id を渡す」という規律に頼るのではなく､型システムの外側で
+// 機械的に強制できるガードとして実装する｡
 type scopedClient struct {
 	inner       herdrcli.Client
 	ownedPaneID string
@@ -386,10 +386,10 @@ func (c *scopedClient) Reachable(ctx context.Context) error {
 	return c.inner.Reachable(ctx)
 }
 
-// simulateDryRunClient は daemon パッケージの dryRunClient と同じ考え方の decorator。
-// dryRunClient をそのまま使わない理由は、それが daemon のログファイル
-// (*applog.Logger) 前提であるのに対し、simulate は「何を送るはずだったか」を
-// そのままコマンドの標準出力 w に表示したいから。
+// simulateDryRunClient は daemon パッケージの dryRunClient と同じ考え方の decorator｡
+// dryRunClient をそのまま使わない理由は､それが daemon のログファイル
+// (*applog.Logger) 前提であるのに対し､simulate は「何を送るはずだったか」を
+// そのままコマンドの標準出力 w に表示したいから｡
 type simulateDryRunClient struct {
 	inner herdrcli.Client
 	w     io.Writer

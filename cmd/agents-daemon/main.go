@@ -1,10 +1,10 @@
-// agents-daemon は Claude Code が 5 時間ウィンドウの利用上限で停止したとき、
-// 上限が解除された時刻に自動でプロンプトを送って作業を再開するツール。
-// context の使用率が閾値を超えた pane へ /compact を投入する役も担う。
+// agents-daemon は Claude Code が 5 時間ウィンドウの利用上限で停止したとき､
+// 上限が解除された時刻に自動でプロンプトを送って作業を再開するツール｡
+// context の使用率が閾値を超えた pane へ /compact を投入する役も担う｡
 //
 // サブコマンド:
 //
-//	daemon    監視デーモン (--ensure で detach 起動、--foreground で直接ループ)
+//	daemon    監視デーモン (--ensure で detach 起動､--foreground で直接ループ)
 //	status    daemon の稼働状況と監視中の pane 一覧の表示
 //	logs      直近のログの表示
 //	stop      daemon の停止

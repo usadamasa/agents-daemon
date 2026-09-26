@@ -1,5 +1,5 @@
 // Package config は agents-daemon の設定 (${XDG_CONFIG_HOME:-~/.config}/agents-daemon/config.json) を
-// 読み込み、検証する｡ファイルが存在しない場合は全項目デフォルトとして扱い、
+// 読み込み､検証する｡ファイルが存在しない場合は全項目デフォルトとして扱い､
 // 個々のキーが不正な場合もそのキーだけデフォルトへ落として起動を継続する｡
 // 設定ファイルの typo で監視全体が黙って無効化される事故を避けるための方針である｡
 package config
@@ -15,13 +15,13 @@ import (
 // 有効な readSource の値｡
 //
 // herdr の "detection" と "visible" は pane の viewport に収まる範囲しか返さない
-// (実測: viewport 16 行の pane に --lines 150 を指定しても 16 行しか返らず、
+// (実測: viewport 16 行の pane に --lines 150 を指定しても 16 行しか返らず､
 // 古い行から順に落ちる)｡ペインを小さく分割していると判定に必要な行が画面から
-// 溢れ、検知が黙って効かなくなる｡"recent" 系はスクロールバックから取るため
+// 溢れ､検知が黙って効かなくなる｡"recent" 系はスクロールバックから取るため
 // 指定した行数がそのまま得られる｡
 //
 // この理由で "detection" は選べる値から外した｡"visible" は「今見えているものだけ」
-// という別の用途があるので残すが、既定にはしない｡
+// という別の用途があるので残すが､既定にはしない｡
 const (
 	ReadSourceVisible         = "visible"
 	ReadSourceRecent          = "recent"
@@ -34,14 +34,14 @@ const (
 	// defaultRetryMessage は上限解除後の再開で送る｡
 	defaultRetryMessage = "Continue where you left off."
 	// defaultCompactStallMessage は compact 後の再開で送る｡daemon は残項目を
-	// 知らないので、名指しの代わりに plan file / state file を読み直させる｡
+	// 知らないので､名指しの代わりに plan file / state file を読み直させる｡
 	defaultCompactStallMessage = "Continue the task you were working on. " +
 		"Reread the plan file or the compact-prep state file for the open items and work through them; " +
 		"if one is blocked, say what is blocking it."
 	// defaultCompactAutoMessage は /compact 本体｡末尾の指示文は圧縮サマリーの
-	// 保持リスト｡`/compact` 単体だと、`/compact` を接頭辞に持つ他のコマンドが
+	// 保持リスト｡`/compact` 単体だと､`/compact` を接頭辞に持つ他のコマンドが
 	// あるときに補完メニューが開いて Enter が候補を横取りしうるので (旧 `/compact-prep`
-	// で実機確認)、後ろに文を続ける形を保つ｡
+	// で実機確認)､後ろに文を続ける形を保つ｡
 	defaultCompactAutoMessage = "/compact Keep the plan file path, current phase, and unresolved items; " +
 		"keep decisions made, options tried or set aside and why, and constraints in their exact wording."
 )
@@ -54,7 +54,7 @@ type Config struct {
 	MarginSeconds       int
 	FallbackWaitHours   float64
 	MaxRetries          int
-	// RetryMessage は resume 時にペインへ送るテキスト｡入力行へエコーされるため、
+	// RetryMessage は resume 時にペインへ送るテキスト｡入力行へエコーされるため､
 	// limit / rate / overloaded のような検知語を含めてはいけない｡含めると
 	// 監視が自分自身の送信を再検知して無限ループする｡
 	RetryMessage            string
@@ -73,22 +73,22 @@ type Config struct {
 	CustomPatterns          []string
 	CustomTransientPatterns []string
 	IdleShutdownMinutes     int
-	// DeferToNativeAutoContinue が true のとき、Claude Code 自身の auto-continue
+	// DeferToNativeAutoContinue が true のとき､Claude Code 自身の auto-continue
 	// (2.1.234 の autoContinueAtUsageLimit) がカウントダウン中の pane には手を出さない｡
-	// この状態では Escape が取り消しキーなので、送信するとネイティブの継続を潰す｡
+	// この状態では Escape が取り消しキーなので､送信するとネイティブの継続を潰す｡
 	DeferToNativeAutoContinue bool
 	// CompactStallEnabled は compact 直後に入力待ちで止まった pane を突く機能の
 	// 全体スイッチ｡
 	CompactStallEnabled bool
 	// CompactStallQuietSeconds は画面が変わらないまま何秒経ったら「止まっている」と
-	// 見なすか｡compact 直後の描画や、圧縮後に Claude が考え始める間を跨がせるための猶予｡
+	// 見なすか｡compact 直後の描画や､圧縮後に Claude が考え始める間を跨がせるための猶予｡
 	CompactStallQuietSeconds int
 	// CompactStallCooldownMinutes は同じ pane へ続けて突かないための間隔｡
 	CompactStallCooldownMinutes int
-	// CompactStallMaxNudges は 1 回の停止 (compact 境界の後ろに応答が無く、空の入力行で
-	// 止まっている画面が、送っても変わらずに続く状態) へ送る回数の上限｡超えたら送らずに
-	// OutcomeCompactNudgeCapped をログへ残し、pane は入力待ちのまま人の判断に委ねる｡
-	// 応答が流れて停止が解けたら 0 に戻し、次の停止は新しく数える｡
+	// CompactStallMaxNudges は 1 回の停止 (compact 境界の後ろに応答が無く､空の入力行で
+	// 止まっている画面が､送っても変わらずに続く状態) へ送る回数の上限｡超えたら送らずに
+	// OutcomeCompactNudgeCapped をログへ残し､pane は入力待ちのまま人の判断に委ねる｡
+	// 応答が流れて停止が解けたら 0 に戻し､次の停止は新しく数える｡
 	CompactStallMaxNudges int
 	// CompactStallMessage は compact 停止時に送るテキスト｡compact 完了 marker 経由の
 	// 再開でも同じ文面を使う｡既定値と制約は defaultCompactStallMessage を参照｡
@@ -99,10 +99,10 @@ type Config struct {
 	// 既定を false にしてあるのは /compact が取り消せないため｡
 	CompactAutoEnabled bool
 	// CompactAutoThresholdPercent はこの使用率 (0..100) 以上で投入を始める｡
-	// cache read が安くなった世代では早い compact が割に合わないため、遅めに置く｡
+	// cache read が安くなった世代では早い compact が割に合わないため､遅めに置く｡
 	CompactAutoThresholdPercent float64
 	// CompactAutoPrepMessage は 1 段目に送る文字列 (compact-prep の起動)｡
-	// skill は plugin が配るので、既定値は plugin 名の名前空間付きで呼ぶ｡
+	// skill は plugin が配るので､既定値は plugin 名の名前空間付きで呼ぶ｡
 	CompactAutoPrepMessage string
 	// CompactAutoMessage は 2 段目に送る文字列 (/compact 本体)｡既定値と末尾の
 	// 指示文の意図は defaultCompactAutoMessage を参照｡
@@ -115,7 +115,7 @@ type Config struct {
 
 	// CompactResumeEnabled は圧縮完了 marker を見て作業を再開させる機能の
 	// スイッチ｡誰が compact したか (このツール / ユーザー / 本体の autocompact) を
-	// 問わず動くため、CompactAutoEnabled とは別に持つ｡
+	// 問わず動くため､CompactAutoEnabled とは別に持つ｡
 	CompactResumeEnabled bool
 	// CompactResumeDelaySeconds は marker がこの秒数より古くなってから送る｡
 	// 圧縮直後にユーザーが自分で続きを打つ余地を残すための猶予｡
@@ -214,7 +214,7 @@ type rawConfig struct {
 // Load は path から設定を読み込む｡
 // ファイルが存在しない場合はエラーにせずデフォルト値を返す (ツールは設定ファイルが
 // 無い状態でも動く必要がある)｡JSON の構文が壊れている場合や個々のキーの型/値が
-// 不正な場合も、そのキーだけデフォルトへ落として起動を継続する｡
+// 不正な場合も､そのキーだけデフォルトへ落として起動を継続する｡
 func Load(path string) (Config, error) {
 	cfg := Default()
 
@@ -226,8 +226,8 @@ func Load(path string) (Config, error) {
 		return cfg, err
 	}
 
-	// Unmarshal が型不一致のフィールドをスキップして「できる範囲まで」埋めてくれるため、
-	// ここで返るエラーは無視してよい (壊れたキーは raw 側で nil のまま残り、
+	// Unmarshal が型不一致のフィールドをスキップして「できる範囲まで」埋めてくれるため､
+	// ここで返るエラーは無視してよい (壊れたキーは raw 側で nil のまま残り､
 	// 後段の applyRaw がデフォルトへ落とす)｡
 	var raw rawConfig
 	_ = json.Unmarshal(data, &raw)
@@ -236,12 +236,12 @@ func Load(path string) (Config, error) {
 	return cfg, nil
 }
 
-// applyRaw は raw の各キーを検証し、妥当なものだけ cfg へ反映する｡
-// applyRaw は raw の各キーを検証しつつ cfg へ反映する。値が不正なキーは
-// 黙って既定値のままにする (タイプミス 1 つで監視全体が止まらないようにするため)。
+// applyRaw は raw の各キーを検証し､妥当なものだけ cfg へ反映する｡
+// applyRaw は raw の各キーを検証しつつ cfg へ反映する｡値が不正なキーは
+// 黙って既定値のままにする (タイプミス 1 つで監視全体が止まらないようにするため)｡
 //
-// 意味のまとまりで 5 つに割ってある。1 関数に並べると認知的複雑度が
-// lint の閾値を超えるうえ、どのキーがどの役割かも読み取りにくくなるため。
+// 意味のまとまりで 5 つに割ってある｡1 関数に並べると認知的複雑度が
+// lint の閾値を超えるうえ､どのキーがどの役割かも読み取りにくくなるため｡
 func applyRaw(cfg *Config, raw *rawConfig) {
 	applyRawBasics(cfg, raw)
 	applyRawDetection(cfg, raw)
@@ -250,7 +250,7 @@ func applyRaw(cfg *Config, raw *rawConfig) {
 	applyRawCompactAuto(cfg, raw)
 }
 
-// applyRawBasics は稼働そのものに関わる設定を反映する。
+// applyRawBasics は稼働そのものに関わる設定を反映する｡
 func applyRawBasics(cfg *Config, raw *rawConfig) {
 	if raw.Enabled != nil {
 		cfg.Enabled = *raw.Enabled
@@ -272,7 +272,7 @@ func applyRawBasics(cfg *Config, raw *rawConfig) {
 	}
 }
 
-// applyRawDetection は「上限に当たったと判断してよいか」に関わる設定を反映する。
+// applyRawDetection は「上限に当たったと判断してよいか」に関わる設定を反映する｡
 func applyRawDetection(cfg *Config, raw *rawConfig) {
 	if v := raw.ReadSource; v != nil && isValidReadSource(*v) {
 		cfg.ReadSource = *v
@@ -297,7 +297,7 @@ func applyRawDetection(cfg *Config, raw *rawConfig) {
 	}
 }
 
-// applyRawRecovery は再開の送り方と一時エラーの扱いに関わる設定を反映する。
+// applyRawRecovery は再開の送り方と一時エラーの扱いに関わる設定を反映する｡
 func applyRawRecovery(cfg *Config, raw *rawConfig) {
 	if v := raw.RetryMessage; v != nil && strings.TrimSpace(*v) != "" {
 		cfg.RetryMessage = *v
@@ -311,7 +311,7 @@ func applyRawRecovery(cfg *Config, raw *rawConfig) {
 	if v := raw.TransientMaxWaitSeconds; v != nil && *v >= 1 {
 		cfg.TransientMaxWaitSeconds = *v
 	}
-	// 上限が下限を下回る組み合わせは意味を成さないので引き上げる。
+	// 上限が下限を下回る組み合わせは意味を成さないので引き上げる｡
 	cfg.TransientMaxWaitSeconds = max(cfg.TransientMaxWaitSeconds, cfg.TransientWaitSeconds)
 	if raw.DeferToNativeAutoContinue != nil {
 		cfg.DeferToNativeAutoContinue = *raw.DeferToNativeAutoContinue
@@ -330,13 +330,13 @@ func applyRawRecovery(cfg *Config, raw *rawConfig) {
 	}
 }
 
-// applyRawCompactStall は compact 直後の停止を突く機能の設定を反映する。
+// applyRawCompactStall は compact 直後の停止を突く機能の設定を反映する｡
 func applyRawCompactStall(cfg *Config, raw *rawConfig) {
 	if raw.CompactStallEnabled != nil {
 		cfg.CompactStallEnabled = *raw.CompactStallEnabled
 	}
-	// 画面が数秒変わらないだけで突くと、compact 直後に考え始めた Claude へ
-	// 割り込む。短すぎる値は受け付けない。
+	// 画面が数秒変わらないだけで突くと､compact 直後に考え始めた Claude へ
+	// 割り込む｡短すぎる値は受け付けない｡
 	if v := raw.CompactStallQuietSeconds; v != nil && *v >= 10 {
 		cfg.CompactStallQuietSeconds = *v
 	}
@@ -351,7 +351,7 @@ func applyRawCompactStall(cfg *Config, raw *rawConfig) {
 	}
 }
 
-// applyRawCompactAuto は context 使用率からの自動 compact と、圧縮後の再開の設定を反映する。
+// applyRawCompactAuto は context 使用率からの自動 compact と､圧縮後の再開の設定を反映する｡
 func applyRawCompactAuto(cfg *Config, raw *rawConfig) {
 	if raw.CompactAutoEnabled != nil {
 		cfg.CompactAutoEnabled = *raw.CompactAutoEnabled
@@ -374,7 +374,7 @@ func applyRawCompactAuto(cfg *Config, raw *rawConfig) {
 	if raw.CompactResumeEnabled != nil {
 		cfg.CompactResumeEnabled = *raw.CompactResumeEnabled
 	}
-	// 圧縮直後に人が続きを打つ余地を残す。短すぎる値は受け付けない。
+	// 圧縮直後に人が続きを打つ余地を残す｡短すぎる値は受け付けない｡
 	if v := raw.CompactResumeDelaySeconds; v != nil && *v >= 10 {
 		cfg.CompactResumeDelaySeconds = *v
 	}

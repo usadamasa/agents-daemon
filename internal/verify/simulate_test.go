@@ -135,7 +135,7 @@ func TestSimulateDryRunClient_送信系はinnerを呼ばずログだけ出す(t 
 	out := buf.String()
 	for _, want := range []string{"[dry-run]", "Continue where you left off.", "esc enter"} {
 		if !strings.Contains(out, want) {
-			t.Errorf("出力に %q が含まれていない。出力:\n%s", want, out)
+			t.Errorf("出力に %q が含まれていない｡出力:\n%s", want, out)
 		}
 	}
 }
@@ -186,14 +186,14 @@ func assertPaneNotOwned(t *testing.T, err error) {
 	}
 }
 
-// TestRunSimulate_RealHerdr は実 herdr に対する統合テスト。herdr が PATH に無い、
-// server に到達できない、または HERDR_ENV=1 のセッション内で実行されていない
-// (使い捨て pane を split する基準となる pane が無い) 場合は skip する。
+// TestRunSimulate_RealHerdr は実 herdr に対する統合テスト｡herdr が PATH に無い､
+// server に到達できない､または HERDR_ENV=1 のセッション内で実行されていない
+// (使い捨て pane を split する基準となる pane が無い) 場合は skip する｡
 //
 // これは「simulate が本当に実 pane に対して検知〜送信の経路を通せる」ことを保証する
-// 最終防衛線。実 Claude セッションへ触れないことはここでは確認しない — それは
+// 最終防衛線｡実 Claude セッションへ触れないことはここでは確認しない — それは
 // scopedClient のユニットテスト (所有 pane 以外への操作を全て拒否する) が
-// 型と経路のレベルで保証しており、実行結果の観察に頼るより確実なため。
+// 型と経路のレベルで保証しており､実行結果の観察に頼るより確実なため｡
 func TestRunSimulate_RealHerdr(t *testing.T) {
 	if _, err := exec.LookPath("herdr"); err != nil {
 		t.Skip("herdr が PATH に無いので skip する")
@@ -227,11 +227,11 @@ func TestRunSimulate_RealHerdr(t *testing.T) {
 		}
 	}
 
-	// 後始末は「作った pane を閉じたか」までを見る。実際に pane list から消えるのは
-	// herdr 側の反映待ちで、ここで待ち受けると時間に依存したテストになる
-	// (pane 数の比較でも消滅のポーリングでも flaky になった)。close を呼んだことは
-	// 上の出力検査で確認済みで、閉じる対象が自分の作った pane に限られることは
-	// scopedClient のユニットテストが保証している。
+	// 後始末は「作った pane を閉じたか」までを見る｡実際に pane list から消えるのは
+	// herdr 側の反映待ちで､ここで待ち受けると時間に依存したテストになる
+	// (pane 数の比較でも消滅のポーリングでも flaky になった)｡close を呼んだことは
+	// 上の出力検査で確認済みで､閉じる対象が自分の作った pane に限られることは
+	// scopedClient のユニットテストが保証している｡
 	if createdPaneID(out) == "" {
 		t.Errorf("出力から作成した pane ID を取り出せない:\n%s", out)
 	}
@@ -239,7 +239,7 @@ func TestRunSimulate_RealHerdr(t *testing.T) {
 
 var createdPanePattern = regexp.MustCompile(`pane (\S+) を作成しました`)
 
-// createdPaneID は simulate の出力から、作成した使い捨て pane の ID を取り出す。
+// createdPaneID は simulate の出力から､作成した使い捨て pane の ID を取り出す｡
 func createdPaneID(out string) string {
 	m := createdPanePattern.FindStringSubmatch(out)
 	if len(m) < 2 {

@@ -40,9 +40,9 @@ func TestLoadRateLimit(t *testing.T) {
 	})
 
 	t.Run("five_hour が null の JSON は HasFiveHour() が false", func(t *testing.T) {
-		// 5 時間ウィンドウが切り替わる瞬間、Claude Code は five_hour を null で渡す
-		// (実機で 2026-08-27T18:10:01Z に観測)。null は Go では 0 に読まれるため、
-		// これを「使用率 0% / resets_at が epoch 0」と解釈してはいけない。
+		// 5 時間ウィンドウが切り替わる瞬間､Claude Code は five_hour を null で渡す
+		// (実機で 2026-08-27T18:10:01Z に観測)｡null は Go では 0 に読まれるため､
+		// これを「使用率 0% / resets_at が epoch 0」と解釈してはいけない｡
 		s := New(t.TempDir())
 		writeFile(t, mustPath(t, s, "sess-1"), `{
 			"five_hour": {"used_percentage": null, "resets_at": null},

@@ -3,9 +3,9 @@
 # context 注入は UserPromptSubmit 側 (userpromptsubmit-compaction-recovery.sh) で行う｡
 #
 # marker を経由する 2 段構成をここで畳まないこと｡この marker は
-# agents-daemon の daemon が「圧縮が完了して、まだ次のプロンプトが
-# 来ていない」を知る唯一の手がかりで、daemon はこれを見て作業の再開を促す｡
-# PostCompact から直接 context を注入する形にすると、その合図が消える｡
+# agents-daemon の daemon が「圧縮が完了して､まだ次のプロンプトが
+# 来ていない」を知る唯一の手がかりで､daemon はこれを見て作業の再開を促す｡
+# PostCompact から直接 context を注入する形にすると､その合図が消える｡
 #
 # fail-open: 個別操作失敗は log_error しつつ常に exit 0 で戻る｡
 

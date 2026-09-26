@@ -5,10 +5,10 @@ import (
 	"testing"
 )
 
-// compact 直後の画面。Claude Code は圧縮の境界を 1 行のヒント付きで出す
-// (2.1.239 のバイナリから採取)。作業が終わっていないのにここで入力待ちになる
-// ことがあり、上限表示は出ないので既存の limit 検知にはかからない。
-const compactStallScreen = `⏺ 変更を適用しました。
+// compact 直後の画面｡Claude Code は圧縮の境界を 1 行のヒント付きで出す
+// (2.1.239 のバイナリから採取)｡作業が終わっていないのにここで入力待ちになる
+// ことがあり､上限表示は出ないので既存の limit 検知にはかからない｡
+const compactStallScreen = `⏺ 変更を適用しました｡
 
 ✻ Conversation compacted (ctrl+o for history)
 
@@ -21,7 +21,7 @@ const compactStallScreen = `⏺ 変更を適用しました。
 `
 
 func TestCompactStallSignature(t *testing.T) {
-	t.Run("compact 境界の後ろに出力が無く、空プロンプトで止まっていれば候補", func(t *testing.T) {
+	t.Run("compact 境界の後ろに出力が無く､空プロンプトで止まっていれば候補", func(t *testing.T) {
 		if _, ok := CompactStallSignature(compactStallScreen, 15); !ok {
 			t.Error("CompactStallSignature() ok = false, want true")
 		}
@@ -29,7 +29,7 @@ func TestCompactStallSignature(t *testing.T) {
 
 	t.Run("要約サマリ形式の境界行でも候補になる", func(t *testing.T) {
 		screen := strings.Join([]string{
-			"⏺ 変更を適用しました。",
+			"⏺ 変更を適用しました｡",
 			"",
 			"  Compacted (ctrl+o to see full summary)",
 			"",
@@ -46,7 +46,7 @@ func TestCompactStallSignature(t *testing.T) {
 		screen := strings.Join([]string{
 			"✻ Conversation compacted (ctrl+o for history)",
 			"",
-			"⏺ 続きを進めます。",
+			"⏺ 続きを進めます｡",
 			"",
 			"─────────",
 			"❯",
@@ -83,7 +83,7 @@ func TestCompactStallSignature(t *testing.T) {
 
 	t.Run("compact していない通常のフッターは候補でない", func(t *testing.T) {
 		screen := strings.Join([]string{
-			"⏺ 完了しました。",
+			"⏺ 完了しました｡",
 			"",
 			"─────────",
 			"❯",
@@ -95,8 +95,8 @@ func TestCompactStallSignature(t *testing.T) {
 	})
 
 	t.Run("散文で compacted に触れただけの行は境界と見なさない", func(t *testing.T) {
-		// README や会話がこの語に触れただけで発火すると、無関係な pane へ
-		// プロンプトを打ち込む事故になる。実際の UI 行は必ず括弧付きのヒントを伴う。
+		// README や会話がこの語に触れただけで発火すると､無関係な pane へ
+		// プロンプトを打ち込む事故になる｡実際の UI 行は必ず括弧付きのヒントを伴う｡
 		screen := strings.Join([]string{
 			"⎿  この節は conversation compacted のあとの挙動を説明する",
 			"",
@@ -110,8 +110,8 @@ func TestCompactStallSignature(t *testing.T) {
 	})
 
 	t.Run("署名は入力行より下 (ステータスライン) の変化に影響されない", func(t *testing.T) {
-		// ステータスラインにはコストやトークン数が並ぶ。ここを署名に含めると
-		// 「画面が変わっていない」が永久に成立せず、検知が黙って死ぬ。
+		// ステータスラインにはコストやトークン数が並ぶ｡ここを署名に含めると
+		// 「画面が変わっていない」が永久に成立せず､検知が黙って死ぬ｡
 		other := strings.Replace(compactStallScreen, "$0", "$1", 1)
 		other = strings.Replace(other, "41k (4%)", "42k (5%)", 1)
 
@@ -144,8 +144,8 @@ func TestPromptIsEmpty(t *testing.T) {
 	})
 
 	t.Run("実機の入力行 (❯ の後が U+00A0) で true", func(t *testing.T) {
-		// herdr pane read で採取した実バイト。Claude Code は ❯ の後を
-		// NO-BREAK SPACE で埋めるため、\s だけの正規表現では当たらない。
+		// herdr pane read で採取した実バイト｡Claude Code は ❯ の後を
+		// NO-BREAK SPACE で埋めるため､\s だけの正規表現では当たらない｡
 		real := "⏺ 直前の応答\n\n─────\n❯ \n─────\n  🌸 Sonnet 5 ･ﾟ 🧠 0k (0%)\n"
 		if !PromptIsEmpty(real, 15) {
 			t.Error("PromptIsEmpty() = false, want true")
@@ -153,7 +153,7 @@ func TestPromptIsEmpty(t *testing.T) {
 	})
 
 	t.Run("入力行が末尾 n 行の外なら false", func(t *testing.T) {
-		// 走査範囲より上にある空プロンプトを拾ってはいけない。
+		// 走査範囲より上にある空プロンプトを拾ってはいけない｡
 		if PromptIsEmpty(compactStallScreen, 3) {
 			t.Error("PromptIsEmpty() = true, want false")
 		}

@@ -3,7 +3,7 @@ version: '3'
 tasks:
   build:
     desc: cmd/ の全 Go バイナリを bin/ にビルド
-    # -o に末尾スラッシュ付きのディレクトリを渡すと、go は main パッケージだけを選んで出力する｡
+    # -o に末尾スラッシュ付きのディレクトリを渡すと､go は main パッケージだけを選んで出力する｡
     cmds:
       - go build -o ./bin/ ./...
 
@@ -36,7 +36,7 @@ tasks:
     desc: Go の全静的解析を実行
     env:
       # spm-go がローカルレジストリ由来なので policy を渡す (CI は direnv を通らない)｡
-      # 絶対パスにするのは、go-arch-lint が各パッケージのディレクトリを cwd にして go を起動するため｡
+      # 絶対パスにするのは､go-arch-lint が各パッケージのディレクトリを cwd にして go を起動するため｡
       AQUA_POLICY_CONFIG: '{{.TASKFILE_DIR}}/aqua/policy.yaml'
     cmds:
       - golangci-lint run --timeout 5m ./...

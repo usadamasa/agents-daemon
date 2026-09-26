@@ -38,7 +38,7 @@ plugin が持つもの:
 
 ```sh
 claude plugin marketplace add usadamasa/agents-marketplace
-claude plugin install agents-daemon@agents-marketplace
+claude plugin install agents-daemon@usadamasa
 ```
 
 次のセッションの SessionStart で､hook が `go build` をバックグラウンドで回す｡
@@ -94,7 +94,7 @@ clone をそのまま読み込ませると､hook と skill の編集は install
 install 済みの版と二重に hook が走らないよう､確認中は install 済みの plugin を無効にしておく｡
 
 ```sh
-claude plugin disable agents-daemon@agents-marketplace
+claude plugin disable agents-daemon@usadamasa
 claude --plugin-dir "$PWD"
 ```
 

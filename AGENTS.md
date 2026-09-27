@@ -41,6 +41,8 @@ bats は hook を `/bin/bash` で起動する (本番の shebang と同じ bash 
 - hook は `${CLAUDE_PLUGIN_ROOT}` に頼らず､自分の位置 (`$(dirname "$0")`) から plugin root を解決する｡
   hooks.json では `"\"${CLAUDE_PLUGIN_ROOT}/hooks/...\""` と引用符で囲む (validate が未引用を警告する)｡
 - 前提条件 (`go` など) が無ければエラー終了する｡警告してスキップしない｡
+- データを読む・加工する処理 (transcript､JSON) はバイナリのサブコマンドに持たせ､hook は stdin を渡すだけにする
+  (`ingest-statusline` / `ingest-stop`)｡bash 3.2 と jq で timestamp や大きなファイルを扱わない｡
 
 ## skill を書くときの決めごと
 

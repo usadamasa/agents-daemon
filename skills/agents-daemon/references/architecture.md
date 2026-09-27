@@ -6,8 +6,9 @@ statusline・hook・skill・daemon が別々のタイミングで動き､ファ
 互いを直接呼ばない｡
 
 ```
-[1] Claude Code ──毎描画── statusline ─────> rate-limits/<session_id>.json (あれば)
-                     (利用者側)       └──> context/<session_id>.json     (毎回)
+[1] Claude Code ──毎描画── statusline ──stdin──> agents-daemon ingest-statusline
+                     (利用者側)                    ├──> rate-limits/<session_id>.json (あれば)
+                                                   └──> context/<session_id>.json     (毎回)
     compact-prep skill ────────────────────> compact-state/<session_id>.md
     PostCompact hook ──────────────────────> compacted/<session_id>
                                                                           │
@@ -25,14 +26,19 @@ statusline・hook・skill・daemon が別々のタイミングで動き､ファ
                                               └─ context 閾値 → compact-prep → compact → 再開
 ```
 
-### [1] statusline が上限情報を落とす
+### [1] statusline が上限情報を渡し､ingest-statusline が落とす
 
 Claude Code は statusline コマンドの stdin に JSON を渡す｡その中に
 `rate_limits.five_hour.{used_percentage, resets_at}` が入る (`resets_at` は Unix epoch 秒)｡
-利用者の statusline はこれを取り出して `rate-limits/<session_id>.json` へ書く｡
-statusline はこの plugin に含まれないので､書式は下の「statusline が書く state」に従って利用者側で書く｡
+この値は statusline の stdin にしか来ないので､statusline を経由するのは避けられない｡
+ただし statusline がするのは stdin を `agents-daemon ingest-statusline` へ渡すことだけで､
+取り出しと書式はバイナリ (`internal/sessionstate.Store.IngestStatusline`) が持つ｡
+statusline はこの plugin に含まれないので､利用者の statusline に呼び出しの 1 行を足す
+(`agents-daemon:setup` skill の `references/statusline.md`)｡
 
-- **初回 API レスポンス後**にだけ現れる｡
+ingest-statusline の出し分けは次のとおり｡
+
+- `rate_limits` は**初回 API レスポンス後**にだけ現れる｡
 - 無いときは何も書かない｡既存ファイルも消さない (まだ届いていないセッションが､他のセッションの
   書いた state を壊さないため)｡
 - **5 時間ウィンドウが切り替わる瞬間は `five_hour` が null で届く** (実機で `xx:10:01` の
@@ -50,22 +56,25 @@ statusline はこの plugin に含まれないので､書式は下の「statusl
   (次のウィンドウで動き出した) の使用率 6% でゲート抑制された｡ゲートは自セッションの
   ファイルだけを見る｡他セッションのファイルは起床時刻の算出にだけ使う
   ([rate-limit.md](rate-limit.md) の「待機時刻の決め方」参照)｡
-- 書き込みは同一ディレクトリの一時ファイル経由の `mv` で原子的に行う｡
-- statusline の描画を壊さないよう fail-silent｡
+- 書き込みは同一ディレクトリの一時ファイル経由の rename で原子的に行う｡
+- statusline の描画を壊さないよう fail-silent｡stdout には何も出さず､失敗しても exit 0 で終わる
+  (理由は stderr に出すが､呼び出しの 1 行が `2>/dev/null` で捨てる)｡daemon のログにも書かない｡
 
 これがこのツールの中核｡`resets_at` が epoch で直接手に入るので､画面の
 `resets 12:30pm (Asia/Tokyo)` のような表記を am/pm やタイムゾーンごとパースする処理が要らない｡
 実機で `resets_at = 1786851000` と画面の `12:30pm (Asia/Tokyo)` が一致することを確認済み｡
 
-同じ statusline が `context.used_percentage` を `context/<session_id>.json` へも書く｡
+同じ呼び出しで `context_window.used_percentage` を `context/<session_id>.json` へも書く｡
 こちらは `rate_limits` と違って**毎描画で必ず書く** (入力に必ず入っている値であり､
 daemon は `observed_at` の新しさでセッションが生きているかも見るため)｡用途は
 [compact.md](compact.md)｡
 
-#### statusline が書く state
+#### ingest-statusline が書く state
 
 `$STATE` は下の「出力されるファイル」と同じ `${XDG_STATE_HOME:-~/.local/state}/agents-daemon/`｡
-どちらも同一ディレクトリの一時ファイルへ書いてから `mv` で置き換える｡
+どちらも同一ディレクトリの一時ファイルへ書いてから rename で置き換える｡
+読み手 (daemon) と書き手 (ingest-statusline) は `internal/sessionstate` の同じ型を使うので､
+書式はここに転記した参考で､実体はそのパッケージにある｡
 
 `$STATE/rate-limits/<session_id>.json` (`rate_limits.five_hour.resets_at` があるときだけ):
 
@@ -162,14 +171,14 @@ pane ごとに次を評価する｡上限側の詳細は [rate-limit.md](rate-li
 設定は利用者が書くものなので XDG の config ディレクトリに置く｡ランタイム状態は揮発物なので
 ハーネスの `~/.claude/` に混ぜず､XDG Base Directory の state ディレクトリ
 `${XDG_STATE_HOME:-~/.local/state}/agents-daemon/` (以下 `$STATE`) に置く｡
-`XDG_STATE_HOME` は daemon (`apppath.FromEnv`)・hook (`hooks/lib/compact-markers.sh`)・statusline が
+`XDG_STATE_HOME` は daemon と `ingest-statusline` (`apppath.FromEnv`)・hook (`hooks/lib/compact-markers.sh`) が
 同じ規則で解決する｡
 
 | パス | 書く主体 | いつ | 中身 | 消す主体 |
 | ---- | ---- | ---- | ---- | ---- |
 | `${XDG_CONFIG_HOME:-~/.config}/agents-daemon/config.json` | 人間 | 手で編集したとき | 設定 | 消さない |
-| `$STATE/rate-limits/<session_id>.json` | 利用者の statusline | statusline の描画ごと (`rate_limits` があるときだけ) | そのセッションの 5 時間 / 7 日ウィンドウの使用率と reset 時刻､観測時刻､session_id | daemon が 24 時間で消す |
-| `$STATE/context/<session_id>.json` | 利用者の statusline | statusline の描画ごと | そのセッションの context 使用率､観測時刻､session_id | daemon が 7 日で消す |
+| `$STATE/rate-limits/<session_id>.json` | `agents-daemon ingest-statusline` (利用者の statusline が呼ぶ) | statusline の描画ごと (`rate_limits.five_hour.resets_at` があるときだけ) | そのセッションの 5 時間 / 7 日ウィンドウの使用率と reset 時刻､観測時刻､session_id | daemon が 24 時間で消す |
+| `$STATE/context/<session_id>.json` | `agents-daemon ingest-statusline` (利用者の statusline が呼ぶ) | statusline の描画ごと | そのセッションの context 使用率､観測時刻､session_id | daemon が 7 日で消す |
 | `$STATE/compact-state/<session_id>.md` | `agents-daemon:compact-prep` skill | `/agents-daemon:compact-prep` の実行時 | 圧縮で失われる作業状態 (plan / phase / 決定事項 / 編集中ファイル) | daemon が 7 日で消す |
 | `$STATE/compacted/<session_id>` | `hooks/compaction-recovery.sh` (PostCompact hook) | 圧縮が完了したとき | 空ファイル｡mtime が圧縮完了時刻 | 復旧 hook が消す (残れば daemon が 7 日で消す) |
 | `$STATE/daemon.pid` | daemon | 起動時に作成､終了時に削除 | 稼働中デーモンの PID | daemon |
@@ -195,7 +204,7 @@ daemon の再起動を跨いで日付が変わっていた場合も､mtime か�
 `daemon.log` へ追記し続ける｡
 
 古いファイルは daemon 自身が消す｡起動時と 1 時間ごとに､mtime が保持期間を過ぎた
-rotate 済みログ (7 日)､`rate-limits/` 配下の state (24 時間｡statusline が `mv` 前に
+rotate 済みログ (7 日)､`rate-limits/` 配下の state (24 時間｡ingest-statusline が rename 前に
 死んで残った `.rate-limits.*` も同じ扱い)､compact 関連の 3 ディレクトリ配下 (7 日) を
 削除する｡何かを消したときだけログに残す｡
 

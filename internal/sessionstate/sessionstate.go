@@ -1,14 +1,16 @@
 // Package sessionstate は､別プロセスがセッション ID をキーに XDG state 配下へ
-// 書く sidecar file を読む唯一の窓口｡
+// 書く sidecar file を読む唯一の窓口｡rate-limits と context は書く側もここにある｡
 //
-//	rate-limits/<session_id>.json    statusline.sh が書く利用上限
-//	context/<session_id>.json        statusline.sh が書く context 使用率
+//	rate-limits/<session_id>.json    ingest-statusline が書く利用上限 (IngestStatusline)
+//	context/<session_id>.json        ingest-statusline が書く context 使用率 (IngestStatusline)
 //	compact-state/<session_id>.md    compact-prep skill が書く復旧用 state file
 //	compacted/<session_id>           PostCompact hook が書く圧縮完了 marker
 //
-// 書き手はいずれもシェル側 (利用者の statusline スクリプトと､この plugin の
-// compact-prep skill・PostCompact hook) で､ディレクトリ名はそちらの定数と対に
-// なっている｡片方だけ変えると protocol が黙って壊れるため､両方まとめて直すこと｡
+// 上 2 つは利用者の statusline から呼ばれた `agents-daemon ingest-statusline` が
+// このパッケージの型で書くので､読み書きの書式は 1 箇所に閉じる｡下 2 つの書き手は
+// シェル側 (この plugin の compact-prep skill・PostCompact hook) で､ディレクトリ名は
+// そちらの定数と対になっている｡片方だけ変えると protocol が黙って壊れるため､
+// 両方まとめて直すこと｡
 //
 // 4 つを 1 パッケージに置くのは､読み手から見て同じ形をしているため｡同じ root
 // ディレクトリ､同じ session ID の検証､同じ mtime ベースの保持期間｡分けると

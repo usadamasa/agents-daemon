@@ -9,9 +9,9 @@ context 使用率が閾値を超えたら､ユーザーの操作なしに
 書いたファイルの有無と mtime だけ｡
 
 ```
-statusline ──毎描画── $STATE/context/<sid>.json {used_percentage}
-                                    │
-daemon (毎 tick) ───────────────────┘
+statusline ──毎描画── ingest-statusline ──> $STATE/context/<sid>.json {used_percentage}
+                                                          │
+daemon (毎 tick) ─────────────────────────────────────────┘
   │
   ├─ 1 段目: 使用率 >= 閾値              → "/agents-daemon:compact-prep" を投入､送信時刻を記録
   ├─ 2 段目: compact-state/<sid>.md の

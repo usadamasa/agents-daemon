@@ -172,8 +172,8 @@ Claude Code の画面の文言は安定した API ではない｡変わって検
 - **herdr が要る｡** 到達できないときデーモンは起動しない｡Ghostty 単体では pane へ
   キーを送る手段が無いため､この機能は成立しない｡
 - **statusline を切っていると state ファイルが作られない｡** statusline はこの plugin に含まれない｡
-  利用者の statusline が書かなければ､ゲートは働かず､待機時刻は画面かフォールバックから決まり､
-  compact の自動投入は動かない｡
+  利用者の statusline が stdin を `agents-daemon ingest-statusline` へ渡さなければ､ゲートは働かず､
+  待機時刻は画面かフォールバックから決まり､compact の自動投入は動かない｡
 - **herdr が pane にセッション ID を紐づけていないと own state を引けない｡** 対応する
   ファイルが決まらないためゲートは適用されず､画面の分類だけで判定する｡起床時刻は
   画面の絶対時刻かアカウント全体の state から決まる｡

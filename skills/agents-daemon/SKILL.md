@@ -19,15 +19,16 @@ herdr のペインを経由して動く常駐デーモン｡役目は 2 つ｡
 
 ## 配線の要点
 
-- 部品はファイル越しに繋がり､互いを直接呼ばない｡利用者の statusline が
-  `rate-limits/<session_id>.json` と `context/<session_id>.json` を書き､
+- 部品はファイル越しに繋がり､互いを直接呼ばない｡利用者の statusline から呼ばれた
+  `agents-daemon ingest-statusline` が `rate-limits/<session_id>.json` と `context/<session_id>.json` を書き､
   `agents-daemon:compact-prep` skill が `compact-state/<session_id>.md` を書き､PostCompact hook が
   `compacted/<session_id>` を書く｡SessionStart hook が daemon を起こし､
   daemon が herdr 経由で pane を見て､これらのファイルの有無と mtime で判断する｡
-- **statusline はこの plugin に含まれない｡** `rate-limits/` と `context/` を書くのは利用者側の
-  statusline で､書式は [architecture.md](references/architecture.md) の「statusline が書く state」にある｡
-  書かれていなければ上限側のゲートと compact の自動投入が働かない｡
-- statusline が書き出すのは Claude Code が stdin で渡す `rate_limits.five_hour` と
+- **statusline はこの plugin に含まれない｡** 利用者の statusline がするのは stdin を
+  `ingest-statusline` へ渡す 1 行だけで､取り出しと書式はバイナリ (`internal/sessionstate`) が持つ｡
+  書式は [architecture.md](references/architecture.md) の「ingest-statusline が書く state」にある｡
+  1 行が無ければ上限側のゲートと compact の自動投入が働かない｡
+- ingest-statusline が書き出すのは Claude Code が statusline の stdin で渡す `rate_limits.five_hour` と
   `context_window.used_percentage`｡`resets_at` は Unix epoch 秒で､これがあるので
   画面の時刻表記をパースしなくて済む｡使用率は statusline の stdin にしか来ないため､
   compact の判定はこの経路が唯一の情報源｡

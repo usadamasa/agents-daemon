@@ -97,7 +97,7 @@ Write と excluded で起動する hook の shell とで解決値が食い違う
 | ---- | ---- | ---- | ---- |
 | `compact-state/<sid>.md` | 本 skill (`/agents-daemon:compact-prep`) | daemon の housekeeping (7 日) | 復旧用の state file 本体｡mtime が「prep が走った」の判定 |
 | `compacted/<sid>` | `hooks/compaction-recovery.sh` (PostCompact) | `hooks/userpromptsubmit-compaction-recovery.sh` (復旧ガイド注入時) | 圧縮完了 marker｡復旧トリガーと daemon の再開判定を兼ねる |
-| `context/<sid>.json` | 利用者の statusline (毎描画) | daemon の housekeeping (7 日) | context 使用率｡daemon が閾値超過を判定する唯一の情報源 |
+| `context/<sid>.json` | `agents-daemon ingest-statusline` (利用者の statusline が毎描画で呼ぶ) | daemon の housekeeping (7 日) | context 使用率｡daemon が閾値超過を判定する唯一の情報源 |
 
 サイクル: 使用率が閾値超え → daemon が `/agents-daemon:compact-prep` を投入 → 本 skill が `compact-state` を書く
 → daemon が `/compact` を投入 → PostCompact hook が `compacted` を書く → daemon が再開を促す

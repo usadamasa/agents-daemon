@@ -32,6 +32,18 @@ compact_state_file() {
   printf '%s\n' "$COMPACT_STATE_DIR/$1.md"
 }
 
+# daemon が非スラッシュの prompt を送る前に書く cache の ack マーカー｡TTL guard hook が読む｡
+# 中身は cache/<session_id>.json の last_request_at の文字列そのまま (末尾改行なし)｡
+# sidecar が無いまま送ったときは sentinel CACHE_ACK_UNKNOWN で､guard は mtime が直近なら通す｡
+# daemon 側は internal/sessionstate (Store.CacheAck / CacheAckUnknown / WriteCacheAck)｡
+CACHE_ACK_DIR="$_CM_BASE/cache-ack"
+CACHE_ACK_UNKNOWN="daemon-unknown"
+
+# session_id ごとの ack マーカーのパスを返す (拡張子なし)｡
+cache_ack_file() {
+  printf '%s\n' "$CACHE_ACK_DIR/$1"
+}
+
 # stdin JSON から .session_id を stdout に出す (空なら empty string)｡
 # 呼び出し側はこの 1 回で SESSION_ID を得られる｡フォークは jq 1 回のみ｡
 compact_read_session_id() {

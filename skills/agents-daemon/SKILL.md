@@ -47,7 +47,7 @@ herdr のペインを経由して動く常駐デーモン｡役目は 2 つ｡
   同一プロジェクトで複数セッションが動いているときに他セッションの state file を上書きする｡
 - 設定は `${XDG_CONFIG_HOME:-~/.config}/agents-daemon/config.json`｡
   ランタイム状態 (`daemon.pid` / `status.json` / `rate-limits/` / `context/` /
-  `compact-state/` / `compacted/` / `cache/` / `logs/`) は `${XDG_STATE_HOME:-~/.local/state}/agents-daemon/` に置く｡
+  `compact-state/` / `compacted/` / `cache/` / `cache-ack/` / `logs/`) は `${XDG_STATE_HOME:-~/.local/state}/agents-daemon/` に置く｡
   ログの rotate と古いファイルの削除は daemon 自身が行う｡
 - バイナリは `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon` に置く｡plugin の
   install 先はバージョンごとに変わるため､その外の固定パスにする｡用意するのは SessionStart hook で､
@@ -67,6 +67,7 @@ herdr のペインを経由して動く常駐デーモン｡役目は 2 つ｡
 | [architecture.md](references/architecture.md) | statusline / hook / skill / daemon の連動､バイナリの用意と差し替え､毎 tick の判定表､出力されるファイル､ログの rotate |
 | [rate-limit.md](references/rate-limit.md) | ネイティブ auto-continue との分担､limit 検知の二重シグナルとゲート､待機時刻の決め方 |
 | [compact.md](references/compact.md) | context 閾値からの 3 段､marker 経路､compact 直後の停止 |
+| [cache.md](references/cache.md) | prompt cache の失効と daemon の送信､ack マーカーの規約､対象の prompt 4 つ､送信ログと status の cache 表示 |
 | [pane-io.md](references/pane-io.md) | 画面の読み取り元､送信のキーストロークと文面の制約 |
 | [operations.md](references/operations.md) | コマンドと `--dry-run`､実機での検証順序､設定キー一覧､既知の制約 |
 
@@ -79,6 +80,7 @@ herdr のペインを経由して動く常駐デーモン｡役目は 2 つ｡
 | 関係ない pane にプロンプトが打ち込まれた | rate-limit.md の「limit の判定は 2 つの手がかりを要求する」「ゲート」 |
 | context が閾値を超えても compact が走らない | compact.md の「送信の条件」､operations.md の「既知の制約」 |
 | 圧縮後に作業が再開しない | compact.md の「なぜ画面を読まないか」「compact 直後の停止」 |
+| 再開の送信が高くついた・どれだけ書き直したか知りたい | cache.md の「ログ」(送信行末の `cache=expired` と context 使用率) |
 | daemon が起きない・バイナリがビルドされない | architecture.md の「バイナリの用意と差し替え」､`build.log` |
 | 直したコードが動いていない | architecture.md の「バイナリの用意と差し替え」 |
 | 送信が pane に届かない | pane-io.md､operations.md の「既知の制約」(pane 内 tmux､herdr 不在) |

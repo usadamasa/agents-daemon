@@ -6,14 +6,16 @@
 //	compact-state/<session_id>.md    compact-prep skill が書く復旧用 state file
 //	compacted/<session_id>           PostCompact hook が書く圧縮完了 marker
 //	cache/<session_id>.json          ingest-stop が書く prompt cache の状態 (IngestStop)
+//	cache-ack/<session_id>           daemon が非スラッシュの prompt を送る前に書く ack (WriteCacheAck)
 //
 // rate-limits / context / cache は hook や statusline から呼ばれた `agents-daemon
 // ingest-*` がこのパッケージの型で書くので､読み書きの書式は 1 箇所に閉じる｡
 // compact-state / compacted の書き手はシェル側 (この plugin の compact-prep skill・
-// PostCompact hook) で､ディレクトリ名はそちらの定数と対になっている｡片方だけ変えると
+// PostCompact hook) で､cache-ack の読み手も シェル側 (TTL guard hook) で､ディレクトリ名は
+// そちらの定数 (hooks/lib/compact-markers.sh) と対になっている｡片方だけ変えると
 // protocol が黙って壊れるため､両方まとめて直すこと｡
 //
-// 5 つを 1 パッケージに置くのは､読み手から見て同じ形をしているため｡同じ root
+// 6 つを 1 パッケージに置くのは､読み手から見て同じ形をしているため｡同じ root
 // ディレクトリ､同じ session ID の検証､同じ mtime ベースの保持期間｡分けると
 // この 3 つが分けた数だけ複製される｡
 //
@@ -34,7 +36,7 @@ import (
 // 出られないことをここで保証する｡
 var sessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 
-// Store は 5 つの sidecar file の置き場所を持つ｡ゼロ値の Store はどのディレクトリも
+// Store は 6 つの sidecar file の置き場所を持つ｡ゼロ値の Store はどのディレクトリも
 // 空文字列で､読み込みは「まだ何も無い」､Prune は何もしないとして振る舞う
 // (state を持たない呼び出し元のテストがそのまま書けるようにするため)｡
 type Store struct {
@@ -43,9 +45,10 @@ type Store struct {
 	CompactState string
 	Compacted    string
 	Cache        string
+	CacheAck     string
 }
 
-// New は XDG state ディレクトリ (apppath.Paths.StateDir) から 5 つの置き場所を導出する｡
+// New は XDG state ディレクトリ (apppath.Paths.StateDir) から 6 つの置き場所を導出する｡
 func New(stateDir string) Store {
 	return Store{
 		RateLimits:   filepath.Join(stateDir, "rate-limits"),
@@ -53,6 +56,7 @@ func New(stateDir string) Store {
 		CompactState: filepath.Join(stateDir, "compact-state"),
 		Compacted:    filepath.Join(stateDir, "compacted"),
 		Cache:        filepath.Join(stateDir, "cache"),
+		CacheAck:     filepath.Join(stateDir, "cache-ack"),
 	}
 }
 

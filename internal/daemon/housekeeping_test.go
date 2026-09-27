@@ -44,7 +44,7 @@ func TestHousekeep(t *testing.T) {
 
 		log := applog.NewLogger(logPath, func() time.Time { return now })
 		t.Cleanup(func() { _ = log.Close() })
-		r := newDaemonRuntime(&herdrclifake.Client{}, log, filepath.Join(dir, "status.json"), store, func(time.Duration) {}, now)
+		r := newDaemonRuntime(&herdrclifake.Client{}, log, filepath.Join(dir, "status.json"), store, false, func(time.Duration) {}, now)
 
 		r.housekeep(logPath, now)
 
@@ -85,7 +85,7 @@ func TestHousekeep(t *testing.T) {
 		logPath := filepath.Join(dir, "logs", "daemon.log")
 		log := applog.NewLogger(logPath, func() time.Time { return now })
 		t.Cleanup(func() { _ = log.Close() })
-		r := newDaemonRuntime(&herdrclifake.Client{}, log, filepath.Join(dir, "status.json"), sessionstate.Store{}, func(time.Duration) {}, now)
+		r := newDaemonRuntime(&herdrclifake.Client{}, log, filepath.Join(dir, "status.json"), sessionstate.Store{}, false, func(time.Duration) {}, now)
 
 		r.housekeep(logPath, now)
 
@@ -97,7 +97,7 @@ func TestHousekeep(t *testing.T) {
 	t.Run("housekeepDue は間隔が空くまで false を返す", func(t *testing.T) {
 		log := applog.NewLogger(filepath.Join(t.TempDir(), "daemon.log"), func() time.Time { return now })
 		t.Cleanup(func() { _ = log.Close() })
-		r := newDaemonRuntime(&herdrclifake.Client{}, log, "", sessionstate.Store{}, func(time.Duration) {}, now)
+		r := newDaemonRuntime(&herdrclifake.Client{}, log, "", sessionstate.Store{}, false, func(time.Duration) {}, now)
 
 		if !r.housekeepDue(now) {
 			t.Error("初回は true のはず")

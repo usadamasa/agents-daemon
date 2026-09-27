@@ -114,16 +114,19 @@ func roundPercent(v *float64) float64 {
 }
 
 // writeJSONAtomic は v を JSON 1 行 (末尾に改行) にして path へ原子的に書く｡
-// 一時ファイルは path と同じディレクトリに tmpPattern の名前で作る｡別のファイル
-// システムだと rename が原子的でなくなり､daemon が書きかけを読むため｡rename 前に
-// 失敗したら一時ファイルを消す (消し損ねても housekeeping が mtime で拾う)｡
 func writeJSONAtomic(path, tmpPattern string, v any) error {
 	data, err := json.Marshal(v)
 	if err != nil {
 		return fmt.Errorf("%s の JSON 化に失敗: %w", filepath.Base(path), err)
 	}
-	data = append(data, '\n')
+	return writeFileAtomic(path, tmpPattern, append(data, '\n'))
+}
 
+// writeFileAtomic は data を path へ原子的に書く｡
+// 一時ファイルは path と同じディレクトリに tmpPattern の名前で作る｡別のファイル
+// システムだと rename が原子的でなくなり､daemon が書きかけを読むため｡rename 前に
+// 失敗したら一時ファイルを消す (消し損ねても housekeeping が mtime で拾う)｡
+func writeFileAtomic(path, tmpPattern string, data []byte) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return fmt.Errorf("%s の作成に失敗: %w", dir, err)

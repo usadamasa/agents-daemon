@@ -21,10 +21,14 @@ const (
 	// 長く取るのは､復旧用 state file が「次のプロンプトで注入される」まで待つ側であり､
 	// セッションが放置されている間に消すと復旧材料そのものを失うため｡
 	compactRetention = 7 * 24 * time.Hour
+	// cacheAckRetention は cache の ack マーカーを残す期間｡ack は時間で失効させない
+	// (待った時間が長くなっても書き直しのコストは同じ) ので compact 系より長く取る｡
+	// 値は参考実装 (claude-token-audit の ttl-guard) の KEEP_DAYS と同じ｡
+	cacheAckRetention = 90 * 24 * time.Hour
 )
 
 // Prune は保持期間を過ぎた sidecar file を削除し､消した数を利用上限 state と
-// それ以外 (compact 関連と cache) に分けて返す｡ディレクトリが空文字列 (ゼロ値の
+// それ以外 (compact 関連と cache と cache-ack) に分けて返す｡ディレクトリが空文字列 (ゼロ値の
 // Store) または存在しない場合は何もしない｡
 func (s Store) Prune(now time.Time) (rateLimits, compacts int, err error) {
 	var errs []error
@@ -40,6 +44,11 @@ func (s Store) Prune(now time.Time) (rateLimits, compacts int, err error) {
 		}
 		compacts += n
 	}
+	n, ackErr := pruneDir(s.CacheAck, now, cacheAckRetention)
+	if ackErr != nil {
+		errs = append(errs, ackErr)
+	}
+	compacts += n
 	return rateLimits, compacts, errors.Join(errs...)
 }
 

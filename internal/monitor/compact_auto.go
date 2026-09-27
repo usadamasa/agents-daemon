@@ -90,7 +90,7 @@ func tickCompactAuto(
 
 	ps.CompactPrepSentAt = now
 	ps.CompactAutoSentAt = now
-	if err := sendPrompt(ctx, deps, pane, deps.Config.CompactAutoPrepMessage); err != nil {
+	if err := sendPrompt(ctx, deps, pane, ps, deps.Config.CompactAutoPrepMessage, now); err != nil {
 		return OutcomeSendError, fmt.Errorf("pane %s への compact-prep 投入に失敗: %w", pane.PaneID, err)
 	}
 	return OutcomeCompactPrepSent, nil
@@ -107,7 +107,7 @@ func tickCompactAutoPending(
 		}
 		ps.CompactPrepSentAt = time.Time{}
 		ps.CompactAutoSentAt = now
-		if err := sendPrompt(ctx, deps, pane, deps.Config.CompactAutoMessage); err != nil {
+		if err := sendPrompt(ctx, deps, pane, ps, deps.Config.CompactAutoMessage, now); err != nil {
 			return OutcomeSendError, fmt.Errorf("pane %s への compact 投入に失敗: %w", pane.PaneID, err)
 		}
 		return OutcomeCompactSent, nil
@@ -153,7 +153,7 @@ func tickCompactResume(
 	// 画面判定の fallback にも送信済みとして伝える｡伝えないと､境界行が拾える
 	// 版の Claude Code では marker 経路の直後にもう一度突くことになる｡
 	ps.CompactNudgedAt = now
-	if err := sendPrompt(ctx, deps, pane, deps.Config.CompactStallMessage); err != nil {
+	if err := sendPrompt(ctx, deps, pane, ps, deps.Config.CompactStallMessage, now); err != nil {
 		return OutcomeSendError, fmt.Errorf("pane %s への再開送信に失敗: %w", pane.PaneID, err)
 	}
 	return OutcomeCompactResumed, nil

@@ -28,7 +28,7 @@ func newTestRuntime(t *testing.T, client herdrcli.Client, startedAt time.Time) (
 	// 存在しないディレクトリは「state 無し」として扱われ､compact の段は
 	// 何もしない (ここで検証したいのは上限周りの遷移なので)｡
 	// 利用上限 state が要るテストは r.store.RateLimits へ書く｡
-	return newDaemonRuntime(client, log, statusPath, sessionstate.New(dir), func(time.Duration) {}, startedAt), statusPath
+	return newDaemonRuntime(client, log, statusPath, sessionstate.New(dir), false, func(time.Duration) {}, startedAt), statusPath
 }
 
 func claudePane(paneID, terminalID string, status herdrcli.AgentStatus) herdrcli.Pane {

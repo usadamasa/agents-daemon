@@ -32,6 +32,14 @@ func TestPrune(t *testing.T) {
 		ageFile(t, keep, 48*time.Hour, now)
 		ageFile(t, drop, 8*24*time.Hour, now)
 
+		// cache も compact 系と同じ 7 日｡
+		keepCache := filepath.Join(s.Cache, "recent.json")
+		dropCache := filepath.Join(s.Cache, "old.json")
+		writeFile(t, keepCache, "{}")
+		writeFile(t, dropCache, "{}")
+		ageFile(t, keepCache, 48*time.Hour, now)
+		ageFile(t, dropCache, 8*24*time.Hour, now)
+
 		rateLimits, compacts, err := s.Prune(now)
 		if err != nil {
 			t.Fatalf("Prune() error = %v", err)
@@ -39,15 +47,15 @@ func TestPrune(t *testing.T) {
 		if rateLimits != 2 {
 			t.Errorf("rateLimits = %d, want 2 (古い state と mktemp の残骸)", rateLimits)
 		}
-		if compacts != 1 {
-			t.Errorf("compacts = %d, want 1", compacts)
+		if compacts != 2 {
+			t.Errorf("compacts = %d, want 2 (compacted と cache)", compacts)
 		}
-		for _, path := range []string{fresh, keep} {
+		for _, path := range []string{fresh, keep, keepCache} {
 			if _, err := os.Stat(path); err != nil {
 				t.Errorf("保持期間内の %s が消えている", filepath.Base(path))
 			}
 		}
-		for _, path := range []string{stale, leftover, drop} {
+		for _, path := range []string{stale, leftover, drop, dropCache} {
 			if _, err := os.Stat(path); err == nil {
 				t.Errorf("保持期間を過ぎた %s が残っている", filepath.Base(path))
 			}

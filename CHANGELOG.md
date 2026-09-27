@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026.0927.2](https://github.com/usadamasa/agents-daemon/compare/2026.0927.1...2026.0927.2) - 2026-09-27
+
+- feat: ingest-stop で Stop hook から prompt cache の状態を cache/ へ写す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/16
+- feat: daemon が cache の失効を知った上で prompt を送る (ack マーカー・ログ・status) by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/18
+
 ## [2026.0927.1](https://github.com/usadamasa/agents-daemon/compare/2026.0927.0...2026.0927.1) - 2026-09-27
 
 - feat: ingest-statusline で statusline の書き出しを plugin のバイナリへ移す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/14

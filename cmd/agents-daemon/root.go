@@ -20,5 +20,6 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(newDoctorCmd())
 	root.AddCommand(newInspectCmd())
 	root.AddCommand(newSimulateCmd())
+	root.AddCommand(newIngestStatuslineCmd())
 	return root
 }

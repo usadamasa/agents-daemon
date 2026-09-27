@@ -344,6 +344,8 @@ func (r *daemonRuntime) cacheSuffix(pane herdrcli.Pane, entry *paneEntry) string
 	switch {
 	case send.AckErr != nil:
 		fmt.Fprintf(&b, "､ack の書き込みに失敗: %v", send.AckErr)
+	case send.Ack != "" && r.dryRun:
+		b.WriteString("､ack は dry-run で省略")
 	case send.Ack == sessionstate.CacheAckUnknown:
 		fmt.Fprintf(&b, "､ack=%s", send.Ack)
 	case send.Ack != "":

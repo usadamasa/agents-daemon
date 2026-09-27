@@ -53,10 +53,24 @@ func retryTick(t *testing.T, deps Deps, ps *PaneState, now time.Time) (Outcome, 
 	return Tick(context.Background(), deps, newTestPaneWithSession(herdrcli.AgentStatusIdle), ps, nil, now)
 }
 
+// sendTextRequiringAck は SendText の時点で ack が既に書かれていることを要求する｡
+// ack は送信の前に書く｡後だと guard が先に prompt を見て止める｡
+func sendTextRequiringAck(t *testing.T, ack *ackRecorder) func(context.Context, string, string) error {
+	return func(context.Context, string, string) error {
+		if len(ack.writes) == 0 {
+			t.Error("ack を書く前に SendText が呼ばれた")
+		}
+		return nil
+	}
+}
+
 func TestTick_失効後の非スラッシュ送信は_ack_を書いてから送る(t *testing.T) {
 	now := time.Date(2026, 9, 27, 9, 0, 0, 0, time.UTC)
-	client := &herdrclifake.Client{PaneReadFunc: readReturning(limitAndRelativeScreen, nil)}
 	ack := &ackRecorder{}
+	client := &herdrclifake.Client{
+		PaneReadFunc: readReturning(limitAndRelativeScreen, nil),
+		SendTextFunc: sendTextRequiringAck(t, ack),
+	}
 	cache := cacheAt(now.Add(-5 * time.Hour)) // 利用上限からの再開は必ず失効後
 	deps := cacheDeps(t, config.Default(), client, cache, ack)
 	ps := &PaneState{Status: StatusWaiting}
@@ -72,10 +86,6 @@ func TestTick_失効後の非スラッシュ送信は_ack_を書いてから送�
 	// guard の文字列比較と合わなくなる｡
 	if len(ack.writes) != 1 || ack.writes[0] != cache.LastRequestRaw {
 		t.Errorf("ack = %v, want [%q]", ack.writes, cache.LastRequestRaw)
-	}
-	// ack は送信の前に書く｡後だと guard が先に prompt を見て止める｡
-	if len(client.Calls) == 0 || client.Calls[0] != "PaneRead:pane-1" {
-		t.Fatalf("Calls = %v", client.Calls)
 	}
 	if ps.LastSend.Ack != cache.LastRequestRaw || ps.LastSend.Cache != cache || !ps.LastSend.At.Equal(now) {
 		t.Errorf("LastSend = %+v, want ack=%q cache=sidecar at=%v", ps.LastSend, cache.LastRequestRaw, now)
@@ -159,8 +169,11 @@ func TestTick_スラッシュで始まる_prompt_は失効後でも_ack_を書�
 func TestTick_compact停止の継続要求も失効後は_ack_を書く(t *testing.T) {
 	// sendPrompt 経路 (compactStallMessage) も recoverPane と同じ前処理を通る｡
 	now := time.Date(2026, 9, 27, 9, 0, 0, 0, time.UTC)
-	client := &herdrclifake.Client{PaneReadFunc: readReturning(compactStalledScreen, nil)}
 	ack := &ackRecorder{}
+	client := &herdrclifake.Client{
+		PaneReadFunc: readReturning(compactStalledScreen, nil),
+		SendTextFunc: sendTextRequiringAck(t, ack),
+	}
 	cfg := config.Default()
 	cache := cacheAt(now.Add(-2 * time.Hour))
 	deps := cacheDeps(t, cfg, client, cache, ack)

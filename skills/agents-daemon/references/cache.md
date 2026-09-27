@@ -34,10 +34,10 @@ ack は要らない｡
 ## ack マーカー
 
 `$STATE/cache-ack/<session_id>` (拡張子なし)｡daemon が非スラッシュの prompt を送る **直前** に書き､
-TTL guard hook (`UserPromptSubmit`) がこれを見て daemon の送信を止めずに通す｡「書き直しのコストを
-承知で送る」の意思表示｡置き場と sentinel は `hooks/lib/compact-markers.sh` (`CACHE_ACK_DIR` /
-`cache_ack_file` / `CACHE_ACK_UNKNOWN`) と `internal/sessionstate` (`Store.CacheAck` / `WriteCacheAck` /
-`CacheAckUnknown`) が対で持つ｡
+TTL guard hook (`UserPromptSubmit`､issue #11 で入る) がこれを見て daemon の送信を止めずに通す｡
+「書き直しのコストを承知で送る」の意思表示｡置き場と sentinel は `hooks/lib/compact-markers.sh`
+(`CACHE_ACK_DIR` / `cache_ack_file` / `CACHE_ACK_UNKNOWN`) と `internal/sessionstate` (`Store.CacheAck` /
+`WriteCacheAck` / `CacheAckUnknown`) が対で持つ｡
 
 | sidecar の状態 | 書く値 |
 | ---- | ---- |
@@ -53,7 +53,8 @@ TTL guard hook (`UserPromptSubmit`) がこれを見て daemon の送信を止め
   新しくする｡
 - `last_request_at` が未来 (clock skew) なら warm 扱い｡
 - ack の書き込みに失敗しても送信は止めない｡失敗はログに残る｡
-- `--dry-run` では書かない｡書くと利用者自身の次の prompt が guard を素通りする｡
+- `--dry-run` では書かない｡書くと利用者自身の次の prompt が guard を素通りする｡ログには
+  `ack は dry-run で省略` と出る｡
 - herdr が pane にセッションを紐づけていなければ書けない (ログに `session 未紐づけ` と出る)｡
 - daemon が 90 日で消す｡ack は時間で失効させない (待った時間が長くなっても書き直しのコストは同じ)
   ので compact 系の 7 日より長い｡
@@ -61,7 +62,7 @@ TTL guard hook (`UserPromptSubmit`) がこれを見て daemon の送信を止め
 Stop hook はユーザーの中断では発火しないので､sidecar が transcript より古いことがある｡daemon は
 sidecar の値を写すため､guard が transcript から求めた値と食い違いうる｡どちらも失効側にずれる
 (「まだ warm」を「失効」と見る) ので送る側の判断は変わらないが､ack の文字列は一致しない｡
-この扱いは guard 側の規則 (mtime が直近の ack を通す) に寄せる｡
+この食い違いは guard 側 (#11) で扱う｡
 
 ## ログ
 

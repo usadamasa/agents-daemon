@@ -200,8 +200,12 @@ func TestDaemonRuntimeTick_SendLogCarriesCacheState(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(r.store.CacheAck, "session-a")); !os.IsNotExist(err) {
 			t.Errorf("dry-run なのに ack が書かれている (err = %v)", err)
 		}
-		if log := readLog(t, statusPath); !strings.Contains(log, "cache=expired") {
-			t.Errorf("dry-run でも cache の状態はログに残す:\n%s", log)
+		log := readLog(t, statusPath)
+		if !strings.Contains(log, "cache=expired") || !strings.Contains(log, "ack は dry-run で省略") {
+			t.Errorf("dry-run でも cache の状態はログに残し､ack を書いていないことを明記する:\n%s", log)
+		}
+		if strings.Contains(log, "ack 済み") {
+			t.Errorf("書いていない ack を「済み」と報告している:\n%s", log)
 		}
 	})
 }

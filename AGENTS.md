@@ -64,15 +64,5 @@ hook・skill・daemon は別プロセスで､ファイル越しに繋がる｡�
 
 ## リリース
 
-CalVer (`YYYY.0M0D.MICRO`) の tag を手で打つ｡**`v` を付けない｡**
-`v2026.0926.0` は Go module が major 2026 の semver と解釈し､module path に
-`/v2026` が無いと拒否する｡`v` 無しなら Go にとって semver tag ではないので無視される｡
-
-1. `.claude-plugin/plugin.json` の `version` を上げて merge する｡
-   SessionStart hook はこの値と cache の stamp を比べて､利用者の手元のバイナリを建て直す｡
-2. tag と release を作る｡
-
-```sh
-git tag 2026.0926.0 && git push origin 2026.0926.0
-gh release create 2026.0926.0 --generate-notes
-```
+tagpr (`.tagpr`､`.github/workflows/tagpr.yaml`) がリリース PR を作る｡`version` は手で上げない｡
+tag に **`v` を付けない｡** `v2026.0926.0` は Go module が major 2026 の semver と解釈して拒否する｡

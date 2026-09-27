@@ -8,9 +8,10 @@ import (
 )
 
 // TestNew_ディレクトリ名がシェル側の定数と一致する は protocol の固定｡
-// 書き出し側は利用者の statusline スクリプト (rate-limits / context) と
-// この plugin の skill・hook (compact-state / compacted) で､
-// 名前が片方だけ変わると daemon が黙って何も読めなくなる｡
+// compact-state / compacted の書き出し側はこの plugin の skill・hook (シェル) で､
+// 名前が片方だけ変わると daemon が黙って何も読めなくなる｡rate-limits / context は
+// 書き手 (IngestStatusline) もこのパッケージにあるが､setup skill の確認手順が
+// パスを直に書くので同じく固定する｡
 func TestNew_ディレクトリ名がシェル側の定数と一致する(t *testing.T) {
 	s := New("/state")
 

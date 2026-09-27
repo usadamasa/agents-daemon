@@ -77,9 +77,9 @@ func reportPanes(w io.Writer, panes []herdrcli.Pane) {
 	_, _ = fmt.Fprintf(w, "  pane 総数: %d 件 (うち Claude agent: %d 件)\n", len(panes), claudeCount)
 }
 
-// reportRateLimitState は statusline.sh が書き出す rate-limits.json の有無､鮮度､
+// reportRateLimitStates は ingest-statusline が書き出す rate-limits.json の有無､鮮度､
 // 5 時間ウィンドウの使用率を報告する｡ファイルが無いこと自体は異常ではない
-// (statusline がまだ 1 度も書いていない)｡
+// (statusline から ingest-statusline がまだ 1 度も rate_limits を受け取っていない)｡
 func reportRateLimitStates(w io.Writer, p apppath.Paths, panes []herdrcli.Pane, now time.Time) {
 	cfg, cfgErr := config.Load(p.ConfigFile())
 	if cfgErr != nil {
@@ -117,7 +117,7 @@ func reportSessionRateLimitState(w io.Writer, cfg config.Config, p apppath.Paths
 		return
 	}
 	if state == nil {
-		_, _ = fmt.Fprintln(w, "  state ファイルはまだありません (statusline がまだ rate_limits を書き出していません)")
+		_, _ = fmt.Fprintln(w, "  state ファイルはまだありません (statusline 経由の ingest-statusline がまだ rate_limits を受け取っていません)")
 		return
 	}
 

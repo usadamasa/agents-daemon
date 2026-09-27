@@ -3,8 +3,8 @@ name: setup
 description: >-
   agents-daemon plugin を install した直後､または動いていない疑いがあるときに､前提がそろっているかを確かめて
   足りない配線を足す｡herdr が入っていない・server が落ちている・このセッションが herdr の pane の外で動いている､
-  statusline が rate-limits / context の state file を書いていない､go や jq が無くてバイナリが建たない､
-  といった状態を拾う｡「agents-daemon をセットアップして」「statusline を配線して」「herdr があるか確かめて」
+  statusline が stdin を `ingest-statusline` へ渡しておらず rate-limits / context の state file が無い､
+  go や jq が無くてバイナリが建たない､といった状態を拾う｡「agents-daemon をセットアップして」「statusline を配線して」「herdr があるか確かめて」
   と言われたときにも使う｡
 ---
 
@@ -13,6 +13,7 @@ description: >-
 agents-daemon が動くのに要る前提を上から順に確かめ､欠けているものだけを直す｡
 確かめるのは「設定が書いてあるか」ではなく「実際に動いた跡があるか」｡
 statusline の中身を grep して判定しない (書き方は人によって違い､書いてあっても動いていないことがある)｡
+例外は 3 段目の `ingest-statusline` を呼ぶ固定の 1 行だけ｡
 
 各段の結果を次の 3 つのどれかで控え､最後にまとめて報告する｡
 
@@ -33,7 +34,7 @@ command -v herdr go jq
 - `herdr`: 無ければ NG｡daemon は herdr の CLI で pane の画面を読み､プロンプトを送る｡herdr の代わりになる経路は無い｡<https://herdr.dev> を案内する｡
 - `go`: 無ければ NG｡SessionStart hook が plugin のソースから `go build` する｡
   hook は Claude Code を起動したシェルの PATH で探すので､入れた後は Claude Code を起動し直す｡
-- `jq`: 無ければ NG｡hook と､statusline に貼るスニペット ([statusline.md](references/statusline.md)) が使う｡
+- `jq`: 無ければ NG｡hook が plugin.json の version と hook 入力の JSON を読むのに使う｡
 
 ## 2. herdr の到達性と､このセッションの pane
 
@@ -57,13 +58,11 @@ herdr pane list | jq -c --arg sid "$sid" \
   herdr の pane の中で Claude Code を起動し直してもらう｡
 - `get-session-id.sh` が失敗したら `CLAUDE_CODE_SESSION_ID` が来ていない｡ここから先のセッション単位の確認はできないので､その旨を報告に残す｡
 
-## 3. statusline が state file を書いているか
+## 3. statusline が state file を書かせているか
 
 置き場は `${XDG_STATE_HOME:-$HOME/.local/state}/agents-daemon/`｡
-[architecture.md](../agents-daemon/references/architecture.md) の「statusline が書く state」は､
-statusline に描画のたびに `context/<session_id>.json` を書き直すよう求めている｡
-statusline がそのとおりに書かれていれば､この skill を動かしているセッションのファイルがあり､`observed_at` も新しい｡
-ファイルが無い､または古ければ､statusline が書いていないか､書き方が求めと違う｡
+配線ができていれば `context/<session_id>.json` が描画のたびに書き直されるので､
+この skill を動かしているセッションのファイルがあり､`observed_at` も新しい｡
 
 ```sh
 sid=$("${CLAUDE_PLUGIN_ROOT}/scripts/get-session-id.sh")
@@ -84,14 +83,20 @@ jq -c . "$state/rate-limits/$sid.json"
 | `rate-limits/<sid>.json` がある | OK |
 | `rate-limits/<sid>.json` が無い | 情報 (下を参照) |
 
-`rate-limits/` は stdin に `rate_limits.five_hour.resets_at` が来たときだけ書かれる｡
+`rate-limits/` は stdin に `rate_limits.five_hour.resets_at` が来たときだけ書かれる (出し分けはバイナリの側)｡
 初回の API レスポンス前には来ないし､`rate_limits` が届かない契約 (Enterprise の seat など) ではずっと来ない｡
 無いときは「上限からの自動再開のゲートは画面判定だけで動く」と伝えるに留める｡
 
 ### statusline へ足す
 
-`context/<sid>.json` が NG なら､[statusline.md](references/statusline.md) を `Read` で開いて従う｡
-statusline の設定の置き場の調べ方､貼るスニペット､書き換えた後の確かめ方がある｡
+`context/<sid>.json` が NG なら､原因は 2 つに絞れる｡順に見る｡
+
+1. バイナリが無い: 先に 4 段目を確かめる｡無ければそれが原因で､statusline 側は直さない
+   (build が終われば次の描画から書かれる)｡
+2. statusline が `ingest-statusline` を呼んでいない: statusline のスクリプトに
+   `agents-daemon" ingest-statusline` の行があるかを見る｡呼ぶ行は固定の 1 行なので､ここだけは grep で判定してよい｡
+   無ければ [statusline.md](references/statusline.md) を `Read` で開いて従う｡
+   statusline の設定の置き場の調べ方､足す 1 行､書き換えた後の確かめ方がある｡
 
 ## 4. バイナリ
 

@@ -21,14 +21,14 @@ plugin が持つもの:
 | `agents-daemon:compact-prep` skill | `/compact` 前に作業状態を state file へ保存する |
 | `agents-daemon:agents-daemon` skill | 運用と切り分けの手引き (症状から引く) |
 | `agents-daemon:setup` skill | 前提の確認と statusline への配線 |
+| `agents-daemon ingest-statusline` | statusline の stdin から daemon が読む state file を書くサブコマンド |
 
 ## 前提
 
 - **[herdr](https://herdr.dev)**: daemon は `herdr pane list` / `pane read` / `pane send-text` で pane を見て送信する｡
   herdr の外で動く Claude Code には何も届かない｡
-- **statusline が state file を書くこと**: 使用率と解除時刻は statusline の stdin にしか来ない｡
-  この plugin は statusline を含まないので､利用者の statusline に書き込みを足す (下の「セットアップ」で行う)｡
-  書かれていなければ､上限側のゲートは働かず､compact の自動投入は動かない｡
+- **statusline が stdin を `ingest-statusline` へ渡すこと**: 使用率と解除時刻は statusline の stdin にしか来ない｡
+  この plugin は statusline を含まないので､利用者の statusline に 1 行足す (下の「セットアップ」で行う)｡
 - **Go toolchain**: SessionStart hook が plugin のソースから `go build` でバイナリを建てる｡
   hook は Claude Code を起動したシェルの PATH で `go` を探す｡無ければ `brew install go` などで入れる｡
   初回の build では Go module のダウンロードにネットワークを使う｡
@@ -51,7 +51,7 @@ build の経過は `${XDG_STATE_HOME:-~/.local/state}/agents-daemon/logs/build.l
 ## セットアップ
 
 install 後に herdr の pane の中で Claude Code を起動し､`/agents-daemon:setup` を実行する｡
-前提がそろっているかを確かめ､statusline への書き込みが無ければ足す案を出す｡
+前提がそろっているかを確かめ､statusline への配線が無ければ足す案を出す｡
 
 ## 設定
 
@@ -77,6 +77,7 @@ agents-daemon doctor                     # 前提条件の診断
 agents-daemon inspect --pane <id>        # 生きた pane の画面を分類する
 agents-daemon daemon --foreground --dry-run  # 送信せずに判定だけ回す
 agents-daemon stop                       # 停止
+agents-daemon ingest-statusline < in.json  # statusline の stdin から state file を書く (statusline が呼ぶ)
 ```
 
 ## 開発

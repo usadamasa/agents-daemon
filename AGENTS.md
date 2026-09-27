@@ -15,7 +15,7 @@ Go のデーモンと､それを配線する hook・skill を持つ｡
 | `scripts/get-session-id.sh` | compact-prep / setup skill が呼ぶ session_id の取得 |
 | `skills/compact-prep/` | `/compact` 前の state file 保存 |
 | `skills/agents-daemon/` | 運用と切り分けの手引き｡配線・判定・設定キーの詳細は `references/` |
-| `skills/setup/` | install 後の前提確認 (herdr､go/jq､statusline の state file､バイナリ)｡statusline へのスニペットは `references/` |
+| `skills/setup/` | install 後の前提確認 (herdr､go/jq､statusline の state file､バイナリ)｡statusline に足す `ingest-statusline` の 1 行は `references/` |
 | `cmd/agents-daemon/` | Go の main (cobra) |
 | `internal/` | daemon の本体｡パス定数は `internal/apppath` |
 | `tests/` | hook と script の bats テスト (`tests/lib/`､`tests/fixtures/`) |
@@ -61,6 +61,7 @@ hook・skill・daemon は別プロセスで､ファイル越しに繋がる｡�
 | `hooks/lib/daemon-bin.sh` | `Taskfile.yml` の `install` | `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon` |
 | `skills/compact-prep/SKILL.md` の保存先 | `internal/apppath` | `compact-state/<session_id>.md` |
 | `.claude-plugin/plugin.json` の skill 名 | `internal/config` の `compactAutoPrepMessage` 既定 | `/agents-daemon:compact-prep` |
+| 利用者の statusline に足す 1 行 (`skills/setup/references/statusline.md`) | `hooks/lib/daemon-bin.sh` と `Taskfile.yml` の `install` | `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon ingest-statusline`｡`context/` `rate-limits/` の書式は `internal/sessionstate` が読み書き両方で持つ |
 
 ## リリース
 

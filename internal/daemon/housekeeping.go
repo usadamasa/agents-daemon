@@ -36,6 +36,6 @@ func (r *daemonRuntime) housekeep(logPath string, now time.Time) {
 		r.log.Logf("sidecar file の削除でエラー: %v", err)
 	}
 	if logs > 0 || states > 0 || compacts > 0 {
-		r.log.Logf("保持期間を過ぎたファイルを削除しました: rotated ログ %d 件､利用上限 state %d 件､compact state %d 件", logs, states, compacts)
+		r.log.Logf("保持期間を過ぎたファイルを削除しました: rotated ログ %d 件､利用上限 state %d 件､compact / cache state %d 件", logs, states, compacts)
 	}
 }

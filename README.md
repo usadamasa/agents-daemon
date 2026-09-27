@@ -18,10 +18,12 @@ plugin が持つもの:
 | SessionStart hook | daemon のバイナリを用意し､`daemon --ensure` で起こす |
 | PostCompact hook | 圧縮完了の marker を置く |
 | UserPromptSubmit hook | marker を見て､圧縮直後の 1 ターンだけ復旧ガイドを注入する |
+| Stop hook | 応答の終わりごとに transcript から prompt cache の状態 (最終リクエスト時刻と TTL) を state file へ写す |
 | `agents-daemon:compact-prep` skill | `/compact` 前に作業状態を state file へ保存する |
 | `agents-daemon:agents-daemon` skill | 運用と切り分けの手引き (症状から引く) |
 | `agents-daemon:setup` skill | 前提の確認と statusline への配線 |
 | `agents-daemon ingest-statusline` | statusline の stdin から daemon が読む state file を書くサブコマンド |
+| `agents-daemon ingest-stop` | Stop hook の stdin から prompt cache の state file を書くサブコマンド |
 
 ## 前提
 
@@ -78,6 +80,7 @@ agents-daemon inspect --pane <id>        # 生きた pane の画面を分類す�
 agents-daemon daemon --foreground --dry-run  # 送信せずに判定だけ回す
 agents-daemon stop                       # 停止
 agents-daemon ingest-statusline < in.json  # statusline の stdin から state file を書く (statusline が呼ぶ)
+agents-daemon ingest-stop < in.json        # Stop hook の stdin から cache state を書く (hook が呼ぶ)
 ```
 
 ## 開発

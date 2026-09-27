@@ -22,7 +22,8 @@ herdr のペインを経由して動く常駐デーモン｡役目は 2 つ｡
 - 部品はファイル越しに繋がり､互いを直接呼ばない｡利用者の statusline から呼ばれた
   `agents-daemon ingest-statusline` が `rate-limits/<session_id>.json` と `context/<session_id>.json` を書き､
   `agents-daemon:compact-prep` skill が `compact-state/<session_id>.md` を書き､PostCompact hook が
-  `compacted/<session_id>` を書く｡SessionStart hook が daemon を起こし､
+  `compacted/<session_id>` を書き､Stop hook から呼ばれた `agents-daemon ingest-stop` が
+  `cache/<session_id>.json` を書く｡SessionStart hook が daemon を起こし､
   daemon が herdr 経由で pane を見て､これらのファイルの有無と mtime で判断する｡
 - **statusline はこの plugin に含まれない｡** 利用者の statusline がするのは stdin を
   `ingest-statusline` へ渡す 1 行だけで､取り出しと書式はバイナリ (`internal/sessionstate`) が持つ｡
@@ -36,7 +37,7 @@ herdr のペインを経由して動く常駐デーモン｡役目は 2 つ｡
   残らず､画面判定 (`internal/detect/compact.go`) は候補を作れない｡代わりに
   PostCompact hook が置く marker を見る｡この経路はユーザーが手で打った `/compact` でも
   本体の autocompact でも動く｡
-- hook の配線元は plugin の `hooks/hooks.json` (SessionStart / PostCompact / UserPromptSubmit)｡
+- hook の配線元は plugin の `hooks/hooks.json` (SessionStart / PostCompact / UserPromptSubmit / Stop)｡
 - marker と state file の置き場は `hooks/lib/compact-markers.sh` の定数 (hook /
   skill 側) と `internal/apppath` (daemon 側) が対で持つ｡片方だけ変えると protocol が
   黙って壊れる｡cwd 相対にしないのは､daemon が別プロセスであり hook に渡る cwd も
@@ -46,7 +47,7 @@ herdr のペインを経由して動く常駐デーモン｡役目は 2 つ｡
   同一プロジェクトで複数セッションが動いているときに他セッションの state file を上書きする｡
 - 設定は `${XDG_CONFIG_HOME:-~/.config}/agents-daemon/config.json`｡
   ランタイム状態 (`daemon.pid` / `status.json` / `rate-limits/` / `context/` /
-  `compact-state/` / `compacted/` / `logs/`) は `${XDG_STATE_HOME:-~/.local/state}/agents-daemon/` に置く｡
+  `compact-state/` / `compacted/` / `cache/` / `logs/`) は `${XDG_STATE_HOME:-~/.local/state}/agents-daemon/` に置く｡
   ログの rotate と古いファイルの削除は daemon 自身が行う｡
 - バイナリは `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon` に置く｡plugin の
   install 先はバージョンごとに変わるため､その外の固定パスにする｡用意するのは SessionStart hook で､

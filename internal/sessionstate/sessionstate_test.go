@@ -24,6 +24,7 @@ func TestNew_ディレクトリ名がシェル側の定数と一致する(t *tes
 		{"Context", s.Context, "/state/context"},
 		{"CompactState", s.CompactState, "/state/compact-state"},
 		{"Compacted", s.Compacted, "/state/compacted"},
+		{"Cache", s.Cache, "/state/cache"},
 	} {
 		if tt.got != tt.want {
 			t.Errorf("%s = %q, want %q", tt.name, tt.got, tt.want)

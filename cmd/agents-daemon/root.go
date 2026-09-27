@@ -21,5 +21,6 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(newInspectCmd())
 	root.AddCommand(newSimulateCmd())
 	root.AddCommand(newIngestStatuslineCmd())
+	root.AddCommand(newIngestStopCmd())
 	return root
 }

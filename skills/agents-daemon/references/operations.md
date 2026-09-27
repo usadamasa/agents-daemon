@@ -37,6 +37,9 @@ agents-daemon simulate                  # 使い捨て pane で検知から送�
 agents-daemon simulate --send --keep    # 実際に送信し､pane を残して目で見る
 ```
 
+hook や statusline から呼ばれる `ingest-statusline` / `ingest-stop` は stdin の JSON を受けて state file を
+書くだけで､手で叩くなら `< in.json` で渡す｡どちらも stdout には何も出さず､失敗しても exit 0 で終わる｡
+
 `inspect` は判定結果だけでなく､走査した行・ゲートが開いているか・待機時刻をどの
 情報源から得たかを出す｡検知がおかしいと疑ったときに､結論ではなく判断過程を見るためのもの｡
 

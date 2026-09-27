@@ -22,10 +22,11 @@ teardown() {
 }
 
 # 呼ばれた引数を $1 へ､stdin を $2 へ書くだけの daemon バイナリを $BIN に置く｡
+# FIXTURE_PATH に cat は無いので builtin だけで書く｡
 make_recording_daemon() {
   local args="$1" stdin="$2"
   mkdir -p "$BIN_DIR"
-  printf '#!/bin/bash\nprintf "%%s\\n" "$*" >>"%s"\ncat >"%s"\n' "$args" "$stdin" >"$BIN"
+  printf '#!/bin/bash\nprintf "%%s\\n" "$*" >>"%s"\nprintf "%%s\\n" "$(</dev/stdin)" >"%s"\n' "$args" "$stdin" >"$BIN"
   chmod +x "$BIN"
 }
 

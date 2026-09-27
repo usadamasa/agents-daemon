@@ -11,6 +11,7 @@ statusline・hook・skill・daemon が別々のタイミングで動き､ファ
                                                    └──> context/<session_id>.json     (毎回)
     compact-prep skill ────────────────────> compact-state/<session_id>.md
     PostCompact hook ──────────────────────> compacted/<session_id>
+    Stop hook ──stdin──> agents-daemon ingest-stop ──> cache/<session_id>.json
                                                                           │
 [2] SessionStart hook ──daemon --ensure──> daemon (常駐 1 プロセス)        │ pane の
                                               │                           │ session を
@@ -97,6 +98,26 @@ daemon は `observed_at` の新しさでセッションが生きているかも�
 
 `observed_at` はどちらも書いた時点の Unix epoch 秒｡
 
+#### ingest-stop が書く state
+
+Stop hook (`hooks/cache-state.sh`) は stdin を `agents-daemon ingest-stop` へ渡すだけで､
+transcript の読み方と書式は `internal/sessionstate` (`IngestStop` / `LoadCache`) が持つ｡
+prompt cache は最後のリクエストから TTL (5 分 / 1 時間) で失効し､失効後の 1 送信は文脈全体の
+cache write になる｡実際に使われた TTL は transcript JSONL の `message.usage.cache_creation` にしか
+無いので､応答の終わりごとに末尾 2MB を読んで写す｡読む規則は
+[tatsuo48/claude-token-audit の ttl_guard.py](https://github.com/tatsuo48/claude-token-audit/blob/main/plugins/ttl-guard/scripts/ttl_guard.py)
+の `last_main_response` と同じ｡
+
+`$STATE/cache/<session_id>.json` (応答の終わりごと｡cache write が 1 つも無ければ消す):
+
+```json
+{"last_request_at": "2026-09-27T03:44:05.954Z", "ttl_seconds": 3600, "transcript_path": "/path/to/transcript.jsonl"}
+```
+
+`last_request_at` は transcript の timestamp 文字列をそのまま写す (読み手が ack と文字列で比較するため)｡
+transcript が無い・読めないときは何も書かず既存ファイルも残す｡ユーザーの中断では Stop が発火しないので
+古くなることがあるが､古い側へずれるのは「まだ warm」を「失効」と見る方向で､能動的な動作を抑える側に倒れる｡
+
 ### [2] SessionStart hook がデーモンを起こす
 
 `hooks/ensure-daemon.sh` が `agents-daemon daemon --ensure` を叩く｡生きているデーモンが既にあれば
@@ -171,8 +192,8 @@ pane ごとに次を評価する｡上限側の詳細は [rate-limit.md](rate-li
 設定は利用者が書くものなので XDG の config ディレクトリに置く｡ランタイム状態は揮発物なので
 ハーネスの `~/.claude/` に混ぜず､XDG Base Directory の state ディレクトリ
 `${XDG_STATE_HOME:-~/.local/state}/agents-daemon/` (以下 `$STATE`) に置く｡
-`XDG_STATE_HOME` は daemon と `ingest-statusline` (`apppath.FromEnv`)・hook (`hooks/lib/compact-markers.sh`) が
-同じ規則で解決する｡
+`XDG_STATE_HOME` は daemon と `ingest-statusline` / `ingest-stop` (`apppath.FromEnv`)・hook
+(`hooks/lib/compact-markers.sh`) が同じ規則で解決する｡
 
 | パス | 書く主体 | いつ | 中身 | 消す主体 |
 | ---- | ---- | ---- | ---- | ---- |
@@ -181,6 +202,7 @@ pane ごとに次を評価する｡上限側の詳細は [rate-limit.md](rate-li
 | `$STATE/context/<session_id>.json` | `agents-daemon ingest-statusline` (利用者の statusline が呼ぶ) | statusline の描画ごと | そのセッションの context 使用率､観測時刻､session_id | daemon が 7 日で消す |
 | `$STATE/compact-state/<session_id>.md` | `agents-daemon:compact-prep` skill | `/agents-daemon:compact-prep` の実行時 | 圧縮で失われる作業状態 (plan / phase / 決定事項 / 編集中ファイル) | daemon が 7 日で消す |
 | `$STATE/compacted/<session_id>` | `hooks/compaction-recovery.sh` (PostCompact hook) | 圧縮が完了したとき | 空ファイル｡mtime が圧縮完了時刻 | 復旧 hook が消す (残れば daemon が 7 日で消す) |
+| `$STATE/cache/<session_id>.json` | `agents-daemon ingest-stop` (`hooks/cache-state.sh` が呼ぶ) | 応答の終わりごと (Stop hook) | 直近の応答の開始時刻と最新の cache write の TTL､transcript のパス | cache write が無いターンで ingest-stop が消す (残れば daemon が 7 日で消す) |
 | `$STATE/daemon.pid` | daemon | 起動時に作成､終了時に削除 | 稼働中デーモンの PID | daemon |
 | `$STATE/status.json` | daemon | 毎 tick (既定 5 秒) | 監視中の pane 一覧と各 pane の監視状態・試行回数・待機期限・直近の判定 | 上書き |
 | `$STATE/logs/daemon.log` | daemon | 報告に値する出来事があったときだけ | 上限検知と待ち時間､再開送信､ユーザーの自己再開､ゲート抑制､ネイティブへの譲り､compact 停止の催促､エラー | rotate |
@@ -205,7 +227,7 @@ daemon の再起動を跨いで日付が変わっていた場合も､mtime か�
 
 古いファイルは daemon 自身が消す｡起動時と 1 時間ごとに､mtime が保持期間を過ぎた
 rotate 済みログ (7 日)､`rate-limits/` 配下の state (24 時間｡ingest-statusline が rename 前に
-死んで残った `.rate-limits.*` も同じ扱い)､compact 関連の 3 ディレクトリ配下 (7 日) を
+死んで残った `.rate-limits.*` も同じ扱い)､compact 関連の 3 ディレクトリと `cache/` 配下 (7 日) を
 削除する｡何かを消したときだけログに残す｡
 
 保持期間は設定キーにせず定数 (`internal/daemon/housekeeping.go`) に置く｡state の

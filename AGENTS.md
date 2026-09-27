@@ -8,9 +8,10 @@ Go のデーモンと､それを配線する hook・skill を持つ｡
 | パス | 中身 |
 | ---- | ---- |
 | `.claude-plugin/plugin.json` | plugin manifest｡version の実体はここ 1 箇所｡marketplace.json は agents-marketplace リポジトリが持つ |
-| `hooks/hooks.json` | SessionStart / PostCompact / UserPromptSubmit の配線 |
+| `hooks/hooks.json` | SessionStart / PostCompact / UserPromptSubmit / Stop の配線 |
 | `hooks/ensure-daemon.sh`, `hooks/build-daemon.sh` | バイナリの用意 (detach build) と `daemon --ensure` |
 | `hooks/compaction-recovery.sh`, `hooks/userpromptsubmit-compaction-recovery.sh` | 圧縮完了 marker と復旧ガイドの注入 |
+| `hooks/cache-state.sh` | Stop の stdin を `ingest-stop` へ渡す (prompt cache の状態を `cache/` へ) |
 | `hooks/lib/` | hook 共通の logger､marker の置き場 (`compact-markers.sh`)､バイナリの置き場 (`daemon-bin.sh`) |
 | `scripts/get-session-id.sh` | compact-prep / setup skill が呼ぶ session_id の取得 |
 | `skills/compact-prep/` | `/compact` 前の state file 保存 |
@@ -62,6 +63,7 @@ hook・skill・daemon は別プロセスで､ファイル越しに繋がる｡�
 | `skills/compact-prep/SKILL.md` の保存先 | `internal/apppath` | `compact-state/<session_id>.md` |
 | `.claude-plugin/plugin.json` の skill 名 | `internal/config` の `compactAutoPrepMessage` 既定 | `/agents-daemon:compact-prep` |
 | 利用者の statusline に足す 1 行 (`skills/setup/references/statusline.md`) | `hooks/lib/daemon-bin.sh` と `Taskfile.yml` の `install` | `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon ingest-statusline`｡`context/` `rate-limits/` の書式は `internal/sessionstate` が読み書き両方で持つ |
+| `hooks/cache-state.sh` (Stop hook) | `hooks/lib/daemon-bin.sh` | 同じバイナリの `ingest-stop`｡`cache/` の書式と transcript の読み方は `internal/sessionstate` が持つ |
 
 ## リリース
 

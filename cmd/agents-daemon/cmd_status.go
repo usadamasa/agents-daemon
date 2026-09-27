@@ -87,7 +87,20 @@ func printSnapshot(w io.Writer, snap *daemon.StatusSnapshot, pid int, now time.T
 		if pn.WaitUntil != nil {
 			wait = pn.WaitUntil.Format(time.RFC3339)
 		}
-		_, _ = fmt.Fprintf(w, "  %s  %s  agent=%s monitor=%s attempts=%d wait_until=%s last=%s\n",
-			pn.PaneID, pn.CWD, pn.AgentStatus, pn.MonitorStatus, pn.Attempts, wait, pn.LastOutcome)
+		_, _ = fmt.Fprintf(w, "  %s  %s  agent=%s monitor=%s attempts=%d wait_until=%s last=%s cache=%s\n",
+			pn.PaneID, pn.CWD, pn.AgentStatus, pn.MonitorStatus, pn.Attempts, wait, pn.LastOutcome, cacheColumn(pn.Cache, now))
 	}
+}
+
+// cacheColumn は pane 行の cache 列｡失効までの残り (または失効からの経過) は表示時点の
+// now から出す｡snapshot の state は tick 時点の判定なので､境界をまたいだ直後は残り 0 分の
+// warm や経過 0 分の expired になりうる｡
+func cacheColumn(c *daemon.CacheStatus, now time.Time) string {
+	if c == nil {
+		return "-"
+	}
+	if now.Before(c.ExpiresAt) {
+		return fmt.Sprintf("warm(残り %d 分)", int(c.ExpiresAt.Sub(now)/time.Minute))
+	}
+	return fmt.Sprintf("expired(失効から %d 分)", int(now.Sub(c.ExpiresAt)/time.Minute))
 }

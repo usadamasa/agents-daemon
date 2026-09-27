@@ -15,6 +15,11 @@ import (
 // 収まれば足りる｡先頭の切れた行は JSON として読めず飛ばされる｡
 const transcriptTailBytes = 2 << 20
 
+// CacheAckUnknown は sidecar が無い (Stop hook が入っていない､初回ターン) まま送るときに
+// ack へ書く sentinel｡guard は mtime が直近ならこれを daemon の送信として通し､transcript から
+// 求めた実際の値で書き換える｡値は hooks/lib/compact-markers.sh の CACHE_ACK_UNKNOWN と対｡
+const CacheAckUnknown = "daemon-unknown"
+
 // cacheFile は cache/<session_id>.json の生の形｡last_request_at は transcript の
 // timestamp 文字列を整形せずに写す｡読み手が ack との比較を文字列の完全一致で行うため｡
 type cacheFile struct {
@@ -35,6 +40,31 @@ type Cache struct {
 	TTL time.Duration
 	// TranscriptPath はその transcript のパス｡
 	TranscriptPath string
+}
+
+// ExpiresAt は cache が失効する時刻 (LastRequestAt + TTL)｡
+func (c *Cache) ExpiresAt() time.Time {
+	return c.LastRequestAt.Add(c.TTL)
+}
+
+// Expired は now 時点で cache が失効しているか (now - LastRequestAt >= TTL) を返す｡
+// LastRequestAt が未来 (clock skew) なら warm 扱い｡
+func (c *Cache) Expired(now time.Time) bool {
+	return !now.Before(c.ExpiresAt())
+}
+
+// WriteCacheAck は cache-ack/<session_id> に value を書く｡daemon が非スラッシュの prompt を
+// 送る直前に呼び､TTL guard hook がこれを見て daemon の送信を止めずに通す｡
+//
+// value は Cache.LastRequestRaw (transcript の timestamp 文字列そのまま) か CacheAckUnknown｡
+// guard との比較は文字列の完全一致なので､整形も末尾の改行も入れない｡同じ値でも書き直す
+// (guard は sentinel の mtime が直近かで daemon の送信かを見る)｡sessionID が空なら何もしない｡
+func (s Store) WriteCacheAck(sessionID, value string) error {
+	path, err := sessionPath(s.CacheAck, sessionID, "")
+	if err != nil || path == "" {
+		return err
+	}
+	return writeFileAtomic(path, ".cache-ack.*", []byte(value))
 }
 
 // stopHookInput は Stop hook の stdin のうち要る部分｡

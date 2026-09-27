@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/monitor"
+	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 )
 
 // PaneStatus は status.json に書き出す pane 1 枚分のスナップショット｡
@@ -22,6 +23,35 @@ type PaneStatus struct {
 	Attempts      int        `json:"attempts"`
 	LastOutcome   string     `json:"last_outcome"`
 	LastTickAt    time.Time  `json:"last_tick_at"`
+	// Cache はそのセッションの prompt cache の状態｡sidecar (cache/<session_id>.json) が
+	// 無ければ省略する｡
+	Cache *CacheStatus `json:"cache,omitempty"`
+}
+
+// CacheStatus は status.json に書き出す prompt cache の状態｡State は tick 時点の判定で､
+// 失効までの残りは読む側が ExpiresAt から出す｡
+type CacheStatus struct {
+	State         string    `json:"state"` // warm / expired
+	LastRequestAt time.Time `json:"last_request_at"`
+	TTLSeconds    int64     `json:"ttl_seconds"`
+	ExpiresAt     time.Time `json:"expires_at"`
+}
+
+// cacheStatus は sidecar の状態を status.json 向けに写す｡nil は nil のまま｡
+func cacheStatus(c *sessionstate.Cache, now time.Time) *CacheStatus {
+	if c == nil {
+		return nil
+	}
+	state := "warm"
+	if c.Expired(now) {
+		state = "expired"
+	}
+	return &CacheStatus{
+		State:         state,
+		LastRequestAt: c.LastRequestAt,
+		TTLSeconds:    int64(c.TTL / time.Second),
+		ExpiresAt:     c.ExpiresAt(),
+	}
 }
 
 // StatusSnapshot は status.json (XDG state 配下､apppath.StatusFile) の内容｡daemon が

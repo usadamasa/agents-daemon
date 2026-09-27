@@ -64,9 +64,9 @@ func (p Paths) StateDir() string {
 	return p.stateDir
 }
 
-// 別プロセスが書く sidecar file (rate-limits / context / compact-state / compacted)
-// のディレクトリとファイル名は sessionstate が StateDir から導出する｡読み込み側と
-// 同じ場所に置いて､書き出し先の規則が二重にならないようにするため｡
+// 別プロセスと共有する sidecar file (rate-limits / context / compact-state / compacted /
+// cache / cache-ack) のディレクトリとファイル名は sessionstate が StateDir から導出する｡
+// 読み込み側と同じ場所に置いて､書き出し先の規則が二重にならないようにするため｡
 
 // PIDFile は稼働中 daemon の PID を保持するファイルのパス｡
 func (p Paths) PIDFile() string {

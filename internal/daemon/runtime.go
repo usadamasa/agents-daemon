@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -47,8 +48,12 @@ type daemonRuntime struct {
 	client herdrcli.Client
 	log    *applog.Logger
 	// statusPath と store はプロセスの生存期間で固定なのでここに置く｡
-	statusPath          string
-	store               sessionstate.Store
+	statusPath string
+	store      sessionstate.Store
+	// dryRun は pane への送信をしない稼働｡client 側 (dryRunClient) が握りつぶすが､
+	// cache の ack マーカーは client を通らないのでここでも見る｡書くと利用者自身の
+	// 次の prompt が TTL guard を素通りする｡
+	dryRun              bool
 	sleep               func(time.Duration)
 	startedAt           time.Time
 	panes               map[string]*paneEntry
@@ -57,12 +62,13 @@ type daemonRuntime struct {
 	lastHousekeepAt     time.Time // ゼロ値は「まだ 1 度も掃除していない」
 }
 
-func newDaemonRuntime(client herdrcli.Client, log *applog.Logger, statusPath string, store sessionstate.Store, sleep func(time.Duration), startedAt time.Time) *daemonRuntime {
+func newDaemonRuntime(client herdrcli.Client, log *applog.Logger, statusPath string, store sessionstate.Store, dryRun bool, sleep func(time.Duration), startedAt time.Time) *daemonRuntime {
 	return &daemonRuntime{
 		client:     client,
 		store:      store,
 		log:        log,
 		statusPath: statusPath,
+		dryRun:     dryRun,
 		sleep:      sleep,
 		startedAt:  startedAt,
 		panes:      map[string]*paneEntry{},
@@ -120,6 +126,10 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 			}
 			return state
 		},
+		// cache の状態は prompt を送る直前に読む (status 用に tick ごとに読む分とは別)｡
+		// 送信の判断には使わないので､読み込みエラーは「sidecar 無し」として継続する｡
+		CacheState: r.loadCache,
+		CacheAck:   r.writeCacheAck,
 	}
 
 	seen := make(map[string]bool, len(panes))
@@ -150,18 +160,7 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 
 		outcome, tickErr := monitor.Tick(ctx, deps, pane, entry.state, rateState, now)
 		r.logOutcome(pane, outcome, tickErr)
-
-		statusPanes = append(statusPanes, PaneStatus{
-			PaneID:        pane.PaneID,
-			TerminalID:    pane.TerminalID,
-			CWD:           pane.CWD,
-			AgentStatus:   string(pane.AgentStatus),
-			MonitorStatus: monitorStatusString(entry.state.Status),
-			WaitUntil:     zeroableTime(entry.state.WaitUntil),
-			Attempts:      entry.state.Attempts,
-			LastOutcome:   outcome.String(),
-			LastTickAt:    now,
-		})
+		statusPanes = append(statusPanes, r.paneStatus(pane, entry, outcome, now))
 	}
 
 	// 消えた pane のエントリを捨てる｡捨てずに放置するとこの map が
@@ -190,9 +189,48 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 	return false, cfg, nil
 }
 
+// paneStatus は status.json に書く pane 1 枚ぶんのスナップショットを組む｡
+func (r *daemonRuntime) paneStatus(pane herdrcli.Pane, entry *paneEntry, outcome monitor.Outcome, now time.Time) PaneStatus {
+	return PaneStatus{
+		PaneID:        pane.PaneID,
+		TerminalID:    pane.TerminalID,
+		CWD:           pane.CWD,
+		AgentStatus:   string(pane.AgentStatus),
+		MonitorStatus: monitorStatusString(entry.state.Status),
+		WaitUntil:     zeroableTime(entry.state.WaitUntil),
+		Attempts:      entry.state.Attempts,
+		LastOutcome:   outcome.String(),
+		LastTickAt:    now,
+		Cache:         cacheStatus(r.loadCache(pane.SessionID()), now),
+	}
+}
+
+// loadCache は pane のセッションの prompt cache の sidecar を読む｡無ければ nil｡
+// 読み込みエラーは判断に効かない (足すのは ack とログだけ) ので､ログに残して nil を返す｡
+func (r *daemonRuntime) loadCache(sessionID string) *sessionstate.Cache {
+	c, err := r.store.LoadCache(sessionID)
+	if err != nil {
+		r.log.Logf("session %s の cache state の読み込みに失敗､sidecar 無しとして継続します: %v", sessionID, err)
+		return nil
+	}
+	return c
+}
+
+// writeCacheAck は cache の ack マーカーを書く｡dry-run では書かない (理由は dryRun を参照)｡
+func (r *daemonRuntime) writeCacheAck(sessionID, value string) error {
+	if r.dryRun {
+		r.log.Logf("dry-run: session %s の cache ack (%s) は書きません", sessionID, value)
+		return nil
+	}
+	return r.store.WriteCacheAck(sessionID, value)
+}
+
 // logOutcome は tick 1 回の結果をログへ書く｡「静かな tick」(監視中で異常無し､
 // 対象外､待機継続中) はログしない｡次の朝に読んで意味が分かる粒度に絞る:
 // 上限検知と待ち時間､送信の実施､ユーザーの自己復帰､ゲート抑制､エラー｡
+//
+// prompt を送った出来事には cache の状態を添える (cacheSuffix)｡失効後の送信は文脈全体を
+// 書き直すので､どれだけ書き直したかを後から追えるようにする｡
 func (r *daemonRuntime) logOutcome(pane herdrcli.Pane, outcome monitor.Outcome, err error) {
 	// 同じ状態が続く間は書かない｡tick は既定 5 秒ごとなので､待機や抑制が
 	// 続くだけで日に数千行に膨れ､後から読めるログでなくなる｡状態が切り替わった
@@ -224,7 +262,7 @@ func (r *daemonRuntime) logOutcome(pane herdrcli.Pane, outcome monitor.Outcome, 
 	case monitor.OutcomeWaiting:
 		r.log.Logf("pane %s (%s): 利用上限/一時エラーを検知し待機に入りました", pane.PaneID, pane.CWD)
 	case monitor.OutcomeRetried:
-		r.log.Logf("pane %s (%s): 再開メッセージを送信しました (%d 回目)", pane.PaneID, pane.CWD, r.panes[pane.TerminalID].state.Attempts)
+		r.log.Logf("pane %s (%s): 再開メッセージを送信しました (%d 回目)%s", pane.PaneID, pane.CWD, entry.state.Attempts, r.cacheSuffix(pane, entry))
 	case monitor.OutcomeRecoveredByUser:
 		r.log.Logf("pane %s (%s): ユーザー自身が復帰したため監視状態へ戻します", pane.PaneID, pane.CWD)
 	case monitor.OutcomeMaxRetries:
@@ -242,33 +280,81 @@ func (r *daemonRuntime) logOutcome(pane herdrcli.Pane, outcome monitor.Outcome, 
 	default:
 		// compact 周りは別関数に分けてある (1 つの switch に並べると
 		// 循環複雑度が lint の閾値を超える)｡
-		if msg := compactOutcomeMessage(outcome); msg != "" {
-			r.log.Logf("pane %s (%s): %s", pane.PaneID, pane.CWD, msg)
+		if msg, sent := compactOutcomeMessage(outcome); msg != "" {
+			suffix := ""
+			if sent {
+				suffix = r.cacheSuffix(pane, entry)
+			}
+			r.log.Logf("pane %s (%s): %s%s", pane.PaneID, pane.CWD, msg, suffix)
 			return
 		}
 		r.log.Logf("pane %s (%s): %s", pane.PaneID, pane.CWD, outcome)
 	}
 }
 
-// compactOutcomeMessage は compact 周りの Outcome に対応するログ本文を返す｡
-// 該当しなければ空文字列｡
-func compactOutcomeMessage(outcome monitor.Outcome) string {
+// compactOutcomeMessage は compact 周りの Outcome に対応するログ本文と､それが prompt の
+// 送信を伴う出来事かを返す｡該当しなければ空文字列｡
+func compactOutcomeMessage(outcome monitor.Outcome) (msg string, sent bool) {
 	switch outcome {
 	case monitor.OutcomeCompactNudged:
-		return "compact 直後に止まっていたため継続を促しました (画面判定)"
+		return "compact 直後に止まっていたため継続を促しました (画面判定)", true
 	case monitor.OutcomeCompactNudgeCapped:
-		return "compact 直後の停止へ継続を促した回数が上限に達したため送りません (詰まっている可能性があります)"
+		return "compact 直後の停止へ継続を促した回数が上限に達したため送りません (詰まっている可能性があります)", false
 	case monitor.OutcomeCompactPrepSent:
-		return "context 使用率が閾値を超えたため compact-prep を投入しました"
+		return "context 使用率が閾値を超えたため compact-prep を投入しました", true
 	case monitor.OutcomeCompactSent:
-		return "compact-prep の state file を確認したため /compact を投入しました"
+		return "compact-prep の state file を確認したため /compact を投入しました", true
 	case monitor.OutcomeCompactPrepTimeout:
-		return "compact-prep の state file が現れないまま時間切れになりました"
+		return "compact-prep の state file が現れないまま時間切れになりました", false
 	case monitor.OutcomeCompactResumed:
-		return "圧縮完了 marker を検知したため作業の再開を促しました"
+		return "圧縮完了 marker を検知したため作業の再開を促しました", true
 	default:
+		return "", false
+	}
+}
+
+// cacheSuffix は送信ログに添える cache の状態｡形は次のいずれか｡
+//
+//	 / cache=warm (経過 3 分､TTL 60 分)
+//	 / cache=expired (経過 312 分､TTL 60 分､context 使用率 63%､ack 済み)
+//	 / cache=unknown (sidecar 無し､ack=daemon-unknown)
+//
+// 失効後の送信は文脈全体を書き直すので context 使用率を併記し､どれだけ書き直したかを
+// 後から追えるようにする｡スラッシュの prompt は guard を素通りするので ack は無い｡
+func (r *daemonRuntime) cacheSuffix(pane herdrcli.Pane, entry *paneEntry) string {
+	if entry == nil {
 		return ""
 	}
+	send := entry.state.LastSend
+	var b strings.Builder
+	fmt.Fprintf(&b, " / cache=%s (", send.State())
+	switch c := send.Cache; {
+	case c == nil && pane.SessionID() == "":
+		b.WriteString("session 未紐づけ")
+	case c == nil:
+		b.WriteString("sidecar 無し")
+	default:
+		fmt.Fprintf(&b, "経過 %d 分､TTL %d 分", int(send.At.Sub(c.LastRequestAt)/time.Minute), int(c.TTL/time.Minute))
+		if c.Expired(send.At) {
+			if cs, err := r.store.LoadCompact(pane.SessionID()); err == nil && cs != nil && cs.HasContext {
+				fmt.Fprintf(&b, "､context 使用率 %.0f%%", cs.UsedPercentage)
+			}
+		}
+	}
+	switch {
+	case send.AckErr != nil:
+		fmt.Fprintf(&b, "､ack の書き込みに失敗: %v", send.AckErr)
+	case send.Ack != "" && r.dryRun:
+		b.WriteString("､ack は dry-run で省略")
+	case send.Ack == sessionstate.CacheAckUnknown:
+		fmt.Fprintf(&b, "､ack=%s", send.Ack)
+	case send.Ack != "":
+		b.WriteString("､ack 済み")
+	case send.Slash:
+		b.WriteString("､スラッシュなので ack なし")
+	}
+	b.WriteString(")")
+	return b.String()
 }
 
 // clearAllLabels は待機ラベルを表示している可能性のある全 pane へ
@@ -384,7 +470,7 @@ func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 	}
 
 	now := time.Now()
-	runtime := newDaemonRuntime(client, log, p.StatusFile(), sessionstate.New(p.StateDir()), time.Sleep, now)
+	runtime := newDaemonRuntime(client, log, p.StatusFile(), sessionstate.New(p.StateDir()), dryRun, time.Sleep, now)
 	runtime.housekeep(p.LogFile(), now)
 
 	sigCh := make(chan os.Signal, 1)

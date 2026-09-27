@@ -60,7 +60,7 @@ func tickCompactStall(ctx context.Context, deps Deps, pane herdrcli.Pane, ps *Pa
 	ps.CompactSignature = ""
 	ps.CompactSeenAt = time.Time{}
 
-	if err := sendPrompt(ctx, deps, pane, deps.Config.CompactStallMessage); err != nil {
+	if err := sendPrompt(ctx, deps, pane, ps, deps.Config.CompactStallMessage, now); err != nil {
 		return OutcomeSendError, fmt.Errorf("pane %s への継続要求の送信に失敗: %w", pane.PaneID, err)
 	}
 	return OutcomeCompactNudged, nil
@@ -84,7 +84,10 @@ func isIdlePane(pane herdrcli.Pane) bool {
 //
 // Escape は入力行のクリアにも使えない (補完メニューを閉じるだけで文字は残る)｡
 // だで呼び出し元は入力欄が空であることを確かめてから呼ぶこと｡
-func sendPrompt(ctx context.Context, deps Deps, pane herdrcli.Pane, text string) error {
+//
+// 送る前に cache の ack を残す (cache_ack.go)｡
+func sendPrompt(ctx context.Context, deps Deps, pane herdrcli.Pane, ps *PaneState, text string, now time.Time) error {
+	ackBeforeSend(deps, pane, ps, text, now)
 	if err := deps.Client.SendText(ctx, pane.PaneID, text); err != nil {
 		return err
 	}

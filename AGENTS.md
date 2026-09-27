@@ -66,6 +66,7 @@ hook・skill・daemon は別プロセスで､ファイル越しに繋がる｡�
 | `.claude-plugin/plugin.json` の skill 名 | `internal/config` の `compactAutoPrepMessage` 既定 | `/agents-daemon:compact-prep` |
 | 利用者の statusline に足す 1 行 (`skills/setup/references/statusline.md`) | `hooks/lib/daemon-bin.sh` と `Taskfile.yml` の `install` | `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon ingest-statusline`｡`context/` `rate-limits/` の書式は `internal/sessionstate` が読み書き両方で持つ |
 | `hooks/cache-state.sh` (Stop hook) | `hooks/lib/daemon-bin.sh` | 同じバイナリの `ingest-stop`｡`cache/` の書式と transcript の読み方は `internal/sessionstate` が持つ |
+| `hooks/lib/compact-markers.sh` の `CACHE_ACK_DIR` / `cache_ack_file` / `CACHE_ACK_UNKNOWN` | `internal/sessionstate` の `Store.CacheAck` / `WriteCacheAck` / `CacheAckUnknown` | `cache-ack/<session_id>`｡中身は `cache/` の `last_request_at` の文字列そのまま (末尾改行なし) か sentinel `daemon-unknown`｡daemon が書き､TTL guard hook が読む |
 
 ## リリース
 

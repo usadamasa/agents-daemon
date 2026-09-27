@@ -24,7 +24,8 @@ statusline・hook・skill・daemon が別々のタイミングで動き､ファ
                                               │
 [3]                                           ├─ 上限解除の時刻まで待つ
                                               │  └─ herdr pane send-text / send-keys で再開
-                                              └─ context 閾値 → compact-prep → compact → 再開
+                                              ├─ context 閾値 → compact-prep → compact → 再開
+                                              └─ 送る直前に cache の失効を見て cache-ack/<session_id> を書く
 ```
 
 ### [1] statusline が上限情報を渡し､ingest-statusline が落とす
@@ -117,6 +118,7 @@ cache write になる｡実際に使われた TTL は transcript JSONL の `mess
 `last_request_at` は transcript の timestamp 文字列をそのまま写す (読み手が ack と文字列で比較するため)｡
 transcript が無い・読めないときは何も書かず既存ファイルも残す｡ユーザーの中断では Stop が発火しないので
 古くなることがあるが､古い側へずれるのは「まだ warm」を「失効」と見る方向で､能動的な動作を抑える側に倒れる｡
+読む側 (daemon が prompt を送るときの ack・ログ・status) は [cache.md](cache.md)｡
 
 ### [2] SessionStart hook がデーモンを起こす
 
@@ -203,9 +205,10 @@ pane ごとに次を評価する｡上限側の詳細は [rate-limit.md](rate-li
 | `$STATE/compact-state/<session_id>.md` | `agents-daemon:compact-prep` skill | `/agents-daemon:compact-prep` の実行時 | 圧縮で失われる作業状態 (plan / phase / 決定事項 / 編集中ファイル) | daemon が 7 日で消す |
 | `$STATE/compacted/<session_id>` | `hooks/compaction-recovery.sh` (PostCompact hook) | 圧縮が完了したとき | 空ファイル｡mtime が圧縮完了時刻 | 復旧 hook が消す (残れば daemon が 7 日で消す) |
 | `$STATE/cache/<session_id>.json` | `agents-daemon ingest-stop` (`hooks/cache-state.sh` が呼ぶ) | 応答の終わりごと (Stop hook) | 直近の応答の開始時刻と最新の cache write の TTL､transcript のパス | cache write が無いターンで ingest-stop が消す (残れば daemon が 7 日で消す) |
+| `$STATE/cache-ack/<session_id>` | daemon | 非スラッシュの prompt を送る直前 (cache が失効しているか sidecar が無いとき) | `cache/` の `last_request_at` の文字列そのまま､または sentinel `daemon-unknown` ([cache.md](cache.md)) | daemon が 90 日で消す |
 | `$STATE/daemon.pid` | daemon | 起動時に作成､終了時に削除 | 稼働中デーモンの PID | daemon |
-| `$STATE/status.json` | daemon | 毎 tick (既定 5 秒) | 監視中の pane 一覧と各 pane の監視状態・試行回数・待機期限・直近の判定 | 上書き |
-| `$STATE/logs/daemon.log` | daemon | 報告に値する出来事があったときだけ | 上限検知と待ち時間､再開送信､ユーザーの自己再開､ゲート抑制､ネイティブへの譲り､compact 停止の催促､エラー | rotate |
+| `$STATE/status.json` | daemon | 毎 tick (既定 5 秒) | 監視中の pane 一覧と各 pane の監視状態・試行回数・待機期限・直近の判定・cache の状態 | 上書き |
+| `$STATE/logs/daemon.log` | daemon | 報告に値する出来事があったときだけ | 上限検知と待ち時間､再開送信 (cache の状態つき)､ユーザーの自己再開､ゲート抑制､ネイティブへの譲り､compact 停止の催促､エラー | rotate |
 | `$STATE/logs/daemon.log.YYYY-MM-DD` | daemon | 日付が変わって最初に書くとき | 前日までの `daemon.log` をそのまま退避したもの | daemon が 7 日で消す |
 | `$STATE/logs/build.log` | `hooks/build-daemon.sh` | SessionStart が build を起こしたとき | build の開始・完了・失敗 | 消さない (追記) |
 | `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon` | `hooks/build-daemon.sh` / `task install` | build 時 | 実行ファイル | 消さない |
@@ -227,8 +230,8 @@ daemon の再起動を跨いで日付が変わっていた場合も､mtime か�
 
 古いファイルは daemon 自身が消す｡起動時と 1 時間ごとに､mtime が保持期間を過ぎた
 rotate 済みログ (7 日)､`rate-limits/` 配下の state (24 時間｡ingest-statusline が rename 前に
-死んで残った `.rate-limits.*` も同じ扱い)､compact 関連の 3 ディレクトリと `cache/` 配下 (7 日) を
-削除する｡何かを消したときだけログに残す｡
+死んで残った `.rate-limits.*` も同じ扱い)､compact 関連の 3 ディレクトリと `cache/` 配下 (7 日)､
+`cache-ack/` 配下 (90 日) を削除する｡何かを消したときだけログに残す｡
 
 保持期間は設定キーにせず定数 (`internal/daemon/housekeeping.go`) に置く｡state の
 24 時間は判定に影響しない値として選んである: `resets_at` は観測から高々 5 時間先で､

@@ -67,6 +67,10 @@ type PaneState struct {
 	CompactAutoSentAt time.Time
 	// CompactResumedAt は圧縮完了 marker を見て再開を送った時刻｡
 	CompactResumedAt time.Time
+
+	// LastSend は直近で prompt を送ったときの cache の状態｡判断には使わず､daemon が
+	// ログに書くために残す (cache_ack.go)｡
+	LastSend SendReport
 }
 
 // Outcome は Tick が 1 tick ぶんに行った (あるいは行わなかった) ことを表す｡
@@ -223,6 +227,13 @@ type Deps struct {
 	// 最後まで到達しないと使わないため｡到達しない tick でファイルを読まずに済む｡
 	// このフィールド自体が nil なら compact の自動化は適用しない｡
 	CompactState func(sessionID string) *sessionstate.Compact
+	// CacheState は pane のセッションの prompt cache の状態 (sessionstate.Store.LoadCache) を
+	// 返す｡prompt を送る直前にだけ読む｡nil は「sidecar 無し」｡このフィールド自体が nil
+	// なら cache の状態は見ず ack も書かない｡
+	CacheState func(sessionID string) *sessionstate.Cache
+	// CacheAck は cache-ack/<session_id> に value を書く (sessionstate.Store.WriteCacheAck)｡
+	// 失効後に非スラッシュの prompt を送る前に呼ばれる｡dry-run の daemon は no-op を差す｡
+	CacheAck func(sessionID, value string) error
 }
 
 // Tick は pane 1 枚ぶんの 1 tick を処理し､ps を必要に応じて書き換える｡
@@ -402,7 +413,7 @@ func tickWaiting(ctx context.Context, deps Deps, pane herdrcli.Pane, ps *PaneSta
 	if kind == detect.KindTransient {
 		ps.Attempts++
 		ps.WaitUntil = now.Add(transientBackoff(ps.Attempts, deps.Config))
-		if err := recoverPane(ctx, deps, pane); err != nil {
+		if err := recoverPane(ctx, deps, pane, ps, now); err != nil {
 			return OutcomeSendError, fmt.Errorf("pane %s への再開送信に失敗: %w", pane.PaneID, err)
 		}
 		return OutcomeRetried, nil
@@ -425,7 +436,7 @@ func tickWaiting(ctx context.Context, deps Deps, pane herdrcli.Pane, ps *PaneSta
 		return OutcomeResumeEnter, nil
 	}
 
-	if err := recoverPane(ctx, deps, pane); err != nil {
+	if err := recoverPane(ctx, deps, pane, ps, now); err != nil {
 		return OutcomeSendError, fmt.Errorf("pane %s への再開送信に失敗: %w", pane.PaneID, err)
 	}
 	return OutcomeRetried, nil
@@ -594,7 +605,9 @@ func transientBackoff(attempts int, cfg config.Config) time.Duration {
 
 // recoverPane は再開の分割送信 (esc → 一時停止 → メッセージ送信 → 一時停止 → enter) を行う｡
 // Claude のペースト検知と /rate-limit-options メニューを避けるため､キー入力を分けている｡
-func recoverPane(ctx context.Context, deps Deps, pane herdrcli.Pane) error {
+// 送る前に cache の ack を残す (cache_ack.go)｡
+func recoverPane(ctx context.Context, deps Deps, pane herdrcli.Pane, ps *PaneState, now time.Time) error {
+	ackBeforeSend(deps, pane, ps, deps.Config.RetryMessage, now)
 	if deps.Config.DismissMenu {
 		if err := deps.Client.SendKeys(ctx, pane.PaneID, "esc"); err != nil {
 			return err

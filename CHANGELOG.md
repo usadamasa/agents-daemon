@@ -1,5 +1,9 @@
 # Changelog
 
+## [2026.0927.1](https://github.com/usadamasa/agents-daemon/compare/2026.0927.0...2026.0927.1) - 2026-09-27
+
+- feat: ingest-statusline で statusline の書き出しを plugin のバイナリへ移す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/14
+
 ## [2026.0927.0](https://github.com/usadamasa/agents-daemon/compare/2026.0926.01...2026.0927.0) - 2026-09-27
 
 - setup skill を追加する by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/4

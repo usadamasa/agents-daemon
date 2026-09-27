@@ -13,6 +13,7 @@ import (
 // 分かれ (message.id が同じ)､usage.cache_creation に ephemeral_1h / 5m の内訳を持つ｡
 type transcriptLine struct {
 	Type       string `json:"type"`
+	Subtype    string `json:"subtype,omitempty"`
 	Timestamp  string `json:"timestamp,omitempty"`
 	Sidechain  bool   `json:"isSidechain"`
 	ID         string `json:"id,omitempty"`
@@ -29,6 +30,9 @@ func (l transcriptLine) String() string {
 	}
 	if l.Timestamp != "" {
 		entry["timestamp"] = l.Timestamp
+	}
+	if l.Subtype != "" {
+		entry["subtype"] = l.Subtype
 	}
 	if l.Type == "assistant" {
 		model := l.Model
@@ -274,6 +278,20 @@ func TestIngestStop_noState(t *testing.T) {
 		c, err := s.LoadCache("sess-1")
 		if err != nil || c != nil {
 			t.Errorf("LoadCache() = %+v, %v, want nil, nil", c, err)
+		}
+	})
+
+	t.Run("compact_boundary の後に応答が無ければ sidecar を消す", func(t *testing.T) {
+		s := New(t.TempDir())
+		path := writeTranscript(t, t.TempDir(),
+			assistant("2026-09-27T03:44:05.954Z", "msg_1", 500, 0).String(),
+			transcriptLine{Type: "system", Subtype: "compact_boundary", Timestamp: "2026-09-27T03:50:00.000Z"}.String(),
+		)
+		writeFile(t, cachePath(t, s), `{"last_request_at":"2026-09-27T03:44:05.954Z","ttl_seconds":3600,"transcript_path":"x"}`)
+		ingest(t, s, path)
+
+		if _, err := os.Stat(cachePath(t, s)); !os.IsNotExist(err) {
+			t.Errorf("compact 前の sidecar が残っている: %v", err)
 		}
 	})
 

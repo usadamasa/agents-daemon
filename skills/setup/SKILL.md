@@ -61,11 +61,8 @@ herdr pane list | jq -c --arg sid "$sid" \
 ## 3. statusline が state file を書かせているか
 
 置き場は `${XDG_STATE_HOME:-$HOME/.local/state}/agents-daemon/`｡
-statusline は stdin を `agents-daemon ingest-statusline` へ渡し､バイナリが描画のたびに
-`context/<session_id>.json` を書き直す ([architecture.md](../agents-daemon/references/architecture.md) の
-「ingest-statusline が書く state」)｡
-配線ができていれば､この skill を動かしているセッションのファイルがあり､`observed_at` も新しい｡
-ファイルが無い､または古ければ､statusline が渡していないか､バイナリがまだ無い｡
+配線ができていれば `context/<session_id>.json` が描画のたびに書き直されるので､
+この skill を動かしているセッションのファイルがあり､`observed_at` も新しい｡
 
 ```sh
 sid=$("${CLAUDE_PLUGIN_ROOT}/scripts/get-session-id.sh")

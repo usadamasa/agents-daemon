@@ -15,12 +15,15 @@ type windowFile struct {
 	ResetsAt       int64   `json:"resets_at"` // Unix epoch 秒
 }
 
-// rateLimitFile は rate-limits/<session_id>.json の生の形｡
-// seven_day も書かれているが読み手が無いので受けない｡
+// rateLimitFile は rate-limits/<session_id>.json の生の形｡読み (readRateLimit) と
+// 書き (IngestStatusline) の両方がこの 1 つを使う｡seven_day は daemon に読み手が
+// 無いが､書き手が入力にあるときだけ付けるので pointer + omitempty で持つ｡
+// フィールドの順がそのままファイルの並びになる｡
 type rateLimitFile struct {
-	FiveHour   windowFile `json:"five_hour"`
-	ObservedAt int64      `json:"observed_at"`
-	SessionID  string     `json:"session_id"`
+	FiveHour   windowFile  `json:"five_hour"`
+	SevenDay   *windowFile `json:"seven_day,omitempty"`
+	ObservedAt int64       `json:"observed_at"`
+	SessionID  string      `json:"session_id"`
 }
 
 // RateLimit は 1 セッションぶんの利用上限の状態｡

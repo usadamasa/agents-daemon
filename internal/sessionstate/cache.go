@@ -77,6 +77,7 @@ type stopHookInput struct {
 // 形式で version 間で変わりうるため､読めない行は飛ばす (fail-open)｡
 type transcriptEntry struct {
 	Type        string `json:"type"`
+	Subtype     string `json:"subtype"`
 	IsSidechain bool   `json:"isSidechain"`
 	Timestamp   string `json:"timestamp"`
 	Message     struct {
@@ -141,6 +142,9 @@ func (s Store) IngestStop(input []byte) error {
 //     のはリクエスト開始時なので､同じ id の最も早い timestamp を採る
 //   - TTL は最新の行ではなく最新の write (ephemeral_*_input_tokens > 0) から採る｡
 //     最新の応答が pure hit でも､その前の write の TTL が生きている
+//
+// compact_boundary より前は見ない (参考実装には無い規則)｡compact 後の次のリクエストは
+// 要約だけを送るので､compact 前の cache の状態は意味を持たない｡
 func lastMainResponse(data []byte) (lastRequestAt string, ttl time.Duration, ok bool) {
 	var lastID string
 	idKnown := false
@@ -152,6 +156,9 @@ func lastMainResponse(data []byte) (lastRequestAt string, ttl time.Duration, ok 
 		var e transcriptEntry
 		if err := json.Unmarshal(line, &e); err != nil {
 			continue
+		}
+		if e.Type == "system" && e.Subtype == "compact_boundary" && !e.IsSidechain {
+			break
 		}
 		if e.Type != "assistant" || e.IsSidechain || e.Message.Model == "<synthetic>" {
 			continue

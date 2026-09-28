@@ -81,6 +81,59 @@ func TestLoadCompact(t *testing.T) {
 			t.Error("壊れた JSON でエラーが返らなかった")
 		}
 	})
+
+	t.Run("idle compact の marker を読む", func(t *testing.T) {
+		s := New(t.TempDir())
+		if err := s.MarkIdleCompacted("sess-1"); err != nil {
+			t.Fatalf("MarkIdleCompacted() error = %v", err)
+		}
+
+		state, err := s.LoadCompact("sess-1")
+		if err != nil {
+			t.Fatalf("LoadCompact() error = %v", err)
+		}
+		if !state.HasIdleCompacted || state.IdleCompactedAt.IsZero() {
+			t.Errorf("idle compacted = %v / %v, want true / 非ゼロ", state.HasIdleCompacted, state.IdleCompactedAt)
+		}
+	})
+}
+
+func TestMarkIdleCompacted(t *testing.T) {
+	t.Run("session ID が空なら何もしない", func(t *testing.T) {
+		if err := New(t.TempDir()).MarkIdleCompacted(""); err != nil {
+			t.Errorf("MarkIdleCompacted(\"\") error = %v", err)
+		}
+	})
+
+	t.Run("パス区切りを含む session ID を拒否する", func(t *testing.T) {
+		if err := New(t.TempDir()).MarkIdleCompacted("../x"); err == nil {
+			t.Error("パス区切りを含む session ID が通ってしまった")
+		}
+	})
+}
+
+func TestIdleCompactActive(t *testing.T) {
+	marked := time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC)
+	withMarker := &Compact{HasIdleCompacted: true, IdleCompactedAt: marked}
+
+	for _, tt := range []struct {
+		name  string
+		state *Compact
+		cache *Cache
+		want  bool
+	}{
+		{"nil は false", nil, nil, false},
+		{"marker が無ければ false", &Compact{}, nil, false},
+		// compact 後に Stop が発火すると､境界の後ろに応答が無いので ingest-stop が sidecar を消す｡
+		{"sidecar が無ければ active", withMarker, nil, true},
+		{"marker より前の応答なら active", withMarker, &Cache{LastRequestAt: marked.Add(-time.Minute)}, true},
+		// 利用者が戻ってターンを終えた｡以後の compact は通常どおり再開の対象にする｡
+		{"marker より後の応答があれば解ける", withMarker, &Cache{LastRequestAt: marked.Add(time.Minute)}, false},
+	} {
+		if got := tt.state.IdleCompactActive(tt.cache); got != tt.want {
+			t.Errorf("%s: IdleCompactActive() = %v, want %v", tt.name, got, tt.want)
+		}
+	}
 }
 
 func TestContextFresh(t *testing.T) {

@@ -40,6 +40,14 @@ func TestPrune(t *testing.T) {
 		ageFile(t, keepCache, 48*time.Hour, now)
 		ageFile(t, dropCache, 8*24*time.Hour, now)
 
+		// idle compact の marker も 7 日｡
+		keepIdle := filepath.Join(s.IdleCompacted, "recent")
+		dropIdle := filepath.Join(s.IdleCompacted, "old")
+		writeFile(t, keepIdle, "")
+		writeFile(t, dropIdle, "")
+		ageFile(t, keepIdle, 48*time.Hour, now)
+		ageFile(t, dropIdle, 8*24*time.Hour, now)
+
 		// ack マーカーは 90 日｡ack は時間で失効させない (待った時間が長くなっても
 		// 書き直しのコストは同じ) ので､7 日で消すと guard が同じ gap でもう一度止める｡
 		keepAck := filepath.Join(s.CacheAck, "recent")
@@ -56,15 +64,15 @@ func TestPrune(t *testing.T) {
 		if rateLimits != 2 {
 			t.Errorf("rateLimits = %d, want 2 (古い state と mktemp の残骸)", rateLimits)
 		}
-		if compacts != 3 {
-			t.Errorf("compacts = %d, want 3 (compacted と cache と cache-ack)", compacts)
+		if compacts != 4 {
+			t.Errorf("compacts = %d, want 4 (compacted と cache と cache-idle-compacted と cache-ack)", compacts)
 		}
-		for _, path := range []string{fresh, keep, keepCache, keepAck} {
+		for _, path := range []string{fresh, keep, keepCache, keepIdle, keepAck} {
 			if _, err := os.Stat(path); err != nil {
 				t.Errorf("保持期間内の %s が消えている", filepath.Base(path))
 			}
 		}
-		for _, path := range []string{stale, leftover, drop, dropCache, dropAck} {
+		for _, path := range []string{stale, leftover, drop, dropCache, dropIdle, dropAck} {
 			if _, err := os.Stat(path); err == nil {
 				t.Errorf("保持期間を過ぎた %s が残っている", filepath.Base(path))
 			}

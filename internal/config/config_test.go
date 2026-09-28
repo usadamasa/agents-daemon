@@ -87,7 +87,10 @@ func TestLoad(t *testing.T) {
 			"compactAutoPrepTimeoutMinutes": 3,
 			"compactAutoCooldownMinutes": 30,
 			"compactResumeEnabled": false,
-			"compactResumeDelaySeconds": 90
+			"compactResumeDelaySeconds": 90,
+			"cacheIdleCompactEnabled": true,
+			"cacheIdleCompactLeadSeconds": 900,
+			"cacheIdleCompactThresholdPercent": 30
 		}`)
 		cfg, err := Load(path)
 		if err != nil {
@@ -131,6 +134,10 @@ func TestLoad(t *testing.T) {
 			CompactAutoCooldownMinutes:    30,
 			CompactResumeEnabled:          false,
 			CompactResumeDelaySeconds:     90,
+
+			CacheIdleCompactEnabled:          true,
+			CacheIdleCompactLeadSeconds:      900,
+			CacheIdleCompactThresholdPercent: 30,
 		}
 		if !reflect.DeepEqual(cfg, want) {
 			t.Errorf("got %+v, want %+v", cfg, want)
@@ -203,6 +210,34 @@ func TestLoad(t *testing.T) {
 		}
 		if cfg.TransientMaxWaitSeconds != 100 {
 			t.Errorf("transientMaxWaitSeconds: got %d, want 100", cfg.TransientMaxWaitSeconds)
+		}
+	})
+
+	t.Run("idle compact の既定は無効､lead 600 秒､閾値 40%", func(t *testing.T) {
+		def := Default()
+		if def.CacheIdleCompactEnabled || def.CacheIdleCompactLeadSeconds != 600 || def.CacheIdleCompactThresholdPercent != 40 {
+			t.Errorf("idle compact の既定 = %v / %d / %v, want false / 600 / 40",
+				def.CacheIdleCompactEnabled, def.CacheIdleCompactLeadSeconds, def.CacheIdleCompactThresholdPercent)
+		}
+	})
+
+	t.Run("idle compact の範囲外の値は既定へ落ちる", func(t *testing.T) {
+		// lead が 1 時間以上だと､1h TTL でも応答の直後から窓が開く｡
+		for _, body := range []string{
+			`{"cacheIdleCompactLeadSeconds": 30, "cacheIdleCompactThresholdPercent": 0}`,
+			`{"cacheIdleCompactLeadSeconds": 3600, "cacheIdleCompactThresholdPercent": 101}`,
+		} {
+			cfg, err := Load(writeTestFile(t, body))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			def := Default()
+			if cfg.CacheIdleCompactLeadSeconds != def.CacheIdleCompactLeadSeconds {
+				t.Errorf("%s: lead = %d, want default %d", body, cfg.CacheIdleCompactLeadSeconds, def.CacheIdleCompactLeadSeconds)
+			}
+			if cfg.CacheIdleCompactThresholdPercent != def.CacheIdleCompactThresholdPercent {
+				t.Errorf("%s: threshold = %v, want default %v", body, cfg.CacheIdleCompactThresholdPercent, def.CacheIdleCompactThresholdPercent)
+			}
 		}
 	})
 

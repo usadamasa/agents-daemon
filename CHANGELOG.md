@@ -1,5 +1,9 @@
 # Changelog
 
+## [2026.0928.0](https://github.com/usadamasa/agents-daemon/compare/2026.0927.2...2026.0928.0) - 2026-09-28
+
+- TTL guard: cache 失効後の最初の prompt を 1 回止める (#11) by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/19
+
 ## [2026.0927.2](https://github.com/usadamasa/agents-daemon/compare/2026.0927.1...2026.0927.2) - 2026-09-27
 
 - feat: ingest-stop で Stop hook から prompt cache の状態を cache/ へ写す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/16

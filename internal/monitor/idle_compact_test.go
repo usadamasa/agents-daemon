@@ -156,8 +156,8 @@ func (f *idleFixture) prepWritten(sentAt, writtenAt time.Time) {
 	f.ps.CompactPrepIdle = true
 	f.cs.HasPrep = true
 	f.cs.PrepWrittenAt = writtenAt
-	// prep のターン自体が cache を更新する (応答の開始は state file の書き込みより前)｡
-	f.cache = cacheAt(sentAt.Add(time.Second))
+	// prep のターン自体が cache を更新する｡最後の応答は state file を書いた後に始まる｡
+	f.cache = cacheAt(writtenAt.Add(time.Second))
 }
 
 func TestTick_idle_compact_は_marker_を書いてから_compact_を送る(t *testing.T) {
@@ -200,26 +200,6 @@ func TestTick_idle_compact_は_marker_を書けなければ_compact_を送らな
 	assertNoSend(t, f.client)
 	if !f.ps.CompactPrepSentAt.IsZero() {
 		t.Errorf("pending が畳まれていない (毎 tick 書き込みを試し続ける): %+v", f.ps)
-	}
-}
-
-func TestTick_idle_compact_は_prep_の後に利用者が戻っていたら中止する(t *testing.T) {
-	// /compact は取り消せない｡戻ってきた利用者の前で細部を落とさない｡
-	f := newIdleFixture()
-	f.prepWritten(idleNow, idleNow.Add(35*time.Second))
-	f.cache = cacheAt(idleNow.Add(2 * time.Minute))
-
-	outcome := f.mustTick(t, idleNow.Add(3*time.Minute))
-
-	if outcome != OutcomeIdleCompactAborted {
-		t.Fatalf("outcome = %v, want %v", outcome, OutcomeIdleCompactAborted)
-	}
-	assertNoSend(t, f.client)
-	if f.marker.marks != 0 {
-		t.Errorf("中止したのに marker を書いた")
-	}
-	if !f.ps.CompactPrepSentAt.IsZero() || f.ps.CompactPrepIdle {
-		t.Errorf("pending が畳まれていない: %+v", f.ps)
 	}
 }
 

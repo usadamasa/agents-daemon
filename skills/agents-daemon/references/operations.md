@@ -130,6 +130,9 @@ pane から解決する｡`--file` にはセッションが無いため `--sessi
 | `compactAutoCooldownMinutes` | `15` | 1 段目を再投入しない間隔 |
 | `compactResumeEnabled` | `true` | 圧縮完了 marker を見て作業を再開させる |
 | `compactResumeDelaySeconds` | `60` | marker がこの秒数より古くなってから送る (10 未満は既定へ落ちる) |
+| `cacheIdleCompactEnabled` | `false` | idle な pane の prompt cache が失効する前に compact-prep → `/compact` を投入する ([compact.md](compact.md) の「idle compact」)｡`compactAutoEnabled` とは独立 |
+| `cacheIdleCompactLeadSeconds` | `600` | 失効の何秒前から動くか (60 以上 3600 未満｡範囲外は既定へ落ちる) |
+| `cacheIdleCompactThresholdPercent` | `40` | この使用率以上で動く |
 
 ### 送る文面
 
@@ -153,7 +156,7 @@ daemon は残項目そのものを知らないので､名指しの代わりに 
 末尾の指示文は圧縮サマリーの保持リスト｡外すと `/compact` が compact-prep の skill と前方一致で
 補完メニューを開き､Enter が候補を横取りしうる ([compact.md](compact.md))｡
 
-`compactAutoEnabled` だけ既定を `false` にしてある｡`/compact` は取り消せないため､
+`compactAutoEnabled` と `cacheIdleCompactEnabled` は既定を `false` にしてある｡`/compact` は取り消せないため､
 コードの既定は投入しない側へ倒す｡有効化は config.json で行う｡
 圧縮**後**の再開 (`compactResumeEnabled`) は安全なので既定 `true`｡
 

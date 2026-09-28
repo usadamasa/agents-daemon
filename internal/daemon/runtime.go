@@ -128,8 +128,9 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 		},
 		// cache の状態は prompt を送る直前に読む (status 用に tick ごとに読む分とは別)｡
 		// 送信の判断には使わないので､読み込みエラーは「sidecar 無し」として継続する｡
-		CacheState: r.loadCache,
-		CacheAck:   r.writeCacheAck,
+		CacheState:        r.loadCache,
+		CacheAck:          r.writeCacheAck,
+		MarkIdleCompacted: r.markIdleCompacted,
 	}
 
 	seen := make(map[string]bool, len(panes))
@@ -225,6 +226,15 @@ func (r *daemonRuntime) writeCacheAck(sessionID, value string) error {
 	return r.store.WriteCacheAck(sessionID, value)
 }
 
+// markIdleCompacted は idle compact の marker を書く｡dry-run では /compact も送らないので書かない｡
+func (r *daemonRuntime) markIdleCompacted(sessionID string) error {
+	if r.dryRun {
+		r.log.Logf("dry-run: session %s の idle compact marker は書きません", sessionID)
+		return nil
+	}
+	return r.store.MarkIdleCompacted(sessionID)
+}
+
 // logOutcome は tick 1 回の結果をログへ書く｡「静かな tick」(監視中で異常無し､
 // 対象外､待機継続中) はログしない｡次の朝に読んで意味が分かる粒度に絞る:
 // 上限検知と待ち時間､送信の実施､ユーザーの自己復帰､ゲート抑制､エラー｡
@@ -308,6 +318,12 @@ func compactOutcomeMessage(outcome monitor.Outcome) (msg string, sent bool) {
 		return "compact-prep の state file が現れないまま時間切れになりました", false
 	case monitor.OutcomeCompactResumed:
 		return "圧縮完了 marker を検知したため作業の再開を促しました", true
+	case monitor.OutcomeIdleCompactPrepSent:
+		return "idle compact: cache の失効が近いため compact-prep を投入しました", true
+	case monitor.OutcomeIdleCompactSent:
+		return "idle compact: marker を書いて /compact を投入しました (利用者が戻るまで再開は送りません)", true
+	case monitor.OutcomeIdleCompactShortTTL:
+		return "idle compact: cache の TTL が短く失効前に compact を終えられないためスキップしました", false
 	default:
 		return "", false
 	}

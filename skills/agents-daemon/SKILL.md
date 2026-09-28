@@ -14,6 +14,7 @@ herdr のペインを経由して動く常駐デーモン｡役目は 2 つ｡
 
 - 5 時間ウィンドウの利用上限で止まったセッションを､解除時刻に再開させる
 - context 使用率が閾値を超えたら `/agents-daemon:compact-prep` → `/compact` を投入し､圧縮後の作業まで再開させる
+  (離席中の pane を prompt cache の失効前に compact する idle compact も同じ 2 段を使う)
 
 前者はネイティブ機能 `autoContinueAtUsageLimit` (既定 on) を置き換えるものではなく､
 ネイティブが降りた場面を拾う側に回る｡
@@ -50,12 +51,13 @@ herdr のペインを経由して動く常駐デーモン｡役目は 2 つ｡
   同一プロジェクトで複数セッションが動いているときに他セッションの state file を上書きする｡
 - 設定は `${XDG_CONFIG_HOME:-~/.config}/agents-daemon/config.json`｡
   ランタイム状態 (`daemon.pid` / `status.json` / `rate-limits/` / `context/` /
-  `compact-state/` / `compacted/` / `cache/` / `cache-ack/` / `logs/`) は `${XDG_STATE_HOME:-~/.local/state}/agents-daemon/` に置く｡
+  `compact-state/` / `compacted/` / `cache/` / `cache-ack/` / `cache-idle-compacted/` / `logs/`) は
+  `${XDG_STATE_HOME:-~/.local/state}/agents-daemon/` に置く｡
   ログの rotate と古いファイルの削除は daemon 自身が行う｡
 - バイナリは `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon` に置く｡plugin の
   install 先はバージョンごとに変わるため､その外の固定パスにする｡用意するのは SessionStart hook で､
   詳細は [architecture.md](references/architecture.md) の「バイナリの用意と差し替え」｡
-- `compactAutoEnabled` は Go の既定を `false` にしてある｡`/compact` は取り消せないため､
+- `compactAutoEnabled` と `cacheIdleCompactEnabled` は Go の既定を `false` にしてある｡`/compact` は取り消せないため､
   コードの既定は投入しない側へ倒す｡使うなら config.json で `true` にする｡
 - sandbox 内のセッションから `stop` を実行すると SIGTERM が
   `operation not permitted` で弾かれる｡デーモン側の後始末は正常なので､
@@ -69,7 +71,7 @@ herdr のペインを経由して動く常駐デーモン｡役目は 2 つ｡
 | ---- | ---- |
 | [architecture.md](references/architecture.md) | statusline / hook / skill / daemon の連動､バイナリの用意と差し替え､毎 tick の判定表､出力されるファイル､ログの rotate |
 | [rate-limit.md](references/rate-limit.md) | ネイティブ auto-continue との分担､limit 検知の二重シグナルとゲート､待機時刻の決め方 |
-| [compact.md](references/compact.md) | context 閾値からの 3 段､marker 経路､compact 直後の停止 |
+| [compact.md](references/compact.md) | context 閾値からの 3 段､marker 経路､cache の失効前の compact (idle compact)､compact 直後の停止 |
 | [cache.md](references/cache.md) | prompt cache の失効と daemon の送信､ack マーカーの規約､対象の prompt 4 つ､送信ログと status の cache 表示 |
 | [pane-io.md](references/pane-io.md) | 画面の読み取り元､送信のキーストロークと文面の制約 |
 | [operations.md](references/operations.md) | コマンドと `--dry-run`､実機での検証順序､設定キー一覧､既知の制約 |
@@ -82,7 +84,7 @@ herdr のペインを経由して動く常駐デーモン｡役目は 2 つ｡
 | 上限が解除されても再開しない | rate-limit.md の「待機時刻の決め方」「ゲート」 |
 | 関係ない pane にプロンプトが打ち込まれた | rate-limit.md の「limit の判定は 2 つの手がかりを要求する」「ゲート」 |
 | context が閾値を超えても compact が走らない | compact.md の「送信の条件」､operations.md の「既知の制約」 |
-| 圧縮後に作業が再開しない | compact.md の「なぜ画面を読まないか」「compact 直後の停止」 |
+| 圧縮後に作業が再開しない | compact.md の「なぜ画面を読まないか」「compact 直後の停止」｡離席中の圧縮なら「idle compact」(再開しないのが仕様) |
 | 再開の送信が高くついた・どれだけ書き直したか知りたい | cache.md の「ログ」(送信行末の `cache=expired` と context 使用率) |
 | prompt が止められて「prompt cache は N 分で失効した」と警告が出る | cache.md の「TTL guard」 |
 | daemon の再開が止められる・`compactStallMessage` が繰り返し打たれる | cache.md の「TTL guard」の ack の規則､ログの `ack 済み` / `session 未紐づけ` |

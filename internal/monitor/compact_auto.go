@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/usadamasa/agents-daemon/internal/config"
 	"github.com/usadamasa/agents-daemon/internal/detect"
 	"github.com/usadamasa/agents-daemon/internal/herdrcli"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
@@ -44,29 +45,45 @@ func tickCompact(
 	if deps.CompactState != nil {
 		cs = deps.CompactState(pane.SessionID())
 	}
+	// idle compact の後で利用者がまだ戻っていない (idle_compact.go)｡cache は marker が
+	// あるときだけ読む｡
+	idleHold := cs != nil && cs.HasIdleCompacted && cs.IdleCompactActive(paneCache(deps, pane))
 
-	if outcome, err := tickCompactAuto(ctx, deps, pane, ps, cs, screen, now); outcome != OutcomeMonitoring || err != nil {
+	outcome, err := tickCompactAuto(ctx, deps, pane, ps, cs, idleHold, screen, now)
+	if err != nil || (outcome != OutcomeMonitoring && outcome != OutcomeIdleCompactShortTTL) {
 		return outcome, err
+	}
+	// 5m TTL のスキップは送信を伴わないので､後段を塞がずに譲る｡後段が何もしなければ返す｡
+	skipped := outcome
+
+	if idleHold {
+		holdAfterIdleCompact(ps, cs)
+		return skipped, nil
 	}
 	if outcome, err := tickCompactResume(ctx, deps, pane, ps, cs, screen, now); outcome != OutcomeMonitoring || err != nil {
 		return outcome, err
 	}
-	return tickCompactStall(ctx, deps, pane, ps, screen, now)
+	if outcome, err := tickCompactStall(ctx, deps, pane, ps, screen, now); outcome != OutcomeMonitoring || err != nil {
+		return outcome, err
+	}
+	return skipped, nil
 }
 
-// tickCompactAuto は 1 段目と 2 段目を処理する｡
-// 送るものが無ければ OutcomeMonitoring を返し､呼び出し元が次の段へ流す｡
+// tickCompactAuto は 1 段目と 2 段目を処理する｡1 段目の発火条件は 2 つあり､context 使用率の
+// 閾値 (compactAutoEnabled) と cache の失効前 (cacheIdleCompactEnabled､idle_compact.go)｡
+// 2 段目と cooldown は共有する｡送るものが無ければ OutcomeMonitoring を返し､呼び出し元が
+// 次の段へ流す｡
 func tickCompactAuto(
 	ctx context.Context, deps Deps, pane herdrcli.Pane, ps *PaneState,
-	cs *sessionstate.Compact, screen string, now time.Time,
+	cs *sessionstate.Compact, idleHold bool, screen string, now time.Time,
 ) (Outcome, error) {
-	if !deps.Config.CompactAutoEnabled {
+	cfg := deps.Config
+	if !ps.CompactPrepSentAt.IsZero() && !pendingEnabled(cfg, ps) {
 		// 途中で機能を切られたときに pending が残らないよう畳む｡cs が nil
 		// (session ID が無い / 読み込みが一度失敗した) だけでは畳まない｡
-		ps.CompactPrepSentAt = time.Time{}
-		return OutcomeMonitoring, nil
+		clearCompactPending(ps)
 	}
-	if cs == nil {
+	if cs == nil || (!cfg.CompactAutoEnabled && !cfg.CacheIdleCompactEnabled) {
 		return OutcomeMonitoring, nil
 	}
 
@@ -74,10 +91,26 @@ func tickCompactAuto(
 		return tickCompactAutoPending(ctx, deps, pane, ps, cs, screen, now)
 	}
 
-	cooldown := time.Duration(deps.Config.CompactAutoCooldownMinutes) * time.Minute
+	cooldown := time.Duration(cfg.CompactAutoCooldownMinutes) * time.Minute
 	if now.Sub(ps.CompactAutoSentAt) < cooldown {
 		return OutcomeMonitoring, nil
 	}
+	if cfg.CompactAutoEnabled {
+		if outcome, err := tickCompactThreshold(ctx, deps, pane, ps, cs, screen, now); outcome != OutcomeMonitoring || err != nil {
+			return outcome, err
+		}
+	}
+	if cfg.CacheIdleCompactEnabled && !idleHold {
+		return tickIdleCompact(ctx, deps, pane, ps, cs, screen, now)
+	}
+	return OutcomeMonitoring, nil
+}
+
+// tickCompactThreshold は context 使用率の閾値による 1 段目｡
+func tickCompactThreshold(
+	ctx context.Context, deps Deps, pane herdrcli.Pane, ps *PaneState,
+	cs *sessionstate.Compact, screen string, now time.Time,
+) (Outcome, error) {
 	// 使用率は statusline が毎描画で書き直す｡古い観測しか無い pane は
 	// そのセッションが生きていないか描画が止まっているので触らない｡
 	maxAge := time.Duration(deps.Config.StateMaxAgeSeconds) * time.Second
@@ -96,6 +129,19 @@ func tickCompactAuto(
 	return OutcomeCompactPrepSent, nil
 }
 
+// pendingEnabled は待っている compact-prep を始めた側の機能がまだ有効かを返す｡
+func pendingEnabled(cfg config.Config, ps *PaneState) bool {
+	if ps.CompactPrepIdle {
+		return cfg.CacheIdleCompactEnabled
+	}
+	return cfg.CompactAutoEnabled
+}
+
+func clearCompactPending(ps *PaneState) {
+	ps.CompactPrepSentAt = time.Time{}
+	ps.CompactPrepIdle = false
+}
+
 // tickCompactAutoPending は compact-prep の完了を待っている状態を処理する｡
 func tickCompactAutoPending(
 	ctx context.Context, deps Deps, pane herdrcli.Pane, ps *PaneState,
@@ -105,23 +151,37 @@ func tickCompactAutoPending(
 		if !canSendTo(deps, pane, screen) {
 			return OutcomeMonitoring, nil
 		}
-		ps.CompactPrepSentAt = time.Time{}
-		ps.CompactAutoSentAt = now
-		if err := sendPrompt(ctx, deps, pane, ps, deps.Config.CompactAutoMessage, now); err != nil {
-			return OutcomeSendError, fmt.Errorf("pane %s への compact 投入に失敗: %w", pane.PaneID, err)
-		}
-		return OutcomeCompactSent, nil
+		return sendCompact(ctx, deps, pane, ps, now)
 	}
 
 	timeout := time.Duration(deps.Config.CompactAutoPrepTimeoutMinutes) * time.Minute
 	if now.Sub(ps.CompactPrepSentAt) >= timeout {
 		// state file が出ないまま時間切れ｡CompactAutoSentAt を打ち直して､
 		// 次の投入までクールダウンぶん待たせる (即座に再投入して往復しないため)｡
-		ps.CompactPrepSentAt = time.Time{}
+		clearCompactPending(ps)
 		ps.CompactAutoSentAt = now
 		return OutcomeCompactPrepTimeout, nil
 	}
 	return OutcomeMonitoring, nil
+}
+
+// sendCompact は 2 段目の /compact を送り､pending を畳む｡
+func sendCompact(ctx context.Context, deps Deps, pane herdrcli.Pane, ps *PaneState, now time.Time) (Outcome, error) {
+	idle := ps.CompactPrepIdle
+	clearCompactPending(ps)
+	ps.CompactAutoSentAt = now
+	sent := OutcomeCompactSent
+	if idle {
+		// marker が無いと､圧縮の後に 3 段目が不在の利用者へ再開を送る｡書けなければ送らない｡
+		if err := markIdleCompacted(deps, pane); err != nil {
+			return OutcomeSendError, fmt.Errorf("pane %s の idle compact marker を書けないため /compact を送りません: %w", pane.PaneID, err)
+		}
+		sent = OutcomeIdleCompactSent
+	}
+	if err := sendPrompt(ctx, deps, pane, ps, deps.Config.CompactAutoMessage, now); err != nil {
+		return OutcomeSendError, fmt.Errorf("pane %s への compact 投入に失敗: %w", pane.PaneID, err)
+	}
+	return sent, nil
 }
 
 // tickCompactResume は 3 段目を処理する｡圧縮完了 marker を見て作業の再開を促す｡

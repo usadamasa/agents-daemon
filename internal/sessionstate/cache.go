@@ -16,8 +16,8 @@ import (
 const transcriptTailBytes = 2 << 20
 
 // CacheAckUnknown は sidecar が無い (Stop hook が入っていない､初回ターン) まま送るときに
-// ack へ書く sentinel｡guard は mtime が直近ならこれを daemon の送信として通し､transcript から
-// 求めた実際の値で書き換える｡値は hooks/lib/compact-markers.sh の CACHE_ACK_UNKNOWN と対｡
+// ack へ書く sentinel｡guard (TTLGuard) は mtime が直近ならこれを daemon の送信として通し､
+// transcript から求めた実際の値で書き換える｡
 const CacheAckUnknown = "daemon-unknown"
 
 // cacheFile は cache/<session_id>.json の生の形｡last_request_at は transcript の
@@ -58,7 +58,7 @@ func (c *Cache) Expired(now time.Time) bool {
 //
 // value は Cache.LastRequestRaw (transcript の timestamp 文字列そのまま) か CacheAckUnknown｡
 // guard との比較は文字列の完全一致なので､整形も末尾の改行も入れない｡同じ値でも書き直す
-// (guard は sentinel の mtime が直近かで daemon の送信かを見る)｡sessionID が空なら何もしない｡
+// (guard は mtime が直近かで daemon の送信かを見る)｡sessionID が空なら何もしない｡
 func (s Store) WriteCacheAck(sessionID, value string) error {
 	path, err := sessionPath(s.CacheAck, sessionID, "")
 	if err != nil || path == "" {
@@ -77,6 +77,7 @@ type stopHookInput struct {
 // 形式で version 間で変わりうるため､読めない行は飛ばす (fail-open)｡
 type transcriptEntry struct {
 	Type        string `json:"type"`
+	Subtype     string `json:"subtype"`
 	IsSidechain bool   `json:"isSidechain"`
 	Timestamp   string `json:"timestamp"`
 	Message     struct {
@@ -141,6 +142,9 @@ func (s Store) IngestStop(input []byte) error {
 //     のはリクエスト開始時なので､同じ id の最も早い timestamp を採る
 //   - TTL は最新の行ではなく最新の write (ephemeral_*_input_tokens > 0) から採る｡
 //     最新の応答が pure hit でも､その前の write の TTL が生きている
+//
+// compact_boundary より前は見ない (参考実装には無い規則)｡compact 後の次のリクエストは
+// 要約だけを送るので､compact 前の cache の状態は意味を持たない｡
 func lastMainResponse(data []byte) (lastRequestAt string, ttl time.Duration, ok bool) {
 	var lastID string
 	idKnown := false
@@ -152,6 +156,9 @@ func lastMainResponse(data []byte) (lastRequestAt string, ttl time.Duration, ok 
 		var e transcriptEntry
 		if err := json.Unmarshal(line, &e); err != nil {
 			continue
+		}
+		if e.Type == "system" && e.Subtype == "compact_boundary" && !e.IsSidechain {
+			break
 		}
 		if e.Type != "assistant" || e.IsSidechain || e.Message.Model == "<synthetic>" {
 			continue

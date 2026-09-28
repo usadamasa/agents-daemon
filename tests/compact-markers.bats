@@ -18,12 +18,3 @@ setup() {
   [ "$COMPACT_STATE_DIR" = "$BASE/compact-state" ]
   [ "$(compact_state_file sess-1)" = "$BASE/compact-state/sess-1.md" ]
 }
-
-@test "cache ack マーカーは cache-ack/<session_id> で､sentinel は daemon-unknown" {
-  # daemon (internal/sessionstate) が書き､TTL guard hook が読む｡拡張子なし｡
-  # shellcheck disable=SC1090
-  source "$LIB"
-  [ "$CACHE_ACK_DIR" = "$BASE/cache-ack" ]
-  [ "$(cache_ack_file sess-1)" = "$BASE/cache-ack/sess-1" ]
-  [ "$CACHE_ACK_UNKNOWN" = "daemon-unknown" ]
-}

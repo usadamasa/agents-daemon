@@ -34,10 +34,8 @@ ack は要らない｡
 ## ack マーカー
 
 `$STATE/cache-ack/<session_id>` (拡張子なし)｡daemon が非スラッシュの prompt を送る **直前** に書き､
-TTL guard hook (`UserPromptSubmit`､issue #11 で入る) がこれを見て daemon の送信を止めずに通す｡
-「書き直しのコストを承知で送る」の意思表示｡置き場と sentinel は `hooks/lib/compact-markers.sh`
-(`CACHE_ACK_DIR` / `cache_ack_file` / `CACHE_ACK_UNKNOWN`) と `internal/sessionstate` (`Store.CacheAck` /
-`WriteCacheAck` / `CacheAckUnknown`) が対で持つ｡
+TTL guard (下の節) がこれを見て daemon の送信を止めずに通す｡「書き直しのコストを承知で送る」の
+意思表示｡書く側も読む側も `internal/sessionstate` (`WriteCacheAck` / `CacheAckUnknown` / `TTLGuard`) にある｡
 
 | sidecar の状態 | 書く値 |
 | ---- | ---- |
@@ -62,7 +60,33 @@ TTL guard hook (`UserPromptSubmit`､issue #11 で入る) がこれを見て dae
 Stop hook はユーザーの中断では発火しないので､sidecar が transcript より古いことがある｡daemon は
 sidecar の値を写すため､guard が transcript から求めた値と食い違いうる｡どちらも失効側にずれる
 (「まだ warm」を「失効」と見る) ので送る側の判断は変わらないが､ack の文字列は一致しない｡
-この食い違いは guard 側 (#11) で扱う｡
+guard は値が違っても mtime が直近の ack を daemon の送信として通す (下の節)｡
+
+## TTL guard
+
+UserPromptSubmit hook `hooks/ttl-guard.sh` が stdin を `agents-daemon ttl-guard` へ渡す｡
+cache 失効後の最初の prompt を 1 回だけ止め (exit 2)､経過時間と選択肢 (`/clear`､同じ prompt の再送､
+`/compact` してから続ける) を警告として見せる｡TTL が 5 分なら `promptCacheTtl: "1h"` も案内する｡
+参考実装は [claude-token-audit の ttl-guard](https://github.com/tatsuo48/claude-token-audit#prevent-r1-with-ttl-guard)｡
+
+判定は transcript を直接読む (sidecar ではなく)｡Stop が発火していない中断の後でも､送信時点の最新が要るため｡
+読み方は `ingest-stop` と同じ `lastMainResponse`｡
+
+| 状況 | 結果 |
+| ---- | ---- |
+| prompt がスラッシュで始まる (`/clear` `/compact` など) | 通す |
+| transcript が無い､cache write が無い､compact 後にまだ応答が無い､warm | 通す |
+| 失効､ack の中身が `last_request_at` と同じ | 通す (同じ idle gap で警告済みか､daemon が承知で送った) |
+| 失効､ack の mtime が直近 60 秒以内 (中身は問わない) | 通して実際の値で書き換える (daemon の送信) |
+| 失効､上のどれでもない | ack を書き換えて止める |
+
+- 中身を問わず mtime で通すのは､sentinel `daemon-unknown` と､sidecar が古いまま daemon が写した値の
+  両方を拾うため｡値の一致は「同じ gap で既に警告した」の判定にだけ使う
+- compact_boundary より前の応答は見ない｡compact 後の次のリクエストは要約だけを送るので､手で `/compact`
+  した後の最初の prompt を止めない (止めると並列の復旧 hook が marker を消し､復旧ガイドが失われる)｡
+  `ingest-stop` も同じ規則で､compact 後に応答が無ければ sidecar を消す
+- ack は時間で失効させない｡90 日より古い ack は guard も消す
+- バイナリが無い・失敗した (サブコマンドを持たない古いバイナリも含む) ときは止めない｡理由は stderr と hook のログ
 
 ## ログ
 

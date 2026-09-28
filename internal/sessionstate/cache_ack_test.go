@@ -13,7 +13,7 @@ func TestWriteCacheAck(t *testing.T) {
 		if err := s.WriteCacheAck("sess-1", "2026-09-27T03:44:05.954Z"); err != nil {
 			t.Fatalf("WriteCacheAck() error = %v", err)
 		}
-		// guard (bash + jq) が transcript の timestamp と文字列で完全一致させるので､
+		// guard (TTLGuard) が transcript の timestamp と文字列で完全一致させるので､
 		// 整形も改行も入れない｡
 		got := readFileString(t, filepath.Join(s.CacheAck, "sess-1"))
 		if got != "2026-09-27T03:44:05.954Z" {
@@ -35,7 +35,7 @@ func TestWriteCacheAck(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Stat() error = %v", err)
 		}
-		// guard は sentinel の mtime が直近かで daemon の送信かを見る｡
+		// guard は mtime が直近かで daemon の送信かを見る｡
 		if info.ModTime().Before(now.Add(-time.Minute)) {
 			t.Errorf("mtime = %v, want 書き直した時刻 (%v 付近)", info.ModTime(), now)
 		}

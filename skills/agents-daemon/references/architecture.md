@@ -26,6 +26,9 @@ statusline・hook・skill・daemon が別々のタイミングで動き､ファ
                                               │  └─ herdr pane send-text / send-keys で再開
                                               ├─ context 閾値 → compact-prep → compact → 再開
                                               └─ 送る直前に cache の失効を見て cache-ack/<session_id> を書く
+
+[4] UserPromptSubmit hook ──stdin──> agents-daemon ttl-guard ── transcript と cache-ack/<session_id> を見て
+                                                               失効後の最初の prompt を止める (exit 2)
 ```
 
 ### [1] statusline が上限情報を渡し､ingest-statusline が落とす
@@ -205,7 +208,7 @@ pane ごとに次を評価する｡上限側の詳細は [rate-limit.md](rate-li
 | `$STATE/compact-state/<session_id>.md` | `agents-daemon:compact-prep` skill | `/agents-daemon:compact-prep` の実行時 | 圧縮で失われる作業状態 (plan / phase / 決定事項 / 編集中ファイル) | daemon が 7 日で消す |
 | `$STATE/compacted/<session_id>` | `hooks/compaction-recovery.sh` (PostCompact hook) | 圧縮が完了したとき | 空ファイル｡mtime が圧縮完了時刻 | 復旧 hook が消す (残れば daemon が 7 日で消す) |
 | `$STATE/cache/<session_id>.json` | `agents-daemon ingest-stop` (`hooks/cache-state.sh` が呼ぶ) | 応答の終わりごと (Stop hook) | 直近の応答の開始時刻と最新の cache write の TTL､transcript のパス | cache write が無いターンで ingest-stop が消す (残れば daemon が 7 日で消す) |
-| `$STATE/cache-ack/<session_id>` | daemon | 非スラッシュの prompt を送る直前 (cache が失効しているか sidecar が無いとき) | `cache/` の `last_request_at` の文字列そのまま､または sentinel `daemon-unknown` ([cache.md](cache.md)) | daemon が 90 日で消す |
+| `$STATE/cache-ack/<session_id>` | daemon と `agents-daemon ttl-guard` | daemon は非スラッシュの prompt を送る直前 (cache が失効しているか sidecar が無いとき)､ttl-guard は失効後の prompt を判定したとき | `last_request_at` の文字列そのまま､または sentinel `daemon-unknown` ([cache.md](cache.md)) | daemon と ttl-guard が 90 日で消す |
 | `$STATE/daemon.pid` | daemon | 起動時に作成､終了時に削除 | 稼働中デーモンの PID | daemon |
 | `$STATE/status.json` | daemon | 毎 tick (既定 5 秒) | 監視中の pane 一覧と各 pane の監視状態・試行回数・待機期限・直近の判定・cache の状態 | 上書き |
 | `$STATE/logs/daemon.log` | daemon | 報告に値する出来事があったときだけ | 上限検知と待ち時間､再開送信 (cache の状態つき)､ユーザーの自己再開､ゲート抑制､ネイティブへの譲り､compact 停止の催促､エラー | rotate |

@@ -3,7 +3,8 @@ name: agents-daemon
 description: >-
   agents-daemon plugin (利用上限からの自動再開と context の自動 compact を担う常駐デーモン) の運用と切り分けに使う｡
   上限が解除されても再開が飛ばない､context が閾値を超えても compact が投入されない､圧縮後に作業が再開しない､
-  関係ない pane を誤検知して打ち込む､daemon が起きない､バイナリがビルドされない・直したコードが動かない､
+  関係ない pane を誤検知して打ち込む､prompt が cache 失効の警告で止められる､daemon が起きない､
+  バイナリがビルドされない・直したコードが動かない､
   といった症状から引く｡statusline / hook / skill / daemon のファイル越しの配線と､設定キーの一覧も持つ｡
 ---
 
@@ -23,7 +24,9 @@ herdr のペインを経由して動く常駐デーモン｡役目は 2 つ｡
   `agents-daemon ingest-statusline` が `rate-limits/<session_id>.json` と `context/<session_id>.json` を書き､
   `agents-daemon:compact-prep` skill が `compact-state/<session_id>.md` を書き､PostCompact hook が
   `compacted/<session_id>` を書き､Stop hook から呼ばれた `agents-daemon ingest-stop` が
-  `cache/<session_id>.json` を書く｡SessionStart hook が daemon を起こし､
+  `cache/<session_id>.json` を書く｡UserPromptSubmit hook から呼ばれた `agents-daemon ttl-guard` は
+  cache 失効後の最初の prompt を止め､daemon が送る前に書く `cache-ack/<session_id>` を見て daemon の
+  送信は通す｡SessionStart hook が daemon を起こし､
   daemon が herdr 経由で pane を見て､これらのファイルの有無と mtime で判断する｡
 - **statusline はこの plugin に含まれない｡** 利用者の statusline がするのは stdin を
   `ingest-statusline` へ渡す 1 行だけで､取り出しと書式はバイナリ (`internal/sessionstate`) が持つ｡
@@ -81,6 +84,8 @@ herdr のペインを経由して動く常駐デーモン｡役目は 2 つ｡
 | context が閾値を超えても compact が走らない | compact.md の「送信の条件」､operations.md の「既知の制約」 |
 | 圧縮後に作業が再開しない | compact.md の「なぜ画面を読まないか」「compact 直後の停止」 |
 | 再開の送信が高くついた・どれだけ書き直したか知りたい | cache.md の「ログ」(送信行末の `cache=expired` と context 使用率) |
+| prompt が止められて「prompt cache は N 分で失効した」と警告が出る | cache.md の「TTL guard」 |
+| daemon の再開が止められる・`compactStallMessage` が繰り返し打たれる | cache.md の「TTL guard」の ack の規則､ログの `ack 済み` / `session 未紐づけ` |
 | daemon が起きない・バイナリがビルドされない | architecture.md の「バイナリの用意と差し替え」､`build.log` |
 | 直したコードが動いていない | architecture.md の「バイナリの用意と差し替え」 |
 | 送信が pane に届かない | pane-io.md､operations.md の「既知の制約」(pane 内 tmux､herdr 不在) |

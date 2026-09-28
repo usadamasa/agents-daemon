@@ -42,12 +42,9 @@ type Compact struct {
 	IdleCompactedAt time.Time
 }
 
-// IdleCompactActive は idle compact の後で､利用者がまだ戻っていないかを返す｡
-// 戻ってターンを終えれば Stop hook が marker より新しい sidecar を書く｡compact の後に
-// 応答が無ければ ingest-stop が sidecar を消すので､cache が nil なら戻っていない｡
-//
-// marker は消さずに比較で解く｡消す役を持つと､daemon の再起動や hook の失敗で
-// 消し損ねたときに解けなくなる｡
+// IdleCompactActive は idle compact の後で利用者がまだ戻っていないか､つまり marker があり
+// cache が無いか marker 以前の応答しか持たないかを返す｡marker は消さずにこの比較で解く
+// (skills/agents-daemon/references/compact.md の「idle compact」)｡
 func (c *Compact) IdleCompactActive(cache *Cache) bool {
 	if c == nil || !c.HasIdleCompacted {
 		return false

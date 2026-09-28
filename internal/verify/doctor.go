@@ -225,6 +225,9 @@ func configFields(cfg, def config.Config) []configFieldReport {
 		{"compactAutoCooldownMinutes", cfg.CompactAutoCooldownMinutes, def.CompactAutoCooldownMinutes},
 		{"compactResumeEnabled", cfg.CompactResumeEnabled, def.CompactResumeEnabled},
 		{"compactResumeDelaySeconds", cfg.CompactResumeDelaySeconds, def.CompactResumeDelaySeconds},
+		{"cacheIdleCompactEnabled", cfg.CacheIdleCompactEnabled, def.CacheIdleCompactEnabled},
+		{"cacheIdleCompactLeadSeconds", cfg.CacheIdleCompactLeadSeconds, def.CacheIdleCompactLeadSeconds},
+		{"cacheIdleCompactThresholdPercent", cfg.CacheIdleCompactThresholdPercent, def.CacheIdleCompactThresholdPercent},
 	}
 	out := make([]configFieldReport, 0, len(raw))
 	for _, r := range raw {

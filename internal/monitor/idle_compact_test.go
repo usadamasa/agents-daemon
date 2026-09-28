@@ -135,6 +135,13 @@ func TestTick_idle_compact_は_5m_TTL_ではスキップする(t *testing.T) {
 		t.Fatalf("outcome = %v, want %v", outcome, OutcomeIdleCompactShortTTL)
 	}
 	assertNoSend(t, f.client)
+
+	// 報告は pane ごとに 1 回｡5m TTL の利用者はターンのたびに条件を満たし､ログが毎ターン伸びる｡
+	f.cache = cacheAt(idleNow.Add(10 * time.Minute))
+	f.cache.TTL = 5 * time.Minute
+	if outcome := f.mustTick(t, idleNow.Add(11*time.Minute)); outcome != OutcomeMonitoring {
+		t.Errorf("2 回目: outcome = %v, want %v", outcome, OutcomeMonitoring)
+	}
 }
 
 func TestTick_5m_TTL_のスキップは圧縮後の再開を塞がない(t *testing.T) {

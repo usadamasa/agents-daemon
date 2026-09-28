@@ -65,6 +65,8 @@ type PaneState struct {
 	// CompactPrepIdle は待っている compact-prep が idle compact (idle_compact.go) の
 	// 発火かどうか｡2 段目で marker を書くかと､ログの出し分けに使う｡
 	CompactPrepIdle bool
+	// IdleCompactShortTTLReported は OutcomeIdleCompactShortTTL を既に返したか｡
+	IdleCompactShortTTLReported bool
 	// CompactAutoSentAt は自動 compact の段が直近で何かを送った (あるいは
 	// 時間切れで諦めた) 時刻｡1 段目のクールダウンの起点｡
 	CompactAutoSentAt time.Time

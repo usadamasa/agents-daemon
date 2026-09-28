@@ -11,15 +11,8 @@ import (
 )
 
 // idle compact は､idle な pane の prompt cache が失効する前に 1 段目・2 段目を走らせる｡
-// warm なうちの /compact は文脈を cache read で読んで要約を出すだけで安い｡失効後に利用者が
-// 戻ったとき､書き直されるのは要約だけになる｡放置すれば文脈全体を書き直す｡
-//
-// 利用者は離席中なので､圧縮の後に 3 段目 (再開) も画面判定の継続要求も送らない｡送れば
-// それ自体が失効後の送信になり､誰もいないのに作業が進む｡/compact を送る前に
-// cache-idle-compacted/<session_id> を書き､3 段目と画面判定はこれが active な間は黙る
-// (sessionstate.Compact.IdleCompactActive)｡marker をファイルに置くのは､利用者の不在中に
-// daemon が再起動しても (PaneState は消える) 再開を送らないため｡利用者が戻ったら､次の
-// prompt で既存の UserPromptSubmit hook が復旧ガイドを注入する｡
+// /compact の前に cache-idle-compacted/<session_id> を書き､それが active な間は 3 段目と
+// 画面判定を送らない｡理由は skills/agents-daemon/references/compact.md の「idle compact」｡
 
 // shortCacheTTL 以下の TTL では prep と compact の 2 段を失効前に終える余裕が無い｡
 const shortCacheTTL = 5 * time.Minute
@@ -47,6 +40,11 @@ func tickIdleCompact(
 		return OutcomeMonitoring, nil
 	}
 	if cache.TTL <= shortCacheTTL || cache.TTL <= lead {
+		// 5m TTL ではターンのたびに条件を満たすので､報告は pane ごとに 1 回にする｡
+		if ps.IdleCompactShortTTLReported {
+			return OutcomeMonitoring, nil
+		}
+		ps.IdleCompactShortTTLReported = true
 		return OutcomeIdleCompactShortTTL, nil
 	}
 

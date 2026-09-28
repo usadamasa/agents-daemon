@@ -75,7 +75,7 @@ cache read で読んで要約を出すだけで安く､失効後に利用者が
 | 上の「送信の条件」の 1 段目と同じ (idle､入力欄が空､使用率の観測が新しい､cooldown) | 同上 |
 | 使用率が `cacheIdleCompactThresholdPercent` (既定 40) 以上 | 書き直しを避けるのが目的で､window の余裕とは別｡`compactAutoThresholdPercent` より低くてよい |
 | `cache/<sid>.json` があり失効前で､`now >= 失効時刻 - cacheIdleCompactLeadSeconds` (既定 600) | prep → compact の 2 段が TTL 内に収まる余裕｡sidecar が古いと失効済みと見て送らない (安全側) |
-| TTL が 5 分より長く､lead より長い | 5 分では 2 段を失効前に終えられない｡満たさなければ送らず `idle-compact-short-ttl` をログに残す |
+| TTL が 5 分より長く､lead より長い | 5 分では 2 段を失効前に終えられない｡満たさなければ送らず `idle-compact-short-ttl` をログに残す (ターンのたびに満たすので pane ごとに 1 回) |
 | 下の marker が active でない | 前回の idle compact から利用者が戻っていない |
 
 ### 圧縮の後は再開しない

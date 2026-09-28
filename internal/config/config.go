@@ -121,15 +121,12 @@ type Config struct {
 	// 圧縮直後にユーザーが自分で続きを打つ余地を残すための猶予｡
 	CompactResumeDelaySeconds int
 
-	// CacheIdleCompactEnabled は､idle な pane の prompt cache が失効する前に 1 段目・2 段目を
-	// 走らせる機能 (idle compact) のスイッチ｡CompactAutoEnabled とは独立｡既定を false に
-	// してあるのは CompactAutoEnabled と同じ理由 (/compact は取り消せない)｡
+	// CacheIdleCompactEnabled は prompt cache の失効前の compact (idle compact) のスイッチ｡
+	// CompactAutoEnabled とは独立で､既定 false の理由も同じ｡
 	CacheIdleCompactEnabled bool
-	// CacheIdleCompactLeadSeconds は失効の何秒前から動くか｡prep → compact の 2 段が
-	// TTL 内に収まる余裕｡
+	// CacheIdleCompactLeadSeconds は失効の何秒前から動くか｡
 	CacheIdleCompactLeadSeconds int
-	// CacheIdleCompactThresholdPercent はこの使用率 (0..100) 以上で動く｡目的は失効後の
-	// 書き直しを小さくすることで､window の余裕とは別なので CompactAutoThresholdPercent より低い｡
+	// CacheIdleCompactThresholdPercent はこの使用率 (0..100) 以上で動く｡
 	CacheIdleCompactThresholdPercent float64
 }
 

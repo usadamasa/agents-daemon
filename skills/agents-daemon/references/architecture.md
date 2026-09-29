@@ -98,10 +98,11 @@ daemon は `observed_at` の新しさでセッションが生きているかも�
 `$STATE/context/<session_id>.json` (毎描画):
 
 ```json
-{"session_id": "0f8e2a4c-1b3d-4e5f-8a9b-0c1d2e3f4a5b", "used_percentage": 63, "observed_at": 1786840000}
+{"session_id": "0f8e2a4c-1b3d-4e5f-8a9b-0c1d2e3f4a5b", "used_percentage": 63, "observed_at": 1786840000, "context_window_size": 200000}
 ```
 
-`observed_at` はどちらも書いた時点の Unix epoch 秒｡
+`observed_at` はどちらも書いた時点の Unix epoch 秒｡`context_window_size` は入力にあるときだけ付ける
+(idle compact が使用率を求めるのに使う｡[compact.md](compact.md))｡
 
 #### ingest-stop が書く state
 
@@ -116,10 +117,12 @@ cache write になる｡実際に使われた TTL は transcript JSONL の `mess
 `$STATE/cache/<session_id>.json` (応答の終わりごと｡cache write が 1 つも無ければ消す):
 
 ```json
-{"last_request_at": "2026-09-27T03:44:05.954Z", "ttl_seconds": 3600, "transcript_path": "/path/to/transcript.jsonl"}
+{"last_request_at": "2026-09-27T03:44:05.954Z", "ttl_seconds": 3600, "context_tokens": 135983, "transcript_path": "/path/to/transcript.jsonl"}
 ```
 
 `last_request_at` は transcript の timestamp 文字列をそのまま写す (読み手が ack と文字列で比較するため)｡
+`context_tokens` はその応答の `input_tokens + cache_creation_input_tokens + cache_read_input_tokens`
+(idle compact が使用率を求めるのに使う｡[compact.md](compact.md))｡
 transcript が無い・読めないときは何も書かず既存ファイルも残す｡ユーザーの中断では Stop が発火しないので
 古くなることがあるが､古い側へずれるのは「まだ warm」を「失効」と見る方向で､能動的な動作を抑える側に倒れる｡
 読む側 (daemon が prompt を送るときの ack・ログ・status) は [cache.md](cache.md)｡

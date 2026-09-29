@@ -37,7 +37,7 @@ func (s Store) Prune(now time.Time) (rateLimits, compacts int, err error) {
 	if err != nil {
 		errs = append(errs, err)
 	}
-	for _, dir := range []string{s.Context, s.CompactState, s.Compacted, s.Cache} {
+	for _, dir := range []string{s.Context, s.CompactState, s.Compacted, s.Cache, s.IdleCompacted} {
 		n, dirErr := pruneDir(dir, now, compactRetention)
 		if dirErr != nil {
 			errs = append(errs, dirErr)
@@ -55,7 +55,7 @@ func (s Store) Prune(now time.Time) (rateLimits, compacts int, err error) {
 // pruneDir は dir 直下の通常ファイルのうち､mtime が now から maxAge より古いものを
 // 削除し､消した数を返す｡
 //
-// 拡張子で絞らないのは､この 5 ディレクトリの中身が全てこの仕組みの書き出しで
+// 拡張子で絞らないのは､これらのディレクトリの中身が全てこの仕組みの書き出しで
 // あり (json / md / 拡張子なしの marker / statusline の mktemp の残骸)､名前で
 // 選り分ける意味が無いため｡サブディレクトリは触らない｡
 //

@@ -24,8 +24,8 @@ daemon が pane へ打ち込む文面は 4 つ (`internal/config` の既定値�
 | ---- | ---- | ---- | ---- |
 | `retryMessage` | 上限解除後の再開 (`recoverPane`) | しない | 失効後なら書く |
 | `compactStallMessage` | compact 後の再開 (marker 経路と画面判定の両方) | しない | 失効後なら書く |
-| `compactAutoPrepMessage` | 1 段目 (`/agents-daemon:compact-prep`) | する | 書かない (ログのみ) |
-| `compactAutoMessage` | 2 段目 (`/compact ...`) | する | 書かない (ログのみ) |
+| `compactAutoPrepMessage` | 1 段目 (`/agents-daemon:compact-prep`)｡idle compact も同じ | する | 書かない (ログのみ) |
+| `compactAutoMessage` | 2 段目 (`/compact ...`)｡idle compact も同じ | する | 書かない (ログのみ) |
 
 スラッシュかどうかは **送る文面そのもの** (`TrimSpace` して `/` 始まり) で判定する｡どの文面も設定で
 書き換えられるので､設定キーで決め打ちしない｡TTL guard hook はスラッシュコマンドを素通しするので

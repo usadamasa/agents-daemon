@@ -62,6 +62,11 @@ type PaneState struct {
 	// CompactPrepSentAt は /compact-prep を投入した時刻｡非ゼロは
 	// 「state file が書かれるのを待っている」を意味する｡
 	CompactPrepSentAt time.Time
+	// CompactPrepIdle は待っている compact-prep が idle compact (idle_compact.go) の
+	// 発火かどうか｡2 段目で marker を書くかと､ログの出し分けに使う｡
+	CompactPrepIdle bool
+	// IdleCompactShortTTLReported は OutcomeIdleCompactShortTTL を既に返したか｡
+	IdleCompactShortTTLReported bool
 	// CompactAutoSentAt は自動 compact の段が直近で何かを送った (あるいは
 	// 時間切れで諦めた) 時刻｡1 段目のクールダウンの起点｡
 	CompactAutoSentAt time.Time
@@ -134,54 +139,49 @@ const (
 	// OutcomeCompactResumed は圧縮完了 marker を見て作業の再開を促す
 	// メッセージを送ったことを表す｡
 	OutcomeCompactResumed
+	// OutcomeIdleCompactPrepSent は cache の失効が近い idle な pane へ
+	// /compact-prep を投入したことを表す (idle compact)｡
+	OutcomeIdleCompactPrepSent
+	// OutcomeIdleCompactSent は idle compact の marker を書いて /compact を投入したことを表す｡
+	OutcomeIdleCompactSent
+	// OutcomeIdleCompactShortTTL は idle compact の条件を満たしたが､TTL が短く 2 段を
+	// 失効前に終えられないため送らなかったことを表す｡
+	OutcomeIdleCompactShortTTL
 )
+
+// outcomeNames は Outcome のログ向けの識別子｡
+var outcomeNames = map[Outcome]string{
+	OutcomeStillWaiting:        "still-waiting",
+	OutcomeScreenUnreadable:    "screen-unreadable",
+	OutcomeRecoveredByUser:     "recovered-by-user",
+	OutcomeNotClaudeAgent:      "not-claude-agent",
+	OutcomeMaxRetries:          "max-retries",
+	OutcomeRetried:             "retried",
+	OutcomeMonitoring:          "monitoring",
+	OutcomeGateSuppressed:      "gate-suppressed",
+	OutcomeWaiting:             "waiting",
+	OutcomeReadError:           "read-error",
+	OutcomeSendError:           "send-error",
+	OutcomeNativeAutoContinue:  "native-auto-continue",
+	OutcomeResumeEnter:         "resume-enter",
+	OutcomeHardCap:             "hard-cap",
+	OutcomeCompactNudged:       "compact-nudged",
+	OutcomeCompactNudgeCapped:  "compact-nudge-capped",
+	OutcomeCompactPrepSent:     "compact-prep-sent",
+	OutcomeCompactSent:         "compact-sent",
+	OutcomeCompactPrepTimeout:  "compact-prep-timeout",
+	OutcomeCompactResumed:      "compact-resumed",
+	OutcomeIdleCompactPrepSent: "idle-compact-prep-sent",
+	OutcomeIdleCompactSent:     "idle-compact-sent",
+	OutcomeIdleCompactShortTTL: "idle-compact-short-ttl",
+}
 
 // String は Outcome をログ向けの識別子文字列にする｡
 func (o Outcome) String() string {
-	switch o {
-	case OutcomeStillWaiting:
-		return "still-waiting"
-	case OutcomeScreenUnreadable:
-		return "screen-unreadable"
-	case OutcomeRecoveredByUser:
-		return "recovered-by-user"
-	case OutcomeNotClaudeAgent:
-		return "not-claude-agent"
-	case OutcomeMaxRetries:
-		return "max-retries"
-	case OutcomeRetried:
-		return "retried"
-	case OutcomeMonitoring:
-		return "monitoring"
-	case OutcomeGateSuppressed:
-		return "gate-suppressed"
-	case OutcomeWaiting:
-		return "waiting"
-	case OutcomeReadError:
-		return "read-error"
-	case OutcomeSendError:
-		return "send-error"
-	case OutcomeNativeAutoContinue:
-		return "native-auto-continue"
-	case OutcomeResumeEnter:
-		return "resume-enter"
-	case OutcomeHardCap:
-		return "hard-cap"
-	case OutcomeCompactNudged:
-		return "compact-nudged"
-	case OutcomeCompactNudgeCapped:
-		return "compact-nudge-capped"
-	case OutcomeCompactPrepSent:
-		return "compact-prep-sent"
-	case OutcomeCompactSent:
-		return "compact-sent"
-	case OutcomeCompactPrepTimeout:
-		return "compact-prep-timeout"
-	case OutcomeCompactResumed:
-		return "compact-resumed"
-	default:
-		return "unknown"
+	if name, ok := outcomeNames[o]; ok {
+		return name
 	}
+	return "unknown"
 }
 
 // metadataSource は herdr pane report-metadata --source に渡す固定値｡
@@ -228,12 +228,16 @@ type Deps struct {
 	// このフィールド自体が nil なら compact の自動化は適用しない｡
 	CompactState func(sessionID string) *sessionstate.Compact
 	// CacheState は pane のセッションの prompt cache の状態 (sessionstate.Store.LoadCache) を
-	// 返す｡prompt を送る直前にだけ読む｡nil は「sidecar 無し」｡このフィールド自体が nil
-	// なら cache の状態は見ず ack も書かない｡
+	// 返す｡読むのは prompt を送る直前と､idle compact の判定 (有効なときか marker があるとき)
+	// だけ｡nil は「sidecar 無し」｡このフィールド自体が nil なら cache の状態は見ず ack も書かない｡
 	CacheState func(sessionID string) *sessionstate.Cache
 	// CacheAck は cache-ack/<session_id> に value を書く (sessionstate.Store.WriteCacheAck)｡
 	// 失効後に非スラッシュの prompt を送る前に呼ばれる｡dry-run の daemon は no-op を差す｡
 	CacheAck func(sessionID, value string) error
+	// MarkIdleCompacted は cache-idle-compacted/<session_id> を書く
+	// (sessionstate.Store.MarkIdleCompacted)｡idle compact の /compact を送る前に呼ばれ､
+	// 失敗したら送らない｡dry-run の daemon は no-op を差す｡
+	MarkIdleCompacted func(sessionID string) error
 }
 
 // Tick は pane 1 枚ぶんの 1 tick を処理し､ps を必要に応じて書き換える｡

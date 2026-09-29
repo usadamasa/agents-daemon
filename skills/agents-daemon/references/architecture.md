@@ -25,6 +25,7 @@ statusline・hook・skill・daemon が別々のタイミングで動き､ファ
 [3]                                           ├─ 上限解除の時刻まで待つ
                                               │  └─ herdr pane send-text / send-keys で再開
                                               ├─ context 閾値 → compact-prep → compact → 再開
+                                              ├─ cache の失効前 → compact-prep → cache-idle-compacted/<session_id> → compact
                                               └─ 送る直前に cache の失効を見て cache-ack/<session_id> を書く
 
 [4] UserPromptSubmit hook ──stdin──> agents-daemon ttl-guard ── transcript と cache-ack/<session_id> を見て
@@ -188,9 +189,10 @@ pane ごとに次を評価する｡上限側の詳細は [rate-limit.md](rate-li
 | 試行回数が `maxRetries` に達した | 長いクールダウンに入る |
 | 一時的なサーバーエラー (5xx / 過負荷) | 指数バックオフで短周期リトライ |
 | どれにも該当せず､context 使用率が閾値を超えている | `/agents-daemon:compact-prep` を投入する (別ゲート) |
-| どれにも該当せず､compact-prep の state file が投入後に書かれた | `/compact` を投入する (別ゲート) |
-| どれにも該当せず､圧縮完了 marker が置かれている | 作業の再開を促すメッセージを送る (別ゲート) |
-| どれにも該当せず､compact 直後で止まっている (画面判定) | 継続を促すメッセージを送る (別ゲート) |
+| どれにも該当せず､cache の失効が近く context 使用率が idle compact の閾値を超えている | `/agents-daemon:compact-prep` を投入する (別ゲート｡idle compact) |
+| どれにも該当せず､compact-prep の state file が投入後に書かれた | `/compact` を投入する (別ゲート｡idle compact なら先に marker を書く) |
+| どれにも該当せず､圧縮完了 marker が置かれている | 作業の再開を促すメッセージを送る (別ゲート｡idle compact の marker が active なら送らない) |
+| どれにも該当せず､compact 直後で止まっている (画面判定) | 継続を促すメッセージを送る (別ゲート｡同上) |
 
 ## 出力されるファイル
 
@@ -209,6 +211,7 @@ pane ごとに次を評価する｡上限側の詳細は [rate-limit.md](rate-li
 | `$STATE/compacted/<session_id>` | `hooks/compaction-recovery.sh` (PostCompact hook) | 圧縮が完了したとき | 空ファイル｡mtime が圧縮完了時刻 | 復旧 hook が消す (残れば daemon が 7 日で消す) |
 | `$STATE/cache/<session_id>.json` | `agents-daemon ingest-stop` (`hooks/cache-state.sh` が呼ぶ) | 応答の終わりごと (Stop hook) | 直近の応答の開始時刻と最新の cache write の TTL､transcript のパス | cache write が無いターンで ingest-stop が消す (残れば daemon が 7 日で消す) |
 | `$STATE/cache-ack/<session_id>` | daemon と `agents-daemon ttl-guard` | daemon は非スラッシュの prompt を送る直前 (cache が失効しているか sidecar が無いとき)､ttl-guard は失効後の prompt を判定したとき | `last_request_at` の文字列そのまま､または sentinel `daemon-unknown` ([cache.md](cache.md)) | daemon と ttl-guard が 90 日で消す |
+| `$STATE/cache-idle-compacted/<session_id>` | daemon | idle compact の `/compact` を送る直前 | 空ファイル｡mtime が送信時刻 ([compact.md](compact.md)) | 消さずに sidecar との比較で解く (daemon が 7 日で消す) |
 | `$STATE/daemon.pid` | daemon | 起動時に作成､終了時に削除 | 稼働中デーモンの PID | daemon |
 | `$STATE/status.json` | daemon | 毎 tick (既定 5 秒) | 監視中の pane 一覧と各 pane の監視状態・試行回数・待機期限・直近の判定・cache の状態 | 上書き |
 | `$STATE/logs/daemon.log` | daemon | 報告に値する出来事があったときだけ | 上限検知と待ち時間､再開送信 (cache の状態つき)､ユーザーの自己再開､ゲート抑制､ネイティブへの譲り､compact 停止の催促､エラー | rotate |
@@ -233,7 +236,7 @@ daemon の再起動を跨いで日付が変わっていた場合も､mtime か�
 
 古いファイルは daemon 自身が消す｡起動時と 1 時間ごとに､mtime が保持期間を過ぎた
 rotate 済みログ (7 日)､`rate-limits/` 配下の state (24 時間｡ingest-statusline が rename 前に
-死んで残った `.rate-limits.*` も同じ扱い)､compact 関連の 3 ディレクトリと `cache/` 配下 (7 日)､
+死んで残った `.rate-limits.*` も同じ扱い)､compact 関連の 3 ディレクトリと `cache/`・`cache-idle-compacted/` 配下 (7 日)､
 `cache-ack/` 配下 (90 日) を削除する｡何かを消したときだけログに残す｡
 
 保持期間は設定キーにせず定数 (`internal/daemon/housekeeping.go`) に置く｡state の

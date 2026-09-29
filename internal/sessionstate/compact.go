@@ -16,7 +16,7 @@ type contextFile struct {
 }
 
 // Compact はセッション 1 つぶんの､compact 自動化に要る状態をまとめたもの｡
-// 3 つの state は互いに独立に現れるため､どれが無くても他は使える｡
+// 4 つの state は互いに独立に現れるため､どれが無くても他は使える｡
 type Compact struct {
 	// HasContext は context 使用率が読めたかどうか｡
 	HasContext bool
@@ -35,6 +35,31 @@ type Compact struct {
 	HasCompacted bool
 	// CompactedAt は marker の mtime (= 圧縮が完了した時刻)｡
 	CompactedAt time.Time
+
+	// HasIdleCompacted は idle compact の marker が存在するかどうか｡
+	HasIdleCompacted bool
+	// IdleCompactedAt は marker の mtime (= idle compact の /compact を送った時刻)｡
+	IdleCompactedAt time.Time
+}
+
+// IdleCompactActive は idle compact の後で利用者がまだ戻っていないか､つまり marker があり
+// cache が無いか marker 以前の応答しか持たないかを返す｡marker は消さずにこの比較で解く
+// (skills/agents-daemon/references/compact.md の「idle compact」)｡
+func (c *Compact) IdleCompactActive(cache *Cache) bool {
+	if c == nil || !c.HasIdleCompacted {
+		return false
+	}
+	return cache == nil || !cache.LastRequestAt.After(c.IdleCompactedAt)
+}
+
+// MarkIdleCompacted は cache-idle-compacted/<session_id> を書く (中身は空で､mtime が送信時刻)｡
+// daemon が idle compact の /compact を送る直前に呼ぶ｡sessionID が空なら何もしない｡
+func (s Store) MarkIdleCompacted(sessionID string) error {
+	path, err := sessionPath(s.IdleCompacted, sessionID, "")
+	if err != nil || path == "" {
+		return err
+	}
+	return writeFileAtomic(path, ".idle-compacted.*", nil)
 }
 
 // ContextFresh は使用率の観測が maxAge 以内かを返す｡
@@ -46,7 +71,7 @@ func (c *Compact) ContextFresh(now time.Time, maxAge time.Duration) bool {
 	return fresh(c.ObservedAt, now, maxAge)
 }
 
-// LoadCompact は sessionID に対応する compact 関連の 3 つの state を読む｡
+// LoadCompact は sessionID に対応する compact 関連の 4 つの state を読む｡
 //
 // sessionID が空 (herdr が pane に agent session を紐づけていない) 場合は
 // 判断材料が無いという正常系として (nil, nil) を返す｡呼び出し元は nil を
@@ -67,6 +92,10 @@ func (s Store) LoadCompact(sessionID string) (*Compact, error) {
 	if err != nil {
 		return nil, err
 	}
+	idlePath, err := sessionPath(s.IdleCompacted, sessionID, "")
+	if err != nil {
+		return nil, err
+	}
 
 	state := &Compact{}
 	if err := loadContext(state, contextPath); err != nil {
@@ -74,6 +103,7 @@ func (s Store) LoadCompact(sessionID string) (*Compact, error) {
 	}
 	state.HasPrep, state.PrepWrittenAt = modTime(prepPath)
 	state.HasCompacted, state.CompactedAt = modTime(markerPath)
+	state.HasIdleCompacted, state.IdleCompactedAt = modTime(idlePath)
 	return state, nil
 }
 

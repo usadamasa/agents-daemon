@@ -120,6 +120,15 @@ type Config struct {
 	// CompactResumeDelaySeconds は marker がこの秒数より古くなってから送る｡
 	// 圧縮直後にユーザーが自分で続きを打つ余地を残すための猶予｡
 	CompactResumeDelaySeconds int
+
+	// CacheIdleCompactEnabled は prompt cache の失効前の compact (idle compact) のスイッチ｡
+	// CompactAutoEnabled とは独立｡既定 true なのは､warm なうちに要約しておけば失効後の
+	// 書き直しが要約だけで済み､その後に再開を送らないため｡
+	CacheIdleCompactEnabled bool
+	// CacheIdleCompactLeadSeconds は失効の何秒前から動くか｡
+	CacheIdleCompactLeadSeconds int
+	// CacheIdleCompactThresholdPercent はこの使用率 (0..100) 以上で動く｡
+	CacheIdleCompactThresholdPercent float64
 }
 
 // Default は全項目デフォルト値の Config を返す｡
@@ -163,6 +172,10 @@ func Default() Config {
 
 		CompactResumeEnabled:      true,
 		CompactResumeDelaySeconds: 60,
+
+		CacheIdleCompactEnabled:          true,
+		CacheIdleCompactLeadSeconds:      600,
+		CacheIdleCompactThresholdPercent: 40,
 	}
 }
 
@@ -209,6 +222,10 @@ type rawConfig struct {
 
 	CompactResumeEnabled      *bool `json:"compactResumeEnabled"`
 	CompactResumeDelaySeconds *int  `json:"compactResumeDelaySeconds"`
+
+	CacheIdleCompactEnabled          *bool    `json:"cacheIdleCompactEnabled"`
+	CacheIdleCompactLeadSeconds      *int     `json:"cacheIdleCompactLeadSeconds"`
+	CacheIdleCompactThresholdPercent *float64 `json:"cacheIdleCompactThresholdPercent"`
 }
 
 // Load は path から設定を読み込む｡
@@ -240,7 +257,7 @@ func Load(path string) (Config, error) {
 // applyRaw は raw の各キーを検証しつつ cfg へ反映する｡値が不正なキーは
 // 黙って既定値のままにする (タイプミス 1 つで監視全体が止まらないようにするため)｡
 //
-// 意味のまとまりで 5 つに割ってある｡1 関数に並べると認知的複雑度が
+// 意味のまとまりで 6 つに割ってある｡1 関数に並べると認知的複雑度が
 // lint の閾値を超えるうえ､どのキーがどの役割かも読み取りにくくなるため｡
 func applyRaw(cfg *Config, raw *rawConfig) {
 	applyRawBasics(cfg, raw)
@@ -248,6 +265,7 @@ func applyRaw(cfg *Config, raw *rawConfig) {
 	applyRawRecovery(cfg, raw)
 	applyRawCompactStall(cfg, raw)
 	applyRawCompactAuto(cfg, raw)
+	applyRawCacheIdleCompact(cfg, raw)
 }
 
 // applyRawBasics は稼働そのものに関わる設定を反映する｡
@@ -377,6 +395,20 @@ func applyRawCompactAuto(cfg *Config, raw *rawConfig) {
 	// 圧縮直後に人が続きを打つ余地を残す｡短すぎる値は受け付けない｡
 	if v := raw.CompactResumeDelaySeconds; v != nil && *v >= 10 {
 		cfg.CompactResumeDelaySeconds = *v
+	}
+}
+
+// applyRawCacheIdleCompact は prompt cache の失効前の compact (idle compact) の設定を反映する｡
+func applyRawCacheIdleCompact(cfg *Config, raw *rawConfig) {
+	if raw.CacheIdleCompactEnabled != nil {
+		cfg.CacheIdleCompactEnabled = *raw.CacheIdleCompactEnabled
+	}
+	// 短すぎると 2 段が失効に間に合わず､1 時間以上だと 1h TTL でも応答の直後から窓が開く｡
+	if v := raw.CacheIdleCompactLeadSeconds; v != nil && *v >= 60 && *v < 3600 {
+		cfg.CacheIdleCompactLeadSeconds = *v
+	}
+	if v := raw.CacheIdleCompactThresholdPercent; v != nil && *v > 0 && *v <= 100 {
+		cfg.CacheIdleCompactThresholdPercent = *v
 	}
 }
 

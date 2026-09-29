@@ -1,7 +1,7 @@
 # prompt cache と daemon の送信
 
-sidecar `cache/<session_id>.json` を書く側 (Stop hook → `ingest-stop`) は
-[architecture.md](architecture.md) の「ingest-stop が書く state」にある｡ここは読む側､つまり daemon が
+cache の状態を transcript から求める仕組みは [architecture.md](architecture.md) の
+「daemon が transcript から求める cache の状態」にある｡ここは使う側､つまり daemon が
 prompt を送るときに cache の状態をどう扱うか｡
 
 ## なぜ見るか
@@ -37,15 +37,15 @@ ack は要らない｡
 TTL guard (下の節) がこれを見て daemon の送信を止めずに通す｡「書き直しのコストを承知で送る」の
 意思表示｡書く側も読む側も `internal/sessionstate` (`WriteCacheAck` / `CacheAckUnknown` / `TTLGuard`) にある｡
 
-| sidecar の状態 | 書く値 |
+| cache の状態 | 書く値 |
 | ---- | ---- |
-| ある､失効 (`now - last_request_at >= ttl`) | `last_request_at` の文字列そのまま |
+| ある､失効 (`now - last_request_at >= ttl`) | 直近の応答の開始時刻 (transcript の文字列そのまま) |
 | ある､warm | 書かない (guard も止めない) |
-| 無い (Stop hook 未導入､初回ターン) | sentinel `daemon-unknown` |
+| 無い (statusline が `transcript_path` を渡していない､初回ターン) | sentinel `daemon-unknown` |
 
-- 値は sidecar の文字列を **整形せずに写す**｡`time.Parse` / `Format` を通すとミリ秒が落ちたり `Z` が
+- 値は transcript の文字列を **整形せずに写す**｡`time.Parse` / `Format` を通すとミリ秒が落ちたり `Z` が
   `+00:00` になったりして､guard の文字列比較 (完全一致) と合わなくなる｡末尾の改行も入れない｡
-- sidecar が無くても **必ず何かを書く**｡書かないと guard が daemon の再開を止め､daemon は pane の停止と
+- 状態が無くても **必ず何かを書く**｡書かないと guard が daemon の再開を止め､daemon は pane の停止と
   見て `compactStallMessage` を打ち､それも止められて堂々巡りになる｡guard は sentinel の mtime が
   直近数十秒以内なら通し､transcript から求めた実際の値で書き換える｡同じ値でも書き直して mtime を
   新しくする｡
@@ -57,10 +57,9 @@ TTL guard (下の節) がこれを見て daemon の送信を止めずに通す�
 - daemon が 90 日で消す｡ack は時間で失効させない (待った時間が長くなっても書き直しのコストは同じ)
   ので compact 系の 7 日より長い｡
 
-Stop hook はユーザーの中断では発火しないので､sidecar が transcript より古いことがある｡daemon は
-sidecar の値を写すため､guard が transcript から求めた値と食い違いうる｡どちらも失効側にずれる
-(「まだ warm」を「失効」と見る) ので送る側の判断は変わらないが､ack の文字列は一致しない｡
-guard は値が違っても mtime が直近の ack を daemon の送信として通す (下の節)｡
+daemon と guard は同じ transcript を同じ規則で読むので､ack の文字列はふつう一致する｡daemon が読んだ後に
+transcript の書き込みが追いつくと食い違うが､guard は値が違っても mtime が直近の ack を daemon の送信として
+通す (下の節)｡
 
 ## TTL guard
 
@@ -69,8 +68,7 @@ cache 失効後の最初の prompt を 1 回だけ止め (exit 2)､経過時間
 `/compact` してから続ける) を警告として見せる｡TTL が 5 分なら `promptCacheTtl: "1h"` も案内する｡
 参考実装は [claude-token-audit の ttl-guard](https://github.com/tatsuo48/claude-token-audit#prevent-r1-with-ttl-guard)｡
 
-判定は transcript を直接読む (sidecar ではなく)｡Stop が発火していない中断の後でも､送信時点の最新が要るため｡
-読み方は `ingest-stop` と同じ `lastMainResponse`｡
+判定は transcript を直接読む｡読み方は daemon と同じ `lastMainResponse`｡
 
 | 状況 | 結果 |
 | ---- | ---- |
@@ -80,11 +78,11 @@ cache 失効後の最初の prompt を 1 回だけ止め (exit 2)､経過時間
 | 失効､ack の mtime が直近 60 秒以内 (中身は問わない) | 通して実際の値で書き換える (daemon の送信) |
 | 失効､上のどれでもない | ack を書き換えて止める |
 
-- 中身を問わず mtime で通すのは､sentinel `daemon-unknown` と､sidecar が古いまま daemon が写した値の
-  両方を拾うため｡値の一致は「同じ gap で既に警告した」の判定にだけ使う
+- 中身を問わず mtime で通すのは､sentinel `daemon-unknown` と､daemon が読んだ後に transcript が伸びた
+  ときの値の両方を拾うため｡値の一致は「同じ gap で既に警告した」の判定にだけ使う
 - compact_boundary より前の応答は見ない｡compact 後の次のリクエストは要約だけを送るので､手で `/compact`
   した後の最初の prompt を止めない (止めると並列の復旧 hook が marker を消し､復旧ガイドが失われる)｡
-  `ingest-stop` も同じ規則で､compact 後に応答が無ければ sidecar を消す
+  daemon も同じ規則で､compact 後に応答が無ければ cache の状態を無しとする
 - ack は時間で失効させない｡90 日より古い ack は guard も消す
 - バイナリが無い・失敗した (サブコマンドを持たない古いバイナリも含む) ときは止めない｡理由は stderr と hook のログ
 
@@ -96,7 +94,7 @@ prompt を送った出来事 (再開送信､compact-prep / compact の投入､
 ```text
 pane 3 (/path): 再開メッセージを送信しました (1 回目) / cache=expired (経過 312 分､TTL 60 分､context 使用率 63%､ack 済み)
 pane 3 (/path): compact 直後に止まっていたため継続を促しました (画面判定) / cache=warm (経過 3 分､TTL 60 分)
-pane 3 (/path): 再開メッセージを送信しました (1 回目) / cache=unknown (sidecar 無し､ack=daemon-unknown)
+pane 3 (/path): 再開メッセージを送信しました (1 回目) / cache=unknown (状態無し､ack=daemon-unknown)
 pane 3 (/path): context 使用率が閾値を超えたため compact-prep を投入しました / cache=expired (経過 90 分､TTL 60 分､context 使用率 76%､スラッシュなので ack なし)
 ```
 
@@ -105,8 +103,9 @@ pane 3 (/path): context 使用率が閾値を超えたため compact-prep を投
 
 ## status
 
-`status.json` の pane ごとに `cache` を持つ (sidecar が無ければ省略)｡`state` は tick 時点の判定で､
-失効までの残りは読む側が `expires_at` から出す｡
+`status.json` の pane ごとに `cache` を持つ (状態が無ければ省略)｡`state` は tick 時点の判定で､
+失効までの残りは読む側が `expires_at` から出す｡working な pane では transcript を読み直さず､前回読んだ
+値を出す (応答のたびに伸びるため)｡daemon が起きてからまだ一度も idle にならない pane では省略される｡
 
 ```json
 {"state": "warm", "last_request_at": "2026-09-27T03:44:05.954Z", "ttl_seconds": 3600, "expires_at": "2026-09-27T04:44:05.954Z"}

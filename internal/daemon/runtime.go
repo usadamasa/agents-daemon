@@ -353,7 +353,7 @@ func compactOutcomeMessage(outcome monitor.Outcome) (msg string, sent bool) {
 //
 //	 / cache=warm (経過 3 分､TTL 60 分)
 //	 / cache=expired (経過 312 分､TTL 60 分､context 使用率 63%､ack 済み)
-//	 / cache=unknown (sidecar 無し､ack=daemon-unknown)
+//	 / cache=unknown (状態無し､ack=daemon-unknown)
 //
 // 失効後の送信は文脈全体を書き直すので context 使用率を併記し､どれだけ書き直したかを
 // 後から追えるようにする｡スラッシュの prompt は guard を素通りするので ack は無い｡
@@ -368,7 +368,7 @@ func (r *daemonRuntime) cacheSuffix(pane herdrcli.Pane, entry *paneEntry) string
 	case c == nil && pane.SessionID() == "":
 		b.WriteString("session 未紐づけ")
 	case c == nil:
-		b.WriteString("sidecar 無し")
+		b.WriteString("状態無し")
 	default:
 		fmt.Fprintf(&b, "経過 %d 分､TTL %d 分", int(send.At.Sub(c.LastRequestAt)/time.Minute), int(c.TTL/time.Minute))
 		if c.Expired(send.At) {

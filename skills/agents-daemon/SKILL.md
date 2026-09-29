@@ -24,8 +24,8 @@ herdr のペインを経由して動く常駐デーモン｡役目は 2 つ｡
 - 部品はファイル越しに繋がり､互いを直接呼ばない｡利用者の statusline から呼ばれた
   `agents-daemon ingest-statusline` が `rate-limits/<session_id>.json` と `context/<session_id>.json` を書き､
   `agents-daemon:compact-prep` skill が `compact-state/<session_id>.md` を書き､PostCompact hook が
-  `compacted/<session_id>` を書き､Stop hook から呼ばれた `agents-daemon ingest-stop` が
-  `cache/<session_id>.json` を書く｡UserPromptSubmit hook から呼ばれた `agents-daemon ttl-guard` は
+  `compacted/<session_id>` を書く｡prompt cache の状態は､daemon が `context/<session_id>.json` の
+  `transcript_path` を辿って transcript から求める｡UserPromptSubmit hook から呼ばれた `agents-daemon ttl-guard` は
   cache 失効後の最初の prompt を止め､daemon が送る前に書く `cache-ack/<session_id>` を見て daemon の
   送信は通す｡SessionStart hook が daemon を起こし､
   daemon が herdr 経由で pane を見て､これらのファイルの有無と mtime で判断する｡
@@ -41,7 +41,7 @@ herdr のペインを経由して動く常駐デーモン｡役目は 2 つ｡
   残らず､画面判定 (`internal/detect/compact.go`) は候補を作れない｡代わりに
   PostCompact hook が置く marker を見る｡この経路はユーザーが手で打った `/compact` でも
   本体の autocompact でも動く｡
-- hook の配線元は plugin の `hooks/hooks.json` (SessionStart / PostCompact / UserPromptSubmit / Stop)｡
+- hook の配線元は plugin の `hooks/hooks.json` (SessionStart / PostCompact / UserPromptSubmit)｡
 - marker と state file の置き場は `hooks/lib/compact-markers.sh` の定数 (hook /
   skill 側) と `internal/apppath` (daemon 側) が対で持つ｡片方だけ変えると protocol が
   黙って壊れる｡cwd 相対にしないのは､daemon が別プロセスであり hook に渡る cwd も

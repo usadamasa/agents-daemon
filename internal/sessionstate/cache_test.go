@@ -72,161 +72,129 @@ func writeTranscript(t *testing.T, dir string, lines ...string) string {
 	return path
 }
 
-func stopInput(t *testing.T, sessionID, transcriptPath string) []byte {
+// pointTranscript は statusline が書く形で context/sess-1.json に transcript_path を置く｡
+func pointTranscript(t *testing.T, s Store, transcriptPath string) {
 	t.Helper()
 	data, err := json.Marshal(map[string]any{
-		"session_id":       sessionID,
-		"transcript_path":  transcriptPath,
-		"hook_event_name":  "Stop",
-		"stop_hook_active": false,
+		"session_id": "sess-1", "used_percentage": 12, "observed_at": 1786834771, "transcript_path": transcriptPath,
 	})
 	if err != nil {
 		t.Fatalf("Marshal() error = %v", err)
 	}
-	return data
+	writeFile(t, filepath.Join(s.Context, "sess-1.json"), string(data))
 }
 
-func ingest(t *testing.T, s Store, transcriptPath string) {
+// loadFrom は transcript の行から sess-1 の cache を求める｡
+func loadFrom(t *testing.T, lines ...string) *Cache {
 	t.Helper()
-	if err := s.IngestStop(stopInput(t, "sess-1", transcriptPath)); err != nil {
-		t.Fatalf("IngestStop() error = %v", err)
-	}
-}
-
-func cachePath(t *testing.T, s Store) string {
-	t.Helper()
-	path, err := sessionPath(s.Cache, "sess-1", ".json")
+	s := New(t.TempDir())
+	pointTranscript(t, s, writeTranscript(t, t.TempDir(), lines...))
+	c, err := NewCacheLoader(s).Load("sess-1")
 	if err != nil {
-		t.Fatalf("sessionPath() error = %v", err)
-	}
-	return path
-}
-
-func loadCache(t *testing.T, s Store) *Cache {
-	t.Helper()
-	c, err := s.LoadCache("sess-1")
-	if err != nil {
-		t.Fatalf("LoadCache() error = %v", err)
-	}
-	if c == nil {
-		t.Fatal("LoadCache() = nil, want sidecar")
+		t.Fatalf("Load() error = %v", err)
 	}
 	return c
 }
 
-func TestIngestStop_parse(t *testing.T) {
+func mustLoadFrom(t *testing.T, lines ...string) *Cache {
+	t.Helper()
+	c := loadFrom(t, lines...)
+	if c == nil {
+		t.Fatal("Load() = nil, want cache")
+	}
+	return c
+}
+
+func TestCacheLoader_parse(t *testing.T) {
 	t.Run("1 応答の複数行から最も早い timestamp を採り､TTL は最新の write から採る", func(t *testing.T) {
-		s := New(t.TempDir())
-		path := writeTranscript(t, t.TempDir(),
+		c := mustLoadFrom(t,
 			transcriptLine{Type: "user", Timestamp: "2026-09-27T03:44:00.000Z"}.String(),
 			assistant("2026-09-27T03:44:05.954Z", "msg_1", 500, 0).String(),
 			assistant("2026-09-27T03:44:09.100Z", "msg_1", 500, 0).String(),
 			assistant("2026-09-27T03:44:12.300Z", "msg_1", 500, 0).String(),
 		)
-		ingest(t, s, path)
-
-		raw := readFileString(t, cachePath(t, s))
-		want := `{"last_request_at":"2026-09-27T03:44:05.954Z","ttl_seconds":3600,"context_tokens":1503,"transcript_path":` + string(mustJSON(t, path)) + `}` + "\n"
-		if raw != want {
-			t.Errorf("cache file = %q, want %q", raw, want)
+		if c.LastRequestRaw != "2026-09-27T03:44:05.954Z" || c.TTL != time.Hour {
+			t.Errorf("cache = %+v, want 03:44:05.954Z / 1h", c)
 		}
 	})
 
-	t.Run("最新の応答が pure hit でも､その前の write の TTL を採る", func(t *testing.T) {
-		s := New(t.TempDir())
-		path := writeTranscript(t, t.TempDir(),
-			assistant("2026-09-27T03:40:00.000Z", "msg_1", 0, 700).String(),
-			assistant("2026-09-27T03:44:05.954Z", "msg_2", 0, 0).String(),
-		)
-		ingest(t, s, path)
-
-		c := loadCache(t, s)
-		if c.LastRequestRaw != "2026-09-27T03:44:05.954Z" {
-			t.Errorf("LastRequestRaw = %q, want 最新の応答の timestamp", c.LastRequestRaw)
-		}
-		if c.TTL != 5*time.Minute {
-			t.Errorf("TTL = %v, want 5m (前の write から)", c.TTL)
-		}
-	})
-
-	t.Run("最新の write が優先され､古い write の TTL には戻らない", func(t *testing.T) {
-		s := New(t.TempDir())
-		path := writeTranscript(t, t.TempDir(),
-			assistant("2026-09-27T03:40:00.000Z", "msg_1", 900, 0).String(),
-			assistant("2026-09-27T03:44:05.954Z", "msg_2", 0, 120).String(),
-		)
-		ingest(t, s, path)
-
-		if c := loadCache(t, s); c.TTL != 5*time.Minute {
-			t.Errorf("TTL = %v, want 5m (最新の write)", c.TTL)
-		}
-	})
-
-	t.Run("最新の応答の入力トークンの合計を記録し､output は含めない", func(t *testing.T) {
+	t.Run("最新の応答の入力トークンの合計を採り､output は含めない", func(t *testing.T) {
 		// statusline の used_percentage と同じ式 (input + cache_creation + cache_read)｡
-		s := New(t.TempDir())
-		path := writeTranscript(t, t.TempDir(),
+		c := mustLoadFrom(t,
 			assistant("2026-09-27T03:40:00.000Z", "msg_1", 500, 0).String(),
 			assistant("2026-09-27T03:44:05.954Z", "msg_2", 0, 120).String(),
 		)
-		ingest(t, s, path)
-
-		if c := loadCache(t, s); c.ContextTokens != 3+1000+120 {
+		if c.ContextTokens != 3+1000+120 {
 			t.Errorf("ContextTokens = %d, want %d (msg_2 の入力の合計)", c.ContextTokens, 3+1000+120)
 		}
 	})
 
-	t.Run("1h と 5m の両方に write があれば 1h", func(t *testing.T) {
-		s := New(t.TempDir())
-		path := writeTranscript(t, t.TempDir(),
-			assistant("2026-09-27T03:44:05.954Z", "msg_1", 10, 10).String(),
+	t.Run("ターンの終わりの応答を採る (Stop hook の時点では書かれていなかった行)", func(t *testing.T) {
+		// 実機の probe と同じ形｡tool_use の応答の後に end_turn の応答が 2 行と stop_hook_summary が続く｡
+		c := mustLoadFrom(t,
+			assistant("2026-09-29T03:36:48.392Z", "msg_tool", 1739, 0).String(),
+			transcriptLine{Type: "user", Timestamp: "2026-09-29T03:37:01.182Z"}.String(),
+			assistant("2026-09-29T03:37:06.094Z", "msg_end", 80670, 0).String(),
+			assistant("2026-09-29T03:37:06.163Z", "msg_end", 80670, 0).String(),
+			transcriptLine{Type: "system", Subtype: "stop_hook_summary", Timestamp: "2026-09-29T03:37:06.370Z"}.String(),
 		)
-		ingest(t, s, path)
+		if c.LastRequestRaw != "2026-09-29T03:37:06.094Z" || c.ContextTokens != 3+1000+80670 {
+			t.Errorf("cache = %+v, want end_turn の応答 (03:37:06.094Z, %d)", c, 3+1000+80670)
+		}
+	})
 
-		if c := loadCache(t, s); c.TTL != time.Hour {
+	t.Run("最新の応答が pure hit でも､その前の write の TTL を採る", func(t *testing.T) {
+		c := mustLoadFrom(t,
+			assistant("2026-09-27T03:40:00.000Z", "msg_1", 0, 700).String(),
+			assistant("2026-09-27T03:44:05.954Z", "msg_2", 0, 0).String(),
+		)
+		if c.LastRequestRaw != "2026-09-27T03:44:05.954Z" || c.TTL != 5*time.Minute {
+			t.Errorf("cache = %+v, want 最新の応答の timestamp と前の write の 5m", c)
+		}
+	})
+
+	t.Run("最新の write が優先され､古い write の TTL には戻らない", func(t *testing.T) {
+		c := mustLoadFrom(t,
+			assistant("2026-09-27T03:40:00.000Z", "msg_1", 900, 0).String(),
+			assistant("2026-09-27T03:44:05.954Z", "msg_2", 0, 120).String(),
+		)
+		if c.TTL != 5*time.Minute {
+			t.Errorf("TTL = %v, want 5m (最新の write)", c.TTL)
+		}
+	})
+
+	t.Run("1h と 5m の両方に write があれば 1h", func(t *testing.T) {
+		if c := mustLoadFrom(t, assistant("2026-09-27T03:44:05.954Z", "msg_1", 10, 10).String()); c.TTL != time.Hour {
 			t.Errorf("TTL = %v, want 1h", c.TTL)
 		}
 	})
 
 	t.Run("sidechain の行は main の応答として数えない", func(t *testing.T) {
-		s := New(t.TempDir())
 		side := assistant("2026-09-27T03:50:00.000Z", "msg_side", 0, 800)
 		side.Sidechain = true
-		path := writeTranscript(t, t.TempDir(),
-			assistant("2026-09-27T03:44:05.954Z", "msg_1", 500, 0).String(),
-			side.String(),
-		)
-		ingest(t, s, path)
-
-		c := loadCache(t, s)
+		c := mustLoadFrom(t, assistant("2026-09-27T03:44:05.954Z", "msg_1", 500, 0).String(), side.String())
 		if c.LastRequestRaw != "2026-09-27T03:44:05.954Z" || c.TTL != time.Hour {
 			t.Errorf("cache = %+v, want main の応答 (03:44:05.954Z, 1h)", c)
 		}
 	})
 
 	t.Run("<synthetic> の行は API リクエストが無いので飛ばす", func(t *testing.T) {
-		s := New(t.TempDir())
 		synthetic := assistant("2026-09-27T03:50:00.000Z", "msg_syn", 0, 0)
 		synthetic.Model = "<synthetic>"
-		path := writeTranscript(t, t.TempDir(),
-			assistant("2026-09-27T03:44:05.954Z", "msg_1", 500, 0).String(),
-			synthetic.String(),
-		)
-		ingest(t, s, path)
-
-		if c := loadCache(t, s); c.LastRequestRaw != "2026-09-27T03:44:05.954Z" {
+		c := mustLoadFrom(t, assistant("2026-09-27T03:44:05.954Z", "msg_1", 500, 0).String(), synthetic.String())
+		if c.LastRequestRaw != "2026-09-27T03:44:05.954Z" {
 			t.Errorf("LastRequestRaw = %q, want synthetic を飛ばした応答", c.LastRequestRaw)
 		}
 	})
 
-	t.Run("ミリ秒付きの timestamp を文字列のまま写し､時刻としても読める", func(t *testing.T) {
+	t.Run("ミリ秒付きの timestamp を文字列のまま持ち､時刻としても読める", func(t *testing.T) {
 		s := New(t.TempDir())
-		path := writeTranscript(t, t.TempDir(),
-			assistant("2026-09-27T03:44:05.954Z", "msg_1", 500, 0).String(),
-		)
-		ingest(t, s, path)
-
-		c := loadCache(t, s)
+		path := writeTranscript(t, t.TempDir(), assistant("2026-09-27T03:44:05.954Z", "msg_1", 500, 0).String())
+		pointTranscript(t, s, path)
+		c, err := NewCacheLoader(s).Load("sess-1")
+		if err != nil || c == nil {
+			t.Fatalf("Load() = %+v, %v", c, err)
+		}
 		want := time.Date(2026, 9, 27, 3, 44, 5, 954_000_000, time.UTC)
 		if !c.LastRequestAt.Equal(want) {
 			t.Errorf("LastRequestAt = %v, want %v", c.LastRequestAt, want)
@@ -237,203 +205,173 @@ func TestIngestStop_parse(t *testing.T) {
 	})
 
 	t.Run("JSON として読めない行は飛ばす", func(t *testing.T) {
-		s := New(t.TempDir())
-		path := writeTranscript(t, t.TempDir(),
-			assistant("2026-09-27T03:44:05.954Z", "msg_1", 500, 0).String(),
-			`{"type":"assistant","message":`,
-			"",
-		)
-		ingest(t, s, path)
-
-		if c := loadCache(t, s); c.LastRequestRaw != "2026-09-27T03:44:05.954Z" {
+		c := mustLoadFrom(t, assistant("2026-09-27T03:44:05.954Z", "msg_1", 500, 0).String(), `{"type":"assistant","message":`, "")
+		if c.LastRequestRaw != "2026-09-27T03:44:05.954Z" {
 			t.Errorf("LastRequestRaw = %q, want 壊れた行を飛ばした応答", c.LastRequestRaw)
 		}
 	})
 
 	t.Run("末尾 2MB だけを読み､途中で切れた先頭行を飛ばす", func(t *testing.T) {
-		s := New(t.TempDir())
 		// 2MB を超える 1 行 (user の長い入力) の後に応答が続く形｡seek 後の先頭は
 		// この行の途中から始まるので､JSON として読めない｡
 		padding := transcriptLine{Type: "user", Timestamp: "2026-09-27T03:00:00.000Z"}.String()
 		padding = padding[:len(padding)-1] + `,"pad":"` + strings.Repeat("x", 3*1024*1024) + `"}`
-		path := writeTranscript(t, t.TempDir(),
+		c := mustLoadFrom(t,
 			assistant("2026-09-27T02:00:00.000Z", "msg_0", 0, 900).String(),
 			padding,
 			assistant("2026-09-27T03:44:05.954Z", "msg_1", 500, 0).String(),
 		)
-		ingest(t, s, path)
-
-		c := loadCache(t, s)
 		if c.LastRequestRaw != "2026-09-27T03:44:05.954Z" || c.TTL != time.Hour {
 			t.Errorf("cache = %+v, want 末尾の応答 (03:44:05.954Z, 1h)", c)
 		}
 	})
 }
 
-func TestIngestStop_noState(t *testing.T) {
-	t.Run("write が 1 つも無ければ sidecar を消す", func(t *testing.T) {
-		s := New(t.TempDir())
-		writeFile(t, cachePath(t, s), `{"last_request_at":"old","ttl_seconds":300,"transcript_path":"x"}`)
-		path := writeTranscript(t, t.TempDir(),
-			assistant("2026-09-27T03:44:05.954Z", "msg_1", 0, 0).String(),
-		)
-		ingest(t, s, path)
-
-		if _, err := os.Stat(cachePath(t, s)); !os.IsNotExist(err) {
-			t.Errorf("sidecar が残っている: %v", err)
+func TestCacheLoader_none(t *testing.T) {
+	t.Run("write が 1 つも無ければ nil", func(t *testing.T) {
+		if c := loadFrom(t, assistant("2026-09-27T03:44:05.954Z", "msg_1", 0, 0).String()); c != nil {
+			t.Errorf("Load() = %+v, want nil", c)
 		}
 	})
 
-	t.Run("assistant の行が無ければ sidecar を消す (消す物が無くてもエラーにしない)", func(t *testing.T) {
-		s := New(t.TempDir())
-		path := writeTranscript(t, t.TempDir(),
-			transcriptLine{Type: "user", Timestamp: "2026-09-27T03:44:00.000Z"}.String(),
-		)
-		ingest(t, s, path)
-
-		c, err := s.LoadCache("sess-1")
-		if err != nil || c != nil {
-			t.Errorf("LoadCache() = %+v, %v, want nil, nil", c, err)
+	t.Run("assistant の行が無ければ nil", func(t *testing.T) {
+		if c := loadFrom(t, transcriptLine{Type: "user", Timestamp: "2026-09-27T03:44:00.000Z"}.String()); c != nil {
+			t.Errorf("Load() = %+v, want nil", c)
 		}
 	})
 
-	t.Run("compact_boundary の後に応答が無ければ sidecar を消す", func(t *testing.T) {
-		s := New(t.TempDir())
-		path := writeTranscript(t, t.TempDir(),
+	t.Run("compact_boundary の後に応答が無ければ nil (IdleCompactActive が active と見る)", func(t *testing.T) {
+		c := loadFrom(t,
 			assistant("2026-09-27T03:44:05.954Z", "msg_1", 500, 0).String(),
 			transcriptLine{Type: "system", Subtype: "compact_boundary", Timestamp: "2026-09-27T03:50:00.000Z"}.String(),
 		)
-		writeFile(t, cachePath(t, s), `{"last_request_at":"2026-09-27T03:44:05.954Z","ttl_seconds":3600,"transcript_path":"x"}`)
-		ingest(t, s, path)
-
-		if _, err := os.Stat(cachePath(t, s)); !os.IsNotExist(err) {
-			t.Errorf("compact 前の sidecar が残っている: %v", err)
+		if c != nil {
+			t.Errorf("Load() = %+v, want nil (compact 前の応答を見ない)", c)
 		}
 	})
 
-	t.Run("transcript が無ければ既存の sidecar に触らない", func(t *testing.T) {
-		s := New(t.TempDir())
-		before := `{"last_request_at":"2026-09-27T03:44:05.954Z","ttl_seconds":300,"transcript_path":"x"}`
-		writeFile(t, cachePath(t, s), before)
-		ingest(t, s, filepath.Join(t.TempDir(), "missing.jsonl"))
+	for _, tt := range []struct {
+		name  string
+		setup func(t *testing.T, s Store)
+	}{
+		{"context が無ければ nil", func(*testing.T, Store) {}},
+		{"transcript_path が無ければ nil (記録を始める前の版が書いた context)", func(t *testing.T, s Store) {
+			writeFile(t, filepath.Join(s.Context, "sess-1.json"), `{"session_id":"sess-1","used_percentage":12,"observed_at":1786834771}`)
+		}},
+		{"transcript が無ければ nil", func(t *testing.T, s Store) {
+			pointTranscript(t, s, filepath.Join(t.TempDir(), "missing.jsonl"))
+		}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			s := New(t.TempDir())
+			tt.setup(t, s)
+			c, err := NewCacheLoader(s).Load("sess-1")
+			if err != nil || c != nil {
+				t.Errorf("Load() = %+v, %v, want nil, nil", c, err)
+			}
+		})
+	}
 
-		if got := readFileString(t, cachePath(t, s)); got != before {
-			t.Errorf("sidecar が書き換わった: %q", got)
-		}
-	})
-
-	t.Run("transcript_path が空なら何もしない", func(t *testing.T) {
-		s := New(t.TempDir())
-		before := `{"last_request_at":"2026-09-27T03:44:05.954Z","ttl_seconds":300,"transcript_path":"x"}`
-		writeFile(t, cachePath(t, s), before)
-		ingest(t, s, "")
-
-		if got := readFileString(t, cachePath(t, s)); got != before {
-			t.Errorf("sidecar が書き換わった: %q", got)
-		}
-	})
-}
-
-func TestIngestStop_guards(t *testing.T) {
-	t.Run("session_id が空なら何も書かない", func(t *testing.T) {
-		root := t.TempDir()
-		s := New(root)
-		path := writeTranscript(t, t.TempDir(), assistant("2026-09-27T03:44:05.954Z", "msg_1", 500, 0).String())
-		if err := s.IngestStop(stopInput(t, "", path)); err != nil {
-			t.Fatalf("IngestStop() error = %v", err)
-		}
-		assertNoFiles(t, root)
-	})
-
-	t.Run("session_id が不正ならエラーで何も書かない", func(t *testing.T) {
-		root := t.TempDir()
-		s := New(root)
-		path := writeTranscript(t, t.TempDir(), assistant("2026-09-27T03:44:05.954Z", "msg_1", 500, 0).String())
-		if err := s.IngestStop(stopInput(t, "../../etc/passwd", path)); err == nil {
-			t.Fatal("エラーが返らなかった")
-		}
-		assertNoFiles(t, root)
-	})
-
-	t.Run("壊れた JSON はエラーで何も書かない", func(t *testing.T) {
-		root := t.TempDir()
-		s := New(root)
-		if err := s.IngestStop([]byte(`{"session_id": "sess-1", `)); err == nil {
-			t.Fatal("エラーが返らなかった")
-		}
-		assertNoFiles(t, root)
-	})
-
-	t.Run("一時ファイルを残さない (rename で置き換える)", func(t *testing.T) {
-		s := New(t.TempDir())
-		path := writeTranscript(t, t.TempDir(), assistant("2026-09-27T03:44:05.954Z", "msg_1", 500, 0).String())
-		ingest(t, s, path)
-
-		entries, err := os.ReadDir(s.Cache)
-		if err != nil {
-			t.Fatalf("ReadDir(%s) error = %v", s.Cache, err)
-		}
-		if len(entries) != 1 || entries[0].Name() != "sess-1.json" {
-			t.Errorf("%s の中身 = %v, want [sess-1.json] だけ", s.Cache, entries)
-		}
-	})
-}
-
-func TestLoadCache(t *testing.T) {
-	t.Run("ファイルが無ければ (nil, nil)", func(t *testing.T) {
-		s := New(t.TempDir())
-		c, err := s.LoadCache("sess-1")
+	t.Run("session ID が空なら nil", func(t *testing.T) {
+		c, err := NewCacheLoader(New(t.TempDir())).Load("")
 		if err != nil || c != nil {
-			t.Errorf("LoadCache() = %+v, %v, want nil, nil", c, err)
-		}
-	})
-
-	t.Run("session ID が空なら (nil, nil)", func(t *testing.T) {
-		s := New(t.TempDir())
-		c, err := s.LoadCache("")
-		if err != nil || c != nil {
-			t.Errorf("LoadCache(\"\") = %+v, %v, want nil, nil", c, err)
+			t.Errorf("Load(\"\") = %+v, %v, want nil, nil", c, err)
 		}
 	})
 
 	t.Run("パス区切りを含む session ID を拒否する", func(t *testing.T) {
-		s := New(t.TempDir())
-		if _, err := s.LoadCache("../../etc/passwd"); err == nil {
+		if _, err := NewCacheLoader(New(t.TempDir())).Load("../../etc/passwd"); err == nil {
 			t.Error("パス区切りを含む session ID が通ってしまった")
 		}
 	})
 
-	t.Run("壊れた JSON はエラーにする", func(t *testing.T) {
+	t.Run("壊れた context はエラーにする", func(t *testing.T) {
 		s := New(t.TempDir())
-		writeFile(t, cachePath(t, s), `{"last_request_at":`)
-		if _, err := s.LoadCache("sess-1"); err == nil {
+		writeFile(t, filepath.Join(s.Context, "sess-1.json"), `{"transcript_path":`)
+		if _, err := NewCacheLoader(s).Load("sess-1"); err == nil {
 			t.Error("壊れた JSON でエラーが返らなかった")
-		}
-	})
-
-	t.Run("context_tokens の無い sidecar は 0 で読む", func(t *testing.T) {
-		// 記録を始める前の版が書いた sidecar｡
-		s := New(t.TempDir())
-		writeFile(t, cachePath(t, s), `{"last_request_at":"2026-09-27T03:44:05.954Z","ttl_seconds":3600,"transcript_path":"x"}`)
-		if c := loadCache(t, s); c.ContextTokens != 0 {
-			t.Errorf("ContextTokens = %d, want 0", c.ContextTokens)
-		}
-	})
-
-	t.Run("時刻として読めない last_request_at はエラーにする", func(t *testing.T) {
-		s := New(t.TempDir())
-		writeFile(t, cachePath(t, s), `{"last_request_at":"yesterday","ttl_seconds":300,"transcript_path":"x"}`)
-		if _, err := s.LoadCache("sess-1"); err == nil {
-			t.Error("不正な時刻でエラーが返らなかった")
 		}
 	})
 }
 
-func mustJSON(t *testing.T, v any) []byte {
-	t.Helper()
-	data, err := json.Marshal(v)
-	if err != nil {
-		t.Fatalf("Marshal() error = %v", err)
+func TestCacheLoader_memo(t *testing.T) {
+	first := assistant("2026-09-27T03:44:05.954Z", "msg_1", 500, 0).String()
+	// 同じ長さで中身の違う行｡memo が効けば読み直さないので､こちらの値は出ない｡
+	second := assistant("2026-09-27T03:44:06.954Z", "msg_2", 500, 0).String()
+	if len(first) != len(second) {
+		t.Fatalf("fixture の長さが違う: %d != %d", len(first), len(second))
 	}
-	return data
+
+	setup := func(t *testing.T) (*CacheLoader, string, time.Time) {
+		t.Helper()
+		s := New(t.TempDir())
+		path := writeTranscript(t, t.TempDir(), first)
+		pointTranscript(t, s, path)
+		mtime := time.Date(2026, 9, 27, 3, 45, 0, 0, time.UTC)
+		if err := os.Chtimes(path, mtime, mtime); err != nil {
+			t.Fatalf("Chtimes() error = %v", err)
+		}
+		l := NewCacheLoader(s)
+		if c, err := l.Load("sess-1"); err != nil || c == nil || c.LastRequestRaw != "2026-09-27T03:44:05.954Z" {
+			t.Fatalf("1 回目の Load() = %+v, %v", c, err)
+		}
+		writeFile(t, path, second+"\n")
+		return l, path, mtime
+	}
+
+	t.Run("大きさと mtime が同じなら読み直さない", func(t *testing.T) {
+		l, path, mtime := setup(t)
+		if err := os.Chtimes(path, mtime, mtime); err != nil {
+			t.Fatalf("Chtimes() error = %v", err)
+		}
+		if c, err := l.Load("sess-1"); err != nil || c == nil || c.LastRequestRaw != "2026-09-27T03:44:05.954Z" {
+			t.Errorf("Load() = %+v, %v, want 前回の値", c, err)
+		}
+	})
+
+	t.Run("mtime が変われば読み直す", func(t *testing.T) {
+		l, path, mtime := setup(t)
+		if err := os.Chtimes(path, mtime.Add(time.Second), mtime.Add(time.Second)); err != nil {
+			t.Fatalf("Chtimes() error = %v", err)
+		}
+		if c, err := l.Load("sess-1"); err != nil || c == nil || c.LastRequestRaw != "2026-09-27T03:44:06.954Z" {
+			t.Errorf("Load() = %+v, %v, want 書き換えた後の値", c, err)
+		}
+	})
+
+	t.Run("Cached は読まずに前回の値を返す", func(t *testing.T) {
+		l, _, _ := setup(t)
+		if c := l.Cached("sess-1"); c == nil || c.LastRequestRaw != "2026-09-27T03:44:05.954Z" {
+			t.Errorf("Cached() = %+v, want 前回の値", c)
+		}
+		if c := l.Cached("other"); c != nil {
+			t.Errorf("Cached(\"other\") = %+v, want nil (読んだことが無い)", c)
+		}
+	})
+
+	t.Run("Retain は残す session 以外を捨てる", func(t *testing.T) {
+		l, _, _ := setup(t)
+		l.Retain(map[string]bool{"other": true})
+		if c := l.Cached("sess-1"); c != nil {
+			t.Errorf("Cached() = %+v, want nil (捨てた)", c)
+		}
+	})
+
+	t.Run("読めない transcript のエラーは変わるまで 1 回だけ返す", func(t *testing.T) {
+		// tick ごとに同じエラーをログへ書かない｡
+		s := New(t.TempDir())
+		path := writeTranscript(t, t.TempDir(), first)
+		pointTranscript(t, s, path)
+		if err := os.Chmod(path, 0o000); err != nil {
+			t.Fatalf("Chmod() error = %v", err)
+		}
+		t.Cleanup(func() { _ = os.Chmod(path, 0o600) })
+		l := NewCacheLoader(s)
+		if _, err := l.Load("sess-1"); err == nil {
+			t.Fatal("1 回目: エラーが返らなかった")
+		}
+		if c, err := l.Load("sess-1"); err != nil || c != nil {
+			t.Errorf("2 回目: Load() = %+v, %v, want nil, nil", c, err)
+		}
+	})
 }

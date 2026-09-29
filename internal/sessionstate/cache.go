@@ -199,6 +199,21 @@ func lastMainResponse(data []byte) (lastRequestAt string, ttl time.Duration, tok
 	return lastRequestAt, ttl, tokens, lastRequestAt != "" && ttl != 0
 }
 
+// CacheLoader は transcript から cache の状態を求める｡
+type CacheLoader struct{}
+
+// NewCacheLoader は s の context/ を起点に transcript を辿る CacheLoader を返す｡
+func NewCacheLoader(s Store) *CacheLoader { return &CacheLoader{} }
+
+// Load は sessionID の cache の状態を返す｡
+func (l *CacheLoader) Load(sessionID string) (*Cache, error) { return nil, nil }
+
+// Cached は前回 Load した値を返す｡
+func (l *CacheLoader) Cached(sessionID string) *Cache { return nil }
+
+// Retain は keep に無い session の memo を捨てる｡
+func (l *CacheLoader) Retain(keep map[string]bool) {}
+
 // readTail は path の末尾 n バイトを読む (ファイルがそれより小さければ全部)｡
 func readTail(path string, n int64) ([]byte, error) {
 	f, err := os.Open(path) // #nosec G304 -- Stop hook が渡す transcript のパスをそのまま開く

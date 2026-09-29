@@ -86,6 +86,18 @@ func TestIngestStatusline_context(t *testing.T) {
 		}
 	})
 
+	t.Run("transcript_path を記録する", func(t *testing.T) {
+		// daemon はこれを辿って transcript から cache の状態を求める｡
+		s := New(t.TempDir())
+		input := `{"session_id": "sess-1", "transcript_path": "/x/t.jsonl", "context_window": {"used_percentage": 12}}`
+		if err := s.IngestStatusline([]byte(input), ingestNow); err != nil {
+			t.Fatalf("IngestStatusline() error = %v", err)
+		}
+		if got := readContextRaw(t, s, "sess-1"); !strings.Contains(got, `"transcript_path":"/x/t.jsonl"`) {
+			t.Errorf("context file = %q, want transcript_path", got)
+		}
+	})
+
 	t.Run("context_window が無ければ 0 で書く", func(t *testing.T) {
 		s := New(t.TempDir())
 		if err := s.IngestStatusline([]byte(`{"session_id": "sess-1"}`), ingestNow); err != nil {

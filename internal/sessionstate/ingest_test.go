@@ -70,6 +70,22 @@ func TestIngestStatusline_context(t *testing.T) {
 		}
 	})
 
+	t.Run("context_window_size を記録し､daemon が読める形になる", func(t *testing.T) {
+		s := New(t.TempDir())
+		input := `{"session_id": "sess-1", "context_window": {"used_percentage": 68, "context_window_size": 200000}}`
+		if err := s.IngestStatusline([]byte(input), ingestNow); err != nil {
+			t.Fatalf("IngestStatusline() error = %v", err)
+		}
+
+		state, err := s.LoadCompact("sess-1")
+		if err != nil {
+			t.Fatalf("LoadCompact() error = %v", err)
+		}
+		if state.ContextWindowSize != 200000 {
+			t.Errorf("ContextWindowSize = %d, want 200000", state.ContextWindowSize)
+		}
+	})
+
 	t.Run("context_window が無ければ 0 で書く", func(t *testing.T) {
 		s := New(t.TempDir())
 		if err := s.IngestStatusline([]byte(`{"session_id": "sess-1"}`), ingestNow); err != nil {

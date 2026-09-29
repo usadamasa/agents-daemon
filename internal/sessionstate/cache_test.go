@@ -43,8 +43,10 @@ func (l transcriptLine) String() string {
 			"id":    l.ID,
 			"model": model,
 			"usage": map[string]any{
-				"input_tokens":            3,
-				"cache_read_input_tokens": 1000,
+				"input_tokens":                3,
+				"cache_read_input_tokens":     1000,
+				"cache_creation_input_tokens": l.OneHour + l.FiveMinute,
+				"output_tokens":               77,
 				"cache_creation": map[string]any{
 					"ephemeral_1h_input_tokens": l.OneHour,
 					"ephemeral_5m_input_tokens": l.FiveMinute,
@@ -124,7 +126,7 @@ func TestIngestStop_parse(t *testing.T) {
 		ingest(t, s, path)
 
 		raw := readFileString(t, cachePath(t, s))
-		want := `{"last_request_at":"2026-09-27T03:44:05.954Z","ttl_seconds":3600,"transcript_path":` + string(mustJSON(t, path)) + `}` + "\n"
+		want := `{"last_request_at":"2026-09-27T03:44:05.954Z","ttl_seconds":3600,"context_tokens":1503,"transcript_path":` + string(mustJSON(t, path)) + `}` + "\n"
 		if raw != want {
 			t.Errorf("cache file = %q, want %q", raw, want)
 		}
@@ -157,6 +159,20 @@ func TestIngestStop_parse(t *testing.T) {
 
 		if c := loadCache(t, s); c.TTL != 5*time.Minute {
 			t.Errorf("TTL = %v, want 5m (最新の write)", c.TTL)
+		}
+	})
+
+	t.Run("最新の応答の入力トークンの合計を記録し､output は含めない", func(t *testing.T) {
+		// statusline の used_percentage と同じ式 (input + cache_creation + cache_read)｡
+		s := New(t.TempDir())
+		path := writeTranscript(t, t.TempDir(),
+			assistant("2026-09-27T03:40:00.000Z", "msg_1", 500, 0).String(),
+			assistant("2026-09-27T03:44:05.954Z", "msg_2", 0, 120).String(),
+		)
+		ingest(t, s, path)
+
+		if c := loadCache(t, s); c.ContextTokens != 3+1000+120 {
+			t.Errorf("ContextTokens = %d, want %d (msg_2 の入力の合計)", c.ContextTokens, 3+1000+120)
 		}
 	})
 
@@ -392,6 +408,15 @@ func TestLoadCache(t *testing.T) {
 		writeFile(t, cachePath(t, s), `{"last_request_at":`)
 		if _, err := s.LoadCache("sess-1"); err == nil {
 			t.Error("壊れた JSON でエラーが返らなかった")
+		}
+	})
+
+	t.Run("context_tokens の無い sidecar は 0 で読む", func(t *testing.T) {
+		// 記録を始める前の版が書いた sidecar｡
+		s := New(t.TempDir())
+		writeFile(t, cachePath(t, s), `{"last_request_at":"2026-09-27T03:44:05.954Z","ttl_seconds":3600,"transcript_path":"x"}`)
+		if c := loadCache(t, s); c.ContextTokens != 0 {
+			t.Errorf("ContextTokens = %d, want 0", c.ContextTokens)
 		}
 	})
 

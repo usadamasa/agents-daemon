@@ -28,7 +28,7 @@ func runIngest(t *testing.T, stdin string) (stdout, stderr string, stateDir stri
 
 func TestNewIngestStatuslineCmd(t *testing.T) {
 	t.Run("stdin の JSON から context/<sid>.json を書き､stdout には何も出さない", func(t *testing.T) {
-		stdout, _, stateDir, err := runIngest(t, `{"session_id": "sess-1", "context_window": {"used_percentage": 42.6}}`)
+		stdout, _, stateDir, err := runIngest(t, `{"session_id": "sess-1", "context_window": {"used_percentage": 42.6, "context_window_size": 200000}}`)
 		if err != nil {
 			t.Fatalf("Execute() error = %v", err)
 		}
@@ -41,6 +41,9 @@ func TestNewIngestStatuslineCmd(t *testing.T) {
 		}
 		if !strings.Contains(string(data), `"used_percentage":43,`) {
 			t.Errorf("context file = %q, want used_percentage 43", data)
+		}
+		if !strings.Contains(string(data), `"context_window_size":200000`) {
+			t.Errorf("context file = %q, want context_window_size 200000", data)
 		}
 	})
 

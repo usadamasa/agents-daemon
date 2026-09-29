@@ -27,7 +27,7 @@ func runIngestStop(t *testing.T, stdin string) (stdout, stderr string, stateDir 
 }
 
 const stopTranscript = `{"type":"user","timestamp":"2026-09-27T03:44:00.000Z"}
-{"type":"assistant","isSidechain":false,"timestamp":"2026-09-27T03:44:05.954Z","message":{"id":"msg_1","model":"claude-fable-5-1","usage":{"cache_creation":{"ephemeral_1h_input_tokens":500,"ephemeral_5m_input_tokens":0}}}}
+{"type":"assistant","isSidechain":false,"timestamp":"2026-09-27T03:44:05.954Z","message":{"id":"msg_1","model":"claude-fable-5-1","usage":{"input_tokens":3,"cache_creation_input_tokens":500,"cache_read_input_tokens":1000,"output_tokens":77,"cache_creation":{"ephemeral_1h_input_tokens":500,"ephemeral_5m_input_tokens":0}}}}
 `
 
 func TestNewIngestStopCmd(t *testing.T) {
@@ -49,7 +49,7 @@ func TestNewIngestStopCmd(t *testing.T) {
 		if readErr != nil {
 			t.Fatalf("cache file が書かれていない: %v", readErr)
 		}
-		if !strings.Contains(string(data), `"last_request_at":"2026-09-27T03:44:05.954Z","ttl_seconds":3600,`) {
+		if !strings.Contains(string(data), `"last_request_at":"2026-09-27T03:44:05.954Z","ttl_seconds":3600,"context_tokens":1503,`) {
 			t.Errorf("cache file = %q", data)
 		}
 	})

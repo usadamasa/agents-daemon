@@ -31,6 +31,20 @@ func TestLoadCompact(t *testing.T) {
 		}
 	})
 
+	t.Run("context_window_size の無い context は 0 で読む", func(t *testing.T) {
+		// 記録を始める前の版が書いた context｡
+		s := New(t.TempDir())
+		writeFile(t, filepath.Join(s.Context, "sess-1.json"), `{"session_id":"sess-1","used_percentage":72.5,"observed_at":1786834771}`)
+
+		state, err := s.LoadCompact("sess-1")
+		if err != nil {
+			t.Fatalf("LoadCompact() error = %v", err)
+		}
+		if state.ContextWindowSize != 0 {
+			t.Errorf("ContextWindowSize = %d, want 0", state.ContextWindowSize)
+		}
+	})
+
 	t.Run("ファイルが無いのは正常系で Has* が false になるだけ", func(t *testing.T) {
 		s := New(t.TempDir())
 		state, err := s.LoadCompact("sess-1")
@@ -132,6 +146,30 @@ func TestIdleCompactActive(t *testing.T) {
 	} {
 		if got := tt.state.IdleCompactActive(tt.cache); got != tt.want {
 			t.Errorf("%s: IdleCompactActive() = %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}
+
+func TestCacheUsedPercentage(t *testing.T) {
+	window := &Compact{ContextWindowSize: 200000}
+
+	for _, tt := range []struct {
+		name   string
+		state  *Compact
+		cache  *Cache
+		want   float64
+		wantOK bool
+	}{
+		{"nil は求めない", nil, &Cache{ContextTokens: 1000}, 0, false},
+		{"sidecar が無ければ求めない", window, nil, 0, false},
+		{"window の大きさが無ければ求めない", &Compact{}, &Cache{ContextTokens: 1000}, 0, false},
+		{"トークン数が無ければ求めない", window, &Cache{}, 0, false},
+		// 実機の値 (Haiku 4.5)｡statusline は同じ時点で 68 を出していた｡
+		{"statusline と同じく整数に丸める", window, &Cache{ContextTokens: 135983}, 68, true},
+	} {
+		got, ok := tt.state.CacheUsedPercentage(tt.cache)
+		if got != tt.want || ok != tt.wantOK {
+			t.Errorf("%s: CacheUsedPercentage() = %v, %v, want %v, %v", tt.name, got, ok, tt.want, tt.wantOK)
 		}
 	}
 }

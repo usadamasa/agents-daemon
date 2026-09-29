@@ -47,15 +47,32 @@ type idleFixture struct {
 	marker *markRecorder
 }
 
+// idleWindow は idle compact のテストの context window の大きさ｡
+const idleWindow = 200000
+
+// idleTokens は idleWindow に対して使用率 pct になるトークン数｡
+func idleTokens(pct int64) int64 {
+	return idleWindow * pct / 100
+}
+
+// idleCacheAt は最後の応答が last に始まり､その入力が使用率 45% ぶんだった cache を返す｡
+func idleCacheAt(last time.Time) *sessionstate.Cache {
+	c := cacheAt(last)
+	c.ContextTokens = idleTokens(45)
+	return c
+}
+
 // newIdleFixture は発火条件をすべて満たす入力を返す｡1h TTL の cache が失効の 5 分前
-// (lead 600 秒の窓の中)､使用率 45%､入力欄が空の idle な pane｡
+// (lead 600 秒の窓の中)､最後の応答の使用率 45%､入力欄が空の idle な pane｡
 func newIdleFixture() *idleFixture {
+	cs := freshContext(45, idleNow)
+	cs.ContextWindowSize = idleWindow
 	return &idleFixture{
 		cfg:    idleCompactConfig(),
 		client: &herdrclifake.Client{PaneReadFunc: readReturning(idleScreen, nil)},
 		ps:     &PaneState{},
-		cs:     freshContext(45, idleNow),
-		cache:  cacheAt(idleNow.Add(-55 * time.Minute)),
+		cs:     cs,
+		cache:  idleCacheAt(idleNow.Add(-55 * time.Minute)),
 		marker: &markRecorder{},
 	}
 }
@@ -92,19 +109,35 @@ func TestTick_idle_compact_は失効が近づいたら_compact_prep_を送る(t 
 	}
 }
 
+func TestTick_idle_compact_は_statusline_の観測が古くても送る(t *testing.T) {
+	// idle な pane では statusline が再描画されない｡観測は最後の応答の直後で止まったまま
+	// 窓が開く (実機では 50 分前の観測)｡
+	f := newIdleFixture()
+	f.cs.ObservedAt = f.cache.LastRequestAt.Add(4 * time.Second)
+
+	if outcome := f.mustTick(t, idleNow); outcome != OutcomeIdleCompactPrepSent {
+		t.Fatalf("outcome = %v, want %v", outcome, OutcomeIdleCompactPrepSent)
+	}
+	assertSentText(t, f.client, f.cfg.CompactAutoPrepMessage)
+}
+
 func TestTick_idle_compact_は送らない(t *testing.T) {
 	for _, tt := range []struct {
 		name  string
 		setup func(f *idleFixture)
 	}{
 		{"cacheIdleCompactEnabled が false", func(f *idleFixture) { f.cfg.CacheIdleCompactEnabled = false }},
-		{"失効後", func(f *idleFixture) { f.cache = cacheAt(idleNow.Add(-61 * time.Minute)) }},
-		{"窓が開く前", func(f *idleFixture) { f.cache = cacheAt(idleNow.Add(-30 * time.Minute)) }},
+		{"失効後", func(f *idleFixture) { f.cache = idleCacheAt(idleNow.Add(-61 * time.Minute)) }},
+		{"窓が開く前", func(f *idleFixture) { f.cache = idleCacheAt(idleNow.Add(-30 * time.Minute)) }},
 		{"sidecar が無い", func(f *idleFixture) { f.cache = nil }},
-		{"使用率が閾値未満", func(f *idleFixture) { f.cs = freshContext(39, idleNow) }},
-		{"使用率の観測が古い", func(f *idleFixture) {
-			f.cs = freshContext(45, idleNow.Add(-time.Duration(f.cfg.StateMaxAgeSeconds+1)*time.Second))
+		{"使用率が閾値未満", func(f *idleFixture) { f.cache.ContextTokens = idleTokens(39) }},
+		// 使用率は最後の応答のトークン数で見る｡statusline の値は使わない｡
+		{"statusline の使用率が閾値以上でも最後の応答が閾値未満", func(f *idleFixture) {
+			f.cs.UsedPercentage = 80
+			f.cache.ContextTokens = idleTokens(39)
 		}},
+		{"トークン数が記録されていない (旧版の sidecar)", func(f *idleFixture) { f.cache.ContextTokens = 0 }},
+		{"window の大きさが分からない (旧版の context)", func(f *idleFixture) { f.cs.ContextWindowSize = 0 }},
 		{"cooldown 中", func(f *idleFixture) { f.ps.CompactAutoSentAt = idleNow.Add(-5 * time.Minute) }},
 		{"入力欄に書きかけがある", func(f *idleFixture) { f.client.PaneReadFunc = readReturning(typingScreen, nil) }},
 		// 前回の idle compact から利用者が戻っていない｡圧縮後の使用率は下がるので普通は閾値で止まる｡
@@ -128,7 +161,7 @@ func TestTick_idle_compact_は送らない(t *testing.T) {
 func TestTick_idle_compact_は_5m_TTL_ではスキップする(t *testing.T) {
 	// 5 分では prep と compact の 2 段を失効前に終えられない｡
 	f := newIdleFixture()
-	f.cache = cacheAt(idleNow.Add(-2 * time.Minute))
+	f.cache = idleCacheAt(idleNow.Add(-2 * time.Minute))
 	f.cache.TTL = 5 * time.Minute
 
 	if outcome := f.mustTick(t, idleNow); outcome != OutcomeIdleCompactShortTTL {
@@ -137,7 +170,7 @@ func TestTick_idle_compact_は_5m_TTL_ではスキップする(t *testing.T) {
 	assertNoSend(t, f.client)
 
 	// 報告は pane ごとに 1 回｡5m TTL の利用者はターンのたびに条件を満たし､ログが毎ターン伸びる｡
-	f.cache = cacheAt(idleNow.Add(10 * time.Minute))
+	f.cache = idleCacheAt(idleNow.Add(10 * time.Minute))
 	f.cache.TTL = 5 * time.Minute
 	if outcome := f.mustTick(t, idleNow.Add(11*time.Minute)); outcome != OutcomeMonitoring {
 		t.Errorf("2 回目: outcome = %v, want %v", outcome, OutcomeMonitoring)
@@ -146,7 +179,7 @@ func TestTick_idle_compact_は_5m_TTL_ではスキップする(t *testing.T) {
 
 func TestTick_5m_TTL_のスキップは圧縮後の再開を塞がない(t *testing.T) {
 	f := newIdleFixture()
-	f.cache = cacheAt(idleNow.Add(-2 * time.Minute))
+	f.cache = idleCacheAt(idleNow.Add(-2 * time.Minute))
 	f.cache.TTL = 5 * time.Minute
 	f.cs.HasCompacted = true
 	f.cs.CompactedAt = idleNow.Add(-time.Duration(f.cfg.CompactResumeDelaySeconds+1) * time.Second)

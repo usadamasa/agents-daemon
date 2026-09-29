@@ -40,6 +40,9 @@ type Cache struct {
 	TTL time.Duration
 	// TranscriptPath はその transcript のパス｡
 	TranscriptPath string
+	// ContextTokens は直近の main 会話の応答の入力トークン数 (input + cache_creation + cache_read)｡
+	// 記録の無い sidecar では 0｡
+	ContextTokens int64
 }
 
 // ExpiresAt は cache が失効する時刻 (LastRequestAt + TTL)｡

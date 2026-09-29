@@ -24,6 +24,8 @@ type Compact struct {
 	UsedPercentage float64
 	// ObservedAt は statusline がその使用率を観測した時刻｡
 	ObservedAt time.Time
+	// ContextWindowSize は statusline が渡す context window の大きさ (トークン数)｡記録が無ければ 0｡
+	ContextWindowSize int64
 
 	// HasPrep は compact-prep の state file が存在するかどうか｡
 	HasPrep bool
@@ -60,6 +62,11 @@ func (s Store) MarkIdleCompacted(sessionID string) error {
 		return err
 	}
 	return writeFileAtomic(path, ".idle-compacted.*", nil)
+}
+
+// CacheUsedPercentage は cache に記録された直近の応答の入力トークン数から context の使用率を求める｡
+func (c *Compact) CacheUsedPercentage(cache *Cache) (float64, bool) {
+	return 0, false
 }
 
 // ContextFresh は使用率の観測が maxAge 以内かを返す｡

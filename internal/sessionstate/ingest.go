@@ -17,7 +17,8 @@ import (
 type statuslineInput struct {
 	SessionID     string `json:"session_id"`
 	ContextWindow struct {
-		UsedPercentage *float64 `json:"used_percentage"`
+		UsedPercentage    *float64 `json:"used_percentage"`
+		ContextWindowSize float64  `json:"context_window_size"`
 	} `json:"context_window"`
 	RateLimits *struct {
 		FiveHour *statuslineWindow `json:"five_hour"`
@@ -62,8 +63,9 @@ func (s Store) IngestStatusline(input []byte, now time.Time) error {
 	observedAt := now.Unix()
 	ctx := contextFile{
 		SessionID:      in.SessionID,
-		UsedPercentage: roundPercent(in.ContextWindow.UsedPercentage),
-		ObservedAt:     observedAt,
+		UsedPercentage:    roundPercent(in.ContextWindow.UsedPercentage),
+		ObservedAt:        observedAt,
+		ContextWindowSize: int64(in.ContextWindow.ContextWindowSize),
 	}
 	if err := writeJSONAtomic(contextPath, ".context.*", ctx); err != nil {
 		return err

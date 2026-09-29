@@ -23,13 +23,14 @@ func tickIdleCompact(
 	cs *sessionstate.Compact, screen string, now time.Time,
 ) (Outcome, error) {
 	cfg := deps.Config
-	maxAge := time.Duration(cfg.StateMaxAgeSeconds) * time.Second
-	if !cs.ContextFresh(now, maxAge) || cs.UsedPercentage < cfg.CacheIdleCompactThresholdPercent {
+	// 使用率は statusline の観測ではなく直近の応答から求める｡idle な pane は statusline が
+	// 再描画されず､観測が窓の開く前に stateMaxAgeSeconds を過ぎるため｡
+	cache := paneCache(deps, pane)
+	if pct, ok := cs.CacheUsedPercentage(cache); !ok || pct < cfg.CacheIdleCompactThresholdPercent {
 		return OutcomeMonitoring, nil
 	}
 	// sidecar が古い (Stop が発火していない) と失効済みと見て送らない｡安全側なのでそのまま｡
-	cache := paneCache(deps, pane)
-	if cache == nil || cache.Expired(now) {
+	if cache.Expired(now) {
 		return OutcomeMonitoring, nil
 	}
 	lead := time.Duration(cfg.CacheIdleCompactLeadSeconds) * time.Second

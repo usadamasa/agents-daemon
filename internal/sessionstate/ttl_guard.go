@@ -56,7 +56,7 @@ func (s Store) TTLGuard(input []byte, now time.Time) (warning string, err error)
 		}
 		return "", errors.Join(fmt.Errorf("transcript の読み込みに失敗: %w", err), pruneErr)
 	}
-	raw, ttl, ok := lastMainResponse(tail)
+	raw, ttl, _, ok := lastMainResponse(tail)
 	if !ok {
 		return "", pruneErr
 	}

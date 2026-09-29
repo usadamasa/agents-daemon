@@ -25,6 +25,7 @@ const CacheAckUnknown = "daemon-unknown"
 type cacheFile struct {
 	LastRequestAt  string `json:"last_request_at"`
 	TTLSeconds     int64  `json:"ttl_seconds"`
+	ContextTokens  int64  `json:"context_tokens,omitempty"`
 	TranscriptPath string `json:"transcript_path"`
 }
 
@@ -87,7 +88,10 @@ type transcriptEntry struct {
 		ID    string `json:"id"`
 		Model string `json:"model"`
 		Usage struct {
-			CacheCreation struct {
+			InputTokens              float64 `json:"input_tokens"`
+			CacheCreationInputTokens float64 `json:"cache_creation_input_tokens"`
+			CacheReadInputTokens     float64 `json:"cache_read_input_tokens"`
+			CacheCreation            struct {
 				OneHour    float64 `json:"ephemeral_1h_input_tokens"`
 				FiveMinute float64 `json:"ephemeral_5m_input_tokens"`
 			} `json:"cache_creation"`
@@ -120,7 +124,7 @@ func (s Store) IngestStop(input []byte) error {
 		}
 		return fmt.Errorf("transcript の読み込みに失敗: %w", err)
 	}
-	lastRequestAt, ttl, ok := lastMainResponse(tail)
+	lastRequestAt, ttl, tokens, ok := lastMainResponse(tail)
 	if !ok {
 		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("%s の削除に失敗: %w", path, err)
@@ -130,12 +134,17 @@ func (s Store) IngestStop(input []byte) error {
 	return writeJSONAtomic(path, ".cache.*", cacheFile{
 		LastRequestAt:  lastRequestAt,
 		TTLSeconds:     int64(ttl / time.Second),
+		ContextTokens:  tokens,
 		TranscriptPath: in.TranscriptPath,
 	})
 }
 
 // lastMainResponse は transcript の末尾から「直近の main 会話の応答の開始時刻」と
-// 「最新の cache write の TTL」を返す｡どちらかが見つからなければ ok は false｡
+// 「最新の cache write の TTL」､「直近の応答の入力トークン数」を返す｡開始時刻か TTL が
+// 見つからなければ ok は false｡
+//
+// 入力トークン数は statusline の used_percentage と同じ式 (input + cache_creation +
+// cache_read､output は含めない) で数える｡
 //
 // 規則は tatsuo48/claude-token-audit の ttl_guard.py (last_main_response) と同じ:
 //
@@ -148,7 +157,7 @@ func (s Store) IngestStop(input []byte) error {
 //
 // compact_boundary より前は見ない (参考実装には無い規則)｡compact 後の次のリクエストは
 // 要約だけを送るので､compact 前の cache の状態は意味を持たない｡
-func lastMainResponse(data []byte) (lastRequestAt string, ttl time.Duration, ok bool) {
+func lastMainResponse(data []byte) (lastRequestAt string, ttl time.Duration, tokens int64, ok bool) {
 	var lastID string
 	idKnown := false
 	for _, line := range slices.Backward(bytes.Split(data, []byte{'\n'})) {
@@ -168,6 +177,9 @@ func lastMainResponse(data []byte) (lastRequestAt string, ttl time.Duration, ok 
 		}
 		if !idKnown {
 			lastID, idKnown = e.Message.ID, true
+			// 同じ id の行は usage も同じなので､最初に見た行から採る｡
+			u := e.Message.Usage
+			tokens = int64(u.InputTokens + u.CacheCreationInputTokens + u.CacheReadInputTokens)
 		}
 		if e.Message.ID == lastID && e.Timestamp != "" {
 			lastRequestAt = e.Timestamp
@@ -184,7 +196,7 @@ func lastMainResponse(data []byte) (lastRequestAt string, ttl time.Duration, ok 
 			}
 		}
 	}
-	return lastRequestAt, ttl, lastRequestAt != "" && ttl != 0
+	return lastRequestAt, ttl, tokens, lastRequestAt != "" && ttl != 0
 }
 
 // readTail は path の末尾 n バイトを読む (ファイルがそれより小さければ全部)｡
@@ -233,5 +245,6 @@ func (s Store) LoadCache(sessionID string) (*Cache, error) {
 		LastRequestRaw: raw.LastRequestAt,
 		TTL:            time.Duration(raw.TTLSeconds) * time.Second,
 		TranscriptPath: raw.TranscriptPath,
+		ContextTokens:  raw.ContextTokens,
 	}, nil
 }

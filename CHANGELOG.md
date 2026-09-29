@@ -1,5 +1,9 @@
 # Changelog
 
+## [2026.0929.0](https://github.com/usadamasa/agents-daemon/compare/2026.0928.0...2026.0929.0) - 2026-09-29
+
+- idle compact: prompt cache の失効前に離席中の pane を compact する by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/22
+
 ## [2026.0928.0](https://github.com/usadamasa/agents-daemon/compare/2026.0927.2...2026.0928.0) - 2026-09-28
 
 - TTL guard: cache 失効後の最初の prompt を 1 回止める (#11) by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/19

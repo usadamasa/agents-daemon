@@ -122,7 +122,8 @@ type Config struct {
 	CompactResumeDelaySeconds int
 
 	// CacheIdleCompactEnabled は prompt cache の失効前の compact (idle compact) のスイッチ｡
-	// CompactAutoEnabled とは独立で､既定 false の理由も同じ｡
+	// CompactAutoEnabled とは独立｡既定 true なのは､warm なうちに要約しておけば失効後の
+	// 書き直しが要約だけで済み､その後に再開を送らないため｡
 	CacheIdleCompactEnabled bool
 	// CacheIdleCompactLeadSeconds は失効の何秒前から動くか｡
 	CacheIdleCompactLeadSeconds int
@@ -172,7 +173,7 @@ func Default() Config {
 		CompactResumeEnabled:      true,
 		CompactResumeDelaySeconds: 60,
 
-		CacheIdleCompactEnabled:          false,
+		CacheIdleCompactEnabled:          true,
 		CacheIdleCompactLeadSeconds:      600,
 		CacheIdleCompactThresholdPercent: 40,
 	}

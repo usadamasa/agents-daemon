@@ -63,7 +63,7 @@ state file の mtime が､daemon が `compactAutoPrepMessage` (既定 `/agents-
 
 ## cache の失効前の compact (idle compact)
 
-`cacheIdleCompactEnabled` (既定 `false`) で有効にする｡`compactAutoEnabled` とは独立で､1 段目の
+`cacheIdleCompactEnabled` (既定 `true`) で切り替える｡`compactAutoEnabled` とは独立で､1 段目の
 発火条件だけが違い､2 段目と cooldown (`compactAutoCooldownMinutes`) は共有する｡
 
 離席中の pane を､prompt cache が失効する前に compact する｡warm なうちの `/compact` は文脈を

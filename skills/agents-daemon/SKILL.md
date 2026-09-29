@@ -57,8 +57,9 @@ herdr のペインを経由して動く常駐デーモン｡役目は 2 つ｡
 - バイナリは `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon` に置く｡plugin の
   install 先はバージョンごとに変わるため､その外の固定パスにする｡用意するのは SessionStart hook で､
   詳細は [architecture.md](references/architecture.md) の「バイナリの用意と差し替え」｡
-- `compactAutoEnabled` と `cacheIdleCompactEnabled` は Go の既定を `false` にしてある｡`/compact` は取り消せないため､
+- `compactAutoEnabled` は Go の既定を `false` にしてある｡`/compact` は取り消せないため､
   コードの既定は投入しない側へ倒す｡使うなら config.json で `true` にする｡
+  `cacheIdleCompactEnabled` (idle compact) は既定 `true` (理由は operations.md の「送る文面」の後段)｡
 - sandbox 内のセッションから `stop` を実行すると SIGTERM が
   `operation not permitted` で弾かれる｡デーモン側の後始末は正常なので､
   通常のターミナルから実行するか自己終了に任せる｡

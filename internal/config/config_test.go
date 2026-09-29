@@ -88,7 +88,7 @@ func TestLoad(t *testing.T) {
 			"compactAutoCooldownMinutes": 30,
 			"compactResumeEnabled": false,
 			"compactResumeDelaySeconds": 90,
-			"cacheIdleCompactEnabled": true,
+			"cacheIdleCompactEnabled": false,
 			"cacheIdleCompactLeadSeconds": 900,
 			"cacheIdleCompactThresholdPercent": 30
 		}`)
@@ -135,7 +135,7 @@ func TestLoad(t *testing.T) {
 			CompactResumeEnabled:          false,
 			CompactResumeDelaySeconds:     90,
 
-			CacheIdleCompactEnabled:          true,
+			CacheIdleCompactEnabled:          false,
 			CacheIdleCompactLeadSeconds:      900,
 			CacheIdleCompactThresholdPercent: 30,
 		}
@@ -213,10 +213,10 @@ func TestLoad(t *testing.T) {
 		}
 	})
 
-	t.Run("idle compact の既定は無効､lead 600 秒､閾値 40%", func(t *testing.T) {
+	t.Run("idle compact の既定は有効､lead 600 秒､閾値 40%", func(t *testing.T) {
 		def := Default()
-		if def.CacheIdleCompactEnabled || def.CacheIdleCompactLeadSeconds != 600 || def.CacheIdleCompactThresholdPercent != 40 {
-			t.Errorf("idle compact の既定 = %v / %d / %v, want false / 600 / 40",
+		if !def.CacheIdleCompactEnabled || def.CacheIdleCompactLeadSeconds != 600 || def.CacheIdleCompactThresholdPercent != 40 {
+			t.Errorf("idle compact の既定 = %v / %d / %v, want true / 600 / 40",
 				def.CacheIdleCompactEnabled, def.CacheIdleCompactLeadSeconds, def.CacheIdleCompactThresholdPercent)
 		}
 	})

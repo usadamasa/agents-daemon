@@ -37,17 +37,6 @@
           }
         ]
       }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/cache-state.sh\"",
-            "timeout": 10
-          }
-        ]
-      }
     ]
   }
 }

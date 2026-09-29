@@ -2,16 +2,17 @@
 // 書く sidecar file を読む唯一の窓口｡rate-limits と context は書く側もここにある｡
 //
 //	rate-limits/<session_id>.json    ingest-statusline が書く利用上限 (IngestStatusline)
-//	context/<session_id>.json        ingest-statusline が書く context 使用率 (IngestStatusline)
+//	context/<session_id>.json        ingest-statusline が書く context 使用率と transcript のパス
+//	                                 (IngestStatusline｡cache の状態は CacheLoader がこのパスから求める)
 //	compact-state/<session_id>.md    compact-prep skill が書く復旧用 state file
 //	compacted/<session_id>           PostCompact hook が書く圧縮完了 marker
-//	cache/<session_id>.json          ingest-stop が書く prompt cache の状態 (IngestStop)
+//	cache/<session_id>.json          旧版の Stop hook が書いた prompt cache の状態｡もう書かず､Prune が消す
 //	cache-ack/<session_id>           daemon が非スラッシュの prompt を送る前に書き､ttl-guard が読む ack
 //	                                 (WriteCacheAck / TTLGuard)
 //	cache-idle-compacted/<session_id> daemon が idle compact の /compact を送る前に書く marker
 //	                                 (MarkIdleCompacted / Compact.IdleCompactActive)
 //
-// rate-limits / context / cache / cache-ack / cache-idle-compacted は hook や statusline から
+// rate-limits / context / cache-ack / cache-idle-compacted は hook や statusline から
 // 呼ばれた `agents-daemon` のサブコマンドか daemon がこのパッケージの型で読み書きするので､
 // 書式は 1 箇所に閉じる｡
 // compact-state / compacted の書き手はシェル側 (この plugin の compact-prep skill・

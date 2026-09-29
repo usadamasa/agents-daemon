@@ -29,8 +29,8 @@ type ttlGuardInput struct {
 //   - 失効していれば cache-ack/<session_id> を見る｡中身が last_request_at と同じなら通す
 //     (同じ idle gap で既に警告したか､daemon が承知で送った)
 //   - 中身が違っても mtime が直近なら daemon の送信として通し､実際の値で書き換える｡
-//     sentinel (CacheAckUnknown) だけでなく､Stop hook が中断で発火せず sidecar が古いまま
-//     daemon が写した値もここで通る
+//     sentinel (CacheAckUnknown) だけでなく､daemon が transcript を読んだ後に transcript が
+//     伸びた (書き込みの遅れが追いついた) ときの値もここで通る
 //   - どちらでもなければ書き換えて止める
 //
 // ack は時間で失効させない (待った時間が長くなっても書き直しのコストは同じ)｡

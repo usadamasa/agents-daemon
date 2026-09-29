@@ -46,8 +46,8 @@ func tickCompact(
 		cs = deps.CompactState(pane.SessionID())
 	}
 	// idle compact の後で利用者がまだ戻っていない (idle_compact.go)｡cache は marker が
-	// あるときだけ読む｡
-	idleHold := cs != nil && cs.HasIdleCompacted && cs.IdleCompactActive(paneCache(deps, pane))
+	// あり､送り先になりうる pane のときだけ読む (以降の段はどれも idle な pane にしか送らない)｡
+	idleHold := cs != nil && cs.HasIdleCompacted && isIdlePane(pane) && cs.IdleCompactActive(paneCache(deps, pane))
 
 	outcome, err := tickCompactAuto(ctx, deps, pane, ps, cs, idleHold, screen, now)
 	if err != nil || (outcome != OutcomeMonitoring && outcome != OutcomeIdleCompactShortTTL) {

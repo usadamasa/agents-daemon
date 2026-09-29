@@ -15,23 +15,14 @@ import (
 // 収まれば足りる｡先頭の切れた行は JSON として読めず飛ばされる｡
 const transcriptTailBytes = 2 << 20
 
-// CacheAckUnknown は sidecar が無い (Stop hook が入っていない､初回ターン) まま送るときに
+// CacheAckUnknown は cache の状態が分からない (transcript を辿れない､初回ターン) まま送るときに
 // ack へ書く sentinel｡guard (TTLGuard) は mtime が直近ならこれを daemon の送信として通し､
 // transcript から求めた実際の値で書き換える｡
 const CacheAckUnknown = "daemon-unknown"
 
-// cacheFile は cache/<session_id>.json の生の形｡last_request_at は transcript の
-// timestamp 文字列を整形せずに写す｡読み手が ack との比較を文字列の完全一致で行うため｡
-type cacheFile struct {
-	LastRequestAt  string `json:"last_request_at"`
-	TTLSeconds     int64  `json:"ttl_seconds"`
-	ContextTokens  int64  `json:"context_tokens,omitempty"`
-	TranscriptPath string `json:"transcript_path"`
-}
-
-// Cache はセッション 1 つぶんの prompt cache の状態｡Stop hook のたびに transcript から
-// 写される｡LastRequestAt + TTL を過ぎると次のリクエストは文脈全体を cache write として
-// 送り直すので､読み手はその前後で送る・送らないを決める｡
+// Cache はセッション 1 つぶんの prompt cache の状態｡daemon が transcript から求める｡
+// LastRequestAt + TTL を過ぎると次のリクエストは文脈全体を cache write として送り直すので､
+// 読み手はその前後で送る・送らないを決める｡
 type Cache struct {
 	// LastRequestAt は直近の main 会話の応答が始まった時刻 (= cache が最後に更新された時刻)｡
 	LastRequestAt time.Time
@@ -42,7 +33,6 @@ type Cache struct {
 	// TranscriptPath はその transcript のパス｡
 	TranscriptPath string
 	// ContextTokens は直近の main 会話の応答の入力トークン数 (input + cache_creation + cache_read)｡
-	// 記録の無い sidecar では 0｡
 	ContextTokens int64
 }
 
@@ -71,12 +61,6 @@ func (s Store) WriteCacheAck(sessionID, value string) error {
 	return writeFileAtomic(path, ".cache-ack.*", []byte(value))
 }
 
-// stopHookInput は Stop hook の stdin のうち要る部分｡
-type stopHookInput struct {
-	SessionID      string `json:"session_id"`
-	TranscriptPath string `json:"transcript_path"`
-}
-
 // transcriptEntry は transcript JSONL の 1 行のうち要る部分｡形式は Claude Code の内部
 // 形式で version 間で変わりうるため､読めない行は飛ばす (fail-open)｡
 type transcriptEntry struct {
@@ -97,46 +81,6 @@ type transcriptEntry struct {
 			} `json:"cache_creation"`
 		} `json:"usage"`
 	} `json:"message"`
-}
-
-// IngestStop は Stop hook の stdin (input) から cache/<session_id>.json を書く｡
-// `agents-daemon ingest-stop` の本体で､応答が終わるたびに呼ばれる｡
-//
-//   - session_id が空､または transcript_path が空なら何もしない
-//   - transcript が無ければ何もしない (既存の sidecar も残す)
-//   - transcript に cache write が 1 つも無ければ (初回ターン､caching 無効) sidecar を消す
-//
-// 書き込みは同一ディレクトリの一時ファイル経由の rename で原子的に行う｡
-func (s Store) IngestStop(input []byte) error {
-	var in stopHookInput
-	if err := json.Unmarshal(input, &in); err != nil {
-		return fmt.Errorf("hook の入力のパースに失敗: %w", err)
-	}
-	path, err := sessionPath(s.Cache, in.SessionID, ".json")
-	if err != nil || path == "" || in.TranscriptPath == "" {
-		return err
-	}
-
-	tail, err := readTail(in.TranscriptPath, transcriptTailBytes)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
-		}
-		return fmt.Errorf("transcript の読み込みに失敗: %w", err)
-	}
-	lastRequestAt, ttl, tokens, ok := lastMainResponse(tail)
-	if !ok {
-		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("%s の削除に失敗: %w", path, err)
-		}
-		return nil
-	}
-	return writeJSONAtomic(path, ".cache.*", cacheFile{
-		LastRequestAt:  lastRequestAt,
-		TTLSeconds:     int64(ttl / time.Second),
-		ContextTokens:  tokens,
-		TranscriptPath: in.TranscriptPath,
-	})
 }
 
 // lastMainResponse は transcript の末尾から「直近の main 会話の応答の開始時刻」と
@@ -199,24 +143,116 @@ func lastMainResponse(data []byte) (lastRequestAt string, ttl time.Duration, tok
 	return lastRequestAt, ttl, tokens, lastRequestAt != "" && ttl != 0
 }
 
-// CacheLoader は transcript から cache の状態を求める｡
-type CacheLoader struct{}
+// CacheLoader は statusline が context/ に記録した transcript_path を辿り､transcript から
+// cache の状態を求める｡Stop hook では読まない｡transcript は非同期に書かれ､Stop の時点では
+// ターンの最後の応答を含まないことがあるため (Claude Code の hooks のドキュメント)｡
+//
+// transcript の大きさと mtime が前回と同じなら読み直さない｡並行には使わない (daemon の tick
+// だけが呼ぶ)｡
+type CacheLoader struct {
+	store Store
+	memo  map[string]cacheMemo
+}
+
+// cacheMemo は session 1 つぶんの前回の結果｡
+type cacheMemo struct {
+	path    string
+	size    int64
+	modTime time.Time
+	cache   *Cache
+}
 
 // NewCacheLoader は s の context/ を起点に transcript を辿る CacheLoader を返す｡
-func NewCacheLoader(s Store) *CacheLoader { return &CacheLoader{} }
+func NewCacheLoader(s Store) *CacheLoader {
+	return &CacheLoader{store: s, memo: map[string]cacheMemo{}}
+}
 
-// Load は sessionID の cache の状態を返す｡
-func (l *CacheLoader) Load(sessionID string) (*Cache, error) { return nil, nil }
+// Load は sessionID の cache の状態を返す｡cache の状態が無い (session が空､context や
+// transcript_path や transcript が無い､cache write が無い､compact 後にまだ応答が無い) なら
+// (nil, nil)｡context が壊れているか transcript が読めないときだけエラーを返す｡
+//
+// 読めない transcript のエラーは､transcript が変わるまで 1 回だけ返す (tick ごとにログへ
+// 同じ行を書かない)｡
+func (l *CacheLoader) Load(sessionID string) (*Cache, error) {
+	contextPath, err := sessionPath(l.store.Context, sessionID, ".json")
+	if err != nil || contextPath == "" {
+		return nil, err
+	}
+	path, err := readTranscriptPath(contextPath)
+	if err != nil || path == "" {
+		delete(l.memo, sessionID)
+		return nil, err
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		delete(l.memo, sessionID)
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("transcript の情報を取得できません: %w", err)
+	}
+	if m, ok := l.memo[sessionID]; ok && m.path == path && m.size == info.Size() && m.modTime.Equal(info.ModTime()) {
+		return m.cache, nil
+	}
+	c, err := readCache(path)
+	l.memo[sessionID] = cacheMemo{path: path, size: info.Size(), modTime: info.ModTime(), cache: c}
+	return c, err
+}
 
-// Cached は前回 Load した値を返す｡
-func (l *CacheLoader) Cached(sessionID string) *Cache { return nil }
+// Cached は前回 Load した値を返す｡transcript は読まない｡Load したことが無ければ nil｡
+func (l *CacheLoader) Cached(sessionID string) *Cache {
+	return l.memo[sessionID].cache
+}
 
-// Retain は keep に無い session の memo を捨てる｡
-func (l *CacheLoader) Retain(keep map[string]bool) {}
+// Retain は keep に無い session の前回の結果を捨てる｡
+func (l *CacheLoader) Retain(keep map[string]bool) {
+	for sessionID := range l.memo {
+		if !keep[sessionID] {
+			delete(l.memo, sessionID)
+		}
+	}
+}
+
+// readTranscriptPath は context/<session_id>.json の transcript_path を返す｡ファイルが
+// 無ければ空｡
+func readTranscriptPath(contextPath string) (string, error) {
+	data, err := os.ReadFile(contextPath) // #nosec G304 -- session ID を検証済みのパス
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "", nil
+		}
+		return "", fmt.Errorf("context state の読み込みに失敗: %w", err)
+	}
+	var raw contextFile
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return "", fmt.Errorf("context state のパースに失敗: %w", err)
+	}
+	return raw.TranscriptPath, nil
+}
+
+// readCache は transcript の末尾から cache の状態を求める｡cache の状態が無ければ nil｡
+func readCache(path string) (*Cache, error) {
+	tail, err := readTail(path, transcriptTailBytes)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("transcript の読み込みに失敗: %w", err)
+	}
+	raw, ttl, tokens, ok := lastMainResponse(tail)
+	if !ok {
+		return nil, nil
+	}
+	at, err := time.Parse(time.RFC3339Nano, raw)
+	if err != nil {
+		return nil, fmt.Errorf("transcript の timestamp %q が時刻として読めない: %w", raw, err)
+	}
+	return &Cache{LastRequestAt: at, LastRequestRaw: raw, TTL: ttl, TranscriptPath: path, ContextTokens: tokens}, nil
+}
 
 // readTail は path の末尾 n バイトを読む (ファイルがそれより小さければ全部)｡
 func readTail(path string, n int64) ([]byte, error) {
-	f, err := os.Open(path) // #nosec G304 -- Stop hook が渡す transcript のパスをそのまま開く
+	f, err := os.Open(path) // #nosec G304 -- Claude Code が渡した transcript のパスをそのまま開く
 	if err != nil {
 		return nil, err
 	}
@@ -231,35 +267,4 @@ func readTail(path string, n int64) ([]byte, error) {
 		}
 	}
 	return io.ReadAll(f)
-}
-
-// LoadCache は sessionID に対応する cache の state を読む｡sessionID が空､または
-// ファイルが無ければ (nil, nil)｡JSON や時刻が読めない場合だけエラーを返す｡
-func (s Store) LoadCache(sessionID string) (*Cache, error) {
-	path, err := sessionPath(s.Cache, sessionID, ".json")
-	if err != nil || path == "" {
-		return nil, err
-	}
-	data, err := os.ReadFile(path) // #nosec G304 -- session ID を検証済みのパス
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("cache state の読み込みに失敗: %w", err)
-	}
-	var raw cacheFile
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return nil, fmt.Errorf("cache state のパースに失敗: %w", err)
-	}
-	at, err := time.Parse(time.RFC3339Nano, raw.LastRequestAt)
-	if err != nil {
-		return nil, fmt.Errorf("cache state の last_request_at が時刻として読めない: %w", err)
-	}
-	return &Cache{
-		LastRequestAt:  at,
-		LastRequestRaw: raw.LastRequestAt,
-		TTL:            time.Duration(raw.TTLSeconds) * time.Second,
-		TranscriptPath: raw.TranscriptPath,
-		ContextTokens:  raw.ContextTokens,
-	}, nil
 }

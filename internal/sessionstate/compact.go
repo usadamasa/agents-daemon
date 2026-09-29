@@ -15,6 +15,8 @@ type contextFile struct {
 	UsedPercentage    float64 `json:"used_percentage"`
 	ObservedAt        int64   `json:"observed_at"`
 	ContextWindowSize int64   `json:"context_window_size,omitempty"`
+	// TranscriptPath は CacheLoader が辿る｡Compact には載せない｡
+	TranscriptPath string `json:"transcript_path,omitempty"`
 }
 
 // Compact はセッション 1 つぶんの､compact 自動化に要る状態をまとめたもの｡

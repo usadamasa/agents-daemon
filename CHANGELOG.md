@@ -1,5 +1,9 @@
 # Changelog
 
+## [2026.0930.0](https://github.com/usadamasa/agents-daemon/compare/2026.0929.0...2026.0930.0) - 2026-09-30
+
+- fix: idle compact と cache の状態を daemon が transcript から求める by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/25
+
 ## [2026.0929.0](https://github.com/usadamasa/agents-daemon/compare/2026.0928.0...2026.0929.0) - 2026-09-29
 
 - idle compact: prompt cache の失効前に離席中の pane を compact する by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/22

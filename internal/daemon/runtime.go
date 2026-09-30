@@ -50,6 +50,7 @@ type daemonRuntime struct {
 	// statusPath と store はプロセスの生存期間で固定なのでここに置く｡
 	statusPath string
 	store      sessionstate.Store
+	cache      *sessionstate.CacheLoader
 	// dryRun は pane への送信をしない稼働｡client 側 (dryRunClient) が握りつぶすが､
 	// cache の ack マーカーは client を通らないのでここでも見る｡書くと利用者自身の
 	// 次の prompt が TTL guard を素通りする｡
@@ -66,6 +67,7 @@ func newDaemonRuntime(client herdrcli.Client, log *applog.Logger, statusPath str
 	return &daemonRuntime{
 		client:     client,
 		store:      store,
+		cache:      sessionstate.NewCacheLoader(store),
 		log:        log,
 		statusPath: statusPath,
 		dryRun:     dryRun,
@@ -126,14 +128,15 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 			}
 			return state
 		},
-		// cache の状態は prompt を送る直前に読む (status 用に tick ごとに読む分とは別)｡
-		// 送信の判断には使わないので､読み込みエラーは「sidecar 無し」として継続する｡
+		// cache の状態は idle compact の判定と prompt を送る直前に読む｡
+		// 読み込みエラーは「cache の状態が無い」(送らない側) として継続する｡
 		CacheState:        r.loadCache,
 		CacheAck:          r.writeCacheAck,
 		MarkIdleCompacted: r.markIdleCompacted,
 	}
 
 	seen := make(map[string]bool, len(panes))
+	sessions := make(map[string]bool, len(panes))
 	claudeCount := 0
 	statusPanes := make([]PaneStatus, 0, len(panes))
 
@@ -143,6 +146,9 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 		}
 		claudeCount++
 		seen[pane.TerminalID] = true
+		if sid := pane.SessionID(); sid != "" {
+			sessions[sid] = true
+		}
 
 		entry, ok := r.panes[pane.TerminalID]
 		if !ok {
@@ -164,13 +170,7 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 		statusPanes = append(statusPanes, r.paneStatus(pane, entry, outcome, now))
 	}
 
-	// 消えた pane のエントリを捨てる｡捨てずに放置するとこの map が
-	// pane の入れ替わりのたびに無限に育ってしまう｡
-	for terminalID := range r.panes {
-		if !seen[terminalID] {
-			delete(r.panes, terminalID)
-		}
-	}
+	r.forgetUnseen(seen, sessions)
 
 	if err := writeStatusSnapshot(r.statusPath, os.Getpid(), r.startedAt, now, statusPanes); err != nil {
 		r.log.Logf("status snapshot の書き込みに失敗: %v", err)
@@ -190,6 +190,17 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 	return false, cfg, nil
 }
 
+// forgetUnseen は消えた pane のエントリと､消えた session の cache の memo を捨てる｡
+// 捨てずに放置するとどちらも pane の入れ替わりのたびに無限に育ってしまう｡
+func (r *daemonRuntime) forgetUnseen(terminals, sessions map[string]bool) {
+	for terminalID := range r.panes {
+		if !terminals[terminalID] {
+			delete(r.panes, terminalID)
+		}
+	}
+	r.cache.Retain(sessions)
+}
+
 // paneStatus は status.json に書く pane 1 枚ぶんのスナップショットを組む｡
 func (r *daemonRuntime) paneStatus(pane herdrcli.Pane, entry *paneEntry, outcome monitor.Outcome, now time.Time) PaneStatus {
 	return PaneStatus{
@@ -202,16 +213,25 @@ func (r *daemonRuntime) paneStatus(pane herdrcli.Pane, entry *paneEntry, outcome
 		Attempts:      entry.state.Attempts,
 		LastOutcome:   outcome.String(),
 		LastTickAt:    now,
-		Cache:         cacheStatus(r.loadCache(pane.SessionID()), now),
+		Cache:         cacheStatus(r.statusCache(pane), now),
 	}
 }
 
-// loadCache は pane のセッションの prompt cache の sidecar を読む｡無ければ nil｡
-// 読み込みエラーは判断に効かない (足すのは ack とログだけ) ので､ログに残して nil を返す｡
+// statusCache は status に載せる cache の状態｡working な pane の transcript は応答のたびに
+// 伸びるので読み直さず､前回読んだ値を出す｡
+func (r *daemonRuntime) statusCache(pane herdrcli.Pane) *sessionstate.Cache {
+	if pane.AgentStatus == herdrcli.AgentStatusWorking {
+		return r.cache.Cached(pane.SessionID())
+	}
+	return r.loadCache(pane.SessionID())
+}
+
+// loadCache は pane のセッションの prompt cache の状態を transcript から求める｡無ければ nil｡
+// 読み込みエラーはログに残して nil を返す (idle compact は送らず､ack は sentinel になる)｡
 func (r *daemonRuntime) loadCache(sessionID string) *sessionstate.Cache {
-	c, err := r.store.LoadCache(sessionID)
+	c, err := r.cache.Load(sessionID)
 	if err != nil {
-		r.log.Logf("session %s の cache state の読み込みに失敗､sidecar 無しとして継続します: %v", sessionID, err)
+		r.log.Logf("session %s の cache の状態の読み込みに失敗､状態無しとして継続します: %v", sessionID, err)
 		return nil
 	}
 	return c
@@ -333,7 +353,7 @@ func compactOutcomeMessage(outcome monitor.Outcome) (msg string, sent bool) {
 //
 //	 / cache=warm (経過 3 分､TTL 60 分)
 //	 / cache=expired (経過 312 分､TTL 60 分､context 使用率 63%､ack 済み)
-//	 / cache=unknown (sidecar 無し､ack=daemon-unknown)
+//	 / cache=unknown (状態無し､ack=daemon-unknown)
 //
 // 失効後の送信は文脈全体を書き直すので context 使用率を併記し､どれだけ書き直したかを
 // 後から追えるようにする｡スラッシュの prompt は guard を素通りするので ack は無い｡
@@ -348,7 +368,7 @@ func (r *daemonRuntime) cacheSuffix(pane herdrcli.Pane, entry *paneEntry) string
 	case c == nil && pane.SessionID() == "":
 		b.WriteString("session 未紐づけ")
 	case c == nil:
-		b.WriteString("sidecar 無し")
+		b.WriteString("状態無し")
 	default:
 		fmt.Fprintf(&b, "経過 %d 分､TTL %d 分", int(send.At.Sub(c.LastRequestAt)/time.Minute), int(c.TTL/time.Minute))
 		if c.Expired(send.At) {

@@ -48,7 +48,7 @@ state file の mtime が､daemon が `compactAutoPrepMessage` (既定 `/agents-
 | ---- | ---- |
 | `agent_status` が `idle` / `done` | working な pane へ送るとキューに入り､進行中の作業の直後に実行される |
 | 入力欄が空 | 残った文字に送信文字列が連結される ([pane-io.md](pane-io.md)) |
-| 使用率の観測が `stateMaxAgeSeconds` 以内 (1 段目) | statusline の描画が止まっている pane は､そのセッションが生きていない |
+| 使用率の観測が `stateMaxAgeSeconds` 以内 (1 段目､閾値の compact だけ) | statusline の描画が止まっている pane は､そのセッションが生きていない |
 | 直近の投入から `compactAutoCooldownMinutes` (1 段目) | state file が出ないまま往復しない |
 | marker が `compactResumeDelaySeconds` (既定 60 秒) より古い (3 段目) | 圧縮直後に人が自分で続きを打つ余地を残す |
 
@@ -72,11 +72,24 @@ cache read で読んで要約を出すだけで安く､失効後に利用者が
 
 | 条件 (1 段目) | なぜ要るか |
 | ---- | ---- |
-| 上の「送信の条件」の 1 段目と同じ (idle､入力欄が空､使用率の観測が新しい､cooldown) | 同上 |
-| 使用率が `cacheIdleCompactThresholdPercent` (既定 40) 以上 | 書き直しを避けるのが目的で､window の余裕とは別｡`compactAutoThresholdPercent` より低くてよい |
-| `cache/<sid>.json` があり失効前で､`now >= 失効時刻 - cacheIdleCompactLeadSeconds` (既定 600) | prep → compact の 2 段が TTL 内に収まる余裕｡sidecar が古いと失効済みと見て送らない (安全側) |
+| 上の「送信の条件」の 1 段目と同じ (idle､入力欄が空､cooldown)｡使用率の観測の新しさは見ない | 同上 |
+| 直近の応答の使用率が `cacheIdleCompactThresholdPercent` (既定 40) 以上 | 書き直しを避けるのが目的で､window の余裕とは別｡`compactAutoThresholdPercent` より低くてよい |
+| cache の状態があり失効前で､`now >= 失効時刻 - cacheIdleCompactLeadSeconds` (既定 600) | prep → compact の 2 段が TTL 内に収まる余裕 |
 | TTL が 5 分より長く､lead より長い | 5 分では 2 段を失効前に終えられない｡満たさなければ送らず `idle-compact-short-ttl` をログに残す (ターンのたびに満たすので pane ごとに 1 回) |
 | 下の marker が active でない | 前回の idle compact から利用者が戻っていない |
+
+cache の状態と使用率は､daemon が transcript から求める ([architecture.md](architecture.md) の
+「daemon が transcript から求める cache の状態」)｡使用率は直近の応答の入力トークン数を
+`context/<sid>.json` の `context_window_size` で割って出す｡式は statusline の `used_percentage` と同じ
+(input + cache_creation + cache_read､output は含めない)｡
+
+`context/<sid>.json` の `used_percentage` を使わないのは､idle な pane では statusline が再描画されず､
+観測が窓の開く前に `stateMaxAgeSeconds` を過ぎるため｡直近の応答の値は次の応答まで変わらないので
+古くならない｡`context_window_size` か `transcript_path` が無い (記録を始める前の版の statusline が書いた)
+ときは送らない｡新しい版に入れ替わった時点で idle な pane は､次に statusline が描画されるまで対象外になる｡
+
+cache の状態を読むのは､idle な pane で入力欄が空のときだけ｡working な pane の transcript は応答のたびに
+伸びるので読まない｡
 
 ### 圧縮の後は再開しない
 
@@ -88,15 +101,15 @@ cache read で読んで要約を出すだけで安く､失効後に利用者が
 daemon は `/compact` を送る**前に** `cache-idle-compacted/<sid>` を書く (書けなければ送らない)｡
 marker は次の間 active で､3 段目と画面判定を黙らせる｡
 
-- marker があり､`cache/<sid>.json` が無いか､その `last_request_at` が marker の mtime 以前
+- marker があり､cache の状態が無いか､直近の応答の開始時刻が marker の mtime 以前
 
-compact の後に Stop が発火すると､境界の後ろに応答が無いので `ingest-stop` が sidecar を消す｡
-利用者が戻ってターンを終えると marker より新しい sidecar が書かれ､marker は解ける｡marker を消さずに
+compact の後は境界の後ろに応答が無いので､cache の状態は無しになる｡
+利用者が戻ってターンを終えると marker より新しい応答が transcript に載り､marker は解ける｡marker を消さずに
 比較で解くのは､消す役を持つと消し損ねたときに解けなくなるため｡ファイルに置くのは､不在中に daemon が
 再起動しても (`PaneState` は消える) 再開を送らないため｡
 
 prep を送った後に利用者が戻ってターンを終えても､2 段目は `/compact` を送る｡prep のターンは state file を
-書いた後に最後の応答を返すので､sidecar の時刻では prep のターンと利用者のターンを分けられない｡
+書いた後に最後の応答を返すので､直近の応答の時刻では prep のターンと利用者のターンを分けられない｡
 `compactAutoEnabled` の 2 段目と同じ振る舞い｡
 
 ## compact 直後の停止

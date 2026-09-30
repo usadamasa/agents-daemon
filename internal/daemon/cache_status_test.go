@@ -12,31 +12,37 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/herdrcli"
 	"github.com/usadamasa/agents-daemon/internal/herdrcli/herdrclifake"
 	"github.com/usadamasa/agents-daemon/internal/monitor"
+	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 )
 
 const cacheLastRequestRaw = "2026-09-27T03:44:05.954Z"
 
-// writeCacheSidecar は ingest-stop が書く生の形で cache/<sid>.json を置く｡
-func writeCacheSidecar(t *testing.T, dir, sessionID string) {
+// cacheTranscript は最後の応答が cacheLastRequestRaw に始まり､1h の cache write を持つ transcript｡
+const cacheTranscript = `{"type":"user","timestamp":"2026-09-27T03:44:00.000Z"}
+{"type":"assistant","isSidechain":false,"timestamp":"` + cacheLastRequestRaw + `","message":{"id":"msg_1","model":"claude-fable-5-1","usage":{"input_tokens":3,"cache_creation_input_tokens":500,"cache_read_input_tokens":1000,"cache_creation":{"ephemeral_1h_input_tokens":500,"ephemeral_5m_input_tokens":0}}}}
+`
+
+// writeCacheTranscript は transcript を置き､statusline が書く形の context/<sid>.json からそこを指す｡
+// context の使用率は 63%｡
+func writeCacheTranscript(t *testing.T, store sessionstate.Store, sessionID string) {
 	t.Helper()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatalf("cache ディレクトリの作成に失敗: %v", err)
+	path := filepath.Join(t.TempDir(), sessionID+".jsonl")
+	if err := os.WriteFile(path, []byte(cacheTranscript), 0o644); err != nil {
+		t.Fatalf("transcript の書き込みに失敗: %v", err)
 	}
-	raw := `{"last_request_at":"` + cacheLastRequestRaw + `","ttl_seconds":3600,"transcript_path":"/tmp/t.jsonl"}` + "\n"
-	if err := os.WriteFile(filepath.Join(dir, sessionID+".json"), []byte(raw), 0o644); err != nil {
-		t.Fatalf("cache sidecar の書き込みに失敗: %v", err)
-	}
+	writeContextSidecar(t, store.Context, sessionID, map[string]any{
+		"used_percentage": 63, "observed_at": 1786840000, "transcript_path": path,
+	})
 }
 
 // writeContextSidecar は ingest-statusline が書く生の形で context/<sid>.json を置く｡
-func writeContextSidecar(t *testing.T, dir, sessionID string, usedPercentage float64, observedAt time.Time) {
+func writeContextSidecar(t *testing.T, dir, sessionID string, fields map[string]any) {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("context ディレクトリの作成に失敗: %v", err)
 	}
-	raw, err := json.Marshal(map[string]any{
-		"session_id": sessionID, "used_percentage": usedPercentage, "observed_at": observedAt.Unix(),
-	})
+	fields["session_id"] = sessionID
+	raw, err := json.Marshal(fields)
 	if err != nil {
 		t.Fatalf("context の JSON 化に失敗: %v", err)
 	}
@@ -64,10 +70,10 @@ func TestDaemonRuntimeTick_StatusCarriesCacheState(t *testing.T) {
 		},
 	}
 
-	t.Run("warm な sidecar は失効時刻とともに出る", func(t *testing.T) {
+	t.Run("warm な cache は失効時刻とともに出る", func(t *testing.T) {
 		now := last.Add(10 * time.Minute)
 		r, statusPath := newTestRuntime(t, client, now)
-		writeCacheSidecar(t, r.store.Cache, "session-a")
+		writeCacheTranscript(t, r.store, "session-a")
 
 		if _, _, err := r.tick(context.Background(), missingConfigPath(t), now); err != nil {
 			t.Fatalf("tick() error = %v", err)
@@ -88,7 +94,7 @@ func TestDaemonRuntimeTick_StatusCarriesCacheState(t *testing.T) {
 	t.Run("失効していれば expired", func(t *testing.T) {
 		now := last.Add(5 * time.Hour)
 		r, statusPath := newTestRuntime(t, client, now)
-		writeCacheSidecar(t, r.store.Cache, "session-a")
+		writeCacheTranscript(t, r.store, "session-a")
 
 		if _, _, err := r.tick(context.Background(), missingConfigPath(t), now); err != nil {
 			t.Fatalf("tick() error = %v", err)
@@ -102,7 +108,30 @@ func TestDaemonRuntimeTick_StatusCarriesCacheState(t *testing.T) {
 		}
 	})
 
-	t.Run("sidecar が無ければ省略する", func(t *testing.T) {
+	t.Run("working な pane では transcript を読まない", func(t *testing.T) {
+		// 応答のたびに伸びる transcript を tick ごとに読み直さない｡読んだことが無ければ省略する｡
+		working := claudePaneWithSession("pane-a", "term-a", "session-a", herdrcli.AgentStatusWorking)
+		workingClient := &herdrclifake.Client{
+			PaneListFunc: func(context.Context) ([]herdrcli.Pane, error) { return []herdrcli.Pane{working}, nil },
+			PaneReadFunc: client.PaneReadFunc,
+		}
+		now := last.Add(10 * time.Minute)
+		r, statusPath := newTestRuntime(t, workingClient, now)
+		writeCacheTranscript(t, r.store, "session-a")
+
+		if _, _, err := r.tick(context.Background(), missingConfigPath(t), now); err != nil {
+			t.Fatalf("tick() error = %v", err)
+		}
+		snap, err := ReadStatusSnapshot(statusPath)
+		if err != nil || snap == nil || len(snap.Panes) != 1 {
+			t.Fatalf("ReadStatusSnapshot() = %+v, %v", snap, err)
+		}
+		if c := snap.Panes[0].Cache; c != nil {
+			t.Errorf("Cache = %+v, want nil (読んでいない)", c)
+		}
+	})
+
+	t.Run("cache が無ければ省略する", func(t *testing.T) {
 		now := last.Add(10 * time.Minute)
 		r, statusPath := newTestRuntime(t, client, now)
 
@@ -141,8 +170,7 @@ func TestDaemonRuntimeTick_SendLogCarriesCacheState(t *testing.T) {
 		now := last.Add(5*time.Hour + 12*time.Minute)
 		client := waitingPaneClient(pane)
 		r, statusPath := newTestRuntime(t, client, now)
-		writeCacheSidecar(t, r.store.Cache, "session-a")
-		writeContextSidecar(t, r.store.Context, "session-a", 63, now)
+		writeCacheTranscript(t, r.store, "session-a")
 		r.panes["term-a"] = &paneEntry{state: &monitor.PaneState{Status: monitor.StatusWaiting}}
 
 		if _, _, err := r.tick(context.Background(), missingConfigPath(t), now); err != nil {
@@ -164,7 +192,7 @@ func TestDaemonRuntimeTick_SendLogCarriesCacheState(t *testing.T) {
 		}
 	})
 
-	t.Run("sidecar が無ければ sentinel を書き､unknown とログに残す", func(t *testing.T) {
+	t.Run("cache が無ければ sentinel を書き､unknown とログに残す", func(t *testing.T) {
 		now := last.Add(5 * time.Hour)
 		client := waitingPaneClient(pane)
 		r, statusPath := newTestRuntime(t, client, now)
@@ -191,7 +219,7 @@ func TestDaemonRuntimeTick_SendLogCarriesCacheState(t *testing.T) {
 		client := waitingPaneClient(pane)
 		r, statusPath := newTestRuntime(t, client, now)
 		r.dryRun = true
-		writeCacheSidecar(t, r.store.Cache, "session-a")
+		writeCacheTranscript(t, r.store, "session-a")
 		r.panes["term-a"] = &paneEntry{state: &monitor.PaneState{Status: monitor.StatusWaiting}}
 
 		if _, _, err := r.tick(context.Background(), missingConfigPath(t), now); err != nil {

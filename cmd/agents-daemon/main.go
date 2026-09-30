@@ -12,7 +12,6 @@
 //	inspect   画面テキストの分類結果と判定根拠の表示
 //	simulate  使い捨て pane を使った end-to-end 検証
 //	ingest-statusline  statusline の stdin から context/ と rate-limits/ の state file を書く
-//	ingest-stop        Stop hook の stdin から cache/ の state file を書く
 //	ttl-guard          UserPromptSubmit hook の stdin を見て､cache 失効後の最初の prompt を止める
 package main
 

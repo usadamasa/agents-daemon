@@ -23,20 +23,21 @@ func tickIdleCompact(
 	cs *sessionstate.Compact, screen string, now time.Time,
 ) (Outcome, error) {
 	cfg := deps.Config
-	maxAge := time.Duration(cfg.StateMaxAgeSeconds) * time.Second
-	if !cs.ContextFresh(now, maxAge) || cs.UsedPercentage < cfg.CacheIdleCompactThresholdPercent {
+	// cache の状態は transcript から求める｡伸び続ける working な pane では読まない｡
+	if !canSendTo(deps, pane, screen) {
 		return OutcomeMonitoring, nil
 	}
-	// sidecar が古い (Stop が発火していない) と失効済みと見て送らない｡安全側なのでそのまま｡
+	// 使用率は statusline の観測ではなく直近の応答から求める｡idle な pane は statusline が
+	// 再描画されず､観測が窓の開く前に stateMaxAgeSeconds を過ぎるため｡
 	cache := paneCache(deps, pane)
-	if cache == nil || cache.Expired(now) {
+	if pct, ok := cs.CacheUsedPercentage(cache); !ok || pct < cfg.CacheIdleCompactThresholdPercent {
+		return OutcomeMonitoring, nil
+	}
+	if cache.Expired(now) {
 		return OutcomeMonitoring, nil
 	}
 	lead := time.Duration(cfg.CacheIdleCompactLeadSeconds) * time.Second
 	if now.Before(cache.ExpiresAt().Add(-lead)) {
-		return OutcomeMonitoring, nil
-	}
-	if !canSendTo(deps, pane, screen) {
 		return OutcomeMonitoring, nil
 	}
 	if cache.TTL <= shortCacheTTL || cache.TTL <= lead {
@@ -68,7 +69,7 @@ func holdAfterIdleCompact(ps *PaneState, cs *sessionstate.Compact) {
 	ps.CompactSeenAt = time.Time{}
 }
 
-// paneCache は pane のセッションの cache の sidecar を返す｡無ければ nil｡
+// paneCache は pane のセッションの cache の状態を返す｡無ければ nil｡
 func paneCache(deps Deps, pane herdrcli.Pane) *sessionstate.Cache {
 	if deps.CacheState == nil {
 		return nil

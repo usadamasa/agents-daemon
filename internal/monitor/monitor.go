@@ -227,9 +227,10 @@ type Deps struct {
 	// 最後まで到達しないと使わないため｡到達しない tick でファイルを読まずに済む｡
 	// このフィールド自体が nil なら compact の自動化は適用しない｡
 	CompactState func(sessionID string) *sessionstate.Compact
-	// CacheState は pane のセッションの prompt cache の状態 (sessionstate.Store.LoadCache) を
-	// 返す｡読むのは prompt を送る直前と､idle compact の判定 (有効なときか marker があるとき)
-	// だけ｡nil は「sidecar 無し」｡このフィールド自体が nil なら cache の状態は見ず ack も書かない｡
+	// CacheState は pane のセッションの prompt cache の状態 (sessionstate.CacheLoader.Load) を
+	// 返す｡読むのは prompt を送る直前と､idle な pane での idle compact の判定 (有効なときか
+	// marker があるとき) だけ｡nil は「状態無し」｡このフィールド自体が nil なら cache の状態は
+	// 見ず ack も書かない｡
 	CacheState func(sessionID string) *sessionstate.Cache
 	// CacheAck は cache-ack/<session_id> に value を書く (sessionstate.Store.WriteCacheAck)｡
 	// 失効後に非スラッシュの prompt を送る前に呼ばれる｡dry-run の daemon は no-op を差す｡

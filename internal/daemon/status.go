@@ -23,8 +23,7 @@ type PaneStatus struct {
 	Attempts      int        `json:"attempts"`
 	LastOutcome   string     `json:"last_outcome"`
 	LastTickAt    time.Time  `json:"last_tick_at"`
-	// Cache はそのセッションの prompt cache の状態｡sidecar (cache/<session_id>.json) が
-	// 無ければ省略する｡
+	// Cache はそのセッションの prompt cache の状態 (transcript から求める)｡無ければ省略する｡
 	Cache *CacheStatus `json:"cache,omitempty"`
 }
 
@@ -37,7 +36,7 @@ type CacheStatus struct {
 	ExpiresAt     time.Time `json:"expires_at"`
 }
 
-// cacheStatus は sidecar の状態を status.json 向けに写す｡nil は nil のまま｡
+// cacheStatus は cache の状態を status.json 向けに写す｡nil は nil のまま｡
 func cacheStatus(c *sessionstate.Cache, now time.Time) *CacheStatus {
 	if c == nil {
 		return nil

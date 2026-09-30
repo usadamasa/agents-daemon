@@ -13,9 +13,9 @@ import (
 // (再開しなければ意味が無い) が､送る側がそれを知らないと､ログにも残らず､TTL guard hook が
 // daemon の prompt を止めて再開が「pane が固まった」ように見える｡
 //
-// だで送る前に cache の sidecar を読み､非スラッシュの prompt を失効後に送るときは
-// ack マーカー cache-ack/<session_id> に sidecar の last_request_at をそのまま写す
-// (「書き直しのコストを承知で送る」の意思表示｡guard はこれを見て通す)｡sidecar が無ければ
+// だで送る前に cache の状態を読み､非スラッシュの prompt を失効後に送るときは
+// ack マーカー cache-ack/<session_id> に直近の応答の開始時刻の文字列をそのまま写す
+// (「書き直しのコストを承知で送る」の意思表示｡guard はこれを見て通す)｡状態が無ければ
 // sentinel を新しい mtime で書く｡書かないと guard が再開を止め､daemon は pane の停止と見て
 // nudge を打ち､それも止められて堂々巡りになる｡
 //
@@ -28,7 +28,7 @@ type SendReport struct {
 	At time.Time
 	// Slash は prompt がスラッシュコマンドだったか｡guard が素通しするので ack は書かない｡
 	Slash bool
-	// Cache は送信時点の sidecar｡nil は sidecar 無し (または session が無い)｡
+	// Cache は送信時点の cache の状態｡nil は状態無し (または session が無い)｡
 	Cache *sessionstate.Cache
 	// Ack は書いた ack の値｡空は書いていない (warm / スラッシュ / session 無し / 配線無し)｡
 	Ack string
@@ -65,7 +65,7 @@ func ackBeforeSend(deps Deps, pane herdrcli.Pane, ps *PaneState, text string, no
 		return
 	}
 
-	// 値は sidecar の文字列をそのまま写す｡time.Parse / Format を通すとミリ秒が落ちたり
+	// 値は transcript の文字列をそのまま写す｡time.Parse / Format を通すとミリ秒が落ちたり
 	// Z が +00:00 になったりして､guard の文字列比較と合わなくなる｡
 	value := sessionstate.CacheAckUnknown
 	if c := report.Cache; c != nil {

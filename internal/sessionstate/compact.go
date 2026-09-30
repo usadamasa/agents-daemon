@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"time"
 )
@@ -11,8 +12,11 @@ import (
 // contextFile は context/<session_id>.json の生の形｡
 type contextFile struct {
 	SessionID      string  `json:"session_id"`
-	UsedPercentage float64 `json:"used_percentage"`
-	ObservedAt     int64   `json:"observed_at"`
+	UsedPercentage    float64 `json:"used_percentage"`
+	ObservedAt        int64   `json:"observed_at"`
+	ContextWindowSize int64   `json:"context_window_size,omitempty"`
+	// TranscriptPath は CacheLoader が辿る｡Compact には載せない｡
+	TranscriptPath string `json:"transcript_path,omitempty"`
 }
 
 // Compact はセッション 1 つぶんの､compact 自動化に要る状態をまとめたもの｡
@@ -24,6 +28,8 @@ type Compact struct {
 	UsedPercentage float64
 	// ObservedAt は statusline がその使用率を観測した時刻｡
 	ObservedAt time.Time
+	// ContextWindowSize は statusline が渡す context window の大きさ (トークン数)｡記録が無ければ 0｡
+	ContextWindowSize int64
 
 	// HasPrep は compact-prep の state file が存在するかどうか｡
 	HasPrep bool
@@ -60,6 +66,18 @@ func (s Store) MarkIdleCompacted(sessionID string) error {
 		return err
 	}
 	return writeFileAtomic(path, ".idle-compacted.*", nil)
+}
+
+// CacheUsedPercentage は cache に記録された直近の応答の入力トークン数から context の使用率を
+// 求める｡statusline の used_percentage と同じく整数へ丸める｡window の大きさかトークン数の
+// 記録が無ければ false｡
+//
+// statusline の観測と違い､idle な間も値が古くならない (直近の応答から使用率は変わらない)｡
+func (c *Compact) CacheUsedPercentage(cache *Cache) (float64, bool) {
+	if c == nil || cache == nil || c.ContextWindowSize <= 0 || cache.ContextTokens <= 0 {
+		return 0, false
+	}
+	return math.Round(float64(cache.ContextTokens) * 100 / float64(c.ContextWindowSize)), true
 }
 
 // ContextFresh は使用率の観測が maxAge 以内かを返す｡
@@ -123,6 +141,7 @@ func loadContext(state *Compact, path string) error {
 	state.HasContext = true
 	state.UsedPercentage = raw.UsedPercentage
 	state.ObservedAt = time.Unix(raw.ObservedAt, 0)
+	state.ContextWindowSize = raw.ContextWindowSize
 	return nil
 }
 

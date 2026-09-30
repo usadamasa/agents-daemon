@@ -15,9 +15,11 @@ import (
 // 5 時間ウィンドウの切り替わりでは five_hour が {null, null} で届く (実機で観測) ため､
 // この区別が無いと直前の resets_at を epoch 0 で上書きしてしまう｡
 type statuslineInput struct {
-	SessionID     string `json:"session_id"`
-	ContextWindow struct {
-		UsedPercentage *float64 `json:"used_percentage"`
+	SessionID      string `json:"session_id"`
+	TranscriptPath string `json:"transcript_path"`
+	ContextWindow  struct {
+		UsedPercentage    *float64 `json:"used_percentage"`
+		ContextWindowSize float64  `json:"context_window_size"`
 	} `json:"context_window"`
 	RateLimits *struct {
 		FiveHour *statuslineWindow `json:"five_hour"`
@@ -62,8 +64,10 @@ func (s Store) IngestStatusline(input []byte, now time.Time) error {
 	observedAt := now.Unix()
 	ctx := contextFile{
 		SessionID:      in.SessionID,
-		UsedPercentage: roundPercent(in.ContextWindow.UsedPercentage),
-		ObservedAt:     observedAt,
+		UsedPercentage:    roundPercent(in.ContextWindow.UsedPercentage),
+		ObservedAt:        observedAt,
+		ContextWindowSize: int64(in.ContextWindow.ContextWindowSize),
+		TranscriptPath:    in.TranscriptPath,
 	}
 	if err := writeJSONAtomic(contextPath, ".context.*", ctx); err != nil {
 		return err

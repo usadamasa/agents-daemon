@@ -29,7 +29,7 @@ const realLimitScreen = `  ⏺ Bash(task test)
 `
 
 func TestClassify_実機で観測した上限到達画面(t *testing.T) {
-	c, err := NewClassifier(nil, nil)
+	c, err := NewClassifier(nil)
 	if err != nil {
 		t.Fatalf("NewClassifier: %v", err)
 	}

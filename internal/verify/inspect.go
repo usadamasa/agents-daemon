@@ -33,7 +33,7 @@ func RunInspect(ctx context.Context, w io.Writer, client multiplexer.Client, p a
 
 	reportScannedLines(w, screen, cfg.DetectionTailLines)
 
-	classifier, err := detect.NewClassifier(cfg.CustomPatterns, cfg.CustomTransientPatterns)
+	classifier, err := detect.NewClassifier(cfg.CustomPatterns)
 	if err != nil {
 		return fmt.Errorf("分類器の構築に失敗: %w", err)
 	}

@@ -35,7 +35,7 @@ const (
 
 func newTestClassifier(t *testing.T) *detect.Classifier {
 	t.Helper()
-	c, err := detect.NewClassifier(nil, nil)
+	c, err := detect.NewClassifier(nil)
 	if err != nil {
 		t.Fatalf("NewClassifier() error = %v", err)
 	}

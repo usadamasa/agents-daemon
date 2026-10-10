@@ -90,7 +90,7 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 		r.log.Logf("設定の読み込みでエラー､デフォルト値で継続します: %v", cfgErr)
 	}
 
-	classifier, err := detect.NewClassifier(cfg.CustomPatterns, cfg.CustomTransientPatterns)
+	classifier, err := detect.NewClassifier(cfg.CustomPatterns)
 	if err != nil {
 		return false, cfg, fmt.Errorf("分類器の構築に失敗: %w", err)
 	}

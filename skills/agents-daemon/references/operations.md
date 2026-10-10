@@ -141,7 +141,6 @@ Claude Code の公式ドキュメントに OSC 7501 の記述は無いので､�
 | `submitDelayMs` | `400` | テキストと Enter の間の待ち |
 | `engagedLabel` | `retry engaged` | 待機中に pane へ出すラベル |
 | `customPatterns` | `[]` | 上限として扱う追加の正規表現 |
-| `customTransientPatterns` | `[]` | 一時エラーとして扱う追加の正規表現 |
 | `idleShutdownMinutes` | `30` | Claude pane が 0 のまま続いたら自己終了する |
 | `deferToNativeAutoContinue` | `true` | ネイティブの auto-continue が再開を予約している間は手を出さない |
 | `compactStallEnabled` | `true` | compact 直後に止まった pane を突く |

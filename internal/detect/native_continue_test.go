@@ -34,7 +34,7 @@ var nativeStoodDownBanners = []string{
 
 func newTestClassifier(t *testing.T) *Classifier {
 	t.Helper()
-	c, err := NewClassifier(nil, nil)
+	c, err := NewClassifier(nil)
 	if err != nil {
 		t.Fatalf("NewClassifier: %v", err)
 	}

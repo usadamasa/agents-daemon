@@ -271,7 +271,7 @@ func runSimulateTicks(ctx context.Context, w io.Writer, p apppath.Paths, ownedPa
 		_, _ = fmt.Fprintf(w, "設定の読み込みに失敗､デフォルト値で継続します: %v\n", cfgErr)
 		cfg = config.Default()
 	}
-	classifier, err := detect.NewClassifier(cfg.CustomPatterns, cfg.CustomTransientPatterns)
+	classifier, err := detect.NewClassifier(cfg.CustomPatterns)
 	if err != nil {
 		return fmt.Errorf("分類器の構築に失敗: %w", err)
 	}

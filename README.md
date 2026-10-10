@@ -53,6 +53,8 @@ claude plugin install agents-daemon@usadamasa
 セッションの開始は待たせず､build が終わると daemon が起きる｡
 バイナリは `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon` に置かれ､
 plugin を更新すると次の SessionStart で建て直される｡動作中の daemon は実行ファイルの差し替えを検知して自分で入れ替わる｡
+セッションを開き直さずに入れ替える手順は `skills/agents-daemon/references/operations.md` の
+「plugin の更新後に daemon を入れ替える」にある｡
 
 build の経過は `${XDG_STATE_HOME:-~/.local/state}/agents-daemon/logs/build.log` に残る｡
 

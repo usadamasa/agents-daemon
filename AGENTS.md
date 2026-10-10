@@ -79,4 +79,5 @@ tag に **`v` を付けない｡** `v2026.0926.0` は Go module が major 2026 �
 
 リリース PR の merge 後の plugin 更新 (`claude plugin marketplace update usadamasa`､
 `claude plugin update agents-daemon@usadamasa`) は sandbox が `~/.claude/plugins` への書き込みを止めるので
-利用者が `!` で打ち､新しいセッションで実機を確かめる｡
+利用者が `!` で打つ｡動いている daemon の入れ替えも `!` で行う｡コマンドは
+`skills/agents-daemon/references/operations.md` の「plugin の更新後に daemon を入れ替える」｡

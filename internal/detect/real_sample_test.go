@@ -28,6 +28,61 @@ const realLimitScreen = `  ⏺ Bash(task test)
   ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents
 `
 
+// 2026-10-10 19:52 に実機 (Claude Code 2.1.296 / rex の block) で transient と誤判定した画面｡
+// Claude は `gh search issues` を実行していただけで､pane には何の異常も無かった｡
+// tool result の中の issue タイトル (twigpui#298) に "rate limited" が含まれており､
+// 直近出力ブロックの任意の文章に裸の語句で当たる transient 判定がこれを拾った｡
+//
+// tool result の中身は利用者とツールが書く任意の文章なので､Claude Code 自身が描く
+// エラー行 (`API Error` で始まる) と同じ扱いにしてはいけない｡
+const realToolOutputScreen = `❯ その手順で試して｡下書きはusadamasaのissueから選んで｡
+
+⏺ Bash(gh search issues --author usadamasa --limit 60 --json repository,number,title,body --jq '.[] | "\(.repository.nameWithOwner)#\(.number)\t\(.body|length)\t\(.title)"')
+  ⎿  usadamasa/agents-daemon#39	1138	rex の小さい block で limit の文言が capture に収まるか確かめる
+     usadamasa/agents-daemon#38	1702	rex backend を rex events --all 駆動にして tick の呼び出し数を減らす
+     usadamasa/twigpui#303	523	viewer を開いたまま post が 500 件の窓から外れると「Loading…」になる
+     usadamasa/twigpui#302	688	poll ごとに main thread で cache JSON を読み直している (load_composite_timeline)
+     usadamasa/twigpui#301	961	timeline の一覧を仮想化する (500 行を notify ごとに全部組み直している)
+     usadamasa/twigpui#300	343	タイムラインのポスト中に､オリジナルのUIでは表示されないURLが表示されることがある
+     usadamasa/twigpui#298	1708	list sync が失敗や 400 の連続で退いている間、ステータスバーが "rate limited" と出る
+     usadamasa/twigpui#295	774	Sources メニューの表示中の項目を、ラベルの ✓ ではなくチェックマークで示す
+
+· Thinking…
+
+────────────────────────────────────────────────────────────────────────────
+❯
+────────────────────────────────────────────────────────────────────────────
+  🌸 Opus 5 💎 ･ﾟ 💰 $3.20 ･ﾟ 🧠 180k (18%) ･ﾟ ⚡ high ･ﾟ 🎀 Mikawa ･ﾟ 🐣 v2.1.296
+  📁 ~/src/github.com/usadamasa/japanese-writer ･ﾟ 🌿 main
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents
+`
+
+func TestClassify_実機で観測したtool出力の画面はtransientではない(t *testing.T) {
+	c, err := NewClassifier(nil, nil)
+	if err != nil {
+		t.Fatalf("NewClassifier: %v", err)
+	}
+
+	t.Run("フッター 15 行の走査で none と判定する", func(t *testing.T) {
+		if got := c.Classify(realToolOutputScreen, 15); got != KindNone {
+			t.Errorf("Classify() = %v, want %v (tool result の文章を transient と誤検知)", got, KindNone)
+		}
+	})
+
+	t.Run("全行の走査でも none と判定する", func(t *testing.T) {
+		if got := c.Classify(realToolOutputScreen, 0); got != KindNone {
+			t.Errorf("Classify() = %v, want %v (tool result の文章を transient と誤検知)", got, KindNone)
+		}
+	})
+
+	t.Run("該当行だけでも none と判定する", func(t *testing.T) {
+		line := `  ⎿  usadamasa/twigpui#298	1708	list sync が失敗や 400 の連続で退いている間、ステータスバーが "rate limited" と出る`
+		if got := c.Classify(line, 0); got != KindNone {
+			t.Errorf("Classify() = %v, want %v", got, KindNone)
+		}
+	})
+}
+
 func TestClassify_実機で観測した上限到達画面(t *testing.T) {
 	c, err := NewClassifier(nil, nil)
 	if err != nil {

@@ -152,6 +152,23 @@ func TestSocketClient_TabGet_And_TabRename(t *testing.T) {
 	}
 }
 
+func TestSocketClient_Call_EmptyResponseIsSuccess(t *testing.T) {
+	// 元の hook (python) は空の応答行を {} と読んだ｡書き込み系の method は成功時に何も返さないかもしれないので､
+	// 空を失敗にすると毎回の hook ログが埋まる｡読み取り系ではゼロ値が返り､呼び出し側が「情報なし」として扱う｡
+	c, _ := newSocketClientForTest(func(map[string]any) string { return "" })
+
+	if err := c.TabRename(context.Background(), "w3X:t1", "x"); err != nil {
+		t.Fatalf("TabRename() error = %v, want nil on empty response", err)
+	}
+	pane, err := c.PaneCurrent(context.Background(), "w3X:p1")
+	if err != nil {
+		t.Fatalf("PaneCurrent() error = %v, want nil on empty response", err)
+	}
+	if pane != (PaneView{}) {
+		t.Errorf("PaneCurrent() = %+v, want zero value", pane)
+	}
+}
+
 func TestSocketClient_Call_HonorsContextDeadline(t *testing.T) {
 	// 応答を返さない server｡ctx の期限で戻らないと hook が Claude Code を待たせる｡
 	c := &SocketClient{path: "fake.sock", dial: func(context.Context) (net.Conn, error) {

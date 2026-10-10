@@ -2,6 +2,7 @@ package herdrcli
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -126,6 +127,11 @@ func (c *SocketClient) call(ctx context.Context, method string, params map[strin
 	line, err := bufio.NewReader(conn).ReadBytes('\n')
 	if err != nil && len(line) == 0 {
 		return fmt.Errorf("herdr %s: 応答の受信に失敗: %w", method, err)
+	}
+	// 空の応答は result も error も無い成功として扱う (元の hook と同じ)｡書き込み系の method が socket で
+	// 何を返すかは未確認で､CLI の report-metadata は成功時に何も出さない｡
+	if len(bytes.TrimSpace(line)) == 0 {
+		return nil
 	}
 	env, err := parseEnvelope(line, nil)
 	if err != nil {

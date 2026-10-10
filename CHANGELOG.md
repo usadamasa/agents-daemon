@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026.1010.0](https://github.com/usadamasa/agents-daemon/compare/2026.0930.0...2026.1010.0) - 2026-10-10
+
+- docs: dream で AGENTS.md の重複を削り、リリース後の plugin 更新を書く by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/32
+- rex に対応する: 多重化ツールを抽象化し herdr と rex の backend を置く by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/36
+
 ## [2026.0930.0](https://github.com/usadamasa/agents-daemon/compare/2026.0929.0...2026.0930.0) - 2026-09-30
 
 - fix: idle compact と cache の状態を daemon が transcript から求める by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/25

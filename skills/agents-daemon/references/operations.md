@@ -62,10 +62,24 @@ statusline から呼ばれる `ingest-statusline` は stdin の JSON を受け�
 pane から解決する｡`--file` にはセッションが無いため `--session` で明示する｡
 指定が無ければゲート判定を行わない旨を出力して､画面の分類だけを報告する｡
 
-`simulate` は使い捨ての pane を作り､herdr に Claude agent として登録し､limit 風の画面を
+`simulate` は自分の pane を分割して使い捨ての pane を作り､Claude agent に見せかけ､limit 風の画面を
 書き込んで､デーモンと同じ判定を通す｡既定では送信しない｡自分が作った pane 以外には
-決して触らない｡**herdr 専用｡** 使い捨て pane を Claude agent に見せる手段 (herdr の `report-agent`) が
-rex に無いため､`REX_SESSION` のある環境ではエラーで止まる｡
+決して触らない｡backend は daemon と同じ規則 (`REX_SESSION` の有無) で選ぶ｡
+
+使い捨て pane の前景は両 backend とも `/bin/sh <script> <screen>`｡script は limit 風の画面を cat したあと
+`exec cat -v` で居座り､daemon が送る esc・文字列・enter を解釈せずそのまま画面に書く (ESC は `^[`)｡
+shell を受け手にすると ESC の直後の文字を Meta として食う (zsh の `KEYTIMEOUT` 0.4 秒) など shell の解釈が混ざり､
+`--send` で何が届いたかを画面で読めない｡
+
+| backend | 自分の pane | script の起動 | Claude agent に見せる手段 | 後始末 |
+| ---- | ---- | ---- | ---- | ---- |
+| herdr | `HERDR_ENV=1` のセッション | `pane split` は shell しか開けないので､起動を待って `pane run <id> /bin/sh …` と enter を打つ | `herdr pane report-agent` (agent=claude, state=idle) | `release-agent` と `pane close` |
+| rex | `REX_BLOCK` の block | `rex split --shell=none -- /bin/sh …` で shell を挟まず直接 | script の先頭で Claude Code と同じ OSC 7501 (`state=idle:app=claude-code`) を `printf` し､`program_status` の record に載せる | `rex block close` |
+
+どちらも登録が backend に載ったことを daemon と同じ経路 (`PaneGet` → `IsClaudeAgent`) で待ってから画面を読む｡
+rex の `capture` は可視領域しか返さないので､使い捨て block は自分の block の 40% の高さで割る｡
+Claude Code の OSC 7501 の書式は 2.1.296 のバイナリから読んだもので､公式ドキュメントには無い
+(「rex の状態の対応」参照)｡
 
 `doctor` は backend (herdr / rex) と選んだ根拠 (`REX_SESSION` の有無)､その server への到達性､Claude pane の
 一覧 (`session_id` が引けなければ `(なし)`) を出す｡daemon の `status.json` の backend が今の環境と違えば
@@ -127,6 +141,8 @@ Claude Code の公式ドキュメントに OSC 7501 の記述は無いので､�
 
 - `app` が `claude` で始まれば Claude agent と見なす｡record が無くても前景プロセスの `argv0` が `claude` なら
   Claude agent とし､`agent_status` は `unknown`｡
+- OSC 7501 の payload は `key=value` を `:` で繋いだもの (`state=idle:app=claude-code`､`title` と `msg` は base64)｡
+  終端は BEL｡`simulate` はこれをシェルの `printf` で出して使い捨て block を Claude に見せる｡
 - `done` と `idle` はどちらも入力待ち｡`blocked` は利用者の操作待ちで､daemon は打ち込まない (herdr と同じ扱い)｡
 
 ## 設定

@@ -18,7 +18,8 @@ plugin が持つもの:
 | ---- | ---- |
 | SessionStart hook | daemon のバイナリを用意し､`daemon --ensure` で起こす |
 | PostCompact hook | 圧縮完了の marker を置く |
-| UserPromptSubmit hook | marker を見て､圧縮直後の 1 ターンだけ復旧ガイドを注入する |
+| UserPromptSubmit hook | marker を見て､圧縮直後の 1 ターンだけ復旧ガイドを注入する｡cache 失効後の最初の prompt を止める (`ttl-guard`) |
+| UserPromptSubmit / Stop hook (herdr) | セッション名 (端末タイトル) と今いるブランチを herdr の space 欄とタブ行へ写す (`herdr-title`)｡rex では何もしない |
 | `agents-daemon:compact-prep` skill | `/compact` 前に作業状態を state file へ保存する |
 | `agents-daemon:agents-daemon` skill | 運用と切り分けの手引き (症状から引く) |
 | `agents-daemon:setup` skill | 前提の確認と statusline の配線 |

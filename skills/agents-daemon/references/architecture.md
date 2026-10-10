@@ -33,6 +33,9 @@ statusline・hook・skill・daemon が別々のタイミングで動き､ファ
 
 [4] UserPromptSubmit hook ──stdin──> agents-daemon ttl-guard ── transcript と cache-ack/<session_id> を見て
                                                                失効後の最初の prompt を止める (exit 2)
+
+[5] UserPromptSubmit / Stop hook ──stdin──> agents-daemon herdr-title ── HERDR_SOCKET_PATH の socket へ
+                                                                        セッション名とブランチを報告する (herdr だけ)
 ```
 
 ### [1] statusline が上限情報を渡し､バイナリが落とす
@@ -218,6 +221,29 @@ herdr の `pane list` 1 回より重いので､block が多い環境ほど tick
 
 rex で Agent と AgentStatus を決めるのは Claude Code 自身が OSC 7501 で報告する `program_status` で､
 状態の対応は [operations.md](operations.md) の「rex の状態の対応」｡
+
+### [5] herdr の space 欄とタブ行にセッション名を出す
+
+herdr が space 欄に出せる built-in token は pane の cwd から引くもので､worktree へ移ったセッションを追わない｡
+端末タイトル (Claude Code がセッションの要約に更新し続ける) は agents 欄にしか出ない｡
+`hooks/herdr-title.sh` (UserPromptSubmit / Stop) が stdin を `agents-daemon herdr-title` へ渡し､
+バイナリ (`internal/hookreport`) が次を `HERDR_SOCKET_PATH` の socket で herdr へ報告する｡
+rex や herdr の外では何もしない (`HERDR_ENV=1` と `HERDR_SOCKET_PATH` と `HERDR_PANE_ID` がそろったときだけ動く)｡
+
+| 面 | 書き込み先 | 値 | hook が無いときの表示 |
+| ---- | ---- | ---- | ---- |
+| space 欄 | workspace metadata の token `claude` (`workspace.report_metadata`) | `pane.current` の `terminal_title_stripped` | 出す口が無い |
+| space 欄 | 同 token `branch` | `foreground_cwd` (git の外なら `cwd`) の `git branch --show-current` | built-in が pane の cwd のブランチを出す |
+| タブ行 | タブの label (`tab.rename`) | 端末タイトル｡空ならタブの番号へ戻す | 連番 |
+
+- 描く側は利用者の herdr config の `$claude` と `$branch` の行｡plugin は token を報告するだけ｡
+- 書き込み先のタブと workspace は `pane.current` (`caller_pane_id` = `HERDR_PANE_ID`) から取る｡herdr が注入する
+  `HERDR_TAB_ID` / `HERDR_WORKSPACE_ID` は pane 作成時の値のままで､`herdr pane move` の後は元のタブを指す｡
+- 空の token は null で送って消す｡`tab.rename` に空を渡すと空の label になるので､番号を渡す｡
+- source は `claude-config:claude-title`｡agents-config の `herdr-claude-title.sh` から移したもので､移行期間は
+  両方の hook が同じ source に報告し､seq (UnixNano) の新しい方が勝つ｡
+- 値を取り直すのは hook の発火時点だけ｡agents 欄は端末タイトルを直に読むので､長いターンの間は space 欄とずれる｡
+- 失敗は exit 0 で理由を stderr に出す (hook のログ)｡herdr との往復と git を合わせて 4 秒で諦める｡
 
 ## 毎 tick の判定
 

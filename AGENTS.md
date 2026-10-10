@@ -9,10 +9,11 @@ Go のデーモンと､それを配線する hook・skill を持つ｡
 | パス | 中身 |
 | ---- | ---- |
 | `.claude-plugin/plugin.json` | plugin manifest｡version の実体はここ 1 箇所｡marketplace.json は agents-marketplace リポジトリが持つ |
-| `hooks/hooks.json` | SessionStart / PostCompact / UserPromptSubmit の配線 |
+| `hooks/hooks.json` | SessionStart / PostCompact / UserPromptSubmit / Stop の配線 |
 | `hooks/ensure-daemon.sh`, `hooks/build-daemon.sh` | バイナリの用意 (detach build) と `daemon --ensure` |
 | `hooks/compaction-recovery.sh`, `hooks/userpromptsubmit-compaction-recovery.sh` | 圧縮完了 marker と復旧ガイドの注入 |
 | `hooks/ttl-guard.sh` | UserPromptSubmit の stdin を `ttl-guard` へ渡し､cache 失効後の最初の prompt を止める (exit 2) |
+| `hooks/herdr-title.sh` | UserPromptSubmit / Stop の stdin を `herdr-title` へ渡し､セッション名とブランチを herdr の space 欄とタブ行へ写す (`internal/hookreport`) |
 | `hooks/lib/` | hook 共通の logger､marker の置き場 (`compact-markers.sh`)､バイナリの置き場 (`daemon-bin.sh`) |
 | `scripts/get-session-id.sh` | compact-prep / setup skill が呼ぶ session_id の取得 |
 | `skills/compact-prep/` | `/compact` 前の state file 保存 |
@@ -20,7 +21,8 @@ Go のデーモンと､それを配線する hook・skill を持つ｡
 | `skills/setup/` | install 後の前提確認 (herdr か rex､go/jq､statusline の state file､バイナリ)｡statusline の配線 2 通りは `references/` |
 | `cmd/agents-daemon/` | Go の main (cobra) |
 | `internal/` | daemon の本体｡パス定数は `internal/apppath`｡statusline の描画は `internal/statusline`､cost の台帳は `internal/spend`､sidecar の原子的な書き込みは `internal/statefile` |
-| `internal/multiplexer`, `internal/herdrcli`, `internal/rexcli`, `internal/backend` | pane 操作の interface (`multiplexer.Client`) とその herdr / rex 実装｡`backend` が環境 (`REX_SESSION`) で選ぶ |
+| `internal/multiplexer`, `internal/herdrcli`, `internal/rexcli`, `internal/backend` | pane 操作の interface (`multiplexer.Client`) とその herdr / rex 実装｡`backend` が環境 (`REX_SESSION`) で選ぶ｡`herdrcli` は hook が使う socket の client (`SocketClient`) も持つ |
+| `internal/hookreport` | hook から呼ばれてセッションの状態を多重化ツールへ写す処理 (`herdr-title`)｡hook script は stdin を渡すだけ |
 | `tests/` | hook と script の bats テスト (`tests/lib/`､`tests/fixtures/`) |
 
 ## 検証
@@ -44,6 +46,9 @@ bats は hook を `/bin/bash` で起動する (本番の shebang と同じ bash 
   hooks.json では `"\"${CLAUDE_PLUGIN_ROOT}/hooks/...\""` と引用符で囲む (validate が未引用を警告する)｡
 - データを読む・加工する処理 (transcript､JSON) はバイナリのサブコマンドに持たせ､hook は stdin を渡すだけにする
   (`ingest-statusline` / `ttl-guard`)｡bash 3.2 と jq で timestamp や大きなファイルを扱わない｡
+- hook から herdr を叩くときは CLI (`herdr`) ではなく `HERDR_SOCKET_PATH` の socket を使う (`herdrcli.SocketClient`)｡
+  hook は Claude Code の PATH を継承し､非対話で起動されたセッションでは homebrew のパスが載らない｡
+  daemon が CLI を使うのは逆で､detach 後の長い稼働で起動時の socket path が古くなりうるため｡
 - Stop hook で transcript を読まない｡transcript は非同期に書かれ､Stop の時点ではターンの最後の応答を
   含まないことがある (Claude Code の hooks のドキュメント)｡cache の状態は daemon が tick で読む｡
 

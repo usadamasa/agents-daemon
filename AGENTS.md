@@ -73,3 +73,7 @@ hook・skill・daemon は別プロセスで､ファイル越しに繋がる｡�
 
 tagpr (`.tagpr`､`.github/workflows/tagpr.yaml`) がリリース PR を作る｡`version` は手で上げない｡
 tag に **`v` を付けない｡** `v2026.0926.0` は Go module が major 2026 の semver と解釈して拒否する｡
+
+リリース PR の merge 後の plugin 更新 (`claude plugin marketplace update usadamasa`､
+`claude plugin update agents-daemon@usadamasa`) は sandbox が `~/.claude/plugins` への書き込みを止めるので
+利用者が `!` で打ち､新しいセッションで実機を確かめる｡

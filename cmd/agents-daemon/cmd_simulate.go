@@ -17,11 +17,12 @@ func newSimulateCmd() *cobra.Command {
 		Use:   "simulate",
 		Short: "使い捨て pane を作り､検知から送信までを end-to-end で検証する",
 		Long: "自分の pane を分割して使い捨て pane を作り､それを Claude agent に見せかけ､limit 風の\n" +
-			"画面を書き込んで､daemon と同じ monitor.Tick を走らせる｡既定では dry-run (--send を\n" +
-			"付けると使い捨て pane に限って実際に送信する)｡backend は daemon と同じく REX_SESSION の\n" +
-			"有無で選ぶ｡herdr では pane report-agent で Claude agent に登録し (HERDR_ENV=1 が要る)､\n" +
-			"rex では使い捨て block のシェルに Claude Code と同じ OSC 7501 を printf させて\n" +
-			"program_status に載せる (REX_BLOCK が要る)｡\n\n" +
+			"画面を出して､daemon と同じ monitor.Tick を走らせる｡既定では dry-run (--send を\n" +
+			"付けると使い捨て pane に限って実際に送信する)｡使い捨て pane の前景は画面を cat した\n" +
+			"あと cat -v で居座る script で､送った esc・文字列・enter を解釈せずそのまま画面に書く｡\n" +
+			"backend は daemon と同じく REX_SESSION の有無で選ぶ｡herdr では pane report-agent で\n" +
+			"Claude agent に登録し (HERDR_ENV=1 が要る)､rex では script が Claude Code と同じ\n" +
+			"OSC 7501 を printf して program_status に載せる (REX_BLOCK が要る)｡\n\n" +
 			"simulate は自分が作った pane 以外には構造的に一切書き込めない (multiplexer.Client を\n" +
 			"scopedClient で包み､作成した pane_id 以外への呼び出しを拒否する)｡実 Claude\n" +
 			"セッションが乗った pane を壊さないための安全策で､テストでも確認している｡\n\n" +
@@ -29,7 +30,7 @@ func newSimulateCmd() *cobra.Command {
 			"決定､までを daemon と全く同じコード経路で通せること｡\n" +
 			"証明しないこと: 実在の Claude セッションに対する検知の正しさ (limit 画面は cat に\n" +
 			"よる疑似表示であり､本物の Claude Code が描くものではない) や､実際に Claude Code へ\n" +
-			"送信したときの受理・再開挙動 (--send でも相手は素の shell pane)｡",
+			"送信したときの受理・再開挙動 (--send でも相手は cat -v で､届いた入力をそのまま見せるだけ)｡",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			p, err := apppath.FromEnv()
 			if err != nil {

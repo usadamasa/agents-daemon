@@ -66,21 +66,20 @@ pane から解決する｡`--file` にはセッションが無いため `--sessi
 書き込んで､デーモンと同じ判定を通す｡既定では送信しない｡自分が作った pane 以外には
 決して触らない｡backend は daemon と同じ規則 (`REX_SESSION` の有無) で選ぶ｡
 
-| backend | 自分の pane | Claude agent に見せる手段 | 後始末 |
-| ---- | ---- | ---- | ---- |
-| herdr | `HERDR_ENV=1` のセッション | `herdr pane report-agent` (agent=claude, state=idle) | `release-agent` と `pane close` |
-| rex | `REX_BLOCK` の block | 使い捨て block のシェルに Claude Code と同じ OSC 7501 (`state=idle:app=claude-code`) を `printf` させ､`program_status` の record に載せる | `rex block close` |
+使い捨て pane の前景は両 backend とも `/bin/sh <script> <screen>`｡script は limit 風の画面を cat したあと
+`exec cat -v` で居座り､daemon が送る esc・文字列・enter を解釈せずそのまま画面に書く (ESC は `^[`)｡
+shell を受け手にすると ESC の直後の文字を Meta として食う (zsh の `KEYTIMEOUT` 0.4 秒) など shell の解釈が混ざり､
+`--send` で何が届いたかを画面で読めない｡
 
-どちらも登録が backend に載ったことを daemon と同じ経路 (`PaneGet` → `IsClaudeAgent`) で待ってから画面を書く｡
+| backend | 自分の pane | script の起動 | Claude agent に見せる手段 | 後始末 |
+| ---- | ---- | ---- | ---- | ---- |
+| herdr | `HERDR_ENV=1` のセッション | `pane split` は shell しか開けないので､起動を待って `pane run <id> /bin/sh …` と enter を打つ | `herdr pane report-agent` (agent=claude, state=idle) | `release-agent` と `pane close` |
+| rex | `REX_BLOCK` の block | `rex split --shell=none -- /bin/sh …` で shell を挟まず直接 | script の先頭で Claude Code と同じ OSC 7501 (`state=idle:app=claude-code`) を `printf` し､`program_status` の record に載せる | `rex block close` |
 
-`--send` の相手は素の shell なので､画面には `ontinue where you left off.` のように 1 文字目が欠けて出る｡
-esc の 300ms 後 (`menuDismissDelayMs`) に来た文字を zsh が `ESC C` (Meta) として食うためで (`KEYTIMEOUT` 既定 0.4 秒)､
-送信が壊れているのではない｡Claude Code 2.1.296 は単体の ESC を 50ms で escape キーとして確定させる
-(入力の字句解析の `incompleteEscapeTimer`) ので､本物の Claude Code には別々のキーとして届く｡
-受け手がどう解釈するかは simulate では確かめられない (cmd の「証明しないこと」)｡
-rex の `capture` は可視領域しか返さないので､使い捨て block は自分の block の 40% の高さで割る
-(20% だと limit の文言とシェルのプロンプトが収まらない)｡Claude Code の OSC 7501 の書式は 2.1.296 のバイナリから
-読んだもので､公式ドキュメントには無い (「rex の状態の対応」参照)｡
+どちらも登録が backend に載ったことを daemon と同じ経路 (`PaneGet` → `IsClaudeAgent`) で待ってから画面を読む｡
+rex の `capture` は可視領域しか返さないので､使い捨て block は自分の block の 40% の高さで割る｡
+Claude Code の OSC 7501 の書式は 2.1.296 のバイナリから読んだもので､公式ドキュメントには無い
+(「rex の状態の対応」参照)｡
 
 `doctor` は backend (herdr / rex) と選んだ根拠 (`REX_SESSION` の有無)､その server への到達性､Claude pane の
 一覧 (`session_id` が引けなければ `(なし)`) を出す｡daemon の `status.json` の backend が今の環境と違えば

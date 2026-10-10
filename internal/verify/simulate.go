@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -60,32 +61,6 @@ func RunSimulate(ctx context.Context, w io.Writer, p apppath.Paths, opts Simulat
 		return fmt.Errorf("%s に到達できません: %w", kind, err)
 	}
 
-	_, _ = fmt.Fprintf(w, "使い捨て pane を作成します (backend=%s)...\n", kind)
-	ownedPaneID, err := host.SplitPane(ctx)
-	if err != nil {
-		return err
-	}
-	_, _ = fmt.Fprintf(w, "  pane %s を作成しました\n", ownedPaneID)
-	defer cleanupSimulatePane(ctx, w, host, ownedPaneID, opts.Keep)
-
-	// 作りたての pane は shell 起動処理 (direnv の読み込み等) の途中のことがあり､
-	// その間に送ったコマンドが消化されず失われることがある (herdr で実測)｡
-	// 起動が落ち着くまで少し待ってから pane に打ち込む｡
-	time.Sleep(shellStartupDelay)
-
-	marked, err := host.MarkAsClaudeAgent(ctx, ownedPaneID)
-	if err != nil {
-		return err
-	}
-	_, _ = fmt.Fprintf(w, "  pane %s を%s\n", ownedPaneID, marked)
-	// 登録が backend に載ったことを､daemon と同じ経路 (PaneGet → IsClaudeAgent) で確かめる｡
-	// rex では OSC 7501 をシェルが実行して record に載るまでの時間が挟まる｡
-	pane, err := waitForClaudeAgent(ctx, execClient, ownedPaneID, markTimeout)
-	if err != nil {
-		return err
-	}
-	_, _ = fmt.Fprintf(w, "  Claude agent として見えました (agent=%s agent_status=%s)\n", pane.Agent, pane.AgentStatus)
-
 	screenContent := defaultSimulateScreen
 	if opts.ScreenFile != "" {
 		data, readErr := os.ReadFile(opts.ScreenFile) // #nosec G304 -- CLI 引数で明示指定
@@ -94,22 +69,72 @@ func RunSimulate(ctx context.Context, w io.Writer, p apppath.Paths, opts Simulat
 		}
 		screenContent = string(data)
 	}
-	if err := writeScreenIntoPane(ctx, host, execClient, ownedPaneID, screenContent); err != nil {
+	scriptPath, screenPath, removeFiles, err := writeSimulateFiles(simulateScript(host.ProgramStatusCommand()), screenContent)
+	if err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintln(w, "  limit 風の画面を書き込みました")
+	// script は sh が読みながら実行し､screen は script が起動直後に cat する｡どちらも開いた
+	// fd があれば削除後も読めるので､pane の後始末と一緒に消してよい｡
+	defer removeFiles()
+
+	_, _ = fmt.Fprintf(w, "使い捨て pane を作成します (backend=%s)...\n", kind)
+	ownedPaneID, err := host.SplitPane(ctx, scriptPath, screenPath)
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(w, "  pane %s を作成しました (前景は /bin/sh %s)\n", ownedPaneID, scriptPath)
+	defer cleanupSimulatePane(ctx, w, host, ownedPaneID, opts.Keep)
+
+	marked, err := host.MarkAsClaudeAgent(ctx, ownedPaneID)
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(w, "  pane %s: %s\n", ownedPaneID, marked)
+	// 登録が backend に載ったことを､daemon と同じ経路 (PaneGet → IsClaudeAgent) で確かめる｡
+	// rex では script が OSC 7501 を出して record に載るまでの時間が挟まる｡
+	pane, err := waitForClaudeAgent(ctx, execClient, ownedPaneID, markTimeout)
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(w, "  Claude agent として見えました (agent=%s agent_status=%s)\n", pane.Agent, pane.AgentStatus)
+
+	// script の cat が画面に出るのを待つ｡コマンドの投入はレンダリング完了を待たずに戻る
+	// (herdr で実測: 固定 500ms 待機では画面反映前に読んでしまい none 判定になることがあった)｡
+	if marker := lastNonEmptyLine(screenContent); marker != "" {
+		if err := waitForScreenContent(ctx, execClient, ownedPaneID, marker, writeScreenTimeout); err != nil {
+			return err
+		}
+	}
+	_, _ = fmt.Fprintln(w, "  limit 風の画面が表示されました")
 
 	return runSimulateTicks(ctx, w, p, ownedPaneID, execClient, opts)
 }
 
-// writeScreenTimeout は writeScreenIntoPane が画面への反映を待つ最大時間｡
+// writeSimulateFiles は script と画面テキストを一時ディレクトリに書き､そのパスと削除関数を返す｡
+func writeSimulateFiles(script, screen string) (scriptPath, screenPath string, remove func(), err error) {
+	dir, err := os.MkdirTemp("", "agents-daemon-simulate-")
+	if err != nil {
+		return "", "", nil, fmt.Errorf("一時ディレクトリの作成に失敗: %w", err)
+	}
+	remove = func() { _ = os.RemoveAll(dir) }
+	scriptPath = filepath.Join(dir, "simulate.sh")
+	screenPath = filepath.Join(dir, "screen.txt")
+	if err := os.WriteFile(scriptPath, []byte(script), 0o600); err != nil {
+		remove()
+		return "", "", nil, fmt.Errorf("script の書き込みに失敗: %w", err)
+	}
+	if err := os.WriteFile(screenPath, []byte(screen), 0o600); err != nil {
+		remove()
+		return "", "", nil, fmt.Errorf("画面テキストの書き込みに失敗: %w", err)
+	}
+	return scriptPath, screenPath, remove, nil
+}
+
+// writeScreenTimeout は画面への反映を待つ最大時間｡
 const writeScreenTimeout = 5 * time.Second
 
 // markTimeout は Claude agent の登録が backend に載るのを待つ最大時間｡
 const markTimeout = 5 * time.Second
-
-// shellStartupDelay は使い捨て pane を作ってから打ち込みを始めるまで待つ時間｡
-const shellStartupDelay = 1500 * time.Millisecond
 
 // waitForClaudeAgent は paneID が multiplexer.IsClaudeAgent を満たすまで PaneGet をポーリングし､
 // 満たした時点の Pane を返す｡
@@ -136,37 +161,6 @@ func waitForClaudeAgent(ctx context.Context, client multiplexer.Client, paneID s
 		}
 		time.Sleep(150 * time.Millisecond)
 	}
-}
-
-// writeScreenIntoPane は host 経由で paneID のシェルに画面テキストを cat させ､実際に画面へ
-// 反映されるまで待つ｡コマンドの投入はレンダリング完了を待たずに戻ることがある
-// (herdr で実測: 固定 500ms 待機では画面反映前に読んでしまい none 判定になることがあった) ため､
-// 固定 sleep ではなく画面に内容が現れたことを client.PaneRead で確認してから返す｡
-func writeScreenIntoPane(ctx context.Context, host simulateHost, client multiplexer.Client, paneID, content string) error {
-	tmp, err := os.CreateTemp("", "agents-daemon-simulate-*.txt")
-	if err != nil {
-		return fmt.Errorf("画面テキストの一時ファイル作成に失敗: %w", err)
-	}
-	tmpPath := tmp.Name()
-	defer func() { _ = os.Remove(tmpPath) }()
-
-	if _, err := tmp.WriteString(content); err != nil {
-		_ = tmp.Close()
-		return fmt.Errorf("画面テキストの書き込みに失敗: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("画面テキストの一時ファイルのクローズに失敗: %w", err)
-	}
-
-	if err := host.WriteScreen(ctx, paneID, tmpPath); err != nil {
-		return err
-	}
-
-	marker := lastNonEmptyLine(content)
-	if marker == "" {
-		return nil // 空画面なら待つ対象が無い
-	}
-	return waitForScreenContent(ctx, client, paneID, marker, writeScreenTimeout)
 }
 
 // lastNonEmptyLine は s の最後の空白以外を含む行を trim して返す｡--source detection は

@@ -7,27 +7,43 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
-	"strings"
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 )
 
-// simulateHost は使い捨て pane の一生 (作成・Claude agent に見せる・画面の書き込み・後始末) を
-// backend ごとに行う｡multiplexer.Client (PaneList/PaneRead/SendText/SendKeys/ReportMetadata/
-// Reachable) に無い pane のライフサイクル操作で､simulate だけが使うので Client には足さず
-// このパッケージに閉じる｡
+// simulateHost は使い捨て pane の一生 (作成・Claude agent に見せる・後始末) を backend ごとに行う｡
+// multiplexer.Client (PaneList/PaneRead/SendText/SendKeys/ReportMetadata/Reachable) に無い
+// pane のライフサイクル操作で､simulate だけが使うので Client には足さずこのパッケージに閉じる｡
+//
+// 使い捨て pane の前景は両 backend とも `/bin/sh scriptPath screenPath` (simulateScript)｡script が
+// limit 風の画面を出したあと `cat -v` として居座り､daemon が送る esc・文字列・enter をそのまま
+// 画面に書く｡shell を受け手にすると ESC の直後の文字を Meta として食う (zsh の KEYTIMEOUT) など
+// shell 側の解釈が混ざり､送信の検証にならない｡
 type simulateHost interface {
-	// SplitPane は自分の pane を分割して使い捨て pane を作り､その ID を返す｡
-	SplitPane(ctx context.Context) (string, error)
-	// MarkAsClaudeAgent は pane を Claude agent に見せ､何をしたかの説明を返す｡
+	// SplitPane は自分の pane を分割して使い捨て pane を作り､その前景で script を走らせる｡
+	SplitPane(ctx context.Context, scriptPath, screenPath string) (string, error)
+	// MarkAsClaudeAgent は pane を外から Claude agent に見せ､何をしたかの説明を返す｡
+	// pane 自身が OSC 7501 で名乗る backend (rex) では script がそれを担い､ここでは何もしない｡
 	MarkAsClaudeAgent(ctx context.Context, paneID string) (string, error)
-	// WriteScreen は pane のシェルに path の内容を表示させる｡画面への反映は待たない｡
-	WriteScreen(ctx context.Context, paneID, path string) error
+	// ProgramStatusCommand は script の先頭で pane 自身に Claude を名乗らせるコマンド｡
+	// 外から見せる backend (herdr) では空｡
+	ProgramStatusCommand() string
 	// ClosePane は SplitPane が作った pane を閉じる｡
 	ClosePane(ctx context.Context, paneID string) error
 	// CloseCommand は手で閉じるときのコマンド (--keep と後始末の失敗時の案内)｡
 	CloseCommand(paneID string) string
+}
+
+// simulateScript は使い捨て pane の前景で走らせる sh script｡$1 は画面テキストのパス｡
+// `cat -v` は受けた入力を解釈せずそのまま書く (ESC は `^[`) ので､送信の内容が画面で読める｡
+func simulateScript(programStatusCommand string) string {
+	s := "#!/bin/sh\n# agents-daemon simulate の使い捨て pane の前景｡\n"
+	if programStatusCommand != "" {
+		s += programStatusCommand + "\n"
+	}
+	s += "/bin/cat \"$1\"\nexec /bin/cat -v\n"
+	return s
 }
 
 // rawCommandTimeout は backend の CLI を直接叩く 1 回あたりの上限｡
@@ -37,6 +53,11 @@ const rawCommandTimeout = 10 * time.Second
 // 文字列の消化より先に Enter が届くことがある (herdr で実測)｡
 const defaultKeyDelay = 300 * time.Millisecond
 
+// defaultShellStartupDelay は herdr の使い捨て pane を作ってから打ち込みを始めるまで待つ時間｡
+// 作りたての pane は shell 起動処理 (direnv の読み込み等) の途中のことがあり､その間に送った
+// コマンドが消化されず失われることがある (実測)｡
+const defaultShellStartupDelay = 1500 * time.Millisecond
+
 // newSimulateHost は kind の host を作り､使い捨て pane を割り出す基準になる自分の pane が
 // 環境から分かることを確かめる｡
 func newSimulateHost(kind string, getenv func(string) string) (simulateHost, error) {
@@ -45,13 +66,13 @@ func newSimulateHost(kind string, getenv func(string) string) (simulateHost, err
 		if getenv("HERDR_ENV") != "1" {
 			return nil, errors.New("HERDR_ENV=1 の herdr セッション内で実行してください (使い捨て pane を割り出す基準になる自分の pane が要ります)")
 		}
-		return &herdrHost{bin: binPath(getenv, "HERDR_BIN_PATH", "herdr"), keyDelay: defaultKeyDelay}, nil
+		return &herdrHost{bin: binPath(getenv, "HERDR_BIN_PATH", "herdr"), keyDelay: defaultKeyDelay, startupDelay: defaultShellStartupDelay}, nil
 	case sessionstate.MultiplexerKindRex:
 		own := getenv("REX_BLOCK")
 		if own == "" {
 			return nil, errors.New("REX_BLOCK のある rex の block 内で実行してください (使い捨て block を割り出す anchor になる自分の block が要ります)")
 		}
-		return &rexHost{bin: binPath(getenv, "REX_BIN_PATH", "rex"), ownBlock: own, keyDelay: defaultKeyDelay}, nil
+		return &rexHost{bin: binPath(getenv, "REX_BIN_PATH", "rex"), ownBlock: own}, nil
 	default:
 		return nil, fmt.Errorf("未対応の多重化ツール: %q", kind)
 	}
@@ -79,19 +100,23 @@ func runRaw(ctx context.Context, bin string, args ...string) ([]byte, error) {
 	return outBuf.Bytes(), nil
 }
 
-// herdrHost は herdr の pane split / report-agent / run / send-keys / release-agent / close で
+// herdrHost は herdr の pane split / run / send-keys / report-agent / release-agent / close で
 // 使い捨て pane を扱う｡
 type herdrHost struct {
-	bin      string
-	keyDelay time.Duration
+	bin          string
+	keyDelay     time.Duration
+	startupDelay time.Duration
 }
 
 func (h *herdrHost) run(ctx context.Context, args ...string) ([]byte, error) {
 	return runRaw(ctx, h.bin, args...)
 }
 
-// SplitPane は現在の pane (--current) を下へ分割する｡現在の pane の内容には影響しない｡
-func (h *herdrHost) SplitPane(ctx context.Context) (string, error) {
+// SplitPane は現在の pane (--current) を下へ分割し､開いた shell に script を打ち込む｡
+// herdr の pane split はコマンドを取らず shell しか開けないので､shell の起動を待ってから
+// `pane run` で打つ｡`pane run` はコマンド文字列を入力するだけで Enter は押さない (実測)｡
+// 打ち込みに失敗したら作った pane を閉じてから失敗を返す (呼び出し側は ID を知らないため)｡
+func (h *herdrHost) SplitPane(ctx context.Context, scriptPath, screenPath string) (string, error) {
 	out, err := h.run(ctx, "pane", "split", "--current", "--direction", "down", "--ratio", "0.2", "--no-focus")
 	if err != nil {
 		return "", fmt.Errorf("使い捨て pane の作成に失敗: %w", err)
@@ -113,10 +138,27 @@ func (h *herdrHost) SplitPane(ctx context.Context) (string, error) {
 	if env.Error != nil {
 		return "", fmt.Errorf("herdr pane split: %s (%s)", env.Error.Message, env.Error.Code)
 	}
-	if env.Result.Pane.PaneID == "" {
+	paneID := env.Result.Pane.PaneID
+	if paneID == "" {
 		return "", fmt.Errorf("pane split の応答に pane_id が含まれていません (stdout=%q)", out)
 	}
-	return env.Result.Pane.PaneID, nil
+
+	time.Sleep(h.startupDelay)
+	if err := h.typeCommand(ctx, paneID, "/bin/sh", scriptPath, screenPath); err != nil {
+		closeErr := h.ClosePane(ctx, paneID)
+		return "", fmt.Errorf("pane %s への script の打ち込みに失敗: %w", paneID, errors.Join(err, closeErr))
+	}
+	return paneID, nil
+}
+
+// typeCommand は pane の shell に command を入力して Enter を送る｡
+func (h *herdrHost) typeCommand(ctx context.Context, paneID string, command ...string) error {
+	if _, err := h.run(ctx, append([]string{"pane", "run", paneID}, command...)...); err != nil {
+		return err
+	}
+	time.Sleep(h.keyDelay)
+	_, err := h.run(ctx, "pane", "send-keys", paneID, "enter")
+	return err
 }
 
 // MarkAsClaudeAgent は herdr pane report-agent で paneID を Claude agent に見せかける｡
@@ -127,20 +169,7 @@ func (h *herdrHost) MarkAsClaudeAgent(ctx context.Context, paneID string) (strin
 	return "Claude agent として herdr に登録しました (agent=claude, state=idle)", nil
 }
 
-// WriteScreen は herdr pane run で paneID のシェルに path を cat させる｡send-text だと
-// 文字ごとの入力になり､内容によってはシェルへのコマンドとして解釈されかねない
-// (実機確認済み: `herdr pane run <id> cat <file>` なら静的な表示に留まる)｡
-// herdr pane run はコマンド文字列を pane に入力するだけで Enter は押さない (実測)｡
-func (h *herdrHost) WriteScreen(ctx context.Context, paneID, path string) error {
-	if _, err := h.run(ctx, "pane", "run", paneID, "cat", path); err != nil {
-		return fmt.Errorf("pane %s への画面テキスト書き込みに失敗: %w", paneID, err)
-	}
-	time.Sleep(h.keyDelay)
-	if _, err := h.run(ctx, "pane", "send-keys", paneID, "enter"); err != nil {
-		return fmt.Errorf("pane %s への enter 送信に失敗: %w", paneID, err)
-	}
-	return nil
-}
+func (h *herdrHost) ProgramStatusCommand() string { return "" }
 
 func (h *herdrHost) ClosePane(ctx context.Context, paneID string) error {
 	var errs []error
@@ -157,19 +186,17 @@ func (h *herdrHost) CloseCommand(paneID string) string {
 	return "herdr pane close " + paneID
 }
 
-// rexHost は rex の split / send / send-key / block close で使い捨て block を扱う｡
+// rexHost は rex の split / block close で使い捨て block を扱う｡
 // rex には herdr の report-agent に当たるものが無く､Claude の判定は Claude Code 自身が出す
-// OSC 7501 (`block call program_status` の record) に頼る｡そこで使い捨て block のシェルに
+// OSC 7501 (`block call program_status` の record) に頼る｡そこで使い捨て block の script に
 // 同じ OSC 7501 を printf させ､本番と同じ判定 (rexcli の toPane) を通す｡
 type rexHost struct {
 	bin      string
 	ownBlock string
-	keyDelay time.Duration
 }
 
 // claudeProgramStatusCommand は Claude Code 2.1.296 が入力待ちで出すものと同じ書式の OSC 7501｡
-// payload は `key=value` を `:` で繋ぎ､終端は BEL｡printf に解釈させる形で送り､生の
-// ESC / BEL を pty に流さない｡
+// payload は `key=value` を `:` で繋ぎ､終端は BEL｡
 const claudeProgramStatusCommand = `printf '\033]7501;state=idle:app=claude-code\a'`
 
 // run は rex を実行する｡server が落ちているときに CLI が起こさないよう autostart を切る (rexcli と同じ)｡
@@ -177,10 +204,11 @@ func (h *rexHost) run(ctx context.Context, args ...string) ([]byte, error) {
 	return runRaw(ctx, h.bin, append([]string{"--autostart=false"}, args...)...)
 }
 
-// SplitPane は自分の block (REX_BLOCK) の下にシェルの block を作る｡rex の capture は可視領域しか
-// 返さないので､limit 風の画面とシェルのプロンプトが収まる高さ (40%) を取る｡
-func (h *rexHost) SplitPane(ctx context.Context) (string, error) {
-	out, err := h.run(ctx, "split", "-b", h.ownBlock, "--split=below", "--ratio", "40", "--focus=false", "--label", simulateMetadataSource, "--json")
+// SplitPane は自分の block (REX_BLOCK) の下に block を作り､shell を挟まず script を直接走らせる
+// (--shell=none)｡rex の capture は可視領域しか返さないので､limit 風の画面が収まる高さ (40%) を取る｡
+// script が落ちたときに画面を読めるよう --keep-open を付ける｡
+func (h *rexHost) SplitPane(ctx context.Context, scriptPath, screenPath string) (string, error) {
+	out, err := h.run(ctx, "split", "-b", h.ownBlock, "--split=below", "--ratio", "40", "--focus=false", "--keep-open", "--shell=none", "--label", simulateMetadataSource, "--json", "--", "/bin/sh", scriptPath, screenPath)
 	if err != nil {
 		return "", fmt.Errorf("使い捨て block の作成に失敗: %w", err)
 	}
@@ -196,29 +224,11 @@ func (h *rexHost) SplitPane(ctx context.Context) (string, error) {
 	return res.BlockIDs[0], nil
 }
 
-// typeCommand は block のシェルに command を入力して Enter を送る｡
-func (h *rexHost) typeCommand(ctx context.Context, blockID, command string) error {
-	if _, err := h.run(ctx, "send", "-b", blockID, command); err != nil {
-		return err
-	}
-	time.Sleep(h.keyDelay)
-	_, err := h.run(ctx, "send-key", "-b", blockID, "enter")
-	return err
+func (h *rexHost) MarkAsClaudeAgent(context.Context, string) (string, error) {
+	return "script が OSC 7501 で Claude Code を名乗りました (app=claude-code, state=idle)", nil
 }
 
-func (h *rexHost) MarkAsClaudeAgent(ctx context.Context, paneID string) (string, error) {
-	if err := h.typeCommand(ctx, paneID, claudeProgramStatusCommand); err != nil {
-		return "", fmt.Errorf("block %s のシェルに OSC 7501 を出させられませんでした: %w", paneID, err)
-	}
-	return "シェルから OSC 7501 を出し､Claude Code を名乗らせました (app=claude-code, state=idle)", nil
-}
-
-func (h *rexHost) WriteScreen(ctx context.Context, paneID, path string) error {
-	if err := h.typeCommand(ctx, paneID, "cat "+shellQuote(path)); err != nil {
-		return fmt.Errorf("block %s への画面テキスト書き込みに失敗: %w", paneID, err)
-	}
-	return nil
-}
+func (h *rexHost) ProgramStatusCommand() string { return claudeProgramStatusCommand }
 
 func (h *rexHost) ClosePane(ctx context.Context, paneID string) error {
 	_, err := h.run(ctx, "block", "close", paneID)
@@ -227,9 +237,4 @@ func (h *rexHost) ClosePane(ctx context.Context, paneID string) error {
 
 func (h *rexHost) CloseCommand(paneID string) string {
 	return "rex block close " + paneID
-}
-
-// shellQuote は s をシングルクォートで包む｡中のシングルクォートは閉じて逃がして開き直す｡
-func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }

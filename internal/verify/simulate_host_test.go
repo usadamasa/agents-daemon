@@ -44,40 +44,76 @@ func TestNewSimulateHost_前提チェック(t *testing.T) {
 	})
 }
 
-// fakeRex は呼び出しを calls.log へ追記し､split にだけ fixture の JSON を返す fake の rex｡
-type fakeRex struct {
+func TestSimulateScript(t *testing.T) {
+	t.Run("rex: OSC 7501 を出してから画面を cat し cat -v で居座る", func(t *testing.T) {
+		got := simulateScript(claudeProgramStatusCommand)
+		// Claude Code 2.1.296 と同じ書式: OSC 7501 ; state=<state>:app=claude-code BEL｡
+		wantOrder := []string{
+			"#!/bin/sh\n",
+			`printf '\033]7501;state=idle:app=claude-code\a'` + "\n",
+			`/bin/cat "$1"` + "\n",
+			"exec /bin/cat -v\n",
+		}
+		rest := got
+		for _, want := range wantOrder {
+			i := strings.Index(rest, want)
+			if i < 0 {
+				t.Fatalf("script に %q がこの順で無い:\n%s", want, got)
+			}
+			rest = rest[i+len(want):]
+		}
+	})
+	t.Run("herdr: OSC 7501 の行は無い", func(t *testing.T) {
+		got := simulateScript("")
+		if strings.Contains(got, "7501") {
+			t.Errorf("herdr の script に OSC 7501 がある:\n%s", got)
+		}
+		if !strings.Contains(got, "exec /bin/cat -v\n") {
+			t.Errorf("受け手の cat -v が無い:\n%s", got)
+		}
+	})
+}
+
+// fakeCLI は呼び出しを calls.log へ追記し､サブコマンドごとの fixture (stdout) を返す fake の CLI｡
+type fakeCLI struct {
 	dir string
 	bin string
 }
 
-func newFakeRex(t *testing.T, splitJSON string) *fakeRex {
+// newFakeCLI は fixtures の key (引数の先頭の語を空白で繋いだもの) に一致する呼び出しにその内容を返す｡
+// skipFirst は calls.log と fixture の照合から除く先頭の引数 (rex の --autostart=false)｡
+func newFakeCLI(t *testing.T, name, skipFirst string, fixtures map[string]string) *fakeCLI {
 	t.Helper()
 	dir := t.TempDir()
 	script := `#!/bin/sh
 d='` + dir + `'
 printf '%s\n' "$*" >> "$d/calls.log"
-if [ "$1" != "--autostart=false" ]; then
-  echo "Error: --autostart=false がない" >&2
-  exit 2
-fi
+`
+	if skipFirst != "" {
+		script += `if [ "$1" != '` + skipFirst + `' ]; then echo "Error: ` + skipFirst + ` がない" >&2; exit 2; fi
 shift
-case "$1" in
-  split) cat "$d/split.json" ;;
-  send|send-key|block) ;;
-  *) echo "Error: unknown command $1" >&2; exit 2 ;;
+`
+	}
+	script += `case "$1 $2" in
+`
+	for key, content := range fixtures {
+		name := strings.ReplaceAll(key, " ", "-") + ".out"
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600); err != nil {
+			t.Fatalf("fixture の作成に失敗: %v", err)
+		}
+		script += `  "` + key + `"*) cat "$d/` + name + `" ;;` + "\n"
+	}
+	script += `  *) ;;
 esac
 `
-	bin := filepath.Join(dir, "rex")
+	bin := filepath.Join(dir, name)
 	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil { // #nosec G306 -- テスト用の実行ファイル
-		t.Fatalf("fake rex の作成に失敗: %v", err)
+		t.Fatalf("fake %s の作成に失敗: %v", name, err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "split.json"), []byte(splitJSON), 0o600); err != nil {
-		t.Fatalf("fixture の作成に失敗: %v", err)
-	}
-	return &fakeRex{dir: dir, bin: bin}
+	return &fakeCLI{dir: dir, bin: bin}
 }
 
-func (f *fakeRex) calls(t *testing.T) []string {
+func (f *fakeCLI) calls(t *testing.T) []string {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join(f.dir, "calls.log"))
 	if err != nil {
@@ -86,16 +122,18 @@ func (f *fakeRex) calls(t *testing.T) []string {
 	return strings.Split(strings.TrimSpace(string(data)), "\n")
 }
 
-func (f *fakeRex) host() *rexHost {
-	return &rexHost{bin: f.bin, ownBlock: "block:mine", keyDelay: 0}
+// 実測 (rex.md) の split --json の形｡API の new_split は block_ids / anchor_block_id / split_ids / revision を返す｡
+const rexSplitJSON = `{"anchor_block_id":"block:mine","block_ids":["block:01a1-new"],"split_ids":["split:01a1"],"revision":7,"window_id":"window:01a1"}`
+
+func newFakeRex(t *testing.T, splitJSON string) (*fakeCLI, *rexHost) {
+	t.Helper()
+	f := newFakeCLI(t, "rex", "--autostart=false", map[string]string{"split -b": splitJSON})
+	return f, &rexHost{bin: f.bin, ownBlock: "block:mine"}
 }
 
-// 実測 (rex.md) の split --json の形｡API の new_split は block_ids / anchor_block_id / split_ids / revision を返す｡
-const splitJSON = `{"anchor_block_id":"block:mine","block_ids":["block:01a1-new"],"split_ids":["split:01a1"],"revision":7,"window_id":"window:01a1"}`
-
 func TestRexHost_SplitPane(t *testing.T) {
-	f := newFakeRex(t, splitJSON)
-	got, err := f.host().SplitPane(context.Background())
+	f, h := newFakeRex(t, rexSplitJSON)
+	got, err := h.SplitPane(context.Background(), "/tmp/sim/simulate.sh", "/tmp/sim/screen.txt")
 	if err != nil {
 		t.Fatalf("SplitPane() error = %v", err)
 	}
@@ -106,65 +144,38 @@ func TestRexHost_SplitPane(t *testing.T) {
 	if len(calls) != 1 {
 		t.Fatalf("呼び出し回数 = %d, want 1: %v", len(calls), calls)
 	}
-	for _, want := range []string{"--autostart=false", "split", "-b block:mine", "--focus=false", "--json"} {
+	for _, want := range []string{
+		"--autostart=false", "split", "-b block:mine", "--focus=false", "--keep-open", "--shell=none", "--json",
+		"-- /bin/sh /tmp/sim/simulate.sh /tmp/sim/screen.txt",
+	} {
 		if !strings.Contains(calls[0], want) {
 			t.Errorf("split の引数に %q が無い: %s", want, calls[0])
 		}
 	}
-	if strings.Contains(calls[0], " -- ") {
-		t.Errorf("split にコマンドを渡している (shell のまま開く必要がある): %s", calls[0])
-	}
 }
 
 func TestRexHost_SplitPane_block_idsが空なら失敗(t *testing.T) {
-	f := newFakeRex(t, `{"anchor_block_id":"block:mine","block_ids":[],"split_ids":[],"revision":7}`)
-	if _, err := f.host().SplitPane(context.Background()); err == nil {
+	_, h := newFakeRex(t, `{"anchor_block_id":"block:mine","block_ids":[],"split_ids":[],"revision":7}`)
+	if _, err := h.SplitPane(context.Background(), "/tmp/sim/simulate.sh", "/tmp/sim/screen.txt"); err == nil {
 		t.Fatal("SplitPane() error = nil, want block_ids が空のエラー")
 	}
 }
 
-func TestRexHost_MarkAsClaudeAgent_OSC7501をシェルに打たせる(t *testing.T) {
-	f := newFakeRex(t, splitJSON)
-	if _, err := f.host().MarkAsClaudeAgent(context.Background(), "block:01a1-new"); err != nil {
+func TestRexHost_MarkAsClaudeAgentは外から何もしない(t *testing.T) {
+	f, h := newFakeRex(t, rexSplitJSON)
+	if _, err := h.MarkAsClaudeAgent(context.Background(), "block:01a1-new"); err != nil {
 		t.Fatalf("MarkAsClaudeAgent() error = %v", err)
 	}
-	calls := f.calls(t)
-	if len(calls) != 2 {
-		t.Fatalf("呼び出し = %v, want send と send-key の 2 回", calls)
+	if _, err := os.Stat(filepath.Join(f.dir, "calls.log")); err == nil {
+		t.Errorf("rex を呼んでいる: %v", f.calls(t))
 	}
-	if !strings.HasPrefix(calls[0], "--autostart=false send -b block:01a1-new ") {
-		t.Errorf("1 回目 = %q, want send -b block:01a1-new …", calls[0])
-	}
-	// Claude Code 2.1.296 と同じ書式: OSC 7501 ; state=<state>:app=claude-code BEL｡
-	// printf に解釈させる形で送り､生の ESC / BEL は pty に流さない｡
-	if !strings.Contains(calls[0], `printf '\033]7501;state=idle:app=claude-code\a'`) {
-		t.Errorf("1 回目に OSC 7501 の printf が無い: %q", calls[0])
-	}
-	if calls[1] != "--autostart=false send-key -b block:01a1-new enter" {
-		t.Errorf("2 回目 = %q, want send-key enter", calls[1])
-	}
-}
-
-func TestRexHost_WriteScreen_catをシェルに打たせる(t *testing.T) {
-	f := newFakeRex(t, splitJSON)
-	if err := f.host().WriteScreen(context.Background(), "block:01a1-new", "/tmp/dir with space/screen.txt"); err != nil {
-		t.Fatalf("WriteScreen() error = %v", err)
-	}
-	calls := f.calls(t)
-	if len(calls) != 2 {
-		t.Fatalf("呼び出し = %v, want send と send-key の 2 回", calls)
-	}
-	if calls[0] != "--autostart=false send -b block:01a1-new cat '/tmp/dir with space/screen.txt'" {
-		t.Errorf("1 回目 = %q, want cat をシングルクォートで", calls[0])
-	}
-	if calls[1] != "--autostart=false send-key -b block:01a1-new enter" {
-		t.Errorf("2 回目 = %q, want send-key enter", calls[1])
+	if h.ProgramStatusCommand() != claudeProgramStatusCommand {
+		t.Errorf("ProgramStatusCommand() = %q", h.ProgramStatusCommand())
 	}
 }
 
 func TestRexHost_ClosePane(t *testing.T) {
-	f := newFakeRex(t, splitJSON)
-	h := f.host()
+	f, h := newFakeRex(t, rexSplitJSON)
 	if err := h.ClosePane(context.Background(), "block:01a1-new"); err != nil {
 		t.Fatalf("ClosePane() error = %v", err)
 	}
@@ -174,6 +185,64 @@ func TestRexHost_ClosePane(t *testing.T) {
 	}
 	if got := h.CloseCommand("block:01a1-new"); got != "rex block close block:01a1-new" {
 		t.Errorf("CloseCommand() = %q", got)
+	}
+}
+
+const herdrSplitJSON = `{"result":{"pane":{"pane_id":"wH:pNew"}}}`
+
+func newFakeHerdr(t *testing.T, splitJSON string) (*fakeCLI, *herdrHost) {
+	t.Helper()
+	f := newFakeCLI(t, "herdr", "", map[string]string{"pane split": splitJSON})
+	return f, &herdrHost{bin: f.bin}
+}
+
+func TestHerdrHost_SplitPane_shellを開いてからscriptを打ち込む(t *testing.T) {
+	f, h := newFakeHerdr(t, herdrSplitJSON)
+	got, err := h.SplitPane(context.Background(), "/tmp/sim/simulate.sh", "/tmp/sim/screen.txt")
+	if err != nil {
+		t.Fatalf("SplitPane() error = %v", err)
+	}
+	if got != "wH:pNew" {
+		t.Errorf("SplitPane() = %q, want wH:pNew", got)
+	}
+	want := []string{
+		"pane split --current --direction down --ratio 0.2 --no-focus",
+		"pane run wH:pNew /bin/sh /tmp/sim/simulate.sh /tmp/sim/screen.txt",
+		"pane send-keys wH:pNew enter",
+	}
+	calls := f.calls(t)
+	if strings.Join(calls, "\n") != strings.Join(want, "\n") {
+		t.Errorf("呼び出し =\n%s\nwant\n%s", strings.Join(calls, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+func TestHerdrHost_SplitPane_応答のerrorで失敗(t *testing.T) {
+	_, h := newFakeHerdr(t, `{"error":{"code":"not_found","message":"no current pane"}}`)
+	_, err := h.SplitPane(context.Background(), "/tmp/sim/simulate.sh", "/tmp/sim/screen.txt")
+	if err == nil || !strings.Contains(err.Error(), "no current pane") {
+		t.Fatalf("SplitPane() error = %v, want herdr のエラーを含む", err)
+	}
+}
+
+func TestHerdrHost_MarkAsClaudeAgentとClosePane(t *testing.T) {
+	f, h := newFakeHerdr(t, herdrSplitJSON)
+	if _, err := h.MarkAsClaudeAgent(context.Background(), "wH:pNew"); err != nil {
+		t.Fatalf("MarkAsClaudeAgent() error = %v", err)
+	}
+	if err := h.ClosePane(context.Background(), "wH:pNew"); err != nil {
+		t.Fatalf("ClosePane() error = %v", err)
+	}
+	want := []string{
+		"pane report-agent wH:pNew --source agents-daemon-simulate --agent claude --state idle",
+		"pane release-agent wH:pNew --source agents-daemon-simulate --agent claude",
+		"pane close wH:pNew",
+	}
+	calls := f.calls(t)
+	if strings.Join(calls, "\n") != strings.Join(want, "\n") {
+		t.Errorf("呼び出し =\n%s\nwant\n%s", strings.Join(calls, "\n"), strings.Join(want, "\n"))
+	}
+	if h.ProgramStatusCommand() != "" {
+		t.Errorf("herdr の ProgramStatusCommand() = %q, want 空", h.ProgramStatusCommand())
 	}
 }
 

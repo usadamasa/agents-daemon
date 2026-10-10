@@ -285,6 +285,7 @@ func TestRunSimulate_RealRex(t *testing.T) {
 		"(backend=rex)",
 		"を作成しました",
 		"Claude agent として見えました (agent=claude agent_status=idle)",
+		"limit 風の画面が表示されました",
 		"1 回目の Tick → Outcome: waiting",
 		"2 回目の Tick → Outcome:",
 		"を閉じました",

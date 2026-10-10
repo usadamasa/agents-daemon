@@ -9,6 +9,8 @@ import (
 	"os"
 	"slices"
 	"time"
+
+	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
 
 // transcriptTailBytes は transcript の末尾から読む量｡直近の応答と最新の cache write が
@@ -58,7 +60,7 @@ func (s Store) WriteCacheAck(sessionID, value string) error {
 	if err != nil || path == "" {
 		return err
 	}
-	return writeFileAtomic(path, ".cache-ack.*", []byte(value))
+	return statefile.WriteFileAtomic(path, ".cache-ack.*", []byte(value))
 }
 
 // transcriptEntry は transcript JSONL の 1 行のうち要る部分｡形式は Claude Code の内部

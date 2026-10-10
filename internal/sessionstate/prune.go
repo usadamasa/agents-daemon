@@ -28,7 +28,7 @@ const (
 )
 
 // Prune は保持期間を過ぎた sidecar file を削除し､消した数を利用上限 state と
-// それ以外 (compact 関連と cache と cache-ack と cost の日) に分けて返す｡ディレクトリが空文字列 (ゼロ値の
+// それ以外 (compact 関連と cache と cache-ack) に分けて返す｡ディレクトリが空文字列 (ゼロ値の
 // Store) または存在しない場合は何もしない｡
 func (s Store) Prune(now time.Time) (rateLimits, compacts int, err error) {
 	var errs []error
@@ -47,13 +47,6 @@ func (s Store) Prune(now time.Time) (rateLimits, compacts int, err error) {
 	n, ackErr := pruneDir(s.CacheAck, now, cacheAckRetention)
 	if ackErr != nil {
 		errs = append(errs, ackErr)
-	}
-	compacts += n
-	// cost は日付のディレクトリ単位で消す (statusline がその日の最初の書き込みでも消すが､
-	// 描画が無い日が続いても daemon が拾う)｡
-	n, costErr := s.pruneCostDays(now)
-	if costErr != nil {
-		errs = append(errs, costErr)
 	}
 	compacts += n
 	return rateLimits, compacts, errors.Join(errs...)

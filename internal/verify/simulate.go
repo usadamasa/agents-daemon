@@ -123,7 +123,7 @@ func writeSimulateFiles(script, screen string) (scriptPath, screenPath string, r
 		remove()
 		return "", "", nil, fmt.Errorf("script の書き込みに失敗: %w", err)
 	}
-	if err := os.WriteFile(screenPath, []byte(screen), 0o600); err != nil {
+	if err := os.WriteFile(screenPath, []byte(screen), 0o600); err != nil { // #nosec G703 -- screenPath は MkdirTemp のディレクトリ配下の固定名｡screen の中身は --screen-file の内容で､パスには使わない
 		remove()
 		return "", "", nil, fmt.Errorf("画面テキストの書き込みに失敗: %w", err)
 	}

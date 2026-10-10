@@ -72,7 +72,6 @@ func TestLoad(t *testing.T) {
 			"submitDelayMs": 200,
 			"engagedLabel": "waiting",
 			"customPatterns": ["foo.*bar"],
-			"customTransientPatterns": ["baz.*qux"],
 			"idleShutdownMinutes": 15,
 			"deferToNativeAutoContinue": false,
 			"compactStallEnabled": false,
@@ -116,7 +115,6 @@ func TestLoad(t *testing.T) {
 			SubmitDelayMs:           200,
 			EngagedLabel:            "waiting",
 			CustomPatterns:          []string{"foo.*bar"},
-			CustomTransientPatterns: []string{"baz.*qux"},
 			IdleShutdownMinutes:     15,
 
 			DeferToNativeAutoContinue:   false,

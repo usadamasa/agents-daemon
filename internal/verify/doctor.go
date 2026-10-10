@@ -214,7 +214,6 @@ func configFields(cfg, def config.Config) []configFieldReport {
 		{"submitDelayMs", cfg.SubmitDelayMs, def.SubmitDelayMs},
 		{"engagedLabel", cfg.EngagedLabel, def.EngagedLabel},
 		{"customPatterns", cfg.CustomPatterns, def.CustomPatterns},
-		{"customTransientPatterns", cfg.CustomTransientPatterns, def.CustomTransientPatterns},
 		{"idleShutdownMinutes", cfg.IdleShutdownMinutes, def.IdleShutdownMinutes},
 		{"deferToNativeAutoContinue", cfg.DeferToNativeAutoContinue, def.DeferToNativeAutoContinue},
 		{"compactStallEnabled", cfg.CompactStallEnabled, def.CompactStallEnabled},

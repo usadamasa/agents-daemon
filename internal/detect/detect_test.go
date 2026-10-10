@@ -7,9 +7,9 @@ import (
 )
 
 func TestClassify(t *testing.T) {
-	newC := func(t *testing.T, extraLimit, extraTransient []string) *Classifier {
+	newC := func(t *testing.T, extraLimit []string) *Classifier {
 		t.Helper()
-		c, err := NewClassifier(extraLimit, extraTransient)
+		c, err := NewClassifier(extraLimit)
 		if err != nil {
 			t.Fatalf("NewClassifier() エラー: %v", err)
 		}
@@ -30,7 +30,7 @@ func TestClassify(t *testing.T) {
 			`  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents`,
 		}, "\n")
 
-		c := newC(t, nil, nil)
+		c := newC(t, nil)
 		if got := c.Classify(screen, 12); got != KindNone {
 			t.Errorf("Classify() = %v, want %v (実機フッターの誤検知)", got, KindNone)
 		}
@@ -38,7 +38,7 @@ func TestClassify(t *testing.T) {
 
 	t.Run("上限フレーズとリセット時刻フレーズが近傍にあれば limit", func(t *testing.T) {
 		screen := "Claude usage limit reached. Your limit will reset at 3pm."
-		c := newC(t, nil, nil)
+		c := newC(t, nil)
 		if got := c.Classify(screen, 0); got != KindLimit {
 			t.Errorf("Classify() = %v, want %v", got, KindLimit)
 		}
@@ -49,7 +49,7 @@ func TestClassify(t *testing.T) {
 			"· Approaching your limit — 85% of your 5-hour limit",
 			"  Resets at 3pm",
 		}, "\n")
-		c := newC(t, nil, nil)
+		c := newC(t, nil)
 		if got := c.Classify(screen, 0); got != KindNone {
 			t.Errorf("Classify() = %v, want %v (使用率警告の誤検知)", got, KindNone)
 		}
@@ -60,7 +60,7 @@ func TestClassify(t *testing.T) {
 			"session limit",
 			strings.Repeat("no reset info here\n", 10),
 		}, "\n")
-		c := newC(t, nil, nil)
+		c := newC(t, nil)
 		if got := c.Classify(screen, 0); got != KindNone {
 			t.Errorf("Classify() = %v, want %v (2 シグナル要件が働いていない)", got, KindNone)
 		}
@@ -71,7 +71,7 @@ func TestClassify(t *testing.T) {
 			"⏺ Running task",
 			"⎿  API Error: 500 Internal Server Error",
 		}, "\n")
-		c := newC(t, nil, nil)
+		c := newC(t, nil)
 		if got := c.Classify(screen, 0); got != KindTransient {
 			t.Errorf("Classify() = %v, want %v", got, KindTransient)
 		}
@@ -79,16 +79,17 @@ func TestClassify(t *testing.T) {
 
 	t.Run("Claude Code の API Error 行なら ⏺ でも ⎿ でも transient と判定する", func(t *testing.T) {
 		// 文言は Claude Code 2.1.296 の bundle から採った (接頭辞 "API Error" と
-		// "Server is temporarily limiting requests (not your usage limit)" ､
+		// "Repeated 529 Overloaded errors" ､"Server is temporarily limiting requests (not your usage limit)" ､
 		// "This is a server-side issue, usually temporary — try again in a moment.")｡
 		for _, line := range []string{
 			`⏺ API Error: 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}`,
+			`⏺ API Error: Repeated 529 Overloaded errors. The API is at capacity — this is usually temporary. Try again in a moment.`,
 			`⏺ API Error: Overloaded. This is a server-side issue, usually temporary — try again in a moment.`,
-			`⏺ API Error: Server is temporarily limiting requests (not your usage limit)`,
-			`  ⎿  API Error: 500 Internal Server Error · Retrying in 2s · attempt 1/10`,
+			`⏺ API Error: Server is temporarily limiting requests (not your usage limit) · this may be a temporary capacity issue.`,
+			`  ⎿  API Error: 500 Internal Server Error`,
 			`  ⎿  API Error: 429 the request was rate limited`,
 		} {
-			c := newC(t, nil, nil)
+			c := newC(t, nil)
 			if got := c.Classify(line, 0); got != KindTransient {
 				t.Errorf("Classify(%q) = %v, want %v", line, got, KindTransient)
 			}
@@ -98,14 +99,30 @@ func TestClassify(t *testing.T) {
 	t.Run("API Error の無い行の transient 語句は tool result の文章なので拾わない", func(t *testing.T) {
 		// tool result (⎿ の下の継続行) には利用者とツールが書く任意の文章が流れる｡
 		for _, screen := range []string{
-			"⏺ Bash(gh issue list)\n  ⎿  usadamasa/twigpui#298\tステータスバーが \"rate limited\" と出る",
+			"⏺ Bash(gh issue list)\n  ⎿  owner/repo#1\tlist の同期を速くする\n     owner/repo#2\tステータスバーが \"rate limited\" と出る",
 			"⏺ Bash(kubectl logs api)\n  ⎿  upstream overloaded, shedding load\n     retrying",
 			"⏺ Read(docs/runbook.md)\n  ⎿  nginx が internal server error を返したら",
 			"⏺ Bash(rg -n 'rate limited' skills/)\n  ⎿  skills/x/SKILL.md:12: 上流が rate limited を返したら待つ",
 		} {
-			c := newC(t, nil, nil)
+			c := newC(t, nil)
 			if got := c.Classify(screen, 0); got != KindNone {
 				t.Errorf("Classify(%q) = %v, want %v (tool result の文章を transient と誤検知)", screen, got, KindNone)
+			}
+		}
+	})
+
+	t.Run("Claude Code 自身がリトライ中のカウントダウン行は接頭辞が無いので拾わない", func(t *testing.T) {
+		// 2.1.296 の描画は `<エラー文言> · Retrying in Ns · attempt n/m` で､3 回目までは
+		// 文言が "API error" に伏せられ､以降は接頭辞無しの formatted エラーになる｡
+		// この間は Claude Code 自身が回復中なので手を出さない｡
+		for _, line := range []string{
+			"  ⎿  API error · Retrying in 2s · attempt 1/10",
+			`  ⎿  529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}} · Retrying in 8s · attempt 3/10`,
+			"  ⎿  500 Internal Server Error · Retrying in 16s · attempt 4/10",
+		} {
+			c := newC(t, nil)
+			if got := c.Classify(line, 0); got != KindNone {
+				t.Errorf("Classify(%q) = %v, want %v (ネイティブのリトライ中に割り込む)", line, got, KindNone)
 			}
 		}
 	})
@@ -116,7 +133,7 @@ func TestClassify(t *testing.T) {
 			"⏺ API Error: 401 Invalid API key · Please run /login",
 			"⏺ API Error: Request was aborted.",
 		} {
-			c := newC(t, nil, nil)
+			c := newC(t, nil)
 			if got := c.Classify(line, 0); got != KindNone {
 				t.Errorf("Classify(%q) = %v, want %v", line, got, KindNone)
 			}
@@ -131,7 +148,7 @@ func TestClassify(t *testing.T) {
 			"⏺ New task",
 			"⎿  Done successfully",
 		}, "\n")
-		c := newC(t, nil, nil)
+		c := newC(t, nil)
 		if got := c.Classify(screen, 0); got != KindNone {
 			t.Errorf("Classify() = %v, want %v (古いエラーの再発火)", got, KindNone)
 		}
@@ -145,7 +162,7 @@ func TestClassify(t *testing.T) {
 		}
 		screen := strings.Join(lines, "\n")
 
-		c := newC(t, nil, nil)
+		c := newC(t, nil)
 		if got := c.Classify(screen, 5); got != KindNone {
 			t.Errorf("Classify() = %v, want %v (tailLines で除外されるはず)", got, KindNone)
 		}
@@ -159,7 +176,7 @@ func TestClassify(t *testing.T) {
 			"account cap hit",
 			"resets in: 90",
 		}, "\n")
-		c := newC(t, []string{"account cap hit"}, nil)
+		c := newC(t, []string{"account cap hit"})
 		if got := c.Classify(screen, 0); got != KindLimit {
 			t.Errorf("Classify() = %v, want %v (追加 limit パターンが効いていない)", got, KindLimit)
 		}
@@ -167,36 +184,14 @@ func TestClassify(t *testing.T) {
 
 	t.Run("設定由来の追加 limit パターンでも近傍にリセット時刻が無ければ発火しない", func(t *testing.T) {
 		screen := "account cap hit, nothing else here"
-		c := newC(t, []string{"account cap hit"}, nil)
+		c := newC(t, []string{"account cap hit"})
 		if got := c.Classify(screen, 0); got != KindNone {
 			t.Errorf("Classify() = %v, want %v (2 シグナル要件が追加パターンに適用されていない)", got, KindNone)
 		}
 	})
 
-	t.Run("設定由来の追加 transient パターンは API Error 行で効く", func(t *testing.T) {
-		screen := strings.Join([]string{
-			"⏺ Running task",
-			"⎿  API Error: custom backend hiccup",
-		}, "\n")
-		c := newC(t, nil, []string{"custom backend hiccup"})
-		if got := c.Classify(screen, 0); got != KindTransient {
-			t.Errorf("Classify() = %v, want %v (追加 transient パターンが効いていない)", got, KindTransient)
-		}
-	})
-
-	t.Run("設定由来の追加 transient パターンでも API Error の無い行では発火しない", func(t *testing.T) {
-		screen := strings.Join([]string{
-			"⏺ Bash(cat backend.log)",
-			"⎿  custom backend hiccup",
-		}, "\n")
-		c := newC(t, nil, []string{"custom backend hiccup"})
-		if got := c.Classify(screen, 0); got != KindNone {
-			t.Errorf("Classify() = %v, want %v (API Error の要件が追加パターンに適用されていない)", got, KindNone)
-		}
-	})
-
 	t.Run("不正な正規表現は構築時にエラーになる", func(t *testing.T) {
-		if _, err := NewClassifier([]string{"("}, nil); err == nil {
+		if _, err := NewClassifier([]string{"("}); err == nil {
 			t.Fatal("NewClassifier() エラーが返らなかった (不正な正規表現のはず)")
 		}
 	})

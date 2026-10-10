@@ -119,7 +119,14 @@ var (
 		regexp.MustCompile(`(?i)try again in \d+\s*(?:hours?|minutes?|h|m)`),
 	}
 
-	// transientPatterns は直近の出力ブロック内でのみ判定する (latestOutputBlock)｡
+	// transientAnchorPattern は Claude Code がリトライを諦めた API の失敗を描く行の接頭辞｡
+	// transient の語句はこの接頭辞と同じ行にあるときだけ拾う｡直近の出力ブロックには tool result の
+	// 任意の文章も入るので､裸の語句では issue のタイトルやログの引用に当たる｡
+	// リトライ中のカウントダウン行には接頭辞が付かず､その間は Claude Code に任せる｡
+	transientAnchorPattern = regexp.MustCompile(`(?i)\bAPI Error\b`)
+
+	// transientPatterns は直近の出力ブロック内 (latestOutputBlock) の､transientAnchorPattern と
+	// 同じ行でのみ判定する｡
 	transientPatterns = []*regexp.Regexp{
 		regexp.MustCompile(`(?i)temporarily limiting requests`),
 		regexp.MustCompile(`(?i)\brate limited\b`),
@@ -215,25 +222,22 @@ func latestOutputBlock(lines []string) []string {
 	return block
 }
 
-// Classifier は設定ファイル由来の追加パターンを保持し､画面テキストを分類する｡
+// Classifier は設定ファイル由来の追加 limit パターンを保持し､画面テキストを分類する｡
+// transient の語句は組み込みだけで､設定からは足せない (Claude Code 自身のエラー行の
+// 言い回しに閉じているため､利用者が足す理由が無い)｡
 type Classifier struct {
-	extraLimit     []*regexp.Regexp
-	extraTransient []*regexp.Regexp
+	extraLimit []*regexp.Regexp
 }
 
-// NewClassifier は追加パターン (設定ファイル由来の文字列) をコンパイルして Classifier を作る｡
+// NewClassifier は追加 limit パターン (設定ファイル由来の文字列) をコンパイルして Classifier を作る｡
 // Claude Code の文言は安定した API ではないため､コード変更無しに言い回しを足せるようにする｡
 // 不正な正規表現が含まれる場合はエラーを返す｡
-func NewClassifier(extraLimitPatterns, extraTransientPatterns []string) (*Classifier, error) {
+func NewClassifier(extraLimitPatterns []string) (*Classifier, error) {
 	limit, err := compilePatterns(extraLimitPatterns)
 	if err != nil {
 		return nil, fmt.Errorf("追加 limit パターンのコンパイルに失敗: %w", err)
 	}
-	transient, err := compilePatterns(extraTransientPatterns)
-	if err != nil {
-		return nil, fmt.Errorf("追加 transient パターンのコンパイルに失敗: %w", err)
-	}
-	return &Classifier{extraLimit: limit, extraTransient: transient}, nil
+	return &Classifier{extraLimit: limit}, nil
 }
 
 func compilePatterns(patterns []string) ([]*regexp.Regexp, error) {
@@ -261,7 +265,7 @@ func compilePatterns(patterns []string) ([]*regexp.Regexp, error) {
 //  2. 解除済みで Enter 待ち (KindResumeReady)
 //  3. 二重シグナルが揃っており､かつ恒久的な上限 (KindSpendLimit)
 //  4. 二重シグナルが揃った通常の上限 (KindLimit)
-//  5. 直近出力ブロックの一時エラー (KindTransient)
+//  5. 直近出力ブロックの `API Error` 行にある一時エラー (KindTransient)
 func (c *Classifier) Classify(screen string, n int) Kind {
 	lines := tailLines(splitScreen(screen), n)
 
@@ -315,8 +319,12 @@ func (c *Classifier) isTransient(lines []string) bool {
 	if block == nil {
 		block = lines
 	}
-	blob := strings.Join(block, "\n")
-	return matchesAny(blob, transientPatterns) || matchesAny(blob, c.extraTransient)
+	for _, line := range block {
+		if transientAnchorPattern.MatchString(line) && matchesAny(line, transientPatterns) {
+			return true
+		}
+	}
+	return false
 }
 
 // absoluteResetRe は "resets 8:10am (Asia/Tokyo)" / "resets at 12:30pm" のような

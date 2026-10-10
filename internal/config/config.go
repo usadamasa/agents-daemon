@@ -71,7 +71,6 @@ type Config struct {
 	SubmitDelayMs           int
 	EngagedLabel            string
 	CustomPatterns          []string
-	CustomTransientPatterns []string
 	IdleShutdownMinutes     int
 	// DeferToNativeAutoContinue が true のとき､Claude Code 自身の auto-continue
 	// (2.1.234 の autoContinueAtUsageLimit) がカウントダウン中の pane には手を出さない｡
@@ -153,7 +152,6 @@ func Default() Config {
 		SubmitDelayMs:           400,
 		EngagedLabel:            "retry engaged",
 		CustomPatterns:          []string{},
-		CustomTransientPatterns: []string{},
 		IdleShutdownMinutes:     30,
 
 		DeferToNativeAutoContinue:   true,
@@ -203,7 +201,6 @@ type rawConfig struct {
 	SubmitDelayMs           *int      `json:"submitDelayMs"`
 	EngagedLabel            *string   `json:"engagedLabel"`
 	CustomPatterns          *[]string `json:"customPatterns"`
-	CustomTransientPatterns *[]string `json:"customTransientPatterns"`
 	IdleShutdownMinutes     *int      `json:"idleShutdownMinutes"`
 
 	DeferToNativeAutoContinue   *bool   `json:"deferToNativeAutoContinue"`
@@ -309,9 +306,6 @@ func applyRawDetection(cfg *Config, raw *rawConfig) {
 	}
 	if v := raw.CustomPatterns; v != nil {
 		cfg.CustomPatterns = sanitizePatterns(*v)
-	}
-	if v := raw.CustomTransientPatterns; v != nil {
-		cfg.CustomTransientPatterns = sanitizePatterns(*v)
 	}
 }
 

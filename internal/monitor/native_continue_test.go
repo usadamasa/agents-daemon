@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/config"
-	"github.com/usadamasa/agents-daemon/internal/herdrcli"
-	"github.com/usadamasa/agents-daemon/internal/herdrcli/herdrclifake"
+	"github.com/usadamasa/agents-daemon/internal/mux"
+	"github.com/usadamasa/agents-daemon/internal/mux/muxfake"
 )
 
 const (
@@ -23,9 +23,9 @@ const (
 )
 
 func TestTick_ネイティブauto_continue中は送信も待機もしない(t *testing.T) {
-	client := &herdrclifake.Client{PaneReadFunc: readReturning(nativeArmedScreen, nil)}
+	client := &muxfake.Client{PaneReadFunc: readReturning(nativeArmedScreen, nil)}
 	deps := newTestDeps(t, config.Default(), client)
-	pane := newTestPane(herdrcli.AgentStatusWorking, true)
+	pane := newTestPane(mux.AgentStatusWorking, true)
 	ps := &PaneState{}
 
 	outcome, err := Tick(context.Background(), deps, pane, ps, nil, time.Now())
@@ -44,9 +44,9 @@ func TestTick_ネイティブauto_continue中は送信も待機もしない(t *t
 func TestTick_待機中にネイティブが再度予約したら送らず監視へ戻る(t *testing.T) {
 	// ここで Escape を送るとネイティブの継続そのものが取り消される
 	// ("esc or type to cancel")｡起床時刻に達していても手を出さない｡
-	client := &herdrclifake.Client{PaneReadFunc: readReturning(nativeArmedScreen, nil)}
+	client := &muxfake.Client{PaneReadFunc: readReturning(nativeArmedScreen, nil)}
 	deps := newTestDeps(t, config.Default(), client)
-	pane := newTestPane(herdrcli.AgentStatusWorking, true)
+	pane := newTestPane(mux.AgentStatusWorking, true)
 	now := time.Now()
 	ps := &PaneState{Status: StatusWaiting, WaitUntil: now.Add(-time.Second), Attempts: 2}
 
@@ -67,9 +67,9 @@ func TestTick_deferToNativeAutoContinueをoffにすると自前で待機する(t
 	cfg := config.Default()
 	cfg.DeferToNativeAutoContinue = false
 
-	client := &herdrclifake.Client{PaneReadFunc: readReturning(nativeArmedScreen, nil)}
+	client := &muxfake.Client{PaneReadFunc: readReturning(nativeArmedScreen, nil)}
 	deps := newTestDeps(t, cfg, client)
-	pane := newTestPane(herdrcli.AgentStatusWorking, true)
+	pane := newTestPane(mux.AgentStatusWorking, true)
 	ps := &PaneState{}
 
 	outcome, err := Tick(context.Background(), deps, pane, ps, nil, time.Now())
@@ -83,7 +83,7 @@ func TestTick_deferToNativeAutoContinueをoffにすると自前で待機する(t
 
 func TestTick_enter待ちにはenterだけを送る(t *testing.T) {
 	var sentKeys []string
-	client := &herdrclifake.Client{
+	client := &muxfake.Client{
 		PaneReadFunc: readReturning(resumeReadyScreen, nil),
 		SendKeysFunc: func(_ context.Context, _ string, keys ...string) error {
 			sentKeys = append(sentKeys, keys...)
@@ -95,7 +95,7 @@ func TestTick_enter待ちにはenterだけを送る(t *testing.T) {
 		},
 	}
 	deps := newTestDeps(t, config.Default(), client)
-	pane := newTestPane(herdrcli.AgentStatusIdle, true)
+	pane := newTestPane(mux.AgentStatusIdle, true)
 	ps := &PaneState{}
 	now := time.Now()
 
@@ -129,10 +129,10 @@ func TestTick_enter待ちにはenterだけを送る(t *testing.T) {
 func TestTick_enterが効かないままなら最終的に打ち切る(t *testing.T) {
 	// Enter を押しても画面が変わらないことがある｡ここで数え上げが効かないと
 	// 30 秒おきに永久に Enter を押し続ける pane ができる｡
-	client := &herdrclifake.Client{PaneReadFunc: readReturning(resumeReadyScreen, nil)}
+	client := &muxfake.Client{PaneReadFunc: readReturning(resumeReadyScreen, nil)}
 	cfg := config.Default()
 	deps := newTestDeps(t, cfg, client)
-	pane := newTestPane(herdrcli.AgentStatusIdle, true)
+	pane := newTestPane(mux.AgentStatusIdle, true)
 	ps := &PaneState{}
 	now := time.Now()
 
@@ -150,9 +150,9 @@ func TestTick_enterが効かないままなら最終的に打ち切る(t *testin
 }
 
 func TestTick_恒久的な上限では待機に入らない(t *testing.T) {
-	client := &herdrclifake.Client{PaneReadFunc: readReturning(hardCapScreen, nil)}
+	client := &muxfake.Client{PaneReadFunc: readReturning(hardCapScreen, nil)}
 	deps := newTestDeps(t, config.Default(), client)
-	pane := newTestPane(herdrcli.AgentStatusIdle, true)
+	pane := newTestPane(mux.AgentStatusIdle, true)
 	ps := &PaneState{}
 
 	outcome, err := Tick(context.Background(), deps, pane, ps, nil, time.Now())
@@ -168,7 +168,7 @@ func TestTick_恒久的な上限では待機に入らない(t *testing.T) {
 	assertNoSend(t, client)
 }
 
-func assertNoSend(t *testing.T, client *herdrclifake.Client) {
+func assertNoSend(t *testing.T, client *muxfake.Client) {
 	t.Helper()
 	for _, call := range client.Calls {
 		if call == "SendText:pane-1" || call == "SendKeys:pane-1" {

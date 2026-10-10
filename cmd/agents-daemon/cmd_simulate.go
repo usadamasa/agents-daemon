@@ -20,7 +20,7 @@ func newSimulateCmd() *cobra.Command {
 			"それを Claude agent に見せかけ､limit 風の画面を書き込んで､daemon と同じ\n" +
 			"monitor.Tick を走らせる｡既定では dry-run (--send を付けると使い捨て pane に\n" +
 			"限って実際に送信する)｡\n\n" +
-			"simulate は自分が作った pane 以外には構造的に一切書き込めない (herdrcli.Client を\n" +
+			"simulate は自分が作った pane 以外には構造的に一切書き込めない (mux.Client を\n" +
 			"scopedClient で包み､作成した pane_id 以外への呼び出しを拒否する)｡実 Claude\n" +
 			"セッションが乗った pane を壊さないための安全策で､テストでも確認している｡\n\n" +
 			"証明すること: pane 列挙→Claude agent 判定→画面読取→分類→ゲート判定→送信内容の\n" +

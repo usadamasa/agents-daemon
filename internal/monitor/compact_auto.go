@@ -7,7 +7,7 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/config"
 	"github.com/usadamasa/agents-daemon/internal/detect"
-	"github.com/usadamasa/agents-daemon/internal/herdrcli"
+	"github.com/usadamasa/agents-daemon/internal/mux"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 )
 
@@ -36,14 +36,14 @@ import (
 // 二段目の受け皿として残しているため｡PostCompact hook が起動しなかった pane
 // (hook の timeout､stdin の session_id が空) では marker が置かれず 3 段目が動かない｡
 func tickCompact(
-	ctx context.Context, deps Deps, pane herdrcli.Pane, ps *PaneState,
+	ctx context.Context, deps Deps, pane mux.Pane, ps *PaneState,
 	screen string, now time.Time,
 ) (Outcome, error) {
 	// loader が差されていない (テスト､あるいは compact の自動化を持たない
 	// 呼び出し元) なら state は無し扱いで､以降の段は何もしない｡
 	var cs *sessionstate.Compact
 	if deps.CompactState != nil {
-		cs = deps.CompactState(pane.SessionID())
+		cs = deps.CompactState(pane.SessionID)
 	}
 	// idle compact の後で利用者がまだ戻っていない (idle_compact.go)｡cache は marker が
 	// あり､送り先になりうる pane のときだけ読む (以降の段はどれも idle な pane にしか送らない)｡
@@ -74,7 +74,7 @@ func tickCompact(
 // 2 段目と cooldown は共有する｡送るものが無ければ OutcomeMonitoring を返し､呼び出し元が
 // 次の段へ流す｡
 func tickCompactAuto(
-	ctx context.Context, deps Deps, pane herdrcli.Pane, ps *PaneState,
+	ctx context.Context, deps Deps, pane mux.Pane, ps *PaneState,
 	cs *sessionstate.Compact, idleHold bool, screen string, now time.Time,
 ) (Outcome, error) {
 	cfg := deps.Config
@@ -108,7 +108,7 @@ func tickCompactAuto(
 
 // tickCompactThreshold は context 使用率の閾値による 1 段目｡
 func tickCompactThreshold(
-	ctx context.Context, deps Deps, pane herdrcli.Pane, ps *PaneState,
+	ctx context.Context, deps Deps, pane mux.Pane, ps *PaneState,
 	cs *sessionstate.Compact, screen string, now time.Time,
 ) (Outcome, error) {
 	// 使用率は statusline が毎描画で書き直す｡古い観測しか無い pane は
@@ -144,7 +144,7 @@ func clearCompactPending(ps *PaneState) {
 
 // tickCompactAutoPending は compact-prep の完了を待っている状態を処理する｡
 func tickCompactAutoPending(
-	ctx context.Context, deps Deps, pane herdrcli.Pane, ps *PaneState,
+	ctx context.Context, deps Deps, pane mux.Pane, ps *PaneState,
 	cs *sessionstate.Compact, screen string, now time.Time,
 ) (Outcome, error) {
 	if cs.HasPrep && cs.PrepWrittenAt.After(ps.CompactPrepSentAt) {
@@ -166,7 +166,7 @@ func tickCompactAutoPending(
 }
 
 // sendCompact は 2 段目の /compact を送り､pending を畳む｡
-func sendCompact(ctx context.Context, deps Deps, pane herdrcli.Pane, ps *PaneState, now time.Time) (Outcome, error) {
+func sendCompact(ctx context.Context, deps Deps, pane mux.Pane, ps *PaneState, now time.Time) (Outcome, error) {
 	idle := ps.CompactPrepIdle
 	clearCompactPending(ps)
 	ps.CompactAutoSentAt = now
@@ -190,7 +190,7 @@ func sendCompact(ctx context.Context, deps Deps, pane herdrcli.Pane, ps *PaneSta
 // 会話へ注入される｡だでユーザーが自分で次のプロンプトを打った場合､marker は
 // 消えていてこの段は何もしない｡
 func tickCompactResume(
-	ctx context.Context, deps Deps, pane herdrcli.Pane, ps *PaneState,
+	ctx context.Context, deps Deps, pane mux.Pane, ps *PaneState,
 	cs *sessionstate.Compact, screen string, now time.Time,
 ) (Outcome, error) {
 	if !deps.Config.CompactResumeEnabled || cs == nil || !cs.HasCompacted {
@@ -224,6 +224,6 @@ func tickCompactResume(
 // 2 つを要求する｡pane が働いていないこと (working な pane へ送るとキューに入り､
 // 進行中の作業の直後に実行される) と､入力欄が空であること (残った文字に送信文字列が
 // 連結される)｡どちらも実機で確認した挙動｡
-func canSendTo(deps Deps, pane herdrcli.Pane, screen string) bool {
+func canSendTo(deps Deps, pane mux.Pane, screen string) bool {
 	return isIdlePane(pane) && detect.PromptIsEmpty(screen, deps.Config.DetectionTailLines)
 }

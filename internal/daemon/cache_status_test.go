@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/usadamasa/agents-daemon/internal/herdrcli"
-	"github.com/usadamasa/agents-daemon/internal/herdrcli/herdrclifake"
 	"github.com/usadamasa/agents-daemon/internal/monitor"
+	"github.com/usadamasa/agents-daemon/internal/mux"
+	"github.com/usadamasa/agents-daemon/internal/mux/muxfake"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 )
 
@@ -62,10 +62,10 @@ func readLog(t *testing.T, statusPath string) string {
 
 func TestDaemonRuntimeTick_StatusCarriesCacheState(t *testing.T) {
 	last := time.Date(2026, 9, 27, 3, 44, 5, 954_000_000, time.UTC)
-	pane := claudePaneWithSession("pane-a", "term-a", "session-a", herdrcli.AgentStatusIdle)
-	client := &herdrclifake.Client{
-		PaneListFunc: func(context.Context) ([]herdrcli.Pane, error) { return []herdrcli.Pane{pane}, nil },
-		PaneReadFunc: func(context.Context, string, herdrcli.PaneReadOptions) (string, error) {
+	pane := claudePaneWithSession("pane-a", "term-a", "session-a", mux.AgentStatusIdle)
+	client := &muxfake.Client{
+		PaneListFunc: func(context.Context) ([]mux.Pane, error) { return []mux.Pane{pane}, nil },
+		PaneReadFunc: func(context.Context, string, mux.PaneReadOptions) (string, error) {
 			return "$ some normal claude output\n⏺ done", nil
 		},
 	}
@@ -110,9 +110,9 @@ func TestDaemonRuntimeTick_StatusCarriesCacheState(t *testing.T) {
 
 	t.Run("working な pane では transcript を読まない", func(t *testing.T) {
 		// 応答のたびに伸びる transcript を tick ごとに読み直さない｡読んだことが無ければ省略する｡
-		working := claudePaneWithSession("pane-a", "term-a", "session-a", herdrcli.AgentStatusWorking)
-		workingClient := &herdrclifake.Client{
-			PaneListFunc: func(context.Context) ([]herdrcli.Pane, error) { return []herdrcli.Pane{working}, nil },
+		working := claudePaneWithSession("pane-a", "term-a", "session-a", mux.AgentStatusWorking)
+		workingClient := &muxfake.Client{
+			PaneListFunc: func(context.Context) ([]mux.Pane, error) { return []mux.Pane{working}, nil },
 			PaneReadFunc: client.PaneReadFunc,
 		}
 		now := last.Add(10 * time.Minute)
@@ -153,10 +153,10 @@ func TestDaemonRuntimeTick_StatusCarriesCacheState(t *testing.T) {
 }
 
 // waitingPaneClient は待機明けで limit 画面のままの pane を 1 枚返す client｡
-func waitingPaneClient(pane herdrcli.Pane) *herdrclifake.Client {
-	return &herdrclifake.Client{
-		PaneListFunc: func(context.Context) ([]herdrcli.Pane, error) { return []herdrcli.Pane{pane}, nil },
-		PaneReadFunc: func(context.Context, string, herdrcli.PaneReadOptions) (string, error) {
+func waitingPaneClient(pane mux.Pane) *muxfake.Client {
+	return &muxfake.Client{
+		PaneListFunc: func(context.Context) ([]mux.Pane, error) { return []mux.Pane{pane}, nil },
+		PaneReadFunc: func(context.Context, string, mux.PaneReadOptions) (string, error) {
 			return "Try again in 5 minutes", nil
 		},
 	}
@@ -164,7 +164,7 @@ func waitingPaneClient(pane herdrcli.Pane) *herdrclifake.Client {
 
 func TestDaemonRuntimeTick_SendLogCarriesCacheState(t *testing.T) {
 	last := time.Date(2026, 9, 27, 3, 44, 5, 954_000_000, time.UTC)
-	pane := claudePaneWithSession("pane-a", "term-a", "session-a", herdrcli.AgentStatusIdle)
+	pane := claudePaneWithSession("pane-a", "term-a", "session-a", mux.AgentStatusIdle)
 
 	t.Run("失効後の送信は ack を書き､経過と TTL と context 使用率をログに残す", func(t *testing.T) {
 		now := last.Add(5*time.Hour + 12*time.Minute)

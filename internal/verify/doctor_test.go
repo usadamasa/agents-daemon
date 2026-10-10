@@ -14,8 +14,8 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/daemon"
-	"github.com/usadamasa/agents-daemon/internal/herdrcli"
-	"github.com/usadamasa/agents-daemon/internal/herdrcli/herdrclifake"
+	"github.com/usadamasa/agents-daemon/internal/mux"
+	"github.com/usadamasa/agents-daemon/internal/mux/muxfake"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 )
 
@@ -25,7 +25,7 @@ func TestRunDoctor(t *testing.T) {
 	fixedNow := time.Date(2026, 8, 16, 13, 0, 0, 0, time.UTC)
 
 	t.Run("herdr に到達できないと error を返し､以降の項目は診断しない", func(t *testing.T) {
-		client := &herdrclifake.Client{
+		client := &muxfake.Client{
 			ReachableFunc: func(context.Context) error { return errFakeUnreachable },
 		}
 		var buf bytes.Buffer
@@ -40,13 +40,13 @@ func TestRunDoctor(t *testing.T) {
 
 	t.Run("herdr に到達できれば pane 一覧・state・設定・daemon・パスを報告して nil を返す", func(t *testing.T) {
 		home := t.TempDir()
-		client := &herdrclifake.Client{
+		client := &muxfake.Client{
 			ReachableFunc: func(context.Context) error { return nil },
-			PaneListFunc: func(context.Context) ([]herdrcli.Pane, error) {
-				return []herdrcli.Pane{
-					{PaneID: "p1", Agent: "claude", AgentStatus: herdrcli.AgentStatusIdle, CWD: "/repo",
-						AgentSession: &herdrcli.AgentSession{Value: "session-abc"}},
-					{PaneID: "p2", Agent: "", AgentStatus: herdrcli.AgentStatusUnknown, CWD: "/other"},
+			PaneListFunc: func(context.Context) ([]mux.Pane, error) {
+				return []mux.Pane{
+					{PaneID: "p1", Agent: "claude", AgentStatus: mux.AgentStatusIdle, CWD: "/repo",
+						SessionID: "session-abc"},
+					{PaneID: "p2", Agent: "", AgentStatus: mux.AgentStatusUnknown, CWD: "/other"},
 				}, nil
 			},
 		}
@@ -82,14 +82,14 @@ func TestRunDoctor(t *testing.T) {
 			"observed_at": fixedNow.Add(-time.Minute).Unix(),
 			"session_id":  "sess-1",
 		})
-		client := &herdrclifake.Client{
+		client := &muxfake.Client{
 			ReachableFunc: func(context.Context) error { return nil },
-			PaneListFunc: func(context.Context) ([]herdrcli.Pane, error) {
-				return []herdrcli.Pane{{
-					Agent:        "claude-code",
-					AgentStatus:  herdrcli.AgentStatusIdle,
-					PaneID:       "p1",
-					AgentSession: &herdrcli.AgentSession{Value: "sess-1"},
+			PaneListFunc: func(context.Context) ([]mux.Pane, error) {
+				return []mux.Pane{{
+					Agent:       "claude-code",
+					AgentStatus: mux.AgentStatusIdle,
+					PaneID:      "p1",
+					SessionID:   "sess-1",
 				}}, nil
 			},
 		}
@@ -116,9 +116,9 @@ func TestRunDoctor(t *testing.T) {
 			StartedAt: fixedNow.Add(-time.Hour),
 			UpdatedAt: fixedNow,
 		})
-		client := &herdrclifake.Client{
+		client := &muxfake.Client{
 			ReachableFunc: func(context.Context) error { return nil },
-			PaneListFunc:  func(context.Context) ([]herdrcli.Pane, error) { return nil, nil },
+			PaneListFunc:  func(context.Context) ([]mux.Pane, error) { return nil, nil },
 		}
 
 		var buf bytes.Buffer

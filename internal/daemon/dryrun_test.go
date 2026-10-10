@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/applog"
-	"github.com/usadamasa/agents-daemon/internal/herdrcli"
-	"github.com/usadamasa/agents-daemon/internal/herdrcli/herdrclifake"
+	"github.com/usadamasa/agents-daemon/internal/mux"
+	"github.com/usadamasa/agents-daemon/internal/mux/muxfake"
 )
 
 // dryRunClient は稼働中の Claude セッションへの誤送信を防ぐ安全弁そのものなので､
@@ -19,14 +19,14 @@ import (
 // 直接検証する｡inner 側の FakeClient に到達したかどうかを Calls で確認する｡
 
 func TestDryRunClient_ReadOperationsPassThrough(t *testing.T) {
-	inner := &herdrclifake.Client{
-		PaneListFunc: func(context.Context) ([]herdrcli.Pane, error) {
-			return []herdrcli.Pane{{PaneID: "p1"}}, nil
+	inner := &muxfake.Client{
+		PaneListFunc: func(context.Context) ([]mux.Pane, error) {
+			return []mux.Pane{{PaneID: "p1"}}, nil
 		},
-		PaneGetFunc: func(context.Context, string) (herdrcli.Pane, error) {
-			return herdrcli.Pane{PaneID: "p1"}, nil
+		PaneGetFunc: func(context.Context, string) (mux.Pane, error) {
+			return mux.Pane{PaneID: "p1"}, nil
 		},
-		PaneReadFunc: func(context.Context, string, herdrcli.PaneReadOptions) (string, error) {
+		PaneReadFunc: func(context.Context, string, mux.PaneReadOptions) (string, error) {
 			return "screen text", nil
 		},
 		ReachableFunc: func(context.Context) error {
@@ -53,7 +53,7 @@ func TestDryRunClient_ReadOperationsPassThrough(t *testing.T) {
 	})
 
 	t.Run("PaneReadはinnerへ到達する", func(t *testing.T) {
-		screen, err := c.PaneRead(ctx, "p1", herdrcli.PaneReadOptions{})
+		screen, err := c.PaneRead(ctx, "p1", mux.PaneReadOptions{})
 		if err != nil || screen != "screen text" {
 			t.Errorf("PaneRead() = %q, %v, want %q, nil", screen, err, "screen text")
 		}
@@ -78,14 +78,14 @@ func TestDryRunClient_ReadOperationsPassThrough(t *testing.T) {
 }
 
 func TestDryRunClient_WriteOperationsNeverReachInner(t *testing.T) {
-	inner := &herdrclifake.Client{
+	inner := &muxfake.Client{
 		SendTextFunc: func(context.Context, string, string) error {
 			return errors.New("実際のペインへ送信されてしまった")
 		},
 		SendKeysFunc: func(context.Context, string, ...string) error {
 			return errors.New("実際のペインへ送信されてしまった")
 		},
-		ReportMetadataFunc: func(context.Context, string, herdrcli.ReportMetadataOptions) error {
+		ReportMetadataFunc: func(context.Context, string, mux.ReportMetadataOptions) error {
 			return errors.New("実際のペインが更新されてしまった")
 		},
 	}
@@ -107,7 +107,7 @@ func TestDryRunClient_WriteOperationsNeverReachInner(t *testing.T) {
 	})
 
 	t.Run("ReportMetadataはinnerに到達せず常に成功を返す", func(t *testing.T) {
-		if err := c.ReportMetadata(ctx, "p1", herdrcli.ReportMetadataOptions{Source: metadataSource}); err != nil {
+		if err := c.ReportMetadata(ctx, "p1", mux.ReportMetadataOptions{Source: metadataSource}); err != nil {
 			t.Errorf("ReportMetadata() error = %v, want nil", err)
 		}
 	})

@@ -105,39 +105,17 @@ func TestParseEnvelope_ErrorFieldSurfaces(t *testing.T) {
 }
 
 func TestParseEnvelope_RealFixtures(t *testing.T) {
-	// 実機の herdr から採取した出力そのもの (cwd などは採取時の値のまま残す)｡
-	paneListFixture := `{"id":"cli:pane:list","result":{"panes":[{"agent":"claude","agent_session":{"agent":"claude","kind":"id","source":"herdr:claude","value":"0d5e717f-82c5-4e71-ac74-799f7197e0de"},"agent_status":"working","cwd":"/Users/usadamasa/src/github.com/usadamasa/claude-config","focused":true,"foreground_cwd":"/Users/usadamasa/src/github.com/usadamasa/claude-config","pane_id":"wH:p1","revision":76,"scroll":{"max_offset_from_bottom":0,"offset_from_bottom":0,"viewport_rows":37},"tab_id":"wH:t1","terminal_id":"term_6590ddf454a3a1","terminal_title":"title","terminal_title_stripped":"title","workspace_id":"wH"},{"agent_status":"unknown","cwd":"/x","focused":false,"foreground_cwd":"/x","pane_id":"wH:p4","revision":5,"scroll":{"max_offset_from_bottom":0,"offset_from_bottom":0,"viewport_rows":37},"tab_id":"wH:t4","terminal_id":"term_6591d9bed8d704","terminal_title":"shell","terminal_title_stripped":"shell","workspace_id":"wH"}],"type":"pane_list"}}`
-
-	env, err := parseEnvelope([]byte(paneListFixture), nil)
+	env, err := parseEnvelope([]byte(realPaneListFixture), nil)
 	if err != nil {
 		t.Fatalf("parseEnvelope() unexpected error: %v", err)
 	}
-	var res paneListResult
-	if err := json.Unmarshal(env.Result, &res); err != nil {
-		t.Fatalf("result unmarshal: %v", err)
+	if env.ID != "cli:pane:list" {
+		t.Errorf("env.ID = %q, want %q", env.ID, "cli:pane:list")
 	}
-	if len(res.Panes) != 2 {
-		t.Fatalf("len(res.Panes) = %d, want 2", len(res.Panes))
+	if env.Error != nil {
+		t.Errorf("env.Error = %v, want nil", env.Error)
 	}
-	claudePane := res.Panes[0]
-	if !IsClaudeAgent(claudePane) {
-		t.Errorf("IsClaudeAgent(claudePane) = false, want true")
-	}
-	if claudePane.AgentSession == nil || claudePane.AgentSession.Value != "0d5e717f-82c5-4e71-ac74-799f7197e0de" {
-		t.Errorf("claudePane.AgentSession = %+v, want session_id 0d5e717f-...", claudePane.AgentSession)
-	}
-	if claudePane.AgentStatus != AgentStatusWorking {
-		t.Errorf("claudePane.AgentStatus = %q, want %q", claudePane.AgentStatus, AgentStatusWorking)
-	}
-
-	shellPane := res.Panes[1]
-	if IsClaudeAgent(shellPane) {
-		t.Errorf("IsClaudeAgent(shellPane) = true, want false (agent フィールドが無い)")
-	}
-	if shellPane.AgentSession != nil {
-		t.Errorf("shellPane.AgentSession = %+v, want nil", shellPane.AgentSession)
-	}
-	if shellPane.AgentStatus != AgentStatusUnknown {
-		t.Errorf("shellPane.AgentStatus = %q, want %q", shellPane.AgentStatus, AgentStatusUnknown)
+	if !json.Valid(env.Result) {
+		t.Errorf("env.Result が JSON として壊れている: %s", env.Result)
 	}
 }

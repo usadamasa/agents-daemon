@@ -14,13 +14,13 @@ func GitBranch(dir string) string {
 	if dir == "" {
 		return ""
 	}
-	out, err := exec.Command("git", "-C", dir, "branch", "--show-current").Output() // #nosec G204 -- 引数は固定
+	out, err := exec.Command("git", "-C", dir, "branch", "--show-current").Output() // #nosec G204 -- shell を通さず､dir は引数 1 つとして渡る
 	if err == nil {
 		if branch := strings.TrimSpace(string(out)); branch != "" {
 			return branch
 		}
 	}
-	if exec.Command("git", "-C", dir, "rev-parse", "--git-dir").Run() == nil { // #nosec G204 -- 引数は固定
+	if exec.Command("git", "-C", dir, "rev-parse", "--git-dir").Run() == nil { // #nosec G204 -- shell を通さず､dir は引数 1 つとして渡る
 		return "(detached)"
 	}
 	return ""

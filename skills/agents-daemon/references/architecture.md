@@ -207,7 +207,7 @@ daemon は pane 操作を `internal/multiplexer` の `Client` interface 越し�
 | SendKeys | `pane send-keys P KEY...` | `send-key -b B KEY...` |
 | ReportMetadata | `pane report-metadata P --source ... --state-label ...` | 何もしない (`block rename` は利用者の label を潰す) |
 | Reachable | `status --json` の `server.running` | `api call server.status` の `pid` が正 |
-| session_id | pane の `agent_session` | `context/<sid>.json` の `multiplexer` から逆引き (上の「ingest-statusline が書く state」) |
+| session_id | pane の `agent_session` | `context/<sid>.json` の `multiplexer` から逆引き (上の「statusline が書く state」) |
 
 rex の呼び出しには全部 `--autostart=false` を付け､子プロセスの環境から `REX_SESSION` / `REX_BLOCK` を外す｡
 `REX_SESSION` があると rex は block の解決をその session の中に閉じ､外せば完全 ID で別 session の block も

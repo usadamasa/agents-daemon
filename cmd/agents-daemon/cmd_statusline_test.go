@@ -11,15 +11,15 @@ import (
 )
 
 // runStatuslineCmd は statusline を stdin 付きで実行する｡HOME と XDG_STATE_HOME は一時ディレクトリへ
-// 向け､幅は full に固定する (圧縮を見るテストだけ COLUMNS を上書きする)｡
-func runStatuslineCmd(t *testing.T, stdin string) (stdout, stderr, stateDir string) {
+// 向ける｡幅 (COLUMNS) と月額上限 (CLAUDE_STATUSLINE_SPEND_CAP) は呼び出し元の環境を引き継がず､
+// 引数で毎回決める (work profile の settings が上限を入れているため､空で「未設定」にする)｡
+func runStatuslineCmd(t *testing.T, stdin, columns, spendCap string) (stdout, stderr, stateDir string) {
 	t.Helper()
 	root := t.TempDir()
 	t.Setenv("HOME", root)
 	t.Setenv("XDG_STATE_HOME", root)
-	if os.Getenv("COLUMNS") == "" {
-		t.Setenv("COLUMNS", "200")
-	}
+	t.Setenv("COLUMNS", columns)
+	t.Setenv("CLAUDE_STATUSLINE_SPEND_CAP", spendCap)
 	for _, key := range []string{"REX_SESSION", "REX_BLOCK", "HERDR_PANE_ID"} {
 		t.Setenv(key, "")
 	}
@@ -41,8 +41,7 @@ const statuslineInput = `{"model": {"display_name": "Opus"}, "workspace": {"curr
 
 func TestNewStatuslineCmd(t *testing.T) {
 	t.Run("3 行を描画し､同じプロセスで context/<sid>.json を書く", func(t *testing.T) {
-		t.Setenv("CLAUDE_STATUSLINE_SPEND_CAP", "")
-		stdout, stderr, stateDir := runStatuslineCmd(t, statuslineInput)
+		stdout, stderr, stateDir := runStatuslineCmd(t, statuslineInput, "200", "")
 		if stderr != "" {
 			t.Errorf("stderr = %q, want empty", stderr)
 		}
@@ -68,9 +67,7 @@ func TestNewStatuslineCmd(t *testing.T) {
 	})
 
 	t.Run("非表示でも state file と cost は書く (表示と副作用を分離する)", func(t *testing.T) {
-		t.Setenv("COLUMNS", "48")
-		t.Setenv("CLAUDE_STATUSLINE_SPEND_CAP", "10000")
-		stdout, _, stateDir := runStatuslineCmd(t, statuslineInput)
+		stdout, _, stateDir := runStatuslineCmd(t, statuslineInput, "48", "10000")
 		if stdout != "" {
 			t.Errorf("stdout = %q, want empty", stdout)
 		}
@@ -84,8 +81,7 @@ func TestNewStatuslineCmd(t *testing.T) {
 	})
 
 	t.Run("上限があれば その日と当月の cost を出す", func(t *testing.T) {
-		t.Setenv("CLAUDE_STATUSLINE_SPEND_CAP", "10000")
-		stdout, stderr, _ := runStatuslineCmd(t, statuslineInput)
+		stdout, stderr, _ := runStatuslineCmd(t, statuslineInput, "200", "10000")
 		if stderr != "" {
 			t.Errorf("stderr = %q, want empty", stderr)
 		}
@@ -97,16 +93,14 @@ func TestNewStatuslineCmd(t *testing.T) {
 	})
 
 	t.Run("compact では合算を読まず 1 行だけ出す", func(t *testing.T) {
-		t.Setenv("COLUMNS", "80")
-		t.Setenv("CLAUDE_STATUSLINE_SPEND_CAP", "10000")
-		stdout, _, _ := runStatuslineCmd(t, statuslineInput)
+		stdout, _, _ := runStatuslineCmd(t, statuslineInput, "80", "10000")
 		if strings.Contains(stdout, "\n") || !strings.Contains(stdout, "🧠 100k (50%)") || strings.Contains(stdout, "🧾") {
 			t.Errorf("compact の出力が違う:\n%q", stdout)
 		}
 	})
 
 	t.Run("壊れた JSON でも exit 0 で stdout は空｡理由は stderr", func(t *testing.T) {
-		stdout, stderr, _ := runStatuslineCmd(t, `{"session_id": `)
+		stdout, stderr, _ := runStatuslineCmd(t, `{"session_id": `, "200", "")
 		if stdout != "" {
 			t.Errorf("stdout = %q, want empty", stdout)
 		}
@@ -130,7 +124,7 @@ func TestNewStatuslineCmd(t *testing.T) {
 				t.Fatalf("git %v: %v\n%s", args, err, out)
 			}
 		}
-		stdout, _, _ := runStatuslineCmd(t, `{"model": {"display_name": "Opus"}, "workspace": {"current_dir": "`+repo+`"}}`)
+		stdout, _, _ := runStatuslineCmd(t, `{"model": {"display_name": "Opus"}, "workspace": {"current_dir": "`+repo+`"}}`, "200", "")
 		if !strings.Contains(stdout, "🌿 feature-x ✨") {
 			t.Errorf("stdout に branch が無い:\n%q", stdout)
 		}
@@ -144,7 +138,7 @@ func TestNewStatuslineCmd(t *testing.T) {
 		if err := os.WriteFile(transcript, []byte(body), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		stdout, stderr, _ := runStatuslineCmd(t, `{"model": {"display_name": "Opus"}, "workspace": {"current_dir": "/tmp"}, "session_id": "sess-1", "transcript_path": "`+transcript+`"}`)
+		stdout, stderr, _ := runStatuslineCmd(t, `{"model": {"display_name": "Opus"}, "workspace": {"current_dir": "/tmp"}, "session_id": "sess-1", "transcript_path": "`+transcript+`"}`, "200", "")
 		if stderr != "" {
 			t.Errorf("stderr = %q, want empty", stderr)
 		}
@@ -154,7 +148,7 @@ func TestNewStatuslineCmd(t *testing.T) {
 	})
 
 	t.Run("transcript が無ければ cache の項目を出さない", func(t *testing.T) {
-		stdout, stderr, _ := runStatuslineCmd(t, statuslineInput)
+		stdout, stderr, _ := runStatuslineCmd(t, statuslineInput, "200", "")
 		if stderr != "" || strings.Contains(stdout, "⏱") {
 			t.Errorf("stdout = %q, stderr = %q", stdout, stderr)
 		}

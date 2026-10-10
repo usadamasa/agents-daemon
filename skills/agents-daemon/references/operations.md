@@ -26,6 +26,21 @@ agents-daemon stop                             # SIGTERM を送って停止
 SessionStart hook は `--dry-run` **なし**で配線してある｡検知の挙動を疑ったときや､
 設定を変えて様子を見たいときに､手動で `--foreground --dry-run` を回す使い方を想定している｡
 
+### plugin の更新後に daemon を入れ替える
+
+`claude plugin update` はバイナリを建て直さない｡建て直すのは次の SessionStart hook で､
+それまで動いている daemon は古い版のまま｡セッションを開き直さずに入れ替えるには､install 済み plugin の
+`hooks/build-daemon.sh` を直接叩く (SessionStart が detach して呼ぶのと同じスクリプト)｡
+
+```sh
+"$(jq -r '.plugins["agents-daemon@usadamasa"][0].installPath' ~/.claude/plugins/installed_plugins.json)/hooks/build-daemon.sh"
+```
+
+plugin の版で `go build` し､cache のバイナリと stamp を差し替えて `daemon --ensure` を叩く｡動いている daemon は
+差し替えを次の tick で検知して自分で入れ替わる ([architecture.md](architecture.md) の「バイナリの用意と差し替え」)｡
+`status` の `started_at` が進んでいれば済んでいる｡Claude Code の sandbox は `~/.cache/agents-daemon` に書けないので､
+利用者が `!` で打つ｡
+
 ### 検証用コマンド
 
 ```sh

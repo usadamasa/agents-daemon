@@ -165,6 +165,8 @@ plugin には install 時の lifecycle hook が無いので､バイナリも Se
   持ち主が生きていれば後から来た側は何もせずに終わる｡build が SIGKILL などで落ちて lock が残っても､
   次の build が持ち主の死を `kill -0` で確かめて残骸を消し､取り直す (`build.log` に `stale lock` が残る)｡
   手で消す必要は無い｡
+- plugin の更新後にセッションを開き直さず入れ替えるには､install 済み plugin の `hooks/build-daemon.sh` を
+  手で叩く｡コマンドは [operations.md](operations.md) の「plugin の更新後に daemon を入れ替える」｡
 - 開発中は `task install` で同じパスへ建てられる｡中身は `hooks/build-daemon.sh` そのもので､
   stamp には clone の plugin.json の version が書かれる｡install 済み plugin と version が同じなら
   次の SessionStart でも建て直されず､clone の版が動き続ける｡plugin 側の版へ戻すときは stamp を消す｡

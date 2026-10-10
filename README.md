@@ -21,8 +21,9 @@ plugin が持つもの:
 | UserPromptSubmit hook | marker を見て､圧縮直後の 1 ターンだけ復旧ガイドを注入する |
 | `agents-daemon:compact-prep` skill | `/compact` 前に作業状態を state file へ保存する |
 | `agents-daemon:agents-daemon` skill | 運用と切り分けの手引き (症状から引く) |
-| `agents-daemon:setup` skill | 前提の確認と statusline への配線 |
-| `agents-daemon ingest-statusline` | statusline の stdin から daemon が読む state file を書くサブコマンド |
+| `agents-daemon:setup` skill | 前提の確認と statusline の配線 |
+| `agents-daemon statusline` | `statusLine.command` に向ける statusline｡描画と､daemon が読む state file の書き込みを同じプロセスで行う |
+| `agents-daemon ingest-statusline` | 自前の statusline から stdin を渡して state file だけを書かせるサブコマンド |
 
 ## 前提
 
@@ -32,11 +33,12 @@ plugin が持つもの:
   - **rex**: `rex ls` / `block call` / `capture` / `send` を使う｡server の socket は
     `~/Library/Application Support/rex/server.sock`｡
     sandbox の中の Bash から `doctor` や setup skill で rex を叩くなら､
-    `sandbox.network.allowUnixSockets` に `~/Library/Application Support/rex` を足す｡block と session の対応は statusline の
-    `ingest-statusline` が書く記録から引くので､下の statusline の配線が必須になる｡
+    `sandbox.network.allowUnixSockets` に `~/Library/Application Support/rex` を足す｡block と session の対応は statusline が
+    書く記録から引くので､下の statusline の配線が必須になる｡
     rex `0.0.1791570264-g7b5bf3` と Claude Code `2.1.296` で測った (2026-10-10)｡
-- **statusline が stdin を `ingest-statusline` へ渡すこと**: 使用率と解除時刻と transcript のパスは statusline の stdin にしか来ない｡
-  この plugin は statusline を含まないので､利用者の statusline に 1 行足す (下の「セットアップ」で行う)｡
+- **statusline の配線**: 使用率と解除時刻と transcript のパスは statusline の stdin にしか来ない｡
+  `statusLine.command` をこの plugin のバイナリの `statusline` に向けるか､自前の statusline から
+  `ingest-statusline` へ stdin を渡す 1 行を足す (下の「セットアップ」で行う)｡
 - **Go toolchain**: SessionStart hook が plugin のソースから `go build` でバイナリを建てる｡
   hook は Claude Code を起動したシェルの PATH で `go` を探す｡無ければ `brew install go` などで入れる｡
   初回の build では Go module のダウンロードにネットワークを使う｡
@@ -87,7 +89,8 @@ agents-daemon doctor                     # 前提条件の診断
 agents-daemon inspect --pane <id>        # 生きた pane の画面を分類する (rex は block ID)
 agents-daemon daemon --foreground --dry-run  # 送信せずに判定だけ回す
 agents-daemon stop                       # 停止
-agents-daemon ingest-statusline < in.json  # statusline の stdin から state file を書く (statusline が呼ぶ)
+COLUMNS=200 agents-daemon statusline < in.json  # statusline を描画し､state file も書く (statusLine.command が呼ぶ)
+agents-daemon ingest-statusline < in.json  # statusline の stdin から state file だけを書く (自前の statusline が呼ぶ)
 ```
 
 ## 開発

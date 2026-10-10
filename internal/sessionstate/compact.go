@@ -7,6 +7,8 @@ import (
 	"math"
 	"os"
 	"time"
+
+	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
 
 // contextFile は context/<session_id>.json の生の形｡
@@ -67,7 +69,7 @@ func (s Store) MarkIdleCompacted(sessionID string) error {
 	if err != nil || path == "" {
 		return err
 	}
-	return writeFileAtomic(path, ".idle-compacted.*", nil)
+	return statefile.WriteFileAtomic(path, ".idle-compacted.*", nil)
 }
 
 // CacheUsedPercentage は cache に記録された直近の応答の入力トークン数から context の使用率を

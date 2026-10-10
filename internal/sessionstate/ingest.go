@@ -2,12 +2,12 @@ package sessionstate
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math"
 	"os"
-	"path/filepath"
 	"time"
+
+	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
 
 // statuslineInput は Claude Code が statusline コマンドの stdin に渡す JSON のうち､
@@ -46,7 +46,7 @@ type statuslineWindow struct {
 //     ときだけ書く｡無い (初回 API レスポンス前､rate_limits が届かない契約､ウィンドウの
 //     切り替わり) ときは既存ファイルを残す
 //
-// 書き込みは同一ディレクトリの一時ファイル経由の rename で原子的に行う｡
+// 書き込みは同一ディレクトリの一時ファイル経由の rename で原子的に行う (statefile)｡
 // 端末多重化ツールの場所はプロセスの環境変数から読む (IngestStatuslineWithEnv)｡
 func (s Store) IngestStatusline(input []byte, now time.Time) error {
 	return s.IngestStatuslineWithEnv(input, os.Getenv, now)
@@ -78,7 +78,7 @@ func (s Store) IngestStatuslineWithEnv(input []byte, getenv func(string) string,
 		TranscriptPath:    in.TranscriptPath,
 		Multiplexer:       newMultiplexerFile(MultiplexerRefFromEnv(getenv)),
 	}
-	if err := writeJSONAtomic(contextPath, ".context.*", ctx); err != nil {
+	if err := statefile.WriteJSONAtomic(contextPath, ".context.*", ctx); err != nil {
 		return err
 	}
 
@@ -86,7 +86,7 @@ func (s Store) IngestStatuslineWithEnv(input []byte, getenv func(string) string,
 	if !ok {
 		return nil
 	}
-	return writeJSONAtomic(rateLimitPath, ".rate-limits.*", rl)
+	return statefile.WriteJSONAtomic(rateLimitPath, ".rate-limits.*", rl)
 }
 
 // rateLimitFile は stdin の rate_limits を書き出す形へ写す｡five_hour.resets_at が
@@ -124,47 +124,4 @@ func roundPercent(v *float64) float64 {
 		return 0
 	}
 	return math.Round(*v)
-}
-
-// writeJSONAtomic は v を JSON 1 行 (末尾に改行) にして path へ原子的に書く｡
-func writeJSONAtomic(path, tmpPattern string, v any) error {
-	data, err := json.Marshal(v)
-	if err != nil {
-		return fmt.Errorf("%s の JSON 化に失敗: %w", filepath.Base(path), err)
-	}
-	return writeFileAtomic(path, tmpPattern, append(data, '\n'))
-}
-
-// writeFileAtomic は data を path へ原子的に書く｡
-// 一時ファイルは path と同じディレクトリに tmpPattern の名前で作る｡別のファイル
-// システムだと rename が原子的でなくなり､daemon が書きかけを読むため｡rename 前に
-// 失敗したら一時ファイルを消す (消し損ねても housekeeping が mtime で拾う)｡
-func writeFileAtomic(path, tmpPattern string, data []byte) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o750); err != nil {
-		return fmt.Errorf("%s の作成に失敗: %w", dir, err)
-	}
-	tmp, err := os.CreateTemp(dir, tmpPattern)
-	if err != nil {
-		return fmt.Errorf("一時ファイルの作成に失敗: %w", err)
-	}
-	if err := writeAndClose(tmp, data); err != nil {
-		return errors.Join(err, os.Remove(tmp.Name()))
-	}
-	if err := os.Rename(tmp.Name(), path); err != nil {
-		return errors.Join(fmt.Errorf("%s への置き換えに失敗: %w", path, err), os.Remove(tmp.Name()))
-	}
-	return nil
-}
-
-// writeAndClose は f へ data を書き切って閉じる｡Close の失敗も書き込みの失敗として返す｡
-func writeAndClose(f *os.File, data []byte) error {
-	if _, err := f.Write(data); err != nil {
-		_ = f.Close()
-		return fmt.Errorf("一時ファイルへの書き込みに失敗: %w", err)
-	}
-	if err := f.Close(); err != nil {
-		return fmt.Errorf("一時ファイルのクローズに失敗: %w", err)
-	}
-	return nil
 }

@@ -52,8 +52,10 @@ agents-daemon simulate                  # 使い捨て pane で検知から送�
 agents-daemon simulate --send --keep    # 実際に送信し､pane を残して目で見る
 ```
 
-statusline から呼ばれる `ingest-statusline` は stdin の JSON を受けて state file を書くだけで､
-手で叩くなら `< in.json` で渡す｡stdout には何も出さず､失敗しても exit 0 で終わる｡
+`statusLine.command` から呼ばれる `statusline` は stdin の JSON を受けて state file を書き､描画を stdout に出す｡
+手で叩くなら `COLUMNS=200 agents-daemon statusline < in.json` で渡す (COLUMNS が無ければ full の 3 行)｡
+自前の statusline から呼ぶ `ingest-statusline` は state file を書くだけで stdout には何も出さない｡
+どちらも失敗しても exit 0 で終わる (理由は stderr)｡
 
 `inspect` は判定結果だけでなく､走査した行・ゲートが開いているか・待機時刻をどの
 情報源から得たかを出す｡検知がおかしいと疑ったときに､結論ではなく判断過程を見るためのもの｡
@@ -239,12 +241,12 @@ Claude Code の画面の文言は安定した API ではない｡変わって検
 - **daemon は 1 つの backend しか見ない｡** 選ぶのは起動時の環境 (`REX_SESSION` の有無) で､herdr の
   セッションから起きた daemon は rex の block を見ない (逆も同じ)｡`doctor` の daemon の節が警告する｡
   `agents-daemon stop` の後､見たい側のセッションで起こし直す｡
-- **statusline を切っていると state ファイルが作られない｡** statusline はこの plugin に含まれない｡
-  利用者の statusline が stdin を `agents-daemon ingest-statusline` へ渡さなければ､ゲートは働かず､
-  待機時刻は画面かフォールバックから決まり､compact の自動投入は動かない｡
+- **statusline を切っていると state ファイルが作られない｡** `statusLine.command` がバイナリの `statusline` を
+  指しているか､利用者の statusline が stdin を `agents-daemon ingest-statusline` へ渡していなければ､
+  ゲートは働かず､待機時刻は画面かフォールバックから決まり､compact の自動投入は動かない｡
 - **pane にセッション ID が紐づいていないと own state を引けない｡** herdr は pane の `agent_session`､
-  rex は `context/<sid>.json` の `multiplexer` で紐づける｡rex では statusline が `ingest-statusline` を
-  呼んでいないと block の session_id が引けない (`doctor` で `session_id=(なし)`)｡対応する
+  rex は `context/<sid>.json` の `multiplexer` で紐づける｡rex では statusline が配線されていないと
+  block の session_id が引けない (`doctor` で `session_id=(なし)`)｡対応する
   ファイルが決まらないためゲートは適用されず､画面の分類だけで判定する｡起床時刻は
   画面の絶対時刻かアカウント全体の state から決まる｡
 - **上限中に開いた新規セッションは､プロンプトを打って弾かれていないと再開しても

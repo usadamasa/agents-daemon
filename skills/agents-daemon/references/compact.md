@@ -9,7 +9,7 @@ context 使用率が閾値を超えたら､ユーザーの操作なしに
 書いたファイルの有無と mtime だけ｡
 
 ```
-statusline ──毎描画── ingest-statusline ──> $STATE/context/<sid>.json {used_percentage}
+statusline ──毎描画── agents-daemon statusline (または ingest-statusline) ──> $STATE/context/<sid>.json {used_percentage}
                                                           │
 daemon (毎 tick) ─────────────────────────────────────────┘
   │

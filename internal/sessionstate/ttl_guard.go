@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
 
 // cacheAckFreshness は daemon が ack を書いてから UserPromptSubmit hook が走るまでの猶予｡
@@ -76,7 +78,7 @@ func (s Store) TTLGuard(input []byte, now time.Time) (warning string, err error)
 	if ack.exists && ack.value == raw {
 		return "", pruneErr
 	}
-	if err := writeFileAtomic(ackPath, ".cache-ack.*", []byte(raw)); err != nil {
+	if err := statefile.WriteFileAtomic(ackPath, ".cache-ack.*", []byte(raw)); err != nil {
 		return "", errors.Join(fmt.Errorf("ack の書き込みに失敗: %w", err), pruneErr)
 	}
 	if ack.exists && fresh(ack.modTime, now, cacheAckFreshness) {

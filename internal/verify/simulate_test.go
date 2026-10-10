@@ -12,17 +12,31 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/herdrcli"
-	"github.com/usadamasa/agents-daemon/internal/herdrcli/herdrclifake"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
 )
+
+func TestRunSimulate_rexの環境では止める(t *testing.T) {
+	t.Setenv("REX_SESSION", "session:01a12439-0839-7829-a4cb-aeac453570c1")
+	t.Setenv("HERDR_ENV", "1")
+	var buf bytes.Buffer
+	err := RunSimulate(context.Background(), &buf, apppath.New(t.TempDir(), "", ""), SimulateOptions{})
+	if err == nil || !strings.Contains(err.Error(), "herdr 専用") {
+		t.Fatalf("RunSimulate() error = %v, want herdr 専用", err)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("止める前に何かした: %s", buf.String())
+	}
+}
 
 func TestScopedClient_所有pane以外への操作を拒否する(t *testing.T) {
 	const owned = "wH:pOwned"
 	const other = "wH:pOther"
 
-	newFake := func() *herdrclifake.Client {
-		return &herdrclifake.Client{
-			PaneGetFunc: func(_ context.Context, paneID string) (herdrcli.Pane, error) {
-				return herdrcli.Pane{PaneID: paneID}, nil
+	newFake := func() *multiplexerfake.Client {
+		return &multiplexerfake.Client{
+			PaneGetFunc: func(_ context.Context, paneID string) (multiplexer.Pane, error) {
+				return multiplexer.Pane{PaneID: paneID}, nil
 			},
 		}
 	}
@@ -51,7 +65,7 @@ func TestScopedClient_所有pane以外への操作を拒否する(t *testing.T) 
 	t.Run("PaneRead: 他 pane は拒否する", func(t *testing.T) {
 		fake := newFake()
 		c := newScopedClient(fake, owned)
-		_, err := c.PaneRead(context.Background(), other, herdrcli.PaneReadOptions{})
+		_, err := c.PaneRead(context.Background(), other, multiplexer.PaneReadOptions{})
 		assertPaneNotOwned(t, err)
 		if len(fake.Calls) != 0 {
 			t.Errorf("拒否されたのに inner が呼ばれている: %v", fake.Calls)
@@ -92,7 +106,7 @@ func TestScopedClient_所有pane以外への操作を拒否する(t *testing.T) 
 	t.Run("ReportMetadata: 他 pane は拒否する", func(t *testing.T) {
 		fake := newFake()
 		c := newScopedClient(fake, owned)
-		err := c.ReportMetadata(context.Background(), other, herdrcli.ReportMetadataOptions{Source: "x"})
+		err := c.ReportMetadata(context.Background(), other, multiplexer.ReportMetadataOptions{Source: "x"})
 		assertPaneNotOwned(t, err)
 		if len(fake.Calls) != 0 {
 			t.Errorf("拒否されたのに inner が呼ばれている: %v", fake.Calls)
@@ -115,7 +129,7 @@ func TestScopedClient_所有pane以外への操作を拒否する(t *testing.T) 
 }
 
 func TestSimulateDryRunClient_送信系はinnerを呼ばずログだけ出す(t *testing.T) {
-	fake := &herdrclifake.Client{}
+	fake := &multiplexerfake.Client{}
 	var buf bytes.Buffer
 	c := simulateDryRunClient{inner: fake, w: &buf}
 
@@ -125,7 +139,7 @@ func TestSimulateDryRunClient_送信系はinnerを呼ばずログだけ出す(t 
 	if err := c.SendKeys(context.Background(), "p1", "esc", "enter"); err != nil {
 		t.Fatalf("SendKeys() error = %v", err)
 	}
-	if err := c.ReportMetadata(context.Background(), "p1", herdrcli.ReportMetadataOptions{Source: "x"}); err != nil {
+	if err := c.ReportMetadata(context.Background(), "p1", multiplexer.ReportMetadataOptions{Source: "x"}); err != nil {
 		t.Fatalf("ReportMetadata() error = %v", err)
 	}
 
@@ -141,9 +155,9 @@ func TestSimulateDryRunClient_送信系はinnerを呼ばずログだけ出す(t 
 }
 
 func TestSimulateDryRunClient_読み取り系はinnerへ委譲する(t *testing.T) {
-	fake := &herdrclifake.Client{
-		PaneGetFunc: func(_ context.Context, paneID string) (herdrcli.Pane, error) {
-			return herdrcli.Pane{PaneID: paneID}, nil
+	fake := &multiplexerfake.Client{
+		PaneGetFunc: func(_ context.Context, paneID string) (multiplexer.Pane, error) {
+			return multiplexer.Pane{PaneID: paneID}, nil
 		},
 	}
 	c := simulateDryRunClient{inner: fake, w: &bytes.Buffer{}}
@@ -154,7 +168,7 @@ func TestSimulateDryRunClient_読み取り系はinnerへ委譲する(t *testing.
 	if _, err := c.PaneGet(context.Background(), "p1"); err != nil {
 		t.Fatalf("PaneGet() error = %v", err)
 	}
-	if _, err := c.PaneRead(context.Background(), "p1", herdrcli.PaneReadOptions{}); err != nil {
+	if _, err := c.PaneRead(context.Background(), "p1", multiplexer.PaneReadOptions{}); err != nil {
 		t.Fatalf("PaneRead() error = %v", err)
 	}
 	if err := c.Reachable(context.Background()); err != nil {
@@ -200,6 +214,9 @@ func TestRunSimulate_RealHerdr(t *testing.T) {
 	}
 	if os.Getenv("HERDR_ENV") != "1" {
 		t.Skip("HERDR_ENV=1 のセッション内でないので skip する")
+	}
+	if os.Getenv("REX_SESSION") != "" {
+		t.Skip("herdr の中の rex で動いており simulate が herdr 専用で止まるので skip する")
 	}
 
 	client := herdrcli.NewExecClient()

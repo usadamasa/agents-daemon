@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/usadamasa/agents-daemon/internal/herdrcli"
-	"github.com/usadamasa/agents-daemon/internal/herdrcli/herdrclifake"
 	"github.com/usadamasa/agents-daemon/internal/monitor"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
 )
 
 // idleCompactConfigPath は idle compact を有効にした config.json を置く｡
@@ -37,10 +37,10 @@ func TestDaemonRuntimeTick_IdleCompactFromTranscript(t *testing.T) {
 	// idle な pane では statusline が再描画されず､観測は最後の応答の直後で止まる｡
 	lastResponse := time.Date(2026, 9, 29, 3, 37, 6, 94_000_000, time.UTC)
 	now := lastResponse.Add(51 * time.Minute)
-	pane := claudePaneWithSession("pane-a", "term-a", "session-a", herdrcli.AgentStatusIdle)
-	client := &herdrclifake.Client{
-		PaneListFunc: func(context.Context) ([]herdrcli.Pane, error) { return []herdrcli.Pane{pane}, nil },
-		PaneReadFunc: func(context.Context, string, herdrcli.PaneReadOptions) (string, error) {
+	pane := claudePaneWithSession("pane-a", "term-a", "session-a", multiplexer.AgentStatusIdle)
+	client := &multiplexerfake.Client{
+		PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) { return []multiplexer.Pane{pane}, nil },
+		PaneReadFunc: func(context.Context, string, multiplexer.PaneReadOptions) (string, error) {
 			return "⏺ 読み終えました｡\n\n─────────\n❯\n─────────\n", nil
 		},
 	}
@@ -69,10 +69,10 @@ func TestDaemonRuntimeTick_IdleCompactFromTranscript(t *testing.T) {
 func TestDaemonRuntimeTick_IdleCompactMarker(t *testing.T) {
 	last := time.Date(2026, 9, 27, 3, 44, 5, 954_000_000, time.UTC)
 	now := last.Add(50 * time.Minute)
-	pane := claudePaneWithSession("pane-a", "term-a", "session-a", herdrcli.AgentStatusIdle)
-	client := &herdrclifake.Client{
-		PaneListFunc: func(context.Context) ([]herdrcli.Pane, error) { return []herdrcli.Pane{pane}, nil },
-		PaneReadFunc: func(context.Context, string, herdrcli.PaneReadOptions) (string, error) {
+	pane := claudePaneWithSession("pane-a", "term-a", "session-a", multiplexer.AgentStatusIdle)
+	client := &multiplexerfake.Client{
+		PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) { return []multiplexer.Pane{pane}, nil },
+		PaneReadFunc: func(context.Context, string, multiplexer.PaneReadOptions) (string, error) {
 			return "⏺ 変更を適用しました｡\n\n─────────\n❯\n─────────\n", nil
 		},
 	}

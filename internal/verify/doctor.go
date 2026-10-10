@@ -15,29 +15,30 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/config"
 	"github.com/usadamasa/agents-daemon/internal/daemon"
-	"github.com/usadamasa/agents-daemon/internal/herdrcli"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 )
 
-// RunDoctor は各前提条件を順に確認し w へ報告する｡herdr に到達できない場合だけ
-// error を返す (呼び出し元の main が exit 1 にする)｡それ以外の欠落や陳腐化は
-// 情報として報告するに留め､error にはしない｡
-func RunDoctor(ctx context.Context, w io.Writer, client herdrcli.Client, p apppath.Paths, now time.Time) error {
+// RunDoctor は各前提条件を順に確認し w へ報告する｡kind は client の多重化ツール
+// (backend.Detect の結果)｡その server に到達できない場合だけ error を返す (呼び出し元の
+// main が exit 1 にする)｡それ以外の欠落や陳腐化は情報として報告するに留め､error にはしない｡
+func RunDoctor(ctx context.Context, w io.Writer, client multiplexer.Client, kind string, p apppath.Paths, now time.Time) error {
 	_, _ = fmt.Fprintln(w, "=== agents-daemon doctor ===")
 
-	_, _ = fmt.Fprintln(w, "\n-- herdr 到達性 --")
+	_, _ = fmt.Fprintln(w, "\n-- backend --")
+	_, _ = fmt.Fprintf(w, "  backend: %s\n", backendLabel(kind))
 	if err := client.Reachable(ctx); err != nil {
-		_, _ = fmt.Fprintf(w, "  NG: herdr に到達できません: %v\n", err)
-		return fmt.Errorf("herdr に到達できないため､これ以降の診断は行えません: %w", err)
+		_, _ = fmt.Fprintf(w, "  NG: %s に到達できません: %v\n", kind, err)
+		return fmt.Errorf("%s に到達できないため､これ以降の診断は行えません: %w", kind, err)
 	}
-	_, _ = fmt.Fprintln(w, "  OK: herdr server は稼働しています")
+	_, _ = fmt.Fprintf(w, "  OK: %s server は稼働しています\n", kind)
 
 	_, _ = fmt.Fprintln(w, "\n-- pane 一覧 --")
 	panes, err := client.PaneList(ctx)
 	if err != nil {
-		// herdr 自体には到達できているのにここで失敗するのは異常｡診断ツールとして
+		// server には到達できているのにここで失敗するのは異常｡診断ツールとして
 		// 機能しない状態なので broken 扱いにする｡
-		return fmt.Errorf("herdr pane list に失敗しました (herdr には到達できるのに異常): %w", err)
+		return fmt.Errorf("%s の pane 一覧の取得に失敗しました (%s には到達できるのに異常): %w", kind, kind, err)
 	}
 	reportPanes(w, panes)
 
@@ -48,7 +49,7 @@ func RunDoctor(ctx context.Context, w io.Writer, client herdrcli.Client, p apppa
 	reportConfigState(w, p)
 
 	_, _ = fmt.Fprintln(w, "\n-- daemon --")
-	reportDaemonState(w, p, now)
+	reportDaemonState(w, p, kind, now)
 
 	_, _ = fmt.Fprintln(w, "\n-- 解決済みパス --")
 	reportPaths(w, p)
@@ -56,20 +57,24 @@ func RunDoctor(ctx context.Context, w io.Writer, client herdrcli.Client, p apppa
 	return nil
 }
 
+// backendLabel は backend と､それを選んだ根拠の環境変数｡
+func backendLabel(kind string) string {
+	if kind == sessionstate.MultiplexerKindRex {
+		return kind + " (REX_SESSION あり)"
+	}
+	return kind + " (REX_SESSION なし)"
+}
+
 // reportPanes は pane 一覧のうち Claude agent と判定されたものを列挙する｡
-func reportPanes(w io.Writer, panes []herdrcli.Pane) {
+func reportPanes(w io.Writer, panes []multiplexer.Pane) {
 	claudeCount := 0
 	for _, pane := range panes {
-		if !herdrcli.IsClaudeAgent(pane) {
+		if !multiplexer.IsClaudeAgent(pane) {
 			continue
 		}
 		claudeCount++
-		sessionID := "(なし)"
-		if pane.AgentSession != nil && pane.AgentSession.Value != "" {
-			sessionID = pane.AgentSession.Value
-		}
 		_, _ = fmt.Fprintf(w, "  pane=%s cwd=%s agent_status=%s session_id=%s\n",
-			pane.PaneID, pane.CWD, pane.AgentStatus, sessionID)
+			pane.PaneID, pane.CWD, pane.AgentStatus, defaultString(pane.SessionID, "(なし)"))
 	}
 	if claudeCount == 0 {
 		_, _ = fmt.Fprintln(w, "  Claude agent の pane が見つかりません")
@@ -80,7 +85,7 @@ func reportPanes(w io.Writer, panes []herdrcli.Pane) {
 // reportRateLimitStates は ingest-statusline が書き出す rate-limits.json の有無､鮮度､
 // 5 時間ウィンドウの使用率を報告する｡ファイルが無いこと自体は異常ではない
 // (statusline から ingest-statusline がまだ 1 度も rate_limits を受け取っていない)｡
-func reportRateLimitStates(w io.Writer, p apppath.Paths, panes []herdrcli.Pane, now time.Time) {
+func reportRateLimitStates(w io.Writer, p apppath.Paths, panes []multiplexer.Pane, now time.Time) {
 	cfg, cfgErr := config.Load(p.ConfigFile())
 	if cfgErr != nil {
 		_, _ = fmt.Fprintf(w, "  設定の読み込みに失敗したため､既定の鮮度閾値で判定します: %v\n", cfgErr)
@@ -89,12 +94,12 @@ func reportRateLimitStates(w io.Writer, p apppath.Paths, panes []herdrcli.Pane, 
 
 	found := false
 	for _, pane := range panes {
-		if !herdrcli.IsClaudeAgent(pane) {
+		if !multiplexer.IsClaudeAgent(pane) {
 			continue
 		}
 		found = true
-		_, _ = fmt.Fprintf(w, "  pane=%s session_id=%s\n", pane.PaneID, defaultString(pane.SessionID(), "(なし)"))
-		reportSessionRateLimitState(w, cfg, p, pane.SessionID(), now)
+		_, _ = fmt.Fprintf(w, "  pane=%s session_id=%s\n", pane.PaneID, defaultString(pane.SessionID, "(なし)"))
+		reportSessionRateLimitState(w, cfg, p, pane.SessionID, now)
 	}
 	if !found {
 		_, _ = fmt.Fprintln(w, "  Claude agent の pane が無いため､対応する state もありません")
@@ -241,7 +246,8 @@ func configFields(cfg, def config.Config) []configFieldReport {
 }
 
 // reportDaemonState は PID ファイルと status.json から daemon の稼働状況を報告する｡
-func reportDaemonState(w io.Writer, p apppath.Paths, now time.Time) {
+// daemon の backend が今の環境の kind と違えば警告する｡
+func reportDaemonState(w io.Writer, p apppath.Paths, kind string, now time.Time) {
 	pid, err := daemon.ReadPIDFile(p.PIDFile())
 	if err != nil {
 		_, _ = fmt.Fprintf(w, "  PID ファイルの読み込みに失敗: %v\n", err)
@@ -264,6 +270,13 @@ func reportDaemonState(w io.Writer, p apppath.Paths, now time.Time) {
 	}
 	_, _ = fmt.Fprintf(w, "  最終 tick: %s (%s 前)\n", snap.UpdatedAt.Format(time.RFC3339), now.Sub(snap.UpdatedAt).Round(time.Second))
 	_, _ = fmt.Fprintf(w, "  監視中 pane: %d 件\n", len(snap.Panes))
+	// 前の daemon が残した snapshot や､backend を記録する前の daemon とは比べない｡
+	if snap.PID == pid && snap.Backend != "" {
+		_, _ = fmt.Fprintf(w, "  backend: %s\n", snap.Backend)
+		if snap.Backend != kind {
+			_, _ = fmt.Fprintf(w, "  ⚠ daemon の backend (%s) が今の環境 (%s) と違います｡daemon はこの環境のセッションを監視していません\n", snap.Backend, kind)
+		}
+	}
 }
 
 // reportPaths は daemon / CLI が触るランタイムファイルの解決済み絶対パスを列挙する｡

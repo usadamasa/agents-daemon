@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/detect"
-	"github.com/usadamasa/agents-daemon/internal/herdrcli"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 )
 
 // tickCompactStall は「上限とは無関係に､compact 直後に入力待ちで止まった pane」を
@@ -22,7 +22,7 @@ import (
 //   - compact 境界の後ろに Claude の応答が無く､空の入力行で止まっている
 //   - その画面が compactStallQuietSeconds のあいだ変わっていない
 //   - 直近の送信から compactStallCooldownMinutes 以上経っている
-func tickCompactStall(ctx context.Context, deps Deps, pane herdrcli.Pane, ps *PaneState, screen string, now time.Time) (Outcome, error) {
+func tickCompactStall(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *PaneState, screen string, now time.Time) (Outcome, error) {
 	cfg := deps.Config
 
 	signature, ok := detect.CompactStallSignature(screen, cfg.DetectionTailLines)
@@ -72,8 +72,8 @@ func tickCompactStall(ctx context.Context, deps Deps, pane herdrcli.Pane, ps *Pa
 // 報告され続けることがあるため) が､ここでは逆に「働いていないこと」を要求する側なので
 // 使ってよい｡working を idle と誤報する事例は観測されておらず､誤っても
 // 「送らない」側へ倒れる｡
-func isIdlePane(pane herdrcli.Pane) bool {
-	return pane.AgentStatus == herdrcli.AgentStatusIdle || pane.AgentStatus == herdrcli.AgentStatusDone
+func isIdlePane(pane multiplexer.Pane) bool {
+	return pane.AgentStatus == multiplexer.AgentStatusIdle || pane.AgentStatus == multiplexer.AgentStatusDone
 }
 
 // sendPrompt は pane の入力欄へ text を打って Enter で投入する｡
@@ -86,7 +86,7 @@ func isIdlePane(pane herdrcli.Pane) bool {
 // だで呼び出し元は入力欄が空であることを確かめてから呼ぶこと｡
 //
 // 送る前に cache の ack を残す (cache_ack.go)｡
-func sendPrompt(ctx context.Context, deps Deps, pane herdrcli.Pane, ps *PaneState, text string, now time.Time) error {
+func sendPrompt(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *PaneState, text string, now time.Time) error {
 	ackBeforeSend(deps, pane, ps, text, now)
 	if err := deps.Client.SendText(ctx, pane.PaneID, text); err != nil {
 		return err

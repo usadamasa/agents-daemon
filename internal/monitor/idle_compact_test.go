@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/config"
-	"github.com/usadamasa/agents-daemon/internal/herdrcli"
-	"github.com/usadamasa/agents-daemon/internal/herdrcli/herdrclifake"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 )
 
@@ -40,7 +40,7 @@ func (m *markRecorder) mark(string) error {
 // idleFixture は idle compact の 1 tick に要る入力｡
 type idleFixture struct {
 	cfg    config.Config
-	client *herdrclifake.Client
+	client *multiplexerfake.Client
 	ps     *PaneState
 	cs     *sessionstate.Compact
 	cache  *sessionstate.Cache
@@ -69,7 +69,7 @@ func newIdleFixture() *idleFixture {
 	cs.ContextWindowSize = idleWindow
 	return &idleFixture{
 		cfg:    idleCompactConfig(),
-		client: &herdrclifake.Client{PaneReadFunc: readReturning(idleScreen, nil)},
+		client: &multiplexerfake.Client{PaneReadFunc: readReturning(idleScreen, nil)},
 		ps:     &PaneState{},
 		cs:     cs,
 		cache:  idleCacheAt(idleNow.Add(-55 * time.Minute)),
@@ -83,7 +83,7 @@ func (f *idleFixture) tick(t *testing.T, now time.Time) (Outcome, error) {
 	deps.CompactState = func(string) *sessionstate.Compact { return f.cs }
 	deps.CacheState = func(string) *sessionstate.Cache { return f.cache }
 	deps.MarkIdleCompacted = f.marker.mark
-	return Tick(context.Background(), deps, newTestPaneWithSession(herdrcli.AgentStatusIdle), f.ps, nil, now)
+	return Tick(context.Background(), deps, newTestPaneWithSession(multiplexer.AgentStatusIdle), f.ps, nil, now)
 }
 
 func (f *idleFixture) mustTick(t *testing.T, now time.Time) Outcome {

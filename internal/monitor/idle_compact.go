@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/usadamasa/agents-daemon/internal/herdrcli"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 )
 
@@ -19,7 +19,7 @@ const shortCacheTTL = 5 * time.Minute
 
 // tickIdleCompact は cache の失効前の 1 段目｡pending と cooldown は呼び出し元が見ている｡
 func tickIdleCompact(
-	ctx context.Context, deps Deps, pane herdrcli.Pane, ps *PaneState,
+	ctx context.Context, deps Deps, pane multiplexer.Pane, ps *PaneState,
 	cs *sessionstate.Compact, screen string, now time.Time,
 ) (Outcome, error) {
 	cfg := deps.Config
@@ -70,16 +70,16 @@ func holdAfterIdleCompact(ps *PaneState, cs *sessionstate.Compact) {
 }
 
 // paneCache は pane のセッションの cache の状態を返す｡無ければ nil｡
-func paneCache(deps Deps, pane herdrcli.Pane) *sessionstate.Cache {
+func paneCache(deps Deps, pane multiplexer.Pane) *sessionstate.Cache {
 	if deps.CacheState == nil {
 		return nil
 	}
-	return deps.CacheState(pane.SessionID())
+	return deps.CacheState(pane.SessionID)
 }
 
-func markIdleCompacted(deps Deps, pane herdrcli.Pane) error {
+func markIdleCompacted(deps Deps, pane multiplexer.Pane) error {
 	if deps.MarkIdleCompacted == nil {
 		return errors.New("marker の書き込み先が配線されていない")
 	}
-	return deps.MarkIdleCompacted(pane.SessionID())
+	return deps.MarkIdleCompacted(pane.SessionID)
 }

@@ -14,8 +14,8 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/daemon"
-	"github.com/usadamasa/agents-daemon/internal/herdrcli"
-	"github.com/usadamasa/agents-daemon/internal/herdrcli/herdrclifake"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 )
 
@@ -25,11 +25,11 @@ func TestRunDoctor(t *testing.T) {
 	fixedNow := time.Date(2026, 8, 16, 13, 0, 0, 0, time.UTC)
 
 	t.Run("herdr に到達できないと error を返し､以降の項目は診断しない", func(t *testing.T) {
-		client := &herdrclifake.Client{
+		client := &multiplexerfake.Client{
 			ReachableFunc: func(context.Context) error { return errFakeUnreachable },
 		}
 		var buf bytes.Buffer
-		err := RunDoctor(context.Background(), &buf, client, apppath.New(t.TempDir(), "", ""), fixedNow)
+		err := RunDoctor(context.Background(), &buf, client, sessionstate.MultiplexerKindHerdr, apppath.New(t.TempDir(), "", ""), fixedNow)
 		if err == nil {
 			t.Fatal("herdr 到達不可のとき error を期待したが nil だった")
 		}
@@ -40,24 +40,25 @@ func TestRunDoctor(t *testing.T) {
 
 	t.Run("herdr に到達できれば pane 一覧・state・設定・daemon・パスを報告して nil を返す", func(t *testing.T) {
 		home := t.TempDir()
-		client := &herdrclifake.Client{
+		client := &multiplexerfake.Client{
 			ReachableFunc: func(context.Context) error { return nil },
-			PaneListFunc: func(context.Context) ([]herdrcli.Pane, error) {
-				return []herdrcli.Pane{
-					{PaneID: "p1", Agent: "claude", AgentStatus: herdrcli.AgentStatusIdle, CWD: "/repo",
-						AgentSession: &herdrcli.AgentSession{Value: "session-abc"}},
-					{PaneID: "p2", Agent: "", AgentStatus: herdrcli.AgentStatusUnknown, CWD: "/other"},
+			PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) {
+				return []multiplexer.Pane{
+					{PaneID: "p1", Agent: "claude", AgentStatus: multiplexer.AgentStatusIdle, CWD: "/repo",
+						SessionID: "session-abc"},
+					{PaneID: "p2", Agent: "", AgentStatus: multiplexer.AgentStatusUnknown, CWD: "/other"},
 				}, nil
 			},
 		}
 
 		var buf bytes.Buffer
-		if err := RunDoctor(context.Background(), &buf, client, apppath.New(home, "", ""), fixedNow); err != nil {
+		if err := RunDoctor(context.Background(), &buf, client, sessionstate.MultiplexerKindHerdr, apppath.New(home, "", ""), fixedNow); err != nil {
 			t.Fatalf("RunDoctor() error = %v", err)
 		}
 		out := buf.String()
 
 		for _, want := range []string{
+			"backend: herdr (REX_SESSION なし)",
 			"OK: herdr server は稼働しています",
 			"pane=p1", "session_id=session-abc",
 			"state ファイルはまだありません",
@@ -82,20 +83,20 @@ func TestRunDoctor(t *testing.T) {
 			"observed_at": fixedNow.Add(-time.Minute).Unix(),
 			"session_id":  "sess-1",
 		})
-		client := &herdrclifake.Client{
+		client := &multiplexerfake.Client{
 			ReachableFunc: func(context.Context) error { return nil },
-			PaneListFunc: func(context.Context) ([]herdrcli.Pane, error) {
-				return []herdrcli.Pane{{
-					Agent:        "claude-code",
-					AgentStatus:  herdrcli.AgentStatusIdle,
-					PaneID:       "p1",
-					AgentSession: &herdrcli.AgentSession{Value: "sess-1"},
+			PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) {
+				return []multiplexer.Pane{{
+					Agent:       "claude-code",
+					AgentStatus: multiplexer.AgentStatusIdle,
+					PaneID:      "p1",
+					SessionID:   "sess-1",
 				}}, nil
 			},
 		}
 
 		var buf bytes.Buffer
-		if err := RunDoctor(context.Background(), &buf, client, p, fixedNow); err != nil {
+		if err := RunDoctor(context.Background(), &buf, client, sessionstate.MultiplexerKindHerdr, p, fixedNow); err != nil {
 			t.Fatalf("RunDoctor() error = %v", err)
 		}
 		out := buf.String()
@@ -116,13 +117,13 @@ func TestRunDoctor(t *testing.T) {
 			StartedAt: fixedNow.Add(-time.Hour),
 			UpdatedAt: fixedNow,
 		})
-		client := &herdrclifake.Client{
+		client := &multiplexerfake.Client{
 			ReachableFunc: func(context.Context) error { return nil },
-			PaneListFunc:  func(context.Context) ([]herdrcli.Pane, error) { return nil, nil },
+			PaneListFunc:  func(context.Context) ([]multiplexer.Pane, error) { return nil, nil },
 		}
 
 		var buf bytes.Buffer
-		if err := RunDoctor(context.Background(), &buf, client, p, fixedNow); err != nil {
+		if err := RunDoctor(context.Background(), &buf, client, sessionstate.MultiplexerKindHerdr, p, fixedNow); err != nil {
 			t.Fatalf("RunDoctor() error = %v", err)
 		}
 		out := buf.String()
@@ -131,6 +132,71 @@ func TestRunDoctor(t *testing.T) {
 		}
 		if !strings.Contains(out, "監視中 pane: 0 件") {
 			t.Errorf("監視中 pane 数の報告が無い: %s", out)
+		}
+	})
+
+	t.Run("rex なら backend と到達性を rex の名前で報告する", func(t *testing.T) {
+		client := &multiplexerfake.Client{
+			ReachableFunc: func(context.Context) error { return nil },
+			PaneListFunc:  func(context.Context) ([]multiplexer.Pane, error) { return nil, nil },
+		}
+		var buf bytes.Buffer
+		if err := RunDoctor(context.Background(), &buf, client, sessionstate.MultiplexerKindRex, apppath.New(t.TempDir(), "", ""), fixedNow); err != nil {
+			t.Fatalf("RunDoctor() error = %v", err)
+		}
+		for _, want := range []string{"backend: rex (REX_SESSION あり)", "OK: rex server は稼働しています"} {
+			if !strings.Contains(buf.String(), want) {
+				t.Errorf("出力に %q が無い:\n%s", want, buf.String())
+			}
+		}
+	})
+
+	t.Run("rex に到達できなければ rex の名前で error を返す", func(t *testing.T) {
+		client := &multiplexerfake.Client{
+			ReachableFunc: func(context.Context) error { return errFakeUnreachable },
+		}
+		var buf bytes.Buffer
+		err := RunDoctor(context.Background(), &buf, client, sessionstate.MultiplexerKindRex, apppath.New(t.TempDir(), "", ""), fixedNow)
+		if err == nil || !strings.Contains(err.Error(), "rex に到達できない") {
+			t.Fatalf("RunDoctor() error = %v, want rex に到達できない", err)
+		}
+	})
+
+	t.Run("daemon の backend が今の環境と違えば警告する", func(t *testing.T) {
+		cases := []struct {
+			name        string
+			snapBackend string
+			snapPID     int
+			wantWarn    bool
+		}{
+			{"herdr の daemon を rex の環境から見た", sessionstate.MultiplexerKindHerdr, os.Getpid(), true},
+			{"同じ backend なら警告しない", sessionstate.MultiplexerKindRex, os.Getpid(), false},
+			{"変更前の daemon (記録なし) は警告しない", "", os.Getpid(), false},
+			{"前の daemon が残した snapshot は警告しない", sessionstate.MultiplexerKindHerdr, os.Getpid() + 1, false},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				p := apppath.New(t.TempDir(), "", "")
+				writeFixturePIDFile(t, p.PIDFile(), os.Getpid())
+				writeFixtureSnapshot(t, p.StatusFile(), daemon.StatusSnapshot{
+					PID:       tc.snapPID,
+					Backend:   tc.snapBackend,
+					StartedAt: fixedNow.Add(-time.Hour),
+					UpdatedAt: fixedNow,
+				})
+				client := &multiplexerfake.Client{
+					ReachableFunc: func(context.Context) error { return nil },
+					PaneListFunc:  func(context.Context) ([]multiplexer.Pane, error) { return nil, nil },
+				}
+				var buf bytes.Buffer
+				if err := RunDoctor(context.Background(), &buf, client, sessionstate.MultiplexerKindRex, p, fixedNow); err != nil {
+					t.Fatalf("RunDoctor() error = %v (警告は exit code を変えない)", err)
+				}
+				warned := strings.Contains(buf.String(), "⚠ daemon の backend")
+				if warned != tc.wantWarn {
+					t.Errorf("警告の有無 = %v, want %v:\n%s", warned, tc.wantWarn, buf.String())
+				}
+			})
 		}
 	})
 }

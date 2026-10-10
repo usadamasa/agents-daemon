@@ -4,6 +4,7 @@
 //	rate-limits/<session_id>.json    ingest-statusline が書く利用上限 (IngestStatusline)
 //	context/<session_id>.json        ingest-statusline が書く context 使用率と transcript のパス
 //	                                 (IngestStatusline｡cache の状態は CacheLoader がこのパスから求める)
+//	                                 と端末多重化ツールの場所 multiplexer (ListMultiplexerBlocks が block から逆引きする)
 //	compact-state/<session_id>.md    compact-prep skill が書く復旧用 state file
 //	compacted/<session_id>           PostCompact hook が書く圧縮完了 marker
 //	cache/<session_id>.json          旧版の Stop hook が書いた prompt cache の状態｡もう書かず､Prune が消す
@@ -35,7 +36,7 @@ import (
 	"time"
 )
 
-// sessionIDPattern はファイル名に使ってよい session ID の形｡herdr から受け取った
+// sessionIDPattern はファイル名に使ってよい session ID の形｡多重化ツールや入力から受け取った
 // 値をそのままパスへ結合するため､区切り文字を含む値でディレクトリの外へ
 // 出られないことをここで保証する｡
 var sessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)

@@ -8,8 +8,8 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/config"
 	"github.com/usadamasa/agents-daemon/internal/detect"
-	"github.com/usadamasa/agents-daemon/internal/herdrcli"
-	"github.com/usadamasa/agents-daemon/internal/herdrcli/herdrclifake"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 )
 
@@ -42,19 +42,19 @@ func newTestClassifier(t *testing.T) *detect.Classifier {
 	return c
 }
 
-func newTestPane(status herdrcli.AgentStatus, isClaude bool) herdrcli.Pane {
+func newTestPane(status multiplexer.AgentStatus, isClaude bool) multiplexer.Pane {
 	agent := "bash"
 	if isClaude {
 		agent = "claude-code"
 	}
-	return herdrcli.Pane{
+	return multiplexer.Pane{
 		Agent:       agent,
 		AgentStatus: status,
 		PaneID:      "pane-1",
 	}
 }
 
-func newTestDeps(t *testing.T, cfg config.Config, client *herdrclifake.Client) Deps {
+func newTestDeps(t *testing.T, cfg config.Config, client *multiplexerfake.Client) Deps {
 	t.Helper()
 	return Deps{
 		Client:     client,
@@ -64,8 +64,8 @@ func newTestDeps(t *testing.T, cfg config.Config, client *herdrclifake.Client) D
 	}
 }
 
-func readReturning(screen string, err error) func(ctx context.Context, paneID string, opts herdrcli.PaneReadOptions) (string, error) {
-	return func(context.Context, string, herdrcli.PaneReadOptions) (string, error) {
+func readReturning(screen string, err error) func(ctx context.Context, paneID string, opts multiplexer.PaneReadOptions) (string, error) {
+	return func(context.Context, string, multiplexer.PaneReadOptions) (string, error) {
 		return screen, err
 	}
 }
@@ -78,15 +78,15 @@ func TestTick_AgentStatusNeverGatesDetection(t *testing.T) {
 	// 上限で止まった pane は「working に見える pane」と区別できないため､
 	// agent_status を判定に使うと上限を取りこぼす｡判定は画面テキストの分類
 	// (detect.Classifier) だけで行う｡
-	for _, status := range []herdrcli.AgentStatus{
-		herdrcli.AgentStatusWorking,
-		herdrcli.AgentStatusIdle,
-		herdrcli.AgentStatusBlocked,
-		herdrcli.AgentStatusDone,
-		herdrcli.AgentStatusUnknown,
+	for _, status := range []multiplexer.AgentStatus{
+		multiplexer.AgentStatusWorking,
+		multiplexer.AgentStatusIdle,
+		multiplexer.AgentStatusBlocked,
+		multiplexer.AgentStatusDone,
+		multiplexer.AgentStatusUnknown,
 	} {
 		t.Run(string(status), func(t *testing.T) {
-			client := &herdrclifake.Client{
+			client := &multiplexerfake.Client{
 				PaneReadFunc: readReturning(limitAndRelativeScreen, nil),
 			}
 			deps := newTestDeps(t, config.Default(), client)
@@ -110,11 +110,11 @@ func TestTick_AgentStatusNeverGatesDetection(t *testing.T) {
 }
 
 func TestTick_StillWaiting_NoRead(t *testing.T) {
-	client := &herdrclifake.Client{
+	client := &multiplexerfake.Client{
 		PaneReadFunc: readReturning(limitAndRelativeScreen, nil),
 	}
 	deps := newTestDeps(t, config.Default(), client)
-	pane := newTestPane(herdrcli.AgentStatusIdle, true)
+	pane := newTestPane(multiplexer.AgentStatusIdle, true)
 	now := time.Now()
 	ps := &PaneState{Status: StatusWaiting, WaitUntil: now.Add(time.Hour)}
 
@@ -140,12 +140,12 @@ func TestTick_LimitDetected_ResetsAtWinsOverFallback(t *testing.T) {
 		ObservedAt:       now.Add(-time.Minute),
 	}
 
-	client := &herdrclifake.Client{
+	client := &multiplexerfake.Client{
 		PaneReadFunc: readReturning(limitAndRelativeScreen, nil),
 	}
 	cfg := config.Default()
 	deps := newTestDeps(t, cfg, client)
-	pane := newTestPane(herdrcli.AgentStatusIdle, true)
+	pane := newTestPane(multiplexer.AgentStatusIdle, true)
 	ps := &PaneState{}
 
 	outcome, err := Tick(context.Background(), deps, pane, ps, rateState, now)
@@ -176,12 +176,12 @@ func TestTick_StaleState_StillUsesResetsAt(t *testing.T) {
 		ObservedAt:       now.Add(-2 * time.Hour), // StateMaxAgeSeconds (既定 900s) を超え陳腐化
 	}
 
-	client := &herdrclifake.Client{
+	client := &multiplexerfake.Client{
 		PaneReadFunc: readReturning(limitAndRelativeScreen, nil), // 「5分後」を含む
 	}
 	cfg := config.Default()
 	deps := newTestDeps(t, cfg, client)
-	pane := newTestPane(herdrcli.AgentStatusIdle, true)
+	pane := newTestPane(multiplexer.AgentStatusIdle, true)
 	ps := &PaneState{}
 
 	outcome, err := Tick(context.Background(), deps, pane, ps, rateState, now)
@@ -201,12 +201,12 @@ func TestTick_StaleState_StillUsesResetsAt(t *testing.T) {
 func TestTick_NoStateNoRelative_FallsBackToFallbackHours(t *testing.T) {
 	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
 
-	client := &herdrclifake.Client{
+	client := &multiplexerfake.Client{
 		PaneReadFunc: readReturning(limitAbsoluteScreen, nil), // 相対表現を含まない
 	}
 	cfg := config.Default()
 	deps := newTestDeps(t, cfg, client)
-	pane := newTestPane(herdrcli.AgentStatusIdle, true)
+	pane := newTestPane(multiplexer.AgentStatusIdle, true)
 	ps := &PaneState{}
 
 	outcome, err := Tick(context.Background(), deps, pane, ps, nil, now)
@@ -253,11 +253,11 @@ func TestTick_Gate_FreshStateThreshold(t *testing.T) {
 				FiveHourResetsAt: now.Add(2 * time.Hour),
 				ObservedAt:       observedAt,
 			}
-			client := &herdrclifake.Client{
+			client := &multiplexerfake.Client{
 				PaneReadFunc: readReturning(limitAndRelativeScreen, nil),
 			}
 			deps := newTestDeps(t, cfg, client)
-			pane := newTestPane(herdrcli.AgentStatusIdle, true)
+			pane := newTestPane(multiplexer.AgentStatusIdle, true)
 			ps := &PaneState{}
 
 			outcome, err := Tick(context.Background(), deps, pane, ps, rateState, now)
@@ -289,11 +289,11 @@ func TestTick_Gate_NullFiveHour_DoesNotSuppress(t *testing.T) {
 		// five_hour が null で書かれた state｡FiveHourResetsAt がゼロ値のままになる｡
 		ObservedAt: now.Add(-time.Minute), // fresh
 	}
-	client := &herdrclifake.Client{
+	client := &multiplexerfake.Client{
 		PaneReadFunc: readReturning(limitAndRelativeScreen, nil),
 	}
 	deps := newTestDeps(t, config.Default(), client)
-	pane := newTestPane(herdrcli.AgentStatusIdle, true)
+	pane := newTestPane(multiplexer.AgentStatusIdle, true)
 	ps := &PaneState{}
 
 	outcome, err := Tick(context.Background(), deps, pane, ps, rateState, now)
@@ -321,11 +321,11 @@ func TestTick_WakeWithLimitScreen_SendsDespiteFreshGate(t *testing.T) {
 		FiveHourResetsAt: now.Add(5 * time.Hour),
 		ObservedAt:       now.Add(-time.Minute), // fresh かつ閾値未満
 	}
-	client := &herdrclifake.Client{
+	client := &multiplexerfake.Client{
 		PaneReadFunc: readReturning(limitAbsoluteScreen, nil),
 	}
 	deps := newTestDeps(t, config.Default(), client)
-	pane := newTestPane(herdrcli.AgentStatusIdle, true)
+	pane := newTestPane(multiplexer.AgentStatusIdle, true)
 	ps := &PaneState{Status: StatusWaiting, WaitUntil: now.Add(-time.Second)}
 
 	outcome, err := Tick(context.Background(), deps, pane, ps, rateState, now)
@@ -355,11 +355,11 @@ func TestTick_WakeWithLimitScreen_SendsDespiteFreshGate(t *testing.T) {
 
 func TestTick_UserResumedDuringWait(t *testing.T) {
 	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
-	client := &herdrclifake.Client{
+	client := &multiplexerfake.Client{
 		PaneReadFunc: readReturning(cleanScreen, nil),
 	}
 	deps := newTestDeps(t, config.Default(), client)
-	pane := newTestPane(herdrcli.AgentStatusIdle, true)
+	pane := newTestPane(multiplexer.AgentStatusIdle, true)
 	ps := &PaneState{Status: StatusWaiting, Attempts: 3, WaitUntil: now.Add(-time.Second)}
 
 	outcome, err := Tick(context.Background(), deps, pane, ps, nil, now)
@@ -385,12 +385,12 @@ func TestTick_UserResumedDuringWait(t *testing.T) {
 
 func TestTick_TransientBackoff_DoublesAndCaps(t *testing.T) {
 	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
-	client := &herdrclifake.Client{
+	client := &multiplexerfake.Client{
 		PaneReadFunc: readReturning(transientScreen, nil),
 	}
 	cfg := config.Default() // TransientWaitSeconds=60, TransientMaxWaitSeconds=300
 	deps := newTestDeps(t, cfg, client)
-	pane := newTestPane(herdrcli.AgentStatusIdle, true)
+	pane := newTestPane(multiplexer.AgentStatusIdle, true)
 	ps := &PaneState{Status: StatusWaiting} // WaitUntil ゼロ値なので初回から必ず進む
 
 	wantDeltas := []time.Duration{
@@ -421,12 +421,12 @@ func TestTick_TransientBackoff_DoublesAndCaps(t *testing.T) {
 
 func TestTick_MaxRetriesReached_NoSend(t *testing.T) {
 	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
-	client := &herdrclifake.Client{
+	client := &multiplexerfake.Client{
 		PaneReadFunc: readReturning(limitAndRelativeScreen, nil), // KindLimit (transient ではない)
 	}
 	cfg := config.Default()
 	deps := newTestDeps(t, cfg, client)
-	pane := newTestPane(herdrcli.AgentStatusIdle, true)
+	pane := newTestPane(multiplexer.AgentStatusIdle, true)
 	ps := &PaneState{Status: StatusWaiting, Attempts: cfg.MaxRetries}
 
 	outcome, err := Tick(context.Background(), deps, pane, ps, nil, now)
@@ -453,7 +453,7 @@ func TestTick_Recovery_SendsEscTextEnterInOrder(t *testing.T) {
 	const wantMessage = "作業を再開してください"
 
 	var gotText string
-	client := &herdrclifake.Client{
+	client := &multiplexerfake.Client{
 		PaneReadFunc: readReturning(limitAndRelativeScreen, nil),
 		SendTextFunc: func(_ context.Context, _ string, text string) error {
 			gotText = text
@@ -463,7 +463,7 @@ func TestTick_Recovery_SendsEscTextEnterInOrder(t *testing.T) {
 	cfg := config.Default()
 	cfg.RetryMessage = wantMessage
 	deps := newTestDeps(t, cfg, client)
-	pane := newTestPane(herdrcli.AgentStatusIdle, true)
+	pane := newTestPane(multiplexer.AgentStatusIdle, true)
 	ps := &PaneState{Status: StatusWaiting}
 
 	outcome, err := Tick(context.Background(), deps, pane, ps, nil, now)
@@ -491,12 +491,12 @@ func TestTick_Recovery_SendsEscTextEnterInOrder(t *testing.T) {
 
 func TestTick_NotClaudeAgent_DuringWait_NoSend(t *testing.T) {
 	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
-	client := &herdrclifake.Client{
+	client := &multiplexerfake.Client{
 		PaneReadFunc: readReturning(limitAndRelativeScreen, nil),
 	}
 	cfg := config.Default()
 	deps := newTestDeps(t, cfg, client)
-	pane := newTestPane(herdrcli.AgentStatusIdle, false) // Claude agent ではなくなった
+	pane := newTestPane(multiplexer.AgentStatusIdle, false) // Claude agent ではなくなった
 	ps := &PaneState{Status: StatusWaiting}
 
 	outcome, err := Tick(context.Background(), deps, pane, ps, nil, now)
@@ -518,11 +518,11 @@ func TestTick_NotClaudeAgent_DuringWait_NoSend(t *testing.T) {
 
 func TestTick_ScreenUnreadable_DuringWait_StaysWaiting(t *testing.T) {
 	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
-	client := &herdrclifake.Client{
+	client := &multiplexerfake.Client{
 		PaneReadFunc: readReturning("", nil), // 空画面
 	}
 	deps := newTestDeps(t, config.Default(), client)
-	pane := newTestPane(herdrcli.AgentStatusIdle, true)
+	pane := newTestPane(multiplexer.AgentStatusIdle, true)
 	ps := &PaneState{Status: StatusWaiting, Attempts: 3}
 
 	outcome, err := Tick(context.Background(), deps, pane, ps, nil, now)
@@ -543,9 +543,9 @@ func TestTick_ReadError_DoesNotKillMachine(t *testing.T) {
 	boom := errors.New("herdr unreachable")
 
 	t.Run("監視中", func(t *testing.T) {
-		client := &herdrclifake.Client{PaneReadFunc: readReturning("", boom)}
+		client := &multiplexerfake.Client{PaneReadFunc: readReturning("", boom)}
 		deps := newTestDeps(t, config.Default(), client)
-		pane := newTestPane(herdrcli.AgentStatusIdle, true)
+		pane := newTestPane(multiplexer.AgentStatusIdle, true)
 		ps := &PaneState{}
 
 		outcome, err := Tick(context.Background(), deps, pane, ps, nil, now)
@@ -562,9 +562,9 @@ func TestTick_ReadError_DoesNotKillMachine(t *testing.T) {
 	})
 
 	t.Run("待機中", func(t *testing.T) {
-		client := &herdrclifake.Client{PaneReadFunc: readReturning("", boom)}
+		client := &multiplexerfake.Client{PaneReadFunc: readReturning("", boom)}
 		deps := newTestDeps(t, config.Default(), client)
-		pane := newTestPane(herdrcli.AgentStatusIdle, true)
+		pane := newTestPane(multiplexer.AgentStatusIdle, true)
 		ps := &PaneState{Status: StatusWaiting, Attempts: 2}
 
 		outcome, err := Tick(context.Background(), deps, pane, ps, nil, now)
@@ -583,12 +583,12 @@ func TestTick_ReadError_DoesNotKillMachine(t *testing.T) {
 
 func TestTick_TransientFromMonitoring_NoMarginAdded(t *testing.T) {
 	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
-	client := &herdrclifake.Client{
+	client := &multiplexerfake.Client{
 		PaneReadFunc: readReturning(transientScreen, nil),
 	}
 	cfg := config.Default()
 	deps := newTestDeps(t, cfg, client)
-	pane := newTestPane(herdrcli.AgentStatusIdle, true)
+	pane := newTestPane(multiplexer.AgentStatusIdle, true)
 	ps := &PaneState{}
 
 	outcome, err := Tick(context.Background(), deps, pane, ps, nil, now)
@@ -617,13 +617,13 @@ func TestTick_TransientFromMonitoring_NoMarginAdded(t *testing.T) {
 
 func TestTick_HandleTransientDisabled_StaysMonitoring(t *testing.T) {
 	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
-	client := &herdrclifake.Client{
+	client := &multiplexerfake.Client{
 		PaneReadFunc: readReturning(transientScreen, nil),
 	}
 	cfg := config.Default()
 	cfg.HandleTransient = false
 	deps := newTestDeps(t, cfg, client)
-	pane := newTestPane(herdrcli.AgentStatusIdle, true)
+	pane := newTestPane(multiplexer.AgentStatusIdle, true)
 	ps := &PaneState{}
 
 	outcome, err := Tick(context.Background(), deps, pane, ps, nil, now)
@@ -644,11 +644,11 @@ func TestTick_HandleTransientDisabled_StaysMonitoring(t *testing.T) {
 
 func TestTick_CleanScreen_StaysMonitoring(t *testing.T) {
 	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
-	client := &herdrclifake.Client{
+	client := &multiplexerfake.Client{
 		PaneReadFunc: readReturning(cleanScreen, nil),
 	}
 	deps := newTestDeps(t, config.Default(), client)
-	pane := newTestPane(herdrcli.AgentStatusIdle, true)
+	pane := newTestPane(multiplexer.AgentStatusIdle, true)
 	ps := &PaneState{}
 
 	outcome, err := Tick(context.Background(), deps, pane, ps, nil, now)
@@ -701,12 +701,12 @@ func TestTick_PastResetsAt_WakesImmediately(t *testing.T) {
 		ObservedAt:       now.Add(-3 * time.Hour), // 上限で描画が止まったので state も古い
 	}
 
-	client := &herdrclifake.Client{
+	client := &multiplexerfake.Client{
 		PaneReadFunc: readReturning(limitAndRelativeScreen, nil), // 「5分後」を含む
 	}
 	cfg := config.Default()
 	deps := newTestDeps(t, cfg, client)
-	pane := newTestPane(herdrcli.AgentStatusIdle, true)
+	pane := newTestPane(multiplexer.AgentStatusIdle, true)
 	ps := &PaneState{}
 
 	outcome, err := Tick(context.Background(), deps, pane, ps, rateState, now)
@@ -733,12 +733,12 @@ func TestTick_StateWithoutResetsAt_FallsBackToRelativeParse(t *testing.T) {
 		ObservedAt:   now,
 	}
 
-	client := &herdrclifake.Client{
+	client := &multiplexerfake.Client{
 		PaneReadFunc: readReturning(limitAndRelativeScreen, nil), // 「5分後」を含む
 	}
 	cfg := config.Default()
 	deps := newTestDeps(t, cfg, client)
-	pane := newTestPane(herdrcli.AgentStatusIdle, true)
+	pane := newTestPane(multiplexer.AgentStatusIdle, true)
 	ps := &PaneState{}
 
 	outcome, err := Tick(context.Background(), deps, pane, ps, rateState, now)

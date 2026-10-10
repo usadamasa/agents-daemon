@@ -1,6 +1,7 @@
 # agents-daemon
 
-herdr のペインで動く Claude Code セッションを見守る常駐デーモンと､それを配線する Claude Code plugin｡
+端末多重化ツール (herdr または rex) の pane で動く Claude Code セッションを見守る常駐デーモンと､
+それを配線する Claude Code plugin｡
 
 ## 何をするか
 
@@ -25,8 +26,15 @@ plugin が持つもの:
 
 ## 前提
 
-- **[herdr](https://herdr.dev)**: daemon は `herdr pane list` / `pane read` / `pane send-text` で pane を見て送信する｡
-  herdr の外で動く Claude Code には何も届かない｡
+- **herdr または rex**: daemon は多重化ツールの CLI で pane を見て送信する｡
+  どちらの外で動く Claude Code にも何も届かない｡daemon は起動時の環境で片方を選ぶ｡`REX_SESSION` があれば rex､無ければ herdr｡
+  - **[herdr](https://herdr.dev)**: `herdr pane list` / `pane read` / `pane send-text` を使う｡
+  - **rex**: `rex ls` / `block call` / `capture` / `send` を使う｡server の socket は
+    `~/Library/Application Support/rex/server.sock`｡
+    sandbox の中の Bash から `doctor` や setup skill で rex を叩くなら､
+    `sandbox.network.allowUnixSockets` に `~/Library/Application Support/rex` を足す｡block と session の対応は statusline の
+    `ingest-statusline` が書く記録から引くので､下の statusline の配線が必須になる｡
+    rex `0.0.1791570264-g7b5bf3` と Claude Code `2.1.296` で測った (2026-10-10)｡
 - **statusline が stdin を `ingest-statusline` へ渡すこと**: 使用率と解除時刻と transcript のパスは statusline の stdin にしか来ない｡
   この plugin は statusline を含まないので､利用者の statusline に 1 行足す (下の「セットアップ」で行う)｡
 - **Go toolchain**: SessionStart hook が plugin のソースから `go build` でバイナリを建てる｡
@@ -50,7 +58,7 @@ build の経過は `${XDG_STATE_HOME:-~/.local/state}/agents-daemon/logs/build.l
 
 ## セットアップ
 
-install 後に herdr の pane の中で Claude Code を起動し､`/agents-daemon:setup` を実行する｡
+install 後に herdr の pane か rex の block の中で Claude Code を起動し､`/agents-daemon:setup` を実行する｡
 前提がそろっているかを確かめ､statusline への配線が無ければ足す案を出す｡
 
 ## 設定
@@ -74,7 +82,7 @@ context の自動 compact を使う最小例:
 agents-daemon status                     # 稼働状況､監視中の pane､ログの末尾
 agents-daemon logs -n 80                 # daemon.log の末尾
 agents-daemon doctor                     # 前提条件の診断
-agents-daemon inspect --pane <id>        # 生きた pane の画面を分類する
+agents-daemon inspect --pane <id>        # 生きた pane の画面を分類する (rex は block ID)
 agents-daemon daemon --foreground --dry-run  # 送信せずに判定だけ回す
 agents-daemon stop                       # 停止
 agents-daemon ingest-statusline < in.json  # statusline の stdin から state file を書く (statusline が呼ぶ)

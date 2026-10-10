@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/config"
-	"github.com/usadamasa/agents-daemon/internal/herdrcli"
-	"github.com/usadamasa/agents-daemon/internal/herdrcli/herdrclifake"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 )
 
@@ -30,7 +30,7 @@ func compactAutoConfig() config.Config {
 }
 
 // compactTick は compact の段を 1 tick 回す｡
-func compactTick(t *testing.T, cfg config.Config, client *herdrclifake.Client, pane herdrcli.Pane, ps *PaneState, cs *sessionstate.Compact, now time.Time) Outcome {
+func compactTick(t *testing.T, cfg config.Config, client *multiplexerfake.Client, pane multiplexer.Pane, ps *PaneState, cs *sessionstate.Compact, now time.Time) Outcome {
 	t.Helper()
 	deps := newTestDeps(t, cfg, client)
 	deps.CompactState = func(string) *sessionstate.Compact { return cs }
@@ -48,8 +48,8 @@ func freshContext(pct float64, now time.Time) *sessionstate.Compact {
 
 func TestTick_使用率が閾値を超えたらcompactPrepを投入する(t *testing.T) {
 	now := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
-	client := &herdrclifake.Client{PaneReadFunc: readReturning(idleScreen, nil)}
-	pane := newTestPane(herdrcli.AgentStatusIdle, true)
+	client := &multiplexerfake.Client{PaneReadFunc: readReturning(idleScreen, nil)}
+	pane := newTestPane(multiplexer.AgentStatusIdle, true)
 	ps := &PaneState{}
 	cfg := compactAutoConfig()
 
@@ -66,10 +66,10 @@ func TestTick_使用率が閾値を超えたらcompactPrepを投入する(t *tes
 
 func TestTick_使用率が閾値未満なら何もしない(t *testing.T) {
 	now := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
-	client := &herdrclifake.Client{PaneReadFunc: readReturning(idleScreen, nil)}
+	client := &multiplexerfake.Client{PaneReadFunc: readReturning(idleScreen, nil)}
 	ps := &PaneState{}
 
-	outcome := compactTick(t, compactAutoConfig(), client, newTestPane(herdrcli.AgentStatusIdle, true), ps, freshContext(59, now), now)
+	outcome := compactTick(t, compactAutoConfig(), client, newTestPane(multiplexer.AgentStatusIdle, true), ps, freshContext(59, now), now)
 
 	if outcome != OutcomeMonitoring {
 		t.Fatalf("outcome = %v, want %v", outcome, OutcomeMonitoring)
@@ -80,11 +80,11 @@ func TestTick_使用率が閾値未満なら何もしない(t *testing.T) {
 func TestTick_使用率の観測が古いなら何もしない(t *testing.T) {
 	// statusline の描画が止まっている pane は､そのセッションが生きていない｡
 	now := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
-	client := &herdrclifake.Client{PaneReadFunc: readReturning(idleScreen, nil)}
+	client := &multiplexerfake.Client{PaneReadFunc: readReturning(idleScreen, nil)}
 	cfg := compactAutoConfig()
 	stale := freshContext(80, now.Add(-time.Duration(cfg.StateMaxAgeSeconds+1)*time.Second))
 
-	outcome := compactTick(t, cfg, client, newTestPane(herdrcli.AgentStatusIdle, true), &PaneState{}, stale, now)
+	outcome := compactTick(t, cfg, client, newTestPane(multiplexer.AgentStatusIdle, true), &PaneState{}, stale, now)
 
 	if outcome != OutcomeMonitoring {
 		t.Fatalf("outcome = %v, want %v", outcome, OutcomeMonitoring)
@@ -95,9 +95,9 @@ func TestTick_使用率の観測が古いなら何もしない(t *testing.T) {
 func TestTick_入力欄に書きかけがあるなら送らない(t *testing.T) {
 	// Escape は入力行をクリアしないため､残った文字に送信文字列が連結される｡
 	now := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
-	client := &herdrclifake.Client{PaneReadFunc: readReturning(typingScreen, nil)}
+	client := &multiplexerfake.Client{PaneReadFunc: readReturning(typingScreen, nil)}
 
-	outcome := compactTick(t, compactAutoConfig(), client, newTestPane(herdrcli.AgentStatusIdle, true), &PaneState{}, freshContext(80, now), now)
+	outcome := compactTick(t, compactAutoConfig(), client, newTestPane(multiplexer.AgentStatusIdle, true), &PaneState{}, freshContext(80, now), now)
 
 	if outcome != OutcomeMonitoring {
 		t.Fatalf("outcome = %v, want %v", outcome, OutcomeMonitoring)
@@ -107,8 +107,8 @@ func TestTick_入力欄に書きかけがあるなら送らない(t *testing.T) 
 
 func TestTick_作業中のpaneには投入しない(t *testing.T) {
 	now := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
-	for _, status := range []herdrcli.AgentStatus{herdrcli.AgentStatusWorking, herdrcli.AgentStatusBlocked, ""} {
-		client := &herdrclifake.Client{PaneReadFunc: readReturning(idleScreen, nil)}
+	for _, status := range []multiplexer.AgentStatus{multiplexer.AgentStatusWorking, multiplexer.AgentStatusBlocked, ""} {
+		client := &multiplexerfake.Client{PaneReadFunc: readReturning(idleScreen, nil)}
 
 		outcome := compactTick(t, compactAutoConfig(), client, newTestPane(status, true), &PaneState{}, freshContext(80, now), now)
 
@@ -121,11 +121,11 @@ func TestTick_作業中のpaneには投入しない(t *testing.T) {
 
 func TestTick_compactAutoEnabledがfalseなら何もしない(t *testing.T) {
 	now := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
-	client := &herdrclifake.Client{PaneReadFunc: readReturning(idleScreen, nil)}
+	client := &multiplexerfake.Client{PaneReadFunc: readReturning(idleScreen, nil)}
 	cfg := compactAutoConfig()
 	cfg.CompactAutoEnabled = false
 
-	outcome := compactTick(t, cfg, client, newTestPane(herdrcli.AgentStatusIdle, true), &PaneState{}, freshContext(95, now), now)
+	outcome := compactTick(t, cfg, client, newTestPane(multiplexer.AgentStatusIdle, true), &PaneState{}, freshContext(95, now), now)
 
 	if outcome != OutcomeMonitoring {
 		t.Fatalf("outcome = %v, want %v", outcome, OutcomeMonitoring)
@@ -135,8 +135,8 @@ func TestTick_compactAutoEnabledがfalseなら何もしない(t *testing.T) {
 
 func TestTick_stateFileが投入後に書かれたらcompactを投入する(t *testing.T) {
 	now := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
-	client := &herdrclifake.Client{PaneReadFunc: readReturning(idleScreen, nil)}
-	pane := newTestPane(herdrcli.AgentStatusIdle, true)
+	client := &multiplexerfake.Client{PaneReadFunc: readReturning(idleScreen, nil)}
+	pane := newTestPane(multiplexer.AgentStatusIdle, true)
 	ps := &PaneState{}
 	cfg := compactAutoConfig()
 
@@ -163,8 +163,8 @@ func TestTick_stateFileが投入後に書かれたらcompactを投入する(t *t
 func TestTick_stateFileが投入より古いままなら待つ(t *testing.T) {
 	// 前のサイクルの state file が残っているだけで /compact を撃たない｡
 	now := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
-	client := &herdrclifake.Client{PaneReadFunc: readReturning(idleScreen, nil)}
-	pane := newTestPane(herdrcli.AgentStatusIdle, true)
+	client := &multiplexerfake.Client{PaneReadFunc: readReturning(idleScreen, nil)}
+	pane := newTestPane(multiplexer.AgentStatusIdle, true)
 	ps := &PaneState{CompactPrepSentAt: now}
 	cs := freshContext(62, now)
 	cs.HasPrep = true
@@ -180,8 +180,8 @@ func TestTick_stateFileが投入より古いままなら待つ(t *testing.T) {
 
 func TestTick_stateFileが現れないまま時間切れになったら諦める(t *testing.T) {
 	now := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
-	client := &herdrclifake.Client{PaneReadFunc: readReturning(idleScreen, nil)}
-	pane := newTestPane(herdrcli.AgentStatusIdle, true)
+	client := &multiplexerfake.Client{PaneReadFunc: readReturning(idleScreen, nil)}
+	pane := newTestPane(multiplexer.AgentStatusIdle, true)
 	cfg := compactAutoConfig()
 	ps := &PaneState{CompactPrepSentAt: now}
 	timedOut := now.Add(time.Duration(cfg.CompactAutoPrepTimeoutMinutes)*time.Minute + time.Second)
@@ -203,8 +203,8 @@ func TestTick_stateFileが現れないまま時間切れになったら諦める
 
 func TestTick_圧縮完了markerを見て再開を促す(t *testing.T) {
 	now := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
-	client := &herdrclifake.Client{PaneReadFunc: readReturning(idleScreen, nil)}
-	pane := newTestPane(herdrcli.AgentStatusIdle, true)
+	client := &multiplexerfake.Client{PaneReadFunc: readReturning(idleScreen, nil)}
+	pane := newTestPane(multiplexer.AgentStatusIdle, true)
 	ps := &PaneState{}
 	cfg := compactAutoConfig()
 	// 圧縮直後は使用率が落ちるので 1 段目は動かない｡
@@ -230,13 +230,13 @@ func TestTick_圧縮完了markerを見て再開を促す(t *testing.T) {
 
 func TestTick_圧縮直後は猶予を置いてから再開を促す(t *testing.T) {
 	now := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
-	client := &herdrclifake.Client{PaneReadFunc: readReturning(idleScreen, nil)}
+	client := &multiplexerfake.Client{PaneReadFunc: readReturning(idleScreen, nil)}
 	cfg := compactAutoConfig()
 	cs := freshContext(9, now)
 	cs.HasCompacted = true
 	cs.CompactedAt = now.Add(-time.Duration(cfg.CompactResumeDelaySeconds-10) * time.Second)
 
-	outcome := compactTick(t, cfg, client, newTestPane(herdrcli.AgentStatusIdle, true), &PaneState{}, cs, now)
+	outcome := compactTick(t, cfg, client, newTestPane(multiplexer.AgentStatusIdle, true), &PaneState{}, cs, now)
 
 	if outcome != OutcomeMonitoring {
 		t.Fatalf("outcome = %v, want %v", outcome, OutcomeMonitoring)
@@ -246,14 +246,14 @@ func TestTick_圧縮直後は猶予を置いてから再開を促す(t *testing.
 
 func TestTick_compactResumeEnabledがfalseなら再開を促さない(t *testing.T) {
 	now := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
-	client := &herdrclifake.Client{PaneReadFunc: readReturning(idleScreen, nil)}
+	client := &multiplexerfake.Client{PaneReadFunc: readReturning(idleScreen, nil)}
 	cfg := compactAutoConfig()
 	cfg.CompactResumeEnabled = false
 	cs := freshContext(9, now)
 	cs.HasCompacted = true
 	cs.CompactedAt = now.Add(-time.Hour)
 
-	outcome := compactTick(t, cfg, client, newTestPane(herdrcli.AgentStatusIdle, true), &PaneState{}, cs, now)
+	outcome := compactTick(t, cfg, client, newTestPane(multiplexer.AgentStatusIdle, true), &PaneState{}, cs, now)
 
 	if outcome != OutcomeMonitoring {
 		t.Fatalf("outcome = %v, want %v", outcome, OutcomeMonitoring)
@@ -264,9 +264,9 @@ func TestTick_compactResumeEnabledがfalseなら再開を促さない(t *testing
 func TestTick_compactStateが無ければ何もしない(t *testing.T) {
 	// Deps.CompactState を差していない daemon (あるいは session ID を持たない pane)｡
 	now := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
-	client := &herdrclifake.Client{PaneReadFunc: readReturning(idleScreen, nil)}
+	client := &multiplexerfake.Client{PaneReadFunc: readReturning(idleScreen, nil)}
 
-	outcome := compactTick(t, compactAutoConfig(), client, newTestPane(herdrcli.AgentStatusIdle, true), &PaneState{}, nil, now)
+	outcome := compactTick(t, compactAutoConfig(), client, newTestPane(multiplexer.AgentStatusIdle, true), &PaneState{}, nil, now)
 
 	if outcome != OutcomeMonitoring {
 		t.Fatalf("outcome = %v, want %v", outcome, OutcomeMonitoring)
@@ -275,7 +275,7 @@ func TestTick_compactStateが無ければ何もしない(t *testing.T) {
 }
 
 // assertSentText は pane へ text が送られ､Enter で投入されたことを確かめる｡
-func assertSentText(t *testing.T, client *herdrclifake.Client, text string) {
+func assertSentText(t *testing.T, client *multiplexerfake.Client, text string) {
 	t.Helper()
 	if client.SentTexts[len(client.SentTexts)-1] != text {
 		t.Errorf("送ったテキスト = %q, want %q", client.SentTexts, text)

@@ -47,7 +47,15 @@ type statuslineWindow struct {
 //     切り替わり) ときは既存ファイルを残す
 //
 // 書き込みは同一ディレクトリの一時ファイル経由の rename で原子的に行う｡
+// 端末多重化ツールの場所はプロセスの環境変数から読む (IngestStatuslineWithEnv)｡
 func (s Store) IngestStatusline(input []byte, now time.Time) error {
+	return s.IngestStatuslineWithEnv(input, os.Getenv, now)
+}
+
+// IngestStatuslineWithEnv は IngestStatusline の本体で､環境変数を getenv から読む｡
+// statusline の command は Claude Code の子プロセスなので REX_BLOCK / HERDR_PANE_ID を
+// 継承しており､その場所を context/<session_id>.json の multiplexer に書く (MultiplexerRefFromEnv)｡
+func (s Store) IngestStatuslineWithEnv(input []byte, getenv func(string) string, now time.Time) error {
 	var in statuslineInput
 	if err := json.Unmarshal(input, &in); err != nil {
 		return fmt.Errorf("statusline の入力のパースに失敗: %w", err)
@@ -63,11 +71,12 @@ func (s Store) IngestStatusline(input []byte, now time.Time) error {
 
 	observedAt := now.Unix()
 	ctx := contextFile{
-		SessionID:      in.SessionID,
+		SessionID:         in.SessionID,
 		UsedPercentage:    roundPercent(in.ContextWindow.UsedPercentage),
 		ObservedAt:        observedAt,
 		ContextWindowSize: int64(in.ContextWindow.ContextWindowSize),
 		TranscriptPath:    in.TranscriptPath,
+		Multiplexer:       newMultiplexerFile(MultiplexerRefFromEnv(getenv)),
 	}
 	if err := writeJSONAtomic(contextPath, ".context.*", ctx); err != nil {
 		return err

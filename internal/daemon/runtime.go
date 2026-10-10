@@ -17,36 +17,39 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/applog"
 	"github.com/usadamasa/agents-daemon/internal/apppath"
+	"github.com/usadamasa/agents-daemon/internal/backend"
 	"github.com/usadamasa/agents-daemon/internal/config"
 	"github.com/usadamasa/agents-daemon/internal/detect"
-	"github.com/usadamasa/agents-daemon/internal/herdrcli"
 	"github.com/usadamasa/agents-daemon/internal/monitor"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 )
 
-// maxConsecutiveTickFailures は herdr pane list の取得にこの回数だけ連続で
-// 失敗したら daemon が自己終了する閾値｡herdr が落ちたまま無限に回り続けて
+// maxConsecutiveTickFailures は PaneList の取得にこの回数だけ連続で
+// 失敗したら daemon が自己終了する閾値｡多重化ツールの server が落ちたまま無限に回り続けて
 // ログを埋め尽くすのを防ぐ｡
 const maxConsecutiveTickFailures = 10
 
-// metadataSource は herdr pane report-metadata --source に渡す固定値｡
+// metadataSource は ReportMetadata の Source に渡す固定値 (herdr の report-metadata --source)｡
 // monitor パッケージ内の同名定数 (非公開) と揃えてある｡
 const metadataSource = "agents-daemon"
 
 // paneEntry は daemon が pane 1 枚ぶんに保持する監視状態｡
 type paneEntry struct {
 	state      *monitor.PaneState
-	pane       herdrcli.Pane // 直近の tick で観測した pane 情報 (シャットダウン時のラベル解除に使う)
+	pane       multiplexer.Pane // 直近の tick で観測した pane 情報 (シャットダウン時のラベル解除に使う)
 	lastSeenAt time.Time
 	lastLogKey string // 直前にログへ書いた内容の識別子 (同じ状態が続く間の重複を抑える)
 }
 
 // daemonRuntime は 1 回の --foreground 実行に閉じたループの可変状態をまとめる｡
-// pane ごとの状態機械は terminal_id をキーにする (pane_id は herdr 再起動で
-// 変わりうるが､terminal_id はその herdr 実行内で安定するため)｡
+// pane ごとの状態機械は TerminalID をキーにする (herdr の pane_id は herdr 再起動で
+// 変わりうるが､terminal_id はその herdr 実行内で安定するため｡rex は block ID)｡
 type daemonRuntime struct {
-	client herdrcli.Client
-	log    *applog.Logger
+	client multiplexer.Client
+	// backend は client の多重化ツールの種類｡status.json に書くだけで判定には使わない｡
+	backend string
+	log     *applog.Logger
 	// statusPath と store はプロセスの生存期間で固定なのでここに置く｡
 	statusPath string
 	store      sessionstate.Store
@@ -63,7 +66,7 @@ type daemonRuntime struct {
 	lastHousekeepAt     time.Time // ゼロ値は「まだ 1 度も掃除していない」
 }
 
-func newDaemonRuntime(client herdrcli.Client, log *applog.Logger, statusPath string, store sessionstate.Store, dryRun bool, sleep func(time.Duration), startedAt time.Time) *daemonRuntime {
+func newDaemonRuntime(client multiplexer.Client, log *applog.Logger, statusPath string, store sessionstate.Store, dryRun bool, sleep func(time.Duration), startedAt time.Time) *daemonRuntime {
 	return &daemonRuntime{
 		client:     client,
 		store:      store,
@@ -141,12 +144,12 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 	statusPanes := make([]PaneStatus, 0, len(panes))
 
 	for _, pane := range panes {
-		if !herdrcli.IsClaudeAgent(pane) {
+		if !multiplexer.IsClaudeAgent(pane) {
 			continue
 		}
 		claudeCount++
 		seen[pane.TerminalID] = true
-		if sid := pane.SessionID(); sid != "" {
+		if sid := pane.SessionID; sid != "" {
 			sessions[sid] = true
 		}
 
@@ -159,7 +162,7 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 		entry.lastSeenAt = now
 
 		// state はセッションごとに別ファイル｡pane に対応するものだけを読む｡
-		rateState, stateErr := r.store.LoadRateLimit(pane.SessionID())
+		rateState, stateErr := r.store.LoadRateLimit(pane.SessionID)
 		if stateErr != nil {
 			r.log.Logf("pane %s の利用上限 state の読み込みに失敗､state 無しとして継続します: %v", pane.PaneID, stateErr)
 			rateState = nil
@@ -172,7 +175,7 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 
 	r.forgetUnseen(seen, sessions)
 
-	if err := writeStatusSnapshot(r.statusPath, os.Getpid(), r.startedAt, now, statusPanes); err != nil {
+	if err := writeStatusSnapshot(r.statusPath, os.Getpid(), r.backend, r.startedAt, now, statusPanes); err != nil {
 		r.log.Logf("status snapshot の書き込みに失敗: %v", err)
 	}
 
@@ -202,7 +205,7 @@ func (r *daemonRuntime) forgetUnseen(terminals, sessions map[string]bool) {
 }
 
 // paneStatus は status.json に書く pane 1 枚ぶんのスナップショットを組む｡
-func (r *daemonRuntime) paneStatus(pane herdrcli.Pane, entry *paneEntry, outcome monitor.Outcome, now time.Time) PaneStatus {
+func (r *daemonRuntime) paneStatus(pane multiplexer.Pane, entry *paneEntry, outcome monitor.Outcome, now time.Time) PaneStatus {
 	return PaneStatus{
 		PaneID:        pane.PaneID,
 		TerminalID:    pane.TerminalID,
@@ -219,11 +222,11 @@ func (r *daemonRuntime) paneStatus(pane herdrcli.Pane, entry *paneEntry, outcome
 
 // statusCache は status に載せる cache の状態｡working な pane の transcript は応答のたびに
 // 伸びるので読み直さず､前回読んだ値を出す｡
-func (r *daemonRuntime) statusCache(pane herdrcli.Pane) *sessionstate.Cache {
-	if pane.AgentStatus == herdrcli.AgentStatusWorking {
-		return r.cache.Cached(pane.SessionID())
+func (r *daemonRuntime) statusCache(pane multiplexer.Pane) *sessionstate.Cache {
+	if pane.AgentStatus == multiplexer.AgentStatusWorking {
+		return r.cache.Cached(pane.SessionID)
 	}
-	return r.loadCache(pane.SessionID())
+	return r.loadCache(pane.SessionID)
 }
 
 // loadCache は pane のセッションの prompt cache の状態を transcript から求める｡無ければ nil｡
@@ -261,7 +264,7 @@ func (r *daemonRuntime) markIdleCompacted(sessionID string) error {
 //
 // prompt を送った出来事には cache の状態を添える (cacheSuffix)｡失効後の送信は文脈全体を
 // 書き直すので､どれだけ書き直したかを後から追えるようにする｡
-func (r *daemonRuntime) logOutcome(pane herdrcli.Pane, outcome monitor.Outcome, err error) {
+func (r *daemonRuntime) logOutcome(pane multiplexer.Pane, outcome monitor.Outcome, err error) {
 	// 同じ状態が続く間は書かない｡tick は既定 5 秒ごとなので､待機や抑制が
 	// 続くだけで日に数千行に膨れ､後から読めるログでなくなる｡状態が切り替わった
 	// ときだけ書き､静かな結果も key は更新して「戻ってきた」を検出できるようにする｡
@@ -351,13 +354,13 @@ func compactOutcomeMessage(outcome monitor.Outcome) (msg string, sent bool) {
 
 // cacheSuffix は送信ログに添える cache の状態｡形は次のいずれか｡
 //
-//	 / cache=warm (経過 3 分､TTL 60 分)
-//	 / cache=expired (経過 312 分､TTL 60 分､context 使用率 63%､ack 済み)
-//	 / cache=unknown (状態無し､ack=daemon-unknown)
+//	/ cache=warm (経過 3 分､TTL 60 分)
+//	/ cache=expired (経過 312 分､TTL 60 分､context 使用率 63%､ack 済み)
+//	/ cache=unknown (状態無し､ack=daemon-unknown)
 //
 // 失効後の送信は文脈全体を書き直すので context 使用率を併記し､どれだけ書き直したかを
 // 後から追えるようにする｡スラッシュの prompt は guard を素通りするので ack は無い｡
-func (r *daemonRuntime) cacheSuffix(pane herdrcli.Pane, entry *paneEntry) string {
+func (r *daemonRuntime) cacheSuffix(pane multiplexer.Pane, entry *paneEntry) string {
 	if entry == nil {
 		return ""
 	}
@@ -365,14 +368,14 @@ func (r *daemonRuntime) cacheSuffix(pane herdrcli.Pane, entry *paneEntry) string
 	var b strings.Builder
 	fmt.Fprintf(&b, " / cache=%s (", send.State())
 	switch c := send.Cache; {
-	case c == nil && pane.SessionID() == "":
+	case c == nil && pane.SessionID == "":
 		b.WriteString("session 未紐づけ")
 	case c == nil:
 		b.WriteString("状態無し")
 	default:
 		fmt.Fprintf(&b, "経過 %d 分､TTL %d 分", int(send.At.Sub(c.LastRequestAt)/time.Minute), int(c.TTL/time.Minute))
 		if c.Expired(send.At) {
-			if cs, err := r.store.LoadCompact(pane.SessionID()); err == nil && cs != nil && cs.HasContext {
+			if cs, err := r.store.LoadCompact(pane.SessionID); err == nil && cs != nil && cs.HasContext {
 				fmt.Fprintf(&b, "､context 使用率 %.0f%%", cs.UsedPercentage)
 			}
 		}
@@ -402,7 +405,7 @@ func (r *daemonRuntime) clearAllLabels(ctx context.Context) {
 		if entry.state.Status != monitor.StatusWaiting {
 			continue
 		}
-		if err := r.client.ReportMetadata(ctx, entry.pane.PaneID, herdrcli.ReportMetadataOptions{
+		if err := r.client.ReportMetadata(ctx, entry.pane.PaneID, multiplexer.ReportMetadataOptions{
 			Source:           metadataSource,
 			ClearStateLabels: true,
 		}); err != nil {
@@ -477,12 +480,17 @@ func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 		return fmt.Errorf("%s の enabled が false のため起動しません", p.ConfigFile())
 	}
 
-	client := herdrcli.NewExecClient()
+	store := sessionstate.New(p.StateDir())
+	kind := backend.Detect(os.Getenv)
+	client, err := backend.New(kind, store)
+	if err != nil {
+		return err
+	}
 	reachCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	reachErr := client.Reachable(reachCtx)
 	cancel()
 	if reachErr != nil {
-		return fmt.Errorf("herdr に到達できないため起動しません: %w", reachErr)
+		return fmt.Errorf("%s に到達できないため起動しません: %w", kind, reachErr)
 	}
 
 	if err := writePIDFile(p.PIDFile(), os.Getpid()); err != nil {
@@ -491,7 +499,7 @@ func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 
 	log := applog.NewLogger(p.LogFile(), time.Now)
 	defer func() { _ = log.Close() }()
-	log.Logf("daemon 起動 (pid %d, pollIntervalSeconds=%d)", os.Getpid(), cfg.PollIntervalSeconds)
+	log.Logf("daemon 起動 (pid %d, backend=%s, pollIntervalSeconds=%d)", os.Getpid(), kind, cfg.PollIntervalSeconds)
 
 	if dryRun {
 		client = newDryRunClient(client, log)
@@ -506,7 +514,8 @@ func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 	}
 
 	now := time.Now()
-	runtime := newDaemonRuntime(client, log, p.StatusFile(), sessionstate.New(p.StateDir()), dryRun, time.Sleep, now)
+	runtime := newDaemonRuntime(client, log, p.StatusFile(), store, dryRun, time.Sleep, now)
+	runtime.backend = kind
 	runtime.housekeep(p.LogFile(), now)
 
 	sigCh := make(chan os.Signal, 1)

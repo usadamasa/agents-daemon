@@ -17,13 +17,14 @@ statusline・hook・skill・daemon が別々のタイミングで動き､ファ
                                               │                           │ session を
                                               │ 毎 tick (既定 5 秒) <──────┘ 引いて読む
                                               │
-                                              ├─ herdr pane list ─────> Claude の pane 一覧
-                                              ├─ herdr pane read ─────> 各 pane の画面テキスト
+                                              ├─ PaneList ────────────> Claude の pane 一覧
+                                              ├─ PaneRead ────────────> 各 pane の画面テキスト
+                                              │  (backend は herdr か rex｡下の「多重化ツールの backend」)
                                               │
                                               │  ここで判定 (下の表)
                                               │
 [3]                                           ├─ 上限解除の時刻まで待つ
-                                              │  └─ herdr pane send-text / send-keys で再開
+                                              │  └─ SendText / SendKeys で再開
                                               ├─ context 閾値 → compact-prep → compact → 再開
                                               ├─ cache の失効前 → compact-prep → cache-idle-compacted/<session_id> → compact
                                               └─ 送る直前に cache の失効を見て cache-ack/<session_id> を書く
@@ -98,11 +99,26 @@ daemon は `observed_at` の新しさでセッションが生きているかも�
 `$STATE/context/<session_id>.json` (毎描画):
 
 ```json
-{"session_id": "0f8e2a4c-1b3d-4e5f-8a9b-0c1d2e3f4a5b", "used_percentage": 63, "observed_at": 1786840000, "context_window_size": 200000, "transcript_path": "/path/to/transcript.jsonl"}
+{"session_id": "0f8e2a4c-1b3d-4e5f-8a9b-0c1d2e3f4a5b", "used_percentage": 63, "observed_at": 1786840000, "context_window_size": 200000, "transcript_path": "/path/to/transcript.jsonl", "multiplexer": {"kind": "rex", "session": "session:01a1…", "block": "block:01a1…"}}
 ```
 
 `observed_at` はどちらも書いた時点の Unix epoch 秒｡`context_window_size` と `transcript_path` は
 入力にあるときだけ付ける (idle compact と cache の状態に使う｡[compact.md](compact.md)､下の節)｡
+
+`multiplexer` は Claude Code が動いている多重化ツールの場所｡statusline のコマンドは Claude Code の環境を
+継承するので､`ingest-statusline` が環境変数から読んで書く (`sessionstate.MultiplexerRefFromEnv`)｡
+
+| 環境変数 | 書く値 |
+| ---- | ---- |
+| `REX_BLOCK` がある | `{"kind": "rex", "session": $REX_SESSION, "block": $REX_BLOCK}` |
+| `HERDR_PANE_ID` がある | `{"kind": "herdr", "pane": $HERDR_PANE_ID}` |
+| どちらも無い | フィールドを付けない |
+
+`REX_BLOCK` を先に見るのは､herdr の中で rex を動かすと両方が見え､Claude Code の直接の親は内側の rex だから｡
+rex backend は block から session_id をこの記録で逆引きする (`Store.ListMultiplexerBlocks`)｡同じ block の
+記録が複数あれば `observed_at` が最新のものを採る (同じ block で Claude Code を起動し直すと古い記録が残る)｡
+`context/` は 7 日で消えるだけなので､5 時間の上限待ちを跨いでも対応は残る｡herdr は今も pane の
+`agent_session` で引き､この記録は書くだけで読まない｡
 
 #### daemon が transcript から求める cache の状態
 
@@ -167,7 +183,34 @@ build の数秒後には新しい版が動いている｡hook も手動操作も
 ### [3] デーモンが監視して再開する
 
 単一プロセスが全 Claude pane を見る｡pane ごとの状態は `terminal_id` をキーに
-プロセス内で持つ (`pane_id` は herdr 再起動で変わりうる)｡
+プロセス内で持つ (herdr の `pane_id` は herdr 再起動で変わりうる｡rex は block ID をそのまま使う)｡
+
+### 多重化ツールの backend
+
+daemon は pane 操作を `internal/multiplexer` の `Client` interface 越しに行い､実装は herdr (`internal/herdrcli`)
+と rex (`internal/rexcli`) の 2 つ｡`internal/backend` が起動時の環境で選ぶ｡`REX_SESSION` があれば rex､
+無ければ herdr｡daemon は SessionStart hook の環境を継承するので､最初に起こしたセッションの側に決まる｡
+選んだ backend は `status.json` の `backend` に書き､`doctor` が今の環境と違えば警告する｡
+
+| 操作 | herdr | rex |
+| ---- | ---- | ---- |
+| PaneList | `pane list` | `ls --json`､session ごとに `block ls -s S --json`､flavor が `com.superlogical.terminal.shell` の block ごとに `block call -b B program_status` と `block call -b B process` |
+| PaneRead | `pane read P --source S --lines N` | `capture -b B --trim --unwrap` の末尾 N 行｡`Source` は無視 |
+| SendText | `pane send-text P TEXT` | `send -b B TEXT` |
+| SendKeys | `pane send-keys P KEY...` | `send-key -b B KEY...` |
+| ReportMetadata | `pane report-metadata P --source ... --state-label ...` | 何もしない (`block rename` は利用者の label を潰す) |
+| Reachable | `status --json` の `server.running` | `api call server.status` の `pid` が正 |
+| session_id | pane の `agent_session` | `context/<sid>.json` の `multiplexer` から逆引き (上の「ingest-statusline が書く state」) |
+
+rex の呼び出しには全部 `--autostart=false` を付け､子プロセスの環境から `REX_SESSION` / `REX_BLOCK` を外す｡
+`REX_SESSION` があると rex は block の解決をその session の中に閉じ､外せば完全 ID で別 session の block も
+解決する (実測)｡`block ls` と `block call` の間に閉じた block (exit 3) は読み飛ばし､PaneList の失敗に数えない｡
+
+rex の列挙は 1 tick に `ls` 1 回､session ごとに `block ls` 1 回､shell の block ごとに 2 回の fork になる｡
+herdr の `pane list` 1 回より重いので､block が多い環境ほど tick あたりの時間が伸びる｡
+
+rex で Agent と AgentStatus を決めるのは Claude Code 自身が OSC 7501 で報告する `program_status` で､
+状態の対応は [operations.md](operations.md) の「rex の状態の対応」｡
 
 ## 毎 tick の判定
 
@@ -204,14 +247,14 @@ pane ごとに次を評価する｡上限側の詳細は [rate-limit.md](rate-li
 | ---- | ---- | ---- | ---- | ---- |
 | `${XDG_CONFIG_HOME:-~/.config}/agents-daemon/config.json` | 人間 | 手で編集したとき | 設定 | 消さない |
 | `$STATE/rate-limits/<session_id>.json` | `agents-daemon ingest-statusline` (利用者の statusline が呼ぶ) | statusline の描画ごと (`rate_limits.five_hour.resets_at` があるときだけ) | そのセッションの 5 時間 / 7 日ウィンドウの使用率と reset 時刻､観測時刻､session_id | daemon が 24 時間で消す |
-| `$STATE/context/<session_id>.json` | `agents-daemon ingest-statusline` (利用者の statusline が呼ぶ) | statusline の描画ごと | そのセッションの context 使用率､観測時刻､session_id､context window の大きさ､transcript のパス | daemon が 7 日で消す |
+| `$STATE/context/<session_id>.json` | `agents-daemon ingest-statusline` (利用者の statusline が呼ぶ) | statusline の描画ごと | そのセッションの context 使用率､観測時刻､session_id､context window の大きさ､transcript のパス､多重化ツールの場所 | daemon が 7 日で消す |
 | `$STATE/compact-state/<session_id>.md` | `agents-daemon:compact-prep` skill | `/agents-daemon:compact-prep` の実行時 | 圧縮で失われる作業状態 (plan / phase / 決定事項 / 編集中ファイル) | daemon が 7 日で消す |
 | `$STATE/compacted/<session_id>` | `hooks/compaction-recovery.sh` (PostCompact hook) | 圧縮が完了したとき | 空ファイル｡mtime が圧縮完了時刻 | 復旧 hook が消す (残れば daemon が 7 日で消す) |
 | `$STATE/cache/<session_id>.json` | 旧版の Stop hook (今は書かない) | - | 旧版の prompt cache の状態 | daemon が 7 日で消す |
 | `$STATE/cache-ack/<session_id>` | daemon と `agents-daemon ttl-guard` | daemon は非スラッシュの prompt を送る直前 (cache が失効しているか状態が分からないとき)､ttl-guard は失効後の prompt を判定したとき | 直近の応答の開始時刻の文字列そのまま､または sentinel `daemon-unknown` ([cache.md](cache.md)) | daemon と ttl-guard が 90 日で消す |
 | `$STATE/cache-idle-compacted/<session_id>` | daemon | idle compact の `/compact` を送る直前 | 空ファイル｡mtime が送信時刻 ([compact.md](compact.md)) | 消さずに直近の応答の時刻との比較で解く (daemon が 7 日で消す) |
 | `$STATE/daemon.pid` | daemon | 起動時に作成､終了時に削除 | 稼働中デーモンの PID | daemon |
-| `$STATE/status.json` | daemon | 毎 tick (既定 5 秒) | 監視中の pane 一覧と各 pane の監視状態・試行回数・待機期限・直近の判定・cache の状態 | 上書き |
+| `$STATE/status.json` | daemon | 毎 tick (既定 5 秒) | backend (herdr / rex)､監視中の pane 一覧と各 pane の監視状態・試行回数・待機期限・直近の判定・cache の状態 | 上書き |
 | `$STATE/logs/daemon.log` | daemon | 報告に値する出来事があったときだけ | 上限検知と待ち時間､再開送信 (cache の状態つき)､ユーザーの自己再開､ゲート抑制､ネイティブへの譲り､compact 停止の催促､エラー | rotate |
 | `$STATE/logs/daemon.log.YYYY-MM-DD` | daemon | 日付が変わって最初に書くとき | 前日までの `daemon.log` をそのまま退避したもの | daemon が 7 日で消す |
 | `$STATE/logs/build.log` | `hooks/build-daemon.sh` | SessionStart が build を起こしたとき | build の開始・完了・失敗 | 消さない (追記) |

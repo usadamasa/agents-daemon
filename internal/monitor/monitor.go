@@ -1,21 +1,21 @@
-// Package monitor は herdr pane 1 枚ぶんの状態機械を実装する｡
+// Package monitor は多重化ツールの pane 1 枚ぶんの状態機械を実装する｡
 //
 // 「monitoring (通常監視)」と「waiting (上限解除 / 一時エラー待ち)」の 2 状態を持ち､
 // 呼び出し元 (daemon) が pane ごとに *PaneState を保持して Tick を毎ポーリング呼び出す
-// 想定である｡このパッケージ自身は herdr pane list を叩かない｡pane の発見・列挙は
+// 想定である｡このパッケージ自身は PaneList を呼ばない｡pane の発見・列挙は
 // daemon の責務であり､ここでは渡された 1 pane を判断するだけに徹する｡
 //
 // 参考実装は https://github.com/mo-arvan/herdr-claude-auto-retry の
 // src/monitor-core.js (processOneTick)｡方式はそこから借りているが､以下の点は
 // 意図的に変えている｡
 //
-//   - herdr の agent_status を判定に使わない｡参考実装は working な pane を対象外に
+//   - 多重化ツールの agent_status を判定に使わない｡参考実装は working な pane を対象外に
 //     するが､上限で止まった pane は出力が止まらない pane と区別できず working と
 //     報告され続けることがある (実測)｡判定は画面テキストの分類だけで行う｡
 //   - statusline 由来の 5 時間ウィンドウ使用率によるゲート (fresh かつ閾値未満なら
 //     limit 発火を見送る) は参考実装に無い､このツール独自の安全策｡
 //   - 遷移結果を文字列ではなく Outcome という列挙型で返す｡
-//   - herdrcli の呼び出しがエラーを返しても状態機械を壊さず､型付きの Outcome と
+//   - multiplexer.Client の呼び出しがエラーを返しても状態機械を壊さず､型付きの Outcome と
 //     error を両方返して呼び出し元 (daemon) が連続失敗をカウントできるようにする｡
 package monitor
 
@@ -27,7 +27,7 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/config"
 	"github.com/usadamasa/agents-daemon/internal/detect"
-	"github.com/usadamasa/agents-daemon/internal/herdrcli"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 )
 
@@ -184,7 +184,7 @@ func (o Outcome) String() string {
 	return "unknown"
 }
 
-// metadataSource は herdr pane report-metadata --source に渡す固定値｡
+// metadataSource は ReportMetadata の Source に渡す固定値 (herdr の report-metadata --source)｡
 const metadataSource = "agents-daemon"
 
 // 以下は参考実装 (monitor-core.js) が config に無い値として直書きしている定数を､
@@ -206,9 +206,9 @@ const (
 )
 
 // Deps は状態遷移に必要な依存をまとめたもの｡テストでは Client に
-// herdrclifake.Client を､Sleep に記録用のダミー関数を注入する｡
+// multiplexerfake.Client を､Sleep に記録用のダミー関数を注入する｡
 type Deps struct {
-	Client     herdrcli.Client
+	Client     multiplexer.Client
 	Classifier *detect.Classifier
 	Config     config.Config
 	// Sleep は recover 中の一時停止に使う｡本番では time.Sleep を渡す想定｡
@@ -247,15 +247,15 @@ type Deps struct {
 // セッションごとに別ファイルなので daemon が pane ごとに読み込んで渡す｡
 // 対応する state が無い場合は nil を渡してよい｡
 //
-// herdrcli の呼び出しがエラーを返しても panic や状態破壊はしない｡エラーは
+// multiplexer.Client の呼び出しがエラーを返しても panic や状態破壊はしない｡エラーは
 // Outcome と共に返すので､呼び出し元は連続失敗のカウント等に使うこと｡
-func Tick(ctx context.Context, deps Deps, pane herdrcli.Pane, ps *PaneState, rateState *sessionstate.RateLimit, now time.Time) (Outcome, error) {
+func Tick(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *PaneState, rateState *sessionstate.RateLimit, now time.Time) (Outcome, error) {
 	if ps.Status == StatusWaiting && now.Before(ps.WaitUntil) {
 		return OutcomeStillWaiting, nil
 	}
 
-	screen, err := deps.Client.PaneRead(ctx, pane.PaneID, herdrcli.PaneReadOptions{
-		Source: herdrcli.PaneReadSource(deps.Config.ReadSource),
+	screen, err := deps.Client.PaneRead(ctx, pane.PaneID, multiplexer.PaneReadOptions{
+		Source: multiplexer.PaneReadSource(deps.Config.ReadSource),
 		Lines:  deps.Config.ReadLines,
 	})
 	if err != nil {
@@ -304,7 +304,7 @@ func Tick(ctx context.Context, deps Deps, pane herdrcli.Pane, ps *PaneState, rat
 //
 // Enter 待ち (KindResumeReady) はここでは扱わない｡あれは待機して送る状態なので､
 // 通常の状態機械 (待機 → 送信 → maxRetries で打ち切り) にそのまま乗せる｡
-func tickNative(ctx context.Context, deps Deps, pane herdrcli.Pane, ps *PaneState, kind detect.Kind) (Outcome, bool, error) {
+func tickNative(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *PaneState, kind detect.Kind) (Outcome, bool, error) {
 	switch kind {
 	case detect.KindAutoContinueArmed:
 		// ネイティブがカウントダウン中｡この状態では Escape が取り消しキーなので
@@ -328,7 +328,7 @@ func tickNative(ctx context.Context, deps Deps, pane herdrcli.Pane, ps *PaneStat
 
 // standDown は待機中だった pane を監視状態へ戻す｡ラベル解除の失敗で状態遷移
 // そのものを止めない (ベストエフォート)｡
-func standDown(ctx context.Context, deps Deps, pane herdrcli.Pane, ps *PaneState) {
+func standDown(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *PaneState) {
 	if ps.Status != StatusWaiting {
 		return
 	}
@@ -401,7 +401,7 @@ func LimitGate(cfg config.Config, rateState *sessionstate.RateLimit, now time.Ti
 }
 
 // tickWaiting は待機状態での 1 tick を処理する｡
-func tickWaiting(ctx context.Context, deps Deps, pane herdrcli.Pane, ps *PaneState, kind detect.Kind, limited bool, now time.Time) (Outcome, error) {
+func tickWaiting(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *PaneState, kind detect.Kind, limited bool, now time.Time) (Outcome, error) {
 	if !limited {
 		ps.Status = StatusMonitoring
 		ps.Attempts = 0
@@ -410,7 +410,7 @@ func tickWaiting(ctx context.Context, deps Deps, pane herdrcli.Pane, ps *PaneSta
 		return OutcomeRecoveredByUser, nil
 	}
 
-	if !herdrcli.IsClaudeAgent(pane) {
+	if !multiplexer.IsClaudeAgent(pane) {
 		ps.WaitUntil = now.Add(time.Duration(deps.Config.PollIntervalSeconds*notClaudeBackoffMultiplier) * time.Second)
 		return OutcomeNotClaudeAgent, nil
 	}
@@ -448,7 +448,7 @@ func tickWaiting(ctx context.Context, deps Deps, pane herdrcli.Pane, ps *PaneSta
 }
 
 // tickMonitoring は監視状態での 1 tick を処理する｡
-func tickMonitoring(ctx context.Context, deps Deps, pane herdrcli.Pane, ps *PaneState, kind detect.Kind, limited bool, gateSuppressed bool, rateState *sessionstate.RateLimit, screen string, now time.Time) (Outcome, error) {
+func tickMonitoring(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *PaneState, kind detect.Kind, limited bool, gateSuppressed bool, rateState *sessionstate.RateLimit, screen string, now time.Time) (Outcome, error) {
 	if gateSuppressed {
 		return OutcomeGateSuppressed, nil
 	}
@@ -611,7 +611,7 @@ func transientBackoff(attempts int, cfg config.Config) time.Duration {
 // recoverPane は再開の分割送信 (esc → 一時停止 → メッセージ送信 → 一時停止 → enter) を行う｡
 // Claude のペースト検知と /rate-limit-options メニューを避けるため､キー入力を分けている｡
 // 送る前に cache の ack を残す (cache_ack.go)｡
-func recoverPane(ctx context.Context, deps Deps, pane herdrcli.Pane, ps *PaneState, now time.Time) error {
+func recoverPane(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *PaneState, now time.Time) error {
 	ackBeforeSend(deps, pane, ps, deps.Config.RetryMessage, now)
 	if deps.Config.DismissMenu {
 		if err := deps.Client.SendKeys(ctx, pane.PaneID, "esc"); err != nil {
@@ -632,18 +632,18 @@ func recoverPane(ctx context.Context, deps Deps, pane herdrcli.Pane, ps *PaneSta
 // 状態遷移の判断ロジック (tickWaiting/tickMonitoring) から分離してあるので､
 // ラベル表示の失敗が遷移テストの assertion に混ざらない｡
 
-func publishEngagedLabel(ctx context.Context, deps Deps, pane herdrcli.Pane) error {
-	return deps.Client.ReportMetadata(ctx, pane.PaneID, herdrcli.ReportMetadataOptions{
+func publishEngagedLabel(ctx context.Context, deps Deps, pane multiplexer.Pane) error {
+	return deps.Client.ReportMetadata(ctx, pane.PaneID, multiplexer.ReportMetadataOptions{
 		Source: metadataSource,
-		StateLabels: map[herdrcli.AgentStatus]string{
+		StateLabels: map[multiplexer.AgentStatus]string{
 			pane.AgentStatus: deps.Config.EngagedLabel,
 		},
 		TTLMillis: deps.Config.PollIntervalSeconds * 1000 * engagedLabelTTLPollMultiplier,
 	})
 }
 
-func clearEngagedLabel(ctx context.Context, deps Deps, pane herdrcli.Pane) error {
-	return deps.Client.ReportMetadata(ctx, pane.PaneID, herdrcli.ReportMetadataOptions{
+func clearEngagedLabel(ctx context.Context, deps Deps, pane multiplexer.Pane) error {
+	return deps.Client.ReportMetadata(ctx, pane.PaneID, multiplexer.ReportMetadataOptions{
 		Source:           metadataSource,
 		ClearStateLabels: true,
 	})

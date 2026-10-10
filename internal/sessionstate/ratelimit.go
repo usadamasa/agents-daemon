@@ -72,7 +72,7 @@ func (s Store) RateLimitFile(sessionID string) (string, error) {
 
 // LoadRateLimit は sessionID に対応する利用上限 state を読み込む｡
 //
-// sessionID が空 (herdr が pane に agent session を紐づけていない) 場合は､
+// sessionID が空 (pane に session が紐づいていない｡herdr の agent_session も rex の multiplexer の記録も無い) 場合は､
 // 判断材料が無いという正常系として (nil, nil) を返す｡呼び出し元は nil の state を
 // 「ゲートを適用しない」として扱う｡ファイルが無い場合も同じく (nil, nil)｡
 func (s Store) LoadRateLimit(sessionID string) (*RateLimit, error) {

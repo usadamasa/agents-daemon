@@ -215,6 +215,9 @@ func TestRunSimulate_RealHerdr(t *testing.T) {
 	if os.Getenv("HERDR_ENV") != "1" {
 		t.Skip("HERDR_ENV=1 のセッション内でないので skip する")
 	}
+	if os.Getenv("REX_SESSION") != "" {
+		t.Skip("herdr の中の rex で動いており simulate が herdr 専用で止まるので skip する")
+	}
 
 	client := herdrcli.NewExecClient()
 	ctx := context.Background()

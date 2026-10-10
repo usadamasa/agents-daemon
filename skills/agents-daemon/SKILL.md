@@ -10,7 +10,7 @@ description: >-
 
 # agents-daemon
 
-herdr のペインを経由して動く常駐デーモン｡役目は 2 つ｡
+端末多重化ツール (herdr か rex) の pane を経由して動く常駐デーモン｡役目は 2 つ｡
 
 - 5 時間ウィンドウの利用上限で止まったセッションを､解除時刻に再開させる
 - context 使用率が閾値を超えたら `/agents-daemon:compact-prep` → `/compact` を投入し､圧縮後の作業まで再開させる
@@ -28,7 +28,8 @@ herdr のペインを経由して動く常駐デーモン｡役目は 2 つ｡
   `transcript_path` を辿って transcript から求める｡UserPromptSubmit hook から呼ばれた `agents-daemon ttl-guard` は
   cache 失効後の最初の prompt を止め､daemon が送る前に書く `cache-ack/<session_id>` を見て daemon の
   送信は通す｡SessionStart hook が daemon を起こし､
-  daemon が herdr 経由で pane を見て､これらのファイルの有無と mtime で判断する｡
+  daemon が herdr か rex 経由で pane を見て､これらのファイルの有無と mtime で判断する｡
+  backend の選び方と操作の対応は [architecture.md](references/architecture.md) の「多重化ツールの backend」｡
 - **statusline はこの plugin に含まれない｡** 利用者の statusline がするのは stdin を
   `ingest-statusline` へ渡す 1 行だけで､取り出しと書式はバイナリ (`internal/sessionstate`) が持つ｡
   書式は [architecture.md](references/architecture.md) の「ingest-statusline が書く state」にある｡
@@ -70,12 +71,12 @@ herdr のペインを経由して動く常駐デーモン｡役目は 2 つ｡
 
 | ファイル | 中身 |
 | ---- | ---- |
-| [architecture.md](references/architecture.md) | statusline / hook / skill / daemon の連動､バイナリの用意と差し替え､毎 tick の判定表､出力されるファイル､ログの rotate |
+| [architecture.md](references/architecture.md) | statusline / hook / skill / daemon の連動､バイナリの用意と差し替え､多重化ツールの backend (herdr / rex)､毎 tick の判定表､出力されるファイル､ログの rotate |
 | [rate-limit.md](references/rate-limit.md) | ネイティブ auto-continue との分担､limit 検知の二重シグナルとゲート､待機時刻の決め方 |
 | [compact.md](references/compact.md) | context 閾値からの 3 段､marker 経路､cache の失効前の compact (idle compact)､compact 直後の停止 |
 | [cache.md](references/cache.md) | prompt cache の失効と daemon の送信､ack マーカーの規約､対象の prompt 4 つ､送信ログと status の cache 表示 |
 | [pane-io.md](references/pane-io.md) | 画面の読み取り元､送信のキーストロークと文面の制約 |
-| [operations.md](references/operations.md) | コマンドと `--dry-run`､実機での検証順序､設定キー一覧､既知の制約 |
+| [operations.md](references/operations.md) | コマンドと `--dry-run`､実機での検証順序､rex の状態の対応､設定キー一覧､既知の制約 |
 
 ## 症状から引くところ
 
@@ -91,4 +92,6 @@ herdr のペインを経由して動く常駐デーモン｡役目は 2 つ｡
 | daemon の再開が止められる・`compactStallMessage` が繰り返し打たれる | cache.md の「TTL guard」の ack の規則､ログの `ack 済み` / `session 未紐づけ` |
 | daemon が起きない・バイナリがビルドされない | architecture.md の「バイナリの用意と差し替え」､`build.log` |
 | 直したコードが動いていない | architecture.md の「バイナリの用意と差し替え」 |
-| 送信が pane に届かない | pane-io.md､operations.md の「既知の制約」(pane 内 tmux､herdr 不在) |
+| 送信が pane に届かない | pane-io.md､operations.md の「既知の制約」(pane 内 tmux､herdr / rex 不在) |
+| rex で `doctor` の pane 一覧が `session_id=(なし)` になる | statusline が新しいバイナリの `ingest-statusline` を呼んでいるか､`context/<sid>.json` に `multiplexer` があるか｡architecture.md の「ingest-statusline が書く state」 |
+| rex のセッションなのに daemon が何も送らない | `doctor` の daemon の節の backend 不一致の警告｡operations.md の「既知の制約」(daemon は 1 つの backend しか見ない) |

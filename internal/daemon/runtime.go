@@ -25,12 +25,12 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 )
 
-// maxConsecutiveTickFailures は herdr pane list の取得にこの回数だけ連続で
-// 失敗したら daemon が自己終了する閾値｡herdr が落ちたまま無限に回り続けて
+// maxConsecutiveTickFailures は PaneList の取得にこの回数だけ連続で
+// 失敗したら daemon が自己終了する閾値｡多重化ツールの server が落ちたまま無限に回り続けて
 // ログを埋め尽くすのを防ぐ｡
 const maxConsecutiveTickFailures = 10
 
-// metadataSource は herdr pane report-metadata --source に渡す固定値｡
+// metadataSource は ReportMetadata の Source に渡す固定値 (herdr の report-metadata --source)｡
 // monitor パッケージ内の同名定数 (非公開) と揃えてある｡
 const metadataSource = "agents-daemon"
 
@@ -43,8 +43,8 @@ type paneEntry struct {
 }
 
 // daemonRuntime は 1 回の --foreground 実行に閉じたループの可変状態をまとめる｡
-// pane ごとの状態機械は terminal_id をキーにする (pane_id は herdr 再起動で
-// 変わりうるが､terminal_id はその herdr 実行内で安定するため)｡
+// pane ごとの状態機械は TerminalID をキーにする (herdr の pane_id は herdr 再起動で
+// 変わりうるが､terminal_id はその herdr 実行内で安定するため｡rex は block ID)｡
 type daemonRuntime struct {
 	client multiplexer.Client
 	// backend は client の多重化ツールの種類｡status.json に書くだけで判定には使わない｡

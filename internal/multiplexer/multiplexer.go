@@ -46,6 +46,7 @@ func IsClaudeAgent(p Pane) bool {
 }
 
 // PaneReadSource は PaneRead が読む画面の範囲｡値は herdr の `pane read --source` の 4 値｡
+// rex は可視領域しか読めないので無視する｡
 type PaneReadSource string
 
 const (

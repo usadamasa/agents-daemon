@@ -49,7 +49,12 @@ pane から解決する｡`--file` にはセッションが無いため `--sessi
 
 `simulate` は使い捨ての pane を作り､herdr に Claude agent として登録し､limit 風の画面を
 書き込んで､デーモンと同じ判定を通す｡既定では送信しない｡自分が作った pane 以外には
-決して触らない｡
+決して触らない｡**herdr 専用｡** 使い捨て pane を Claude agent に見せる手段 (herdr の `report-agent`) が
+rex に無いため､`REX_SESSION` のある環境ではエラーで止まる｡
+
+`doctor` は backend (herdr / rex) と選んだ根拠 (`REX_SESSION` の有無)､その server への到達性､Claude pane の
+一覧 (`session_id` が引けなければ `(なし)`) を出す｡daemon の `status.json` の backend が今の環境と違えば
+警告する｡`inspect --pane` の pane ID は rex では block ID｡
 
 ### 実機での検証順序
 
@@ -87,6 +92,28 @@ pane から解決する｡`--file` にはセッションが無いため `--sessi
 ([pane-io.md](pane-io.md) の「読み取り元」参照)｡どちらも実際に動かすまで
 気づけなかった類の失敗で､`--dry-run` や `simulate` だけでは踏めなかった｡
 
+### rex の状態の対応
+
+2026-10-10､rex `0.0.1791570264-g7b5bf3` と Claude Code `2.1.296` で測った｡rex では Claude Code 自身が
+OSC 7501 で状態を報告し､daemon は `block call -b BLOCK program_status` の `records` から読む｡
+Claude Code の公式ドキュメントに OSC 7501 の記述は無いので､版が変われば測り直す｡
+
+使うのは root record (`id` が無いか空) だけで､`id` に agent ID を持つ record は subagent のもの｡
+
+| 画面の状況 | `state` | `app` | `agent_status` |
+| ---- | ---- | ---- | ---- |
+| 作業中 | `working` | `claude-code` | `working` |
+| ターンを終えて利用者の入力待ち | `done` | `claude-code` | `done` |
+| permission prompt を Esc で断った後 | `idle` | `claude-code` | `idle` |
+| permission prompt (`kind` は `permission`､`msg` は `approve <tool>: <command>`) | `blocked` | `claude-code` | `blocked` |
+| 起動直後の trust dialog (`kind` も `msg` も無し) | `blocked` | `claude` | `blocked` |
+| 上のどれでもない値 | その他 | - | `unknown` |
+| shell だけの block | `records: []` | - | Claude agent ではない |
+
+- `app` が `claude` で始まれば Claude agent と見なす｡record が無くても前景プロセスの `argv0` が `claude` なら
+  Claude agent とし､`agent_status` は `unknown`｡
+- `done` と `idle` はどちらも入力待ち｡`blocked` は利用者の操作待ちで､daemon は打ち込まない (herdr と同じ扱い)｡
+
 ## 設定
 
 `${XDG_CONFIG_HOME:-~/.config}/agents-daemon/config.json`｡ファイルが無ければ全て既定値｡
@@ -101,7 +128,7 @@ pane から解決する｡`--file` にはセッションが無いため `--sessi
 | `fallbackWaitHours` | `5` | 解除時刻がどこからも取れないときの待ち |
 | `maxRetries` | `5` | クールダウンに入るまでの再開試行回数 |
 | `retryMessage` | `Continue where you left off.` | 再開時に送る文面 |
-| `readSource` | `recent-unwrapped` | herdr の画面取得ソース｡`recent` / `recent-unwrapped` / `visible` |
+| `readSource` | `recent-unwrapped` | herdr の画面取得ソース｡`recent` / `recent-unwrapped` / `visible`｡rex では無視 (可視領域だけを読む) |
 | `readLines` | `25` | 1 回に読む行数 |
 | `detectionTailLines` | `15` | 判定に使う末尾行数 |
 | `usedPercentageThreshold` | `90` | ゲートの閾値 (これ未満なら発火しない) |
@@ -177,12 +204,17 @@ Claude Code の画面の文言は安定した API ではない｡変わって検
   config.json だけ置いても何も起きない｡
 - **Go が無いとバイナリが建たない｡** SessionStart hook は `go build` でバイナリを用意する｡
   `go` が PATH に無ければ `$STATE/logs/build.log` に ERROR を残し､デーモンは起きない｡
-- **herdr が要る｡** 到達できないときデーモンは起動しない｡Ghostty 単体では pane へ
-  キーを送る手段が無いため､この機能は成立しない｡
+- **herdr か rex が要る｡** 選ばれた backend の server に到達できないときデーモンは起動しない｡
+  Ghostty 単体では pane へキーを送る手段が無いため､この機能は成立しない｡
+- **daemon は 1 つの backend しか見ない｡** 選ぶのは起動時の環境 (`REX_SESSION` の有無) で､herdr の
+  セッションから起きた daemon は rex の block を見ない (逆も同じ)｡`doctor` の daemon の節が警告する｡
+  `agents-daemon stop` の後､見たい側のセッションで起こし直す｡
 - **statusline を切っていると state ファイルが作られない｡** statusline はこの plugin に含まれない｡
   利用者の statusline が stdin を `agents-daemon ingest-statusline` へ渡さなければ､ゲートは働かず､
   待機時刻は画面かフォールバックから決まり､compact の自動投入は動かない｡
-- **herdr が pane にセッション ID を紐づけていないと own state を引けない｡** 対応する
+- **pane にセッション ID が紐づいていないと own state を引けない｡** herdr は pane の `agent_session`､
+  rex は `context/<sid>.json` の `multiplexer` で紐づける｡rex では statusline が `ingest-statusline` を
+  呼んでいないと block の session_id が引けない (`doctor` で `session_id=(なし)`)｡対応する
   ファイルが決まらないためゲートは適用されず､画面の分類だけで判定する｡起床時刻は
   画面の絶対時刻かアカウント全体の state から決まる｡
 - **上限中に開いた新規セッションは､プロンプトを打って弾かれていないと再開しても
@@ -197,7 +229,7 @@ Claude Code の画面の文言は安定した API ではない｡変わって検
   文字列は tmux 側でフォーカスを持つペイン (teammate 一覧など) に吸われ､Claude の
   入力行は空のままになる (実測)｡上限からの再開も compact の自動化も同じ経路を通るため､
   この形の pane では届かない｡
-- **compact の自動化は herdr の pane に限られる｡** daemon は `herdr pane list` で
+- **compact の自動化は herdr の pane か rex の block に限られる｡** daemon は多重化ツールの一覧で
   セッションを見つけるため､素のターミナルで動く Claude Code には何も届かない｡
   そちらは Claude Code 本体の autocompact (90% 付近) に任せることになる｡
 - **長く放置した pane では 1 段目が動かない｡** 使用率は statusline の描画で更新される
@@ -212,4 +244,12 @@ Claude Code の画面の文言は安定した API ではない｡変わって検
   スクロールバックから取るので影響を受けないが､`visible` に変えると表示領域に
   収まる範囲しか返らず､判定に必要な行が溢れる｡詳細は
   [pane-io.md](pane-io.md) の「読み取り元」を参照｡
+- **rex は常に可視領域だけを読む｡** `readSource` は効かず､scrollback を読む手段が無い｡
+  小さい block では上限の文言が流れた時点で検知が効かなくなる ([pane-io.md](pane-io.md) の「rex の読み取り元」)｡
 - **待機中のラベルは `--state-label` で出す｡** herdr 0.8.0 に `--custom-status` は存在しない｡
+- **rex では待機中のラベルが出ない｡** `ReportMetadata` は rex では何もしない｡表示に使える `block rename` は
+  利用者が付けた label を潰すため｡待機の状況は `agents-daemon status` で見る｡
+- **rex の送信は実機で測っていない｡** `send` / `send-key` の組み立ては fake の rex で確かめただけで､
+  daemon が渡すキー名 (`esc` `enter`) は herdr のもの｡rex でそのまま通るかは未測定｡
+- **rex の状態は Claude Code の OSC 7501 の報告に頼る｡** 公式ドキュメントに無い挙動なので､
+  Claude Code の版で変わりうる｡測った版は上の「rex の状態の対応」｡

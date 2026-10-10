@@ -1,15 +1,15 @@
-// Package monitor は herdr pane 1 枚ぶんの状態機械を実装する｡
+// Package monitor は多重化ツールの pane 1 枚ぶんの状態機械を実装する｡
 //
 // 「monitoring (通常監視)」と「waiting (上限解除 / 一時エラー待ち)」の 2 状態を持ち､
 // 呼び出し元 (daemon) が pane ごとに *PaneState を保持して Tick を毎ポーリング呼び出す
-// 想定である｡このパッケージ自身は herdr pane list を叩かない｡pane の発見・列挙は
+// 想定である｡このパッケージ自身は PaneList を呼ばない｡pane の発見・列挙は
 // daemon の責務であり､ここでは渡された 1 pane を判断するだけに徹する｡
 //
 // 参考実装は https://github.com/mo-arvan/herdr-claude-auto-retry の
 // src/monitor-core.js (processOneTick)｡方式はそこから借りているが､以下の点は
 // 意図的に変えている｡
 //
-//   - herdr の agent_status を判定に使わない｡参考実装は working な pane を対象外に
+//   - 多重化ツールの agent_status を判定に使わない｡参考実装は working な pane を対象外に
 //     するが､上限で止まった pane は出力が止まらない pane と区別できず working と
 //     報告され続けることがある (実測)｡判定は画面テキストの分類だけで行う｡
 //   - statusline 由来の 5 時間ウィンドウ使用率によるゲート (fresh かつ閾値未満なら
@@ -184,7 +184,7 @@ func (o Outcome) String() string {
 	return "unknown"
 }
 
-// metadataSource は herdr pane report-metadata --source に渡す固定値｡
+// metadataSource は ReportMetadata の Source に渡す固定値 (herdr の report-metadata --source)｡
 const metadataSource = "agents-daemon"
 
 // 以下は参考実装 (monitor-core.js) が config に無い値として直書きしている定数を､

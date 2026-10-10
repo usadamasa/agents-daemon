@@ -36,7 +36,7 @@ import (
 	"time"
 )
 
-// sessionIDPattern はファイル名に使ってよい session ID の形｡herdr から受け取った
+// sessionIDPattern はファイル名に使ってよい session ID の形｡多重化ツールや入力から受け取った
 // 値をそのままパスへ結合するため､区切り文字を含む値でディレクトリの外へ
 // 出られないことをここで保証する｡
 var sessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)

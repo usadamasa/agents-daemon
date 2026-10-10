@@ -1,6 +1,7 @@
 # AGENTS.md
 
-利用上限からの自動再開と context の自動 compact を担う常駐デーモンの Claude Code plugin｡
+端末多重化ツール (herdr / rex) の pane 越しに､利用上限からの自動再開と context の自動 compact を担う
+常駐デーモンの Claude Code plugin｡
 Go のデーモンと､それを配線する hook・skill を持つ｡
 
 ## レイアウト
@@ -16,9 +17,10 @@ Go のデーモンと､それを配線する hook・skill を持つ｡
 | `scripts/get-session-id.sh` | compact-prep / setup skill が呼ぶ session_id の取得 |
 | `skills/compact-prep/` | `/compact` 前の state file 保存 |
 | `skills/agents-daemon/` | 運用と切り分けの手引き｡配線・判定・設定キーの詳細は `references/` |
-| `skills/setup/` | install 後の前提確認 (herdr､go/jq､statusline の state file､バイナリ)｡statusline に足す `ingest-statusline` の 1 行は `references/` |
+| `skills/setup/` | install 後の前提確認 (herdr か rex､go/jq､statusline の state file､バイナリ)｡statusline に足す `ingest-statusline` の 1 行は `references/` |
 | `cmd/agents-daemon/` | Go の main (cobra) |
 | `internal/` | daemon の本体｡パス定数は `internal/apppath` |
+| `internal/multiplexer`, `internal/herdrcli`, `internal/rexcli`, `internal/backend` | pane 操作の interface (`multiplexer.Client`) とその herdr / rex 実装｡`backend` が環境 (`REX_SESSION`) で選ぶ |
 | `tests/` | hook と script の bats テスト (`tests/lib/`､`tests/fixtures/`) |
 
 ## 検証
@@ -66,6 +68,7 @@ hook・skill・daemon は別プロセスで､ファイル越しに繋がる｡�
 | `skills/compact-prep/SKILL.md` の保存先 | `internal/apppath` | `compact-state/<session_id>.md` |
 | `.claude-plugin/plugin.json` の skill 名 | `internal/config` の `compactAutoPrepMessage` 既定 | `/agents-daemon:compact-prep` |
 | 利用者の statusline に足す 1 行 (`skills/setup/references/statusline.md`) | `hooks/lib/daemon-bin.sh` と `Taskfile.yml` の `install` | `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon ingest-statusline`｡`context/` `rate-limits/` の書式は `internal/sessionstate` が読み書き両方で持つ |
+| `ingest-statusline` が `context/<sid>.json` の `multiplexer` に書く場所 (環境変数 `REX_SESSION` / `REX_BLOCK` / `HERDR_PANE_ID` から) | `internal/sessionstate` の `ListMultiplexerBlocks` を `internal/rexcli` が引く (`internal/backend` が配線) | rex の block から session_id への対応｡書式と読み方は `internal/sessionstate/multiplexer.go` が両方持つ |
 | statusline の stdin の `transcript_path` (`ingest-statusline` が `context/` へ写す) | `internal/sessionstate` の `CacheLoader` | daemon が辿る transcript｡読み方 (`lastMainResponse`) は `ttl-guard` と共有する |
 | `hooks/ttl-guard.sh` (UserPromptSubmit hook) | `hooks/lib/daemon-bin.sh` | 同じバイナリの `ttl-guard`｡exit 2 だけが「止める」で､それ以外は通す｡`cache-ack/` の書式と判定は `internal/sessionstate` が持つ (daemon が書き､`ttl-guard` が読む) |
 

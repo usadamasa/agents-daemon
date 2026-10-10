@@ -26,8 +26,17 @@
 `recent-unwrapped` を既定にしたのは､折り返された長い行を 1 行として扱えるため｡
 上限の文言が画面幅で折り返されても､1 行の中で limit と reset の両方を拾える｡
 
+### rex の読み取り元
+
+rex は `capture -b BLOCK --trim --unwrap` で読み､末尾 `readLines` 行に絞る｡`readSource` は無視する｡
+capture が返すのは block の可視領域だけで (52 行の block で 52 行｡実測)､`format` method の入力にも
+scrollback や行数の指定が無い｡rex には scrollback を読む手段が無く､herdr の `visible` と同じ罠を常に負う｡
+上限の文言が流れる前に読めているうちは検知できるが､小さい block (10 行程度) で limit の文と reset の行が
+可視領域に収まるかは測っていない｡`--unwrap` で折り返しは 1 行に戻る｡
+
 ## 送信
 
+herdr でも rex でも同じ手順で送る (rex は `send` / `send-key`｡[architecture.md](architecture.md) の対応表)｡
 Escape → テキスト → Enter を**別々のキーストロークとして**送る｡まとめて送ると Claude の
 ペースト検知に引っかかり､`/rate-limit-options` メニューが出ていると解除できない｡
 

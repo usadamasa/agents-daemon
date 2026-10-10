@@ -93,7 +93,7 @@ func (c *Compact) ContextFresh(now time.Time, maxAge time.Duration) bool {
 
 // LoadCompact は sessionID に対応する compact 関連の 4 つの state を読む｡
 //
-// sessionID が空 (herdr が pane に agent session を紐づけていない) 場合は
+// sessionID が空 (pane に session が紐づいていない｡herdr の agent_session も rex の multiplexer の記録も無い) 場合は
 // 判断材料が無いという正常系として (nil, nil) を返す｡呼び出し元は nil を
 // 「compact の自動化を適用しない」として扱う｡
 //

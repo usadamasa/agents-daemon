@@ -33,6 +33,7 @@ const (
 var ingestNow = time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC)
 
 func TestIngestStatusline_context(t *testing.T) {
+	clearMuxEnv(t)
 	t.Run("rate_limits が無くても context は書く", func(t *testing.T) {
 		s := New(t.TempDir())
 		if err := s.IngestStatusline([]byte(inputNoRateLimits), ingestNow); err != nil {

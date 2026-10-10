@@ -4,6 +4,7 @@
 //	rate-limits/<session_id>.json    ingest-statusline が書く利用上限 (IngestStatusline)
 //	context/<session_id>.json        ingest-statusline が書く context 使用率と transcript のパス
 //	                                 (IngestStatusline｡cache の状態は CacheLoader がこのパスから求める)
+//	                                 と端末多重化ツールの場所 mux (ListMuxBlocks が block から逆引きする)
 //	compact-state/<session_id>.md    compact-prep skill が書く復旧用 state file
 //	compacted/<session_id>           PostCompact hook が書く圧縮完了 marker
 //	cache/<session_id>.json          旧版の Stop hook が書いた prompt cache の状態｡もう書かず､Prune が消す

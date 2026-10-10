@@ -11,12 +11,14 @@ import (
 
 // contextFile は context/<session_id>.json の生の形｡
 type contextFile struct {
-	SessionID      string  `json:"session_id"`
+	SessionID         string  `json:"session_id"`
 	UsedPercentage    float64 `json:"used_percentage"`
 	ObservedAt        int64   `json:"observed_at"`
 	ContextWindowSize int64   `json:"context_window_size,omitempty"`
 	// TranscriptPath は CacheLoader が辿る｡Compact には載せない｡
 	TranscriptPath string `json:"transcript_path,omitempty"`
+	// Mux は ListMuxBlocks が block から session を逆引きするのに使う｡
+	Mux *muxFile `json:"mux,omitempty"`
 }
 
 // Compact はセッション 1 つぶんの､compact 自動化に要る状態をまとめたもの｡

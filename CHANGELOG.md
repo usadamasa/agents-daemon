@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026.1010.3](https://github.com/usadamasa/agents-daemon/compare/2026.1010.2...2026.1010.3) - 2026-10-10
+
+- feat: herdr-claude-title.sh を plugin の herdr-title hook に移す (#35 フェーズ 2 の前半) by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/48
+- feat: herdr の session_id を agent_session ではなく statusline の sidecar から引く (#35 フェーズ 2 の後半) by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/51
+
 ## [2026.1010.2](https://github.com/usadamasa/agents-daemon/compare/2026.1010.1...2026.1010.2) - 2026-10-10
 
 - docs: plugin 更新後にセッションを開き直さず daemon を入れ替える手順を書く by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/43

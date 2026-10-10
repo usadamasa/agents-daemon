@@ -4,6 +4,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -24,8 +25,9 @@ func seedCost(t *testing.T, s Store, day, sessionID string, total, carried float
 		`{"session_id":"`+sessionID+`","total_cost_usd":`+ftoa(total)+`,"carried_usd":`+ftoa(carried)+`}`+"\n")
 }
 
+// ftoa は JSON と同じ最短表記 (3.79､2､4.1) にする｡
 func ftoa(v float64) string {
-	return formatUSD(v)
+	return strconv.FormatFloat(v, 'f', -1, 64)
 }
 
 func nearly(a, b float64) bool {

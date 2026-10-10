@@ -12,16 +12,18 @@
 //	                                 (WriteCacheAck / TTLGuard)
 //	cache-idle-compacted/<session_id> daemon が idle compact の /compact を送る前に書く marker
 //	                                 (MarkIdleCompacted / Compact.IdleCompactActive)
+//	cost/<YYYY-MM-DD>/<session_id>.json  statusline が書くセッションの累計 cost と前日までの繰り越し
+//	                                 (RecordCost / SumCost｡rate_limits が届かない契約での代替表示に使う)
 //
-// rate-limits / context / cache-ack / cache-idle-compacted は hook や statusline から
+// rate-limits / context / cache-ack / cache-idle-compacted / cost は hook や statusline から
 // 呼ばれた `agents-daemon` のサブコマンドか daemon がこのパッケージの型で読み書きするので､
 // 書式は 1 箇所に閉じる｡
 // compact-state / compacted の書き手はシェル側 (この plugin の compact-prep skill・
 // PostCompact hook) で､ディレクトリ名はそちらの定数 (hooks/lib/compact-markers.sh) と
 // 対になっている｡片方だけ変えると protocol が黙って壊れるため､両方まとめて直すこと｡
 //
-// 7 つを 1 パッケージに置くのは､読み手から見て同じ形をしているため｡同じ root
-// ディレクトリ､同じ session ID の検証､同じ mtime ベースの保持期間｡分けると
+// 8 つを 1 パッケージに置くのは､読み手から見て同じ形をしているため｡同じ root
+// ディレクトリ､同じ session ID の検証､同じ保持期間の規則｡分けると
 // この 3 つが分けた数だけ複製される｡
 //
 // JSON の生の形 (rateLimitFile / contextFile) と､それを読む関数は非公開にして
@@ -41,7 +43,7 @@ import (
 // 出られないことをここで保証する｡
 var sessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 
-// Store は 7 つの sidecar file の置き場所を持つ｡ゼロ値の Store はどのディレクトリも
+// Store は 8 つの sidecar file の置き場所を持つ｡ゼロ値の Store はどのディレクトリも
 // 空文字列で､読み込みは「まだ何も無い」､Prune は何もしないとして振る舞う
 // (state を持たない呼び出し元のテストがそのまま書けるようにするため)｡
 type Store struct {
@@ -52,9 +54,10 @@ type Store struct {
 	Cache         string
 	CacheAck      string
 	IdleCompacted string
+	Cost          string
 }
 
-// New は XDG state ディレクトリ (apppath.Paths.StateDir) から 7 つの置き場所を導出する｡
+// New は XDG state ディレクトリ (apppath.Paths.StateDir) から 8 つの置き場所を導出する｡
 func New(stateDir string) Store {
 	return Store{
 		RateLimits:    filepath.Join(stateDir, "rate-limits"),
@@ -64,6 +67,7 @@ func New(stateDir string) Store {
 		Cache:         filepath.Join(stateDir, "cache"),
 		CacheAck:      filepath.Join(stateDir, "cache-ack"),
 		IdleCompacted: filepath.Join(stateDir, "cache-idle-compacted"),
+		Cost:          filepath.Join(stateDir, "cost"),
 	}
 }
 

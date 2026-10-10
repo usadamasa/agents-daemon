@@ -40,7 +40,6 @@ bats は hook を `/bin/bash` で起動する (本番の shebang と同じ bash 
 - SessionStart は 5 秒以内に返す｡`go build` のような重い処理は `nohup ... </dev/null >>log 2>&1 &` で detach する｡
 - hook は `${CLAUDE_PLUGIN_ROOT}` に頼らず､自分の位置 (`$(dirname "$0")`) から plugin root を解決する｡
   hooks.json では `"\"${CLAUDE_PLUGIN_ROOT}/hooks/...\""` と引用符で囲む (validate が未引用を警告する)｡
-- 前提条件 (`go` など) が無ければエラー終了する｡警告してスキップしない｡
 - データを読む・加工する処理 (transcript､JSON) はバイナリのサブコマンドに持たせ､hook は stdin を渡すだけにする
   (`ingest-statusline` / `ttl-guard`)｡bash 3.2 と jq で timestamp や大きなファイルを扱わない｡
 - Stop hook で transcript を読まない｡transcript は非同期に書かれ､Stop の時点ではターンの最後の応答を
@@ -74,3 +73,7 @@ hook・skill・daemon は別プロセスで､ファイル越しに繋がる｡�
 
 tagpr (`.tagpr`､`.github/workflows/tagpr.yaml`) がリリース PR を作る｡`version` は手で上げない｡
 tag に **`v` を付けない｡** `v2026.0926.0` は Go module が major 2026 の semver と解釈して拒否する｡
+
+リリース PR の merge 後の plugin 更新 (`claude plugin marketplace update usadamasa`､
+`claude plugin update agents-daemon@usadamasa`) は sandbox が `~/.claude/plugins` への書き込みを止めるので
+利用者が `!` で打ち､新しいセッションで実機を確かめる｡

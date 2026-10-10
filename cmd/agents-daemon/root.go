@@ -20,6 +20,7 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(newDoctorCmd())
 	root.AddCommand(newInspectCmd())
 	root.AddCommand(newSimulateCmd())
+	root.AddCommand(newStatuslineCmd())
 	root.AddCommand(newIngestStatuslineCmd())
 	root.AddCommand(newTTLGuardCmd())
 	return root

@@ -11,7 +11,8 @@
 //	doctor    前提条件の診断
 //	inspect   画面テキストの分類結果と判定根拠の表示
 //	simulate  使い捨て pane を使った end-to-end 検証
-//	ingest-statusline  statusline の stdin から context/ と rate-limits/ の state file を書く
+//	statusline         Claude Code の statusline を描画し､同じプロセスで state file と cost の記録を書く
+//	ingest-statusline  statusline の stdin から context/ と rate-limits/ の state file を書く (自前の statusline から呼ぶ)
 //	ttl-guard          UserPromptSubmit hook の stdin を見て､cache 失効後の最初の prompt を止める
 package main
 

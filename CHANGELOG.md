@@ -1,5 +1,11 @@
 # Changelog
 
+## [2026.1010.2](https://github.com/usadamasa/agents-daemon/compare/2026.1010.1...2026.1010.2) - 2026-10-10
+
+- docs: plugin 更新後にセッションを開き直さず daemon を入れ替える手順を書く by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/43
+- simulate を rex でも使えるようにする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/45
+- feat: statusline を agents-daemon statusline サブコマンドに移す (#35 フェーズ 4) by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/47
+
 ## [2026.1010.1](https://github.com/usadamasa/agents-daemon/compare/2026.1010.0...2026.1010.1) - 2026-10-10
 
 - fix(detect): transient の判定を Claude Code の API Error 行に限る by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/41

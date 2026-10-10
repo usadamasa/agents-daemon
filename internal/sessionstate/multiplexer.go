@@ -64,8 +64,7 @@ func (m *multiplexerFile) ref() MultiplexerRef {
 }
 
 // ListMultiplexerBlocks は context/ を 1 回走査し､kind の block (herdr は pane) の ID から
-// session_id への対応を返す｡rex には herdr の agent_session に当たるものが無いため､
-// statusline が書いた対から逆引きする｡
+// session_id への対応を返す｡herdr も rex も､pane と session の対応はこの記録 (statusline が書く) だけから引く｡
 //
 // 同じ ID の記録が複数あれば observed_at が最新のもの (同値なら名前順で先) を採る｡
 // 同じ block で Claude Code を起動し直すと､古い session の記録が prune まで残るため｡

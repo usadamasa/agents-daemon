@@ -132,7 +132,7 @@ func (f *fakeRex) calls(t *testing.T) []string {
 	return readLines(t, filepath.Join(f.dir, "calls.log"))
 }
 
-func (f *fakeRex) client(resolve SessionResolver) *execClient {
+func (f *fakeRex) client(resolve multiplexer.SessionResolver) *execClient {
 	return &execClient{binPath: f.bin, timeout: noCommandTimeout, resolve: resolve}
 }
 
@@ -159,7 +159,7 @@ func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-func staticResolver(m map[string]string) SessionResolver {
+func staticResolver(m map[string]string) multiplexer.SessionResolver {
 	return func() (map[string]string, error) { return m, nil }
 }
 

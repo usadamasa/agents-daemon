@@ -19,15 +19,15 @@ func Detect(getenv func(string) string) string {
 	return sessionstate.MultiplexerKindHerdr
 }
 
-// New は kind の Client を作る｡rex は block から session を引くのに store を使う｡
+// New は kind の Client を作る｡pane (rex は block) から session_id を引く対応は､どちらも statusline が
+// `context/<sid>.json` に書いた記録 (store) から取る｡
 func New(kind string, store sessionstate.Store) (multiplexer.Client, error) {
+	resolve := func() (map[string]string, error) { return store.ListMultiplexerBlocks(kind) }
 	switch kind {
 	case sessionstate.MultiplexerKindHerdr:
-		return herdrcli.NewExecClient(), nil
+		return herdrcli.NewExecClient(resolve), nil
 	case sessionstate.MultiplexerKindRex:
-		return rexcli.NewExecClient(func() (map[string]string, error) {
-			return store.ListMultiplexerBlocks(sessionstate.MultiplexerKindRex)
-		}), nil
+		return rexcli.NewExecClient(resolve), nil
 	default:
 		return nil, fmt.Errorf("未対応の多重化ツール: %q", kind)
 	}

@@ -24,6 +24,8 @@ func TestPaneWire_ToPane_RealFixture(t *testing.T) {
 		t.Fatalf("len(res.Panes) = %d, want 2", len(res.Panes))
 	}
 
+	// SessionID は toPane では埋めない｡fixture の agent_session (herdr の integration script が入れた値) は
+	// 読まず､PaneList / PaneGet が statusline の書いた sidecar から引く｡
 	want := []multiplexer.Pane{
 		{
 			PaneID:        "wH:p1",
@@ -31,11 +33,9 @@ func TestPaneWire_ToPane_RealFixture(t *testing.T) {
 			CWD:           "/Users/usadamasa/src/github.com/usadamasa/claude-config",
 			Agent:         "claude",
 			AgentStatus:   multiplexer.AgentStatusWorking,
-			SessionID:     "0d5e717f-82c5-4e71-ac74-799f7197e0de",
 			TerminalTitle: "title",
 		},
 		{
-			// agent_session が無い素の shell pane は SessionID が空になる
 			PaneID:        "wH:p4",
 			TerminalID:    "term_6591d9bed8d704",
 			CWD:           "/x",
@@ -44,7 +44,7 @@ func TestPaneWire_ToPane_RealFixture(t *testing.T) {
 		},
 	}
 	for i, w := range res.Panes {
-		if got := w.toPane(); got != want[i] {
+		if got := w.toPane(""); got != want[i] {
 			t.Errorf("panes[%d].toPane() = %+v, want %+v", i, got, want[i])
 		}
 	}

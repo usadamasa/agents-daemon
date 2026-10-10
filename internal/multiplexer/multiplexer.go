@@ -74,6 +74,11 @@ type ReportMetadataOptions struct {
 	TTLMillis        int // 0 以下なら TTL を指定しない
 }
 
+// SessionResolver は pane (rex は block) の ID から Claude Code の session_id への対応を返す｡
+// 実体は statusline が `context/<sid>.json` の multiplexer に書いた記録 (sessionstate.Store.ListMultiplexerBlocks)｡
+// backend は PaneList / PaneGet の呼び出しごとに 1 回だけ呼ぶ｡
+type SessionResolver func() (map[string]string, error)
+
 // Client は多重化ツールが提供する pane 操作の抽象｡daemon はこの interface にのみ
 // 依存し､exec.Command を直接呼ばない｡
 type Client interface {

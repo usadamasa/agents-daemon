@@ -23,23 +23,26 @@ const defaultTimeout = 10 * time.Second
 type execClient struct {
 	binPath string
 	timeout time.Duration
+	// resolve は pane_id から session_id を引く｡herdr の pane が持つ agent_session (herdr の integration script が
+	// report_agent_session で入れる値) は読まず､rex と同じく statusline が書いた sidecar だけを使う｡
+	resolve multiplexer.SessionResolver
 }
 
 // NewExecClient は実 herdr バイナリを叩く Client を返す｡
 // バイナリパスは環境変数 HERDR_BIN_PATH で上書きできる (未設定なら PATH 上の "herdr")｡
-func NewExecClient() multiplexer.Client {
-	return newExecClientWithTimeout(defaultTimeout)
+func NewExecClient(resolve multiplexer.SessionResolver) multiplexer.Client {
+	return newExecClientWithTimeout(resolve, defaultTimeout)
 }
 
 // newExecClientWithTimeout はコマンド 1 回あたりのタイムアウトを指定して Client を作る｡
 // パッケージ外からタイムアウトを指定する必要はまだ無いため (実機統合テストのみが使う)､
 // 非公開のままにしてある｡
-func newExecClientWithTimeout(timeout time.Duration) multiplexer.Client {
+func newExecClientWithTimeout(resolve multiplexer.SessionResolver, timeout time.Duration) multiplexer.Client {
 	bin := os.Getenv("HERDR_BIN_PATH")
 	if bin == "" {
 		bin = "herdr"
 	}
-	return &execClient{binPath: bin, timeout: timeout}
+	return &execClient{binPath: bin, timeout: timeout, resolve: resolve}
 }
 
 // run は herdr を実行し､stdout/stderr を分離したまま返す｡
@@ -119,6 +122,10 @@ type paneListResult struct {
 }
 
 func (c *execClient) PaneList(ctx context.Context) ([]multiplexer.Pane, error) {
+	sessions, err := c.resolve()
+	if err != nil {
+		return nil, fmt.Errorf("pane と session の対応の読み込みに失敗: %w", err)
+	}
 	env, err := c.runEnvelope(ctx, "pane", "list")
 	if err != nil {
 		return nil, err
@@ -132,7 +139,7 @@ func (c *execClient) PaneList(ctx context.Context) ([]multiplexer.Pane, error) {
 	}
 	panes := make([]multiplexer.Pane, len(res.Panes))
 	for i, w := range res.Panes {
-		panes[i] = w.toPane()
+		panes[i] = w.toPane(sessions[w.PaneID])
 	}
 	return panes, nil
 }
@@ -142,6 +149,10 @@ type paneGetResult struct {
 }
 
 func (c *execClient) PaneGet(ctx context.Context, paneID string) (multiplexer.Pane, error) {
+	sessions, err := c.resolve()
+	if err != nil {
+		return multiplexer.Pane{}, fmt.Errorf("pane と session の対応の読み込みに失敗: %w", err)
+	}
 	env, err := c.runEnvelope(ctx, "pane", "get", paneID)
 	if err != nil {
 		return multiplexer.Pane{}, err
@@ -150,7 +161,7 @@ func (c *execClient) PaneGet(ctx context.Context, paneID string) (multiplexer.Pa
 	if err := json.Unmarshal(env.Result, &res); err != nil {
 		return multiplexer.Pane{}, fmt.Errorf("herdr pane get %s: result の parse に失敗: %w", paneID, err)
 	}
-	return res.Pane.toPane(), nil
+	return res.Pane.toPane(sessions[res.Pane.PaneID]), nil
 }
 
 // PaneRead は herdr pane read の出力をそのまま返す｡この応答は envelope に

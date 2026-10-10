@@ -17,7 +17,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/detect"
 	"github.com/usadamasa/agents-daemon/internal/herdrcli"
 	"github.com/usadamasa/agents-daemon/internal/monitor"
-	"github.com/usadamasa/agents-daemon/internal/mux"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 )
 
@@ -123,7 +123,7 @@ func splitSimulatePane(ctx context.Context) (string, error) {
 }
 
 // markAsClaudeAgent は herdr pane report-agent で paneID を Claude agent に見せかける｡
-// これにより mux.IsClaudeAgent(pane) が true になり､monitor.Tick が daemon と
+// これにより multiplexer.IsClaudeAgent(pane) が true になり､monitor.Tick が daemon と
 // 同じ経路でこの pane を対象として扱うようになる｡
 func markAsClaudeAgent(ctx context.Context, paneID string) error {
 	if _, err := runHerdrRaw(ctx, "pane", "report-agent", paneID, "--source", simulateMetadataSource, "--agent", "claude", "--state", "idle"); err != nil {
@@ -144,7 +144,7 @@ const shellStartupDelay = 1500 * time.Millisecond
 // なら静的な表示に留まる)｡`herdr pane run` はレンダリング完了を待たずに戻ることがある
 // (実測: 固定 500ms 待機では画面反映前に読んでしまい none 判定になることがあった) ため､
 // 固定 sleep ではなく画面に内容が現れたことを client.PaneRead で確認してから返す｡
-func writeScreenIntoPane(ctx context.Context, client mux.Client, paneID, content string) error {
+func writeScreenIntoPane(ctx context.Context, client multiplexer.Client, paneID, content string) error {
 	tmp, err := os.CreateTemp("", "agents-daemon-simulate-*.txt")
 	if err != nil {
 		return fmt.Errorf("画面テキストの一時ファイル作成に失敗: %w", err)
@@ -192,11 +192,11 @@ func lastNonEmptyLine(s string) string {
 
 // waitForScreenContent は paneID の画面 (detection source) に substr が現れるまで
 // ポーリングする｡
-func waitForScreenContent(ctx context.Context, client mux.Client, paneID, substr string, timeout time.Duration) error {
+func waitForScreenContent(ctx context.Context, client multiplexer.Client, paneID, substr string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	var lastScreen string
 	for {
-		screen, err := client.PaneRead(ctx, paneID, mux.PaneReadOptions{Source: mux.SourceDetection, Lines: 40})
+		screen, err := client.PaneRead(ctx, paneID, multiplexer.PaneReadOptions{Source: multiplexer.SourceDetection, Lines: 40})
 		if err == nil {
 			lastScreen = screen
 			if strings.Contains(screen, substr) {
@@ -234,7 +234,7 @@ func cleanupSimulatePane(ctx context.Context, w io.Writer, ownedPaneID string, k
 }
 
 // runHerdrRaw は herdr CLI を直接叩く｡simulate が使う pane split / report-agent /
-// release-agent / close は mux.Client interface (PaneList/PaneRead/SendText/
+// release-agent / close は multiplexer.Client interface (PaneList/PaneRead/SendText/
 // SendKeys/ReportMetadata/Reachable) に含まれない pane ライフサイクル操作なので､
 // このファイル専用の最小限のラッパーとして実装している
 // (internal/herdrcli は本タスクの変更対象外)｡
@@ -260,7 +260,7 @@ func runHerdrRaw(ctx context.Context, args ...string) ([]byte, error) {
 // 1 回目の Tick で limit を検知して待機状態に入った場合､2 回目は起床時刻を過ぎたと
 // 仮定した合成の now を渡して再送信の経路 (recoverPane 経由の SendText/SendKeys) まで
 // 確認する｡実時間では待たない (上限解除まで数時間かかるため)｡
-func runSimulateTicks(ctx context.Context, w io.Writer, p apppath.Paths, ownedPaneID string, execClient mux.Client, opts SimulateOptions) error {
+func runSimulateTicks(ctx context.Context, w io.Writer, p apppath.Paths, ownedPaneID string, execClient multiplexer.Client, opts SimulateOptions) error {
 	cfg, cfgErr := config.Load(p.ConfigFile())
 	if cfgErr != nil {
 		_, _ = fmt.Fprintf(w, "設定の読み込みに失敗､デフォルト値で継続します: %v\n", cfgErr)
@@ -283,7 +283,7 @@ func runSimulateTicks(ctx context.Context, w io.Writer, p apppath.Paths, ownedPa
 	}
 
 	guarded := newScopedClient(execClient, ownedPaneID)
-	var tickClient mux.Client = guarded
+	var tickClient multiplexer.Client = guarded
 	mode := "dry-run (--send を付けると実際に送信します)"
 	if opts.Send {
 		mode = "実送信 (使い捨て pane に対してのみ)"
@@ -322,18 +322,18 @@ func runSimulateTicks(ctx context.Context, w io.Writer, p apppath.Paths, ownedPa
 	return nil
 }
 
-// scopedClient は mux.Client を包み､ownedPaneID 以外の pane を対象にした呼び出しを
+// scopedClient は multiplexer.Client を包み､ownedPaneID 以外の pane を対象にした呼び出しを
 // 全て拒否する｡simulate は自分が作った使い捨て pane 以外に絶対に触れてはいけないので､
 // 「呼び出し側が正しい pane_id を渡す」という規律に頼るのではなく､型システムの外側で
 // 機械的に強制できるガードとして実装する｡
 type scopedClient struct {
-	inner       mux.Client
+	inner       multiplexer.Client
 	ownedPaneID string
 }
 
 var errPaneNotOwned = errors.New("simulate が作成した pane 以外への操作を拒否しました")
 
-func newScopedClient(inner mux.Client, ownedPaneID string) *scopedClient {
+func newScopedClient(inner multiplexer.Client, ownedPaneID string) *scopedClient {
 	return &scopedClient{inner: inner, ownedPaneID: ownedPaneID}
 }
 
@@ -344,18 +344,18 @@ func (c *scopedClient) guard(paneID string) error {
 	return nil
 }
 
-func (c *scopedClient) PaneList(ctx context.Context) ([]mux.Pane, error) {
+func (c *scopedClient) PaneList(ctx context.Context) ([]multiplexer.Pane, error) {
 	return c.inner.PaneList(ctx) // 読み取り専用の一覧なので許可する
 }
 
-func (c *scopedClient) PaneGet(ctx context.Context, paneID string) (mux.Pane, error) {
+func (c *scopedClient) PaneGet(ctx context.Context, paneID string) (multiplexer.Pane, error) {
 	if err := c.guard(paneID); err != nil {
-		return mux.Pane{}, err
+		return multiplexer.Pane{}, err
 	}
 	return c.inner.PaneGet(ctx, paneID)
 }
 
-func (c *scopedClient) PaneRead(ctx context.Context, paneID string, opts mux.PaneReadOptions) (string, error) {
+func (c *scopedClient) PaneRead(ctx context.Context, paneID string, opts multiplexer.PaneReadOptions) (string, error) {
 	if err := c.guard(paneID); err != nil {
 		return "", err
 	}
@@ -376,7 +376,7 @@ func (c *scopedClient) SendKeys(ctx context.Context, paneID string, keys ...stri
 	return c.inner.SendKeys(ctx, paneID, keys...)
 }
 
-func (c *scopedClient) ReportMetadata(ctx context.Context, paneID string, opts mux.ReportMetadataOptions) error {
+func (c *scopedClient) ReportMetadata(ctx context.Context, paneID string, opts multiplexer.ReportMetadataOptions) error {
 	if err := c.guard(paneID); err != nil {
 		return err
 	}
@@ -392,19 +392,19 @@ func (c *scopedClient) Reachable(ctx context.Context) error {
 // (*applog.Logger) 前提であるのに対し､simulate は「何を送るはずだったか」を
 // そのままコマンドの標準出力 w に表示したいから｡
 type simulateDryRunClient struct {
-	inner mux.Client
+	inner multiplexer.Client
 	w     io.Writer
 }
 
-func (c simulateDryRunClient) PaneList(ctx context.Context) ([]mux.Pane, error) {
+func (c simulateDryRunClient) PaneList(ctx context.Context) ([]multiplexer.Pane, error) {
 	return c.inner.PaneList(ctx)
 }
 
-func (c simulateDryRunClient) PaneGet(ctx context.Context, paneID string) (mux.Pane, error) {
+func (c simulateDryRunClient) PaneGet(ctx context.Context, paneID string) (multiplexer.Pane, error) {
 	return c.inner.PaneGet(ctx, paneID)
 }
 
-func (c simulateDryRunClient) PaneRead(ctx context.Context, paneID string, opts mux.PaneReadOptions) (string, error) {
+func (c simulateDryRunClient) PaneRead(ctx context.Context, paneID string, opts multiplexer.PaneReadOptions) (string, error) {
 	return c.inner.PaneRead(ctx, paneID, opts)
 }
 
@@ -422,7 +422,7 @@ func (c simulateDryRunClient) SendKeys(_ context.Context, paneID string, keys ..
 	return nil
 }
 
-func (c simulateDryRunClient) ReportMetadata(_ context.Context, paneID string, _ mux.ReportMetadataOptions) error {
+func (c simulateDryRunClient) ReportMetadata(_ context.Context, paneID string, _ multiplexer.ReportMetadataOptions) error {
 	_, _ = fmt.Fprintf(c.w, "  [dry-run] pane %s のラベル更新はしない\n", paneID)
 	return nil
 }

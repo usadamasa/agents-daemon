@@ -11,14 +11,14 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/applog"
 	"github.com/usadamasa/agents-daemon/internal/monitor"
-	"github.com/usadamasa/agents-daemon/internal/mux"
-	"github.com/usadamasa/agents-daemon/internal/mux/muxfake"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 )
 
 // newTestRuntime は daemonRuntime を t.TempDir() の下だけで完結させて組み立てる｡
 // statusPath はログディレクトリと同じ一時ディレクトリ内に置く｡
-func newTestRuntime(t *testing.T, client mux.Client, startedAt time.Time) (*daemonRuntime, string) {
+func newTestRuntime(t *testing.T, client multiplexer.Client, startedAt time.Time) (*daemonRuntime, string) {
 	t.Helper()
 	dir := t.TempDir()
 	log := applog.NewLogger(filepath.Join(dir, "daemon.log"), time.Now)
@@ -31,8 +31,8 @@ func newTestRuntime(t *testing.T, client mux.Client, startedAt time.Time) (*daem
 	return newDaemonRuntime(client, log, statusPath, sessionstate.New(dir), false, func(time.Duration) {}, startedAt), statusPath
 }
 
-func claudePane(paneID, terminalID string, status mux.AgentStatus) mux.Pane {
-	return mux.Pane{
+func claudePane(paneID, terminalID string, status multiplexer.AgentStatus) multiplexer.Pane {
+	return multiplexer.Pane{
 		Agent:       "claude-code",
 		AgentStatus: status,
 		PaneID:      paneID,
@@ -41,10 +41,10 @@ func claudePane(paneID, terminalID string, status mux.AgentStatus) mux.Pane {
 	}
 }
 
-func nonClaudePane(paneID, terminalID string) mux.Pane {
-	return mux.Pane{
+func nonClaudePane(paneID, terminalID string) multiplexer.Pane {
+	return multiplexer.Pane{
 		Agent:       "bash",
-		AgentStatus: mux.AgentStatusIdle,
+		AgentStatus: multiplexer.AgentStatusIdle,
 		PaneID:      paneID,
 		TerminalID:  terminalID,
 	}
@@ -58,9 +58,9 @@ func missingConfigPath(t *testing.T) string {
 }
 
 func TestDaemonRuntimeTick_NewPaneGetsFreshState(t *testing.T) {
-	client := &muxfake.Client{
-		PaneListFunc: func(context.Context) ([]mux.Pane, error) {
-			return []mux.Pane{claudePane("p1", "t1", mux.AgentStatusIdle)}, nil
+	client := &multiplexerfake.Client{
+		PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) {
+			return []multiplexer.Pane{claudePane("p1", "t1", multiplexer.AgentStatusIdle)}, nil
 		},
 	}
 	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
@@ -96,9 +96,9 @@ func TestDaemonRuntimeTick_NewPaneGetsFreshState(t *testing.T) {
 }
 
 func TestDaemonRuntimeTick_DisappearedPaneEntryDropped(t *testing.T) {
-	var panesNow []mux.Pane
-	client := &muxfake.Client{
-		PaneListFunc: func(context.Context) ([]mux.Pane, error) {
+	var panesNow []multiplexer.Pane
+	client := &multiplexerfake.Client{
+		PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) {
 			return panesNow, nil
 		},
 	}
@@ -106,7 +106,7 @@ func TestDaemonRuntimeTick_DisappearedPaneEntryDropped(t *testing.T) {
 	r, _ := newTestRuntime(t, client, now)
 	cfgPath := missingConfigPath(t)
 
-	panesNow = []mux.Pane{claudePane("p1", "t1", mux.AgentStatusIdle)}
+	panesNow = []multiplexer.Pane{claudePane("p1", "t1", multiplexer.AgentStatusIdle)}
 	if _, _, err := r.tick(context.Background(), cfgPath, now); err != nil {
 		t.Fatalf("1回目の tick() error = %v", err)
 	}
@@ -124,9 +124,9 @@ func TestDaemonRuntimeTick_DisappearedPaneEntryDropped(t *testing.T) {
 }
 
 func TestDaemonRuntimeTick_NonClaudePaneNeverGetsEntry(t *testing.T) {
-	client := &muxfake.Client{
-		PaneListFunc: func(context.Context) ([]mux.Pane, error) {
-			return []mux.Pane{nonClaudePane("p1", "t1")}, nil
+	client := &multiplexerfake.Client{
+		PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) {
+			return []multiplexer.Pane{nonClaudePane("p1", "t1")}, nil
 		},
 	}
 	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
@@ -164,14 +164,14 @@ func TestDaemonRuntimeTick_MissingSessionStateDoesNotLeakToOtherPanes(t *testing
 
 	const limitScreen = "Try again in 5 minutes"
 
-	paneA := claudePaneWithSession("pane-a", "term-a", "session-a", mux.AgentStatusIdle)
-	paneB := claudePaneWithSession("pane-b", "term-b", "session-b", mux.AgentStatusIdle)
+	paneA := claudePaneWithSession("pane-a", "term-a", "session-a", multiplexer.AgentStatusIdle)
+	paneB := claudePaneWithSession("pane-b", "term-b", "session-b", multiplexer.AgentStatusIdle)
 
-	client := &muxfake.Client{
-		PaneListFunc: func(context.Context) ([]mux.Pane, error) {
-			return []mux.Pane{paneA, paneB}, nil
+	client := &multiplexerfake.Client{
+		PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) {
+			return []multiplexer.Pane{paneA, paneB}, nil
 		},
-		PaneReadFunc: func(context.Context, string, mux.PaneReadOptions) (string, error) {
+		PaneReadFunc: func(context.Context, string, multiplexer.PaneReadOptions) (string, error) {
 			return limitScreen, nil
 		},
 	}
@@ -198,9 +198,9 @@ func TestDaemonRuntimeTick_IdleShutdown(t *testing.T) {
 		t.Fatalf("設定ファイルの書き込みに失敗: %v", err)
 	}
 
-	var panesNow []mux.Pane
-	client := &muxfake.Client{
-		PaneListFunc: func(context.Context) ([]mux.Pane, error) { return panesNow, nil },
+	var panesNow []multiplexer.Pane
+	client := &multiplexerfake.Client{
+		PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) { return panesNow, nil },
 	}
 	t0 := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 	r, _ := newTestRuntime(t, client, t0)
@@ -226,7 +226,7 @@ func TestDaemonRuntimeTick_IdleShutdown(t *testing.T) {
 
 	// 3回目: Claude pane が再出現 → idleSince がリセットされる (ゼロ値に戻る)｡
 	t2 := t1.Add(time.Second)
-	panesNow = []mux.Pane{claudePane("p1", "t1", mux.AgentStatusIdle)}
+	panesNow = []multiplexer.Pane{claudePane("p1", "t1", multiplexer.AgentStatusIdle)}
 	if shutdown, _, err := r.tick(ctx, cfgPath, t2); err != nil || shutdown {
 		t.Fatalf("3回目の tick (pane再出現): shutdown=%v, err=%v, want false, nil", shutdown, err)
 	}
@@ -265,8 +265,8 @@ func TestDaemonRuntimeTick_ConsecutiveFailures(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("閾値まで連続失敗すると自己終了する", func(t *testing.T) {
-		client := &muxfake.Client{
-			PaneListFunc: func(context.Context) ([]mux.Pane, error) { return nil, sentinelErr },
+		client := &multiplexerfake.Client{
+			PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) { return nil, sentinelErr },
 		}
 		r, _ := newTestRuntime(t, client, now)
 
@@ -294,8 +294,8 @@ func TestDaemonRuntimeTick_ConsecutiveFailures(t *testing.T) {
 
 	t.Run("途中で成功するとカウンタがリセットされる", func(t *testing.T) {
 		mode := "fail"
-		client := &muxfake.Client{
-			PaneListFunc: func(context.Context) ([]mux.Pane, error) {
+		client := &multiplexerfake.Client{
+			PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) {
 				if mode == "fail" {
 					return nil, sentinelErr
 				}
@@ -347,7 +347,7 @@ func TestDaemonRuntimeTick_ConsecutiveFailures(t *testing.T) {
 
 // claudePaneWithSession は agent_session まで埋めた Claude pane を作る｡
 // pane と Claude セッションの対応付けは SessionID だけが持つ｡
-func claudePaneWithSession(paneID, terminalID, sessionID string, status mux.AgentStatus) mux.Pane {
+func claudePaneWithSession(paneID, terminalID, sessionID string, status multiplexer.AgentStatus) multiplexer.Pane {
 	pane := claudePane(paneID, terminalID, status)
 	pane.SessionID = sessionID
 	return pane
@@ -386,14 +386,14 @@ func TestDaemonRuntimeTick_RateStateIsMatchedPerSession(t *testing.T) {
 
 	const limitScreen = "Try again in 5 minutes"
 
-	paneA := claudePaneWithSession("pane-a", "term-a", "session-a", mux.AgentStatusIdle)
-	paneB := claudePaneWithSession("pane-b", "term-b", "session-b", mux.AgentStatusIdle)
+	paneA := claudePaneWithSession("pane-a", "term-a", "session-a", multiplexer.AgentStatusIdle)
+	paneB := claudePaneWithSession("pane-b", "term-b", "session-b", multiplexer.AgentStatusIdle)
 
-	client := &muxfake.Client{
-		PaneListFunc: func(context.Context) ([]mux.Pane, error) {
-			return []mux.Pane{paneA, paneB}, nil
+	client := &multiplexerfake.Client{
+		PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) {
+			return []multiplexer.Pane{paneA, paneB}, nil
 		},
-		PaneReadFunc: func(context.Context, string, mux.PaneReadOptions) (string, error) {
+		PaneReadFunc: func(context.Context, string, multiplexer.PaneReadOptions) (string, error) {
 			return limitScreen, nil
 		},
 	}

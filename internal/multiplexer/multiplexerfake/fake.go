@@ -1,25 +1,25 @@
-// Package muxfake は mux.Client のテスト用実装を提供する｡mux 本体から切り出して
-// いるのは､これがテスト scaffolding であり､mux の公開 API (実運用で使う型・関数) とは
+// Package multiplexerfake は multiplexer.Client のテスト用実装を提供する｡multiplexer 本体から
+// 切り出しているのは､これがテスト scaffolding であり､multiplexer の公開 API (実運用で使う型・関数) とは
 // 性質が異なるため｡daemon / verify / monitor いずれのテストも､実クライアントを
 // 一切経由せずにこのパッケージだけを import すればよい｡
-package muxfake
+package multiplexerfake
 
 import (
 	"context"
 	"fmt"
 
-	"github.com/usadamasa/agents-daemon/internal/mux"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 )
 
-// Client は mux.Client のテスト用実装｡各メソッドの挙動を *Func フィールドで
+// Client は multiplexer.Client のテスト用実装｡各メソッドの挙動を *Func フィールドで
 // 差し替えられる｡
 type Client struct {
-	PaneListFunc       func(ctx context.Context) ([]mux.Pane, error)
-	PaneGetFunc        func(ctx context.Context, paneID string) (mux.Pane, error)
-	PaneReadFunc       func(ctx context.Context, paneID string, opts mux.PaneReadOptions) (string, error)
+	PaneListFunc       func(ctx context.Context) ([]multiplexer.Pane, error)
+	PaneGetFunc        func(ctx context.Context, paneID string) (multiplexer.Pane, error)
+	PaneReadFunc       func(ctx context.Context, paneID string, opts multiplexer.PaneReadOptions) (string, error)
 	SendTextFunc       func(ctx context.Context, paneID, text string) error
 	SendKeysFunc       func(ctx context.Context, paneID string, keys ...string) error
-	ReportMetadataFunc func(ctx context.Context, paneID string, opts mux.ReportMetadataOptions) error
+	ReportMetadataFunc func(ctx context.Context, paneID string, opts multiplexer.ReportMetadataOptions) error
 	ReachableFunc      func(ctx context.Context) error
 
 	// Calls は呼ばれた操作の履歴｡テストの assertion に使う｡
@@ -29,9 +29,9 @@ type Client struct {
 	SentTexts []string
 }
 
-var _ mux.Client = (*Client)(nil)
+var _ multiplexer.Client = (*Client)(nil)
 
-func (f *Client) PaneList(ctx context.Context) ([]mux.Pane, error) {
+func (f *Client) PaneList(ctx context.Context) ([]multiplexer.Pane, error) {
 	f.Calls = append(f.Calls, "PaneList")
 	if f.PaneListFunc != nil {
 		return f.PaneListFunc(ctx)
@@ -39,15 +39,15 @@ func (f *Client) PaneList(ctx context.Context) ([]mux.Pane, error) {
 	return nil, nil
 }
 
-func (f *Client) PaneGet(ctx context.Context, paneID string) (mux.Pane, error) {
+func (f *Client) PaneGet(ctx context.Context, paneID string) (multiplexer.Pane, error) {
 	f.Calls = append(f.Calls, "PaneGet:"+paneID)
 	if f.PaneGetFunc != nil {
 		return f.PaneGetFunc(ctx, paneID)
 	}
-	return mux.Pane{}, fmt.Errorf("muxfake.Client: PaneGetFunc が未設定")
+	return multiplexer.Pane{}, fmt.Errorf("multiplexerfake.Client: PaneGetFunc が未設定")
 }
 
-func (f *Client) PaneRead(ctx context.Context, paneID string, opts mux.PaneReadOptions) (string, error) {
+func (f *Client) PaneRead(ctx context.Context, paneID string, opts multiplexer.PaneReadOptions) (string, error) {
 	f.Calls = append(f.Calls, "PaneRead:"+paneID)
 	if f.PaneReadFunc != nil {
 		return f.PaneReadFunc(ctx, paneID, opts)
@@ -72,7 +72,7 @@ func (f *Client) SendKeys(ctx context.Context, paneID string, keys ...string) er
 	return nil
 }
 
-func (f *Client) ReportMetadata(ctx context.Context, paneID string, opts mux.ReportMetadataOptions) error {
+func (f *Client) ReportMetadata(ctx context.Context, paneID string, opts multiplexer.ReportMetadataOptions) error {
 	f.Calls = append(f.Calls, "ReportMetadata:"+paneID)
 	if f.ReportMetadataFunc != nil {
 		return f.ReportMetadataFunc(ctx, paneID, opts)

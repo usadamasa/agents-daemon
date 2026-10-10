@@ -1,6 +1,6 @@
-// Package mux は端末多重化ツールの pane 操作を表す中立の interface と型を持つ｡
+// Package multiplexer は端末多重化ツールの pane 操作を表す中立の interface と型を持つ｡
 // herdr と rex の backend がこれを実装し､backend 固有の JSON は各 backend に閉じる｡
-package mux
+package multiplexer
 
 import (
 	"context"

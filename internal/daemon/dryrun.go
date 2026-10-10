@@ -5,10 +5,10 @@ import (
 	"strings"
 
 	"github.com/usadamasa/agents-daemon/internal/applog"
-	"github.com/usadamasa/agents-daemon/internal/mux"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 )
 
-// dryRunClient は mux.Client のうち pane を書き換える操作だけを握りつぶし､
+// dryRunClient は multiplexer.Client のうち pane を書き換える操作だけを握りつぶし､
 // 「本来なら何を送っていたか」をログに残すデコレータ｡読み取り (pane list /
 // pane read / 到達性確認) はそのまま通すので､検知と判定は本番と同じ経路を通る｡
 //
@@ -16,23 +16,23 @@ import (
 // Claude セッションへ誤ってプロンプトを打ち込む事故は取り返しがつかないため､
 // 「送信だけしない」状態を作れることを検証手順の入口に据えている｡
 type dryRunClient struct {
-	inner mux.Client
+	inner multiplexer.Client
 	log   *applog.Logger
 }
 
-func newDryRunClient(inner mux.Client, log *applog.Logger) mux.Client {
+func newDryRunClient(inner multiplexer.Client, log *applog.Logger) multiplexer.Client {
 	return dryRunClient{inner: inner, log: log}
 }
 
-func (c dryRunClient) PaneList(ctx context.Context) ([]mux.Pane, error) {
+func (c dryRunClient) PaneList(ctx context.Context) ([]multiplexer.Pane, error) {
 	return c.inner.PaneList(ctx)
 }
 
-func (c dryRunClient) PaneGet(ctx context.Context, paneID string) (mux.Pane, error) {
+func (c dryRunClient) PaneGet(ctx context.Context, paneID string) (multiplexer.Pane, error) {
 	return c.inner.PaneGet(ctx, paneID)
 }
 
-func (c dryRunClient) PaneRead(ctx context.Context, paneID string, opts mux.PaneReadOptions) (string, error) {
+func (c dryRunClient) PaneRead(ctx context.Context, paneID string, opts multiplexer.PaneReadOptions) (string, error) {
 	return c.inner.PaneRead(ctx, paneID, opts)
 }
 
@@ -50,7 +50,7 @@ func (c dryRunClient) SendKeys(_ context.Context, paneID string, keys ...string)
 	return nil
 }
 
-func (c dryRunClient) ReportMetadata(_ context.Context, paneID string, _ mux.ReportMetadataOptions) error {
+func (c dryRunClient) ReportMetadata(_ context.Context, paneID string, _ multiplexer.ReportMetadataOptions) error {
 	c.log.Logf("[dry-run] pane %s のラベルを更新しない", paneID)
 	return nil
 }

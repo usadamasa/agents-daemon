@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/usadamasa/agents-daemon/internal/mux"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 )
 
@@ -52,7 +52,7 @@ func (r SendReport) State() string {
 // 必要なら ack を書く｡失敗しても送信は止めない (報告に残すだけ)｡
 //
 // スラッシュの判定は config のキーではなく送る文面で行う｡どの文面も設定で書き換えられる｡
-func ackBeforeSend(deps Deps, pane mux.Pane, ps *PaneState, text string, now time.Time) {
+func ackBeforeSend(deps Deps, pane multiplexer.Pane, ps *PaneState, text string, now time.Time) {
 	report := SendReport{At: now, Slash: strings.HasPrefix(strings.TrimSpace(text), "/")}
 	defer func() { ps.LastSend = report }()
 

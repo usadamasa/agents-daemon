@@ -11,8 +11,8 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/config"
-	"github.com/usadamasa/agents-daemon/internal/mux"
-	"github.com/usadamasa/agents-daemon/internal/mux/muxfake"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
 )
 
 // 2026-08-16 に実機 (Claude Code 2.1.224) で採取した通常のフッター｡
@@ -56,7 +56,7 @@ func TestRunInspect_サンプル画面での分類(t *testing.T) {
 		file := writeInspectFixture(t, home, "normal.txt", inspectSampleNormalScreen)
 
 		var buf bytes.Buffer
-		if err := RunInspect(context.Background(), &buf, &muxfake.Client{}, apppath.New(home, "", ""), "", file, "", fixedNow); err != nil {
+		if err := RunInspect(context.Background(), &buf, &multiplexerfake.Client{}, apppath.New(home, "", ""), "", file, "", fixedNow); err != nil {
 			t.Fatalf("RunInspect() error = %v", err)
 		}
 		out := buf.String()
@@ -73,7 +73,7 @@ func TestRunInspect_サンプル画面での分類(t *testing.T) {
 		file := writeInspectFixture(t, home, "limit.txt", inspectSampleLimitScreen)
 
 		var buf bytes.Buffer
-		if err := RunInspect(context.Background(), &buf, &muxfake.Client{}, apppath.New(home, "", ""), "", file, "", fixedNow); err != nil {
+		if err := RunInspect(context.Background(), &buf, &multiplexerfake.Client{}, apppath.New(home, "", ""), "", file, "", fixedNow); err != nil {
 			t.Fatalf("RunInspect() error = %v", err)
 		}
 		out := buf.String()
@@ -107,7 +107,7 @@ func TestRunInspect_サンプル画面での分類(t *testing.T) {
 		})
 
 		var buf bytes.Buffer
-		if err := RunInspect(context.Background(), &buf, &muxfake.Client{}, p, "", file, inspectTestSessionID, fixedNow); err != nil {
+		if err := RunInspect(context.Background(), &buf, &multiplexerfake.Client{}, p, "", file, inspectTestSessionID, fixedNow); err != nil {
 			t.Fatalf("RunInspect() error = %v", err)
 		}
 		out := buf.String()
@@ -129,7 +129,7 @@ func TestRunInspect_サンプル画面での分類(t *testing.T) {
 		})
 
 		var buf bytes.Buffer
-		if err := RunInspect(context.Background(), &buf, &muxfake.Client{}, p, "", file, inspectTestSessionID, fixedNow); err != nil {
+		if err := RunInspect(context.Background(), &buf, &multiplexerfake.Client{}, p, "", file, inspectTestSessionID, fixedNow); err != nil {
 			t.Fatalf("RunInspect() error = %v", err)
 		}
 		out := buf.String()
@@ -138,11 +138,11 @@ func TestRunInspect_サンプル画面での分類(t *testing.T) {
 		}
 	})
 
-	t.Run("--pane 指定時は mux.Client 経由で読み取る", func(t *testing.T) {
+	t.Run("--pane 指定時は multiplexer.Client 経由で読み取る", func(t *testing.T) {
 		home := t.TempDir()
-		var gotOpts mux.PaneReadOptions
-		client := &muxfake.Client{
-			PaneReadFunc: func(_ context.Context, paneID string, opts mux.PaneReadOptions) (string, error) {
+		var gotOpts multiplexer.PaneReadOptions
+		client := &multiplexerfake.Client{
+			PaneReadFunc: func(_ context.Context, paneID string, opts multiplexer.PaneReadOptions) (string, error) {
 				gotOpts = opts
 				return inspectSampleLimitScreen, nil
 			},
@@ -159,7 +159,7 @@ func TestRunInspect_サンプル画面での分類(t *testing.T) {
 		}
 		// 期待値は設定の既定から引く｡読み取り元の既定は viewport 制限を避けるために
 		// 変わりうるので､ここに値を直書きすると既定を変えるたびに嘘になる｡
-		wantSource := mux.PaneReadSource(config.Default().ReadSource)
+		wantSource := multiplexer.PaneReadSource(config.Default().ReadSource)
 		if gotOpts.Source != wantSource {
 			t.Errorf("PaneReadOptions.Source = %v, want %v (config.Default() の readSource)", gotOpts.Source, wantSource)
 		}
@@ -170,8 +170,8 @@ func TestRunInspect_サンプル画面での分類(t *testing.T) {
 
 	t.Run("--pane 指定時は送信系メソッドを一切呼ばない", func(t *testing.T) {
 		home := t.TempDir()
-		client := &muxfake.Client{
-			PaneReadFunc: func(context.Context, string, mux.PaneReadOptions) (string, error) {
+		client := &multiplexerfake.Client{
+			PaneReadFunc: func(context.Context, string, multiplexer.PaneReadOptions) (string, error) {
 				return inspectSampleLimitScreen, nil
 			},
 		}

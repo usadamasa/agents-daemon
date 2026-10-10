@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/usadamasa/agents-daemon/internal/mux"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 )
 
 // herdr 0.8.0 の send-text / send-keys / report-metadata は､成功したとき
@@ -19,22 +19,22 @@ func TestSendCommands_成功時は無出力で終了コード0(t *testing.T) {
 
 	tests := []struct {
 		name string
-		call func(mux.Client) error
+		call func(multiplexer.Client) error
 	}{
 		{
 			name: "SendText",
-			call: func(c mux.Client) error { return c.SendText(ctx, "wH:p1", "resume") },
+			call: func(c multiplexer.Client) error { return c.SendText(ctx, "wH:p1", "resume") },
 		},
 		{
 			name: "SendKeys",
-			call: func(c mux.Client) error { return c.SendKeys(ctx, "wH:p1", "esc", "enter") },
+			call: func(c multiplexer.Client) error { return c.SendKeys(ctx, "wH:p1", "esc", "enter") },
 		},
 		{
 			name: "ReportMetadata",
-			call: func(c mux.Client) error {
-				return c.ReportMetadata(ctx, "wH:p1", mux.ReportMetadataOptions{
+			call: func(c multiplexer.Client) error {
+				return c.ReportMetadata(ctx, "wH:p1", multiplexer.ReportMetadataOptions{
 					Source:      "agents-daemon",
-					StateLabels: map[mux.AgentStatus]string{mux.AgentStatusIdle: "retry engaged"},
+					StateLabels: map[multiplexer.AgentStatus]string{multiplexer.AgentStatusIdle: "retry engaged"},
 				})
 			},
 		},

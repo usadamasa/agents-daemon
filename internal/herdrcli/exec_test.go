@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/usadamasa/agents-daemon/internal/mux"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 )
 
 // writeFakeHerdr は HERDR_BIN_PATH に指せる shell script を作り､そのパスを返す｡
@@ -49,13 +49,13 @@ func TestExecClient_PaneList_Success(t *testing.T) {
 	if len(panes) != 2 {
 		t.Fatalf("len(panes) = %d, want 2", len(panes))
 	}
-	if !mux.IsClaudeAgent(panes[0]) {
+	if !multiplexer.IsClaudeAgent(panes[0]) {
 		t.Errorf("panes[0] は claude agent であるべき")
 	}
 	if panes[0].SessionID != "0d5e717f-82c5-4e71-ac74-799f7197e0de" {
 		t.Errorf("panes[0].SessionID = %q, want agent_session.value", panes[0].SessionID)
 	}
-	if mux.IsClaudeAgent(panes[1]) {
+	if multiplexer.IsClaudeAgent(panes[1]) {
 		t.Errorf("panes[1] (shell pane) は claude agent ではないべき")
 	}
 }
@@ -118,7 +118,7 @@ func TestExecClient_PaneRead_ReturnsRawText(t *testing.T) {
 	script := "printf '%s' " + shellQuote(rawText)
 	c := newExecClientForTest(t, script, noCommandTimeout)
 
-	got, err := c.PaneRead(context.Background(), "wH:p1", mux.PaneReadOptions{Source: mux.SourceDetection, Lines: 5})
+	got, err := c.PaneRead(context.Background(), "wH:p1", multiplexer.PaneReadOptions{Source: multiplexer.SourceDetection, Lines: 5})
 	if err != nil {
 		t.Fatalf("PaneRead() error = %v", err)
 	}
@@ -132,7 +132,7 @@ func TestExecClient_PaneRead_ArgsIncludeSourceAndLines(t *testing.T) {
 	t.Setenv("CAPTURE_FILE", capturePath)
 	c := newExecClientForTest(t, captureArgsScript, noCommandTimeout)
 
-	if _, err := c.PaneRead(context.Background(), "wH:p1", mux.PaneReadOptions{Source: mux.SourceDetection, Lines: 12}); err != nil {
+	if _, err := c.PaneRead(context.Background(), "wH:p1", multiplexer.PaneReadOptions{Source: multiplexer.SourceDetection, Lines: 12}); err != nil {
 		t.Fatalf("PaneRead() error = %v", err)
 	}
 	got := readCapturedArgs(t, capturePath)
@@ -145,7 +145,7 @@ func TestExecClient_PaneRead_ArgsIncludeSourceAndLines(t *testing.T) {
 func TestExecClient_ReportMetadata_RequiresSource(t *testing.T) {
 	c := newExecClientForTest(t, "echo should-not-run; exit 1", noCommandTimeout)
 
-	err := c.ReportMetadata(context.Background(), "wH:p1", mux.ReportMetadataOptions{})
+	err := c.ReportMetadata(context.Background(), "wH:p1", multiplexer.ReportMetadataOptions{})
 	if err == nil {
 		t.Fatalf("ReportMetadata() error = nil, want error for missing Source")
 	}
@@ -156,11 +156,11 @@ func TestExecClient_ReportMetadata_BuildsArgsDeterministically(t *testing.T) {
 	t.Setenv("CAPTURE_FILE", capturePath)
 	c := newExecClientForTest(t, captureArgsScript+"\necho '{\"id\":\"cli:request\",\"result\":{}}'", noCommandTimeout)
 
-	opts := mux.ReportMetadataOptions{
+	opts := multiplexer.ReportMetadataOptions{
 		Source: "agents-daemon",
-		StateLabels: map[mux.AgentStatus]string{
-			mux.AgentStatusIdle:    "waiting",
-			mux.AgentStatusBlocked: "waiting",
+		StateLabels: map[multiplexer.AgentStatus]string{
+			multiplexer.AgentStatusIdle:    "waiting",
+			multiplexer.AgentStatusBlocked: "waiting",
 		},
 		TTLMillis: 5000,
 	}

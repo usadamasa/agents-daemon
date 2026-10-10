@@ -54,7 +54,7 @@ func (s Store) IngestStatusline(input []byte, now time.Time) error {
 
 // IngestStatuslineWithEnv は IngestStatusline の本体で､環境変数を getenv から読む｡
 // statusline の command は Claude Code の子プロセスなので REX_BLOCK / HERDR_PANE_ID を
-// 継承しており､その場所を context/<session_id>.json の mux に書く (MuxRefFromEnv)｡
+// 継承しており､その場所を context/<session_id>.json の multiplexer に書く (MultiplexerRefFromEnv)｡
 func (s Store) IngestStatuslineWithEnv(input []byte, getenv func(string) string, now time.Time) error {
 	var in statuslineInput
 	if err := json.Unmarshal(input, &in); err != nil {
@@ -76,7 +76,7 @@ func (s Store) IngestStatuslineWithEnv(input []byte, getenv func(string) string,
 		ObservedAt:        observedAt,
 		ContextWindowSize: int64(in.ContextWindow.ContextWindowSize),
 		TranscriptPath:    in.TranscriptPath,
-		Mux:               newMuxFile(MuxRefFromEnv(getenv)),
+		Multiplexer:       newMultiplexerFile(MultiplexerRefFromEnv(getenv)),
 	}
 	if err := writeJSONAtomic(contextPath, ".context.*", ctx); err != nil {
 		return err

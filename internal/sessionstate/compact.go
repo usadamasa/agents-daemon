@@ -17,8 +17,8 @@ type contextFile struct {
 	ContextWindowSize int64   `json:"context_window_size,omitempty"`
 	// TranscriptPath は CacheLoader が辿る｡Compact には載せない｡
 	TranscriptPath string `json:"transcript_path,omitempty"`
-	// Mux は ListMuxBlocks が block から session を逆引きするのに使う｡
-	Mux *muxFile `json:"mux,omitempty"`
+	// Multiplexer は ListMultiplexerBlocks が block から session を逆引きするのに使う｡
+	Multiplexer *multiplexerFile `json:"multiplexer,omitempty"`
 }
 
 // Compact はセッション 1 つぶんの､compact 自動化に要る状態をまとめたもの｡

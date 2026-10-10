@@ -1,8 +1,8 @@
-// Package herdrcli は herdr CLI (https://herdr.dev) を叩く mux.Client の実装を提供する｡
-// herdr 形の JSON はこのパッケージの非公開の wire 型に閉じ､外へは mux.Pane で渡す｡
+// Package herdrcli は herdr CLI (https://herdr.dev) を叩く multiplexer.Client の実装を提供する｡
+// herdr 形の JSON はこのパッケージの非公開の wire 型に閉じ､外へは multiplexer.Pane で渡す｡
 package herdrcli
 
-import "github.com/usadamasa/agents-daemon/internal/mux"
+import "github.com/usadamasa/agents-daemon/internal/multiplexer"
 
 // agentSessionWire は pane に紐づく agent セッションの識別情報｡
 // Claude Code の pane では Value が CLAUDE_CODE_SESSION_ID と一致する｡
@@ -26,15 +26,15 @@ type paneWire struct {
 	TerminalTitle string            `json:"terminal_title"`
 }
 
-// toPane は herdr の pane を中立の mux.Pane へ写す｡agent_status は herdr の 5 値が
-// そのまま mux.AgentStatus の値になる｡
-func (w paneWire) toPane() mux.Pane {
-	p := mux.Pane{
+// toPane は herdr の pane を中立の multiplexer.Pane へ写す｡agent_status は herdr の 5 値が
+// そのまま multiplexer.AgentStatus の値になる｡
+func (w paneWire) toPane() multiplexer.Pane {
+	p := multiplexer.Pane{
 		PaneID:        w.PaneID,
 		TerminalID:    w.TerminalID,
 		CWD:           w.CWD,
 		Agent:         w.Agent,
-		AgentStatus:   mux.AgentStatus(w.AgentStatus),
+		AgentStatus:   multiplexer.AgentStatus(w.AgentStatus),
 		TerminalTitle: w.TerminalTitle,
 	}
 	if w.AgentSession != nil {

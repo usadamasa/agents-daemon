@@ -12,13 +12,13 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/config"
 	"github.com/usadamasa/agents-daemon/internal/detect"
 	"github.com/usadamasa/agents-daemon/internal/monitor"
-	"github.com/usadamasa/agents-daemon/internal/mux"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 )
 
 // RunInspect は screen の分類と待機時刻の算出根拠を w へ表示する｡--pane / --file の
 // どちらか一方を指定する必要があるという制約は呼び出し元 (cobra の RunE) が検証する｡
-func RunInspect(ctx context.Context, w io.Writer, client mux.Client, p apppath.Paths, paneID, file, sessionID string, now time.Time) error {
+func RunInspect(ctx context.Context, w io.Writer, client multiplexer.Client, p apppath.Paths, paneID, file, sessionID string, now time.Time) error {
 	cfg, cfgErr := config.Load(p.ConfigFile())
 	if cfgErr != nil {
 		_, _ = fmt.Fprintf(w, "設定の読み込みに失敗､デフォルト値で継続します: %v\n", cfgErr)
@@ -164,7 +164,7 @@ func reportCompactStall(w io.Writer, cfg config.Config, screen string) {
 }
 
 // loadInspectScreen は --pane / --file のどちらかから画面テキストを取得する｡
-func loadInspectScreen(ctx context.Context, client mux.Client, cfg config.Config, paneID, file string) (screen, source string, err error) {
+func loadInspectScreen(ctx context.Context, client multiplexer.Client, cfg config.Config, paneID, file string) (screen, source string, err error) {
 	if file != "" {
 		data, readErr := os.ReadFile(file) // #nosec G304 -- CLI 引数で明示指定されたファイル
 		if readErr != nil {
@@ -173,8 +173,8 @@ func loadInspectScreen(ctx context.Context, client mux.Client, cfg config.Config
 		return string(data), fmt.Sprintf("file:%s", file), nil
 	}
 
-	screen, err = client.PaneRead(ctx, paneID, mux.PaneReadOptions{
-		Source: mux.PaneReadSource(cfg.ReadSource),
+	screen, err = client.PaneRead(ctx, paneID, multiplexer.PaneReadOptions{
+		Source: multiplexer.PaneReadSource(cfg.ReadSource),
 		Lines:  cfg.ReadLines,
 	})
 	if err != nil {
@@ -256,7 +256,7 @@ func reportWake(w io.Writer, cfg config.Config, rateState, account *sessionstate
 // または agent session が紐づいていない場合は空文字列を返す (state 無しとして扱う)｡
 // 利用上限 state はセッションごとに別ファイルなので､この対応付けが取れないと
 // どの state を読むべきかが決まらない｡
-func paneSessionID(ctx context.Context, client mux.Client, paneID string) string {
+func paneSessionID(ctx context.Context, client multiplexer.Client, paneID string) string {
 	if paneID == "" {
 		return ""
 	}

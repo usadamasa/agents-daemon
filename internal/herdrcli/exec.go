@@ -12,14 +12,14 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/usadamasa/agents-daemon/internal/mux"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 )
 
 // defaultTimeout は herdr コマンド 1 回あたりのデフォルトタイムアウト｡
 // hung した herdr が daemon を巻き込んで停止させないための安全弁｡
 const defaultTimeout = 10 * time.Second
 
-// execClient は herdr CLI を subprocess として呼び出す mux.Client 実装｡
+// execClient は herdr CLI を subprocess として呼び出す multiplexer.Client 実装｡
 type execClient struct {
 	binPath string
 	timeout time.Duration
@@ -27,14 +27,14 @@ type execClient struct {
 
 // NewExecClient は実 herdr バイナリを叩く Client を返す｡
 // バイナリパスは環境変数 HERDR_BIN_PATH で上書きできる (未設定なら PATH 上の "herdr")｡
-func NewExecClient() mux.Client {
+func NewExecClient() multiplexer.Client {
 	return newExecClientWithTimeout(defaultTimeout)
 }
 
 // newExecClientWithTimeout はコマンド 1 回あたりのタイムアウトを指定して Client を作る｡
 // パッケージ外からタイムアウトを指定する必要はまだ無いため (実機統合テストのみが使う)､
 // 非公開のままにしてある｡
-func newExecClientWithTimeout(timeout time.Duration) mux.Client {
+func newExecClientWithTimeout(timeout time.Duration) multiplexer.Client {
 	bin := os.Getenv("HERDR_BIN_PATH")
 	if bin == "" {
 		bin = "herdr"
@@ -118,7 +118,7 @@ type paneListResult struct {
 	Panes []paneWire `json:"panes"`
 }
 
-func (c *execClient) PaneList(ctx context.Context) ([]mux.Pane, error) {
+func (c *execClient) PaneList(ctx context.Context) ([]multiplexer.Pane, error) {
 	env, err := c.runEnvelope(ctx, "pane", "list")
 	if err != nil {
 		return nil, err
@@ -130,7 +130,7 @@ func (c *execClient) PaneList(ctx context.Context) ([]mux.Pane, error) {
 	if res.Panes == nil {
 		return nil, nil
 	}
-	panes := make([]mux.Pane, len(res.Panes))
+	panes := make([]multiplexer.Pane, len(res.Panes))
 	for i, w := range res.Panes {
 		panes[i] = w.toPane()
 	}
@@ -141,14 +141,14 @@ type paneGetResult struct {
 	Pane paneWire `json:"pane"`
 }
 
-func (c *execClient) PaneGet(ctx context.Context, paneID string) (mux.Pane, error) {
+func (c *execClient) PaneGet(ctx context.Context, paneID string) (multiplexer.Pane, error) {
 	env, err := c.runEnvelope(ctx, "pane", "get", paneID)
 	if err != nil {
-		return mux.Pane{}, err
+		return multiplexer.Pane{}, err
 	}
 	var res paneGetResult
 	if err := json.Unmarshal(env.Result, &res); err != nil {
-		return mux.Pane{}, fmt.Errorf("herdr pane get %s: result の parse に失敗: %w", paneID, err)
+		return multiplexer.Pane{}, fmt.Errorf("herdr pane get %s: result の parse に失敗: %w", paneID, err)
 	}
 	return res.Pane.toPane(), nil
 }
@@ -157,7 +157,7 @@ func (c *execClient) PaneGet(ctx context.Context, paneID string) (mux.Pane, erro
 // 包まれない生テキストであり､JSON parse を試みない｡
 // opts.Source は `herdr pane read --help` が列挙する 4 値のみが有効 (実測確認済み)｡
 // 空なら herdr のデフォルト (recent) に委ねる｡
-func (c *execClient) PaneRead(ctx context.Context, paneID string, opts mux.PaneReadOptions) (string, error) {
+func (c *execClient) PaneRead(ctx context.Context, paneID string, opts multiplexer.PaneReadOptions) (string, error) {
 	args := []string{"pane", "read", paneID}
 	if opts.Source != "" {
 		args = append(args, "--source", string(opts.Source))
@@ -189,7 +189,7 @@ func (c *execClient) SendKeys(ctx context.Context, paneID string, keys ...string
 //
 // herdr 0.8.0 は --title / --clear-title / --display-agent / --clear-display-agent も
 // 受けるが､agents-daemon はラベル (state-label) と TTL しか使わないので渡さない｡
-func (c *execClient) ReportMetadata(ctx context.Context, paneID string, opts mux.ReportMetadataOptions) error {
+func (c *execClient) ReportMetadata(ctx context.Context, paneID string, opts multiplexer.ReportMetadataOptions) error {
 	if opts.Source == "" {
 		return fmt.Errorf("herdr pane report-metadata %s: Source は必須", paneID)
 	}
@@ -209,7 +209,7 @@ func (c *execClient) ReportMetadata(ctx context.Context, paneID string, opts mux
 		}
 		sort.Strings(statuses)
 		for _, status := range statuses {
-			args = append(args, "--state-label", fmt.Sprintf("%s=%s", status, opts.StateLabels[mux.AgentStatus(status)]))
+			args = append(args, "--state-label", fmt.Sprintf("%s=%s", status, opts.StateLabels[multiplexer.AgentStatus(status)]))
 		}
 	}
 	if opts.TTLMillis > 0 {

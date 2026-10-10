@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/usadamasa/agents-daemon/internal/mux"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 )
 
 // realPaneListFixture は実機の herdr から採取した `pane list` の出力そのもの
@@ -24,13 +24,13 @@ func TestPaneWire_ToPane_RealFixture(t *testing.T) {
 		t.Fatalf("len(res.Panes) = %d, want 2", len(res.Panes))
 	}
 
-	want := []mux.Pane{
+	want := []multiplexer.Pane{
 		{
 			PaneID:        "wH:p1",
 			TerminalID:    "term_6590ddf454a3a1",
 			CWD:           "/Users/usadamasa/src/github.com/usadamasa/claude-config",
 			Agent:         "claude",
-			AgentStatus:   mux.AgentStatusWorking,
+			AgentStatus:   multiplexer.AgentStatusWorking,
 			SessionID:     "0d5e717f-82c5-4e71-ac74-799f7197e0de",
 			TerminalTitle: "title",
 		},
@@ -39,7 +39,7 @@ func TestPaneWire_ToPane_RealFixture(t *testing.T) {
 			PaneID:        "wH:p4",
 			TerminalID:    "term_6591d9bed8d704",
 			CWD:           "/x",
-			AgentStatus:   mux.AgentStatusUnknown,
+			AgentStatus:   multiplexer.AgentStatusUnknown,
 			TerminalTitle: "shell",
 		},
 	}

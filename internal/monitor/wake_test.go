@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/config"
-	"github.com/usadamasa/agents-daemon/internal/mux"
-	"github.com/usadamasa/agents-daemon/internal/mux/muxfake"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 )
 
@@ -149,13 +149,13 @@ func TestTick_FreshSession_NoOwnState_UsesAccountWindow(t *testing.T) {
 	now := jst(7, 35)
 	account := stateAt(jst(8, 10), 96)
 
-	client := &muxfake.Client{
+	client := &multiplexerfake.Client{
 		PaneReadFunc: readReturning(limitAbsoluteScreen, nil), // 相対表現も am/pm も無い
 	}
 	cfg := config.Default()
 	deps := newTestDeps(t, cfg, client)
 	deps.Account = account
-	pane := newTestPane(mux.AgentStatusIdle, true)
+	pane := newTestPane(multiplexer.AgentStatusIdle, true)
 	ps := &PaneState{}
 
 	outcome, err := Tick(context.Background(), deps, pane, ps, nil, now)

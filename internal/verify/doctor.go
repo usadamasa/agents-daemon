@@ -15,14 +15,14 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/config"
 	"github.com/usadamasa/agents-daemon/internal/daemon"
-	"github.com/usadamasa/agents-daemon/internal/mux"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 )
 
 // RunDoctor は各前提条件を順に確認し w へ報告する｡herdr に到達できない場合だけ
 // error を返す (呼び出し元の main が exit 1 にする)｡それ以外の欠落や陳腐化は
 // 情報として報告するに留め､error にはしない｡
-func RunDoctor(ctx context.Context, w io.Writer, client mux.Client, p apppath.Paths, now time.Time) error {
+func RunDoctor(ctx context.Context, w io.Writer, client multiplexer.Client, p apppath.Paths, now time.Time) error {
 	_, _ = fmt.Fprintln(w, "=== agents-daemon doctor ===")
 
 	_, _ = fmt.Fprintln(w, "\n-- herdr 到達性 --")
@@ -57,10 +57,10 @@ func RunDoctor(ctx context.Context, w io.Writer, client mux.Client, p apppath.Pa
 }
 
 // reportPanes は pane 一覧のうち Claude agent と判定されたものを列挙する｡
-func reportPanes(w io.Writer, panes []mux.Pane) {
+func reportPanes(w io.Writer, panes []multiplexer.Pane) {
 	claudeCount := 0
 	for _, pane := range panes {
-		if !mux.IsClaudeAgent(pane) {
+		if !multiplexer.IsClaudeAgent(pane) {
 			continue
 		}
 		claudeCount++
@@ -76,7 +76,7 @@ func reportPanes(w io.Writer, panes []mux.Pane) {
 // reportRateLimitStates は ingest-statusline が書き出す rate-limits.json の有無､鮮度､
 // 5 時間ウィンドウの使用率を報告する｡ファイルが無いこと自体は異常ではない
 // (statusline から ingest-statusline がまだ 1 度も rate_limits を受け取っていない)｡
-func reportRateLimitStates(w io.Writer, p apppath.Paths, panes []mux.Pane, now time.Time) {
+func reportRateLimitStates(w io.Writer, p apppath.Paths, panes []multiplexer.Pane, now time.Time) {
 	cfg, cfgErr := config.Load(p.ConfigFile())
 	if cfgErr != nil {
 		_, _ = fmt.Fprintf(w, "  設定の読み込みに失敗したため､既定の鮮度閾値で判定します: %v\n", cfgErr)
@@ -85,7 +85,7 @@ func reportRateLimitStates(w io.Writer, p apppath.Paths, panes []mux.Pane, now t
 
 	found := false
 	for _, pane := range panes {
-		if !mux.IsClaudeAgent(pane) {
+		if !multiplexer.IsClaudeAgent(pane) {
 			continue
 		}
 		found = true

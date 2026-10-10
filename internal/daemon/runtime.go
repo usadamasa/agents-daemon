@@ -21,7 +21,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/detect"
 	"github.com/usadamasa/agents-daemon/internal/herdrcli"
 	"github.com/usadamasa/agents-daemon/internal/monitor"
-	"github.com/usadamasa/agents-daemon/internal/mux"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 )
 
@@ -37,7 +37,7 @@ const metadataSource = "agents-daemon"
 // paneEntry は daemon が pane 1 枚ぶんに保持する監視状態｡
 type paneEntry struct {
 	state      *monitor.PaneState
-	pane       mux.Pane // 直近の tick で観測した pane 情報 (シャットダウン時のラベル解除に使う)
+	pane       multiplexer.Pane // 直近の tick で観測した pane 情報 (シャットダウン時のラベル解除に使う)
 	lastSeenAt time.Time
 	lastLogKey string // 直前にログへ書いた内容の識別子 (同じ状態が続く間の重複を抑える)
 }
@@ -46,7 +46,7 @@ type paneEntry struct {
 // pane ごとの状態機械は terminal_id をキーにする (pane_id は herdr 再起動で
 // 変わりうるが､terminal_id はその herdr 実行内で安定するため)｡
 type daemonRuntime struct {
-	client mux.Client
+	client multiplexer.Client
 	log    *applog.Logger
 	// statusPath と store はプロセスの生存期間で固定なのでここに置く｡
 	statusPath string
@@ -64,7 +64,7 @@ type daemonRuntime struct {
 	lastHousekeepAt     time.Time // ゼロ値は「まだ 1 度も掃除していない」
 }
 
-func newDaemonRuntime(client mux.Client, log *applog.Logger, statusPath string, store sessionstate.Store, dryRun bool, sleep func(time.Duration), startedAt time.Time) *daemonRuntime {
+func newDaemonRuntime(client multiplexer.Client, log *applog.Logger, statusPath string, store sessionstate.Store, dryRun bool, sleep func(time.Duration), startedAt time.Time) *daemonRuntime {
 	return &daemonRuntime{
 		client:     client,
 		store:      store,
@@ -142,7 +142,7 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 	statusPanes := make([]PaneStatus, 0, len(panes))
 
 	for _, pane := range panes {
-		if !mux.IsClaudeAgent(pane) {
+		if !multiplexer.IsClaudeAgent(pane) {
 			continue
 		}
 		claudeCount++
@@ -203,7 +203,7 @@ func (r *daemonRuntime) forgetUnseen(terminals, sessions map[string]bool) {
 }
 
 // paneStatus は status.json に書く pane 1 枚ぶんのスナップショットを組む｡
-func (r *daemonRuntime) paneStatus(pane mux.Pane, entry *paneEntry, outcome monitor.Outcome, now time.Time) PaneStatus {
+func (r *daemonRuntime) paneStatus(pane multiplexer.Pane, entry *paneEntry, outcome monitor.Outcome, now time.Time) PaneStatus {
 	return PaneStatus{
 		PaneID:        pane.PaneID,
 		TerminalID:    pane.TerminalID,
@@ -220,8 +220,8 @@ func (r *daemonRuntime) paneStatus(pane mux.Pane, entry *paneEntry, outcome moni
 
 // statusCache は status に載せる cache の状態｡working な pane の transcript は応答のたびに
 // 伸びるので読み直さず､前回読んだ値を出す｡
-func (r *daemonRuntime) statusCache(pane mux.Pane) *sessionstate.Cache {
-	if pane.AgentStatus == mux.AgentStatusWorking {
+func (r *daemonRuntime) statusCache(pane multiplexer.Pane) *sessionstate.Cache {
+	if pane.AgentStatus == multiplexer.AgentStatusWorking {
 		return r.cache.Cached(pane.SessionID)
 	}
 	return r.loadCache(pane.SessionID)
@@ -262,7 +262,7 @@ func (r *daemonRuntime) markIdleCompacted(sessionID string) error {
 //
 // prompt を送った出来事には cache の状態を添える (cacheSuffix)｡失効後の送信は文脈全体を
 // 書き直すので､どれだけ書き直したかを後から追えるようにする｡
-func (r *daemonRuntime) logOutcome(pane mux.Pane, outcome monitor.Outcome, err error) {
+func (r *daemonRuntime) logOutcome(pane multiplexer.Pane, outcome monitor.Outcome, err error) {
 	// 同じ状態が続く間は書かない｡tick は既定 5 秒ごとなので､待機や抑制が
 	// 続くだけで日に数千行に膨れ､後から読めるログでなくなる｡状態が切り替わった
 	// ときだけ書き､静かな結果も key は更新して「戻ってきた」を検出できるようにする｡
@@ -358,7 +358,7 @@ func compactOutcomeMessage(outcome monitor.Outcome) (msg string, sent bool) {
 //
 // 失効後の送信は文脈全体を書き直すので context 使用率を併記し､どれだけ書き直したかを
 // 後から追えるようにする｡スラッシュの prompt は guard を素通りするので ack は無い｡
-func (r *daemonRuntime) cacheSuffix(pane mux.Pane, entry *paneEntry) string {
+func (r *daemonRuntime) cacheSuffix(pane multiplexer.Pane, entry *paneEntry) string {
 	if entry == nil {
 		return ""
 	}
@@ -403,7 +403,7 @@ func (r *daemonRuntime) clearAllLabels(ctx context.Context) {
 		if entry.state.Status != monitor.StatusWaiting {
 			continue
 		}
-		if err := r.client.ReportMetadata(ctx, entry.pane.PaneID, mux.ReportMetadataOptions{
+		if err := r.client.ReportMetadata(ctx, entry.pane.PaneID, multiplexer.ReportMetadataOptions{
 			Source:           metadataSource,
 			ClearStateLabels: true,
 		}); err != nil {

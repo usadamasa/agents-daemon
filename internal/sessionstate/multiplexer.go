@@ -8,15 +8,15 @@ import (
 	"path/filepath"
 )
 
-// 端末多重化ツールの種類｡context/<session_id>.json の mux.kind に書く値｡
+// 端末多重化ツールの種類｡context/<session_id>.json の multiplexer.kind に書く値｡
 const (
-	MuxKindRex   = "rex"
-	MuxKindHerdr = "herdr"
+	MultiplexerKindRex   = "rex"
+	MultiplexerKindHerdr = "herdr"
 )
 
-// MuxRef は Claude Code が動いている端末多重化ツールの場所｡rex は Session と Block､
+// MultiplexerRef は Claude Code が動いている端末多重化ツールの場所｡rex は Session と Block､
 // herdr は Pane だけを持つ｡
-type MuxRef struct {
+type MultiplexerRef struct {
 	Kind    string
 	Session string
 	Block   string
@@ -24,53 +24,53 @@ type MuxRef struct {
 }
 
 // ID は kind の中で場所を指す ID (rex は block､herdr は pane)｡
-func (r MuxRef) ID() string {
-	if r.Kind == MuxKindRex {
+func (r MultiplexerRef) ID() string {
+	if r.Kind == MultiplexerKindRex {
 		return r.Block
 	}
 	return r.Pane
 }
 
-// MuxRefFromEnv は statusline の command が Claude Code から継承した環境変数から場所を読む｡
+// MultiplexerRefFromEnv は statusline の command が Claude Code から継承した環境変数から場所を読む｡
 // REX_BLOCK を HERDR_PANE_ID より先に見るのは､herdr の中で rex を動かすと両方が見えるため
 // (内側が Claude Code の直接の親)｡空の値は無いものとして扱う｡
-func MuxRefFromEnv(getenv func(string) string) (MuxRef, bool) {
+func MultiplexerRefFromEnv(getenv func(string) string) (MultiplexerRef, bool) {
 	if block := getenv("REX_BLOCK"); block != "" {
-		return MuxRef{Kind: MuxKindRex, Session: getenv("REX_SESSION"), Block: block}, true
+		return MultiplexerRef{Kind: MultiplexerKindRex, Session: getenv("REX_SESSION"), Block: block}, true
 	}
 	if pane := getenv("HERDR_PANE_ID"); pane != "" {
-		return MuxRef{Kind: MuxKindHerdr, Pane: pane}, true
+		return MultiplexerRef{Kind: MultiplexerKindHerdr, Pane: pane}, true
 	}
-	return MuxRef{}, false
+	return MultiplexerRef{}, false
 }
 
-// muxFile は context/<session_id>.json の mux の生の形｡
-type muxFile struct {
+// multiplexerFile は context/<session_id>.json の multiplexer の生の形｡
+type multiplexerFile struct {
 	Kind    string `json:"kind"`
 	Session string `json:"session,omitempty"`
 	Block   string `json:"block,omitempty"`
 	Pane    string `json:"pane,omitempty"`
 }
 
-func newMuxFile(ref MuxRef, ok bool) *muxFile {
+func newMultiplexerFile(ref MultiplexerRef, ok bool) *multiplexerFile {
 	if !ok {
 		return nil
 	}
-	return &muxFile{Kind: ref.Kind, Session: ref.Session, Block: ref.Block, Pane: ref.Pane}
+	return &multiplexerFile{Kind: ref.Kind, Session: ref.Session, Block: ref.Block, Pane: ref.Pane}
 }
 
-func (m *muxFile) ref() MuxRef {
-	return MuxRef{Kind: m.Kind, Session: m.Session, Block: m.Block, Pane: m.Pane}
+func (m *multiplexerFile) ref() MultiplexerRef {
+	return MultiplexerRef{Kind: m.Kind, Session: m.Session, Block: m.Block, Pane: m.Pane}
 }
 
-// ListMuxBlocks は context/ を 1 回走査し､kind の block (herdr は pane) の ID から
+// ListMultiplexerBlocks は context/ を 1 回走査し､kind の block (herdr は pane) の ID から
 // session_id への対応を返す｡rex には herdr の agent_session に当たるものが無いため､
 // statusline が書いた対から逆引きする｡
 //
 // 同じ ID の記録が複数あれば observed_at が最新のもの (同値なら名前順で先) を採る｡
 // 同じ block で Claude Code を起動し直すと､古い session の記録が prune まで残るため｡
 // 壊れたファイルは読み飛ばす｡ディレクトリが無い・ゼロ値の Store なら空を返す｡
-func (s Store) ListMuxBlocks(kind string) (map[string]string, error) {
+func (s Store) ListMultiplexerBlocks(kind string) (map[string]string, error) {
 	if s.Context == "" {
 		return nil, nil
 	}
@@ -89,10 +89,10 @@ func (s Store) ListMuxBlocks(kind string) (map[string]string, error) {
 			continue
 		}
 		raw, ok := readContextFile(filepath.Join(s.Context, entry.Name()))
-		if !ok || raw.SessionID == "" || raw.Mux == nil || raw.Mux.Kind != kind {
+		if !ok || raw.SessionID == "" || raw.Multiplexer == nil || raw.Multiplexer.Kind != kind {
 			continue
 		}
-		id := raw.Mux.ref().ID()
+		id := raw.Multiplexer.ref().ID()
 		if id == "" {
 			continue
 		}
@@ -105,10 +105,10 @@ func (s Store) ListMuxBlocks(kind string) (map[string]string, error) {
 	return sessions, nil
 }
 
-// ResolveMuxBlock は kind の block (herdr は pane) の ID から session_id を引く｡
-// 無ければ ("", nil)｡複数の ID を引くなら ListMuxBlocks で 1 回の走査に済ませる｡
-func (s Store) ResolveMuxBlock(kind, id string) (string, error) {
-	sessions, err := s.ListMuxBlocks(kind)
+// ResolveMultiplexerBlock は kind の block (herdr は pane) の ID から session_id を引く｡
+// 無ければ ("", nil)｡複数の ID を引くなら ListMultiplexerBlocks で 1 回の走査に済ませる｡
+func (s Store) ResolveMultiplexerBlock(kind, id string) (string, error) {
+	sessions, err := s.ListMultiplexerBlocks(kind)
 	if err != nil {
 		return "", err
 	}

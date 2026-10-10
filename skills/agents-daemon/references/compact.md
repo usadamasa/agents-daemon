@@ -38,9 +38,10 @@ state file の mtime が､daemon が `compactAutoPrepMessage` (既定 `/agents-
 突くことになる｡3 段目の marker も同じ考えで､自分が送った再開より後に置かれた marker しか見ない｡
 
 `compact-state/<sid>.md` の `<sid>` は compact-prep skill が
-`CLAUDE_CODE_SESSION_ID` から取る｡この値は herdr の `agent_session.value`
+`CLAUDE_CODE_SESSION_ID` から取る｡この値は statusline が `context/<sid>.json` に書く `session_id`
 (daemon が pane から引く session_id) と PostCompact hook の stdin の `session_id` に
-一致する｡3 つが一致することは実機で確認した｡
+一致する｡3 つが一致することは実機で確認した (herdr の `agent_session.value` と比べていた頃の確認で､
+値はどれも Claude Code の session_id)｡
 
 ## 送信の条件
 

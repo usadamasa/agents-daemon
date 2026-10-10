@@ -31,15 +31,16 @@ plugin が持つもの:
 - **herdr または rex**: daemon は多重化ツールの CLI で pane を見て送信する｡
   どちらの外で動く Claude Code にも何も届かない｡daemon は起動時の環境で片方を選ぶ｡`REX_SESSION` があれば rex､無ければ herdr｡
   - **[herdr](https://herdr.dev)**: `herdr pane list` / `pane read` / `pane send-text` を使う｡
+    `herdr integration install claude` (herdr 生成の SessionStart hook) は要らない｡
   - **rex**: `rex ls` / `block call` / `capture` / `send` を使う｡server の socket は
     `~/Library/Application Support/rex/server.sock`｡
     sandbox の中の Bash から `doctor` や setup skill で rex を叩くなら､
-    `sandbox.network.allowUnixSockets` に `~/Library/Application Support/rex` を足す｡block と session の対応は statusline が
-    書く記録から引くので､下の statusline の配線が必須になる｡
+    `sandbox.network.allowUnixSockets` に `~/Library/Application Support/rex` を足す｡
     rex `0.0.1791570264-g7b5bf3` と Claude Code `2.1.296` で測った (2026-10-10)｡
 - **statusline の配線**: 使用率と解除時刻と transcript のパスは statusline の stdin にしか来ない｡
   `statusLine.command` をこの plugin のバイナリの `statusline` に向けるか､自前の statusline から
   `ingest-statusline` へ stdin を渡す 1 行を足す (下の「セットアップ」で行う)｡
+  pane (rex は block) と session の対応も statusline が書く記録から引くので､herdr でも rex でも必須になる｡
 - **Go toolchain**: SessionStart hook が plugin のソースから `go build` でバイナリを建てる｡
   hook は Claude Code を起動したシェルの PATH で `go` を探す｡無ければ `brew install go` などで入れる｡
   初回の build では Go module のダウンロードにネットワークを使う｡

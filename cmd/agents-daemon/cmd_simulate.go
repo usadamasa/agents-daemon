@@ -16,10 +16,12 @@ func newSimulateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "simulate",
 		Short: "使い捨て pane を作り､検知から送信までを end-to-end で検証する",
-		Long: "herdr pane split で自分専用の使い捨て pane を作り､herdr pane report-agent で\n" +
-			"それを Claude agent に見せかけ､limit 風の画面を書き込んで､daemon と同じ\n" +
-			"monitor.Tick を走らせる｡既定では dry-run (--send を付けると使い捨て pane に\n" +
-			"限って実際に送信する)｡\n\n" +
+		Long: "自分の pane を分割して使い捨て pane を作り､それを Claude agent に見せかけ､limit 風の\n" +
+			"画面を書き込んで､daemon と同じ monitor.Tick を走らせる｡既定では dry-run (--send を\n" +
+			"付けると使い捨て pane に限って実際に送信する)｡backend は daemon と同じく REX_SESSION の\n" +
+			"有無で選ぶ｡herdr では pane report-agent で Claude agent に登録し (HERDR_ENV=1 が要る)､\n" +
+			"rex では使い捨て block のシェルに Claude Code と同じ OSC 7501 を printf させて\n" +
+			"program_status に載せる (REX_BLOCK が要る)｡\n\n" +
 			"simulate は自分が作った pane 以外には構造的に一切書き込めない (multiplexer.Client を\n" +
 			"scopedClient で包み､作成した pane_id 以外への呼び出しを拒否する)｡実 Claude\n" +
 			"セッションが乗った pane を壊さないための安全策で､テストでも確認している｡\n\n" +

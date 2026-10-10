@@ -1,14 +1,11 @@
 package verify
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -16,13 +13,12 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/backend"
 	"github.com/usadamasa/agents-daemon/internal/config"
 	"github.com/usadamasa/agents-daemon/internal/detect"
-	"github.com/usadamasa/agents-daemon/internal/herdrcli"
 	"github.com/usadamasa/agents-daemon/internal/monitor"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 )
 
-// simulateMetadataSource は simulate が herdr へ渡す --source 識別子｡
+// simulateMetadataSource は simulate が herdr へ渡す --source 識別子 (rex では block の label)｡
 // daemon パッケージ本体の metadataSource ("agents-daemon") とは別の値にして､
 // 本番の daemon が書いたラベルと simulate の後始末を取り違えないようにする｡
 const simulateMetadataSource = "agents-daemon-simulate"
@@ -49,37 +45,46 @@ type SimulateOptions struct {
 }
 
 // RunSimulate は simulate の本体｡使い捨て pane の作成から後始末まで一貫して行う｡
+// backend は daemon と同じ規則 (REX_SESSION の有無) で選ぶ｡
 func RunSimulate(ctx context.Context, w io.Writer, p apppath.Paths, opts SimulateOptions) error {
-	// 使い捨て pane を Claude agent に見せる手段 (herdr の report-agent) が rex には無い｡
-	if backend.Detect(os.Getenv) != sessionstate.MultiplexerKindHerdr {
-		return errors.New("simulate は herdr 専用です｡rex のセッション (REX_SESSION あり) では使えません")
+	kind := backend.Detect(os.Getenv)
+	host, err := newSimulateHost(kind, os.Getenv)
+	if err != nil {
+		return err
 	}
-	if os.Getenv("HERDR_ENV") != "1" {
-		return errors.New("HERDR_ENV=1 の herdr セッション内で実行してください (使い捨て pane を割り出す基準になる自分の pane が要ります)")
+	execClient, err := backend.New(kind, sessionstate.New(p.StateDir()))
+	if err != nil {
+		return err
 	}
-
-	execClient := herdrcli.NewExecClient()
 	if err := execClient.Reachable(ctx); err != nil {
-		return fmt.Errorf("herdr に到達できません: %w", err)
+		return fmt.Errorf("%s に到達できません: %w", kind, err)
 	}
 
-	_, _ = fmt.Fprintln(w, "使い捨て pane を作成します...")
-	ownedPaneID, err := splitSimulatePane(ctx)
+	_, _ = fmt.Fprintf(w, "使い捨て pane を作成します (backend=%s)...\n", kind)
+	ownedPaneID, err := host.SplitPane(ctx)
 	if err != nil {
 		return err
 	}
 	_, _ = fmt.Fprintf(w, "  pane %s を作成しました\n", ownedPaneID)
-	defer cleanupSimulatePane(ctx, w, ownedPaneID, opts.Keep)
-
-	if err := markAsClaudeAgent(ctx, ownedPaneID); err != nil {
-		return err
-	}
-	_, _ = fmt.Fprintf(w, "  pane %s を Claude agent として herdr に登録しました (agent=claude, state=idle)\n", ownedPaneID)
+	defer cleanupSimulatePane(ctx, w, host, ownedPaneID, opts.Keep)
 
 	// 作りたての pane は shell 起動処理 (direnv の読み込み等) の途中のことがあり､
-	// その間に送った `herdr pane run` のコマンドが消化されず失われることがある
-	// (実測)｡起動が落ち着くまで少し待ってから画面テキストを書き込む｡
+	// その間に送ったコマンドが消化されず失われることがある (herdr で実測)｡
+	// 起動が落ち着くまで少し待ってから pane に打ち込む｡
 	time.Sleep(shellStartupDelay)
+
+	marked, err := host.MarkAsClaudeAgent(ctx, ownedPaneID)
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(w, "  pane %s を%s\n", ownedPaneID, marked)
+	// 登録が backend に載ったことを､daemon と同じ経路 (PaneGet → IsClaudeAgent) で確かめる｡
+	// rex では OSC 7501 をシェルが実行して record に載るまでの時間が挟まる｡
+	pane, err := waitForClaudeAgent(ctx, execClient, ownedPaneID, markTimeout)
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(w, "  Claude agent として見えました (agent=%s agent_status=%s)\n", pane.Agent, pane.AgentStatus)
 
 	screenContent := defaultSimulateScreen
 	if opts.ScreenFile != "" {
@@ -89,7 +94,7 @@ func RunSimulate(ctx context.Context, w io.Writer, p apppath.Paths, opts Simulat
 		}
 		screenContent = string(data)
 	}
-	if err := writeScreenIntoPane(ctx, execClient, ownedPaneID, screenContent); err != nil {
+	if err := writeScreenIntoPane(ctx, host, execClient, ownedPaneID, screenContent); err != nil {
 		return err
 	}
 	_, _ = fmt.Fprintln(w, "  limit 風の画面を書き込みました")
@@ -97,59 +102,47 @@ func RunSimulate(ctx context.Context, w io.Writer, p apppath.Paths, opts Simulat
 	return runSimulateTicks(ctx, w, p, ownedPaneID, execClient, opts)
 }
 
-// splitSimulatePane は自分専用の使い捨て pane を作り､その pane_id を返す｡
-// 現在の pane (--current) から分割するだけなので､現在の pane の内容には影響しない｡
-func splitSimulatePane(ctx context.Context) (string, error) {
-	out, err := runHerdrRaw(ctx, "pane", "split", "--current", "--direction", "down", "--ratio", "0.2", "--no-focus")
-	if err != nil {
-		return "", fmt.Errorf("使い捨て pane の作成に失敗: %w", err)
-	}
-	var env struct {
-		Result struct {
-			Pane struct {
-				PaneID string `json:"pane_id"`
-			} `json:"pane"`
-		} `json:"result"`
-		Error *struct {
-			Code    string `json:"code"`
-			Message string `json:"message"`
-		} `json:"error"`
-	}
-	if err := json.Unmarshal(bytes.TrimSpace(out), &env); err != nil {
-		return "", fmt.Errorf("pane split の応答を解釈できません: %w (stdout=%q)", err, out)
-	}
-	if env.Error != nil {
-		return "", fmt.Errorf("herdr pane split: %s (%s)", env.Error.Message, env.Error.Code)
-	}
-	if env.Result.Pane.PaneID == "" {
-		return "", fmt.Errorf("pane split の応答に pane_id が含まれていません (stdout=%q)", out)
-	}
-	return env.Result.Pane.PaneID, nil
-}
-
-// markAsClaudeAgent は herdr pane report-agent で paneID を Claude agent に見せかける｡
-// これにより multiplexer.IsClaudeAgent(pane) が true になり､monitor.Tick が daemon と
-// 同じ経路でこの pane を対象として扱うようになる｡
-func markAsClaudeAgent(ctx context.Context, paneID string) error {
-	if _, err := runHerdrRaw(ctx, "pane", "report-agent", paneID, "--source", simulateMetadataSource, "--agent", "claude", "--state", "idle"); err != nil {
-		return fmt.Errorf("pane %s を Claude agent として登録できませんでした: %w", paneID, err)
-	}
-	return nil
-}
-
 // writeScreenTimeout は writeScreenIntoPane が画面への反映を待つ最大時間｡
 const writeScreenTimeout = 5 * time.Second
 
-// shellStartupDelay は使い捨て pane を作ってから画面テキストを書き込むまで待つ時間｡
+// markTimeout は Claude agent の登録が backend に載るのを待つ最大時間｡
+const markTimeout = 5 * time.Second
+
+// shellStartupDelay は使い捨て pane を作ってから打ち込みを始めるまで待つ時間｡
 const shellStartupDelay = 1500 * time.Millisecond
 
-// writeScreenIntoPane は herdr pane run で paneID のシェルに画面テキストを cat させ､
-// 実際に画面へ反映されるまで待つ｡send-text だと文字ごとの入力になり､内容によっては
-// シェルへのコマンドとして解釈されかねない (実機確認済み: `herdr pane run <id> cat <file>`
-// なら静的な表示に留まる)｡`herdr pane run` はレンダリング完了を待たずに戻ることがある
-// (実測: 固定 500ms 待機では画面反映前に読んでしまい none 判定になることがあった) ため､
+// waitForClaudeAgent は paneID が multiplexer.IsClaudeAgent を満たすまで PaneGet をポーリングし､
+// 満たした時点の Pane を返す｡
+func waitForClaudeAgent(ctx context.Context, client multiplexer.Client, paneID string, timeout time.Duration) (multiplexer.Pane, error) {
+	deadline := time.Now().Add(timeout)
+	var last multiplexer.Pane
+	var lastErr error
+	for {
+		pane, err := client.PaneGet(ctx, paneID)
+		if err == nil {
+			last = pane
+			lastErr = nil
+			if multiplexer.IsClaudeAgent(pane) {
+				return pane, nil
+			}
+		} else {
+			lastErr = err
+		}
+		if time.Now().After(deadline) {
+			if lastErr != nil {
+				return multiplexer.Pane{}, fmt.Errorf("pane %s が %s 以内に Claude agent として見えませんでした (最後の PaneGet の失敗: %w)", paneID, timeout, lastErr)
+			}
+			return multiplexer.Pane{}, fmt.Errorf("pane %s が %s 以内に Claude agent として見えませんでした (最後の観測: agent=%q agent_status=%s)", paneID, timeout, last.Agent, last.AgentStatus)
+		}
+		time.Sleep(150 * time.Millisecond)
+	}
+}
+
+// writeScreenIntoPane は host 経由で paneID のシェルに画面テキストを cat させ､実際に画面へ
+// 反映されるまで待つ｡コマンドの投入はレンダリング完了を待たずに戻ることがある
+// (herdr で実測: 固定 500ms 待機では画面反映前に読んでしまい none 判定になることがあった) ため､
 // 固定 sleep ではなく画面に内容が現れたことを client.PaneRead で確認してから返す｡
-func writeScreenIntoPane(ctx context.Context, client multiplexer.Client, paneID, content string) error {
+func writeScreenIntoPane(ctx context.Context, host simulateHost, client multiplexer.Client, paneID, content string) error {
 	tmp, err := os.CreateTemp("", "agents-daemon-simulate-*.txt")
 	if err != nil {
 		return fmt.Errorf("画面テキストの一時ファイル作成に失敗: %w", err)
@@ -165,14 +158,8 @@ func writeScreenIntoPane(ctx context.Context, client multiplexer.Client, paneID,
 		return fmt.Errorf("画面テキストの一時ファイルのクローズに失敗: %w", err)
 	}
 
-	if _, err := runHerdrRaw(ctx, "pane", "run", paneID, "cat", tmpPath); err != nil {
-		return fmt.Errorf("pane %s への画面テキスト書き込みに失敗: %w", paneID, err)
-	}
-	// herdr pane run はコマンド文字列を pane に入力するだけで Enter は押さない (実測)｡
-	// これを送らないと cat が実行されないまま画面には何も反映されない｡
-	time.Sleep(300 * time.Millisecond)
-	if _, err := runHerdrRaw(ctx, "pane", "send-keys", paneID, "enter"); err != nil {
-		return fmt.Errorf("pane %s への enter 送信に失敗: %w", paneID, err)
+	if err := host.WriteScreen(ctx, paneID, tmpPath); err != nil {
+		return err
 	}
 
 	marker := lastNonEmptyLine(content)
@@ -216,49 +203,19 @@ func waitForScreenContent(ctx context.Context, client multiplexer.Client, paneID
 }
 
 // cleanupSimulatePane は使い捨て pane の後始末をする｡ownedPaneID は必ず
-// splitSimulatePane がこのプロセス自身で作った値であり､呼び出し元にそれ以外の
+// host.SplitPane がこのプロセス自身で作った値であり､呼び出し元にそれ以外の
 // pane_id を渡す手段は無い｡失敗しても simulate 全体は失敗させず､手動での
 // 後始末コマンドを案内するだけに留める｡
-func cleanupSimulatePane(ctx context.Context, w io.Writer, ownedPaneID string, keep bool) {
+func cleanupSimulatePane(ctx context.Context, w io.Writer, host simulateHost, ownedPaneID string, keep bool) {
 	if keep {
-		_, _ = fmt.Fprintf(w, "--keep が指定されたため pane %s は残しています (`herdr pane close %s` で手動削除してください)\n", ownedPaneID, ownedPaneID)
+		_, _ = fmt.Fprintf(w, "--keep が指定されたため pane %s は残しています (`%s` で手動削除してください)\n", ownedPaneID, host.CloseCommand(ownedPaneID))
 		return
 	}
-	var errs []error
-	if _, err := runHerdrRaw(ctx, "pane", "release-agent", ownedPaneID, "--source", simulateMetadataSource, "--agent", "claude"); err != nil {
-		errs = append(errs, err)
-	}
-	if _, err := runHerdrRaw(ctx, "pane", "close", ownedPaneID); err != nil {
-		errs = append(errs, err)
-	}
-	if err := errors.Join(errs...); err != nil {
-		_, _ = fmt.Fprintf(w, "後始末に失敗しました (`herdr pane close %s` で手動削除してください): %v\n", ownedPaneID, err)
+	if err := host.ClosePane(ctx, ownedPaneID); err != nil {
+		_, _ = fmt.Fprintf(w, "後始末に失敗しました (`%s` で手動削除してください): %v\n", host.CloseCommand(ownedPaneID), err)
 		return
 	}
 	_, _ = fmt.Fprintf(w, "pane %s を閉じました\n", ownedPaneID)
-}
-
-// runHerdrRaw は herdr CLI を直接叩く｡simulate が使う pane split / report-agent /
-// release-agent / close は multiplexer.Client interface (PaneList/PaneRead/SendText/
-// SendKeys/ReportMetadata/Reachable) に含まれない pane ライフサイクル操作なので､
-// このファイル専用の最小限のラッパーとして実装している
-// (internal/herdrcli は本タスクの変更対象外)｡
-func runHerdrRaw(ctx context.Context, args ...string) ([]byte, error) {
-	bin := os.Getenv("HERDR_BIN_PATH")
-	if bin == "" {
-		bin = "herdr"
-	}
-	runCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(runCtx, bin, args...) // #nosec G204,G702 -- bin は固定既定値/環境変数､args はこのファイル内で組み立てた定数引数のみ
-	var outBuf, errBuf bytes.Buffer
-	cmd.Stdout = &outBuf
-	cmd.Stderr = &errBuf
-	if err := cmd.Run(); err != nil {
-		return outBuf.Bytes(), fmt.Errorf("herdr %v: %w (stderr=%q)", args, err, errBuf.Bytes())
-	}
-	return outBuf.Bytes(), nil
 }
 
 // runSimulateTicks は monitor.Tick を daemon と同じ設定で実行し､結果を w へ表示する｡

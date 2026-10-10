@@ -16,13 +16,14 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
 )
 
-func TestRunSimulate_rexの環境では止める(t *testing.T) {
+func TestRunSimulate_rexではREX_BLOCKが無ければ止める(t *testing.T) {
 	t.Setenv("REX_SESSION", "session:01a12439-0839-7829-a4cb-aeac453570c1")
+	t.Setenv("REX_BLOCK", "")
 	t.Setenv("HERDR_ENV", "1")
 	var buf bytes.Buffer
 	err := RunSimulate(context.Background(), &buf, apppath.New(t.TempDir(), "", ""), SimulateOptions{})
-	if err == nil || !strings.Contains(err.Error(), "herdr 専用") {
-		t.Fatalf("RunSimulate() error = %v, want herdr 専用", err)
+	if err == nil || !strings.Contains(err.Error(), "REX_BLOCK") {
+		t.Fatalf("RunSimulate() error = %v, want REX_BLOCK に触れるエラー", err)
 	}
 	if buf.Len() != 0 {
 		t.Errorf("止める前に何かした: %s", buf.String())
@@ -216,7 +217,7 @@ func TestRunSimulate_RealHerdr(t *testing.T) {
 		t.Skip("HERDR_ENV=1 のセッション内でないので skip する")
 	}
 	if os.Getenv("REX_SESSION") != "" {
-		t.Skip("herdr の中の rex で動いており simulate が herdr 専用で止まるので skip する")
+		t.Skip("herdr の中の rex で動いており backend が rex になるので skip する")
 	}
 
 	client := herdrcli.NewExecClient()
@@ -249,6 +250,49 @@ func TestRunSimulate_RealHerdr(t *testing.T) {
 	// (pane 数の比較でも消滅のポーリングでも flaky になった)｡close を呼んだことは
 	// 上の出力検査で確認済みで､閉じる対象が自分の作った pane に限られることは
 	// scopedClient のユニットテストが保証している｡
+	if createdPaneID(out) == "" {
+		t.Errorf("出力から作成した pane ID を取り出せない:\n%s", out)
+	}
+}
+
+// realRexSimulateEnv を 1 にしたときだけ TestRunSimulate_RealRex が動く｡rex の block の中で
+// `go test ./...` を打つのは日常の開発ループで､そのたびに利用者の session へ block を割って
+// 打ち込むのは避けたい (herdr は HERDR_ENV=1 のセッション自体が検証専用なので opt-in にしていない)｡
+const realRexSimulateEnv = "AGENTS_DAEMON_REAL_REX_SIMULATE"
+
+// TestRunSimulate_RealRex は実 rex に対する統合テスト｡rex の block 内 (REX_SESSION と REX_BLOCK
+// あり) で realRexSimulateEnv=1 を付けて打つ｡
+func TestRunSimulate_RealRex(t *testing.T) {
+	if os.Getenv(realRexSimulateEnv) != "1" {
+		t.Skipf("%s=1 が無いので skip する", realRexSimulateEnv)
+	}
+	if os.Getenv("REX_SESSION") == "" || os.Getenv("REX_BLOCK") == "" {
+		t.Skip("rex の block 内 (REX_SESSION と REX_BLOCK あり) でないので skip する")
+	}
+	if _, err := exec.LookPath("rex"); err != nil {
+		t.Skip("rex が PATH に無いので skip する")
+	}
+
+	home := t.TempDir()
+	var buf bytes.Buffer
+	if err := RunSimulate(context.Background(), &buf, apppath.New(home, "", ""), SimulateOptions{}); err != nil {
+		t.Fatalf("RunSimulate() error = %v\n出力:\n%s", err, buf.String())
+	}
+	out := buf.String()
+	t.Logf("simulate 出力:\n%s", out)
+
+	for _, want := range []string{
+		"(backend=rex)",
+		"を作成しました",
+		"Claude agent として見えました (agent=claude agent_status=idle)",
+		"1 回目の Tick → Outcome: waiting",
+		"2 回目の Tick → Outcome:",
+		"を閉じました",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("出力に %q が含まれていない", want)
+		}
+	}
 	if createdPaneID(out) == "" {
 		t.Errorf("出力から作成した pane ID を取り出せない:\n%s", out)
 	}

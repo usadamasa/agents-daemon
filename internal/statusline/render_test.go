@@ -336,7 +336,8 @@ func TestRender_cache(t *testing.T) {
 		v := withRateLimits(view("Opus", "/tmp"), 42, 6750, 9)
 		v.Cache = &CacheView{Remaining: 42 * time.Minute}
 		out := lines(render(t, v))[1]
-		if !(strings.Index(out, "⏳") < strings.Index(out, "⏱") && strings.Index(out, "⏱") < strings.Index(out, "💰")) {
+		rateLimit, cache, cost := strings.Index(out, "⏳"), strings.Index(out, "⏱"), strings.Index(out, "💰")
+		if rateLimit > cache || cache > cost {
 			t.Errorf("並びが違う: %q", out)
 		}
 	})

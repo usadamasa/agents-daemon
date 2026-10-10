@@ -5,6 +5,7 @@ description: >-
   上限が解除されても再開が飛ばない､context が閾値を超えても compact が投入されない､圧縮後に作業が再開しない､
   関係ない pane を誤検知して打ち込む､prompt が cache 失効の警告で止められる､daemon が起きない､
   バイナリがビルドされない・直したコードが動かない､
+  herdr のタブ名や space 欄のセッション名が変わらない､
   といった症状から引く｡statusline / hook / skill / daemon のファイル越しの配線と､設定キーの一覧も持つ｡
 ---
 
@@ -44,7 +45,9 @@ description: >-
   残らず､画面判定 (`internal/detect/compact.go`) は候補を作れない｡代わりに
   PostCompact hook が置く marker を見る｡この経路はユーザーが手で打った `/compact` でも
   本体の autocompact でも動く｡
-- hook の配線元は plugin の `hooks/hooks.json` (SessionStart / PostCompact / UserPromptSubmit)｡
+- hook の配線元は plugin の `hooks/hooks.json` (SessionStart / PostCompact / UserPromptSubmit / Stop)｡
+  Stop と UserPromptSubmit の `herdr-title` は herdr の space 欄とタブ行にセッション名を出すだけで､
+  daemon の判定には関わらない ([architecture.md](references/architecture.md) の「[5]」)｡
 - marker と state file の置き場は `hooks/lib/compact-markers.sh` の定数 (hook /
   skill 側) と `internal/apppath` (daemon 側) が対で持つ｡片方だけ変えると protocol が
   黙って壊れる｡cwd 相対にしないのは､daemon が別プロセスであり hook に渡る cwd も
@@ -97,3 +100,4 @@ description: >-
 | 送信が pane に届かない | pane-io.md､operations.md の「既知の制約」(pane 内 tmux､herdr / rex 不在) |
 | rex で `doctor` の pane 一覧が `session_id=(なし)` になる | statusline が新しいバイナリ (`statusline` か `ingest-statusline`) を呼んでいるか､`context/<sid>.json` に `multiplexer` があるか｡architecture.md の「statusline が書く state」 |
 | rex のセッションなのに daemon が何も送らない | `doctor` の daemon の節の backend 不一致の警告｡operations.md の「既知の制約」(daemon は 1 つの backend しか見ない) |
+| herdr のタブ名や space 欄の `$claude` / `$branch` が変わらない | architecture.md の「[5]」｡`HERDR_ENV` `HERDR_SOCKET_PATH` `HERDR_PANE_ID` がそろっているか､バイナリが `herdr-title` を持つ版か (hook のログに `herdr-title failed` が出る) |

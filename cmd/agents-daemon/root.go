@@ -23,5 +23,6 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(newStatuslineCmd())
 	root.AddCommand(newIngestStatuslineCmd())
 	root.AddCommand(newTTLGuardCmd())
+	root.AddCommand(newHerdrTitleCmd())
 	return root
 }

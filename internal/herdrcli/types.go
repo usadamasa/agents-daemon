@@ -1,4 +1,5 @@
-// Package herdrcli は herdr CLI (https://herdr.dev) を叩く multiplexer.Client の実装を提供する｡
+// Package herdrcli は herdr (https://herdr.dev) を叩く client を提供する｡daemon が使う CLI 経由の
+// multiplexer.Client (execClient) と､hook が使う socket 直叩きの SocketClient の 2 つで､応答の envelope の形を共有する｡
 // herdr 形の JSON はこのパッケージの非公開の wire 型に閉じ､外へは multiplexer.Pane で渡す｡
 package herdrcli
 

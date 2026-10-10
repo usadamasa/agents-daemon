@@ -21,8 +21,9 @@ description: >-
 
 ## 配線の要点
 
-- 部品はファイル越しに繋がり､互いを直接呼ばない｡利用者の statusline から呼ばれた
-  `agents-daemon ingest-statusline` が `rate-limits/<session_id>.json` と `context/<session_id>.json` を書き､
+- 部品はファイル越しに繋がり､互いを直接呼ばない｡statusline として呼ばれた
+  `agents-daemon statusline` (または利用者の statusline から呼ばれた `ingest-statusline`) が
+  `rate-limits/<session_id>.json` と `context/<session_id>.json` を書き､
   `agents-daemon:compact-prep` skill が `compact-state/<session_id>.md` を書き､PostCompact hook が
   `compacted/<session_id>` を書く｡prompt cache の状態は､daemon が `context/<session_id>.json` の
   `transcript_path` を辿って transcript から求める｡UserPromptSubmit hook から呼ばれた `agents-daemon ttl-guard` は
@@ -30,11 +31,12 @@ description: >-
   送信は通す｡SessionStart hook が daemon を起こし､
   daemon が herdr か rex 経由で pane を見て､これらのファイルの有無と mtime で判断する｡
   backend の選び方と操作の対応は [architecture.md](references/architecture.md) の「多重化ツールの backend」｡
-- **statusline はこの plugin に含まれない｡** 利用者の statusline がするのは stdin を
-  `ingest-statusline` へ渡す 1 行だけで､取り出しと書式はバイナリ (`internal/sessionstate`) が持つ｡
-  書式は [architecture.md](references/architecture.md) の「ingest-statusline が書く state」にある｡
-  1 行が無ければ上限側のゲートと compact の自動投入が働かない｡
-- ingest-statusline が書き出すのは Claude Code が statusline の stdin で渡す `rate_limits.five_hour` と
+- **statusline の配線は 2 通り｡** `statusLine.command` をバイナリの `statusline` に向ける (描画と state file の
+  書き込みを同じプロセスで行う) か､自前の statusline から stdin を `ingest-statusline` へ渡す 1 行を足す｡
+  取り出しと書式はどちらもバイナリ (`internal/sessionstate`) が持つ｡
+  書式は [architecture.md](references/architecture.md) の「statusline が書く state」にある｡
+  配線が無ければ上限側のゲートと compact の自動投入が働かない｡
+- statusline が書き出すのは Claude Code が statusline の stdin で渡す `rate_limits.five_hour` と
   `context_window.used_percentage`｡`resets_at` は Unix epoch 秒で､これがあるので
   画面の時刻表記をパースしなくて済む｡使用率は statusline の stdin にしか来ないため､
   compact の判定はこの経路が唯一の情報源｡
@@ -93,5 +95,5 @@ description: >-
 | daemon が起きない・バイナリがビルドされない | architecture.md の「バイナリの用意と差し替え」､`build.log` |
 | 直したコードが動いていない | architecture.md の「バイナリの用意と差し替え」 |
 | 送信が pane に届かない | pane-io.md､operations.md の「既知の制約」(pane 内 tmux､herdr / rex 不在) |
-| rex で `doctor` の pane 一覧が `session_id=(なし)` になる | statusline が新しいバイナリの `ingest-statusline` を呼んでいるか､`context/<sid>.json` に `multiplexer` があるか｡architecture.md の「ingest-statusline が書く state」 |
+| rex で `doctor` の pane 一覧が `session_id=(なし)` になる | statusline が新しいバイナリ (`statusline` か `ingest-statusline`) を呼んでいるか､`context/<sid>.json` に `multiplexer` があるか｡architecture.md の「statusline が書く state」 |
 | rex のセッションなのに daemon が何も送らない | `doctor` の daemon の節の backend 不一致の警告｡operations.md の「既知の制約」(daemon は 1 つの backend しか見ない) |

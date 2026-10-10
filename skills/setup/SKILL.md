@@ -4,7 +4,8 @@ description: >-
   agents-daemon plugin を install した直後､または動いていない疑いがあるときに､前提がそろっているかを確かめて
   足りない配線を足す｡herdr も rex も入っていない・server が落ちている・このセッションが herdr の pane や
   rex の block の外で動いている､rex の block に session_id が紐づかない､
-  statusline が stdin を `ingest-statusline` へ渡しておらず rate-limits / context の state file が無い､
+  statusline が配線されておらず (`statusLine.command` がバイナリの `statusline` を指していない､または自前の
+  statusline が stdin を `ingest-statusline` へ渡していない) rate-limits / context の state file が無い､
   go や jq が無くてバイナリが建たない､といった状態を拾う｡「agents-daemon をセットアップして」「statusline を配線して」
   「herdr があるか確かめて」「rex で動くか確かめて」と言われたときにも使う｡
 ---
@@ -14,7 +15,7 @@ description: >-
 agents-daemon が動くのに要る前提を上から順に確かめ､欠けているものだけを直す｡
 確かめるのは「設定が書いてあるか」ではなく「実際に動いた跡があるか」｡
 statusline の中身を grep して判定しない (書き方は人によって違い､書いてあっても動いていないことがある)｡
-例外は 3 段目の `ingest-statusline` を呼ぶ固定の 1 行だけ｡
+例外は 3 段目の `statusLine.command` の値と `ingest-statusline` を呼ぶ固定の 1 行だけ｡
 
 各段の結果を次の 3 つのどれかで控え､最後にまとめて報告する｡
 
@@ -81,9 +82,9 @@ rex --autostart=false api call server.status | jq -c '{pid, session_count}'
 `operation not permitted` で socket に繋がらないなら sandbox が止めている｡`sandbox.network.allowUnixSockets` に
 `~/Library/Application Support/rex` が要る (足すかは利用者が決める)｡
 
-rex には herdr の `agent_session` に当たるものが無い｡daemon は statusline の `ingest-statusline` が
-`context/<sid>.json` の `multiplexer` に書いた block から session_id を引く｡このセッションの block と
-その記録が一致するかを確かめる｡
+rex には herdr の `agent_session` に当たるものが無い｡daemon は statusline (バイナリの `statusline` か
+`ingest-statusline`) が `context/<sid>.json` の `multiplexer` に書いた block から session_id を引く｡
+このセッションの block とその記録が一致するかを確かめる｡
 
 ```sh
 sid=$("${CLAUDE_PLUGIN_ROOT}/scripts/get-session-id.sh")
@@ -127,16 +128,17 @@ jq -c . "$state/rate-limits/$sid.json"
 初回の API レスポンス前には来ないし､`rate_limits` が届かない契約 (Enterprise の seat など) ではずっと来ない｡
 無いときは「上限からの自動再開のゲートは画面判定だけで動く」と伝えるに留める｡
 
-### statusline へ足す
+### statusline を配線する
 
 `context/<sid>.json` が NG なら､原因は 2 つに絞れる｡順に見る｡
 
 1. バイナリが無い: 先に 4 段目を確かめる｡無ければそれが原因で､statusline 側は直さない
    (build が終われば次の描画から書かれる)｡
-2. statusline が `ingest-statusline` を呼んでいない: statusline のスクリプトに
-   `agents-daemon" ingest-statusline` の行があるかを見る｡呼ぶ行は固定の 1 行なので､ここだけは grep で判定してよい｡
-   無ければ [statusline.md](references/statusline.md) を `Read` で開いて従う｡
-   statusline の設定の置き場の調べ方､足す 1 行､書き換えた後の確かめ方がある｡
+2. statusline が配線されていない: `statusLine.command` がバイナリの `statusline` を指しているか､
+   自前のスクリプトに `agents-daemon" ingest-statusline` の行があるかを見る｡どちらも固定の文字列なので､
+   ここだけは grep で判定してよい｡どちらも無ければ [statusline.md](references/statusline.md) を `Read` で
+   開いて従う｡配線の 2 通り (`statusLine.command` をバイナリに向ける / 自前の statusline に 1 行足す)､
+   statusline の設定の置き場の調べ方､書き換えた後の確かめ方がある｡
 
 ## 4. バイナリ
 

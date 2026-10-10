@@ -123,10 +123,12 @@ daemon は `observed_at` の新しさでセッションが生きているかも�
 | どちらも無い | フィールドを付けない |
 
 `REX_BLOCK` を先に見るのは､herdr の中で rex を動かすと両方が見え､Claude Code の直接の親は内側の rex だから｡
-rex backend は block から session_id をこの記録で逆引きする (`Store.ListMultiplexerBlocks`)｡同じ block の
-記録が複数あれば `observed_at` が最新のものを採る (同じ block で Claude Code を起動し直すと古い記録が残る)｡
-`context/` は 7 日で消えるだけなので､5 時間の上限待ちを跨いでも対応は残る｡herdr は今も pane の
-`agent_session` で引き､この記録は書くだけで読まない｡
+backend は pane (rex は block) から session_id をこの記録で逆引きする (`Store.ListMultiplexerBlocks`)｡同じ ID の
+記録が複数あれば `observed_at` が最新のものを採る (同じ pane で Claude Code を起動し直すと古い記録が残る)｡
+`context/` は 7 日で消えるだけなので､5 時間の上限待ちを跨いでも対応は残る｡herdr の pane が持つ
+`agent_session` (herdr の integration script が SessionStart で入れる値) は読まない｡herdr と rex の対応付けを
+1 本にし､`herdr integration install claude` への依存を切るため｡制約 (別 workspace への `pane move`､初回描画までの
+数秒) は [operations.md](operations.md) の「既知の制約」｡
 
 #### daemon が transcript から求める cache の状態
 
@@ -210,7 +212,7 @@ daemon は pane 操作を `internal/multiplexer` の `Client` interface 越し�
 | SendKeys | `pane send-keys P KEY...` | `send-key -b B KEY...` |
 | ReportMetadata | `pane report-metadata P --source ... --state-label ...` | 何もしない (`block rename` は利用者の label を潰す) |
 | Reachable | `status --json` の `server.running` | `api call server.status` の `pid` が正 |
-| session_id | pane の `agent_session` | `context/<sid>.json` の `multiplexer` から逆引き (上の「statusline が書く state」) |
+| session_id | `context/<sid>.json` の `multiplexer.pane` から逆引き (上の「statusline が書く state」) | `context/<sid>.json` の `multiplexer.block` から逆引き (同) |
 
 rex の呼び出しには全部 `--autostart=false` を付け､子プロセスの環境から `REX_SESSION` / `REX_BLOCK` を外す｡
 `REX_SESSION` があると rex は block の解決をその session の中に閉じ､外せば完全 ID で別 session の block も

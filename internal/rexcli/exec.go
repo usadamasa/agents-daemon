@@ -25,24 +25,21 @@ const shellFlavor = "com.superlogical.terminal.shell"
 // exitTargetNotFound は rex が block や session を解決できなかったときの exit code (実測)｡
 const exitTargetNotFound = 3
 
-// SessionResolver は block_id から Claude Code の session_id への対応を返す｡
-// rex には herdr の agent_session に当たるものが無く､statusline が書いた対から引く｡
-type SessionResolver func() (map[string]string, error)
-
 // execClient は rex CLI を subprocess として呼び出す multiplexer.Client 実装｡
 type execClient struct {
 	binPath string
 	timeout time.Duration
-	resolve SessionResolver
+	// resolve は block_id から session_id を引く (statusline が書いた sidecar)｡
+	resolve multiplexer.SessionResolver
 }
 
 // NewExecClient は実 rex バイナリを叩く Client を返す｡
 // バイナリパスは環境変数 REX_BIN_PATH で上書きできる (未設定なら PATH 上の "rex")｡
-func NewExecClient(resolve SessionResolver) multiplexer.Client {
+func NewExecClient(resolve multiplexer.SessionResolver) multiplexer.Client {
 	return newExecClientWithTimeout(resolve, defaultTimeout)
 }
 
-func newExecClientWithTimeout(resolve SessionResolver, timeout time.Duration) *execClient {
+func newExecClientWithTimeout(resolve multiplexer.SessionResolver, timeout time.Duration) *execClient {
 	bin := os.Getenv("REX_BIN_PATH")
 	if bin == "" {
 		bin = "rex"

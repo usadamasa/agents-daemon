@@ -4,9 +4,9 @@ set -euo pipefail
 # 現セッションの session_id (UUID) を stdout に出力する｡compact-prep skill から呼ばれる｡
 #
 # skill は hook と違って stdin JSON を受け取らないため､Claude Code が Bash ツールの
-# 環境に入れる CLAUDE_CODE_SESSION_ID を唯一の情報源にする｡この値は herdr の
-# agent_session.value と一致するため､agents-daemon の daemon が pane から引く
-# session_id と突き合わせられる｡
+# 環境に入れる CLAUDE_CODE_SESSION_ID を唯一の情報源にする｡この値は statusline が
+# context/<sid>.json に書く session_id と一致するため､agents-daemon の daemon が pane から
+# 引く session_id と突き合わせられる｡
 #
 # ~/.claude/projects/<encoded-cwd>/*.jsonl の mtime から推測する形は取らない｡同一
 # プロジェクトで複数セッションが動くと取り違え､他セッションの state file を上書きする｡

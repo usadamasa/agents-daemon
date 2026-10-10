@@ -33,14 +33,29 @@ func writeFakeHerdr(t *testing.T, script string) string {
 // 検証するテストだけが､意図的に短い値を渡す｡
 const noCommandTimeout = 0
 
-func newExecClientForTest(t *testing.T, script string, timeout time.Duration) *execClient {
-	t.Helper()
-	return &execClient{binPath: writeFakeHerdr(t, script), timeout: timeout}
+func staticResolver(m map[string]string) multiplexer.SessionResolver {
+	return func() (map[string]string, error) { return m, nil }
 }
 
-func TestExecClient_PaneList_Success(t *testing.T) {
-	fixture := `{"id":"cli:pane:list","result":{"panes":[{"agent":"claude","agent_session":{"agent":"claude","kind":"id","source":"herdr:claude","value":"0d5e717f-82c5-4e71-ac74-799f7197e0de"},"agent_status":"working","cwd":"/x","focused":true,"foreground_cwd":"/x","pane_id":"wH:p1","revision":76,"scroll":{"max_offset_from_bottom":0,"offset_from_bottom":0,"viewport_rows":37},"tab_id":"wH:t1","terminal_id":"term_1","terminal_title":"t","terminal_title_stripped":"t","workspace_id":"wH"},{"agent_status":"unknown","cwd":"/x","focused":false,"foreground_cwd":"/x","pane_id":"wH:p4","revision":5,"scroll":{"max_offset_from_bottom":0,"offset_from_bottom":0,"viewport_rows":37},"tab_id":"wH:t4","terminal_id":"term_2","terminal_title":"s","terminal_title_stripped":"s","workspace_id":"wH"}],"type":"pane_list"}}`
-	c := newExecClientForTest(t, "cat <<'EOF'\n"+fixture+"\nEOF", noCommandTimeout)
+func newExecClientForTest(t *testing.T, script string, timeout time.Duration) *execClient {
+	t.Helper()
+	return newExecClientWithResolverForTest(t, script, timeout, staticResolver(nil))
+}
+
+func newExecClientWithResolverForTest(t *testing.T, script string, timeout time.Duration, resolve multiplexer.SessionResolver) *execClient {
+	t.Helper()
+	return &execClient{binPath: writeFakeHerdr(t, script), timeout: timeout, resolve: resolve}
+}
+
+// paneListWithAgentSessionFixture は実機の `pane list` の応答｡herdr の integration script が入れた
+// agent_session (value 0d5e…) が残っている｡daemon はこれを読まず､statusline が書いた sidecar から引く｡
+const paneListWithAgentSessionFixture = `{"id":"cli:pane:list","result":{"panes":[{"agent":"claude","agent_session":{"agent":"claude","kind":"id","source":"herdr:claude","value":"0d5e717f-82c5-4e71-ac74-799f7197e0de"},"agent_status":"working","cwd":"/x","focused":true,"foreground_cwd":"/x","pane_id":"wH:p1","revision":76,"scroll":{"max_offset_from_bottom":0,"offset_from_bottom":0,"viewport_rows":37},"tab_id":"wH:t1","terminal_id":"term_1","terminal_title":"t","terminal_title_stripped":"t","workspace_id":"wH"},{"agent_status":"unknown","cwd":"/x","focused":false,"foreground_cwd":"/x","pane_id":"wH:p4","revision":5,"scroll":{"max_offset_from_bottom":0,"offset_from_bottom":0,"viewport_rows":37},"tab_id":"wH:t4","terminal_id":"term_2","terminal_title":"s","terminal_title_stripped":"s","workspace_id":"wH"}],"type":"pane_list"}}`
+
+const paneListScript = "cat <<'EOF'\n" + paneListWithAgentSessionFixture + "\nEOF"
+
+func TestExecClient_PaneList_SessionIDComesFromResolver(t *testing.T) {
+	c := newExecClientWithResolverForTest(t, paneListScript, noCommandTimeout,
+		staticResolver(map[string]string{"wH:p1": "sid-from-sidecar"}))
 
 	panes, err := c.PaneList(context.Background())
 	if err != nil {
@@ -52,11 +67,64 @@ func TestExecClient_PaneList_Success(t *testing.T) {
 	if !multiplexer.IsClaudeAgent(panes[0]) {
 		t.Errorf("panes[0] は claude agent であるべき")
 	}
-	if panes[0].SessionID != "0d5e717f-82c5-4e71-ac74-799f7197e0de" {
-		t.Errorf("panes[0].SessionID = %q, want agent_session.value", panes[0].SessionID)
+	if panes[0].SessionID != "sid-from-sidecar" {
+		t.Errorf("panes[0].SessionID = %q, want resolver の値 (agent_session ではない)", panes[0].SessionID)
 	}
 	if multiplexer.IsClaudeAgent(panes[1]) {
 		t.Errorf("panes[1] (shell pane) は claude agent ではないべき")
+	}
+	if panes[1].SessionID != "" {
+		t.Errorf("panes[1].SessionID = %q, want empty", panes[1].SessionID)
+	}
+}
+
+func TestExecClient_PaneList_IgnoresAgentSession(t *testing.T) {
+	// resolver に無い pane は､herdr が agent_session を持っていても SessionID が空になる｡
+	// これが herdr の integration script (report_agent_session) への依存を切った証拠｡
+	c := newExecClientWithResolverForTest(t, paneListScript, noCommandTimeout, staticResolver(nil))
+
+	panes, err := c.PaneList(context.Background())
+	if err != nil {
+		t.Fatalf("PaneList() error = %v", err)
+	}
+	if panes[0].SessionID != "" {
+		t.Errorf("panes[0].SessionID = %q, want empty (agent_session を読んではいけない)", panes[0].SessionID)
+	}
+}
+
+func TestExecClient_PaneList_ResolverCalledOnce(t *testing.T) {
+	n := 0
+	c := newExecClientWithResolverForTest(t, paneListScript, noCommandTimeout,
+		func() (map[string]string, error) { n++; return nil, nil })
+	if _, err := c.PaneList(context.Background()); err != nil {
+		t.Fatalf("PaneList() error = %v", err)
+	}
+	if n != 1 {
+		t.Errorf("resolve の呼び出し回数 = %d, want 1", n)
+	}
+}
+
+func TestExecClient_PaneList_ResolverErrorSurfaces(t *testing.T) {
+	boom := errors.New("context ディレクトリの走査に失敗")
+	c := newExecClientWithResolverForTest(t, paneListScript, noCommandTimeout,
+		func() (map[string]string, error) { return nil, boom })
+	_, err := c.PaneList(context.Background())
+	if !errors.Is(err, boom) {
+		t.Fatalf("PaneList() error = %v, want %v", err, boom)
+	}
+}
+
+func TestExecClient_PaneGet_SessionIDComesFromResolver(t *testing.T) {
+	fixture := `{"id":"cli:pane:get","result":{"pane":{"agent":"claude","agent_session":{"agent":"claude","kind":"id","source":"herdr:claude","value":"0d5e717f-82c5-4e71-ac74-799f7197e0de"},"agent_status":"idle","cwd":"/x","pane_id":"wH:p1","terminal_id":"term_1","terminal_title":"t","workspace_id":"wH"},"type":"pane_info"}}`
+	c := newExecClientWithResolverForTest(t, "cat <<'EOF'\n"+fixture+"\nEOF", noCommandTimeout,
+		staticResolver(map[string]string{"wH:p1": "sid-from-sidecar"}))
+
+	pane, err := c.PaneGet(context.Background(), "wH:p1")
+	if err != nil {
+		t.Fatalf("PaneGet() error = %v", err)
+	}
+	if pane.SessionID != "sid-from-sidecar" {
+		t.Errorf("pane.SessionID = %q, want resolver の値", pane.SessionID)
 	}
 }
 
@@ -224,7 +292,7 @@ func TestExecClient_Reachable(t *testing.T) {
 
 func TestNewExecClient_UsesHerdrBinPathOverride(t *testing.T) {
 	t.Setenv("HERDR_BIN_PATH", "/custom/path/to/herdr")
-	c := NewExecClient().(*execClient)
+	c := NewExecClient(staticResolver(nil)).(*execClient)
 	if c.binPath != "/custom/path/to/herdr" {
 		t.Errorf("binPath = %q, want %q", c.binPath, "/custom/path/to/herdr")
 	}
@@ -232,7 +300,7 @@ func TestNewExecClient_UsesHerdrBinPathOverride(t *testing.T) {
 
 func TestNewExecClient_DefaultsToHerdrOnPath(t *testing.T) {
 	t.Setenv("HERDR_BIN_PATH", "")
-	c := NewExecClient().(*execClient)
+	c := NewExecClient(staticResolver(nil)).(*execClient)
 	if c.binPath != "herdr" {
 		t.Errorf("binPath = %q, want %q", c.binPath, "herdr")
 	}

@@ -15,7 +15,7 @@ func TestExecClient_RealHerdr_PaneList(t *testing.T) {
 		t.Skip("herdr が PATH に無いので skip する")
 	}
 
-	c := newExecClientWithTimeout(5 * time.Second)
+	c := newExecClientWithTimeout(staticResolver(nil), 5*time.Second)
 	if err := c.Reachable(context.Background()); err != nil {
 		t.Skipf("herdr server に到達できないので skip する: %v", err)
 	}

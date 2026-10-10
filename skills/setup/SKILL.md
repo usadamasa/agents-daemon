@@ -3,7 +3,7 @@ name: setup
 description: >-
   agents-daemon plugin を install した直後､または動いていない疑いがあるときに､前提がそろっているかを確かめて
   足りない配線を足す｡herdr も rex も入っていない・server が落ちている・このセッションが herdr の pane や
-  rex の block の外で動いている､rex の block に session_id が紐づかない､
+  rex の block の外で動いている､pane や block に session_id が紐づかない (`doctor` で `session_id=(なし)`)､
   statusline が配線されておらず (`statusLine.command` がバイナリの `statusline` を指していない､または自前の
   statusline が stdin を `ingest-statusline` へ渡していない) rate-limits / context の state file が無い､
   go や jq が無くてバイナリが建たない､といった状態を拾う｡「agents-daemon をセットアップして」「statusline を配線して」
@@ -48,31 +48,21 @@ command -v herdr rex go jq
 printenv REX_SESSION
 ```
 
-値が出れば rex (下の「rex のとき」)､出なければ herdr (下の「herdr のとき」)｡daemon も同じ規則で選ぶ｡
+値が出れば rex､出なければ herdr｡daemon も同じ規則で選ぶ｡到達性の確かめ方だけが backend で違う｡
 
-### herdr のとき
+### 到達性
+
+herdr:
 
 ```sh
 herdr status --json | jq -c '.server | {running, version}'
 ```
 
 `running` が `true` でなければ NG｡herdr の server を起こしてもらう｡daemon の到達確認 (`Reachable`) も同じ呼び出しを見る｡
+`herdr integration install claude` (herdr 生成の SessionStart hook) は要らない｡
+daemon は herdr の `agent_session` を読まない｡
 
-続けて､このセッションが herdr の pane の中で動いていて､daemon から見えるかを確かめる｡
-`HERDR_ENV` が立っているだけでは足りない｡daemon は `agent_session` で pane とセッションを対応付ける｡
-
-```sh
-sid=$("${CLAUDE_PLUGIN_ROOT}/scripts/get-session-id.sh")
-herdr pane list | jq -c --arg sid "$sid" \
-  '[.result.panes[] | select(.agent_session.value? == $sid) | {pane_id, agent}]'
-```
-
-- 1 件出れば OK｡
-- 空なら NG｡herdr の外 (素のターミナル､IDE) で動いているか､herdr がまだ agent を認識していない｡
-  herdr の pane の中で Claude Code を起動し直してもらう｡
-- `get-session-id.sh` が失敗したら `CLAUDE_CODE_SESSION_ID` が来ていない｡ここから先のセッション単位の確認はできないので､その旨を報告に残す｡
-
-### rex のとき
+rex:
 
 ```sh
 rex --autostart=false api call server.status | jq -c '{pid, session_count}'
@@ -82,22 +72,30 @@ rex --autostart=false api call server.status | jq -c '{pid, session_count}'
 `operation not permitted` で socket に繋がらないなら sandbox が止めている｡`sandbox.network.allowUnixSockets` に
 `~/Library/Application Support/rex` が要る (足すかは利用者が決める)｡
 
-rex には herdr の `agent_session` に当たるものが無い｡daemon は statusline (バイナリの `statusline` か
-`ingest-statusline`) が `context/<sid>.json` の `multiplexer` に書いた block から session_id を引く｡
-このセッションの block とその記録が一致するかを確かめる｡
+### このセッションの pane (block) と session_id の対応
+
+herdr も rex も､daemon は statusline (バイナリの `statusline` か `ingest-statusline`) が `context/<sid>.json` の
+`multiplexer` に書いた場所 (herdr は `HERDR_PANE_ID`､rex は `REX_BLOCK`) から session_id を引く｡
+このセッションの場所とその記録が一致するかを確かめる｡
 
 ```sh
 sid=$("${CLAUDE_PLUGIN_ROOT}/scripts/get-session-id.sh")
 state="${XDG_STATE_HOME:-$HOME/.local/state}/agents-daemon"
-printenv REX_BLOCK
+printf 'HERDR_PANE_ID=%s REX_BLOCK=%s\n' "${HERDR_PANE_ID:-}" "${REX_BLOCK:-}"
 jq -c '.multiplexer' "$state/context/$sid.json"
 ```
 
-- `multiplexer.kind` が `rex` で `multiplexer.block` が `REX_BLOCK` と一致すれば OK｡
-- `REX_BLOCK` が空なら NG｡rex の block の外で動いている｡rex の block の中で Claude Code を起動し直してもらう｡
+- `multiplexer.kind` が backend と同じで､`multiplexer.pane` が `HERDR_PANE_ID` (herdr) または `multiplexer.block` が
+  `REX_BLOCK` (rex) と一致すれば OK｡
+- `HERDR_PANE_ID` / `REX_BLOCK` が両方空なら NG｡多重化ツールの外 (素のターミナル､IDE) で動いている｡
+  herdr の pane か rex の block の中で Claude Code を起動し直してもらう｡
 - `context/<sid>.json` が無いなら､この段ではなく 3 段目の NG (statusline の配線) として扱う｡
 - ファイルはあるのに `multiplexer` が `null` なら､statusline が呼ぶバイナリが `multiplexer` を書く前の版｡
-  4 段目のバイナリを建て直せば次の描画から書かれる｡`get-session-id.sh` の失敗は herdr のときと同じ扱い｡
+  4 段目のバイナリを建て直せば次の描画から書かれる｡
+- herdr で `multiplexer.pane` が `pane list` のどの `pane_id` とも一致しないなら､別の workspace へ `pane move` した pane｡
+  ID が変わっても記録は起動時の値のままなので､その pane で Claude Code を起動し直してもらう
+  (`agents-daemon:agents-daemon` skill の operations.md「既知の制約」)｡
+- `get-session-id.sh` が失敗したら `CLAUDE_CODE_SESSION_ID` が来ていない｡ここから先のセッション単位の確認はできないので､その旨を報告に残す｡
 
 ## 3. statusline が state file を書かせているか
 

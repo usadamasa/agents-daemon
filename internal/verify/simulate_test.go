@@ -220,7 +220,7 @@ func TestRunSimulate_RealHerdr(t *testing.T) {
 		t.Skip("herdr の中の rex で動いており backend が rex になるので skip する")
 	}
 
-	client := herdrcli.NewExecClient()
+	client := herdrcli.NewExecClient(func() (map[string]string, error) { return nil, nil })
 	ctx := context.Background()
 	if err := client.Reachable(ctx); err != nil {
 		t.Skipf("herdr server に到達できないので skip する: %v", err)

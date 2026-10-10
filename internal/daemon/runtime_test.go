@@ -345,7 +345,7 @@ func TestDaemonRuntimeTick_ConsecutiveFailures(t *testing.T) {
 	})
 }
 
-// claudePaneWithSession は agent_session まで埋めた Claude pane を作る｡
+// claudePaneWithSession は SessionID (backend が sidecar から引いた値) まで埋めた Claude pane を作る｡
 // pane と Claude セッションの対応付けは SessionID だけが持つ｡
 func claudePaneWithSession(paneID, terminalID, sessionID string, status multiplexer.AgentStatus) multiplexer.Pane {
 	pane := claudePane(paneID, terminalID, status)

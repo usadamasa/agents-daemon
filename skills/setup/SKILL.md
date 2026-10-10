@@ -81,7 +81,7 @@ herdr も rex も､daemon は statusline (バイナリの `statusline` か `ing
 ```sh
 sid=$("${CLAUDE_PLUGIN_ROOT}/scripts/get-session-id.sh")
 state="${XDG_STATE_HOME:-$HOME/.local/state}/agents-daemon"
-printenv HERDR_PANE_ID REX_BLOCK
+printf 'HERDR_PANE_ID=%s REX_BLOCK=%s\n' "${HERDR_PANE_ID:-}" "${REX_BLOCK:-}"
 jq -c '.multiplexer' "$state/context/$sid.json"
 ```
 

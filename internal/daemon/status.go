@@ -56,7 +56,10 @@ func cacheStatus(c *sessionstate.Cache, now time.Time) *CacheStatus {
 // StatusSnapshot は status.json (XDG state 配下､apppath.StatusFile) の内容｡daemon が
 // tick のたびに上書きし､`status` コマンドがこれを読んで表示する｡
 type StatusSnapshot struct {
-	PID       int          `json:"pid"`
+	PID int `json:"pid"`
+	// Backend は daemon が見ている多重化ツール (herdr / rex)｡doctor が今の環境と突き合わせる｡
+	// 記録を始める前の daemon が書いたものでは空になる｡
+	Backend   string       `json:"backend,omitempty"`
 	StartedAt time.Time    `json:"started_at"`
 	UpdatedAt time.Time    `json:"updated_at"`
 	Panes     []PaneStatus `json:"panes"`
@@ -81,8 +84,8 @@ func zeroableTime(t time.Time) *time.Time {
 
 // WriteStatusSnapshot は status.json を原子的に書き込む (同ディレクトリの
 // 一時ファイルに書いて rename)｡
-func writeStatusSnapshot(path string, pid int, startedAt, now time.Time, panes []PaneStatus) error {
-	snap := StatusSnapshot{PID: pid, StartedAt: startedAt, UpdatedAt: now, Panes: panes}
+func writeStatusSnapshot(path string, pid int, backend string, startedAt, now time.Time, panes []PaneStatus) error {
+	snap := StatusSnapshot{PID: pid, Backend: backend, StartedAt: startedAt, UpdatedAt: now, Panes: panes}
 	data, err := json.MarshalIndent(snap, "", "  ")
 	if err != nil {
 		return fmt.Errorf("status snapshot の JSON 化に失敗: %w", err)

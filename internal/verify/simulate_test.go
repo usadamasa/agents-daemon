@@ -16,6 +16,19 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
 )
 
+func TestRunSimulate_rexの環境では止める(t *testing.T) {
+	t.Setenv("REX_SESSION", "session:01a12439-0839-7829-a4cb-aeac453570c1")
+	t.Setenv("HERDR_ENV", "1")
+	var buf bytes.Buffer
+	err := RunSimulate(context.Background(), &buf, apppath.New(t.TempDir(), "", ""), SimulateOptions{})
+	if err == nil || !strings.Contains(err.Error(), "herdr 専用") {
+		t.Fatalf("RunSimulate() error = %v, want herdr 専用", err)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("止める前に何かした: %s", buf.String())
+	}
+}
+
 func TestScopedClient_所有pane以外への操作を拒否する(t *testing.T) {
 	const owned = "wH:pOwned"
 	const other = "wH:pOther"

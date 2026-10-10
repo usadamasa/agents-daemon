@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
+	"github.com/usadamasa/agents-daemon/internal/backend"
 	"github.com/usadamasa/agents-daemon/internal/config"
 	"github.com/usadamasa/agents-daemon/internal/detect"
 	"github.com/usadamasa/agents-daemon/internal/herdrcli"
@@ -49,6 +50,10 @@ type SimulateOptions struct {
 
 // RunSimulate は simulate の本体｡使い捨て pane の作成から後始末まで一貫して行う｡
 func RunSimulate(ctx context.Context, w io.Writer, p apppath.Paths, opts SimulateOptions) error {
+	// 使い捨て pane を Claude agent に見せる手段 (herdr の report-agent) が rex には無い｡
+	if backend.Detect(os.Getenv) != sessionstate.MultiplexerKindHerdr {
+		return errors.New("simulate は herdr 専用です｡rex のセッション (REX_SESSION あり) では使えません")
+	}
 	if os.Getenv("HERDR_ENV") != "1" {
 		return errors.New("HERDR_ENV=1 の herdr セッション内で実行してください (使い捨て pane を割り出す基準になる自分の pane が要ります)")
 	}

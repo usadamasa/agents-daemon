@@ -75,6 +75,7 @@ func printSnapshot(w io.Writer, snap *daemon.StatusSnapshot, pid int, now time.T
 		_, _ = fmt.Fprintln(w, "status snapshot がまだありません (起動直後の可能性があります)")
 		return
 	}
+	_, _ = fmt.Fprintf(w, "backend: %s\n", backendColumn(snap.Backend))
 	_, _ = fmt.Fprintf(w, "起動: %s (%s 前)\n", snap.StartedAt.Format(time.RFC3339), now.Sub(snap.StartedAt).Round(time.Second))
 	_, _ = fmt.Fprintf(w, "最終更新: %s (%s 前)\n", snap.UpdatedAt.Format(time.RFC3339), now.Sub(snap.UpdatedAt).Round(time.Second))
 	if len(snap.Panes) == 0 {
@@ -90,6 +91,14 @@ func printSnapshot(w io.Writer, snap *daemon.StatusSnapshot, pid int, now time.T
 		_, _ = fmt.Fprintf(w, "  %s  %s  agent=%s monitor=%s attempts=%d wait_until=%s last=%s cache=%s\n",
 			pn.PaneID, pn.CWD, pn.AgentStatus, pn.MonitorStatus, pn.Attempts, wait, pn.LastOutcome, cacheColumn(pn.Cache, now))
 	}
+}
+
+// backendColumn は backend の表示｡記録を始める前の daemon が書いた snapshot では空になる｡
+func backendColumn(kind string) string {
+	if kind == "" {
+		return "(記録なし)"
+	}
+	return kind
 }
 
 // cacheColumn は pane 行の cache 列｡失効までの残り (または失効からの経過) は表示時点の

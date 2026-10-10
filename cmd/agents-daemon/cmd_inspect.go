@@ -2,12 +2,14 @@ package main
 
 import (
 	"errors"
+	"os"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
-	"github.com/usadamasa/agents-daemon/internal/herdrcli"
+	"github.com/usadamasa/agents-daemon/internal/backend"
+	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 	"github.com/usadamasa/agents-daemon/internal/verify"
 )
 
@@ -20,8 +22,9 @@ func newInspectCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "inspect",
 		Short: "画面テキストの分類と､待機時刻の算出根拠を表示する (送信はしない)",
-		Long: "--pane <id> は herdr 越しに生きた pane を読み､--file <path> は保存済みの画面\n" +
-			"テキストファイルを読む｡どちらか一方を必ず指定する｡\n" +
+		Long: "--pane <id> は多重化ツール (herdr / rex) 越しに生きた pane を読み､--file <path> は保存済みの\n" +
+			"画面テキストファイルを読む｡どちらか一方を必ず指定する｡多重化ツールは REX_SESSION があれば\n" +
+			"rex (pane ID は block ID)､無ければ herdr を選ぶ｡\n" +
 			"分類器 (detect.Classifier) を daemon (monitor パッケージ) と全く同じ設定で走らせ､\n" +
 			"判定結果だけでなく､走査した行範囲・ゲート判定 (statusline の 5 時間ウィンドウ\n" +
 			"使用率)・起床時刻とその根拠までを表示する｡pane への送信は一切行わない｡",
@@ -33,10 +36,14 @@ func newInspectCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return verify.RunInspect(cmd.Context(), cmd.OutOrStdout(), herdrcli.NewExecClient(), p, paneID, file, sessionID, time.Now())
+			client, err := backend.New(backend.Detect(os.Getenv), sessionstate.New(p.StateDir()))
+			if err != nil {
+				return err
+			}
+			return verify.RunInspect(cmd.Context(), cmd.OutOrStdout(), client, p, paneID, file, sessionID, time.Now())
 		},
 	}
-	cmd.Flags().StringVar(&paneID, "pane", "", "herdr 越しに読む pane ID")
+	cmd.Flags().StringVar(&paneID, "pane", "", "多重化ツール (herdr / rex) 越しに読む pane ID (rex は block ID)")
 	cmd.Flags().StringVar(&file, "file", "", "保存済み画面テキストファイルのパス")
 	cmd.Flags().StringVar(&sessionID, "session", "", "利用上限 state を引く Claude セッション ID (--pane 指定時は pane から解決するため不要)")
 	return cmd

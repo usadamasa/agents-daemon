@@ -17,9 +17,9 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/applog"
 	"github.com/usadamasa/agents-daemon/internal/apppath"
+	"github.com/usadamasa/agents-daemon/internal/backend"
 	"github.com/usadamasa/agents-daemon/internal/config"
 	"github.com/usadamasa/agents-daemon/internal/detect"
-	"github.com/usadamasa/agents-daemon/internal/herdrcli"
 	"github.com/usadamasa/agents-daemon/internal/monitor"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
@@ -47,7 +47,9 @@ type paneEntry struct {
 // 変わりうるが､terminal_id はその herdr 実行内で安定するため)｡
 type daemonRuntime struct {
 	client multiplexer.Client
-	log    *applog.Logger
+	// backend は client の多重化ツールの種類｡status.json に書くだけで判定には使わない｡
+	backend string
+	log     *applog.Logger
 	// statusPath と store はプロセスの生存期間で固定なのでここに置く｡
 	statusPath string
 	store      sessionstate.Store
@@ -173,7 +175,7 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 
 	r.forgetUnseen(seen, sessions)
 
-	if err := writeStatusSnapshot(r.statusPath, os.Getpid(), r.startedAt, now, statusPanes); err != nil {
+	if err := writeStatusSnapshot(r.statusPath, os.Getpid(), r.backend, r.startedAt, now, statusPanes); err != nil {
 		r.log.Logf("status snapshot の書き込みに失敗: %v", err)
 	}
 
@@ -352,9 +354,9 @@ func compactOutcomeMessage(outcome monitor.Outcome) (msg string, sent bool) {
 
 // cacheSuffix は送信ログに添える cache の状態｡形は次のいずれか｡
 //
-//	 / cache=warm (経過 3 分､TTL 60 分)
-//	 / cache=expired (経過 312 分､TTL 60 分､context 使用率 63%､ack 済み)
-//	 / cache=unknown (状態無し､ack=daemon-unknown)
+//	/ cache=warm (経過 3 分､TTL 60 分)
+//	/ cache=expired (経過 312 分､TTL 60 分､context 使用率 63%､ack 済み)
+//	/ cache=unknown (状態無し､ack=daemon-unknown)
 //
 // 失効後の送信は文脈全体を書き直すので context 使用率を併記し､どれだけ書き直したかを
 // 後から追えるようにする｡スラッシュの prompt は guard を素通りするので ack は無い｡
@@ -478,12 +480,17 @@ func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 		return fmt.Errorf("%s の enabled が false のため起動しません", p.ConfigFile())
 	}
 
-	client := herdrcli.NewExecClient()
+	store := sessionstate.New(p.StateDir())
+	kind := backend.Detect(os.Getenv)
+	client, err := backend.New(kind, store)
+	if err != nil {
+		return err
+	}
 	reachCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	reachErr := client.Reachable(reachCtx)
 	cancel()
 	if reachErr != nil {
-		return fmt.Errorf("herdr に到達できないため起動しません: %w", reachErr)
+		return fmt.Errorf("%s に到達できないため起動しません: %w", kind, reachErr)
 	}
 
 	if err := writePIDFile(p.PIDFile(), os.Getpid()); err != nil {
@@ -492,7 +499,7 @@ func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 
 	log := applog.NewLogger(p.LogFile(), time.Now)
 	defer func() { _ = log.Close() }()
-	log.Logf("daemon 起動 (pid %d, pollIntervalSeconds=%d)", os.Getpid(), cfg.PollIntervalSeconds)
+	log.Logf("daemon 起動 (pid %d, backend=%s, pollIntervalSeconds=%d)", os.Getpid(), kind, cfg.PollIntervalSeconds)
 
 	if dryRun {
 		client = newDryRunClient(client, log)
@@ -507,7 +514,8 @@ func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 	}
 
 	now := time.Now()
-	runtime := newDaemonRuntime(client, log, p.StatusFile(), sessionstate.New(p.StateDir()), dryRun, time.Sleep, now)
+	runtime := newDaemonRuntime(client, log, p.StatusFile(), store, dryRun, time.Sleep, now)
+	runtime.backend = kind
 	runtime.housekeep(p.LogFile(), now)
 
 	sigCh := make(chan os.Signal, 1)

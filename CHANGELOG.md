@@ -1,5 +1,9 @@
 # Changelog
 
+## [2026.1010.1](https://github.com/usadamasa/agents-daemon/compare/2026.1010.0...2026.1010.1) - 2026-10-10
+
+- fix(detect): transient の判定を Claude Code の API Error 行に限る by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/41
+
 ## [2026.1010.0](https://github.com/usadamasa/agents-daemon/compare/2026.0930.0...2026.1010.0) - 2026-10-10
 
 - docs: dream で AGENTS.md の重複を削り、リリース後の plugin 更新を書く by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/32

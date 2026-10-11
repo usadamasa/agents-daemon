@@ -92,6 +92,7 @@ description: >-
 | 関係ない pane にプロンプトが打ち込まれた | rate-limit.md の「limit の判定は 2 つの手がかりを要求する」「ゲート」 |
 | context が閾値を超えても compact が走らない | compact.md の「送信の条件」､operations.md の「既知の制約」 |
 | 圧縮後に作業が再開しない | compact.md の「なぜ画面を読まないか」「compact 直後の停止」｡離席中の圧縮なら「idle compact」(再開しないのが仕様) |
+| 離席中の pane で idle compact が走らない | `inspect --pane <id>` の「idle compact」の判定､daemon.log の `idle-compact-held`｡compact.md の「送らなかった理由の追い方」 |
 | 再開の送信が高くついた・どれだけ書き直したか知りたい | cache.md の「ログ」(送信行末の `cache=expired` と context 使用率) |
 | prompt が止められて「prompt cache は N 分で失効した」と警告が出る | cache.md の「TTL guard」 |
 | daemon の再開が止められる・`compactStallMessage` が繰り返し打たれる | cache.md の「TTL guard」の ack の規則､ログの `ack 済み` / `session 未紐づけ` |

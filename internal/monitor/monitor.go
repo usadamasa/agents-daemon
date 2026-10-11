@@ -67,6 +67,9 @@ type PaneState struct {
 	CompactPrepIdle bool
 	// IdleCompactShortTTLReported は OutcomeIdleCompactShortTTL を既に返したか｡
 	IdleCompactShortTTLReported bool
+	// IdleCompactHeld は直近に OutcomeIdleCompactHeld を返したときの判定｡判断には使わず､daemon が
+	// ログの本文と重複除去のキーに使う｡
+	IdleCompactHeld IdleCompactCheck
 	// CompactAutoSentAt は自動 compact の段が直近で何かを送った (あるいは
 	// 時間切れで諦めた) 時刻｡1 段目のクールダウンの起点｡
 	CompactAutoSentAt time.Time
@@ -147,6 +150,9 @@ const (
 	// OutcomeIdleCompactShortTTL は idle compact の条件を満たしたが､TTL が短く 2 段を
 	// 失効前に終えられないため送らなかったことを表す｡
 	OutcomeIdleCompactShortTTL
+	// OutcomeIdleCompactHeld は cache の失効前の窓が開いているのに idle compact を送らなかったことを
+	// 表す｡理由は PaneState.IdleCompactHeld｡
+	OutcomeIdleCompactHeld
 )
 
 // outcomeNames は Outcome のログ向けの識別子｡
@@ -174,6 +180,7 @@ var outcomeNames = map[Outcome]string{
 	OutcomeIdleCompactPrepSent: "idle-compact-prep-sent",
 	OutcomeIdleCompactSent:     "idle-compact-sent",
 	OutcomeIdleCompactShortTTL: "idle-compact-short-ttl",
+	OutcomeIdleCompactHeld:     "idle-compact-held",
 }
 
 // String は Outcome をログ向けの識別子文字列にする｡

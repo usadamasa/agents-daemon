@@ -23,7 +23,7 @@ const cacheTranscript = `{"type":"user","timestamp":"2026-09-27T03:44:00.000Z"}
 `
 
 // writeCacheTranscript は transcript を置き､statusline が書く形の context/<sid>.json からそこを指す｡
-// context の使用率は 63%｡
+// 直近の応答の使用率は 63% (1503 / 2400)｡statusline の観測 (20%) はそれより前の描画で古い｡
 func writeCacheTranscript(t *testing.T, store sessionstate.Store, sessionID string) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), sessionID+".jsonl")
@@ -31,7 +31,7 @@ func writeCacheTranscript(t *testing.T, store sessionstate.Store, sessionID stri
 		t.Fatalf("transcript の書き込みに失敗: %v", err)
 	}
 	writeContextSidecar(t, store.Context, sessionID, map[string]any{
-		"used_percentage": 63, "observed_at": 1786840000, "transcript_path": path,
+		"used_percentage": 20, "observed_at": 1786840000, "transcript_path": path, "context_window_size": 2400,
 	})
 }
 
@@ -166,7 +166,8 @@ func TestDaemonRuntimeTick_SendLogCarriesCacheState(t *testing.T) {
 	last := time.Date(2026, 9, 27, 3, 44, 5, 954_000_000, time.UTC)
 	pane := claudePaneWithSession("pane-a", "term-a", "session-a", multiplexer.AgentStatusIdle)
 
-	t.Run("失効後の送信は ack を書き､経過と TTL と context 使用率をログに残す", func(t *testing.T) {
+	t.Run("失効後の送信は ack を書き､経過と TTL と直近の応答の context 使用率をログに残す", func(t *testing.T) {
+		// 使用率は statusline の観測 (idle な pane では古い) ではなく､送信時点の cache の状態から求める｡
 		now := last.Add(5*time.Hour + 12*time.Minute)
 		client := waitingPaneClient(pane)
 		r, statusPath := newTestRuntime(t, client, now)

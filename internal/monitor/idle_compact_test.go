@@ -3,6 +3,7 @@ package monitor
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -129,15 +130,7 @@ func TestTick_idle_compact_は送らない(t *testing.T) {
 		{"cacheIdleCompactEnabled が false", func(f *idleFixture) { f.cfg.CacheIdleCompactEnabled = false }},
 		{"失効後", func(f *idleFixture) { f.cache = idleCacheAt(idleNow.Add(-61 * time.Minute)) }},
 		{"窓が開く前", func(f *idleFixture) { f.cache = idleCacheAt(idleNow.Add(-30 * time.Minute)) }},
-		{"sidecar が無い", func(f *idleFixture) { f.cache = nil }},
-		{"使用率が閾値未満", func(f *idleFixture) { f.cache.ContextTokens = idleTokens(39) }},
-		// 使用率は最後の応答のトークン数で見る｡statusline の値は使わない｡
-		{"statusline の使用率が閾値以上でも最後の応答が閾値未満", func(f *idleFixture) {
-			f.cs.UsedPercentage = 80
-			f.cache.ContextTokens = idleTokens(39)
-		}},
-		{"トークン数が記録されていない (旧版の sidecar)", func(f *idleFixture) { f.cache.ContextTokens = 0 }},
-		{"window の大きさが分からない (旧版の context)", func(f *idleFixture) { f.cs.ContextWindowSize = 0 }},
+		{"cache の状態が無い", func(f *idleFixture) { f.cache = nil }},
 		{"cooldown 中", func(f *idleFixture) { f.ps.CompactAutoSentAt = idleNow.Add(-5 * time.Minute) }},
 		{"入力欄に書きかけがある", func(f *idleFixture) { f.client.PaneReadFunc = readReturning(typingScreen, nil) }},
 		// 前回の idle compact から利用者が戻っていない｡圧縮後の使用率は下がるので普通は閾値で止まる｡
@@ -156,6 +149,130 @@ func TestTick_idle_compact_は送らない(t *testing.T) {
 			assertNoSend(t, f.client)
 		})
 	}
+}
+
+func TestTick_idle_compact_は窓が開いているのに送らないときは理由を返す(t *testing.T) {
+	// #24 では送らなかった理由が log にも inspect にも出ず､state とコードを突き合わせるしかなかった｡
+	for _, tt := range []struct {
+		name  string
+		setup func(f *idleFixture)
+		want  IdleCompactGate
+		pct   float64
+	}{
+		{"使用率が閾値未満", func(f *idleFixture) { f.cache.ContextTokens = idleTokens(39) }, IdleCompactBelowThreshold, 39},
+		// 使用率は最後の応答のトークン数で見る｡statusline の値は使わない｡
+		{"statusline の使用率が閾値以上でも最後の応答が閾値未満", func(f *idleFixture) {
+			f.cs.UsedPercentage = 80
+			f.cache.ContextTokens = idleTokens(39)
+		}, IdleCompactBelowThreshold, 39},
+		{"トークン数が記録されていない (旧版の sidecar)", func(f *idleFixture) { f.cache.ContextTokens = 0 }, IdleCompactUsageUnknown, 0},
+		{"window の大きさが分からない (旧版の context)", func(f *idleFixture) { f.cs.ContextWindowSize = 0 }, IdleCompactUsageUnknown, 0},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newIdleFixture()
+			tt.setup(f)
+
+			if outcome := f.mustTick(t, idleNow); outcome != OutcomeIdleCompactHeld {
+				t.Errorf("outcome = %v, want %v", outcome, OutcomeIdleCompactHeld)
+			}
+			assertNoSend(t, f.client)
+			if f.ps.IdleCompactHeld.Gate != tt.want || f.ps.IdleCompactHeld.UsedPercentage != tt.pct {
+				t.Errorf("IdleCompactHeld = %+v, want gate %v, 使用率 %v", f.ps.IdleCompactHeld, tt.want, tt.pct)
+			}
+		})
+	}
+}
+
+func TestTick_理由付きの見送りは圧縮後の再開を塞がない(t *testing.T) {
+	f := newIdleFixture()
+	f.cache.ContextTokens = idleTokens(39)
+	f.cs.HasCompacted = true
+	f.cs.CompactedAt = idleNow.Add(-time.Duration(f.cfg.CompactResumeDelaySeconds+1) * time.Second)
+
+	if outcome := f.mustTick(t, idleNow); outcome != OutcomeCompactResumed {
+		t.Fatalf("outcome = %v, want %v", outcome, OutcomeCompactResumed)
+	}
+}
+
+func TestEvaluateIdleCompact(t *testing.T) {
+	// tickIdleCompact と inspect が同じ判定を使う｡順番は「送れない理由のうち外側のもの」から｡
+	cfg := idleCompactConfig()
+	base := func() (*sessionstate.Compact, *sessionstate.Cache) {
+		f := newIdleFixture()
+		return f.cs, f.cache
+	}
+	for _, tt := range []struct {
+		name  string
+		setup func(cs *sessionstate.Compact, c *sessionstate.Cache) *sessionstate.Cache
+		want  IdleCompactGate
+	}{
+		{"条件を満たす", func(_ *sessionstate.Compact, c *sessionstate.Cache) *sessionstate.Cache { return c }, IdleCompactReady},
+		{"marker が active", func(cs *sessionstate.Compact, c *sessionstate.Cache) *sessionstate.Cache {
+			cs.HasIdleCompacted = true
+			cs.IdleCompactedAt = c.LastRequestAt.Add(time.Minute)
+			return c
+		}, IdleCompactMarkerActive},
+		{"marker はあるが利用者が戻った", func(cs *sessionstate.Compact, c *sessionstate.Cache) *sessionstate.Cache {
+			cs.HasIdleCompacted = true
+			cs.IdleCompactedAt = c.LastRequestAt.Add(-time.Minute)
+			return c
+		}, IdleCompactReady},
+		{"cache の状態が無い", func(*sessionstate.Compact, *sessionstate.Cache) *sessionstate.Cache { return nil }, IdleCompactNoCache},
+		{"失効後", func(*sessionstate.Compact, *sessionstate.Cache) *sessionstate.Cache {
+			return idleCacheAt(idleNow.Add(-61 * time.Minute))
+		}, IdleCompactExpired},
+		{"窓が開く前", func(*sessionstate.Compact, *sessionstate.Cache) *sessionstate.Cache {
+			return idleCacheAt(idleNow.Add(-30 * time.Minute))
+		}, IdleCompactBeforeWindow},
+		// 5m TTL では窓が常に開いているので､使用率より先に TTL で見送る (使用率が低くても理由は TTL)｡
+		{"TTL が短い", func(*sessionstate.Compact, *sessionstate.Cache) *sessionstate.Cache {
+			c := idleCacheAt(idleNow.Add(-2 * time.Minute))
+			c.TTL = 5 * time.Minute
+			c.ContextTokens = idleTokens(10)
+			return c
+		}, IdleCompactShortTTL},
+		{"TTL が lead 以下", func(*sessionstate.Compact, *sessionstate.Cache) *sessionstate.Cache {
+			c := idleCacheAt(idleNow.Add(-2 * time.Minute))
+			c.TTL = 10 * time.Minute
+			return c
+		}, IdleCompactShortTTL},
+		{"使用率が求められない", func(cs *sessionstate.Compact, c *sessionstate.Cache) *sessionstate.Cache {
+			cs.ContextWindowSize = 0
+			return c
+		}, IdleCompactUsageUnknown},
+		{"使用率が閾値未満", func(_ *sessionstate.Compact, c *sessionstate.Cache) *sessionstate.Cache {
+			c.ContextTokens = idleTokens(39)
+			return c
+		}, IdleCompactBelowThreshold},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cs, c := base()
+			c = tt.setup(cs, c)
+			if got := EvaluateIdleCompact(cfg, cs, c, idleNow); got.Gate != tt.want {
+				t.Errorf("EvaluateIdleCompact().Gate = %v, want %v", got.Gate, tt.want)
+			}
+		})
+	}
+
+	t.Run("窓が開いているのに送らない理由だけが Held", func(t *testing.T) {
+		for g := IdleCompactMarkerActive; g <= IdleCompactReady; g++ {
+			want := g == IdleCompactUsageUnknown || g == IdleCompactBelowThreshold
+			if got := g.Held(); got != want {
+				t.Errorf("%v.Held() = %v, want %v", g, got, want)
+			}
+		}
+	})
+
+	t.Run("閾値未満の説明には使用率と閾値が入る", func(t *testing.T) {
+		cs, c := base()
+		c.ContextTokens = idleTokens(39)
+		got := EvaluateIdleCompact(cfg, cs, c, idleNow).String()
+		for _, want := range []string{"39%", "40%"} {
+			if !strings.Contains(got, want) {
+				t.Errorf("String() = %q に %q が無い", got, want)
+			}
+		}
+	})
 }
 
 func TestTick_idle_compact_は_5m_TTL_ではスキップする(t *testing.T) {

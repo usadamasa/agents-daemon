@@ -50,10 +50,11 @@ func tickCompact(
 	idleHold := cs != nil && cs.HasIdleCompacted && isIdlePane(pane) && cs.IdleCompactActive(paneCache(deps, pane))
 
 	outcome, err := tickCompactAuto(ctx, deps, pane, ps, cs, idleHold, screen, now)
-	if err != nil || (outcome != OutcomeMonitoring && outcome != OutcomeIdleCompactShortTTL) {
+	if err != nil || !idleCompactSkipped(outcome) {
 		return outcome, err
 	}
-	// 5m TTL のスキップは送信を伴わないので､後段を塞がずに譲る｡後段が何もしなければ返す｡
+	// idle compact の見送り (5m TTL､窓の中で送らない) は送信を伴わないので､後段を塞がずに譲る｡
+	// 後段が何もしなければ返す｡
 	skipped := outcome
 
 	if idleHold {
@@ -67,6 +68,11 @@ func tickCompact(
 		return outcome, err
 	}
 	return skipped, nil
+}
+
+// idleCompactSkipped は idle compact が送らずに譲った Outcome (OutcomeMonitoring を含む) かを返す｡
+func idleCompactSkipped(outcome Outcome) bool {
+	return outcome == OutcomeMonitoring || outcome == OutcomeIdleCompactShortTTL || outcome == OutcomeIdleCompactHeld
 }
 
 // tickCompactAuto は 1 段目と 2 段目を処理する｡1 段目の発火条件は 2 つあり､context 使用率の
@@ -111,8 +117,9 @@ func tickCompactThreshold(
 	ctx context.Context, deps Deps, pane multiplexer.Pane, ps *PaneState,
 	cs *sessionstate.Compact, screen string, now time.Time,
 ) (Outcome, error) {
-	// 使用率は statusline が毎描画で書き直す｡古い観測しか無い pane は
-	// そのセッションが生きていないか描画が止まっているので触らない｡
+	// 使用率は statusline が毎描画で書き直し､描画が止まった pane では観測の値のまま止まる｡
+	// 古い観測は今の使用率を表さないので触らない (セッションの生存は pane の列挙が見ている)｡
+	// idle な pane は idle_compact.go が直近の応答から使用率を求める｡
 	maxAge := time.Duration(deps.Config.StateMaxAgeSeconds) * time.Second
 	if !cs.ContextFresh(now, maxAge) || cs.UsedPercentage < deps.Config.CompactAutoThresholdPercent {
 		return OutcomeMonitoring, nil

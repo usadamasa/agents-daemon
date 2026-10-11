@@ -49,7 +49,7 @@ state file の mtime が､daemon が `compactAutoPrepMessage` (既定 `/agents-
 | ---- | ---- |
 | `agent_status` が `idle` / `done` | working な pane へ送るとキューに入り､進行中の作業の直後に実行される |
 | 入力欄が空 | 残った文字に送信文字列が連結される ([pane-io.md](pane-io.md)) |
-| 使用率の観測が `stateMaxAgeSeconds` 以内 (1 段目､閾値の compact だけ) | statusline の描画が止まっている pane は､そのセッションが生きていない |
+| 使用率の観測が `stateMaxAgeSeconds` 以内 (1 段目､閾値の compact だけ) | 使用率は statusline の描画のたびに書き直され､描画が止まると観測の値のまま残る｡古い観測は今の使用率を表さない (セッションの生存は pane の列挙が見る) |
 | 直近の投入から `compactAutoCooldownMinutes` (1 段目) | state file が出ないまま往復しない |
 | marker が `compactResumeDelaySeconds` (既定 60 秒) より古い (3 段目) | 圧縮直後に人が自分で続きを打つ余地を残す |
 
@@ -74,10 +74,13 @@ cache read で読んで要約を出すだけで安く､失効後に利用者が
 | 条件 (1 段目) | なぜ要るか |
 | ---- | ---- |
 | 上の「送信の条件」の 1 段目と同じ (idle､入力欄が空､cooldown)｡使用率の観測の新しさは見ない | 同上 |
-| 直近の応答の使用率が `cacheIdleCompactThresholdPercent` (既定 40) 以上 | 書き直しを避けるのが目的で､window の余裕とは別｡`compactAutoThresholdPercent` より低くてよい |
+| 下の marker が active でない | 前回の idle compact から利用者が戻っていない |
 | cache の状態があり失効前で､`now >= 失効時刻 - cacheIdleCompactLeadSeconds` (既定 600) | prep → compact の 2 段が TTL 内に収まる余裕 |
 | TTL が 5 分より長く､lead より長い | 5 分では 2 段を失効前に終えられない｡満たさなければ送らず `idle-compact-short-ttl` をログに残す (ターンのたびに満たすので pane ごとに 1 回) |
-| 下の marker が active でない | 前回の idle compact から利用者が戻っていない |
+| 直近の応答の使用率が `cacheIdleCompactThresholdPercent` (既定 40) 以上 | 書き直しを避けるのが目的で､window の余裕とは別｡`compactAutoThresholdPercent` より低くてよい |
+
+表の順が判定の順｡TTL を使用率より先に見るのは､5m TTL では窓が常に開いていて､使用率を先に見ると
+ターンのたびに「窓が開いているのに送らない」を報告してしまうため｡
 
 cache の状態と使用率は､daemon が transcript から求める ([architecture.md](architecture.md) の
 「daemon が transcript から求める cache の状態」)｡使用率は直近の応答の入力トークン数を
@@ -91,6 +94,20 @@ cache の状態と使用率は､daemon が transcript から求める ([archite
 
 cache の状態を読むのは､idle な pane で入力欄が空のときだけ｡working な pane の transcript は応答のたびに
 伸びるので読まない｡
+
+### 送らなかった理由の追い方
+
+判定は `monitor.EvaluateIdleCompact` の 1 箇所にあり､daemon と `inspect --pane <id>` が同じものを呼ぶ｡
+`inspect` は「idle compact」の節に cache の状態 (直近の応答､TTL､失効時刻)､窓が開いているか､
+直近の応答から求めた使用率と閾値､marker､判定を並べる｡
+
+ログに残すのは「窓が開いているのに送らない」ときだけ (`idle-compact-held`)｡理由は使用率が求められない
+(`context_window_size` かトークン数の記録が無い) か､使用率が閾値未満の 2 つで､理由が変わったときだけ 1 行出す｡
+窓が開く前と失効後は毎 tick の常態なので書かない｡
+
+```text
+pane 3 (/path): idle compact: 失効前の窓は開いていますが送りません: 直近の応答の使用率が閾値未満 (34% < 40%)
+```
 
 ### 圧縮の後は再開しない
 

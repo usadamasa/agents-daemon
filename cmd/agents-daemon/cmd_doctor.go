@@ -18,7 +18,8 @@ func newDoctorCmd() *cobra.Command {
 		Use:   "doctor",
 		Short: "daemon が動作するための前提条件を診断する",
 		Long: "多重化ツール (herdr / rex) の選択と到達性､Claude pane の見え方､statusline state の鮮度､\n" +
-			"設定ファイルの状態､daemon の稼働状況､解決済みパスを順に確認して報告する｡多重化ツールは\n" +
+			"設定ファイルの状態､daemon の稼働状況､peer messaging の socket (CLAUDE_CODE_MESSAGING_SOCKET)､\n" +
+			"解決済みパスを順に確認して報告する｡多重化ツールは\n" +
 			"REX_SESSION があれば rex､無ければ herdr を選ぶ｡その server へ到達できない場合のみ実際に\n" +
 			"壊れているとみなし exit 1 にする｡他の項目は情報提供のみで exit 0 (state ファイルがまだ無い､\n" +
 			"daemon が起動していない､daemon の多重化ツールが今の環境と違う等)｡",
@@ -32,7 +33,7 @@ func newDoctorCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return verify.RunDoctor(cmd.Context(), cmd.OutOrStdout(), client, kind, p, time.Now())
+			return verify.RunDoctor(cmd.Context(), cmd.OutOrStdout(), client, kind, p, time.Now(), os.Getenv)
 		},
 	}
 }

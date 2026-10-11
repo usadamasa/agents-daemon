@@ -20,9 +20,10 @@ import (
 )
 
 // RunDoctor は各前提条件を順に確認し w へ報告する｡kind は client の多重化ツール
-// (backend.Detect の結果)｡その server に到達できない場合だけ error を返す (呼び出し元の
+// (backend.Detect の結果)､getenv は peer messaging の判定に使う環境 (通常は os.Getenv)｡
+// その server に到達できない場合だけ error を返す (呼び出し元の
 // main が exit 1 にする)｡それ以外の欠落や陳腐化は情報として報告するに留め､error にはしない｡
-func RunDoctor(ctx context.Context, w io.Writer, client multiplexer.Client, kind string, p apppath.Paths, now time.Time) error {
+func RunDoctor(ctx context.Context, w io.Writer, client multiplexer.Client, kind string, p apppath.Paths, now time.Time, getenv func(string) string) error {
 	_, _ = fmt.Fprintln(w, "=== agents-daemon doctor ===")
 
 	_, _ = fmt.Fprintln(w, "\n-- backend --")
@@ -50,6 +51,9 @@ func RunDoctor(ctx context.Context, w io.Writer, client multiplexer.Client, kind
 
 	_, _ = fmt.Fprintln(w, "\n-- daemon --")
 	reportDaemonState(w, p, kind, now)
+
+	_, _ = fmt.Fprintln(w, "\n-- peer messaging (ListAgents / SendMessage) --")
+	reportPeerMessaging(w, getenv)
 
 	_, _ = fmt.Fprintln(w, "\n-- 解決済みパス --")
 	reportPaths(w, p)
@@ -275,6 +279,32 @@ func reportDaemonState(w io.Writer, p apppath.Paths, kind string, now time.Time)
 		if snap.Backend != kind {
 			_, _ = fmt.Fprintf(w, "  ⚠ daemon の backend (%s) が今の環境 (%s) と違います｡daemon はこの環境のセッションを監視していません\n", snap.Backend, kind)
 		}
+	}
+}
+
+// reportPeerMessaging は Claude Code の cross-session messaging がこのプロセスの環境で
+// 使える状態かを報告する｡Claude Code は各セッションで CLAUDE_CODE_MESSAGING_SOCKET を
+// 子プロセス (Bash ツール) へ渡すので､doctor をセッション内から呼んだときだけ判定できる｡
+// 設定側の切り分け (gate を止める env､crossSessionInbound､deny) は setup skill の
+// references/peer-messaging.md が持ち､ここは観測できる事実だけを出す｡
+func reportPeerMessaging(w io.Writer, getenv func(string) string) {
+	socket := getenv("CLAUDE_CODE_MESSAGING_SOCKET")
+	if socket == "" {
+		_, _ = fmt.Fprintln(w, "  CLAUDE_CODE_MESSAGING_SOCKET: (なし)")
+		_, _ = fmt.Fprintln(w, "  Claude Code のセッションの外から呼んだか､そのセッションで cross-session messaging が無効｡"+
+			"セッション内 (Bash ツール) から呼んで (なし) なら setup skill の references/peer-messaging.md で切り分ける")
+		return
+	}
+	_, _ = fmt.Fprintf(w, "  CLAUDE_CODE_MESSAGING_SOCKET: %s\n", socket)
+	if _, err := os.Stat(socket); err != nil {
+		_, _ = fmt.Fprintf(w, "  NG: socket がありません (bind に失敗したか､セッションが終了している): %v\n", err)
+	} else {
+		_, _ = fmt.Fprintln(w, "  OK: socket があります")
+	}
+	// sandbox 化した子プロセスとして起動した Claude Code は CLAUDE_CODE_TMPDIR を受け取り､
+	// socket 先が /tmp/claude-<uid>/cc-socks/ へ移って seatbelt に bind を拒否される｡
+	if tmpdir := getenv("CLAUDE_CODE_TMPDIR"); tmpdir != "" {
+		_, _ = fmt.Fprintf(w, "  ⚠ CLAUDE_CODE_TMPDIR=%s｡入れ子で起動したセッション (sandbox 内の claude) では socket を bind できず､messaging は使えません\n", tmpdir)
 	}
 }
 

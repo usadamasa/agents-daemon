@@ -6,7 +6,9 @@ description: >-
   rex の block の外で動いている､pane や block に session_id が紐づかない (`doctor` で `session_id=(なし)`)､
   statusline が配線されておらず (`statusLine.command` がバイナリの `statusline` を指していない､または自前の
   statusline が stdin を `ingest-statusline` へ渡していない) rate-limits / context の state file が無い､
-  go や jq が無くてバイナリが建たない､といった状態を拾う｡「agents-daemon をセットアップして」「statusline を配線して」
+  go や jq が無くてバイナリが建たない､sandbox 内から `herdr` が `PermissionDenied`・`rex` が
+  `connect: operation not permitted` で落ちる､peer messaging (`ListAgents` / `SendMessage`) が無い・
+  `CLAUDE_CODE_MESSAGING_SOCKET` が空､といった状態を拾う｡「agents-daemon をセットアップして」「statusline を配線して」
   「herdr があるか確かめて」「rex で動くか確かめて」と言われたときにも使う｡
 ---
 
@@ -62,6 +64,14 @@ herdr status --json | jq -c '.server | {running, version}'
 `herdr integration install claude` (herdr 生成の SessionStart hook) は要らない｡
 daemon は herdr の `agent_session` を読まない｡
 
+JSON ではなく `Os { code: 1, kind: PermissionDenied }` が返るなら sandbox が socket を塞いでいる｡
+`sandbox.network.allowUnixSockets` に socket の親ディレクトリ `~/.config/herdr` が要る (足すかは利用者が決める)｡
+unix socket はこのキーが単独で支配し､`filesystem.allowWrite` にも `network.allowedDomains` にも従わない｡
+キーは `sandbox.network` の下に置く｡`sandbox` 直下に書いても schema エラーにならず黙って無視される｡
+効いているかはシステムプロンプトの sandbox 要約の Network 節に `allowUnixSockets` が出るかで分かる｡
+Linux で全面許可するキーは boolean の `sandbox.network.allowAllUnixSockets`｡
+許可はセッション開始時に評価されるので､変えたら新しいセッションで `herdr agent list` が JSON を返すことを確かめる｡
+
 rex:
 
 ```sh
@@ -70,7 +80,11 @@ rex --autostart=false api call server.status | jq -c '{pid, session_count}'
 
 失敗するか `pid` が無ければ NG｡rex の server を起こしてもらう｡daemon の到達確認 (`Reachable`) も同じ呼び出しを見る｡
 `operation not permitted` で socket に繋がらないなら sandbox が止めている｡`sandbox.network.allowUnixSockets` に
-`~/Library/Application Support/rex` が要る (足すかは利用者が決める)｡
+`~/Library/Application Support/rex` が要る (足すかは利用者が決める)｡パスに空白が入るがクォートは要らない｡
+`rex` を `excludedCommands` に置く形は取らない｡rex の操作は `rex events --json | jq` のようにパイプと組み合わせるので､
+excluded にすると guard が照合外れで落とす｡rex の許可は再起動なしで次の Bash 呼び出しから効く
+(2026-10-10､Claude Code 2.1.296 で実測｡herdr の「セッション開始時に評価」とは違う)｡
+効いているかは sandbox 内から `rex ls` がセッション一覧を返すことで確かめる｡
 
 ### このセッションの pane (block) と session_id の対応
 
@@ -159,7 +173,7 @@ cat "$bin/agents-daemon.version"
 "${XDG_CACHE_HOME:-$HOME/.cache}/agents-daemon/bin/agents-daemon" doctor
 ```
 
-pane 一覧､セッションごとの rate-limits の鮮度､config.json の実効値､daemon の稼働を出す｡
+pane 一覧､セッションごとの rate-limits の鮮度､config.json の実効値､daemon の稼働､peer messaging の socket を出す｡
 `daemon は起動していません` なら､次のセッションの SessionStart で起きる｡
 すぐ起こしたいときも､Claude の Bash からは起こさない｡Bash が sandbox の中で動く環境では､
 そこから起こした daemon が sandbox の制限を引き継ぐ｡代わりに､利用者に次の 1 行をプロンプトへ打ってもらう｡
@@ -167,6 +181,23 @@ pane 一覧､セッションごとの rate-limits の鮮度､config.json の�
 ```sh
 ! "${XDG_CACHE_HOME:-$HOME/.cache}/agents-daemon/bin/agents-daemon" daemon --ensure
 ```
+
+## 6. peer messaging
+
+daemon の役目には関わらないが､別セッション (peer) へ作業を渡す経路 (`agents-daemon:peer-sessions` skill) が
+このセッションで使えるかを､同じ場で確かめる｡
+
+```sh
+printenv CLAUDE_CODE_MESSAGING_SOCKET
+```
+
+| 結果 | 判定 |
+| ---- | ---- |
+| `/tmp/cc-socks/<pid>.sock` が出て､`doctor` の「peer messaging」が `OK: socket があります` | OK |
+| 空 (exit 1)､または `ListAgents` ツールも `/list-agents` も無い | 情報｡このセッションでは peer へ渡せない｡[peer-messaging.md](references/peer-messaging.md) を `Read` で開いて切り分ける |
+| `doctor` が `⚠ CLAUDE_CODE_TMPDIR` を出す | 情報｡入れ子で起動したセッションで､bind できない構成｡親セッションから確かめる (同上) |
+
+バイナリが無くて `doctor` を回せないときは `printenv` だけで判定する｡
 
 ## 報告
 
@@ -181,6 +212,7 @@ agents-daemon setup
 - statusline: context <OK (n 秒前) | NG>､rate-limits <OK | 無し (理由)>
 - バイナリ: <version | NG (build.log の要点)>
 - doctor: <要点>
+- peer messaging: <OK | 無効 (切り分けの結果) | 判定できず (理由)>
 - 直したこと: <書き換えたファイルと中身の要約 | なし>
 - 残っていること: <利用者の作業 | なし>
 ```

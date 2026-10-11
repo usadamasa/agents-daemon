@@ -22,7 +22,8 @@ plugin が持つもの:
 | UserPromptSubmit / Stop hook (herdr) | セッション名 (端末タイトル) と今いるブランチを herdr の space 欄とタブ行へ写す (`herdr-title`)｡rex では何もしない |
 | `agents-daemon:compact-prep` skill | `/compact` 前に作業状態を state file へ保存する |
 | `agents-daemon:agents-daemon` skill | 運用と切り分けの手引き (症状から引く) |
-| `agents-daemon:setup` skill | 前提の確認と statusline の配線 |
+| `agents-daemon:setup` skill | 前提の確認と statusline の配線､peer messaging の切り分け |
+| `agents-daemon:peer-sessions` skill | 別セッション (peer) へ作業を渡す手順と､herdr / rex ごとの pane 操作 |
 | `agents-daemon statusline` | `statusLine.command` に向ける statusline｡描画と､daemon が読む state file の書き込みを同じプロセスで行う |
 | `agents-daemon ingest-statusline` | 自前の statusline から stdin を渡して state file だけを書かせるサブコマンド |
 
@@ -87,7 +88,7 @@ context の自動 compact を使う最小例:
 ```sh
 agents-daemon status                     # 稼働状況､監視中の pane､ログの末尾
 agents-daemon logs -n 80                 # daemon.log の末尾
-agents-daemon doctor                     # 前提条件の診断
+agents-daemon doctor                     # 前提条件の診断 (peer messaging の socket も含む)
 agents-daemon inspect --pane <id>        # 生きた pane の画面を分類する (rex は block ID)
 agents-daemon daemon --foreground --dry-run  # 送信せずに判定だけ回す
 agents-daemon stop                       # 停止

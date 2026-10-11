@@ -272,16 +272,10 @@ func TestReportPeerMessaging(t *testing.T) {
 				env["CLAUDE_CODE_TMPDIR"] = filepath.Join(tempdir, tc.tmpdir)
 			}
 			if tc.socket != "" {
-				socket := filepath.Join(tempdir, tc.socket)
-				env["CLAUDE_CODE_MESSAGING_SOCKET"] = socket
-				if tc.socketExists {
-					if err := os.MkdirAll(filepath.Dir(socket), 0o700); err != nil {
-						t.Fatalf("MkdirAll() error = %v", err)
-					}
-					if err := os.WriteFile(socket, nil, 0o600); err != nil {
-						t.Fatalf("WriteFile() error = %v", err)
-					}
-				}
+				env["CLAUDE_CODE_MESSAGING_SOCKET"] = filepath.Join(tempdir, tc.socket)
+			}
+			if tc.socketExists {
+				touchFile(t, env["CLAUDE_CODE_MESSAGING_SOCKET"])
 			}
 			var buf bytes.Buffer
 			reportPeerMessaging(&buf, envOf(env))
@@ -342,6 +336,17 @@ func TestReportConfigState_カスタム値はデフォルトと異なる印が�
 	}
 	if strings.Contains(defaultLine, "(*)") {
 		t.Errorf("デフォルト値のままの行に差分マークが付いている: %q", defaultLine)
+	}
+}
+
+// touchFile は path に空ファイルを作る (親ディレクトリも作る)｡socket の存在だけを見る fixture 用｡
+func touchFile(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
 	}
 }
 

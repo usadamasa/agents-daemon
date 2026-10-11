@@ -100,4 +100,5 @@ description: >-
 | 送信が pane に届かない | pane-io.md､operations.md の「既知の制約」(pane 内 tmux､herdr / rex 不在) |
 | `doctor` の pane 一覧が `session_id=(なし)` になる | statusline が新しいバイナリ (`statusline` か `ingest-statusline`) を呼んでいるか､`context/<sid>.json` に `multiplexer` があるか｡architecture.md の「statusline が書く state」｡herdr で別 workspace へ `pane move` した pane なら operations.md の「既知の制約」 |
 | rex のセッションなのに daemon が何も送らない | `doctor` の daemon の節の backend 不一致の警告｡operations.md の「既知の制約」(daemon は 1 つの backend しか見ない) |
+| `ListAgents` / `SendMessage` がツール一覧に無く `/list-agents` も認識されない (peer へ作業を渡せない) | `agents-daemon:setup` skill の「peer messaging」 |
 | herdr のタブ名や space 欄の `$claude` / `$branch` が変わらない | architecture.md の「[5]」｡`HERDR_ENV` `HERDR_SOCKET_PATH` `HERDR_PANE_ID` がそろっているか､バイナリが `herdr-title` を持つ版か (hook のログに `herdr-title failed` が出る) |

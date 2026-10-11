@@ -18,7 +18,9 @@ Go のデーモンと､それを配線する hook・skill を持つ｡
 | `scripts/get-session-id.sh` | compact-prep / setup skill が呼ぶ session_id の取得 |
 | `skills/compact-prep/` | `/compact` 前の state file 保存 |
 | `skills/agents-daemon/` | 運用と切り分けの手引き｡配線・判定・設定キーの詳細は `references/` |
-| `skills/setup/` | install 後の前提確認 (herdr か rex､go/jq､statusline の state file､バイナリ)｡statusline の配線 2 通りは `references/` |
+| `skills/setup/` | install 後の前提確認｡backend ごとの手順と配線の詳細は `references/` |
+| `skills/peer-sessions/` | 別セッション (peer) へ作業を渡す手順 (`ListAgents` / `SendMessage`)｡多重化ツールごとの pane / block 操作は `references/herdr.md` `references/rex.md` |
+| `skills/herdr/` | herdr の CLI の手引き｡`herdr --skill` の出力をそのまま置いた生成物で､手で編集しない｡herdr を更新したら `task herdr-skill` で作り直す (`herdr --version` を commit message に書く) |
 | `cmd/agents-daemon/` | Go の main (cobra) |
 | `internal/` | daemon の本体｡パス定数は `internal/apppath`｡statusline の描画は `internal/statusline`､cost の台帳は `internal/spend`､sidecar の原子的な書き込みは `internal/statefile` |
 | `internal/multiplexer`, `internal/herdrcli`, `internal/rexcli`, `internal/backend` | pane 操作の interface (`multiplexer.Client`) とその herdr / rex 実装｡`backend` が環境 (`REX_SESSION`) で選ぶ｡`herdrcli` は hook が使う socket の client (`SocketClient`) も持つ |
@@ -60,6 +62,12 @@ bats は hook を `/bin/bash` で起動する (本番の shebang と同じ bash 
 - skill 間の参照とスラッシュコマンドは名前空間付きで書く (`agents-daemon:compact-prep`､
   `/agents-daemon:compact-prep`)｡bare 名は `~/.claude/skills/` に残った旧コピーへ当たる｡
 - skill 内の references は相対リンクで書き､読む手順は `Read` で書く｡
+
+## state を書くときの決めごと
+
+- ランタイム状態は `~/.claude/` に置かず XDG (`internal/apppath`) に置く｡環境から埋める入口は `apppath.FromEnv` だけ｡
+- 書くファイルを足すときは､同じ PR で消す仕組みと architecture.md「出力されるファイル」の行 (書く主体・消す主体) を足す｡
+- 削除は daemon 自身が mtime で行う (`internal/daemon/housekeeping.go`)｡保持期間は定数にし､根拠をコメントに書く｡
 
 ## パス定数の対
 

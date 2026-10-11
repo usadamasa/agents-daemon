@@ -21,6 +21,19 @@ import (
 
 var errFakeUnreachable = errors.New("fake: herdr unreachable")
 
+// noEnv は環境変数が 1 つも無い getenv｡doctor の既存の項目は環境に依らない｡
+func noEnv(string) string { return "" }
+
+// doctorInput は fixedNow と noEnv を固定した DoctorInput を組む｡
+func doctorInput(client multiplexer.Client, kind string, p apppath.Paths, now time.Time) DoctorInput {
+	return DoctorInput{Client: client, Kind: kind, Paths: p, Now: now, Getenv: noEnv}
+}
+
+// envOf は m だけを持つ getenv を返す｡
+func envOf(m map[string]string) func(string) string {
+	return func(k string) string { return m[k] }
+}
+
 func TestRunDoctor(t *testing.T) {
 	fixedNow := time.Date(2026, 8, 16, 13, 0, 0, 0, time.UTC)
 
@@ -29,7 +42,7 @@ func TestRunDoctor(t *testing.T) {
 			ReachableFunc: func(context.Context) error { return errFakeUnreachable },
 		}
 		var buf bytes.Buffer
-		err := RunDoctor(context.Background(), &buf, client, sessionstate.MultiplexerKindHerdr, apppath.New(t.TempDir(), "", ""), fixedNow)
+		err := RunDoctor(context.Background(), &buf, doctorInput(client, sessionstate.MultiplexerKindHerdr, apppath.New(t.TempDir(), "", ""), fixedNow))
 		if err == nil {
 			t.Fatal("herdr 到達不可のとき error を期待したが nil だった")
 		}
@@ -52,7 +65,7 @@ func TestRunDoctor(t *testing.T) {
 		}
 
 		var buf bytes.Buffer
-		if err := RunDoctor(context.Background(), &buf, client, sessionstate.MultiplexerKindHerdr, apppath.New(home, "", ""), fixedNow); err != nil {
+		if err := RunDoctor(context.Background(), &buf, doctorInput(client, sessionstate.MultiplexerKindHerdr, apppath.New(home, "", ""), fixedNow)); err != nil {
 			t.Fatalf("RunDoctor() error = %v", err)
 		}
 		out := buf.String()
@@ -64,6 +77,8 @@ func TestRunDoctor(t *testing.T) {
 			"state ファイルはまだありません",
 			"は存在しません｡全項目デフォルト値で動作します",
 			"daemon は起動していません",
+			"-- peer messaging",
+			"CLAUDE_CODE_MESSAGING_SOCKET: (なし)",
 			"config:      " + filepath.Join(home, ".config", "agents-daemon", "config.json"),
 		} {
 			if !strings.Contains(out, want) {
@@ -96,7 +111,7 @@ func TestRunDoctor(t *testing.T) {
 		}
 
 		var buf bytes.Buffer
-		if err := RunDoctor(context.Background(), &buf, client, sessionstate.MultiplexerKindHerdr, p, fixedNow); err != nil {
+		if err := RunDoctor(context.Background(), &buf, doctorInput(client, sessionstate.MultiplexerKindHerdr, p, fixedNow)); err != nil {
 			t.Fatalf("RunDoctor() error = %v", err)
 		}
 		out := buf.String()
@@ -123,7 +138,7 @@ func TestRunDoctor(t *testing.T) {
 		}
 
 		var buf bytes.Buffer
-		if err := RunDoctor(context.Background(), &buf, client, sessionstate.MultiplexerKindHerdr, p, fixedNow); err != nil {
+		if err := RunDoctor(context.Background(), &buf, doctorInput(client, sessionstate.MultiplexerKindHerdr, p, fixedNow)); err != nil {
 			t.Fatalf("RunDoctor() error = %v", err)
 		}
 		out := buf.String()
@@ -141,7 +156,7 @@ func TestRunDoctor(t *testing.T) {
 			PaneListFunc:  func(context.Context) ([]multiplexer.Pane, error) { return nil, nil },
 		}
 		var buf bytes.Buffer
-		if err := RunDoctor(context.Background(), &buf, client, sessionstate.MultiplexerKindRex, apppath.New(t.TempDir(), "", ""), fixedNow); err != nil {
+		if err := RunDoctor(context.Background(), &buf, doctorInput(client, sessionstate.MultiplexerKindRex, apppath.New(t.TempDir(), "", ""), fixedNow)); err != nil {
 			t.Fatalf("RunDoctor() error = %v", err)
 		}
 		for _, want := range []string{"backend: rex (REX_SESSION あり)", "OK: rex server は稼働しています"} {
@@ -156,7 +171,7 @@ func TestRunDoctor(t *testing.T) {
 			ReachableFunc: func(context.Context) error { return errFakeUnreachable },
 		}
 		var buf bytes.Buffer
-		err := RunDoctor(context.Background(), &buf, client, sessionstate.MultiplexerKindRex, apppath.New(t.TempDir(), "", ""), fixedNow)
+		err := RunDoctor(context.Background(), &buf, doctorInput(client, sessionstate.MultiplexerKindRex, apppath.New(t.TempDir(), "", ""), fixedNow))
 		if err == nil || !strings.Contains(err.Error(), "rex に到達できない") {
 			t.Fatalf("RunDoctor() error = %v, want rex に到達できない", err)
 		}
@@ -189,7 +204,7 @@ func TestRunDoctor(t *testing.T) {
 					PaneListFunc:  func(context.Context) ([]multiplexer.Pane, error) { return nil, nil },
 				}
 				var buf bytes.Buffer
-				if err := RunDoctor(context.Background(), &buf, client, sessionstate.MultiplexerKindRex, p, fixedNow); err != nil {
+				if err := RunDoctor(context.Background(), &buf, doctorInput(client, sessionstate.MultiplexerKindRex, p, fixedNow)); err != nil {
 					t.Fatalf("RunDoctor() error = %v (警告は exit code を変えない)", err)
 				}
 				warned := strings.Contains(buf.String(), "⚠ daemon の backend")
@@ -199,6 +214,89 @@ func TestRunDoctor(t *testing.T) {
 			})
 		}
 	})
+}
+
+func TestReportPeerMessaging(t *testing.T) {
+	// パスは全て t.TempDir() からの相対で書く｡実パス (/tmp/claude-501 等) を書かないのは､
+	// sandbox 内の go test では t.TempDir() 自体が /tmp/claude-<uid> の下になり､fixture が環境と交差するため｡
+	cases := []struct {
+		name         string
+		tmpdir       string // CLAUDE_CODE_TMPDIR (空なら未設定)
+		socket       string // CLAUDE_CODE_MESSAGING_SOCKET (空なら未設定)
+		socketExists bool
+		want         []string
+		wantNone     []string
+	}{
+		{
+			name:     "環境変数が無ければ無効か外部起動と報告し OK/NG は出さない",
+			want:     []string{"CLAUDE_CODE_MESSAGING_SOCKET: (なし)", "peer-messaging.md"},
+			wantNone: []string{"OK: socket", "NG: socket"},
+		},
+		{
+			name:         "socket があれば OK",
+			socket:       "cc-socks/123.sock",
+			socketExists: true,
+			want:         []string{"OK: socket があります"},
+			wantNone:     []string{"NG: socket", "⚠ socket が CLAUDE_CODE_TMPDIR"},
+		},
+		{
+			name:     "環境変数はあるのに socket が無ければ NG",
+			socket:   "cc-socks/missing.sock",
+			want:     []string{"NG: socket がありません"},
+			wantNone: []string{"OK: socket"},
+		},
+		{
+			// 親セッションの Bash ツールにも CLAUDE_CODE_TMPDIR は来る (実測: /tmp/claude-501)｡
+			// socket が /tmp/cc-socks/ に居る通常のセッションで警告してはいけない｡
+			name:         "CLAUDE_CODE_TMPDIR があっても socket がその外なら警告しない",
+			tmpdir:       "claude-501",
+			socket:       "cc-socks/123.sock",
+			socketExists: true,
+			want:         []string{"OK: socket があります"},
+			wantNone:     []string{"⚠ socket が CLAUDE_CODE_TMPDIR"},
+		},
+		{
+			name:     "名前が接頭辞として一致するだけの別ディレクトリは配下と見なさない",
+			tmpdir:   "claude-50",
+			socket:   "claude-501/cc-socks/missing.sock",
+			want:     []string{"NG: socket がありません"},
+			wantNone: []string{"⚠ socket が CLAUDE_CODE_TMPDIR"},
+		},
+		{
+			name:   "socket が CLAUDE_CODE_TMPDIR の下なら入れ子の起動として警告する",
+			tmpdir: "claude-501",
+			socket: "claude-501/cc-socks/missing.sock",
+			want:   []string{"NG: socket がありません", "⚠ socket が CLAUDE_CODE_TMPDIR"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tempdir := t.TempDir()
+			env := map[string]string{}
+			if tc.tmpdir != "" {
+				env["CLAUDE_CODE_TMPDIR"] = filepath.Join(tempdir, tc.tmpdir)
+			}
+			if tc.socket != "" {
+				env["CLAUDE_CODE_MESSAGING_SOCKET"] = filepath.Join(tempdir, tc.socket)
+			}
+			if tc.socketExists {
+				touchFile(t, env["CLAUDE_CODE_MESSAGING_SOCKET"])
+			}
+			var buf bytes.Buffer
+			reportPeerMessaging(&buf, envOf(env))
+			out := buf.String()
+			for _, want := range tc.want {
+				if !strings.Contains(out, want) {
+					t.Errorf("出力に %q が無い:\n%s", want, out)
+				}
+			}
+			for _, none := range tc.wantNone {
+				if strings.Contains(out, none) {
+					t.Errorf("出力に %q が出てはいけない:\n%s", none, out)
+				}
+			}
+		})
+	}
 }
 
 func TestReportConfigState_不正なJSONはフォールバックを明言する(t *testing.T) {
@@ -243,6 +341,17 @@ func TestReportConfigState_カスタム値はデフォルトと異なる印が�
 	}
 	if strings.Contains(defaultLine, "(*)") {
 		t.Errorf("デフォルト値のままの行に差分マークが付いている: %q", defaultLine)
+	}
+}
+
+// touchFile は path に空ファイルを作る (親ディレクトリも作る)｡socket の存在だけを見る fixture 用｡
+func touchFile(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
 	}
 }
 

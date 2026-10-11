@@ -66,6 +66,63 @@ func TestDaemonRuntimeTick_IdleCompactFromTranscript(t *testing.T) {
 	}
 }
 
+func TestDaemonRuntimeTick_IdleCompactHeldLogsReasonOnce(t *testing.T) {
+	// 窓が開いているのに送らないときは理由を 1 行残す｡tick は 5 秒ごとなので､同じ理由が続く間は書かない｡
+	lastResponse := time.Date(2026, 9, 29, 3, 37, 6, 94_000_000, time.UTC)
+	now := lastResponse.Add(51 * time.Minute)
+	pane := claudePaneWithSession("pane-a", "term-a", "session-a", multiplexer.AgentStatusIdle)
+	client := &multiplexerfake.Client{
+		PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) { return []multiplexer.Pane{pane}, nil },
+		PaneReadFunc: func(context.Context, string, multiplexer.PaneReadOptions) (string, error) {
+			return "⏺ 読み終えました｡\n\n─────────\n❯\n─────────\n", nil
+		},
+	}
+	r, statusPath := newTestRuntime(t, client, now)
+	transcript := filepath.Join(t.TempDir(), "session-a.jsonl")
+	if err := os.WriteFile(transcript, []byte(probeTranscript), 0o644); err != nil {
+		t.Fatalf("transcript の書き込みに失敗: %v", err)
+	}
+	// 137034 tokens は 400k の window では 34% で､閾値 40% に届かない｡
+	writeContextSidecar(t, r.store.Context, "session-a", map[string]any{
+		"used_percentage": 34, "observed_at": lastResponse.Add(time.Second).Unix(),
+		"context_window_size": 400000, "transcript_path": transcript,
+	})
+	cfgPath := idleCompactConfigPath(t)
+
+	for i := range 2 {
+		if _, _, err := r.tick(context.Background(), cfgPath, now.Add(time.Duration(i)*5*time.Second)); err != nil {
+			t.Fatalf("tick() error = %v", err)
+		}
+	}
+	log := readLog(t, statusPath)
+	if got := strings.Count(log, "idle compact"); got != 1 {
+		t.Errorf("同じ理由の見送りが %d 行 (want 1):\n%s", got, log)
+	}
+	for _, want := range []string{"送りません", "34%", "40%"} {
+		if !strings.Contains(log, want) {
+			t.Errorf("ログに %q が無い:\n%s", want, log)
+		}
+	}
+	if strings.Contains(log, "compact-prep を投入") {
+		t.Errorf("送っていないのに投入のログがある:\n%s", log)
+	}
+
+	// 理由が変わったら改めて 1 行出す (statusline の記録から window の大きさが消えた)｡
+	writeContextSidecar(t, r.store.Context, "session-a", map[string]any{
+		"used_percentage": 34, "observed_at": lastResponse.Add(time.Second).Unix(), "transcript_path": transcript,
+	})
+	if _, _, err := r.tick(context.Background(), cfgPath, now.Add(10*time.Second)); err != nil {
+		t.Fatalf("tick() error = %v", err)
+	}
+	log = readLog(t, statusPath)
+	if got := strings.Count(log, "idle compact"); got != 2 {
+		t.Errorf("理由が変わったのに行が増えていない (%d 行):\n%s", got, log)
+	}
+	if !strings.Contains(log, "使用率を求められ") {
+		t.Errorf("ログに使用率が求められない理由が無い:\n%s", log)
+	}
+}
+
 func TestDaemonRuntimeTick_IdleCompactMarker(t *testing.T) {
 	last := time.Date(2026, 9, 27, 3, 44, 5, 954_000_000, time.UTC)
 	now := last.Add(50 * time.Minute)

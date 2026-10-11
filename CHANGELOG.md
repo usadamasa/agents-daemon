@@ -1,5 +1,9 @@
 # Changelog
 
+## [2026.1011.1](https://github.com/usadamasa/agents-daemon/compare/2026.1011.0...2026.1011.1) - 2026-10-11
+
+- idle compact が送らなかった理由を inspect とログで追えるようにする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/55
+
 ## [2026.1011.0](https://github.com/usadamasa/agents-daemon/compare/2026.1010.3...2026.1011.0) - 2026-10-11
 
 - feat: peer-sessions skill を plugin に移し、peer messaging の診断を doctor と setup に持たせる (#35 フェーズ 3) by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/53

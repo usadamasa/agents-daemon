@@ -160,23 +160,7 @@ func reportIdleCompact(w io.Writer, cfg config.Config, cs *sessionstate.Compact,
 	if cache == nil {
 		_, _ = fmt.Fprintln(w, "    cache の状態: ありません (transcript_path が無い､cache write が無い､または compact 後にまだ応答が無い)")
 	} else {
-		_, _ = fmt.Fprintf(w, "    cache の状態: 直近の応答 %s､TTL %d 分､失効 %s (%s)\n",
-			cache.LastRequestAt.Format(time.RFC3339), int(cache.TTL/time.Minute), cache.ExpiresAt().Format(time.RFC3339),
-			describeRemaining(cache.ExpiresAt().Sub(now)))
-		lead := time.Duration(cfg.CacheIdleCompactLeadSeconds) * time.Second
-		opensAt := cache.ExpiresAt().Add(-lead)
-		if now.Before(opensAt) {
-			_, _ = fmt.Fprintf(w, "    失効前の窓: まだ開いていない (失効の %s 前､%s に開く)\n", lead, opensAt.Format(time.RFC3339))
-		} else {
-			_, _ = fmt.Fprintf(w, "    失効前の窓: 開いている (失効の %s 前､%s から)\n", lead, opensAt.Format(time.RFC3339))
-		}
-		if pct, ok := cs.CacheUsedPercentage(cache); ok {
-			_, _ = fmt.Fprintf(w, "    使用率: %.0f%% / 閾値 %.0f%% (直近の応答の入力 %d tokens / window %d)\n",
-				pct, cfg.CacheIdleCompactThresholdPercent, cache.ContextTokens, cs.ContextWindowSize)
-		} else {
-			_, _ = fmt.Fprintf(w, "    使用率: 求められない (直近の応答の入力 %d tokens､window %d｡どちらかが 0 なら記録を始める前の版の statusline が書いた context)\n",
-				cache.ContextTokens, cs.ContextWindowSize)
-		}
+		reportIdleCompactCache(w, cfg, cs, cache, now)
 	}
 	if cs.HasIdleCompacted {
 		state := "利用者が戻ったので解けている"
@@ -188,6 +172,27 @@ func reportIdleCompact(w io.Writer, cfg config.Config, cs *sessionstate.Compact,
 		_, _ = fmt.Fprintln(w, "    idle compact の marker: ありません")
 	}
 	_, _ = fmt.Fprintf(w, "    判定: %s\n", monitor.EvaluateIdleCompact(cfg, cs, cache, now))
+}
+
+// reportIdleCompactCache は cache の状態から導ける 3 行 (失効時刻､窓､使用率) を表示する｡
+func reportIdleCompactCache(w io.Writer, cfg config.Config, cs *sessionstate.Compact, cache *sessionstate.Cache, now time.Time) {
+	_, _ = fmt.Fprintf(w, "    cache の状態: 直近の応答 %s､TTL %d 分､失効 %s (%s)\n",
+		cache.LastRequestAt.Format(time.RFC3339), int(cache.TTL/time.Minute), cache.ExpiresAt().Format(time.RFC3339),
+		describeRemaining(cache.ExpiresAt().Sub(now)))
+	lead := time.Duration(cfg.CacheIdleCompactLeadSeconds) * time.Second
+	opensAt := cache.ExpiresAt().Add(-lead)
+	if now.Before(opensAt) {
+		_, _ = fmt.Fprintf(w, "    失効前の窓: まだ開いていない (失効の %s 前､%s に開く)\n", lead, opensAt.Format(time.RFC3339))
+	} else {
+		_, _ = fmt.Fprintf(w, "    失効前の窓: 開いている (失効の %s 前､%s から)\n", lead, opensAt.Format(time.RFC3339))
+	}
+	if pct, ok := cs.CacheUsedPercentage(cache); ok {
+		_, _ = fmt.Fprintf(w, "    使用率: %.0f%% / 閾値 %.0f%% (直近の応答の入力 %d tokens / window %d)\n",
+			pct, cfg.CacheIdleCompactThresholdPercent, cache.ContextTokens, cs.ContextWindowSize)
+		return
+	}
+	_, _ = fmt.Fprintf(w, "    使用率: 求められない (直近の応答の入力 %d tokens､window %d｡どちらかが 0 なら記録を始める前の版の statusline が書いた context)\n",
+		cache.ContextTokens, cs.ContextWindowSize)
 }
 
 // describeRemaining は失効までの残り (負なら失効からの経過) を文にする｡

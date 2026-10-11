@@ -225,14 +225,14 @@ func TestEvaluateIdleCompact(t *testing.T) {
 			return idleCacheAt(idleNow.Add(-30 * time.Minute))
 		}, IdleCompactBeforeWindow},
 		// 5m TTL では窓が常に開いているので､使用率より先に TTL で見送る (使用率が低くても理由は TTL)｡
-		{"TTL が短い", func(_ *sessionstate.Compact, c *sessionstate.Cache) *sessionstate.Cache {
-			c = idleCacheAt(idleNow.Add(-2 * time.Minute))
+		{"TTL が短い", func(*sessionstate.Compact, *sessionstate.Cache) *sessionstate.Cache {
+			c := idleCacheAt(idleNow.Add(-2 * time.Minute))
 			c.TTL = 5 * time.Minute
 			c.ContextTokens = idleTokens(10)
 			return c
 		}, IdleCompactShortTTL},
-		{"TTL が lead 以下", func(_ *sessionstate.Compact, c *sessionstate.Cache) *sessionstate.Cache {
-			c = idleCacheAt(idleNow.Add(-2 * time.Minute))
+		{"TTL が lead 以下", func(*sessionstate.Compact, *sessionstate.Cache) *sessionstate.Cache {
+			c := idleCacheAt(idleNow.Add(-2 * time.Minute))
 			c.TTL = 10 * time.Minute
 			return c
 		}, IdleCompactShortTTL},

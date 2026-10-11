@@ -1,5 +1,9 @@
 # Changelog
 
+## [2026.1011.0](https://github.com/usadamasa/agents-daemon/compare/2026.1010.3...2026.1011.0) - 2026-10-11
+
+- feat: peer-sessions skill を plugin に移し、peer messaging の診断を doctor と setup に持たせる (#35 フェーズ 3) by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/53
+
 ## [2026.1010.3](https://github.com/usadamasa/agents-daemon/compare/2026.1010.2...2026.1010.3) - 2026-10-10
 
 - feat: herdr-claude-title.sh を plugin の herdr-title hook に移す (#35 フェーズ 2 の前半) by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/48

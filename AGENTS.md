@@ -18,7 +18,7 @@ Go のデーモンと､それを配線する hook・skill を持つ｡
 | `scripts/get-session-id.sh` | compact-prep / setup skill が呼ぶ session_id の取得 |
 | `skills/compact-prep/` | `/compact` 前の state file 保存 |
 | `skills/agents-daemon/` | 運用と切り分けの手引き｡配線・判定・設定キーの詳細は `references/` |
-| `skills/setup/` | install 後の前提確認 (herdr か rex､go/jq､statusline の state file､バイナリ､peer messaging)｡statusline の配線 2 通りと peer messaging の切り分けは `references/` |
+| `skills/setup/` | install 後の前提確認｡backend ごとの手順と配線の詳細は `references/` |
 | `skills/peer-sessions/` | 別セッション (peer) へ作業を渡す手順 (`ListAgents` / `SendMessage`)｡多重化ツールごとの pane / block 操作は `references/herdr.md` `references/rex.md` |
 | `skills/herdr/` | herdr の CLI の手引き｡`herdr --skill` の出力をそのまま置いた生成物で､手で編集しない｡herdr を更新したら `task herdr-skill` で作り直す (`herdr --version` を commit message に書く) |
 | `cmd/agents-daemon/` | Go の main (cobra) |
@@ -63,29 +63,11 @@ bats は hook を `/bin/bash` で起動する (本番の shebang と同じ bash 
   `/agents-daemon:compact-prep`)｡bare 名は `~/.claude/skills/` に残った旧コピーへ当たる｡
 - skill 内の references は相対リンクで書き､読む手順は `Read` で書く｡
 
-## 常駐物 (state を残すもの) を書くときの決めごと
+## state を書くときの決めごと
 
-ランタイム状態 (PID､status､ログ､他プロセスと受け渡す state) は `~/.claude/` に置かず XDG Base Directory に置く｡
-state は `${XDG_STATE_HOME:-~/.local/state}/agents-daemon/`､
-再生成できるものは `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/`､
-設定は `${XDG_CONFIG_HOME:-~/.config}/agents-daemon/`｡`~/.claude/` はハーネス自身が管理する実ディレクトリで､
-そこへ揮発物を混ぜると消してよいものと管理されたものの区別が付かなくなる｡実装済みの一覧と rotate の挙動は
-`skills/agents-daemon/references/architecture.md` の「出力されるファイル」が持つ｡
-
-- パス解決は `internal/apppath` に閉じ､環境から埋める入口は `apppath.FromEnv` の 1 つだけ｡`os.Getenv` を各所で呼ばない｡
-  テストは `apppath.New(t.TempDir(), "", "")` で起点を差し替える｡shell (hook) は `${XDG_STATE_HOME:-$HOME/.local/state}`
-  と同じ規則で解決し､bats は `HOME` だけでなく `XDG_STATE_HOME` も一時ディレクトリへ向ける｡
-- 書くファイルを足すときは､同じ PR で消す仕組みと architecture.md の表の行 (書く主体・いつ・消す主体) を足す｡
-  残す仕組みだけ先に入れると､後から「どこまで消してよいか」を判断する材料が失われる｡
-- 現行ログは固定名 (`daemon.log`) にし､日付が変わって最初の書き込みで `daemon.log.YYYY-MM-DD` へ退避する｡
-  `tail -f` や `logs` サブコマンドの参照先を日付で動かさない｡
-- 保持期間は mtime で判定し､設定キーにせず定数 (`internal/daemon/housekeeping.go`) に置く｡判定に効かない長さを選び､
-  根拠をコメントに書く｡
-- 削除は daemon 自身が起動時と 1 時間ごとに行う｡cron や別 hook を増やさない｡何かを消したときだけログに残す｡
-- 原子的な書き込み (`internal/statefile`) の途中で書き手が死ぬと一時ファイルが残る｡同じディレクトリの一時ファイルの
-  接頭辞も削除対象に含める｡
-- sandbox 内の Bash から手で叩く (`--foreground`､`simulate`) には利用者の settings の `sandbox.filesystem.allowWrite` に
-  state ディレクトリが要る｡hook と statusline は sandbox の外で動くので､無くても本番の書き込みは通る｡
+- ランタイム状態は `~/.claude/` に置かず XDG (`internal/apppath`) に置く｡環境から埋める入口は `apppath.FromEnv` だけ｡
+- 書くファイルを足すときは､同じ PR で消す仕組みと architecture.md「出力されるファイル」の行 (書く主体・消す主体) を足す｡
+- 削除は daemon 自身が mtime で行う (`internal/daemon/housekeeping.go`)｡保持期間は定数にし､根拠をコメントに書く｡
 
 ## パス定数の対
 

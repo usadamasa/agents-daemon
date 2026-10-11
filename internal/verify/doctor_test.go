@@ -24,6 +24,11 @@ var errFakeUnreachable = errors.New("fake: herdr unreachable")
 // noEnv は環境変数が 1 つも無い getenv｡doctor の既存の項目は環境に依らない｡
 func noEnv(string) string { return "" }
 
+// doctorInput は fixedNow と noEnv を固定した DoctorInput を組む｡
+func doctorInput(client multiplexer.Client, kind string, p apppath.Paths, now time.Time) DoctorInput {
+	return DoctorInput{Client: client, Kind: kind, Paths: p, Now: now, Getenv: noEnv}
+}
+
 // envOf は m だけを持つ getenv を返す｡
 func envOf(m map[string]string) func(string) string {
 	return func(k string) string { return m[k] }
@@ -37,7 +42,7 @@ func TestRunDoctor(t *testing.T) {
 			ReachableFunc: func(context.Context) error { return errFakeUnreachable },
 		}
 		var buf bytes.Buffer
-		err := RunDoctor(context.Background(), &buf, client, sessionstate.MultiplexerKindHerdr, apppath.New(t.TempDir(), "", ""), fixedNow, noEnv)
+		err := RunDoctor(context.Background(), &buf, doctorInput(client, sessionstate.MultiplexerKindHerdr, apppath.New(t.TempDir(), "", ""), fixedNow))
 		if err == nil {
 			t.Fatal("herdr 到達不可のとき error を期待したが nil だった")
 		}
@@ -60,7 +65,7 @@ func TestRunDoctor(t *testing.T) {
 		}
 
 		var buf bytes.Buffer
-		if err := RunDoctor(context.Background(), &buf, client, sessionstate.MultiplexerKindHerdr, apppath.New(home, "", ""), fixedNow, noEnv); err != nil {
+		if err := RunDoctor(context.Background(), &buf, doctorInput(client, sessionstate.MultiplexerKindHerdr, apppath.New(home, "", ""), fixedNow)); err != nil {
 			t.Fatalf("RunDoctor() error = %v", err)
 		}
 		out := buf.String()
@@ -106,7 +111,7 @@ func TestRunDoctor(t *testing.T) {
 		}
 
 		var buf bytes.Buffer
-		if err := RunDoctor(context.Background(), &buf, client, sessionstate.MultiplexerKindHerdr, p, fixedNow, noEnv); err != nil {
+		if err := RunDoctor(context.Background(), &buf, doctorInput(client, sessionstate.MultiplexerKindHerdr, p, fixedNow)); err != nil {
 			t.Fatalf("RunDoctor() error = %v", err)
 		}
 		out := buf.String()
@@ -133,7 +138,7 @@ func TestRunDoctor(t *testing.T) {
 		}
 
 		var buf bytes.Buffer
-		if err := RunDoctor(context.Background(), &buf, client, sessionstate.MultiplexerKindHerdr, p, fixedNow, noEnv); err != nil {
+		if err := RunDoctor(context.Background(), &buf, doctorInput(client, sessionstate.MultiplexerKindHerdr, p, fixedNow)); err != nil {
 			t.Fatalf("RunDoctor() error = %v", err)
 		}
 		out := buf.String()
@@ -151,7 +156,7 @@ func TestRunDoctor(t *testing.T) {
 			PaneListFunc:  func(context.Context) ([]multiplexer.Pane, error) { return nil, nil },
 		}
 		var buf bytes.Buffer
-		if err := RunDoctor(context.Background(), &buf, client, sessionstate.MultiplexerKindRex, apppath.New(t.TempDir(), "", ""), fixedNow, noEnv); err != nil {
+		if err := RunDoctor(context.Background(), &buf, doctorInput(client, sessionstate.MultiplexerKindRex, apppath.New(t.TempDir(), "", ""), fixedNow)); err != nil {
 			t.Fatalf("RunDoctor() error = %v", err)
 		}
 		for _, want := range []string{"backend: rex (REX_SESSION あり)", "OK: rex server は稼働しています"} {
@@ -166,7 +171,7 @@ func TestRunDoctor(t *testing.T) {
 			ReachableFunc: func(context.Context) error { return errFakeUnreachable },
 		}
 		var buf bytes.Buffer
-		err := RunDoctor(context.Background(), &buf, client, sessionstate.MultiplexerKindRex, apppath.New(t.TempDir(), "", ""), fixedNow, noEnv)
+		err := RunDoctor(context.Background(), &buf, doctorInput(client, sessionstate.MultiplexerKindRex, apppath.New(t.TempDir(), "", ""), fixedNow))
 		if err == nil || !strings.Contains(err.Error(), "rex に到達できない") {
 			t.Fatalf("RunDoctor() error = %v, want rex に到達できない", err)
 		}
@@ -199,7 +204,7 @@ func TestRunDoctor(t *testing.T) {
 					PaneListFunc:  func(context.Context) ([]multiplexer.Pane, error) { return nil, nil },
 				}
 				var buf bytes.Buffer
-				if err := RunDoctor(context.Background(), &buf, client, sessionstate.MultiplexerKindRex, p, fixedNow, noEnv); err != nil {
+				if err := RunDoctor(context.Background(), &buf, doctorInput(client, sessionstate.MultiplexerKindRex, p, fixedNow)); err != nil {
 					t.Fatalf("RunDoctor() error = %v (警告は exit code を変えない)", err)
 				}
 				warned := strings.Contains(buf.String(), "⚠ daemon の backend")

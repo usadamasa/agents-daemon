@@ -33,7 +33,9 @@ func newDoctorCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return verify.RunDoctor(cmd.Context(), cmd.OutOrStdout(), client, kind, p, time.Now(), os.Getenv)
+			return verify.RunDoctor(cmd.Context(), cmd.OutOrStdout(), verify.DoctorInput{
+				Client: client, Kind: kind, Paths: p, Now: time.Now(), Getenv: os.Getenv,
+			})
 		},
 	}
 }

@@ -1,15 +1,10 @@
 ---
 name: setup
 description: >-
-  agents-daemon plugin を install した直後､または動いていない疑いがあるときに､前提がそろっているかを確かめて
-  足りない配線を足す｡herdr も rex も入っていない・server が落ちている・このセッションが herdr の pane や
-  rex の block の外で動いている､pane や block に session_id が紐づかない (`doctor` で `session_id=(なし)`)､
-  statusline が配線されておらず (`statusLine.command` がバイナリの `statusline` を指していない､または自前の
-  statusline が stdin を `ingest-statusline` へ渡していない) rate-limits / context の state file が無い､
-  go や jq が無くてバイナリが建たない､sandbox 内から `herdr` が `PermissionDenied`・`rex` が
-  `connect: operation not permitted` で落ちる､peer messaging (`ListAgents` / `SendMessage`) が無い・
-  `CLAUDE_CODE_MESSAGING_SOCKET` が空､といった状態を拾う｡「agents-daemon をセットアップして」「statusline を配線して」
-  「herdr があるか確かめて」「rex で動くか確かめて」と言われたときにも使う｡
+  agents-daemon plugin を install した直後､または動いていない疑いがあるときに､前提 (herdr か rex､go と jq､
+  statusline の配線､バイナリ､peer messaging) がそろっているかを確かめて足りない配線を足す｡
+  `doctor` で `session_id=(なし)`､state file が無い､sandbox 内から herdr / rex の socket に繋がらない､
+  `ListAgents` が無い､といった症状でも引く｡「agents-daemon をセットアップして」「statusline を配線して」と言われたときにも使う｡
 ---
 
 # setup
@@ -50,48 +45,17 @@ command -v herdr rex go jq
 printenv REX_SESSION
 ```
 
-値が出れば rex､出なければ herdr｡daemon も同じ規則で選ぶ｡到達性の確かめ方だけが backend で違う｡
+値が出れば rex､出なければ herdr｡daemon も同じ規則で選ぶ｡backend ごとの手順は reference にあり､`Read` で開いて従う｡
 
-### 到達性
-
-herdr:
-
-```sh
-herdr status --json | jq -c '.server | {running, version}'
-```
-
-`running` が `true` でなければ NG｡herdr の server を起こしてもらう｡daemon の到達確認 (`Reachable`) も同じ呼び出しを見る｡
-`herdr integration install claude` (herdr 生成の SessionStart hook) は要らない｡
-daemon は herdr の `agent_session` を読まない｡
-
-JSON ではなく `Os { code: 1, kind: PermissionDenied }` が返るなら sandbox が socket を塞いでいる｡
-`sandbox.network.allowUnixSockets` に socket の親ディレクトリ `~/.config/herdr` が要る (足すかは利用者が決める)｡
-unix socket はこのキーが単独で支配し､`filesystem.allowWrite` にも `network.allowedDomains` にも従わない｡
-キーは `sandbox.network` の下に置く｡`sandbox` 直下に書いても schema エラーにならず黙って無視される｡
-効いているかはシステムプロンプトの sandbox 要約の Network 節に `allowUnixSockets` が出るかで分かる｡
-Linux で全面許可するキーは boolean の `sandbox.network.allowAllUnixSockets`｡
-許可はセッション開始時に評価されるので､変えたら新しいセッションで `herdr agent list` が JSON を返すことを確かめる｡
-
-rex:
-
-```sh
-rex --autostart=false api call server.status | jq -c '{pid, session_count}'
-```
-
-失敗するか `pid` が無ければ NG｡rex の server を起こしてもらう｡daemon の到達確認 (`Reachable`) も同じ呼び出しを見る｡
-`operation not permitted` で socket に繋がらないなら sandbox が止めている｡`sandbox.network.allowUnixSockets` に
-`~/Library/Application Support/rex` が要る (足すかは利用者が決める)｡パスに空白が入るがクォートは要らない｡
-`rex` を `excludedCommands` に置く形は取らない｡rex の操作は `rex events --json | jq` のように
-パイプと組み合わせるので､excluded にすると guard が照合外れで落とす｡
-rex の許可は再起動なしで次の Bash 呼び出しから効く (2026-10-10､Claude Code 2.1.296 で実測｡
-herdr の「セッション開始時に評価」とは違う)｡
-効いているかは sandbox 内から `rex ls` がセッション一覧を返すことで確かめる｡
+| backend | reference | 中身 |
+| ---- | ---- | ---- |
+| herdr | [herdr.md](references/herdr.md) | 到達性､sandbox の socket 許可､pane の対応 (`pane move` の制約) |
+| rex | [rex.md](references/rex.md) | 到達性､sandbox の socket 許可､block の対応 |
 
 ### このセッションの pane (block) と session_id の対応
 
-herdr も rex も､daemon は statusline (バイナリの `statusline` か `ingest-statusline`) が `context/<sid>.json` の
-`multiplexer` に書いた場所 (herdr は `HERDR_PANE_ID`､rex は `REX_BLOCK`) から session_id を引く｡
-このセッションの場所とその記録が一致するかを確かめる｡
+daemon は statusline (バイナリの `statusline` か `ingest-statusline`) が `context/<sid>.json` の `multiplexer` に書いた
+場所から session_id を引く｡このセッションの場所とその記録が一致するかを確かめる (どの値を比べるかは reference)｡
 
 ```sh
 sid=$("${CLAUDE_PLUGIN_ROOT}/scripts/get-session-id.sh")
@@ -100,16 +64,11 @@ printf 'HERDR_PANE_ID=%s REX_BLOCK=%s\n' "${HERDR_PANE_ID:-}" "${REX_BLOCK:-}"
 jq -c '.multiplexer' "$state/context/$sid.json"
 ```
 
-- `multiplexer.kind` が backend と同じで､`multiplexer.pane` が `HERDR_PANE_ID` (herdr) または `multiplexer.block` が
-  `REX_BLOCK` (rex) と一致すれば OK｡
 - `HERDR_PANE_ID` / `REX_BLOCK` が両方空なら NG｡多重化ツールの外 (素のターミナル､IDE) で動いている｡
   herdr の pane か rex の block の中で Claude Code を起動し直してもらう｡
 - `context/<sid>.json` が無いなら､この段ではなく 3 段目の NG (statusline の配線) として扱う｡
 - ファイルはあるのに `multiplexer` が `null` なら､statusline が呼ぶバイナリが `multiplexer` を書く前の版｡
   4 段目のバイナリを建て直せば次の描画から書かれる｡
-- herdr で `multiplexer.pane` が `pane list` のどの `pane_id` とも一致しないなら､別の workspace へ `pane move` した pane｡
-  ID が変わっても記録は起動時の値のままなので､その pane で Claude Code を起動し直してもらう
-  (`agents-daemon:agents-daemon` skill の operations.md「既知の制約」)｡
 - `get-session-id.sh` が失敗したら `CLAUDE_CODE_SESSION_ID` が来ていない｡ここから先のセッション単位の確認はできないので､その旨を報告に残す｡
 
 ## 3. statusline が state file を書かせているか

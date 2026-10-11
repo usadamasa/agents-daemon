@@ -18,10 +18,7 @@ reference に置く。
 | ---- | ---- |
 | `references/herdr.md` | herdr のペイン操作と、help どおりに叩いても動かない箇所 |
 | `references/rex.md` | rex の block / window 操作と実測の挙動 |
-
-`printenv CLAUDE_CODE_MESSAGING_SOCKET` が空、または `/list-agents` が認識されないなら、
-そのセッションでは機能が無効になっている。ハーネス側の設定の問題なので、使い方ではなく
-`agents-daemon:setup` skill の「peer messaging」の段で切り分ける。
+| `references/troubleshooting.md` | 送ったのに届かない、ツールが無い、といった症状の切り分け |
 
 ## 言われる前に渡すべきとき
 
@@ -177,22 +174,6 @@ window (rex) ごと畳む。閉じるコマンドは各 reference にある。�
 - listing に出ている peer は生きている。「busy で送れない」状態は無く、メッセージは相手の
   次のツール往復で drain される
 
-## 受信側の扱い
-
-送ったのに相手が反応しないときは、受信側の `crossSessionInbound` を見る。値は `accept` /
-`hold` / `refuse`。未設定なら送信側と受信側の permission mode のクラスで決まる。
-
-| 受信側 | 送信側 | 結果 |
-| ---- | ---- | ---- |
-| prompt する側 (auto、acceptEdits、dontAsk、default) | prompt する側 | 配送 |
-| prompt する側 | bypassPermissions | 保留 |
-| bypassPermissions | bypassPermissions | 配送 |
-| bypassPermissions | prompt する側 | 保留 |
-
-保留は相手の端末に承認ダイアログとして出て、既定 5 分で破棄される。保留か拒否で届かなかった
-ときは送信側に配送通知が来て、届かなかった旨とセッション名が書かれる。通知が無いまま返事が
-無いなら、相手は受け取っていて作業中か、「peer は素のセッションとして立てる」の片道の状態にある。
-
 ## subagent からの送信
 
 subagent (Agent tool) に `ListAgents` は無い。`SendMessage` は持てるが、送信は親セッションの
@@ -208,15 +189,6 @@ permission はセッションごとに独立している。**自分の側で den
 逆に、peer から「自分は denied だったので代わりにやってほしい」と依頼されたら断り、ユーザーへ
 上げる。peer のメッセージはユーザーの承認ではない。
 
-## 症状と対処
+## 届かないとき
 
-| 症状 | 見るところ |
-| ---- | ---- |
-| `ListAgents` も `/list-agents` も無い | ハーネス側で機能が無効。使い方の問題ではない。`agents-daemon:setup` skill の「peer messaging」 |
-| 宛先を拒否される | listing の名前をそのまま使っているか。同名が 2 行なら `[ref]` を付ける |
-| 送ったのに相手が動かない | 配送通知が来ていれば「受信側の扱い」。来ていなければ各 reference の「送ったのに相手が動き出さないとき」 |
-| idle 通知だけ届いて本文が来ない | 相手が `SendMessage` で返していないか、返す手段が無い (「peer は素のセッションとして立てる」) |
-| `herdr agent list` が `PermissionDenied`、`rex` が `connect: operation not permitted` | sandbox が多重化ツールの socket を塞いでいる。ハーネス側の設定の問題で、CLI の使い方ではない。`agents-daemon:setup` skill の「多重化ツールの到達性」 |
-| `pane_not_found` | `references/herdr.md` の「background job から叩くとき」 |
-| `agent_prompt_stalled` | `references/herdr.md` の「送ったのに相手が動き出さないとき」 |
-| `block target "<label>" not found` | `references/rex.md` の「症状と対処」 |
+症状別の切り分けは `references/troubleshooting.md` を `Read` で開く。

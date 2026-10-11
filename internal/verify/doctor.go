@@ -21,44 +21,52 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 )
 
-// RunDoctor は各前提条件を順に確認し w へ報告する｡kind は client の多重化ツール
-// (backend.Detect の結果)､getenv は peer messaging の判定に使う環境 (通常は os.Getenv)｡
-// その server に到達できない場合だけ error を返す (呼び出し元の
+// DoctorInput は RunDoctor が診断に使う環境｡
+type DoctorInput struct {
+	Client multiplexer.Client
+	Kind   string // Client の多重化ツール (backend.Detect の結果)
+	Paths  apppath.Paths
+	Now    time.Time
+	Getenv func(string) string // peer messaging の判定に使う環境 (通常は os.Getenv)
+}
+
+// RunDoctor は各前提条件を順に確認し w へ報告する｡
+// 多重化ツールの server に到達できない場合だけ error を返す (呼び出し元の
 // main が exit 1 にする)｡それ以外の欠落や陳腐化は情報として報告するに留め､error にはしない｡
-func RunDoctor(ctx context.Context, w io.Writer, client multiplexer.Client, kind string, p apppath.Paths, now time.Time, getenv func(string) string) error {
+func RunDoctor(ctx context.Context, w io.Writer, in DoctorInput) error {
 	_, _ = fmt.Fprintln(w, "=== agents-daemon doctor ===")
 
 	_, _ = fmt.Fprintln(w, "\n-- backend --")
-	_, _ = fmt.Fprintf(w, "  backend: %s\n", backendLabel(kind))
-	if err := client.Reachable(ctx); err != nil {
-		_, _ = fmt.Fprintf(w, "  NG: %s に到達できません: %v\n", kind, err)
-		return fmt.Errorf("%s に到達できないため､これ以降の診断は行えません: %w", kind, err)
+	_, _ = fmt.Fprintf(w, "  backend: %s\n", backendLabel(in.Kind))
+	if err := in.Client.Reachable(ctx); err != nil {
+		_, _ = fmt.Fprintf(w, "  NG: %s に到達できません: %v\n", in.Kind, err)
+		return fmt.Errorf("%s に到達できないため､これ以降の診断は行えません: %w", in.Kind, err)
 	}
-	_, _ = fmt.Fprintf(w, "  OK: %s server は稼働しています\n", kind)
+	_, _ = fmt.Fprintf(w, "  OK: %s server は稼働しています\n", in.Kind)
 
 	_, _ = fmt.Fprintln(w, "\n-- pane 一覧 --")
-	panes, err := client.PaneList(ctx)
+	panes, err := in.Client.PaneList(ctx)
 	if err != nil {
 		// server には到達できているのにここで失敗するのは異常｡診断ツールとして
 		// 機能しない状態なので broken 扱いにする｡
-		return fmt.Errorf("%s の pane 一覧の取得に失敗しました (%s には到達できるのに異常): %w", kind, kind, err)
+		return fmt.Errorf("%s の pane 一覧の取得に失敗しました (%s には到達できるのに異常): %w", in.Kind, in.Kind, err)
 	}
 	reportPanes(w, panes)
 
 	_, _ = fmt.Fprintln(w, "\n-- statusline state (セッションごとの rate-limits) --")
-	reportRateLimitStates(w, p, panes, now)
+	reportRateLimitStates(w, in.Paths, panes, in.Now)
 
 	_, _ = fmt.Fprintln(w, "\n-- 設定ファイル --")
-	reportConfigState(w, p)
+	reportConfigState(w, in.Paths)
 
 	_, _ = fmt.Fprintln(w, "\n-- daemon --")
-	reportDaemonState(w, p, kind, now)
+	reportDaemonState(w, in.Paths, in.Kind, in.Now)
 
 	_, _ = fmt.Fprintln(w, "\n-- peer messaging (ListAgents / SendMessage) --")
-	reportPeerMessaging(w, getenv)
+	reportPeerMessaging(w, in.Getenv)
 
 	_, _ = fmt.Fprintln(w, "\n-- 解決済みパス --")
-	reportPaths(w, p)
+	reportPaths(w, in.Paths)
 
 	return nil
 }

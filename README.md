@@ -89,7 +89,7 @@ context の自動 compact を使う最小例:
 ```sh
 agents-daemon status                     # 稼働状況､監視中の pane､ログの末尾
 agents-daemon logs -n 80                 # daemon.log の末尾
-agents-daemon doctor                     # 前提条件の診断 (peer messaging の socket も含む)
+agents-daemon doctor                     # 前提条件の診断
 agents-daemon inspect --pane <id>        # 生きた pane の画面を分類する (rex は block ID)
 agents-daemon daemon --foreground --dry-run  # 送信せずに判定だけ回す
 agents-daemon stop                       # 停止

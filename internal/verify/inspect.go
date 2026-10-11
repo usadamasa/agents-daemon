@@ -123,6 +123,13 @@ func reportCompactAuto(w io.Writer, cfg config.Config, p apppath.Paths, sessionI
 		_, _ = fmt.Fprintln(w, "  compactAutoEnabled が false のため /compact-prep は投入しません")
 	}
 
+	_, _ = fmt.Fprintln(w, "  idle compact (cache の失効前の compact):")
+	cache, cacheErr := sessionstate.NewCacheLoader(store).Load(sessionID)
+	if cacheErr != nil {
+		_, _ = fmt.Fprintf(w, "    cache の状態の読み込みに失敗､状態無しとして扱います: %v\n", cacheErr)
+	}
+	reportIdleCompact(w, cfg, cs, cache, now)
+
 	if cs.HasPrep {
 		_, _ = fmt.Fprintf(w, "  compact-prep の state file: %s に書かれています\n", cs.PrepWrittenAt.Format(time.RFC3339))
 	} else {
@@ -139,7 +146,56 @@ func reportCompactAuto(w io.Writer, cfg config.Config, p apppath.Paths, sessionI
 	if !cfg.CompactResumeEnabled {
 		_, _ = fmt.Fprintln(w, "  compactResumeEnabled が false のため再開は促しません")
 	}
-	_, _ = fmt.Fprintln(w, "  送信にはさらに agent_status が idle/done であることが要ります")
+	_, _ = fmt.Fprintf(w, "  送信にはさらに agent_status が idle/done であることと､直近の投入から %d 分 (cooldown) が要ります\n",
+		cfg.CompactAutoCooldownMinutes)
+}
+
+// reportIdleCompact は idle compact の 1 段目の判定の内訳を表示する｡判定そのものは daemon と同じ
+// monitor.EvaluateIdleCompact に任せる (reportGate と同じ理由)｡ここが持つのは､判定に使った値を
+// どの順で見せるかだけ｡
+func reportIdleCompact(w io.Writer, cfg config.Config, cs *sessionstate.Compact, cache *sessionstate.Cache, now time.Time) {
+	if !cfg.CacheIdleCompactEnabled {
+		_, _ = fmt.Fprintln(w, "    cacheIdleCompactEnabled が false のため送りません")
+	}
+	if cache == nil {
+		_, _ = fmt.Fprintln(w, "    cache の状態: ありません (transcript_path が無い､cache write が無い､または compact 後にまだ応答が無い)")
+	} else {
+		_, _ = fmt.Fprintf(w, "    cache の状態: 直近の応答 %s､TTL %d 分､失効 %s (%s)\n",
+			cache.LastRequestAt.Format(time.RFC3339), int(cache.TTL/time.Minute), cache.ExpiresAt().Format(time.RFC3339),
+			describeRemaining(cache.ExpiresAt().Sub(now)))
+		lead := time.Duration(cfg.CacheIdleCompactLeadSeconds) * time.Second
+		opensAt := cache.ExpiresAt().Add(-lead)
+		if now.Before(opensAt) {
+			_, _ = fmt.Fprintf(w, "    失効前の窓: まだ開いていない (失効の %s 前､%s に開く)\n", lead, opensAt.Format(time.RFC3339))
+		} else {
+			_, _ = fmt.Fprintf(w, "    失効前の窓: 開いている (失効の %s 前､%s から)\n", lead, opensAt.Format(time.RFC3339))
+		}
+		if pct, ok := cs.CacheUsedPercentage(cache); ok {
+			_, _ = fmt.Fprintf(w, "    使用率: %.0f%% / 閾値 %.0f%% (直近の応答の入力 %d tokens / window %d)\n",
+				pct, cfg.CacheIdleCompactThresholdPercent, cache.ContextTokens, cs.ContextWindowSize)
+		} else {
+			_, _ = fmt.Fprintf(w, "    使用率: 求められない (直近の応答の入力 %d tokens､window %d｡どちらかが 0 なら記録を始める前の版の statusline が書いた context)\n",
+				cache.ContextTokens, cs.ContextWindowSize)
+		}
+	}
+	if cs.HasIdleCompacted {
+		state := "利用者が戻ったので解けている"
+		if cs.IdleCompactActive(cache) {
+			state = "active (3 段目と画面判定を送らない)"
+		}
+		_, _ = fmt.Fprintf(w, "    idle compact の marker: %s (%s)\n", cs.IdleCompactedAt.Format(time.RFC3339), state)
+	} else {
+		_, _ = fmt.Fprintln(w, "    idle compact の marker: ありません")
+	}
+	_, _ = fmt.Fprintf(w, "    判定: %s\n", monitor.EvaluateIdleCompact(cfg, cs, cache, now))
+}
+
+// describeRemaining は失効までの残り (負なら失効からの経過) を文にする｡
+func describeRemaining(d time.Duration) string {
+	if d < 0 {
+		return fmt.Sprintf("失効から %s", (-d).Round(time.Second))
+	}
+	return fmt.Sprintf("残り %s", d.Round(time.Second))
 }
 
 // reportCompactStall は compact 直後に止まっているかの候補判定を表示する｡

@@ -167,12 +167,12 @@ func TestRunInspect_サンプル画面での分類(t *testing.T) {
 		out := buf.String()
 		for _, want := range []string{
 			"idle compact",
-			last.Format(time.RFC3339),                   // 直近の応答の時刻
-			"TTL 60m0s",                                 // TTL
-			last.Add(time.Hour).Format(time.RFC3339),    // 失効時刻
-			"窓: 開いている",                                  // 失効の lead 秒前を過ぎた
-			"使用率: 30% / 閾値 40%",                          // 60000 / 200000
-			"marker: ありません",                             // idle compact の marker
+			last.Format(time.RFC3339),                  // 直近の応答の時刻
+			"TTL 60 分",                                 // TTL (送信ログと同じ書式)
+			last.Add(time.Hour).Format(time.RFC3339),   // 失効時刻
+			"窓: 開いている",                                 // 失効の lead 秒前を過ぎた
+			"使用率: 30% / 閾値 40%",                        // 60000 / 200000
+			"marker: ありません",                            // idle compact の marker
 			monitor.IdleCompactBelowThreshold.String(), // 判定
 		} {
 			if !strings.Contains(out, want) {

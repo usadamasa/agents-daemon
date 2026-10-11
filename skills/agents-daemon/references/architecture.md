@@ -265,7 +265,7 @@ pane ごとに次を評価する｡上限側の詳細は [rate-limit.md](rate-li
 | 試行回数が `maxRetries` に達した | 長いクールダウンに入る |
 | 一時的なサーバーエラー (5xx / 過負荷) | 指数バックオフで短周期リトライ |
 | どれにも該当せず､context 使用率が閾値を超えている | `/agents-daemon:compact-prep` を投入する (別ゲート) |
-| どれにも該当せず､cache の失効が近く context 使用率が idle compact の閾値を超えている | `/agents-daemon:compact-prep` を投入する (別ゲート｡idle compact) |
+| どれにも該当せず､cache の失効が近く context 使用率が idle compact の閾値を超えている | `/agents-daemon:compact-prep` を投入する (別ゲート｡idle compact)｡失効が近いのに使用率で送らないときは理由をログに残す (`idle-compact-held`) |
 | どれにも該当せず､compact-prep の state file が投入後に書かれた | `/compact` を投入する (別ゲート｡idle compact なら先に marker を書く) |
 | どれにも該当せず､圧縮完了 marker が置かれている | 作業の再開を促すメッセージを送る (別ゲート｡idle compact の marker が active なら送らない) |
 | どれにも該当せず､compact 直後で止まっている (画面判定) | 継続を促すメッセージを送る (別ゲート｡同上) |

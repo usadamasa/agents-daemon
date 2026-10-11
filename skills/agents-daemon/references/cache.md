@@ -98,8 +98,10 @@ pane 3 (/path): 再開メッセージを送信しました (1 回目) / cache=un
 pane 3 (/path): context 使用率が閾値を超えたため compact-prep を投入しました / cache=expired (経過 90 分､TTL 60 分､context 使用率 76%､スラッシュなので ack なし)
 ```
 
-失効後の送信は `context/<session_id>.json` の使用率を併記する｡書き直したのは文脈全体なので､
-その時点の使用率がそのまま書き直しの量になる｡
+失効後の送信は context 使用率を併記する｡書き直したのは文脈全体なので､その時点の使用率がそのまま
+書き直しの量になる｡使用率は送信時点の cache の状態 (直近の応答の入力トークン数) を
+`context/<session_id>.json` の `context_window_size` で割ったもので､statusline の `used_percentage` ではない
+(idle な pane では描画が止まり古い)｡`context_window_size` の記録が無ければ `入力 137034 tokens` とトークン数を出す｡
 
 ## status
 

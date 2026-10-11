@@ -269,14 +269,7 @@ func (r *daemonRuntime) logOutcome(pane multiplexer.Pane, outcome monitor.Outcom
 	// 続くだけで日に数千行に膨れ､後から読めるログでなくなる｡状態が切り替わった
 	// ときだけ書き､静かな結果も key は更新して「戻ってきた」を検出できるようにする｡
 	entry := r.panes[pane.TerminalID]
-	key := outcome.String()
-	if err != nil {
-		key += "|" + err.Error()
-	}
-	if outcome == monitor.OutcomeRetried && entry != nil {
-		// 送信は 1 回ずつが独立した出来事なので､試行回数を key に混ぜて毎回残す｡
-		key = fmt.Sprintf("%s|%d", key, entry.state.Attempts)
-	}
+	key := logKey(outcome, err, entry)
 	if entry != nil {
 		repeated := entry.lastLogKey == key
 		entry.lastLogKey = key
@@ -313,7 +306,7 @@ func (r *daemonRuntime) logOutcome(pane multiplexer.Pane, outcome monitor.Outcom
 	default:
 		// compact 周りは別関数に分けてある (1 つの switch に並べると
 		// 循環複雑度が lint の閾値を超える)｡
-		if msg, sent := compactOutcomeMessage(outcome); msg != "" {
+		if msg, sent := compactOutcomeMessage(outcome, entry); msg != "" {
 			suffix := ""
 			if sent {
 				suffix = r.cacheSuffix(pane, entry)
@@ -325,9 +318,33 @@ func (r *daemonRuntime) logOutcome(pane multiplexer.Pane, outcome monitor.Outcom
 	}
 }
 
+// logKey は logOutcome の重複除去のキー｡同じ Outcome でも別の出来事として残すものは値を混ぜる｡
+func logKey(outcome monitor.Outcome, err error, entry *paneEntry) string {
+	key := outcome.String()
+	if err != nil {
+		key += "|" + err.Error()
+	}
+	if entry == nil {
+		return key
+	}
+	switch outcome {
+	case monitor.OutcomeRetried:
+		// 送信は 1 回ずつが独立した出来事なので､試行回数を混ぜて毎回残す｡
+		return fmt.Sprintf("%s|%d", key, entry.state.Attempts)
+	case monitor.OutcomeIdleCompactHeld:
+		// 見送りは理由が変わったときだけ残す｡同じ理由は窓が閉じるまで毎 tick 続く｡
+		return key + "|" + entry.state.IdleCompactHeld.String()
+	default:
+		return key
+	}
+}
+
 // compactOutcomeMessage は compact 周りの Outcome に対応するログ本文と､それが prompt の
 // 送信を伴う出来事かを返す｡該当しなければ空文字列｡
-func compactOutcomeMessage(outcome monitor.Outcome) (msg string, sent bool) {
+func compactOutcomeMessage(outcome monitor.Outcome, entry *paneEntry) (msg string, sent bool) {
+	if outcome == monitor.OutcomeIdleCompactHeld && entry != nil {
+		return "idle compact: 失効前の窓は開いていますが送りません: " + entry.state.IdleCompactHeld.String(), false
+	}
 	switch outcome {
 	case monitor.OutcomeCompactNudged:
 		return "compact 直後に止まっていたため継続を促しました (画面判定)", true
@@ -359,7 +376,9 @@ func compactOutcomeMessage(outcome monitor.Outcome) (msg string, sent bool) {
 //	/ cache=unknown (状態無し､ack=daemon-unknown)
 //
 // 失効後の送信は文脈全体を書き直すので context 使用率を併記し､どれだけ書き直したかを
-// 後から追えるようにする｡スラッシュの prompt は guard を素通りするので ack は無い｡
+// 後から追えるようにする｡使用率は送信時点の cache (直近の応答の入力トークン数) から求める｡
+// statusline の観測は idle な pane では古い｡window の大きさが無ければトークン数をそのまま出す｡
+// スラッシュの prompt は guard を素通りするので ack は無い｡
 func (r *daemonRuntime) cacheSuffix(pane multiplexer.Pane, entry *paneEntry) string {
 	if entry == nil {
 		return ""
@@ -375,9 +394,7 @@ func (r *daemonRuntime) cacheSuffix(pane multiplexer.Pane, entry *paneEntry) str
 	default:
 		fmt.Fprintf(&b, "経過 %d 分､TTL %d 分", int(send.At.Sub(c.LastRequestAt)/time.Minute), int(c.TTL/time.Minute))
 		if c.Expired(send.At) {
-			if cs, err := r.store.LoadCompact(pane.SessionID); err == nil && cs != nil && cs.HasContext {
-				fmt.Fprintf(&b, "､context 使用率 %.0f%%", cs.UsedPercentage)
-			}
+			fmt.Fprintf(&b, "､%s", r.contextUsage(pane.SessionID, c))
 		}
 	}
 	switch {
@@ -394,6 +411,17 @@ func (r *daemonRuntime) cacheSuffix(pane multiplexer.Pane, entry *paneEntry) str
 	}
 	b.WriteString(")")
 	return b.String()
+}
+
+// contextUsage は失効後の送信ログに添える context の量｡使用率が求まれば「context 使用率 63%」､
+// window の大きさの記録が無ければ「入力 137034 tokens」｡
+func (r *daemonRuntime) contextUsage(sessionID string, c *sessionstate.Cache) string {
+	if cs, err := r.store.LoadCompact(sessionID); err == nil {
+		if pct, ok := cs.CacheUsedPercentage(c); ok {
+			return fmt.Sprintf("context 使用率 %.0f%%", pct)
+		}
+	}
+	return fmt.Sprintf("入力 %d tokens", c.ContextTokens)
 }
 
 // clearAllLabels は待機ラベルを表示している可能性のある全 pane へ

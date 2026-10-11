@@ -20,7 +20,8 @@ socket のパスは `${XDG_RUNTIME_DIR:-${CLAUDE_CODE_TMPDIR:-/tmp}}/cc-socks/<p
 
 - 入れ子で立てた `claude -p` では判定できない。`CLAUDE_CODE_TMPDIR` を渡されて socket 先が
   `/tmp/claude-<uid>/cc-socks/` へ移り、gate の可否によらず bind が seatbelt に拒否される
-  (`doctor` が `⚠ CLAUDE_CODE_TMPDIR` で指す状態)。debug ログには常に `Failed to listen` が出るので、
+  (`doctor` が `⚠ socket が CLAUDE_CODE_TMPDIR … の下にあります` で指す状態。変数そのものは親セッションの
+  Bash ツールにも来るので、変数の有無では見分けない)。debug ログには常に `Failed to listen` が出るので、
   `Skipped` の有無を対照実験で切り分けようとしても材料にならない。
 - 端末多重化ツールのペインで立てたセッションは親相当で、`/tmp/cc-socks/` に bind できる。
   そこへ `SendMessage` で「ListAgents を呼んで結果と `printenv` の値を返せ」と頼む。gate は

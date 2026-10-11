@@ -212,54 +212,76 @@ func TestRunDoctor(t *testing.T) {
 }
 
 func TestReportPeerMessaging(t *testing.T) {
+	// パスは全て t.TempDir() からの相対で書く｡実パス (/tmp/claude-501 等) を書かないのは､
+	// sandbox 内の go test では t.TempDir() 自体が /tmp/claude-<uid> の下になり､fixture が環境と交差するため｡
 	cases := []struct {
-		name     string
-		tmpdir   string
-		socket   func(t *testing.T) string
-		want     []string
-		wantNone []string
+		name         string
+		tmpdir       string // CLAUDE_CODE_TMPDIR (空なら未設定)
+		socket       string // CLAUDE_CODE_MESSAGING_SOCKET (空なら未設定)
+		socketExists bool
+		want         []string
+		wantNone     []string
 	}{
 		{
-			name:   "環境変数が無ければ無効か外部起動と報告し OK/NG は出さない",
-			socket: func(*testing.T) string { return "" },
-			want:   []string{"CLAUDE_CODE_MESSAGING_SOCKET: (なし)", "peer-messaging.md"},
-			wantNone: []string{
-				"OK: socket", "NG: socket",
-			},
+			name:     "環境変数が無ければ無効か外部起動と報告し OK/NG は出さない",
+			want:     []string{"CLAUDE_CODE_MESSAGING_SOCKET: (なし)", "peer-messaging.md"},
+			wantNone: []string{"OK: socket", "NG: socket"},
 		},
 		{
-			name: "socket があれば OK",
-			socket: func(t *testing.T) string {
-				path := filepath.Join(t.TempDir(), "cc-socks", "123.sock")
-				if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-					t.Fatalf("MkdirAll() error = %v", err)
-				}
-				if err := os.WriteFile(path, nil, 0o600); err != nil {
-					t.Fatalf("WriteFile() error = %v", err)
-				}
-				return path
-			},
-			want:     []string{"OK: socket があります"},
-			wantNone: []string{"NG: socket", "⚠ CLAUDE_CODE_TMPDIR"},
+			name:         "socket があれば OK",
+			socket:       "cc-socks/123.sock",
+			socketExists: true,
+			want:         []string{"OK: socket があります"},
+			wantNone:     []string{"NG: socket", "⚠ socket が CLAUDE_CODE_TMPDIR"},
 		},
 		{
 			name:     "環境変数はあるのに socket が無ければ NG",
-			socket:   func(t *testing.T) string { return filepath.Join(t.TempDir(), "cc-socks", "missing.sock") },
+			socket:   "cc-socks/missing.sock",
 			want:     []string{"NG: socket がありません"},
 			wantNone: []string{"OK: socket"},
 		},
 		{
-			name:   "CLAUDE_CODE_TMPDIR があれば入れ子の起動として警告する",
-			tmpdir: "/tmp/claude-501",
-			socket: func(t *testing.T) string { return filepath.Join(t.TempDir(), "cc-socks", "missing.sock") },
-			want:   []string{"NG: socket がありません", "⚠ CLAUDE_CODE_TMPDIR"},
+			// 親セッションの Bash ツールにも CLAUDE_CODE_TMPDIR は来る (実測: /tmp/claude-501)｡
+			// socket が /tmp/cc-socks/ に居る通常のセッションで警告してはいけない｡
+			name:         "CLAUDE_CODE_TMPDIR があっても socket がその外なら警告しない",
+			tmpdir:       "claude-501",
+			socket:       "cc-socks/123.sock",
+			socketExists: true,
+			want:         []string{"OK: socket があります"},
+			wantNone:     []string{"⚠ socket が CLAUDE_CODE_TMPDIR"},
+		},
+		{
+			name:     "名前が接頭辞として一致するだけの別ディレクトリは配下と見なさない",
+			tmpdir:   "claude-50",
+			socket:   "claude-501/cc-socks/missing.sock",
+			want:     []string{"NG: socket がありません"},
+			wantNone: []string{"⚠ socket が CLAUDE_CODE_TMPDIR"},
+		},
+		{
+			name:   "socket が CLAUDE_CODE_TMPDIR の下なら入れ子の起動として警告する",
+			tmpdir: "claude-501",
+			socket: "claude-501/cc-socks/missing.sock",
+			want:   []string{"NG: socket がありません", "⚠ socket が CLAUDE_CODE_TMPDIR"},
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			env := map[string]string{
-				"CLAUDE_CODE_MESSAGING_SOCKET": tc.socket(t),
-				"CLAUDE_CODE_TMPDIR":           tc.tmpdir,
+			tempdir := t.TempDir()
+			env := map[string]string{}
+			if tc.tmpdir != "" {
+				env["CLAUDE_CODE_TMPDIR"] = filepath.Join(tempdir, tc.tmpdir)
+			}
+			if tc.socket != "" {
+				socket := filepath.Join(tempdir, tc.socket)
+				env["CLAUDE_CODE_MESSAGING_SOCKET"] = socket
+				if tc.socketExists {
+					if err := os.MkdirAll(filepath.Dir(socket), 0o700); err != nil {
+						t.Fatalf("MkdirAll() error = %v", err)
+					}
+					if err := os.WriteFile(socket, nil, 0o600); err != nil {
+						t.Fatalf("WriteFile() error = %v", err)
+					}
+				}
 			}
 			var buf bytes.Buffer
 			reportPeerMessaging(&buf, envOf(env))

@@ -81,9 +81,10 @@ rex --autostart=false api call server.status | jq -c '{pid, session_count}'
 失敗するか `pid` が無ければ NG｡rex の server を起こしてもらう｡daemon の到達確認 (`Reachable`) も同じ呼び出しを見る｡
 `operation not permitted` で socket に繋がらないなら sandbox が止めている｡`sandbox.network.allowUnixSockets` に
 `~/Library/Application Support/rex` が要る (足すかは利用者が決める)｡パスに空白が入るがクォートは要らない｡
-`rex` を `excludedCommands` に置く形は取らない｡rex の操作は `rex events --json | jq` のようにパイプと組み合わせるので､
-excluded にすると guard が照合外れで落とす｡rex の許可は再起動なしで次の Bash 呼び出しから効く
-(2026-10-10､Claude Code 2.1.296 で実測｡herdr の「セッション開始時に評価」とは違う)｡
+`rex` を `excludedCommands` に置く形は取らない｡rex の操作は `rex events --json | jq` のように
+パイプと組み合わせるので､excluded にすると guard が照合外れで落とす｡
+rex の許可は再起動なしで次の Bash 呼び出しから効く (2026-10-10､Claude Code 2.1.296 で実測｡
+herdr の「セッション開始時に評価」とは違う)｡
 効いているかは sandbox 内から `rex ls` がセッション一覧を返すことで確かめる｡
 
 ### このセッションの pane (block) と session_id の対応
@@ -195,9 +196,12 @@ printenv CLAUDE_CODE_MESSAGING_SOCKET
 | ---- | ---- |
 | `/tmp/cc-socks/<pid>.sock` が出て､`doctor` の「peer messaging」が `OK: socket があります` | OK |
 | 空 (exit 1)､または `ListAgents` ツールも `/list-agents` も無い | 情報｡このセッションでは peer へ渡せない｡[peer-messaging.md](references/peer-messaging.md) を `Read` で開いて切り分ける |
-| `doctor` が `⚠ CLAUDE_CODE_TMPDIR` を出す | 情報｡入れ子で起動したセッションで､bind できない構成｡親セッションから確かめる (同上) |
+| `doctor` が `⚠ socket が CLAUDE_CODE_TMPDIR … の下にあります` を出す | 情報｡入れ子で起動したセッションで､bind できない構成｡親セッションから確かめる (同上) |
 
-バイナリが無くて `doctor` を回せないときは `printenv` だけで判定する｡
+バイナリが無い､または 2 段目で多重化ツールに到達できず `doctor` がこの節まで進まないときは､`printenv` の値と
+socket ファイルの有無 (`ls -l "$CLAUDE_CODE_MESSAGING_SOCKET"`) だけで判定する｡
+`CLAUDE_CODE_TMPDIR` 自体は親セッションの Bash ツールにも来る (sandbox が渡す) ので､
+変数があるだけでは入れ子と判断しない｡
 
 ## 報告
 

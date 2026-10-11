@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
@@ -303,9 +305,21 @@ func reportPeerMessaging(w io.Writer, getenv func(string) string) {
 	}
 	// sandbox 化した子プロセスとして起動した Claude Code は CLAUDE_CODE_TMPDIR を受け取り､
 	// socket 先が /tmp/claude-<uid>/cc-socks/ へ移って seatbelt に bind を拒否される｡
-	if tmpdir := getenv("CLAUDE_CODE_TMPDIR"); tmpdir != "" {
-		_, _ = fmt.Fprintf(w, "  ⚠ CLAUDE_CODE_TMPDIR=%s｡入れ子で起動したセッション (sandbox 内の claude) では socket を bind できず､messaging は使えません\n", tmpdir)
+	// 変数そのものは親セッションの Bash ツールにも来る (sandbox が渡す) ので､変数の有無ではなく
+	// socket のパスがその下に居るかで入れ子を見分ける｡
+	if tmpdir := getenv("CLAUDE_CODE_TMPDIR"); tmpdir != "" && isUnder(socket, tmpdir) {
+		_, _ = fmt.Fprintf(w, "  ⚠ socket が CLAUDE_CODE_TMPDIR (%s) の下にあります｡入れ子で起動したセッション (sandbox 内の claude) では bind できず､messaging は使えません\n", tmpdir)
 	}
+}
+
+// isUnder は path が dir 配下にあるかをパスの区切りで判定する (接頭辞の文字列一致では
+// /tmp/claude-501 と /tmp/claude-5010 を区別できない)｡
+func isUnder(path, dir string) bool {
+	rel, err := filepath.Rel(filepath.Clean(dir), filepath.Clean(path))
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, "../") && !filepath.IsAbs(rel)
 }
 
 // reportPaths は daemon / CLI が触るランタイムファイルの解決済み絶対パスを列挙する｡

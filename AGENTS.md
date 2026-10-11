@@ -20,6 +20,7 @@ Go のデーモンと､それを配線する hook・skill を持つ｡
 | `skills/agents-daemon/` | 運用と切り分けの手引き｡配線・判定・設定キーの詳細は `references/` |
 | `skills/setup/` | install 後の前提確認 (herdr か rex､go/jq､statusline の state file､バイナリ､peer messaging)｡statusline の配線 2 通りと peer messaging の切り分けは `references/` |
 | `skills/peer-sessions/` | 別セッション (peer) へ作業を渡す手順 (`ListAgents` / `SendMessage`)｡多重化ツールごとの pane / block 操作は `references/herdr.md` `references/rex.md` |
+| `skills/herdr/` | herdr の CLI の手引き｡`herdr --skill` の出力をそのまま置いた生成物で､手で編集しない｡herdr を更新したら `task herdr-skill` で作り直す (`herdr --version` を commit message に書く) |
 | `cmd/agents-daemon/` | Go の main (cobra) |
 | `internal/` | daemon の本体｡パス定数は `internal/apppath`｡statusline の描画は `internal/statusline`､cost の台帳は `internal/spend`､sidecar の原子的な書き込みは `internal/statefile` |
 | `internal/multiplexer`, `internal/herdrcli`, `internal/rexcli`, `internal/backend` | pane 操作の interface (`multiplexer.Client`) とその herdr / rex 実装｡`backend` が環境 (`REX_SESSION`) で選ぶ｡`herdrcli` は hook が使う socket の client (`SocketClient`) も持つ |

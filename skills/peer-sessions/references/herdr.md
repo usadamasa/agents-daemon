@@ -1,28 +1,15 @@
 # herdr のペイン操作
 
-herdr の CLI 構文の正は herdr 自身が出す help で、コマンド群を引数なしで叩くと一覧が出る
-(`herdr pane`、`herdr agent`)。`herdr --skill` が同じ内容を skill の形で出す。ここでは、その通りに
-叩いても期待どおりに動かない箇所と、peer セッションを立てるときの手順だけを扱う。
+herdr の CLI 構文と ID・agent の状態の規則は `agents-daemon:herdr` skill (`herdr --skill` の生成物を
+plugin が同梱したもの) を参照する。ここでは、その通りに叩いても期待どおりに動かない箇所と、
+peer セッションを立てるときの手順だけを扱う。
 
 `herdr agent list` が JSON を返さず `Os { code: 1, kind: PermissionDenied }` を返すなら、
 CLI の使い方ではなく sandbox が unix socket を塞いでいる。ハーネス側の設定の問題なので、
 `agents-daemon:setup` skill の「多重化ツールの到達性」で切り分ける。
 
-`herdr --skill` の生成物を skill として入れている環境では、その description にある
-「herdr と明示されない限り使うな」は、背景ターミナルがあれば便利という程度の状況を弾くための条件で、
-peer を立てる依頼は該当しない。
-
-## help に書かれていない前提
-
-- ID は `w1` (workspace)、`w1:t1` (tab)、`w1:p1` (pane) の形で、閉じた ID は再利用されない。
-  別 workspace へ `pane move` した pane は新しい ID を受け取る。続きは応答の
-  `.result.move_result.pane.pane_id` か agent 名で指す
-- agent の状態は `idle` / `done` / `blocked` / `unknown` / `working`。`idle` と `done` はどちらも入力待ちで、
-  違いはその tab が herdr の UI で見られたかどうか。`unknown` は agent は居るが分類できない状態で、
-  完了の証拠にはならない
-- `agent start` は既存の shell pane (対話プロンプトで待っている pane) にしか起動できず、pane を作らない。
-  先に `pane split` で器を作る
-- 自分で作っていない workspace / tab / pane は閉じない。`herdr server stop` は自分のセッションも巻き込む
+`agents-daemon:herdr` skill の description にある「herdr と明示されない限り使うな」は、背景ターミナルが
+あれば便利という程度の状況を弾くための条件で、peer を立てる依頼は該当しない。
 
 ## peer の Claude セッションを立てる
 

@@ -253,12 +253,12 @@ Claude Code の画面の文言は安定した API ではない｡変わって検
   画面の絶対時刻かアカウント全体の state から決まる｡herdr の pane が持つ `agent_session` (herdr の
   integration script が入れる値) は読まない｡
 - **herdr で pane を別の workspace へ `pane move` すると､その pane の対応が切れる｡** herdr は移動した pane に
-  新しい workspace 付きの ID を振り (`herdr --skill` の出力「Use IDs and caller context」)､`pane list` には新しい ID だけが
+  新しい workspace 付きの ID を振り (`agents-daemon:herdr` skill の「Use IDs and caller context」)､`pane list` には新しい ID だけが
   出る｡一方 sidecar に書かれるのは Claude Code が起動時に継承した古い `HERDR_PANE_ID` のまま｡
   `doctor` で `session_id=(なし)` になり､その pane では own state が引けないので上限の再開のゲートと
   compact の自動投入が効かない (画面の分類だけで動く)｡戻すには､その pane で Claude Code を起動し直す
   (新しい ID で記録される)｡同じ workspace 内の `pane move` (タブ間) は ID が変わらないはずなので影響しない
-  (`herdr --skill` の記述と `w1:p1` の形からの推測で､実測はしていない)｡
+  (`agents-daemon:herdr` skill の記述と `w1:p1` の形からの推測で､実測はしていない)｡
   herdr の再起動で pane ID が変わるかも未測定 (herdr は ID を「stable handles」と言う)｡
   以前読んでいた `agent_session` は herdr が pane に付けて持っていたので､移動しても追えていた｡
   別 workspace への `pane move` を日常的に使うなら､この経路の制約として知っておく｡

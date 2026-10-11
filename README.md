@@ -24,6 +24,7 @@ plugin が持つもの:
 | `agents-daemon:agents-daemon` skill | 運用と切り分けの手引き (症状から引く) |
 | `agents-daemon:setup` skill | 前提の確認と statusline の配線､peer messaging の切り分け |
 | `agents-daemon:peer-sessions` skill | 別セッション (peer) へ作業を渡す手順と､herdr / rex ごとの pane 操作 |
+| `agents-daemon:herdr` skill | herdr の CLI の手引き (`herdr --skill` の出力を同梱) |
 | `agents-daemon statusline` | `statusLine.command` に向ける statusline｡描画と､daemon が読む state file の書き込みを同じプロセスで行う |
 | `agents-daemon ingest-statusline` | 自前の statusline から stdin を渡して state file だけを書かせるサブコマンド |
 

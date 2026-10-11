@@ -11,6 +11,7 @@
     "./skills/compact-prep",
     "./skills/agents-daemon",
     "./skills/setup",
-    "./skills/peer-sessions"
+    "./skills/peer-sessions",
+    "./skills/herdr"
   ]
 }

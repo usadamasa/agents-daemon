@@ -129,8 +129,9 @@ jobs:
 
   ci-status-check:
     needs: [go-test, go-lint, bats, shellcheck, plugin-validate, pinact]
-    if: failure()
+    if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - run: exit 1
+      - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1

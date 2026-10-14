@@ -22,8 +22,8 @@ daemon (毎 tick) ────────────────────�
 
 3 段目は 1・2 段目を経由しない compact でも動く｡marker を書くのは PostCompact hook で
 あって daemon ではないため､ユーザーが手で打った `/compact` でも Claude Code 本体の
-autocompact でも同じように再開する (PostCompact は `compact_reason` を
-`manual` / `auto` で渡し､matcher を書かなければ両方で起動する)｡
+autocompact でも同じように再開する (PostCompact は stdin の `trigger` を `manual` / `auto` で渡し､matcher を
+書かなければ両方で起動する｡`auto` は autocompact と Claude Code 2.1.299 の idle compaction の両方)｡
 
 ## なぜ画面を読まないか
 

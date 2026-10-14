@@ -80,7 +80,8 @@ shell を受け手にすると ESC の直後の文字を Meta として食う (z
 
 どちらも登録が backend に載ったことを daemon と同じ経路 (`PaneGet` → `IsClaudeAgent`) で待ってから画面を読む｡
 rex の `capture` は可視領域しか返さないので､使い捨て block は自分の block の 40% の高さで割る｡
-Claude Code の OSC 7501 の書式は 2.1.296 のバイナリから読んだもので､公式ドキュメントには無い
+Claude Code の OSC 7501 の書式は 2.1.296 のバイナリから読んだもの｡対応そのものは CHANGELOG 2.1.295 が
+「Program Status Protocol (OSC 7501)」として名指ししたが､payload の書式を書いた docs のページはまだ無い
 (「rex の状態の対応」参照)｡
 
 `doctor` は backend (herdr / rex) と選んだ根拠 (`REX_SESSION` の有無)､その server への到達性､Claude pane の
@@ -129,7 +130,8 @@ Claude Code の OSC 7501 の書式は 2.1.296 のバイナリから読んだも�
 
 2026-10-10､rex `0.0.1791570264-g7b5bf3` と Claude Code `2.1.296` で測った｡rex では Claude Code 自身が
 OSC 7501 で状態を報告し､daemon は `block call -b BLOCK program_status` の `records` から読む｡
-Claude Code の公式ドキュメントに OSC 7501 の記述は無いので､版が変われば測り直す｡
+対応は CHANGELOG 2.1.295 (Program Status Protocol) にあるが､payload の書式は公式ドキュメントに無いので､
+版が変われば測り直す｡
 
 使うのは root record (`id` が無いか空) だけで､`id` に agent ID を持つ record は subagent のもの｡
 
@@ -298,5 +300,5 @@ Claude Code の画面の文言は安定した API ではない｡変わって検
   利用者が付けた label を潰すため｡待機の状況は `agents-daemon status` で見る｡
 - **rex の送信は実機で測っていない｡** `send` / `send-key` の組み立ては fake の rex で確かめただけで､
   daemon が渡すキー名 (`esc` `enter`) は herdr のもの｡rex でそのまま通るかは未測定｡
-- **rex の状態は Claude Code の OSC 7501 の報告に頼る｡** 公式ドキュメントに無い挙動なので､
-  Claude Code の版で変わりうる｡測った版は上の「rex の状態の対応」｡
+- **rex の状態は Claude Code の OSC 7501 の報告に頼る｡** 対応は CHANGELOG 2.1.295 にあるが payload の書式は
+  公式ドキュメントに無いので､Claude Code の版で変わりうる｡測った版は上の「rex の状態の対応」｡

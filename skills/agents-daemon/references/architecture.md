@@ -40,6 +40,8 @@ statusline・hook・skill・daemon が別々のタイミングで動き､ファ
 
 ### [1] statusline が上限情報を渡し､バイナリが落とす
 
+<!-- cc-premise: 2.1.299 statusline stdin の rate_limits.five_hour / context_window / transcript_path と再実行の契機 -->
+
 Claude Code は statusline コマンドの stdin に JSON を渡す｡その中に
 `rate_limits.five_hour.{used_percentage, resets_at}` が入る (`resets_at` は Unix epoch 秒)｡
 この値は statusline の stdin にしか来ないので､statusline を経由するのは避けられない｡
@@ -136,7 +138,11 @@ prompt cache は最後のリクエストから TTL (5 分 / 1 時間) で失効�
 cache write になる｡daemon は実際に使われた TTL を transcript JSONL の `message.usage.cache_creation` から求める｡
 `context/<session_id>.json` の `transcript_path` を辿り､末尾 2MB を読む (`internal/sessionstate` の `CacheLoader`)｡
 Claude Code 2.1.251 からは statusline の stdin の `prompt_cache` にも `ttl` と `expires_at` が載るので､
-そちらへの置き換えは [#60](https://github.com/usadamasa/agents-daemon/issues/60) で扱う｡読む規則は
+そちらへの置き換えは [#60](https://github.com/usadamasa/agents-daemon/issues/60) で扱う｡
+
+<!-- cc-premise: 2.1.299 cache transcript の cache_creation から TTL を読む｡prompt_cache への置き換えは #60 -->
+<!-- cc-premise: 2.1.299 hooks Stop の時点で transcript はターンの最後の応答を含まない -->
+読む規則は
 [tatsuo48/claude-token-audit の ttl_guard.py](https://github.com/tatsuo48/claude-token-audit/blob/main/plugins/ttl-guard/scripts/ttl_guard.py)
 の `last_main_response` と同じ｡求めるのは直近の main の応答の開始時刻 (transcript の timestamp 文字列を
 そのまま持つ｡ack と文字列で比較するため)､最新の cache write の TTL､その応答の

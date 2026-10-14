@@ -121,6 +121,7 @@ func ttlWarning(elapsed, ttl time.Duration) string {
 	b.WriteString("                           (/compact も 1 回は全履歴を送り直す｡以後のターンが要約だけを読むので元が取れる)\n")
 	if ttl == 5*time.Minute {
 		b.WriteString("\nprompt cache の TTL が 5 分です｡作業の途中で離れることが多いなら､settings.json に\n")
+		// cc-premise: 2.1.242 cache promptCacheTtl 設定と CLAUDE_CODE_PROMPT_CACHE_TTL
 		b.WriteString(`"promptCacheTtl": "1h" (環境変数 CLAUDE_CODE_PROMPT_CACHE_TTL でも可､Claude Code v2.1.242+) を` + "\n")
 		b.WriteString("設定すると cache が長く持ちます (cache write の単価は 2 倍)｡\n")
 	}

@@ -8,6 +8,8 @@
 # PostCompact から直接 context を注入する形にすると､その合図が消える｡
 #
 # fail-open: 個別操作失敗は log_error しつつ常に exit 0 で戻る｡
+#
+# cc-premise: 2.1.299 compact PostCompact は trigger=manual/auto で発火し､auto には idle compaction も含む
 
 set -euo pipefail
 

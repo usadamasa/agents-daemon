@@ -47,6 +47,8 @@ feature flag の gate で機能全体が落ちている。この gate は ListAg
    `DISABLE_GROWTHBOOK` のいずれかが非空だと gate は off のままになる。
    settings の `env` と、Claude Code を起動したシェルの環境の両方を見る。
 2. Claude Code が v2.1.224 以降か、OS が macOS または Linux か。
+   <!-- cc-premise: 2.1.236 peer-messaging messaging socket と ListAgents / SendMessage (notify_when_idle は 2.1.236) -->
+
 3. `~/.claude/statsig/` の評価キャッシュが取れているか。`statsig.cached.evaluations.*` の
    `source` が `NetworkNotModified` か `Network` なら評価は届いている。
 

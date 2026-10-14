@@ -85,6 +85,8 @@ description: >-
 
 ## 症状から引くところ
 
+<!-- cc-premise: 2.1.296 hooks claude --debug が hook ごとの所要時間を Hooks: 行で出す -->
+
 | 症状 | 見るところ |
 | ---- | ---- |
 | install したばかり､前提がそろっているか分からない | `agents-daemon:setup` skill |

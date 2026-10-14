@@ -5,6 +5,8 @@
 
 ## Claude Code 自身の auto-continue との関係
 
+<!-- cc-premise: 2.1.299 limit-screen autoContinueAtUsageLimit のバナー・取り消し・Enter 待ちの文言と Escape の意味 -->
+
 `autoContinueAtUsageLimit` (既定 on) により､上限が解除されると Claude Code
 自身が中断された turn を流し直す｡**このツールと取り合いになる｡**
 

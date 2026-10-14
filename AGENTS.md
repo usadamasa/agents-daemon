@@ -26,6 +26,7 @@ Go のデーモンと､それを配線する hook・skill を持つ｡
 | `internal/multiplexer`, `internal/herdrcli`, `internal/rexcli`, `internal/backend` | pane 操作の interface (`multiplexer.Client`) とその herdr / rex 実装｡`backend` が環境 (`REX_SESSION`) で選ぶ｡`herdrcli` は hook が使う socket の client (`SocketClient`) も持つ |
 | `internal/hookreport` | hook から呼ばれてセッションの状態を多重化ツールへ写す処理 (`herdr-title`)｡hook script は stdin を渡すだけ |
 | `tests/` | hook と script の bats テスト (`tests/lib/`､`tests/fixtures/`) |
+| `.claude/skills/catching-up-with-claude-code-changelog/` | Claude Code の更新後に CHANGELOG・バイナリ・docs を追い､この repo の前提 (画面の文言､hook と statusline の field､本体の新機能との重なり) を点検して issue に落とす手順｡plugin には同梱しない保守用 skill |
 
 ## 検証
 
@@ -41,6 +42,8 @@ hook のテストは fake の `go` とバイナリで回るので､Go のビル
 bats は hook を `/bin/bash` で起動する (本番の shebang と同じ bash 3.2 で非互換を拾うため)｡
 
 ## hook を書くときの決めごと
+
+<!-- cc-premise: 2.1.299 hooks SessionStart の stdout は context に入る｡UserPromptSubmit の既定 timeout は 30 秒 -->
 
 - hook の stdout は Claude Code が読む｡SessionStart の stdout は会話の context へ入るので､ログは stderr へ出す｡
 - SessionStart は 5 秒以内に返す｡`go build` のような重い処理は `nohup ... </dev/null >>log 2>&1 &` で detach する｡
@@ -62,6 +65,14 @@ bats は hook を `/bin/bash` で起動する (本番の shebang と同じ bash 
 - skill 間の参照とスラッシュコマンドは名前空間付きで書く (`agents-daemon:compact-prep`､
   `/agents-daemon:compact-prep`)｡bare 名は `~/.claude/skills/` に残った旧コピーへ当たる｡
 - skill 内の references は相対リンクで書き､読む手順は `Read` で書く｡
+
+## Claude Code の挙動を書くときの決めごと
+
+- 画面の文言､hook の発火条件､statusline の field､OSC のように Claude Code の版で変わりうる挙動を docs・コメント・
+  fixture に書くときは､その前提を述べた箇所に marker を 1 行置く｡形は `cc-premise: <version> <topic> [メモ]`
+  (Go と sh はコメント､md は `<!-- -->`)｡`<version>` は最後に確かめた Claude Code の版､`<topic>` は
+  `.claude/skills/catching-up-with-claude-code-changelog/SKILL.md` の topic 一覧のどれか｡
+  skill がこの marker を grep して､更新後に見直す箇所の一覧にする｡確かめ直したら `<version>` を上げる｡
 
 ## state を書くときの決めごと
 

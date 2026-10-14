@@ -25,6 +25,10 @@ daemon (毎 tick) ────────────────────�
 autocompact でも同じように再開する (PostCompact は stdin の `trigger` を `manual` / `auto` で渡し､matcher を
 書かなければ両方で起動する｡`auto` は autocompact と Claude Code 2.1.299 の idle compaction の両方)｡
 
+<!-- cc-premise: 2.1.299 compact PostCompact の trigger の値 (manual / auto) -->
+<!-- cc-premise: 2.1.299 idle-compact 本体は 200K+ tokens､TTL の 0.9 で発火､flag 待ち｡daemon との重なりは #59 -->
+
+
 ## なぜ画面を読まないか
 
 compact 後の画面には圧縮の境界行が残らない｡実機で確認した｡probe した pane を実際に

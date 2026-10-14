@@ -133,6 +133,9 @@ OSC 7501 で状態を報告し､daemon は `block call -b BLOCK program_status`
 対応は CHANGELOG 2.1.295 (Program Status Protocol) にあるが､payload の書式は公式ドキュメントに無いので､
 版が変われば測り直す｡
 
+<!-- cc-premise: 2.1.296 osc7501 state / app / kind の値と画面の状況の対応 -->
+
+
 使うのは root record (`id` が無いか空) だけで､`id` に agent ID を持つ record は subagent のもの｡
 
 | 画面の状況 | `state` | `app` | `agent_status` |

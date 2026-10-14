@@ -196,6 +196,7 @@ type rexHost struct {
 }
 
 // claudeProgramStatusCommand は Claude Code 2.1.296 が入力待ちで出すものと同じ書式の OSC 7501｡
+// cc-premise: 2.1.296 osc7501 payload の書式 (state=…:app=claude-code)
 // payload は `key=value` を `:` で繋ぎ､終端は BEL｡
 const claudeProgramStatusCommand = `printf '\033]7501;state=idle:app=claude-code\a'`
 

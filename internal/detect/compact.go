@@ -17,6 +17,7 @@ var (
 	// ("(ctrl+o …)") を伴うので､括弧を必須にしてある｡これが無いと､この語に
 	// 触れただけの散文 (README や会話) を境界と誤認して､無関係な pane へ
 	// プロンプトを打ち込む事故になる｡
+	// cc-premise: 2.1.299 compact 圧縮の境界行の文言 (compact_test.go)
 	compactBoundaryPatterns = []*regexp.Regexp{
 		regexp.MustCompile(`(?i)conversation compacted` + sp + `*\(`),
 		regexp.MustCompile(`(?i)^` + sp + `*compacted` + sp + `+\(`),

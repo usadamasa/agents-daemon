@@ -64,6 +64,7 @@ var (
 	csiEscapeRe   = regexp.MustCompile(`\x1b\[[\x20-\x3f]*[\x40-\x7e]`)
 
 	// 上限フレーズ｡単体では発火せず､nearbyWindow 以内に resetPatterns が要る｡
+	// cc-premise: 2.1.299 limit-screen 上限到達の文言 (real_sample_test.go の現物)
 	limitPatterns = []*regexp.Regexp{
 		regexp.MustCompile(`(?i)(?:hit|exceeded|reached).*(?:your|the)\s*(?:[\w-]+\s+){0,3}limit`),
 		regexp.MustCompile(`(?i)\d+-hour limit`),
@@ -89,7 +90,8 @@ var (
 	//
 	// この状態では **Escape が取り消しキー** なので､待機明けに Escape を送ると
 	// ネイティブの継続そのものを潰す｡だで検知したら手を出さない｡
-	autoContinueArmedPattern = regexp.MustCompile(`(?i)(?:usage limit|limit (?:has )?reset).*\bcontinuing (?:automatically|shortly|now)\b`)
+	// cc-premise: 2.1.299 limit-screen auto-continue のバナーと降りた通知の文言 (native_continue_test.go)
+	autoContinueArmedPattern =regexp.MustCompile(`(?i)(?:usage limit|limit (?:has )?reset).*\bcontinuing (?:automatically|shortly|now)\b`)
 
 	// nativeStoodDownPattern はネイティブが継続を諦めたことを伝える通知｡
 	// 予約中のバナーは画面下部で描き直される要素なので､取り消されても直前の
@@ -105,7 +107,8 @@ var (
 	// メッセージにも session / weekly のリセット時刻が載るようになり､二重シグナル
 	// 要件を満たすようになった｡待機に入ると解除時刻に送信 → 再び弾かれる､を
 	// maxRetries まで繰り返す｡上流も retry watchdog 側で同じ扱いにしている (2.1.232)｡
-	hardCapPatterns = []*regexp.Regexp{
+	// cc-premise: 2.1.299 limit-screen spend limit / usage credit の文言
+	hardCapPatterns =[]*regexp.Regexp{
 		regexp.MustCompile(`(?i)\bspend limit\b`),
 		regexp.MustCompile(`(?i)usage credit limit`),
 		regexp.MustCompile(`(?i)credit balance (?:is )?too low`),
@@ -123,7 +126,8 @@ var (
 	// transient の語句はこの接頭辞と同じ行にあるときだけ拾う｡直近の出力ブロックには tool result の
 	// 任意の文章も入るので､裸の語句では issue のタイトルやログの引用に当たる｡
 	// リトライ中のカウントダウン行には接頭辞が付かず､その間は Claude Code に任せる｡
-	transientAnchorPattern = regexp.MustCompile(`(?i)\bAPI Error\b`)
+	// cc-premise: 2.1.296 transient API Error 行の接頭辞とリトライ表示 (detect_test.go)
+	transientAnchorPattern =regexp.MustCompile(`(?i)\bAPI Error\b`)
 
 	// transientPatterns は直近の出力ブロック内 (latestOutputBlock) の､transientAnchorPattern と
 	// 同じ行でのみ判定する｡

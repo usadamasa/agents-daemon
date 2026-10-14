@@ -110,6 +110,8 @@ func roundPercent(v float64) int {
 	return int(math.Round(v))
 }
 
+// cc-premise: 2.1.153 statusline 実行前に COLUMNS が設定される
+//
 // Mode は表示幅による段階的な圧縮｡Claude Code v2.1.153+ は statusline の実行前に COLUMNS へ
 // 端末の実サイズを入れる｡herdr / rex で pane を分割すると幅が縮み､3 行構成のままでは
 // 折り返して行数を食うため､幅に応じて出力量を落とす｡

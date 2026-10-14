@@ -6,6 +6,8 @@
 #
 # fail-open: バイナリが無い・失敗した (サブコマンドを持たない古いバイナリも含む) ときは exit 0｡
 # exit 0 の stdout は context に入るため､バイナリの stdout も stderr へ寄せる｡
+#
+# cc-premise: 2.1.299 hooks UserPromptSubmit は prompt を生で受け､exit 2 で止める｡skill の展開より前に走る
 
 set -euo pipefail
 

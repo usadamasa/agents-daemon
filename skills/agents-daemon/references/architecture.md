@@ -133,9 +133,10 @@ backend は pane (rex は block) から session_id をこの記録で逆引き�
 #### daemon が transcript から求める cache の状態
 
 prompt cache は最後のリクエストから TTL (5 分 / 1 時間) で失効し､失効後の 1 送信は文脈全体の
-cache write になる｡実際に使われた TTL は transcript JSONL の `message.usage.cache_creation` にしか
-無いので､daemon が `context/<session_id>.json` の `transcript_path` を辿り､末尾 2MB を読んで求める
-(`internal/sessionstate` の `CacheLoader`)｡読む規則は
+cache write になる｡daemon は実際に使われた TTL を transcript JSONL の `message.usage.cache_creation` から求める｡
+`context/<session_id>.json` の `transcript_path` を辿り､末尾 2MB を読む (`internal/sessionstate` の `CacheLoader`)｡
+Claude Code 2.1.251 からは statusline の stdin の `prompt_cache` にも `ttl` と `expires_at` が載るので､
+そちらへの置き換えは [#60](https://github.com/usadamasa/agents-daemon/issues/60) で扱う｡読む規則は
 [tatsuo48/claude-token-audit の ttl_guard.py](https://github.com/tatsuo48/claude-token-audit/blob/main/plugins/ttl-guard/scripts/ttl_guard.py)
 の `last_main_response` と同じ｡求めるのは直近の main の応答の開始時刻 (transcript の timestamp 文字列を
 そのまま持つ｡ack と文字列で比較するため)､最新の cache write の TTL､その応答の

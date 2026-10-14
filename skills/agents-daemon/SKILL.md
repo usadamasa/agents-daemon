@@ -103,3 +103,4 @@ description: >-
 | rex のセッションなのに daemon が何も送らない | `doctor` の daemon の節の backend 不一致の警告｡operations.md の「既知の制約」(daemon は 1 つの backend しか見ない) |
 | `ListAgents` / `SendMessage` がツール一覧に無く `/list-agents` も認識されない (peer へ作業を渡せない) | `agents-daemon:setup` skill の「peer messaging」 |
 | herdr のタブ名や space 欄の `$claude` / `$branch` が変わらない | architecture.md の「[5]」｡`HERDR_ENV` `HERDR_SOCKET_PATH` `HERDR_PANE_ID` がそろっているか､バイナリが `herdr-title` を持つ版か (hook のログに `herdr-title failed` が出る) |
+| hook が 10 秒の timeout に当たっている疑い (prompt の送信が遅い､hook の効果が出ない) | `claude --debug` で起動し､`Hooks: UserPromptSubmit [...] finished with status 0 (31ms)` の行 (Claude Code 2.1.296+) で hook ごとの所要時間を見る｡`timed out after <N>ms` なら当たっている |

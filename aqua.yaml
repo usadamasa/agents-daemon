@@ -17,6 +17,5 @@ packages:
   - name: securego/gosec@v2.28.0
   - name: golangci/golangci-lint@v2.13.1
   - name: golang/vuln/govulncheck@v1.7.0
-  - name: suzuki-shunsuke/pinact@v4.1.0
   - name: fdaines/spm-go@v0.11.1
     registry: local

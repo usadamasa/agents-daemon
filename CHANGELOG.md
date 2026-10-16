@@ -1,5 +1,12 @@
 # Changelog
 
+## [2026.1016.0](https://github.com/usadamasa/agents-daemon/compare/2026.1011.1...2026.1016.0) - 2026-10-16
+
+- ci: 全ジョブ成功時に ci-status-check を success にする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/57
+- docs: Claude Code 2.1.290〜2.1.299 の点検に沿って references を直す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/61
+- feat: Claude Code の更新に追従する skill と cc-premise marker を足す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/63
+- docs: rex の情報源に superlogical の MCP を足す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/65
+
 ## [2026.1011.1](https://github.com/usadamasa/agents-daemon/compare/2026.1011.0...2026.1011.1) - 2026-10-11
 
 - idle compact が送らなかった理由を inspect とログで追えるようにする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/55

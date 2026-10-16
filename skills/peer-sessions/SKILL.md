@@ -17,7 +17,7 @@ reference に置く。
 | reference | 内容 |
 | ---- | ---- |
 | `references/herdr.md` | herdr のペイン操作と、help どおりに叩いても動かない箇所 |
-| `references/rex.md` | rex の block / window 操作と実測の挙動 |
+| `references/rex.md` | rex の block / window 操作と実測の挙動、docs と feedback (MCP) の引き方 |
 | `references/troubleshooting.md` | 送ったのに届かない、ツールが無い、といった症状の切り分け |
 
 ## 言われる前に渡すべきとき

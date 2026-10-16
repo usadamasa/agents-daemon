@@ -305,3 +305,6 @@ Claude Code の画面の文言は安定した API ではない｡変わって検
   daemon が渡すキー名 (`esc` `enter`) は herdr のもの｡rex でそのまま通るかは未測定｡
 - **rex の状態は Claude Code の OSC 7501 の報告に頼る｡** 対応は CHANGELOG 2.1.295 にあるが payload の書式は
   公式ドキュメントに無いので､Claude Code の版で変わりうる｡測った版は上の「rex の状態の対応」｡
+- rex 側の制約 (可視領域だけ､ラベルが出ない､送信が未測定) が今の版でも残っているかは､
+  `agents-daemon:peer-sessions` skill の `references/rex.md` の「使い方・不具合・新機能の情報源」で
+  docs と feedback を引いて確かめる｡

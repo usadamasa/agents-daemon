@@ -34,3 +34,4 @@
 | `pane_not_found` | `herdr.md` の「background job から叩くとき」 |
 | `agent_prompt_stalled` | `herdr.md` の「送ったのに相手が動き出さないとき」 |
 | `block target "<label>" not found` | `rex.md` の「症状と対処」 |
+| rex の症状が `rex.md` の表に無い | `rex.md` の「使い方・不具合・新機能の情報源」。feedback を `search_feedback` で引く |

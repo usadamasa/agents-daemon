@@ -2,11 +2,9 @@ package rexcli
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -14,33 +12,31 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 )
 
-// 実測の ID と JSON。2026-10-10 (rex 0.0.1791570264、Claude Code 2.1.296) と
-// 2026-10-17 (rex 0.0.1792158932 = preview.15、Claude Code 2.1.302、#69) のもの。
+// fake の rex に渡す ID。session と Claude の block は 2026-10-10 の実測、閉じた block と shell 以外の block は作り物。
 const (
 	sessionA = "session:01a12439-0839-7829-a4cb-aeac453570c1"
 	sessionB = "session:01a1250f-c100-71e0-aed0-4a433569cf00"
 
 	blockClaudeWorking = "block:01a12439-083a-74f9-9827-49c3478b2469"
-	blockShell         = "block:01a1250f-c101-7290-9025-733c2a16aca7"
 	blockClaudeDone    = "block:01a12540-cd47-7943-a503-91a06c58fab5"
-	blockStartup       = "block:01a14841-3085-7cb5-afbd-fc949b43a888"
-	blockStaleDone     = "block:01a14843-aebd-7c50-8b92-f40f4d3f5324"
 	blockClosed        = "block:01a12599-0000-7000-8000-000000000001"
 	blockNotShell      = "block:01a12599-0000-7000-8000-000000000002"
-
-	// foreground の process の pid。record の owner.pid と突き合わせる。
-	pidClaudeWorking = 15470
-	pidClaudeDone    = 17633
-	pidClaudeStartup = 70904
-	pidClaudeKilled  = 73002
-	pidShell         = 72817
+	blockClosedMidway  = "block:01a12599-0000-7000-8000-000000000003"
 
 	sidWorking = "0d5e717f-82c5-4e71-ac74-799f7197e0de"
 	sidDone    = "6b1f3c2a-1111-4222-8333-944455556666"
 )
 
-const lsJSON = `{"sessions":[{"session_id":"` + sessionA + `","label":"shy-alcove"},{"session_id":"` + sessionB + `","label":"hidden-pine"}]}`
+// lsJSON は `ls --json` の応答。形は 2026-10-10 の実測。
+func lsJSON(sessions ...string) string {
+	parts := make([]string, 0, len(sessions))
+	for _, s := range sessions {
+		parts = append(parts, `{"session_id":"`+s+`","label":"shy-alcove"}`)
+	}
+	return `{"sessions":[` + strings.Join(parts, ",") + `]}`
+}
 
+// blockLsJSON は `block ls --json` の応答。形は 2026-10-10 の実測。
 func blockLsJSON(blocks ...[2]string) string {
 	parts := make([]string, 0, len(blocks))
 	for _, b := range blocks {
@@ -48,44 +44,6 @@ func blockLsJSON(blocks ...[2]string) string {
 	}
 	return `{"blocks":[` + strings.Join(parts, ",") + `]}`
 }
-
-const (
-	psWorking = `{"records":[` +
-		`{"state":"working","app":"claude-code","effective_app":"claude-code","msg":"Showing rex CLI help for relevant subcommands","updated_at":"2026-10-10T18:30:19.629038+09:00","owner":{"pid":15470,"name":"2.1.296"}},` +
-		`{"id":"a01b73b4e3800b31f","state":"done","app":"claude-code","effective_app":"claude-code","title":"Map herdrcli and its consumers","updated_at":"2026-10-10T18:29:58.836427+09:00","owner":{"pid":15470,"name":"2.1.296"}}]}`
-	psDone       = `{"records":[{"state":"done","app":"claude-code","effective_app":"claude-code","msg":"guard-gql-read の PR 作成待ち","updated_at":"2026-10-10T18:16:09.305373+09:00","owner":{"pid":17633,"name":"2.1.296"}}]}`
-	psPermission = `{"records":[{"state":"blocked","kind":"permission","app":"claude-code","effective_app":"claude-code","msg":"approve Bash: rm -rf ./tmp/junk","updated_at":"2026-10-10T18:51:48.057417+09:00","owner":{"pid":94252,"name":"2.1.296"}}]}`
-	psIdle       = `{"records":[{"state":"idle","app":"claude-code","effective_app":"claude-code","updated_at":"2026-10-10T18:52:20.000000+09:00","owner":{"pid":94252,"name":"2.1.296"}}]}`
-	psEmpty      = `{"records":[]}`
-	// 起動直後。Claude Code 自身が数秒以内に出す (rex preview.15 は process 名から record を補わない)。
-	psStartup = `{"records":[{"state":"idle","app":"claude-code","effective_app":"claude-code","updated_at":"2026-10-17T14:06:38.636286+09:00","owner":{"pid":70904,"name":"2.1.302"}}]}`
-	// done のまま SIGKILL で終わった Claude Code の record。foreground が shell に戻っても次の prompt が出ても残る
-	// (OSC 7501 の仕様: done と error は process の終了と shell prompt を生き延びる)。
-	psStaleDone = `{"records":[{"state":"done","app":"claude-code","effective_app":"claude-code","msg":"replied 'ok' as requested; no tools used","updated_at":"2026-10-17T14:09:30.224596+09:00","owner":{"pid":73002,"name":"2.1.302"}}]}`
-	// event payload の root record は "id":"" で来る。
-	psEmptyID      = `{"records":[{"id":"","state":"working","app":"claude-code","updated_at":"2026-10-10T18:30:41.644437+09:00","owner":{"pid":15470,"name":"2.1.296"}}]}`
-	psSubagentOnly = `{"records":[{"id":"a01b73b4e3800b31f","state":"working","app":"claude-code","updated_at":"2026-10-10T18:29:58.836427+09:00"}]}`
-	psUnknownState = `{"records":[{"state":"starting","app":"claude-code","updated_at":"2026-10-10T18:29:58.836427+09:00","owner":{"pid":15470,"name":"2.1.296"}}]}`
-	psOtherApp     = `{"records":[{"state":"working","app":"cargo","effective_app":"cargo","updated_at":"2026-10-17T14:00:00.000000+09:00","owner":{"pid":15470,"name":"cargo"}}]}`
-	// rex が owner を付けなくなった (または名前を変えた) ときの形。実測ではなく想定。
-	psNoOwner = `{"records":[{"state":"done","app":"claude-code","effective_app":"claude-code","updated_at":"2026-10-17T14:00:00.000000+09:00"}]}`
-)
-
-const (
-	reasonNoOwner    = "record に owner.pid が無い (rex の版が変わった可能性。record を使えず agent_status が unknown のままになる)"
-	reasonStaleOwner = "record の owner (pid 73002) が foreground の process (pid 70904) と違う (前の Claude の record が残っている)"
-)
-
-// processJSON は `block call process` の応答。pid と argv0 は foreground の process のもの。
-func processJSON(pid int, argv0, cwd string) string {
-	return `{"last_exit":null,` +
-		`"child":{"pid":33929,"user_id":0,"user":"root","name":"login","path":"/usr/bin/login"},` +
-		`"foreground":{"pid":` + strconv.Itoa(pid) + `,"user_id":501,"user":"usadamasa","name":"2.1.296","path":"/Users/usadamasa/.local/share/claude/versions/2.1.296","invoked_path":"/Users/usadamasa/.local/bin/claude","argv0":"` + argv0 + `","cwd":"` + cwd + `"},` +
-		`"ancestors":[{"pid":33930,"user_id":501,"user":"usadamasa","name":"zsh","path":"/bin/zsh","invoked_path":"/bin/zsh","argv0":"-zsh","cwd":"` + cwd + `"}],` +
-		`"home":"/Users/usadamasa"}`
-}
-
-const serverStatusJSON = `{"pid":46997,"instance_id":"a842cc30-1b60-4180-862a-1d2843681d21","host_id":"dfd31eaf-0189-45ad-9a36-10c09f3cb111","started_at":"2026-10-10T02:13:17.525033Z","exit_empty":false,"session_count":2,"tailscale":{"state":"disabled","allow_tailnet_members":false},"config":{"generation":1,"hash":""}}`
 
 // fakeRex は fixture のディレクトリと、それを読む fake の rex。
 type fakeRex struct {
@@ -95,7 +53,8 @@ type fakeRex struct {
 
 // newFakeRex は引数で fixture を選んで返す fake の rex を書く。fixture が無ければ実機と同じく
 // `block target "…" not found` を stderr に出して exit 3 になる。呼び出しごとに引数を
-// calls.log へ、環境変数を env.log へ追記する。--autostart=false が先頭に無い呼び出しは拒む。
+// calls.log へ、環境変数を env.log へ追記する。--autostart=false が先頭に無い呼び出しは拒むので、
+// 成功を確かめるテストはどれも autostart を切っていることを確かめている。
 func newFakeRex(t *testing.T) *fakeRex {
 	t.Helper()
 	dir := t.TempDir()
@@ -186,180 +145,92 @@ func staticResolver(m map[string]string) multiplexer.SessionResolver {
 	return func() (map[string]string, error) { return m, nil }
 }
 
-// setupTwoSessions は 2 session の実測に近い構成を作る。session A に作業中の Claude と shell だけの block、
-// session B に入力待ちの Claude、起動直後の Claude、Claude が死んで done の record だけ残った shell、
-// block ls の後に閉じた block、shell 以外の block。
-func setupTwoSessions(t *testing.T) *fakeRex {
-	t.Helper()
+// TestExecClient_PaneList は 2 session を回る 1 回の PaneList の配線を見る。session A に作業中の Claude と
+// shell 以外の block、session B に block ls の後に閉じた block、program_status と process の間に閉じた block、
+// 入力待ちの Claude を置く。
+func TestExecClient_PaneList(t *testing.T) {
 	f := newFakeRex(t)
-	f.put(t, "ls.json", lsJSON)
+	f.put(t, "ls.json", lsJSON(sessionA, sessionB))
 	f.put(t, "block-ls-"+sessionA+".json", blockLsJSON(
 		[2]string{blockClaudeWorking, shellFlavor},
-		[2]string{blockShell, shellFlavor},
-	))
-	f.put(t, "block-ls-"+sessionB+".json", blockLsJSON(
-		[2]string{blockClaudeDone, shellFlavor},
-		[2]string{blockStartup, shellFlavor},
-		[2]string{blockStaleDone, shellFlavor},
-		[2]string{blockClosed, shellFlavor},
 		[2]string{blockNotShell, "com.superlogical.browser"},
 	))
-	f.putBlock(t, blockClaudeWorking, psWorking, processJSON(pidClaudeWorking, "claude", "/Users/usadamasa/src/github.com/usadamasa/agents-daemon"))
-	f.putBlock(t, blockShell, psEmpty, processJSON(pidShell, "-zsh", "/Users/usadamasa"))
-	f.putBlock(t, blockClaudeDone, psDone, processJSON(pidClaudeDone, "claude", "/Users/usadamasa/src/github.com/usadamasa/guard"))
-	f.putBlock(t, blockStartup, psStartup, processJSON(pidClaudeStartup, "/Users/usadamasa/.local/bin/claude", "/Users/usadamasa/tmp/new"))
-	f.putBlock(t, blockStaleDone, psStaleDone, processJSON(pidShell, "-zsh", "/Users/usadamasa/src/github.com/usadamasa/agents-daemon"))
-	return f
-}
+	f.put(t, "block-ls-"+sessionB+".json", blockLsJSON(
+		[2]string{blockClosed, shellFlavor},
+		[2]string{blockClosedMidway, shellFlavor},
+		[2]string{blockClaudeDone, shellFlavor},
+	))
+	f.putBlock(t, blockClaudeWorking, measured(t, measuredOct10, "program_status-working.json"), processJSON(pidClaudeWorking, "claude", "/w/agents-daemon"))
+	f.put(t, "program_status-"+blockClosedMidway+".json", psEmpty)
+	f.putBlock(t, blockClaudeDone, measured(t, measuredOct10, "program_status-done.json"), processJSON(pidClaudeDone, "claude", "/w/guard"))
 
-func TestExecClient_PaneList_TwoSessions(t *testing.T) {
-	f := setupTwoSessions(t)
-	c := f.client(staticResolver(map[string]string{
-		blockClaudeWorking: sidWorking,
-		blockClaudeDone:    sidDone,
-	}))
-
+	resolves := 0
+	c := f.client(func() (map[string]string, error) {
+		resolves++
+		return map[string]string{blockClaudeWorking: sidWorking, blockClaudeDone: sidDone}, nil
+	})
 	panes, err := c.PaneList(context.Background())
-	if err != nil {
-		t.Fatalf("PaneList() error = %v", err)
-	}
-
-	want := []multiplexer.Pane{
-		{PaneID: blockClaudeWorking, TerminalID: blockClaudeWorking, CWD: "/Users/usadamasa/src/github.com/usadamasa/agents-daemon", Agent: "claude", AgentStatus: multiplexer.AgentStatusWorking, SessionID: sidWorking},
-		{PaneID: blockShell, TerminalID: blockShell, CWD: "/Users/usadamasa", AgentStatus: multiplexer.AgentStatusUnknown},
-		{PaneID: blockClaudeDone, TerminalID: blockClaudeDone, CWD: "/Users/usadamasa/src/github.com/usadamasa/guard", Agent: "claude", AgentStatus: multiplexer.AgentStatusDone, SessionID: sidDone},
-		{PaneID: blockStartup, TerminalID: blockStartup, CWD: "/Users/usadamasa/tmp/new", Agent: "claude", AgentStatus: multiplexer.AgentStatusIdle},
-		{PaneID: blockStaleDone, TerminalID: blockStaleDone, CWD: "/Users/usadamasa/src/github.com/usadamasa/agents-daemon", AgentStatus: multiplexer.AgentStatusUnknown},
-	}
-	if !slices.Equal(panes, want) {
-		t.Errorf("PaneList() =\n%+v\nwant\n%+v", panes, want)
-	}
-	if multiplexer.IsClaudeAgent(panes[1]) {
-		t.Errorf("shell だけの block を Claude と判定した: %+v", panes[1])
-	}
-	if multiplexer.IsClaudeAgent(panes[4]) {
-		t.Errorf("Claude が死んで done の record だけ残った shell を Claude と判定した: %+v", panes[4])
-	}
-}
-
-func TestExecClient_PaneList_CallsOnlyShellBlocks(t *testing.T) {
-	f := setupTwoSessions(t)
-	if _, err := f.client(staticResolver(nil)).PaneList(context.Background()); err != nil {
-		t.Fatalf("PaneList() error = %v", err)
-	}
-	for _, call := range f.calls(t) {
-		if strings.Contains(call, blockNotShell) {
-			t.Errorf("shell 以外の block に method を打った: %q", call)
-		}
-	}
-}
-
-func TestExecClient_PaneList_EveryCallDisablesAutostart(t *testing.T) {
-	f := setupTwoSessions(t)
-	if _, err := f.client(staticResolver(nil)).PaneList(context.Background()); err != nil {
-		t.Fatalf("PaneList() error = %v", err)
-	}
-	calls := f.calls(t)
-	if len(calls) == 0 {
-		t.Fatal("rex が 1 回も呼ばれていない")
-	}
-	for _, call := range calls {
-		if !strings.HasPrefix(call, "--autostart=false ") {
-			t.Errorf("--autostart=false が先頭に無い呼び出し: %q", call)
-		}
-	}
-}
-
-func TestExecClient_PaneList_ArgsOfEachCall(t *testing.T) {
-	f := newFakeRex(t)
-	f.put(t, "ls.json", `{"sessions":[{"session_id":"`+sessionA+`","label":"shy-alcove"}]}`)
-	f.put(t, "block-ls-"+sessionA+".json", blockLsJSON([2]string{blockClaudeWorking, shellFlavor}))
-	f.putBlock(t, blockClaudeWorking, psWorking, processJSON(pidClaudeWorking, "claude", "/x"))
-
-	if _, err := f.client(staticResolver(nil)).PaneList(context.Background()); err != nil {
-		t.Fatalf("PaneList() error = %v", err)
-	}
-	want := []string{
-		"--autostart=false ls --json",
-		"--autostart=false block ls -s " + sessionA + " --json",
-		"--autostart=false block call -b " + blockClaudeWorking + " program_status",
-		"--autostart=false block call -b " + blockClaudeWorking + " process",
-	}
-	if got := f.calls(t); !slices.Equal(got, want) {
-		t.Errorf("calls =\n%v\nwant\n%v", got, want)
-	}
-}
-
-func TestExecClient_PaneList_SkipsBlockClosedAfterBlockLs(t *testing.T) {
-	f := setupTwoSessions(t)
-	panes, err := f.client(staticResolver(nil)).PaneList(context.Background())
 	if err != nil {
 		t.Fatalf("PaneList() error = %v (閉じた block は読み飛ばすべき)", err)
 	}
-	for _, p := range panes {
-		if p.PaneID == blockClosed {
-			t.Errorf("閉じた block が PaneList に残った: %+v", p)
+
+	t.Run("閉じた block を飛ばし session_id を埋める", func(t *testing.T) {
+		want := []multiplexer.Pane{
+			{PaneID: blockClaudeWorking, TerminalID: blockClaudeWorking, CWD: "/w/agents-daemon", Agent: "claude", AgentStatus: multiplexer.AgentStatusWorking, SessionID: sidWorking},
+			{PaneID: blockClaudeDone, TerminalID: blockClaudeDone, CWD: "/w/guard", Agent: "claude", AgentStatus: multiplexer.AgentStatusDone, SessionID: sidDone},
 		}
-	}
-	if len(panes) != 5 {
-		t.Errorf("len(panes) = %d, want 5 (閉じた block の前後の block は残る)", len(panes))
-	}
+		if !slices.Equal(panes, want) {
+			t.Errorf("PaneList() =\n%+v\nwant\n%+v", panes, want)
+		}
+	})
+	t.Run("shell の block にだけ method を打つ", func(t *testing.T) {
+		want := []string{
+			"--autostart=false ls --json",
+			"--autostart=false block ls -s " + sessionA + " --json",
+			"--autostart=false block call -b " + blockClaudeWorking + " program_status",
+			"--autostart=false block call -b " + blockClaudeWorking + " process",
+			"--autostart=false block ls -s " + sessionB + " --json",
+			"--autostart=false block call -b " + blockClosed + " program_status",
+			"--autostart=false block call -b " + blockClosedMidway + " program_status",
+			"--autostart=false block call -b " + blockClosedMidway + " process",
+			"--autostart=false block call -b " + blockClaudeDone + " program_status",
+			"--autostart=false block call -b " + blockClaudeDone + " process",
+		}
+		if got := f.calls(t); !slices.Equal(got, want) {
+			t.Errorf("calls =\n%v\nwant\n%v", strings.Join(got, "\n"), strings.Join(want, "\n"))
+		}
+	})
+	t.Run("resolve は 1 回", func(t *testing.T) {
+		if resolves != 1 {
+			t.Errorf("resolve の呼び出し回数 = %d, want 1", resolves)
+		}
+	})
 }
 
-func TestExecClient_PaneList_SkipsBlockClosedBetweenMethods(t *testing.T) {
-	f := newFakeRex(t)
-	f.put(t, "ls.json", `{"sessions":[{"session_id":"`+sessionA+`","label":"shy-alcove"}]}`)
-	f.put(t, "block-ls-"+sessionA+".json", blockLsJSON(
-		[2]string{blockClosed, shellFlavor},
-		[2]string{blockClaudeWorking, shellFlavor},
-	))
-	// program_status は返ったが process の前に閉じた。
-	f.put(t, "program_status-"+blockClosed+".json", psDone)
-	f.putBlock(t, blockClaudeWorking, psWorking, processJSON(pidClaudeWorking, "claude", "/x"))
-
-	panes, err := f.client(staticResolver(nil)).PaneList(context.Background())
-	if err != nil {
-		t.Fatalf("PaneList() error = %v", err)
+// not found 以外の失敗は block を飛ばさずエラーにする。
+func TestExecClient_PaneList_FailureIsError(t *testing.T) {
+	tests := []struct {
+		name     string
+		fixtures map[string]string
+	}{
+		{"ls が失敗", nil},
+		{"block ls が失敗", map[string]string{"ls.json": lsJSON(sessionA)}},
+		{"program_status が JSON でない", map[string]string{
+			"ls.json":                        lsJSON(sessionA),
+			"block-ls-" + sessionA + ".json": blockLsJSON([2]string{blockClaudeWorking, shellFlavor}),
+			"program_status-" + blockClaudeWorking + ".json": "not json",
+		}},
 	}
-	if len(panes) != 1 || panes[0].PaneID != blockClaudeWorking {
-		t.Errorf("PaneList() = %+v, want 作業中の block だけ", panes)
-	}
-}
-
-func TestExecClient_PaneList_LsFailureIsError(t *testing.T) {
-	f := newFakeRex(t)
-	if _, err := f.client(staticResolver(nil)).PaneList(context.Background()); err == nil {
-		t.Fatal("PaneList() error = nil, want ls の失敗")
-	}
-}
-
-func TestExecClient_PaneList_BlockLsFailureIsError(t *testing.T) {
-	f := newFakeRex(t)
-	f.put(t, "ls.json", lsJSON)
-	if _, err := f.client(staticResolver(nil)).PaneList(context.Background()); err == nil {
-		t.Fatal("PaneList() error = nil, want block ls の失敗")
-	}
-}
-
-func TestExecClient_PaneList_NonNotFoundBlockFailureIsError(t *testing.T) {
-	f := newFakeRex(t)
-	f.put(t, "ls.json", `{"sessions":[{"session_id":"`+sessionA+`","label":"shy-alcove"}]}`)
-	f.put(t, "block-ls-"+sessionA+".json", blockLsJSON([2]string{blockClaudeWorking, shellFlavor}))
-	f.putBlock(t, blockClaudeWorking, "not json", processJSON(pidClaudeWorking, "claude", "/x"))
-	if _, err := f.client(staticResolver(nil)).PaneList(context.Background()); err == nil {
-		t.Fatal("PaneList() error = nil, want program_status の parse 失敗")
-	}
-}
-
-func TestExecClient_PaneList_ResolverCalledOnce(t *testing.T) {
-	f := setupTwoSessions(t)
-	n := 0
-	c := f.client(func() (map[string]string, error) { n++; return nil, nil })
-	if _, err := c.PaneList(context.Background()); err != nil {
-		t.Fatalf("PaneList() error = %v", err)
-	}
-	if n != 1 {
-		t.Errorf("resolve の呼び出し回数 = %d, want 1", n)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newFakeRex(t)
+			for name, content := range tt.fixtures {
+				f.put(t, name, content)
+			}
+			if _, err := f.client(staticResolver(nil)).PaneList(context.Background()); err == nil {
+				t.Fatal("PaneList() error = nil")
+			}
+		})
 	}
 }
 
@@ -367,10 +238,11 @@ func TestExecClient_DropsRexSessionFromChildEnv(t *testing.T) {
 	t.Setenv("REX_SESSION", sessionA)
 	t.Setenv("REX_BLOCK", blockClaudeWorking)
 	t.Setenv("REX_FAKE_KEEP", "kept")
-	f := setupTwoSessions(t)
+	f := newFakeRex(t)
+	f.put(t, "server-status.json", measured(t, measuredOct10, "server_status.json"))
 
-	if _, err := f.client(staticResolver(nil)).PaneList(context.Background()); err != nil {
-		t.Fatalf("PaneList() error = %v", err)
+	if err := f.client(staticResolver(nil)).Reachable(context.Background()); err != nil {
+		t.Fatalf("Reachable() error = %v", err)
 	}
 	env := readLines(t, filepath.Join(f.dir, "env.log"))
 	if len(env) == 0 {
@@ -390,57 +262,9 @@ func TestExecClient_DropsRexSessionFromChildEnv(t *testing.T) {
 	}
 }
 
-func TestToPane(t *testing.T) {
-	tests := []struct {
-		name       string
-		ps         string
-		pid        int
-		argv0      string
-		wantAgent  string
-		wantStatus multiplexer.AgentStatus
-		wantReason string
-	}{
-		{"作業中の claude-code", psWorking, pidClaudeWorking, "claude", "claude", multiplexer.AgentStatusWorking, ""},
-		{"ターン終了の done", psDone, pidClaudeDone, "claude", "claude", multiplexer.AgentStatusDone, ""},
-		{"起動直後の idle", psStartup, pidClaudeStartup, "claude", "claude", multiplexer.AgentStatusIdle, ""},
-		{"--shell=none で起動すると argv0 が絶対パス", psStartup, pidClaudeStartup, "/Users/usadamasa/.local/bin/claude", "claude", multiplexer.AgentStatusIdle, ""},
-		{"permission prompt は blocked", psPermission, 94252, "claude", "claude", multiplexer.AgentStatusBlocked, ""},
-		{"permission を断った後の idle", psIdle, 94252, "claude", "claude", multiplexer.AgentStatusIdle, ""},
-		{"event 形の id 空の root record", psEmptyID, pidClaudeWorking, "claude", "claude", multiplexer.AgentStatusWorking, ""},
-		{"未知の state は unknown", psUnknownState, pidClaudeWorking, "claude", "claude", multiplexer.AgentStatusUnknown, ""},
-		{"record 無しでも argv0 が claude なら Claude", psEmpty, pidClaudeWorking, "claude", "claude", multiplexer.AgentStatusUnknown, ""},
-		{"shell だけの block", psEmpty, pidShell, "-zsh", "", multiplexer.AgentStatusUnknown, ""},
-		{"subagent の record は見ない", psSubagentOnly, pidShell, "-zsh", "", multiplexer.AgentStatusUnknown, ""},
-		{"Claude が死んで done の record だけ残った shell", psStaleDone, pidShell, "-zsh", "", multiplexer.AgentStatusUnknown, ""},
-		{"前の Claude の record が残る中で claude を起動し直した直後", psStaleDone, pidClaudeStartup, "claude", "claude", multiplexer.AgentStatusUnknown, reasonStaleOwner},
-		{"claude-code 以外の app の record", psOtherApp, pidClaudeWorking, "cargo", "", multiplexer.AgentStatusUnknown, ""},
-		{"rex が owner を付けなくなったら理由を残す", psNoOwner, pidClaudeWorking, "claude", "claude", multiplexer.AgentStatusUnknown, reasonNoOwner},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var ps programStatusResult
-			if err := json.Unmarshal([]byte(tt.ps), &ps); err != nil {
-				t.Fatalf("program_status の parse に失敗: %v", err)
-			}
-			var proc processResult
-			if err := json.Unmarshal([]byte(processJSON(tt.pid, tt.argv0, "/w")), &proc); err != nil {
-				t.Fatalf("process の parse に失敗: %v", err)
-			}
-			got := toPane(blockClaudeWorking, ps, proc, "sid")
-			want := multiplexer.Pane{
-				PaneID: blockClaudeWorking, TerminalID: blockClaudeWorking, CWD: "/w",
-				Agent: tt.wantAgent, AgentStatus: tt.wantStatus, SessionID: "sid", UnknownReason: tt.wantReason,
-			}
-			if got != want {
-				t.Errorf("toPane() = %+v, want %+v", got, want)
-			}
-		})
-	}
-}
-
 func TestExecClient_PaneGet(t *testing.T) {
 	f := newFakeRex(t)
-	f.putBlock(t, blockClaudeDone, psDone, processJSON(pidClaudeDone, "claude", "/w"))
+	f.putBlock(t, blockClaudeDone, measured(t, measuredOct10, "program_status-done.json"), processJSON(pidClaudeDone, "claude", "/w"))
 	c := f.client(staticResolver(map[string]string{blockClaudeDone: sidDone}))
 
 	got, err := c.PaneGet(context.Background(), blockClaudeDone)
@@ -453,32 +277,50 @@ func TestExecClient_PaneGet(t *testing.T) {
 	}
 }
 
-func TestExecClient_PaneGet_MissingBlockIsError(t *testing.T) {
-	f := newFakeRex(t)
-	_, err := f.client(staticResolver(nil)).PaneGet(context.Background(), blockClosed)
-	if err == nil {
-		t.Fatal("PaneGet() error = nil, want not found")
+// 1 block を相手にする method は、block が無ければ rex の stderr を添えたエラーを返す。
+func TestExecClient_TargetNotFoundIsError(t *testing.T) {
+	tests := []struct {
+		name string
+		call func(c *execClient) error
+	}{
+		{"PaneGet", func(c *execClient) error {
+			_, err := c.PaneGet(context.Background(), blockClosed)
+			return err
+		}},
+		{"PaneRead", func(c *execClient) error {
+			_, err := c.PaneRead(context.Background(), blockClosed, multiplexer.PaneReadOptions{})
+			return err
+		}},
+		{"SendText", func(c *execClient) error { return c.SendText(context.Background(), blockClosed, "続けて") }},
+		{"SendKeys", func(c *execClient) error { return c.SendKeys(context.Background(), blockClosed, "enter") }},
 	}
-	if !strings.Contains(err.Error(), "not found") {
-		t.Errorf("error = %v, want rex の stderr を含む", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.call(newFakeRex(t).client(staticResolver(nil)))
+			if err == nil || !strings.Contains(err.Error(), "not found") {
+				t.Errorf("error = %v, want rex の stderr (not found) を含む", err)
+			}
+		})
 	}
 }
 
 func TestExecClient_PaneRead(t *testing.T) {
-	screen := "line1\nline2\nline3\nline4\n"
+	const screen = "line1\nline2\nline3\nline4\n"
 	tests := []struct {
-		name  string
-		lines int
-		want  string
+		name   string
+		screen string
+		lines  int
+		want   string
 	}{
-		{"Lines 0 は全体", 0, screen},
-		{"末尾 2 行", 2, "line3\nline4\n"},
-		{"行数より多ければ全体", 10, screen},
+		{"Lines 0 は全体", screen, 0, screen},
+		{"末尾 2 行", screen, 2, "line3\nline4\n"},
+		{"行数より多ければ全体", screen, 10, screen},
+		{"末尾に改行が無ければ足さない", "a\nb\nc", 2, "b\nc"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			f := newFakeRex(t)
-			f.put(t, "capture-"+blockClaudeWorking+".txt", screen)
+			f.put(t, "capture-"+blockClaudeWorking+".txt", tt.screen)
 			got, err := f.client(staticResolver(nil)).PaneRead(context.Background(), blockClaudeWorking,
 				multiplexer.PaneReadOptions{Lines: tt.lines})
 			if err != nil {
@@ -492,12 +334,6 @@ func TestExecClient_PaneRead(t *testing.T) {
 				t.Errorf("calls = %v, want %v", calls, wantCall)
 			}
 		})
-	}
-}
-
-func TestTailLines_NoTrailingNewline(t *testing.T) {
-	if got := tailLines("a\nb\nc", 2); got != "b\nc" {
-		t.Errorf("tailLines() = %q, want %q", got, "b\nc")
 	}
 }
 
@@ -521,20 +357,13 @@ func TestExecClient_SendTextAndKeys(t *testing.T) {
 	}
 }
 
-func TestExecClient_SendKeys_MissingBlockIsError(t *testing.T) {
-	f := newFakeRex(t)
-	if err := f.client(staticResolver(nil)).SendKeys(context.Background(), blockClosed, "enter"); err == nil {
-		t.Fatal("SendKeys() error = nil, want not found")
-	}
-}
-
 func TestExecClient_Reachable(t *testing.T) {
 	tests := []struct {
 		name    string
 		status  string // 空なら fixture を置かない (exit 3)
 		wantErr bool
 	}{
-		{"pid があれば到達", serverStatusJSON, false},
+		{"pid があれば到達", measured(t, measuredOct10, "server_status.json"), false},
 		{"pid 0 は到達でない", `{"pid":0}`, true},
 		{"壊れた JSON", "not json", true},
 		{"非 0 exit", "", true},

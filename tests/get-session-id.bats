@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# compact-prep skill が state file の名前に使う session_id の取得を検証する｡
+# setup skill が state file の名前に使う session_id の取得を検証する｡
 #
 # 値はファイル名になるため､環境変数が無いときやパス区切りを含むときは推測せずに失敗させる｡
 

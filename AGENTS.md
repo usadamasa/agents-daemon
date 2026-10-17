@@ -43,6 +43,10 @@ devShell の go は `go.mod` の `go` 行と同じ系列 (`go_1_26`) にし、`G
 版を上げるときは `nix flake update`。devShell は開発用で、利用者の環境で hook がバイナリをビルドするときは
 利用者の PATH の go を使う。
 
+## 文章を書くときの決めごと
+
+- 句読点は全角の「。」「、」を使う。半角の「｡」「､」は使わない (md、コメント、ログとエラーの文面のどれも)。
+
 ## hook を書くときの決めごと
 
 <!-- cc-premise: 2.1.299 hooks SessionStart の stdout は context に入る。UserPromptSubmit の既定 timeout は 30 秒 -->

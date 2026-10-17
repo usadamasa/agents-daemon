@@ -94,9 +94,10 @@ type rexHost struct {
 	ownBlock string
 }
 
-// claudeProgramStatusCommand は Claude Code 2.1.296 が入力待ちで出すものと同じ書式の OSC 7501｡
-// cc-premise: 2.1.296 osc7501 payload の書式 (state=…:app=claude-code)
-// payload は `key=value` を `:` で繋ぎ､終端は BEL｡
+// claudeProgramStatusCommand は Claude Code が入力待ちで出すものと同じ書式の OSC 7501｡
+// cc-premise: 2.1.302 osc7501 payload の書式 (state=…:app=claude-code)
+// payload は `key=value` を `:` で繋ぎ､終端は BEL｡rexcli は record の owner.pid と前景の pid を
+// 突き合わせるので､printf は script 自身 (sh の builtin) が出し､その後 exec で同じ pid のまま居座る｡
 const claudeProgramStatusCommand = `printf '\033]7501;state=idle:app=claude-code\a'`
 
 // run は rex を実行する｡server が落ちているときに CLI が起こさないよう autostart を切る (rexcli と同じ)｡

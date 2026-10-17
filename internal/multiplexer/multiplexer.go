@@ -10,8 +10,8 @@ import (
 	"strings"
 )
 
-// AgentStatus は backend が pane に対して報告する agent の状態｡
-// rex では Claude Code 自身が OSC 7501 で申告する state をそのまま写す｡
+// AgentStatus は pane の agent の状態｡rex では Claude Code 自身が OSC 7501 で申告する state を
+// そのまま写す (rex は画面や process 名から補わない)｡
 type AgentStatus string
 
 const (
@@ -19,7 +19,9 @@ const (
 	AgentStatusIdle AgentStatus = "idle"
 	// AgentStatusWorking は作業中｡この状態の pane には絶対に割り込まない｡
 	AgentStatusWorking AgentStatus = "working"
-	// AgentStatusBlocked は承認待ち・質問待ちなど backend が UI から認識した状態｡
+	// AgentStatusBlocked は Claude Code が「利用者の操作待ち」と自己申告した状態｡permission prompt､
+	// 利用者への質問､認証失敗､その他の dialog が開いている間 (kind の対応は
+	// skills/agents-daemon/references/operations.md の「rex の状態の対応」)｡
 	AgentStatusBlocked AgentStatus = "blocked"
 	// AgentStatusDone は idle と同じ実体だが､focused UI で未観測のままバックグラウンド作業が終わった状態｡
 	AgentStatusDone AgentStatus = "done"

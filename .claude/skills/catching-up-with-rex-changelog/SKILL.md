@@ -1,10 +1,9 @@
 ---
 name: catching-up-with-rex-changelog
 description: >-
-  端末多重化ツール rex が更新されたあと、agents-daemon が rex の CLI と program_status (OSC 7501) に置いている
-  前提を changelog と実機の応答と突き合わせて追従するときに使う。rex の preview を上げた、`rex-premise` marker を
-  確かめ直したい、record の `owner.pid` や `block call` の exit code が変わっていないか見たい、rex を上げてから
-  全 pane が `unknown` になった・compact の催促が止まった、`rex events` の形を確かめたい、といった場面。
+  端末多重化ツール rex が更新されたあと、agents-daemon が rex に置いている前提 (`rex-premise` marker) を
+  changelog と実機の応答と突き合わせて追従するときに使う。rex を上げた、rex の changelog を読みたい、
+  rex を上げてから daemon の挙動が変わった、rex の新機能を daemon に取り込めないか見たい、といった場面。
   「rex の changelog を追って」「rex を上げたので点検して」「rex の前提が古くなっていないか」で引く。
 ---
 
@@ -17,7 +16,7 @@ preview が出るので、上げたら changelog と実機の応答をこの rep
 | 資料 | 何が分かるか | 読み方 |
 | ---- | ---- | ---- |
 | changelog (superlogical MCP) | 版ごとの変更。「rex CLI」「Rex Server」の節に CLI と program_status の変更が載る | `read_changelog` で範囲の版を 1 版ずつ全文読む。`search_changelog` は検索語の裏取りに使う |
-| 実機の CLI (自分の block) | 応答の JSON の欄、exit code、flag の有無 | 下の固定コマンドを打ち、コードが読む欄と突き合わせる |
+| 実機の CLI (自分の block) | 応答の JSON の欄、exit code、flag の有無 | [references/cli-checks.md](references/cli-checks.md) の固定コマンドを打ち、コードが読む欄と突き合わせる |
 | rex docs | OSC 7501 の仕様 (何が仕様で何が rex 独自か) | [program-status](https://www.superlogical.com/rex/docs/build/program-status) |
 
 前提: superlogical MCP (`list_changelog` / `read_changelog`) が繋がっていること、rex の block の中で動いていること
@@ -34,9 +33,9 @@ preview が出るので、上げたら changelog と実機の応答をこの rep
 rex version --json
 ```
 
-`rex_version` (`0.0.1792158932-g88fd41`) と `built_at` を控える。rex の CLI は changelog の版 (`preview.15`) を出さない
+`rex_version` と `built_at` を控える。rex の CLI は changelog の版 (`preview.N` の形) を出さない
 (`api call server.version` も同じ)。changelog の版は `list_changelog` の一覧から、`built_at` の日付と同じ日かその直後の
-post を取る。post は build より後に出る (preview.15 は build が 2026-10-16 13:55Z、post が同日 18:23Z)。
+post を取る。post は build より後に出る。
 
 前回見た版は [references/last-checked.md](references/last-checked.md) の最後の行。範囲はその次の版から今の版まで。
 `rex_version` が前回と同じなら changelog は読まず、手順 4 の実機の点検だけ行う。
@@ -77,27 +76,10 @@ go run ./cmd/agents-daemon doctor
 付いていなければ、record の `owner.pid` と前景の pid の突き合わせは通っている。Bash ツールの実行中は working になる。
 理由の行が出たら、その文面が欄の有無を言っている (`record に owner.pid が無い`)。
 
-次に固定のコマンドを打ち、コードが読む欄だけを突き合わせる。実機の JSON には fixture に無い欄がある
+次に固定のコマンドを打ち、コードが読む欄だけを突き合わせる。コマンドの一覧と、読む欄・突き合わせる先・コマンドごとの
+注意は [references/cli-checks.md](references/cli-checks.md) を Read で読む。実機の JSON には fixture に無い欄がある
 (`block ls` の `owner` など)。それはずれではない。
 ずれとして扱うのは、コードが読む欄の欠落・名前の違い・型の違い・exit code の違い。
-
-| コマンド | コードが読む欄 | 突き合わせる先 |
-| ---- | ---- | ---- |
-| `rex --autostart=false block call -b "$REX_BLOCK" program_status` | `records[].id` / `state` / `app` / `owner.pid` | `exec.go` の `programStatusRecord`、`exec_test.go` の `psWorking` |
-| `rex --autostart=false block call -b "$REX_BLOCK" process` | `foreground.pid` / `argv0` / `cwd` | `exec.go` の `processResult`、`exec_test.go` の `processJSON` |
-| `rex --autostart=false block ls -s "$REX_SESSION" --json` | `blocks[].block_id` / `flavor` (`com.superlogical.terminal.shell`) | `exec.go` の `blockLsResult` と `shellFlavor` |
-| `rex --autostart=false block call -b block:01a12599-0000-7000-8000-000000000001 program_status; echo "exit=$?"` | stderr が `block target "…" not found`、exit 3 | `exec.go` の `exitTargetNotFound`、`exec_test.go` の `newFakeRex` |
-| `rex --autostart=false api call server.status` | `pid` | `exec.go` の `serverStatusResult` |
-| `timeout 5 rex --autostart=false events --json -s "$REX_SESSION"` | `program_status_changed` の `payload.record` (`owner.pid` 付き) | #78 の本文の形 (コードが購読するようになったら `internal/rexcli`) |
-
-- `--autostart=false` が全部のコマンドで通ること自体が点検の 1 つ (flag が消えると全呼び出しが落ちる)。
-- `events` は流れ続けるので coreutils の `timeout` で切る。exit 124 と stderr の `Error: interrupted` が正常。
-  `program_status_changed` は record が変わったときだけ流れるので、5 秒では `client_connected` しか来ないことがある。
-  来なければ `timeout 30` に伸ばして次のターンで打ち直す。それでも来なければ、外形 (`session_event` →
-  `block_event` → `name`) が #78 の形のままかだけ見て、record の中身は `program_status` の応答 (同じ record) で
-  代用する。
-- `rex --autostart=false block inspect "$REX_BLOCK"` の METHOD / EVENT の一覧で、`program_status` と `process` が残っているか、
-  新しい method や event が増えていないかも見る。
 
 ### 5. レポートを書いて issue にする
 
@@ -128,7 +110,7 @@ go run ./cmd/agents-daemon doctor
 rex-premise: <version> <topic> [メモ]
 ```
 
-- `<version>`: その前提を最後に確かめた changelog の版 (`preview.15`)
+- `<version>`: その前提を最後に確かめた changelog の版 (`preview.N` の形)
 - `<topic>`: 下の表の 1 語
 - Go と sh はコメント行、md は `<!-- rex-premise: … -->` の 1 行
 

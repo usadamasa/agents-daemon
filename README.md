@@ -103,7 +103,7 @@ claude plugin validate --strict .
 ```
 
 開発には flakes を有効にした [Nix](https://nixos.org/) と、[direnv](https://direnv.net/) と
-[nix-direnv](https://github.com/nix-community/nix-direnv) を使う。Go・task・golangci-lint・shellcheck・bats などは
+[nix-direnv](https://github.com/nix-community/nix-direnv) を使う。Go・task・golangci-lint・shellcheck・bats・jq などは
 `flake.nix` の devShell で揃え、版は `flake.lock` が固定する nixpkgs で決まる。`.envrc` が `use flake` で devShell を
 読み込むので `direnv allow` する。CI も同じ flake を使う。plugin を使うだけなら Nix は要らない。
 

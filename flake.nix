@@ -60,6 +60,8 @@
               govulncheck
               bats
               shellcheck
+              # hook と bats のテストが呼ぶ
+              jq
               tools.spm-go
             ];
             env.GOTOOLCHAIN = "local";

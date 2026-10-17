@@ -28,7 +28,7 @@ const (
 // 実測に無い形の program_status。
 const (
 	psEmpty = `{"records":[]}`
-	// event payload の root record は "id":"" で来る。
+	// event payload の root record は "id":"" で来る。その形を program_status の応答に移したもの。
 	psEmptyID = `{"records":[{"id":"","state":"working","app":"claude-code","updated_at":"2026-10-10T18:30:41.644437+09:00","owner":{"pid":15470,"name":"2.1.296"}}]}`
 	// owner は foreground と一致させ、root と取り違えたときだけ working になるようにする。
 	psSubagentOnly = `{"records":[{"id":"a01b73b4e3800b31f","state":"working","app":"claude-code","updated_at":"2026-10-10T18:29:58.836427+09:00","owner":{"pid":15470,"name":"2.1.296"}}]}`
@@ -106,6 +106,10 @@ func TestToPane(t *testing.T) {
 			}
 			if got != want {
 				t.Errorf("toPane() = %+v, want %+v", got, want)
+			}
+			// daemon が Claude の pane と見て文面を打つかは IsClaudeAgent で決まる。
+			if isClaude, wantClaude := multiplexer.IsClaudeAgent(got), tt.wantAgent == "claude"; isClaude != wantClaude {
+				t.Errorf("IsClaudeAgent(%+v) = %v, want %v", got, isClaude, wantClaude)
 			}
 		})
 	}

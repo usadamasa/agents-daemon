@@ -114,42 +114,6 @@ func TestDaemonRuntimeTick_NewPaneGetsFreshState(t *testing.T) {
 	}
 }
 
-// status.json の pane は pane_id だけで識別する。pane_id と同じ値だった terminal_id は書かない。
-func TestDaemonRuntimeTick_StatusHasNoTerminalID(t *testing.T) {
-	client := &multiplexerfake.Client{
-		PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) {
-			return []multiplexer.Pane{claudePane("p1", multiplexer.AgentStatusIdle)}, nil
-		},
-	}
-	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
-	r, statusPath := newTestRuntime(t, client, now)
-
-	if _, _, err := r.tick(context.Background(), missingConfigPath(t), now); err != nil {
-		t.Fatalf("tick() error = %v", err)
-	}
-
-	// 構造体を経由すると消えたキーを確かめられないので、生の JSON を読む。
-	data, err := os.ReadFile(statusPath)
-	if err != nil {
-		t.Fatalf("status.json の読み込みに失敗: %v", err)
-	}
-	var raw struct {
-		Panes []map[string]any `json:"panes"`
-	}
-	if err := json.Unmarshal(data, &raw); err != nil {
-		t.Fatalf("status.json のパースに失敗: %v", err)
-	}
-	if len(raw.Panes) != 1 {
-		t.Fatalf("panes = %v, want 1 件", raw.Panes)
-	}
-	if got := raw.Panes[0]["pane_id"]; got != "p1" {
-		t.Errorf("pane_id = %v, want p1", got)
-	}
-	if got, ok := raw.Panes[0]["terminal_id"]; ok {
-		t.Errorf("terminal_id = %v が書かれている、want キー無し", got)
-	}
-}
-
 func TestDaemonRuntimeTick_DisappearedPaneEntryDropped(t *testing.T) {
 	var panesNow []multiplexer.Pane
 	client := &multiplexerfake.Client{

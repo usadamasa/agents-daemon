@@ -164,7 +164,7 @@ build の数秒後には新しい版が動いている。hook も手動操作も
 ### [3] デーモンが監視して再開する
 
 単一プロセスが全 Claude pane を見る。pane ごとの状態は pane ID (rex の block ID) をキーに
-プロセス内で持つ。`status.json` の `terminal_id` は `pane_id` と同じ値を写したもので、daemon は読まない。
+プロセス内で持つ。
 
 ### 多重化ツールの backend
 

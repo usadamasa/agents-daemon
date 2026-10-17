@@ -13,9 +13,7 @@ import (
 
 // PaneStatus は status.json に書き出す pane 1 枚分のスナップショット。
 type PaneStatus struct {
-	PaneID string `json:"pane_id"`
-	// TerminalID は pane_id と同じ値。中では使わないが、外から jq で読まれている可能性に備えてキーを残す (#73)。
-	TerminalID    string     `json:"terminal_id"`
+	PaneID        string     `json:"pane_id"`
 	CWD           string     `json:"cwd"`
 	AgentStatus   string     `json:"agent_status"`
 	MonitorStatus string     `json:"monitor_status"`

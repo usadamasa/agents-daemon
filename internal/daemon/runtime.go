@@ -187,7 +187,6 @@ func (r *daemonRuntime) forgetUnseen(seen map[string]bool) {
 func paneStatus(pane multiplexer.Pane, entry *paneEntry, outcome monitor.Outcome, now time.Time) PaneStatus {
 	return PaneStatus{
 		PaneID:        pane.PaneID,
-		TerminalID:    pane.PaneID,
 		CWD:           pane.CWD,
 		AgentStatus:   string(pane.AgentStatus),
 		MonitorStatus: monitorStatusString(entry.state.Status),

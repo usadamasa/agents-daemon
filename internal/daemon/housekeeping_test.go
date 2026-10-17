@@ -33,26 +33,26 @@ func TestHousekeep(t *testing.T) {
 		dir := t.TempDir()
 		logPath := filepath.Join(dir, "logs", "daemon.log")
 		store := sessionstate.New(dir)
-		compactedDir := store.Compacted
+		contextDir := store.Context
 		touchAged(t, applog.RotatedPath(logPath, "2026-08-01"), 20*24*time.Hour, now)
 		touchAged(t, applog.RotatedPath(logPath, "2026-08-27"), 24*time.Hour, now)
 		touchAged(t, filepath.Join(store.RateLimits, "old.json"), 30*time.Hour, now)
 		touchAged(t, filepath.Join(store.RateLimits, "fresh.json"), time.Hour, now)
-		// 圧縮完了 marker は拡張子を持たない｡保持期間も rate-limits より長い｡
-		touchAged(t, filepath.Join(compactedDir, "old-session"), 8*24*time.Hour, now)
-		touchAged(t, filepath.Join(compactedDir, "fresh-session"), 30*time.Hour, now)
+		// context の保持期間は rate-limits より長い (上限待ちを跨いで block と session の対応を残す)｡
+		touchAged(t, filepath.Join(contextDir, "old-session.json"), 8*24*time.Hour, now)
+		touchAged(t, filepath.Join(contextDir, "fresh-session.json"), 30*time.Hour, now)
 
 		log := applog.NewLogger(logPath, func() time.Time { return now })
 		t.Cleanup(func() { _ = log.Close() })
-		r := newDaemonRuntime(&multiplexerfake.Client{}, log, filepath.Join(dir, "status.json"), store, false, func(time.Duration) {}, now)
+		r := newDaemonRuntime(&multiplexerfake.Client{}, log, filepath.Join(dir, "status.json"), store, func(time.Duration) {}, now)
 
 		r.housekeep(logPath, now)
 
-		if _, err := os.Stat(filepath.Join(compactedDir, "old-session")); !os.IsNotExist(err) {
-			t.Errorf("8 日前の marker は消えるべき (err=%v)", err)
+		if _, err := os.Stat(filepath.Join(contextDir, "old-session.json")); !os.IsNotExist(err) {
+			t.Errorf("8 日前の context は消えるべき (err=%v)", err)
 		}
-		if _, err := os.Stat(filepath.Join(compactedDir, "fresh-session")); err != nil {
-			t.Errorf("30 時間前の marker は残るべき: %v", err)
+		if _, err := os.Stat(filepath.Join(contextDir, "fresh-session.json")); err != nil {
+			t.Errorf("30 時間前の context は残るべき: %v", err)
 		}
 
 		if _, err := os.Stat(applog.RotatedPath(logPath, "2026-08-01")); !os.IsNotExist(err) {
@@ -85,7 +85,7 @@ func TestHousekeep(t *testing.T) {
 		logPath := filepath.Join(dir, "logs", "daemon.log")
 		log := applog.NewLogger(logPath, func() time.Time { return now })
 		t.Cleanup(func() { _ = log.Close() })
-		r := newDaemonRuntime(&multiplexerfake.Client{}, log, filepath.Join(dir, "status.json"), sessionstate.Store{}, false, func(time.Duration) {}, now)
+		r := newDaemonRuntime(&multiplexerfake.Client{}, log, filepath.Join(dir, "status.json"), sessionstate.Store{}, func(time.Duration) {}, now)
 
 		r.housekeep(logPath, now)
 
@@ -97,7 +97,7 @@ func TestHousekeep(t *testing.T) {
 	t.Run("housekeepDue は間隔が空くまで false を返す", func(t *testing.T) {
 		log := applog.NewLogger(filepath.Join(t.TempDir(), "daemon.log"), func() time.Time { return now })
 		t.Cleanup(func() { _ = log.Close() })
-		r := newDaemonRuntime(&multiplexerfake.Client{}, log, "", sessionstate.Store{}, false, func(time.Duration) {}, now)
+		r := newDaemonRuntime(&multiplexerfake.Client{}, log, "", sessionstate.Store{}, func(time.Duration) {}, now)
 
 		if !r.housekeepDue(now) {
 			t.Error("初回は true のはず")

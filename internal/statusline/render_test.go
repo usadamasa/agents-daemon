@@ -312,39 +312,3 @@ func TestRender_spend(t *testing.T) {
 		assertNotContains(t, render(t, v), "🧾")
 	})
 }
-
-func TestRender_cache(t *testing.T) {
-	t.Run("失効までの残り時間を分で出す", func(t *testing.T) {
-		v := view("Opus", "/tmp")
-		v.Cache = &CacheView{Remaining: 42*time.Minute + 30*time.Second}
-		assertContains(t, render(t, v), green+"⏱ cache 42m")
-	})
-	t.Run("残りが 10 分以下なら orange", func(t *testing.T) {
-		v := view("Opus", "/tmp")
-		v.Cache = &CacheView{Remaining: 10 * time.Minute}
-		assertContains(t, render(t, v), orange+"⏱ cache 10m")
-	})
-	t.Run("失効していれば cold を red で", func(t *testing.T) {
-		v := view("Opus", "/tmp")
-		v.Cache = &CacheView{Remaining: -time.Minute}
-		assertContains(t, render(t, v), red+"⏱ cache cold")
-	})
-	t.Run("状態が分からなければ出さない", func(t *testing.T) {
-		assertNotContains(t, render(t, view("Opus", "/tmp")), "⏱")
-	})
-	t.Run("2 行目の ⏳ と 💰 の間に置く", func(t *testing.T) {
-		v := withRateLimits(view("Opus", "/tmp"), 42, 6750, 9)
-		v.Cache = &CacheView{Remaining: 42 * time.Minute}
-		out := lines(render(t, v))[1]
-		rateLimit, cache, cost := strings.Index(out, "⏳"), strings.Index(out, "⏱"), strings.Index(out, "💰")
-		if rateLimit > cache || cache > cost {
-			t.Errorf("並びが違う: %q", out)
-		}
-	})
-	t.Run("compact では出さない", func(t *testing.T) {
-		v := view("Opus", "/tmp")
-		v.Cache = &CacheView{Remaining: 42 * time.Minute}
-		v.Mode = ModeCompact
-		assertNotContains(t, render(t, v), "⏱")
-	})
-}

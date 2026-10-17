@@ -25,10 +25,34 @@ func newTestRuntime(t *testing.T, client multiplexer.Client, startedAt time.Time
 	t.Cleanup(func() { _ = log.Close() })
 	statusPath := filepath.Join(dir, "status.json")
 	// sidecar file のディレクトリは一時ディレクトリ配下を指すだけで作らない｡
-	// 存在しないディレクトリは「state 無し」として扱われ､compact の段は
-	// 何もしない (ここで検証したいのは上限周りの遷移なので)｡
+	// 存在しないディレクトリは「state 無し」として扱われる｡
 	// 利用上限 state が要るテストは r.store.RateLimits へ書く｡
-	return newDaemonRuntime(client, log, statusPath, sessionstate.New(dir), false, func(time.Duration) {}, startedAt), statusPath
+	return newDaemonRuntime(client, log, statusPath, sessionstate.New(dir), func(time.Duration) {}, startedAt), statusPath
+}
+
+// writeContextSidecar は statusline が書く生の形で context/<sid>.json を置く｡
+func writeContextSidecar(t *testing.T, dir, sessionID string, fields map[string]any) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("context ディレクトリの作成に失敗: %v", err)
+	}
+	fields["session_id"] = sessionID
+	raw, err := json.Marshal(fields)
+	if err != nil {
+		t.Fatalf("context の JSON 化に失敗: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, sessionID+".json"), raw, 0o644); err != nil {
+		t.Fatalf("context sidecar の書き込みに失敗: %v", err)
+	}
+}
+
+func readLog(t *testing.T, statusPath string) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(filepath.Dir(statusPath), "daemon.log"))
+	if err != nil {
+		t.Fatalf("ログの読み込みに失敗: %v", err)
+	}
+	return string(data)
 }
 
 func claudePane(paneID, terminalID string, status multiplexer.AgentStatus) multiplexer.Pane {

@@ -1,26 +1,14 @@
 // Package sessionstate は､別プロセスがセッション ID をキーに XDG state 配下へ
-// 書く sidecar file を読む唯一の窓口｡rate-limits と context は書く側もここにある｡
+// 書く sidecar file を読む唯一の窓口｡書く側もここにある｡
 //
-//	rate-limits/<session_id>.json    ingest-statusline が書く利用上限 (IngestStatusline)
-//	context/<session_id>.json        ingest-statusline が書く context 使用率と transcript のパス
-//	                                 (IngestStatusline｡cache の状態は CacheLoader がこのパスから求める)
-//	                                 と端末多重化ツールの場所 multiplexer (ListMultiplexerBlocks が block から逆引きする)
-//	compact-state/<session_id>.md    compact-prep skill が書く復旧用 state file
-//	compacted/<session_id>           PostCompact hook が書く圧縮完了 marker
-//	cache/<session_id>.json          旧版の Stop hook が書いた prompt cache の状態｡もう書かず､Prune が消す
-//	cache-ack/<session_id>           daemon が非スラッシュの prompt を送る前に書き､ttl-guard が読む ack
-//	                                 (WriteCacheAck / TTLGuard)
-//	cache-idle-compacted/<session_id> daemon が idle compact の /compact を送る前に書く marker
-//	                                 (MarkIdleCompacted / Compact.IdleCompactActive)
+//	rate-limits/<session_id>.json    statusline / ingest-statusline が書く利用上限 (IngestStatusline)
+//	context/<session_id>.json        statusline / ingest-statusline が書く context 使用率と
+//	                                 端末多重化ツールの場所 multiplexer (ListMultiplexerBlocks が block から逆引きする)
 //
-// rate-limits / context / cache-ack / cache-idle-compacted は hook や statusline から
-// 呼ばれた `agents-daemon` のサブコマンドか daemon がこのパッケージの型で読み書きするので､
-// 書式は 1 箇所に閉じる｡
-// compact-state / compacted の書き手はシェル側 (この plugin の compact-prep skill・
-// PostCompact hook) で､ディレクトリ名はそちらの定数 (hooks/lib/compact-markers.sh) と
-// 対になっている｡片方だけ変えると protocol が黙って壊れるため､両方まとめて直すこと｡
+// どちらも statusline から呼ばれた `agents-daemon` のサブコマンドか daemon がこのパッケージの
+// 型で読み書きするので､書式は 1 箇所に閉じる｡
 //
-// 7 つを 1 パッケージに置くのは､読み手から見て同じ形をしているため｡同じ root
+// 1 パッケージに置くのは､読み手から見て同じ形をしているため｡同じ root
 // ディレクトリ､同じ session ID の検証､同じ mtime ベースの保持期間｡分けると
 // この 3 つが分けた数だけ複製される｡この形から外れるもの (statusline の cost の台帳は
 // 日付で入れ子になり､日付の名前で消す) は別パッケージ (internal/spend) に置く｡
@@ -38,29 +26,19 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
 
-// Store は 7 つの sidecar file の置き場所を持つ｡ゼロ値の Store はどのディレクトリも
+// Store は sidecar file の置き場所を持つ｡ゼロ値の Store はどのディレクトリも
 // 空文字列で､読み込みは「まだ何も無い」､Prune は何もしないとして振る舞う
 // (state を持たない呼び出し元のテストがそのまま書けるようにするため)｡
 type Store struct {
-	RateLimits    string
-	Context       string
-	CompactState  string
-	Compacted     string
-	Cache         string
-	CacheAck      string
-	IdleCompacted string
+	RateLimits string
+	Context    string
 }
 
-// New は XDG state ディレクトリ (apppath.Paths.StateDir) から 7 つの置き場所を導出する｡
+// New は XDG state ディレクトリ (apppath.Paths.StateDir) から置き場所を導出する｡
 func New(stateDir string) Store {
 	return Store{
-		RateLimits:    filepath.Join(stateDir, "rate-limits"),
-		Context:       filepath.Join(stateDir, "context"),
-		CompactState:  filepath.Join(stateDir, "compact-state"),
-		Compacted:     filepath.Join(stateDir, "compacted"),
-		Cache:         filepath.Join(stateDir, "cache"),
-		CacheAck:      filepath.Join(stateDir, "cache-ack"),
-		IdleCompacted: filepath.Join(stateDir, "cache-idle-compacted"),
+		RateLimits: filepath.Join(stateDir, "rate-limits"),
+		Context:    filepath.Join(stateDir, "context"),
 	}
 }
 

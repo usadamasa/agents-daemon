@@ -2,7 +2,7 @@
 
 ## 全体の連動
 
-statusline・hook・skill・daemon が別々のタイミングで動き､ファイルを介して繋がる｡
+statusline・hook・daemon が別々のタイミングで動き､ファイルを介して繋がる｡
 互いを直接呼ばない｡
 
 ```
@@ -11,9 +11,6 @@ statusline・hook・skill・daemon が別々のタイミングで動き､ファ
                                                    ├──> rate-limits/<session_id>.json (あれば)
                                                    ├──> context/<session_id>.json     (毎回)
                                                    └──> cost/<YYYY-MM-DD>/<session_id>.json (statusline だけ､上限の env があるとき)
-    compact-prep skill ────────────────────> compact-state/<session_id>.md
-    PostCompact hook ──────────────────────> compacted/<session_id>
-    Claude Code ──非同期に追記──> transcript (context/ の transcript_path が指す)
                                                                           │
 [2] SessionStart hook ──daemon --ensure──> daemon (常駐 1 プロセス)        │ pane の
                                               │                           │ session を
@@ -25,19 +22,16 @@ statusline・hook・skill・daemon が別々のタイミングで動き､ファ
                                               │
                                               │  ここで判定 (下の表)
                                               │
-[3]                                           ├─ 上限解除の時刻まで待つ
-                                              │  └─ SendText / SendKeys で再開
-                                              ├─ context 閾値 → compact-prep → compact → 再開
-                                              ├─ cache の失効前 → compact-prep → cache-idle-compacted/<session_id> → compact
-                                              └─ 送る直前に cache の失効を見て cache-ack/<session_id> を書く
-
-[4] UserPromptSubmit hook ──stdin──> agents-daemon ttl-guard ── transcript と cache-ack/<session_id> を見て
-                                                               失効後の最初の prompt を止める (exit 2)
+[3]                                           └─ 上限解除の時刻まで待つ
+                                                 └─ SendText / SendKeys で再開
 ```
+
+context の compact と prompt cache の失効には関わらない｡Claude Code 本体の autocompact・idle compaction と､
+失効後の footer の案内 (`~222k uncached · /clear to start fresh`) に任せる｡
 
 ### [1] statusline が上限情報を渡し､バイナリが落とす
 
-<!-- cc-premise: 2.1.299 statusline stdin の rate_limits.five_hour / context_window / transcript_path と再実行の契機 -->
+<!-- cc-premise: 2.1.299 statusline stdin の rate_limits.five_hour / context_window と再実行の契機 -->
 
 Claude Code は statusline コマンドの stdin に JSON を渡す｡その中に
 `rate_limits.five_hour.{used_percentage, resets_at}` が入る (`resets_at` は Unix epoch 秒)｡
@@ -78,10 +72,9 @@ state file の出し分けは次のとおり｡
 `resets 12:30pm (Asia/Tokyo)` のような表記を am/pm やタイムゾーンごとパースする処理が要らない｡
 実機で `resets_at = 1786851000` と画面の `12:30pm (Asia/Tokyo)` が一致することを確認済み｡
 
-同じ呼び出しで `context_window.used_percentage` を `context/<session_id>.json` へも書く｡
-こちらは `rate_limits` と違って**毎描画で必ず書く** (入力に必ず入っている値であり､
-daemon は `observed_at` の新しさでセッションが生きているかも見るため)｡用途は
-[compact.md](compact.md)｡
+同じ呼び出しで `context/<session_id>.json` へも書く｡こちらは `rate_limits` と違って**毎描画で必ず書く**｡
+daemon が使うのは `multiplexer` (block から session_id への対応) で､同じ block の記録が複数あれば
+`observed_at` が最新のものを採る｡`used_percentage` は参考として写すだけで､daemon は読まない｡
 
 #### statusline が書く state
 
@@ -106,11 +99,10 @@ daemon は `observed_at` の新しさでセッションが生きているかも�
 `$STATE/context/<session_id>.json` (毎描画):
 
 ```json
-{"session_id": "0f8e2a4c-1b3d-4e5f-8a9b-0c1d2e3f4a5b", "used_percentage": 63, "observed_at": 1786840000, "context_window_size": 200000, "transcript_path": "/path/to/transcript.jsonl", "multiplexer": {"kind": "rex", "session": "session:01a1…", "block": "block:01a1…"}}
+{"session_id": "0f8e2a4c-1b3d-4e5f-8a9b-0c1d2e3f4a5b", "used_percentage": 63, "observed_at": 1786840000, "multiplexer": {"kind": "rex", "session": "session:01a1…", "block": "block:01a1…"}}
 ```
 
-`observed_at` はどちらも書いた時点の Unix epoch 秒｡`context_window_size` と `transcript_path` は
-入力にあるときだけ付ける (idle compact と cache の状態に使う｡[compact.md](compact.md)､下の節)｡
+`observed_at` はどちらも書いた時点の Unix epoch 秒｡
 
 `multiplexer` は Claude Code が動いている多重化ツールの場所｡statusline のコマンドは Claude Code の環境を
 継承するので､バイナリが環境変数から読んで書く (`sessionstate.MultiplexerRefFromEnv`)｡
@@ -124,29 +116,6 @@ backend は block から session_id をこの記録で逆引きする (`Store.Li
 記録が複数あれば `observed_at` が最新のものを採る (同じ block で Claude Code を起動し直すと古い記録が残る)｡
 `context/` は 7 日で消えるだけなので､5 時間の上限待ちを跨いでも対応は残る｡制約 (初回描画までの
 数秒) は [operations.md](operations.md) の「既知の制約」｡
-
-#### daemon が transcript から求める cache の状態
-
-prompt cache は最後のリクエストから TTL (5 分 / 1 時間) で失効し､失効後の 1 送信は文脈全体の
-cache write になる｡daemon は実際に使われた TTL を transcript JSONL の `message.usage.cache_creation` から求める｡
-`context/<session_id>.json` の `transcript_path` を辿り､末尾 2MB を読む (`internal/sessionstate` の `CacheLoader`)｡
-Claude Code 2.1.251 からは statusline の stdin の `prompt_cache` にも `ttl` と `expires_at` が載るので､
-そちらへの置き換えは [#60](https://github.com/usadamasa/agents-daemon/issues/60) で扱う｡
-
-<!-- cc-premise: 2.1.299 cache transcript の cache_creation から TTL を読む｡prompt_cache への置き換えは #60 -->
-<!-- cc-premise: 2.1.299 hooks Stop の時点で transcript はターンの最後の応答を含まない -->
-読む規則は
-[tatsuo48/claude-token-audit の ttl_guard.py](https://github.com/tatsuo48/claude-token-audit/blob/main/plugins/ttl-guard/scripts/ttl_guard.py)
-の `last_main_response` と同じ｡求めるのは直近の main の応答の開始時刻 (transcript の timestamp 文字列を
-そのまま持つ｡ack と文字列で比較するため)､最新の cache write の TTL､その応答の
-`input_tokens + cache_creation_input_tokens + cache_read_input_tokens`｡
-
-Stop hook では読まない｡transcript は非同期に書かれ､Stop の時点ではターンの最後の応答を含まない
-ことがある (Claude Code の hooks のドキュメント)｡実機でも､Stop hook が読んだ値はいつも 1 応答前だった｡
-
-daemon が読み直すのは､idle な pane の判定と prompt を送る直前だけ｡transcript の大きさと mtime が
-前回と同じなら読み直さない｡working な pane の status には前回読んだ値を出す｡
-読む側の使い方 (ack・ログ・status) は [cache.md](cache.md)｡
 
 ### [2] SessionStart hook がデーモンを起こす
 
@@ -202,7 +171,7 @@ build の数秒後には新しい版が動いている｡hook も手動操作も
 daemon は pane 操作を `internal/multiplexer` の `Client` interface 越しに行い､実装は rex (`internal/rexcli`)｡
 `internal/backend` が起動時の環境に `REX_SESSION` があることを確かめ､無ければ `daemon --ensure` は
 stderr に 1 行出して何もせずに戻る (素の端末の SessionStart で毎回 daemon を起こさない)｡hook はこの判定を
-持たず､バイナリの build は常に行う｡同じバイナリを `statusline` / `ingest-statusline` / `ttl-guard` が使い､
+持たず､バイナリの build は常に行う｡同じバイナリを `statusline` / `ingest-statusline` が使い､
 これらは多重化ツールを要らないため｡backend は `status.json` の `backend` に書き､`status` が表示する｡
 
 | 操作 | rex |
@@ -228,8 +197,8 @@ rex で Agent と AgentStatus を決めるのは Claude Code 自身が OSC 7501 
 
 ## 毎 tick の判定
 
-pane ごとに次を評価する｡上限側の詳細は [rate-limit.md](rate-limit.md)､compact 側は
-[compact.md](compact.md)､画面の読み取りと送信の作法は [pane-io.md](pane-io.md)｡
+pane ごとに次を評価する｡上限側の詳細は [rate-limit.md](rate-limit.md)､
+画面の読み取りと送信の作法は [pane-io.md](pane-io.md)｡
 
 | 条件 | 動作 |
 | ---- | ---- |
@@ -243,34 +212,24 @@ pane ごとに次を評価する｡上限側の詳細は [rate-limit.md](rate-li
 | 待機期限に達した | 再開プロンプトを送り､試行回数を増やす |
 | 試行回数が `maxRetries` に達した | 長いクールダウンに入る |
 | 一時的なサーバーエラー (5xx / 過負荷) | 指数バックオフで短周期リトライ |
-| どれにも該当せず､context 使用率が閾値を超えている | `/agents-daemon:compact-prep` を投入する (別ゲート) |
-| どれにも該当せず､cache の失効が近く context 使用率が idle compact の閾値を超えている | `/agents-daemon:compact-prep` を投入する (別ゲート｡idle compact)｡失効が近いのに使用率で送らないときは理由をログに残す (`idle-compact-held`) |
-| どれにも該当せず､compact-prep の state file が投入後に書かれた | `/compact` を投入する (別ゲート｡idle compact なら先に marker を書く) |
-| どれにも該当せず､圧縮完了 marker が置かれている | 作業の再開を促すメッセージを送る (別ゲート｡idle compact の marker が active なら送らない) |
-| どれにも該当せず､compact 直後で止まっている (画面判定) | 継続を促すメッセージを送る (別ゲート｡同上) |
+| どれにも該当しない | 何もしない |
 
 ## 出力されるファイル
 
 設定は利用者が書くものなので XDG の config ディレクトリに置く｡ランタイム状態は揮発物なので
 ハーネスの `~/.claude/` に混ぜず､XDG Base Directory の state ディレクトリ
 `${XDG_STATE_HOME:-~/.local/state}/agents-daemon/` (以下 `$STATE`) に置く｡
-`XDG_STATE_HOME` は daemon と `statusline` / `ingest-statusline` / `ttl-guard` (`apppath.FromEnv`)・hook
-(`hooks/lib/compact-markers.sh`) が同じ規則で解決する｡
+`XDG_STATE_HOME` は daemon と `statusline` / `ingest-statusline` (`apppath.FromEnv`) が同じ規則で解決する｡
 
 | パス | 書く主体 | いつ | 中身 | 消す主体 |
 | ---- | ---- | ---- | ---- | ---- |
 | `${XDG_CONFIG_HOME:-~/.config}/agents-daemon/config.json` | 人間 | 手で編集したとき | 設定 | 消さない |
 | `$STATE/rate-limits/<session_id>.json` | `agents-daemon statusline` または `ingest-statusline` (利用者の statusline が呼ぶ) | statusline の描画ごと (`rate_limits.five_hour.resets_at` があるときだけ) | そのセッションの 5 時間 / 7 日ウィンドウの使用率と reset 時刻､観測時刻､session_id | daemon が 24 時間で消す |
-| `$STATE/context/<session_id>.json` | `agents-daemon statusline` または `ingest-statusline` (利用者の statusline が呼ぶ) | statusline の描画ごと | そのセッションの context 使用率､観測時刻､session_id､context window の大きさ､transcript のパス､多重化ツールの場所 | daemon が 7 日で消す |
+| `$STATE/context/<session_id>.json` | `agents-daemon statusline` または `ingest-statusline` (利用者の statusline が呼ぶ) | statusline の描画ごと | そのセッションの context 使用率､観測時刻､session_id､多重化ツールの場所 | daemon が 7 日で消す |
 | `$STATE/cost/<YYYY-MM-DD>/<session_id>.json` | `agents-daemon statusline` (`CLAUDE_STATUSLINE_SPEND_CAP` があるとき) | statusline の描画ごと (累計が変わったときだけ書き直す) | そのセッションの累計 cost と前日までの繰り越し (`internal/spend`)｡daemon は読まない | `statusline` がその日の最初の書き込みで 45 日より古い日を消す |
-| `$STATE/compact-state/<session_id>.md` | `agents-daemon:compact-prep` skill | `/agents-daemon:compact-prep` の実行時 | 圧縮で失われる作業状態 (plan / phase / 決定事項 / 編集中ファイル) | daemon が 7 日で消す |
-| `$STATE/compacted/<session_id>` | `hooks/compaction-recovery.sh` (PostCompact hook) | 圧縮が完了したとき | 空ファイル｡mtime が圧縮完了時刻 | 復旧 hook が消す (残れば daemon が 7 日で消す) |
-| `$STATE/cache/<session_id>.json` | 旧版の Stop hook (今は書かない) | - | 旧版の prompt cache の状態 | daemon が 7 日で消す |
-| `$STATE/cache-ack/<session_id>` | daemon と `agents-daemon ttl-guard` | daemon は非スラッシュの prompt を送る直前 (cache が失効しているか状態が分からないとき)､ttl-guard は失効後の prompt を判定したとき | 直近の応答の開始時刻の文字列そのまま､または sentinel `daemon-unknown` ([cache.md](cache.md)) | daemon と ttl-guard が 90 日で消す |
-| `$STATE/cache-idle-compacted/<session_id>` | daemon | idle compact の `/compact` を送る直前 | 空ファイル｡mtime が送信時刻 ([compact.md](compact.md)) | 消さずに直近の応答の時刻との比較で解く (daemon が 7 日で消す) |
 | `$STATE/daemon.pid` | daemon | 起動時に作成､終了時に削除 | 稼働中デーモンの PID | daemon |
-| `$STATE/status.json` | daemon | 毎 tick (既定 5 秒) | backend (rex)､監視中の pane 一覧と各 pane の監視状態・試行回数・待機期限・直近の判定・cache の状態 | 上書き |
-| `$STATE/logs/daemon.log` | daemon | 報告に値する出来事があったときだけ | 上限検知と待ち時間､再開送信 (cache の状態つき)､ユーザーの自己再開､ゲート抑制､ネイティブへの譲り､compact 停止の催促､idle compact の見送り (理由つき)､エラー | rotate |
+| `$STATE/status.json` | daemon | 毎 tick (既定 5 秒) | backend (rex)､監視中の pane 一覧と各 pane の監視状態・試行回数・待機期限・直近の判定 | 上書き |
+| `$STATE/logs/daemon.log` | daemon | 報告に値する出来事があったときだけ | 上限検知と待ち時間､再開送信､ユーザーの自己再開､ゲート抑制､ネイティブへの譲り､エラー | rotate |
 | `$STATE/logs/daemon.log.YYYY-MM-DD` | daemon | 日付が変わって最初に書くとき | 前日までの `daemon.log` をそのまま退避したもの | daemon が 7 日で消す |
 | `$STATE/logs/build.log` | `hooks/build-daemon.sh` | SessionStart が build を起こしたとき | build の開始・完了・失敗 | 消さない (追記) |
 | `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon` | `hooks/build-daemon.sh` / `task install` | build 時 | 実行ファイル | 消さない |
@@ -278,6 +237,9 @@ pane ごとに次を評価する｡上限側の詳細は [rate-limit.md](rate-li
 
 `$STATE` はデーモンが必要に応じて作る｡消しても壊れない
 (次回の起動と次回の statusline 描画で再生成される)｡
+
+旧版 (compact の自動化と ttl-guard を持っていた版) が書いていた `compact-state/` `compacted/` `cache/`
+`cache-ack/` `cache-idle-compacted/` は今の版では読みも消しもしない｡残っていれば手で消す｡
 
 静かな tick は**何も書かない**｡ログが伸びていないことは､何も起きていないことを意味する｡
 
@@ -292,11 +254,9 @@ daemon の再起動を跨いで日付が変わっていた場合も､mtime か�
 
 古いファイルは daemon 自身が消す｡起動時と 1 時間ごとに､mtime が保持期間を過ぎた
 rotate 済みログ (7 日)､`rate-limits/` 配下の state (24 時間｡ingest-statusline が rename 前に
-死んで残った `.rate-limits.*` も同じ扱い)､compact 関連の 3 ディレクトリと `cache/`・`cache-idle-compacted/` 配下 (7 日)､
-`cache-ack/` 配下 (90 日) を削除する｡何かを消したときだけログに残す｡
+死んで残った `.rate-limits.*` も同じ扱い)､`context/` 配下 (7 日) を削除する｡何かを消したときだけログに残す｡
 
-保持期間は設定キーにせず定数 (`internal/daemon/housekeeping.go`) に置く｡state の
-24 時間は判定に影響しない値として選んである: `resets_at` は観測から高々 5 時間先で､
-起床時刻の算出 (`LatestWindow`) は未来の `resets_at` しか使わない｡compact 側を 7 日と
-長く取るのは､復旧用 state file が「次のプロンプトで注入される」まで待つ側であり､
-セッションが放置されている間に消すと復旧材料そのものを失うため｡
+保持期間は設定キーにせず定数 (`internal/daemon/housekeeping.go`､`internal/sessionstate/prune.go`) に置く｡
+state の 24 時間は判定に影響しない値として選んである: `resets_at` は観測から高々 5 時間先で､
+起床時刻の算出 (`LatestWindow`) は未来の `resets_at` しか使わない｡`context/` を 7 日と長く取るのは､
+block から session への対応を 5 時間の上限待ちを跨いで残すため｡

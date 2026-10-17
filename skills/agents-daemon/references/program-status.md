@@ -35,7 +35,7 @@ docs に無く、2.1.302 のバイナリと実測 (2026-10-17、rex preview.15�
 - 条件を満たす record が無くても、`foreground` の `argv0` (basename) が `claude` なら Claude agent として `unknown`。
   record があるのに使えなかったときは理由を daemon のログ (`agent_status を判定できません`) と `doctor` の
   pane 一覧 (`unknown の理由`) に出す。`owner` は rex 独自の欄なので、rex の版が変わって欄が消えると全 pane が
-  `unknown` になり compact の催促が止まる。その状態を黙って通さないための出口。
+  `unknown` になる。その状態を黙って通さないための出口。
 
 ## payload の書式
 

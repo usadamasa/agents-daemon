@@ -15,11 +15,9 @@ import (
 // 5 時間ウィンドウの切り替わりでは five_hour が {null, null} で届く (実機で観測) ため､
 // この区別が無いと直前の resets_at を epoch 0 で上書きしてしまう｡
 type statuslineInput struct {
-	SessionID      string `json:"session_id"`
-	TranscriptPath string `json:"transcript_path"`
-	ContextWindow  struct {
-		UsedPercentage    *float64 `json:"used_percentage"`
-		ContextWindowSize float64  `json:"context_window_size"`
+	SessionID     string `json:"session_id"`
+	ContextWindow struct {
+		UsedPercentage *float64 `json:"used_percentage"`
 	} `json:"context_window"`
 	RateLimits *struct {
 		FiveHour *statuslineWindow `json:"five_hour"`
@@ -35,13 +33,24 @@ type statuslineWindow struct {
 	ResetsAt       *float64 `json:"resets_at"`
 }
 
+// contextFile は context/<session_id>.json の生の形｡読むのは ListMultiplexerBlocks
+// (block から session への逆引き) だけで､observed_at は同じ block の記録が複数あるときに
+// 最新を選ぶのに使う｡
+type contextFile struct {
+	SessionID      string  `json:"session_id"`
+	UsedPercentage float64 `json:"used_percentage"`
+	ObservedAt     int64   `json:"observed_at"`
+	// Multiplexer は ListMultiplexerBlocks が block から session を逆引きするのに使う｡
+	Multiplexer *multiplexerFile `json:"multiplexer,omitempty"`
+}
+
 // IngestStatusline は statusline の stdin (input) から context/ と rate-limits/ の
 // sidecar file を書く｡`agents-daemon ingest-statusline` の本体で､statusline の描画
 // ごとに呼ばれる｡
 //
 //   - session_id が空なら何も書かない (判断材料が無い)
-//   - context/<session_id>.json は毎回書く｡daemon は observed_at の新しさで
-//     セッションの生死も見るため､書かない描画があると判定が古くなる
+//   - context/<session_id>.json は毎回書く｡block と session の対応は最新の記録を採るので､
+//     書かない描画があると対応が古くなる
 //   - rate-limits/<session_id>.json は rate_limits.five_hour.resets_at が非 null の
 //     ときだけ書く｡無い (初回 API レスポンス前､rate_limits が届かない契約､ウィンドウの
 //     切り替わり) ときは既存ファイルを残す
@@ -71,12 +80,10 @@ func (s Store) IngestStatuslineWithEnv(input []byte, getenv func(string) string,
 
 	observedAt := now.Unix()
 	ctx := contextFile{
-		SessionID:         in.SessionID,
-		UsedPercentage:    roundPercent(in.ContextWindow.UsedPercentage),
-		ObservedAt:        observedAt,
-		ContextWindowSize: int64(in.ContextWindow.ContextWindowSize),
-		TranscriptPath:    in.TranscriptPath,
-		Multiplexer:       newMultiplexerFile(MultiplexerRefFromEnv(getenv)),
+		SessionID:      in.SessionID,
+		UsedPercentage: roundPercent(in.ContextWindow.UsedPercentage),
+		ObservedAt:     observedAt,
+		Multiplexer:    newMultiplexerFile(MultiplexerRefFromEnv(getenv)),
 	}
 	if err := statefile.WriteJSONAtomic(contextPath, ".context.*", ctx); err != nil {
 		return err

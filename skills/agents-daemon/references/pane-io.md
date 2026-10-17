@@ -1,7 +1,6 @@
 # pane の読み取りと送信
 
-上限からの再開 ([rate-limit.md](rate-limit.md)) と compact の自動化
-([compact.md](compact.md)) が共通で負う制約｡
+上限からの再開 ([rate-limit.md](rate-limit.md)) が負う制約｡
 
 ## 読み取り元
 
@@ -21,13 +20,9 @@ Escape → テキスト → Enter を**別々のキーストロークとして**
 
 送信文字列は入力行にエコーされる｡**検知語 (`limit` / `rate` / 過負荷を示す語 等) を
 入れてはいけない｡** 自分のメッセージを自分で検知して､無限に再送する｡この制約は
-`retryMessage` `compactStallMessage` `compactAutoMessage` すべてに掛かる｡
+`retryMessage` に掛かる｡
 
-入力欄が空であることを確認してから送る｡Escape は補完メニューを閉じるだけで入力行を
-クリアしないため､残った文字に送信文字列が連結される｡空判定には U+00A0 (NBSP) を
-含める — 画面上の空の入力行は通常の空白ではないことがある｡
-
-Escape を送るかは経路で分かれる｡上限からの再開では `/rate-limit-options` メニューを
-閉じる必要があるため送る (`dismissMenu`､既定 true)｡compact 後の再開では送らない｡
-閉じるべきメニューが無いうえ､万一ダイアログが開いていれば Escape がそれを勝手に
-answer してしまう｡
+上限からの再開では `/rate-limit-options` メニューを閉じる必要があるため､先に Escape を送る
+(`dismissMenu`､既定 true)｡Escape は補完メニューを閉じるだけで入力行をクリアしないので､
+残った文字があれば送信文字列が連結される｡画面上の空の入力行は通常の空白ではなく U+00A0 (NBSP)
+のことがある｡

@@ -54,7 +54,8 @@ index に載る週しか存在せず、404 が普通。
 - **前提に当たるか**: 下の「前提の洗い出し」で出した版の引用と検索語に当たる項目
 - **アイデアになるか**: daemon が pane 越しにやっていることを本体が直接できるようになった項目 (hook の新 event や
   新 field、statusline の新 field、新しい設定キー、OSC、`claude` のサブコマンド)。daemon の役目 (上限からの再開、
-  compact の前後、cache の失効、多重化ツールへの状態の報告) に関わるものを候補にする
+  多重化ツールへの状態の報告) に関わるものを候補にする。compact と prompt cache は本体に任せると決めた (#59) ので、
+  その周りの変化は「daemon の守備範囲が戻るか」ではなく「docs の説明が古くなっていないか」の目で読む
 
 該当しない項目 (mods、cloud sessions、Slack、Code Review、VS Code) は飛ばしてよい。
 
@@ -85,9 +86,9 @@ rg -a -o -N '.{0,160}(<CHANGELOG で見た設定キーや env 名>).{0,200}' "$B
 
 | ページ | 見る節 | 突き合わせる先 |
 | ---- | ---- | ---- |
-| `https://code.claude.com/docs/en/hooks.md` (27 万文字。PostCompact は offset 200000 付近、UserPromptSubmit は 100000 付近) | PostCompact / PreCompact の matcher と input、UserPromptSubmit の順序、Stop の注意 | `hooks/*.sh`、`compact.md`、`architecture.md` [4] [5] |
-| `https://code.claude.com/docs/en/statusline.md` | 「When the status line updates」、JSON の field 表、`rate_limits` と `prompt_cache` の節 | `internal/sessionstate`、`architecture.md` [1] |
-| `https://code.claude.com/docs/en/settings-reference.md`、`env-vars.md` | compaction、usage limit、retry、prompt cache の設定キー | `rate-limit.md`、`compact.md`、`cache.md` |
+| `https://code.claude.com/docs/en/hooks.md` (27 万文字。SessionStart は先頭付近) | SessionStart の input と stdout の扱い、hook timeout | `hooks/*.sh`、`architecture.md` [2] |
+| `https://code.claude.com/docs/en/statusline.md` | 「When the status line updates」、JSON の field 表、`rate_limits` の節 | `internal/sessionstate`、`architecture.md` [1] |
+| `https://code.claude.com/docs/en/settings-reference.md`、`env-vars.md` | usage limit、retry の設定キー | `rate-limit.md` |
 
 ### 5. レポートを書く
 
@@ -145,10 +146,7 @@ rg -n -o 'cc-premise: [0-9.]+ [a-z0-9-]+.*' --glob '!tmp/**' . | sort -t' ' -k3,
 | ---- | ---- | ---- |
 | `limit-screen` | 上限の検知と再開 | usage limit, rate limit, auto-continue, continuing automatically, press enter, spend limit, usage credits, autoContinueAtUsageLimit, rate-limit-options |
 | `transient` | transient の引き取り | API Error, overloaded, 529, retry, backoff, RETRY_WATCHDOG |
-| `compact` | compact の前後 (hook、境界行) | compaction, compact, PostCompact, PreCompact, autocompact |
-| `idle-compact` | cache の失効前の compact | idle compaction, idleCompaction, IDLE_COMPACT |
-| `cache` | prompt cache の TTL と ack | prompt cache, cache TTL, promptCacheTtl, transcript |
-| `statusline` | statusline の sidecar | status line, statusline, rate_limits, context_window, prompt_cache |
+| `statusline` | statusline の sidecar | status line, statusline, rate_limits, context_window |
 | `hooks` | hook の配線 | UserPromptSubmit, Stop hook, SessionStart, onFailure, hook timeout |
 | `osc7501` | 多重化ツールへの状態の報告 | OSC 7501, Program Status, terminal, title |
 | `peer-messaging` | 別セッションへの送受信 | ListAgents, SendMessage, messaging socket, cross-session |

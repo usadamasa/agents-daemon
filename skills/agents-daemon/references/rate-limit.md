@@ -87,9 +87,6 @@ rex の `agent_status` は Claude Code 自身が OSC 7501 で申告する state 
 そのため `agent_status` は status 表示のためだけに残し､判定は画面テキストの分類だけで行う｡
 稼働中の pane も毎 tick 読むことになるが､読み取りは副作用が無い｡
 
-compact 側では逆に `agent_status` を条件に使う｡向きが違うためで､理由は
-[compact.md](compact.md) の「compact 直後の停止」にある｡
-
 ## limit の判定は 2 つの手がかりを要求する
 
 画面に limit を示す文言があるだけでは発火しない｡近く (前後 6 行以内) に reset 時刻を示す

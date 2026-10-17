@@ -41,7 +41,7 @@ func RunInspect(ctx context.Context, w io.Writer, client multiplexer.Client, p a
 	_, _ = fmt.Fprintf(w, "\n判定結果: %s\n", kind)
 
 	if sessionID == "" {
-		sessionID = paneSessionID(ctx, client, paneID)
+		sessionID = multiplexer.SessionIDOf(ctx, client, paneID)
 	}
 	if sessionID == "" {
 		_, _ = fmt.Fprintln(w, "\n対象セッションが決まらないため､利用上限 state によるゲート判定は行いません")
@@ -82,146 +82,10 @@ func RunInspect(ctx context.Context, w io.Writer, client multiplexer.Client, p a
 	case detect.KindSpendLimit:
 		_, _ = fmt.Fprintln(w, "\n待っても解除されない上限 (spend limit / usage credit) です｡待機に入りません｡")
 	case detect.KindNone:
-		_, _ = fmt.Fprintln(w, "\n--- compact の自動化の判定 ---")
-		reportCompactAuto(w, cfg, p, sessionID, screen, now)
-		_, _ = fmt.Fprintln(w, "\n--- compact 停止の判定 (画面判定の fallback) ---")
-		reportCompactStall(w, cfg, screen)
+		_, _ = fmt.Fprintln(w, "\n上限でも一時エラーでもない画面です｡daemon は何もしません｡")
 	}
 
 	return nil
-}
-
-// reportCompactAuto は context 使用率からの自動 compact と､圧縮後の再開の判定を表示する｡
-// agent_status は pane を引き直さないと分からないため､残りの条件として並べるに留める｡
-func reportCompactAuto(w io.Writer, cfg config.Config, p apppath.Paths, sessionID, screen string, now time.Time) {
-	if sessionID == "" {
-		_, _ = fmt.Fprintln(w, "  対象セッションが決まらないため判定しません")
-		return
-	}
-	store := sessionstate.New(p.StateDir())
-	cs, err := store.LoadCompact(sessionID)
-	if err != nil {
-		_, _ = fmt.Fprintf(w, "  compact state の読み込みに失敗: %v\n", err)
-		return
-	}
-
-	prompt := "書きかけがあります (送信しません)"
-	if detect.PromptIsEmpty(screen, cfg.DetectionTailLines) {
-		prompt = "空 (送信できます)"
-	}
-	_, _ = fmt.Fprintf(w, "  入力欄: %s\n", prompt)
-
-	if !cs.HasContext {
-		_, _ = fmt.Fprintf(w, "  context 使用率: state が無い (statusline が %s へ書きます)\n", store.Context)
-	} else {
-		maxAge := time.Duration(cfg.StateMaxAgeSeconds) * time.Second
-		_, _ = fmt.Fprintf(w, "  context 使用率: %.0f%% / 閾値 %.0f%% (観測から %s､鮮度の上限 %s)\n",
-			cs.UsedPercentage, cfg.CompactAutoThresholdPercent,
-			now.Sub(cs.ObservedAt).Round(time.Second), maxAge)
-	}
-	if !cfg.CompactAutoEnabled {
-		_, _ = fmt.Fprintln(w, "  compactAutoEnabled が false のため /compact-prep は投入しません")
-	}
-
-	_, _ = fmt.Fprintln(w, "  idle compact (cache の失効前の compact):")
-	cache, cacheErr := sessionstate.NewCacheLoader(store).Load(sessionID)
-	if cacheErr != nil {
-		_, _ = fmt.Fprintf(w, "    cache の状態の読み込みに失敗､状態無しとして扱います: %v\n", cacheErr)
-	}
-	reportIdleCompact(w, cfg, cs, cache, now)
-
-	if cs.HasPrep {
-		_, _ = fmt.Fprintf(w, "  compact-prep の state file: %s に書かれています\n", cs.PrepWrittenAt.Format(time.RFC3339))
-	} else {
-		_, _ = fmt.Fprintln(w, "  compact-prep の state file: ありません")
-	}
-
-	if cs.HasCompacted {
-		delay := time.Duration(cfg.CompactResumeDelaySeconds) * time.Second
-		_, _ = fmt.Fprintf(w, "  圧縮完了 marker: %s (経過 %s / 猶予 %s)\n",
-			cs.CompactedAt.Format(time.RFC3339), now.Sub(cs.CompactedAt).Round(time.Second), delay)
-	} else {
-		_, _ = fmt.Fprintln(w, "  圧縮完了 marker: ありません")
-	}
-	if !cfg.CompactResumeEnabled {
-		_, _ = fmt.Fprintln(w, "  compactResumeEnabled が false のため再開は促しません")
-	}
-	_, _ = fmt.Fprintf(w, "  送信にはさらに agent_status が idle/done であることと､直近の投入から %d 分 (cooldown) が要ります\n",
-		cfg.CompactAutoCooldownMinutes)
-}
-
-// reportIdleCompact は idle compact の 1 段目の判定の内訳を表示する｡判定そのものは daemon と同じ
-// monitor.EvaluateIdleCompact に任せる (reportGate と同じ理由)｡ここが持つのは､判定に使った値を
-// どの順で見せるかだけ｡
-func reportIdleCompact(w io.Writer, cfg config.Config, cs *sessionstate.Compact, cache *sessionstate.Cache, now time.Time) {
-	if !cfg.CacheIdleCompactEnabled {
-		_, _ = fmt.Fprintln(w, "    cacheIdleCompactEnabled が false のため送りません")
-	}
-	if cache == nil {
-		_, _ = fmt.Fprintln(w, "    cache の状態: ありません (transcript_path が無い､cache write が無い､または compact 後にまだ応答が無い)")
-	} else {
-		reportIdleCompactCache(w, cfg, cs, cache, now)
-	}
-	if cs.HasIdleCompacted {
-		state := "利用者が戻ったので解けている"
-		if cs.IdleCompactActive(cache) {
-			state = "active (3 段目と画面判定を送らない)"
-		}
-		_, _ = fmt.Fprintf(w, "    idle compact の marker: %s (%s)\n", cs.IdleCompactedAt.Format(time.RFC3339), state)
-	} else {
-		_, _ = fmt.Fprintln(w, "    idle compact の marker: ありません")
-	}
-	_, _ = fmt.Fprintf(w, "    判定: %s\n", monitor.EvaluateIdleCompact(cfg, cs, cache, now))
-}
-
-// reportIdleCompactCache は cache の状態から導ける 3 行 (失効時刻､窓､使用率) を表示する｡
-func reportIdleCompactCache(w io.Writer, cfg config.Config, cs *sessionstate.Compact, cache *sessionstate.Cache, now time.Time) {
-	_, _ = fmt.Fprintf(w, "    cache の状態: 直近の応答 %s､TTL %d 分､失効 %s (%s)\n",
-		cache.LastRequestAt.Format(time.RFC3339), int(cache.TTL/time.Minute), cache.ExpiresAt().Format(time.RFC3339),
-		describeRemaining(cache.ExpiresAt().Sub(now)))
-	lead := time.Duration(cfg.CacheIdleCompactLeadSeconds) * time.Second
-	opensAt := cache.ExpiresAt().Add(-lead)
-	if now.Before(opensAt) {
-		_, _ = fmt.Fprintf(w, "    失効前の窓: まだ開いていない (失効の %s 前､%s に開く)\n", lead, opensAt.Format(time.RFC3339))
-	} else {
-		_, _ = fmt.Fprintf(w, "    失効前の窓: 開いている (失効の %s 前､%s から)\n", lead, opensAt.Format(time.RFC3339))
-	}
-	if pct, ok := cs.CacheUsedPercentage(cache); ok {
-		_, _ = fmt.Fprintf(w, "    使用率: %.0f%% / 閾値 %.0f%% (直近の応答の入力 %d tokens / window %d)\n",
-			pct, cfg.CacheIdleCompactThresholdPercent, cache.ContextTokens, cs.ContextWindowSize)
-		return
-	}
-	_, _ = fmt.Fprintf(w, "    使用率: 求められない (直近の応答の入力 %d tokens､window %d｡どちらかが 0 なら記録を始める前の版の statusline が書いた context)\n",
-		cache.ContextTokens, cs.ContextWindowSize)
-}
-
-// describeRemaining は失効までの残り (負なら失効からの経過) を文にする｡
-func describeRemaining(d time.Duration) string {
-	if d < 0 {
-		return fmt.Sprintf("失効から %s", (-d).Round(time.Second))
-	}
-	return fmt.Sprintf("残り %s", d.Round(time.Second))
-}
-
-// reportCompactStall は compact 直後に止まっているかの候補判定を表示する｡
-// 実際に送るかどうかは monitor が agent_status・画面の安定・クールダウンを
-// 重ねて決めるため､ここでは「候補かどうか」と残りの条件を並べるに留める｡
-func reportCompactStall(w io.Writer, cfg config.Config, screen string) {
-	if !cfg.CompactStallEnabled {
-		_, _ = fmt.Fprintln(w, "  compactStallEnabled が false のため判定しません")
-		return
-	}
-	signature, ok := detect.CompactStallSignature(screen, cfg.DetectionTailLines)
-	if !ok {
-		_, _ = fmt.Fprintln(w, "  候補ではありません (compact 境界が無い / 境界の後ろに応答がある / 入力行が空でない)")
-		return
-	}
-	_, _ = fmt.Fprintln(w, "  候補です｡根拠にした範囲:")
-	for _, line := range strings.Split(signature, "\n") {
-		_, _ = fmt.Fprintf(w, "    %s\n", line)
-	}
-	_, _ = fmt.Fprintf(w, "  送信にはさらに次が要ります: agent_status が idle/done､この画面が %d 秒変わらない､直近の送信から %d 分､同じ停止への送信が %d 回未満\n",
-		cfg.CompactStallQuietSeconds, cfg.CompactStallCooldownMinutes, cfg.CompactStallMaxNudges)
 }
 
 // loadInspectScreen は --pane / --file のどちらかから画面テキストを取得する｡
@@ -308,19 +172,4 @@ func reportWake(w io.Writer, cfg config.Config, rateState, account *sessionstate
 		_, _ = fmt.Fprintln(w, "  アカウント全体で最新のウィンドウ: 無し")
 	}
 	_, _ = fmt.Fprintf(w, "  起床時刻: %s\n", wake.Format(time.RFC3339))
-}
-
-// paneSessionID は pane に紐づく Claude セッション ID を引く｡pane が取得できない､
-// または agent session が紐づいていない場合は空文字列を返す (state 無しとして扱う)｡
-// 利用上限 state はセッションごとに別ファイルなので､この対応付けが取れないと
-// どの state を読むべきかが決まらない｡
-func paneSessionID(ctx context.Context, client multiplexer.Client, paneID string) string {
-	if paneID == "" {
-		return ""
-	}
-	pane, err := client.PaneGet(ctx, paneID)
-	if err != nil {
-		return ""
-	}
-	return pane.SessionID
 }

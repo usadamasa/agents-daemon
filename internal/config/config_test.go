@@ -71,23 +71,7 @@ func TestLoad(t *testing.T) {
 			"submitDelayMs": 200,
 			"customPatterns": ["foo.*bar"],
 			"idleShutdownMinutes": 15,
-			"deferToNativeAutoContinue": false,
-			"compactStallEnabled": false,
-			"compactStallQuietSeconds": 300,
-			"compactStallCooldownMinutes": 20,
-			"compactStallMaxNudges": 5,
-			"compactStallMessage": "keep going",
-			"compactAutoEnabled": true,
-			"compactAutoThresholdPercent": 70,
-			"compactAutoPrepMessage": "/prep",
-			"compactAutoMessage": "/compact now",
-			"compactAutoPrepTimeoutMinutes": 3,
-			"compactAutoCooldownMinutes": 30,
-			"compactResumeEnabled": false,
-			"compactResumeDelaySeconds": 90,
-			"cacheIdleCompactEnabled": false,
-			"cacheIdleCompactLeadSeconds": 900,
-			"cacheIdleCompactThresholdPercent": 30
+			"deferToNativeAutoContinue": false
 		}`)
 		cfg, err := Load(path)
 		if err != nil {
@@ -113,40 +97,22 @@ func TestLoad(t *testing.T) {
 			CustomPatterns:          []string{"foo.*bar"},
 			IdleShutdownMinutes:     15,
 
-			DeferToNativeAutoContinue:   false,
-			CompactStallEnabled:         false,
-			CompactStallQuietSeconds:    300,
-			CompactStallCooldownMinutes: 20,
-			CompactStallMaxNudges:       5,
-			CompactStallMessage:         "keep going",
-
-			CompactAutoEnabled:            true,
-			CompactAutoThresholdPercent:   70,
-			CompactAutoPrepMessage:        "/prep",
-			CompactAutoMessage:            "/compact now",
-			CompactAutoPrepTimeoutMinutes: 3,
-			CompactAutoCooldownMinutes:    30,
-			CompactResumeEnabled:          false,
-			CompactResumeDelaySeconds:     90,
-
-			CacheIdleCompactEnabled:          false,
-			CacheIdleCompactLeadSeconds:      900,
-			CacheIdleCompactThresholdPercent: 30,
+			DeferToNativeAutoContinue: false,
 		}
 		if !reflect.DeepEqual(cfg, want) {
 			t.Errorf("got %+v, want %+v", cfg, want)
 		}
 	})
 
-	t.Run("compactStallQuietSeconds が短すぎる値なら既定へ落ちる", func(t *testing.T) {
-		// 数秒で突くと compact 直後に考え始めた Claude へ割り込む｡
-		path := writeTestFile(t, `{"compactStallQuietSeconds": 3}`)
+	t.Run("旧版の compact / cache のキーは無視され､他のキーはそのまま効く", func(t *testing.T) {
+		// 利用者の config.json に残ったキーで起動が止まったり他のキーが落ちたりしない｡
+		path := writeTestFile(t, `{"compactAutoEnabled": true, "cacheIdleCompactEnabled": false, "marginSeconds": 45}`)
 		cfg, err := Load(path)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if cfg.CompactStallQuietSeconds != Default().CompactStallQuietSeconds {
-			t.Errorf("CompactStallQuietSeconds = %d, want %d", cfg.CompactStallQuietSeconds, Default().CompactStallQuietSeconds)
+		if cfg.MarginSeconds != 45 {
+			t.Errorf("marginSeconds: got %d, want 45", cfg.MarginSeconds)
 		}
 	})
 
@@ -204,34 +170,6 @@ func TestLoad(t *testing.T) {
 		}
 		if cfg.TransientMaxWaitSeconds != 100 {
 			t.Errorf("transientMaxWaitSeconds: got %d, want 100", cfg.TransientMaxWaitSeconds)
-		}
-	})
-
-	t.Run("idle compact の既定は有効､lead 600 秒､閾値 40%", func(t *testing.T) {
-		def := Default()
-		if !def.CacheIdleCompactEnabled || def.CacheIdleCompactLeadSeconds != 600 || def.CacheIdleCompactThresholdPercent != 40 {
-			t.Errorf("idle compact の既定 = %v / %d / %v, want true / 600 / 40",
-				def.CacheIdleCompactEnabled, def.CacheIdleCompactLeadSeconds, def.CacheIdleCompactThresholdPercent)
-		}
-	})
-
-	t.Run("idle compact の範囲外の値は既定へ落ちる", func(t *testing.T) {
-		// lead が 1 時間以上だと､1h TTL でも応答の直後から窓が開く｡
-		for _, body := range []string{
-			`{"cacheIdleCompactLeadSeconds": 30, "cacheIdleCompactThresholdPercent": 0}`,
-			`{"cacheIdleCompactLeadSeconds": 3600, "cacheIdleCompactThresholdPercent": 101}`,
-		} {
-			cfg, err := Load(writeTestFile(t, body))
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			def := Default()
-			if cfg.CacheIdleCompactLeadSeconds != def.CacheIdleCompactLeadSeconds {
-				t.Errorf("%s: lead = %d, want default %d", body, cfg.CacheIdleCompactLeadSeconds, def.CacheIdleCompactLeadSeconds)
-			}
-			if cfg.CacheIdleCompactThresholdPercent != def.CacheIdleCompactThresholdPercent {
-				t.Errorf("%s: threshold = %v, want default %v", body, cfg.CacheIdleCompactThresholdPercent, def.CacheIdleCompactThresholdPercent)
-			}
 		}
 	})
 

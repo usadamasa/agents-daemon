@@ -29,12 +29,6 @@ type SpendView struct {
 	Cap   int
 }
 
-// CacheView は prompt cache の状態｡Remaining が 0 以下なら失効済み｡
-// 状態が分からない (transcript が無い､初回ターン) なら View.Cache は nil｡
-type CacheView struct {
-	Remaining time.Duration
-}
-
 // View は描画に要るものを全て解決した形｡stdin の値 (Input) に､呼び出し側が settings・git・
 // state から引いた値を足す｡Render はここから先でファイルもコマンドも触らない｡
 type View struct {
@@ -49,7 +43,6 @@ type View struct {
 	// ProjectBranch は起動元 ProjectDir の branch (ProjectBranch の値)｡CurrentDir が起動元の外にあるときだけ使う｡
 	ProjectBranch string
 	Spend         *SpendView
-	Cache         *CacheView
 }
 
 // segment は statusline の 1 項目｡色と､絵文字を含む本文｡
@@ -65,18 +58,17 @@ type segmentFunc func(v View, now time.Time) (segment, bool)
 // 数字を横断で読むのに視線が飛ばず､どの行も折り返さない長さに収まる｡
 //
 //	1 行目: 何で動いているか (model / effort / output style / version)
-//	2 行目: どれだけ使ったか (context / 利用上限 / cache / cost)
+//	2 行目: どれだけ使ったか (context / 利用上限 / cost)
 //	3 行目: どこに居るか (dir / branch / worktree / 起動元)
 var fullLines = [][]segmentFunc{
 	{modelSegment, effortSegment, outputStyleSegment, versionSegment},
-	{contextSegment, rateLimitSegment, cacheSegment, costSegment, daySpendSegment, monthSpendSegment},
+	{contextSegment, rateLimitSegment, costSegment, daySpendSegment, monthSpendSegment},
 	{dirSegment, branchSegment, worktreeSegment, homeSegment},
 }
 
 // compactLine は幅が足りないときの 1 行｡残すのは pane を跨いで見分けが要るもの
 // (context / effort / ディレクトリ / branch / worktree) だけ｡model・cost・version・output_style は落とす｡
 // 利用上限 (⏳) と月額 (🧾) はアカウント全体の値で pane ごとに変わらないので落とす｡
-// cache (⏱) は pane ごとの値だが､幅を優先して落とす｡
 var compactLine = []segmentFunc{contextSegment, effortSegment, shortDirSegment, plainBranchSegment, worktreeSegment}
 
 // Render は Mode に応じた行を返す｡full は 3 行を改行で繋ぎ､末尾に改行を付けない｡
@@ -210,25 +202,6 @@ func formatCountdown(d time.Duration) string {
 		return fmt.Sprintf("%dh%dm", h, m)
 	}
 	return fmt.Sprintf("%dm", m)
-}
-
-// cacheWarnRemaining は prompt cache の残りがこれ以下なら orange にする境界｡
-const cacheWarnRemaining = 10 * time.Minute
-
-// cacheSegment は prompt cache の失効までの残り時間｡失効後の最初の prompt は会話全体を送り直すので､
-// 離席の前に見えるようにする｡失効済みは cold｡
-func cacheSegment(v View, _ time.Time) (segment, bool) {
-	if v.Cache == nil {
-		return segment{}, false
-	}
-	switch remaining := v.Cache.Remaining; {
-	case remaining <= 0:
-		return segment{red, "⏱ cache cold"}, true
-	case remaining <= cacheWarnRemaining:
-		return segment{orange, fmt.Sprintf("⏱ cache %dm", int(remaining.Minutes()))}, true
-	default:
-		return segment{green, fmt.Sprintf("⏱ cache %dm", int(remaining.Minutes()))}, true
-	}
 }
 
 func costSegment(v View, _ time.Time) (segment, bool) {

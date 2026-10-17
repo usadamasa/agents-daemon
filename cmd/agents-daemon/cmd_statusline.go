@@ -83,17 +83,17 @@ func runStatusline(stdin io.Reader, now time.Time) (string, error) {
 	if mode == statusline.ModeHidden {
 		return "", errors.Join(errs...)
 	}
-	view, err := buildView(store, ledger, in, mode, spendCap, now)
+	view, err := buildView(ledger, in, mode, spendCap, now)
 	if err != nil {
 		errs = append(errs, err)
 	}
 	return view.Render(now), errors.Join(errs...)
 }
 
-// buildView は settings・git・state から描画に要る値を引く｡合算と cache は full でだけ読む
-// (compact では出さないので､台帳の走査と transcript の読み込みを省く)｡
+// buildView は settings・git・state から描画に要る値を引く｡合算は full でだけ読む
+// (compact では出さないので､台帳の走査を省く)｡
 // state が読めなくても描画は返し､理由をエラーに添える｡
-func buildView(store sessionstate.Store, ledger spend.Ledger, in statusline.Input, mode statusline.Mode, spendCap int, now time.Time) (statusline.View, error) {
+func buildView(ledger spend.Ledger, in statusline.Input, mode statusline.Mode, spendCap int, now time.Time) (statusline.View, error) {
 	home := os.Getenv("HOME")
 	view := statusline.View{
 		Input:  in,
@@ -109,22 +109,14 @@ func buildView(store sessionstate.Store, ledger spend.Ledger, in statusline.Inpu
 		return view, nil
 	}
 
-	var errs []error
 	if spendCap > 0 {
 		sum, err := ledger.Sum(now)
 		if err != nil {
-			errs = append(errs, err)
-		} else {
-			view.Spend = &statusline.SpendView{Day: sum.Day, Month: sum.Month, Cap: spendCap}
+			return view, err
 		}
+		view.Spend = &statusline.SpendView{Day: sum.Day, Month: sum.Month, Cap: spendCap}
 	}
-	cache, err := sessionstate.NewCacheLoader(store).Load(in.SessionID)
-	if err != nil {
-		errs = append(errs, err)
-	} else if cache != nil {
-		view.Cache = &statusline.CacheView{Remaining: cache.ExpiresAt().Sub(now)}
-	}
-	return view, errors.Join(errs...)
+	return view, nil
 }
 
 // parseSpendCap は環境変数の月額上限を読む｡整数でなければ未設定 (0) として扱う｡

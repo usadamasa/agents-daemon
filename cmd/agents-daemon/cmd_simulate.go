@@ -4,7 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
-	"github.com/usadamasa/agents-daemon/internal/verify"
+	"github.com/usadamasa/agents-daemon/internal/simulate"
 )
 
 // newSimulateCmd は `agents-daemon simulate` を組み立てる｡
@@ -35,7 +35,7 @@ func newSimulateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return verify.RunSimulate(cmd.Context(), cmd.OutOrStdout(), p, verify.SimulateOptions{Send: send, Keep: keep, ScreenFile: screenFile})
+			return simulate.Run(cmd.Context(), cmd.OutOrStdout(), p, simulate.Options{Send: send, Keep: keep, ScreenFile: screenFile})
 		},
 	}
 	cmd.Flags().BoolVar(&send, "send", false, "dry-run をやめ､使い捨て pane へ実際に再開メッセージを送信する")

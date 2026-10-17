@@ -5,21 +5,17 @@
 
 ## 何をするか
 
-役目は 2 つある｡
+**利用上限からの自動再開**: 5 時間ウィンドウの利用上限で止まったセッションを､解除時刻に再開させる｡
+Claude Code 自身の auto-continue が再開を予約している間は手を出さず､ネイティブが降りた場面だけを拾う｡
 
-- **利用上限からの自動再開**: 5 時間ウィンドウの利用上限で止まったセッションを､解除時刻に再開させる｡
-  Claude Code 自身の auto-continue が再開を予約している間は手を出さず､ネイティブが降りた場面だけを拾う｡
-- **context の自動 compact**: context 使用率が閾値を超えたら `/agents-daemon:compact-prep` で復旧材料を書かせ､
-  続けて `/compact` を投入し､圧縮後に作業を再開させる (既定は off)｡
+context の compact と prompt cache の失効は Claude Code 本体に任せる (autocompact､idle compaction､
+失効後の footer の案内)｡以前この plugin が持っていた compact の自動化と ttl-guard は外した｡
 
 plugin が持つもの:
 
 | 部品 | 役目 |
 | ---- | ---- |
 | SessionStart hook | daemon のバイナリを用意し､`daemon --ensure` で起こす |
-| PostCompact hook | 圧縮完了の marker を置く |
-| UserPromptSubmit hook | marker を見て､圧縮直後の 1 ターンだけ復旧ガイドを注入する｡cache 失効後の最初の prompt を止める (`ttl-guard`) |
-| `agents-daemon:compact-prep` skill | `/compact` 前に作業状態を state file へ保存する |
 | `agents-daemon:agents-daemon` skill | 運用と切り分けの手引き (症状から引く) |
 | `agents-daemon:setup` skill | 前提の確認と statusline の配線､peer messaging の切り分け |
 | `agents-daemon:peer-sessions` skill | 別セッション (peer) へ作業を渡す手順と､rex の block 操作 |
@@ -30,11 +26,11 @@ plugin が持つもの:
 
 - **rex**: daemon は rex の CLI (`rex ls` / `block call` / `capture` / `send`) で block を見て送信する｡
   rex の外で動く Claude Code には何も届かず､`REX_SESSION` の無いセッションの SessionStart では daemon を起こさない
-  (statusline と `ttl-guard` は rex の外でも動く)｡server の socket は `~/Library/Application Support/rex/server.sock`｡
+  (statusline は rex の外でも動く)｡server の socket は `~/Library/Application Support/rex/server.sock`｡
   sandbox の中の Bash から `doctor` や setup skill で rex を叩くなら､
   `sandbox.network.allowUnixSockets` に `~/Library/Application Support/rex` を足す｡
   rex `0.0.1791570264-g7b5bf3` と Claude Code `2.1.296` で測った (2026-10-10)｡
-- **statusline の配線**: 使用率と解除時刻と transcript のパスは statusline の stdin にしか来ない｡
+- **statusline の配線**: 使用率と解除時刻は statusline の stdin にしか来ない｡
   `statusLine.command` をこの plugin のバイナリの `statusline` に向けるか､自前の statusline から
   `ingest-statusline` へ stdin を渡す 1 行を足す (下の「セットアップ」で行う)｡
   block と session の対応も statusline が書く記録から引くので､必須になる｡
@@ -68,13 +64,6 @@ install 後に rex の block の中で Claude Code を起動し､`/agents-daemo
 
 `${XDG_CONFIG_HOME:-~/.config}/agents-daemon/config.json`｡ファイルが無ければ全て既定値で動く｡
 daemon は毎 tick 読み直すので､編集は数秒で反映される｡
-
-context の自動 compact を使う最小例:
-
-```json
-{"compactAutoEnabled": true}
-```
-
 設定キーの一覧は `skills/agents-daemon/references/operations.md` にある｡
 
 ## コマンド

@@ -24,55 +24,30 @@ func TestPrune(t *testing.T) {
 		ageFile(t, stale, 25*time.Hour, now)
 		ageFile(t, leftover, 25*time.Hour, now)
 
-		// compact 系は 7 日｡24 時間では消えないことが利用上限との差になる｡
-		keep := filepath.Join(s.CompactState, "recent.md")
-		drop := filepath.Join(s.Compacted, "old")
-		writeFile(t, keep, "")
-		writeFile(t, drop, "")
+		// context は 7 日｡24 時間では消えないことが利用上限との差になる｡
+		keep := filepath.Join(s.Context, "recent.json")
+		drop := filepath.Join(s.Context, "old.json")
+		writeFile(t, keep, "{}")
+		writeFile(t, drop, "{}")
 		ageFile(t, keep, 48*time.Hour, now)
 		ageFile(t, drop, 8*24*time.Hour, now)
 
-		// cache も compact 系と同じ 7 日｡
-		keepCache := filepath.Join(s.Cache, "recent.json")
-		dropCache := filepath.Join(s.Cache, "old.json")
-		writeFile(t, keepCache, "{}")
-		writeFile(t, dropCache, "{}")
-		ageFile(t, keepCache, 48*time.Hour, now)
-		ageFile(t, dropCache, 8*24*time.Hour, now)
-
-		// idle compact の marker も 7 日｡
-		keepIdle := filepath.Join(s.IdleCompacted, "recent")
-		dropIdle := filepath.Join(s.IdleCompacted, "old")
-		writeFile(t, keepIdle, "")
-		writeFile(t, dropIdle, "")
-		ageFile(t, keepIdle, 48*time.Hour, now)
-		ageFile(t, dropIdle, 8*24*time.Hour, now)
-
-		// ack マーカーは 90 日｡ack は時間で失効させない (待った時間が長くなっても
-		// 書き直しのコストは同じ) ので､7 日で消すと guard が同じ gap でもう一度止める｡
-		keepAck := filepath.Join(s.CacheAck, "recent")
-		dropAck := filepath.Join(s.CacheAck, "old")
-		writeFile(t, keepAck, "x")
-		writeFile(t, dropAck, "x")
-		ageFile(t, keepAck, 60*24*time.Hour, now)
-		ageFile(t, dropAck, 91*24*time.Hour, now)
-
-		rateLimits, compacts, err := s.Prune(now)
+		rateLimits, contexts, err := s.Prune(now)
 		if err != nil {
 			t.Fatalf("Prune() error = %v", err)
 		}
 		if rateLimits != 2 {
 			t.Errorf("rateLimits = %d, want 2 (古い state と mktemp の残骸)", rateLimits)
 		}
-		if compacts != 4 {
-			t.Errorf("compacts = %d, want 4 (compacted と cache と cache-idle-compacted と cache-ack)", compacts)
+		if contexts != 1 {
+			t.Errorf("contexts = %d, want 1", contexts)
 		}
-		for _, path := range []string{fresh, keep, keepCache, keepIdle, keepAck} {
+		for _, path := range []string{fresh, keep} {
 			if _, err := os.Stat(path); err != nil {
 				t.Errorf("保持期間内の %s が消えている", filepath.Base(path))
 			}
 		}
-		for _, path := range []string{stale, leftover, drop, dropCache, dropIdle, dropAck} {
+		for _, path := range []string{stale, leftover, drop} {
 			if _, err := os.Stat(path); err == nil {
 				t.Errorf("保持期間を過ぎた %s が残っている", filepath.Base(path))
 			}
@@ -97,16 +72,16 @@ func TestPrune(t *testing.T) {
 
 	t.Run("ディレクトリが無ければ何もしない", func(t *testing.T) {
 		s := New(t.TempDir())
-		rateLimits, compacts, err := s.Prune(now)
-		if err != nil || rateLimits != 0 || compacts != 0 {
-			t.Errorf("Prune() = %d, %d, %v, want 0, 0, nil", rateLimits, compacts, err)
+		rateLimits, contexts, err := s.Prune(now)
+		if err != nil || rateLimits != 0 || contexts != 0 {
+			t.Errorf("Prune() = %d, %d, %v, want 0, 0, nil", rateLimits, contexts, err)
 		}
 	})
 
 	t.Run("ゼロ値の Store は何もしない", func(t *testing.T) {
-		rateLimits, compacts, err := Store{}.Prune(now)
-		if err != nil || rateLimits != 0 || compacts != 0 {
-			t.Errorf("Prune() = %d, %d, %v, want 0, 0, nil", rateLimits, compacts, err)
+		rateLimits, contexts, err := Store{}.Prune(now)
+		if err != nil || rateLimits != 0 || contexts != 0 {
+			t.Errorf("Prune() = %d, %d, %v, want 0, 0, nil", rateLimits, contexts, err)
 		}
 	})
 }

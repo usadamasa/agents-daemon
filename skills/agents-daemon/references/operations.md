@@ -150,50 +150,14 @@ rex の送信が未測定なのはこの教訓がまだ果たされていない�
 | `customPatterns` | `[]` | 上限として扱う追加の正規表現 |
 | `idleShutdownMinutes` | `30` | Claude pane が 0 のまま続いたら自己終了する |
 | `deferToNativeAutoContinue` | `true` | ネイティブの auto-continue が再開を予約している間は手を出さない |
-| `compactStallEnabled` | `true` | compact 直後に止まった pane を突く |
-| `compactStallQuietSeconds` | `120` | 画面が変わらないまま何秒で「止まっている」と見なすか (10 未満は既定へ落ちる) |
-| `compactStallCooldownMinutes` | `10` | 同じ pane を続けて突かない間隔 |
-| `compactStallMaxNudges` | `3` | 1 回の停止 (送っても画面が変わらず続く状態) へ送る回数の上限｡超えたら送らずログに `compact-nudge-capped` を残し､pane は入力待ちのまま人の判断に委ねる｡応答が流れて停止が解けたら数え直す (1 未満は既定へ落ちる) |
-| `compactStallMessage` | 下の「送る文面」 | compact 後の再開で送る文面 (marker 経路と画面判定の両方で使う) |
-| `compactAutoEnabled` | `false` | context 使用率から `/agents-daemon:compact-prep` → `/compact` を投入する (使うなら config.json で `true` にする) |
-| `compactAutoThresholdPercent` | `75` | この使用率以上で投入を始める (cache read が安い世代では早い compact が割に合わないため遅め) |
-| `compactAutoPrepMessage` | `/agents-daemon:compact-prep` | 1 段目に送る文字列｡plugin の skill は名前空間付きで呼ぶ |
-| `compactAutoMessage` | 下の「送る文面」 | 2 段目に送る文字列 (`/compact` 本体) |
-| `compactAutoPrepTimeoutMinutes` | `5` | state file を待つ上限 |
-| `compactAutoCooldownMinutes` | `15` | 1 段目を再投入しない間隔 |
-| `compactResumeEnabled` | `true` | 圧縮完了 marker を見て作業を再開させる |
-| `compactResumeDelaySeconds` | `60` | marker がこの秒数より古くなってから送る (10 未満は既定へ落ちる) |
-| `cacheIdleCompactEnabled` | `true` | idle な pane の prompt cache が失効する前に compact-prep → `/compact` を投入する ([compact.md](compact.md) の「idle compact」)｡`compactAutoEnabled` とは独立 |
-| `cacheIdleCompactLeadSeconds` | `600` | 失効の何秒前から動くか (60 以上 3600 未満｡範囲外は既定へ落ちる) |
-| `cacheIdleCompactThresholdPercent` | `40` | この使用率以上で動く |
+
+旧版の compact / cache のキー (`compactStall*` `compactAuto*` `compactResume*` `cacheIdleCompact*`) は
+読まない｡config.json に残っていても他のキーには影響しないが､消してよい｡
 
 ### 送る文面
 
-既定値は `internal/config/config.go` の `default*Message` 定数｡
-どれも上限の検知語 (`limit` / `rate` 等) を含めてはいけない ([pane-io.md](pane-io.md))｡
-
-`compactStallMessage` (既定):
-
-```text
-Continue the task you were working on. Reread the plan file or the compact-prep state file for the open items and work through them; if one is blocked, say what is blocking it.
-```
-
-daemon は残項目そのものを知らないので､名指しの代わりに plan file / state file を読み直させる｡
-
-`compactAutoMessage` (既定):
-
-```text
-/compact Keep the plan file path, current phase, and unresolved items; keep decisions made, options tried or set aside and why, and constraints in their exact wording.
-```
-
-末尾の指示文は圧縮サマリーの保持リスト｡外すと `/compact` が compact-prep の skill と前方一致で
-補完メニューを開き､Enter が候補を横取りしうる ([compact.md](compact.md))｡
-
-`compactAutoEnabled` だけ既定を `false` にしてある｡`/compact` は取り消せないため､
-コードの既定は投入しない側へ倒す｡有効化は config.json で行う｡
-`cacheIdleCompactEnabled` は既定 `true`｡warm なうちに要約しておけば失効後の書き直しが要約だけで済み､
-圧縮後に再開も送らない ([compact.md](compact.md) の「idle compact」)｡止めるなら config.json で `false` にする｡
-圧縮**後**の再開 (`compactResumeEnabled`) は安全なので既定 `true`｡
+既定値は `internal/config/config.go` の `defaultRetryMessage`｡
+上限の検知語 (`limit` / `rate` 等) を含めてはいけない ([pane-io.md](pane-io.md))｡
 
 Claude Code の画面の文言は安定した API ではない｡変わって検知が止まったら
 `customPatterns` に新しい表現を足せば､コードを変えずに追随できる｡
@@ -214,7 +178,7 @@ Claude Code の画面の文言は安定した API ではない｡変わって検
   SessionStart では起こさない｡Ghostty 単体では pane へキーを送る手段が無いため､この機能は成立しない｡
 - **statusline を切っていると state ファイルが作られない｡** `statusLine.command` がバイナリの `statusline` を
   指しているか､利用者の statusline が stdin を `agents-daemon ingest-statusline` へ渡していなければ､
-  ゲートは働かず､待機時刻は画面かフォールバックから決まり､compact の自動投入は動かない｡
+  ゲートは働かず､待機時刻は画面かフォールバックから決まる｡
 - **block にセッション ID が紐づいていないと own state を引けない｡** `context/<sid>.json` の
   `multiplexer` (statusline が環境変数の `REX_BLOCK` から書く) で紐づける｡statusline が
   配線されていないと session_id が引けない (`doctor` で `session_id=(なし)`)｡対応する
@@ -232,19 +196,7 @@ Claude Code の画面の文言は安定した API ではない｡変わって検
 - **pane の中で tmux が動いていると送信が入力行へ届かない｡** agent teams
   (`tmux -L claude-swarm-*`) を開いたセッションの pane に `send-text` すると､
   文字列は tmux 側でフォーカスを持つペイン (teammate 一覧など) に吸われ､Claude の
-  入力行は空のままになる (実測)｡上限からの再開も compact の自動化も同じ経路を通るため､
-  この形の pane では届かない｡
-- **compact の自動化は rex の block に限られる｡** daemon は rex の一覧で
-  セッションを見つけるため､素のターミナルで動く Claude Code には何も届かない｡
-  そちらは Claude Code 本体の autocompact (90% 付近) に任せることになる｡
-- **長く放置した pane では 1 段目が動かない｡** 使用率は statusline の描画で更新される
-  ため､最後の描画から `stateMaxAgeSeconds` (既定 15 分) を過ぎた pane は「観測が古い」
-  として見送る｡実際に効くのはターンが終わった直後 — 圧縮を挟みたい場所そのもの — で､
-  数時間放置した pane は次のターンまで待つことになる｡
-- **compact 停止の画面判定には裏取りが 1 つしか無い｡** 上限検知のような二重シグナルが
-  取れないので､画面の安定・`agent_status`・クールダウンで代替している｡
-  誤って突かれるのが嫌なら `compactStallEnabled` を false にする
-  (marker 経路の再開は `compactResumeEnabled` で別に制御する)｡
+  入力行は空のままになる (実測)｡この形の pane には再開が届かない｡
 - **rex は常に可視領域だけを読む｡** scrollback を読む手段が無い｡
   小さい block では上限の文言が流れた時点で検知が効かなくなる ([pane-io.md](pane-io.md) の「読み取り元」)｡
 - **待機中のラベルは出ない｡** 表示に使える `block rename` は利用者が付けた label を潰すため｡

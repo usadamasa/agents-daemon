@@ -42,7 +42,7 @@ type Pane struct {
 	SessionID     string
 	TerminalTitle string
 	// UnknownReason は agent の record があるのに使えず AgentStatus が unknown になった理由｡空なら該当しない｡
-	// rex の版が変わって record の形が崩れたときに compact の催促が黙って止まらないよう､daemon はログに､
+	// rex の版が変わって record の形が崩れたときに判定が黙って止まらないよう､daemon はログに､
 	// doctor は pane 一覧に出す｡
 	UnknownReason string
 }
@@ -51,6 +51,21 @@ type Pane struct {
 // agent フィールドへの大文字小文字を無視した部分一致で判定する｡
 func IsClaudeAgent(p Pane) bool {
 	return strings.Contains(strings.ToLower(p.Agent), "claude")
+}
+
+// SessionIDOf は pane に紐づく Claude セッション ID を引く｡pane が取得できない､
+// または agent session が紐づいていない場合は空文字列を返す (state 無しとして扱う)｡
+// 利用上限 state はセッションごとに別ファイルなので､この対応付けが取れないと
+// どの state を読むべきかが決まらない｡
+func SessionIDOf(ctx context.Context, client Client, paneID string) string {
+	if paneID == "" {
+		return ""
+	}
+	pane, err := client.PaneGet(ctx, paneID)
+	if err != nil {
+		return ""
+	}
+	return pane.SessionID
 }
 
 // PaneReadOptions は PaneRead の呼び出しオプション｡

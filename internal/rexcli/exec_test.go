@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kballard/go-shellquote"
+
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 )
 
@@ -112,9 +114,27 @@ func (f *fakeRex) putBlock(t *testing.T, blockID, programStatus, process string)
 	f.put(t, "process-"+blockID+".json", process)
 }
 
-func (f *fakeRex) calls(t *testing.T) []string {
+// assertCalls は rex に渡った引数列を、呼び出しごとに want と比べる。want は shell の語で書き、
+// 空白を含む 1 引数は引用符で囲む。
+func (f *fakeRex) assertCalls(t *testing.T, want ...string) {
 	t.Helper()
-	return readLines(t, filepath.Join(f.dir, "calls.log"))
+	got := splitArgs(t, readLines(t, filepath.Join(f.dir, "calls.log")))
+	if w := splitArgs(t, want); !slices.EqualFunc(got, w, slices.Equal[[]string]) {
+		t.Errorf("calls =\n%q\nwant\n%q", got, w)
+	}
+}
+
+func splitArgs(t *testing.T, lines []string) [][]string {
+	t.Helper()
+	out := make([][]string, 0, len(lines))
+	for _, line := range lines {
+		args, err := shellquote.Split(line)
+		if err != nil {
+			t.Fatalf("%q を引数に分けられない: %v", line, err)
+		}
+		out = append(out, args)
+	}
+	return out
 }
 
 func (f *fakeRex) client(resolve multiplexer.SessionResolver) *execClient {
@@ -187,21 +207,18 @@ func TestExecClient_PaneList(t *testing.T) {
 		}
 	})
 	t.Run("shell の block にだけ method を打つ", func(t *testing.T) {
-		want := []string{
+		f.assertCalls(t,
 			"--autostart=false ls --json",
-			"--autostart=false block ls -s " + sessionA + " --json",
-			"--autostart=false block call -b " + blockClaudeWorking + " program_status",
-			"--autostart=false block call -b " + blockClaudeWorking + " process",
-			"--autostart=false block ls -s " + sessionB + " --json",
-			"--autostart=false block call -b " + blockClosed + " program_status",
-			"--autostart=false block call -b " + blockClosedMidway + " program_status",
-			"--autostart=false block call -b " + blockClosedMidway + " process",
-			"--autostart=false block call -b " + blockClaudeDone + " program_status",
-			"--autostart=false block call -b " + blockClaudeDone + " process",
-		}
-		if got := f.calls(t); !slices.Equal(got, want) {
-			t.Errorf("calls =\n%v\nwant\n%v", strings.Join(got, "\n"), strings.Join(want, "\n"))
-		}
+			"--autostart=false block ls -s "+sessionA+" --json",
+			"--autostart=false block call -b "+blockClaudeWorking+" program_status",
+			"--autostart=false block call -b "+blockClaudeWorking+" process",
+			"--autostart=false block ls -s "+sessionB+" --json",
+			"--autostart=false block call -b "+blockClosed+" program_status",
+			"--autostart=false block call -b "+blockClosedMidway+" program_status",
+			"--autostart=false block call -b "+blockClosedMidway+" process",
+			"--autostart=false block call -b "+blockClaudeDone+" program_status",
+			"--autostart=false block call -b "+blockClaudeDone+" process",
+		)
 	})
 	t.Run("resolve は 1 回", func(t *testing.T) {
 		if resolves != 1 {
@@ -340,10 +357,7 @@ func TestExecClient_PaneRead(t *testing.T) {
 			if got != tt.want {
 				t.Errorf("PaneRead() = %q, want %q", got, tt.want)
 			}
-			wantCall := []string{"--autostart=false capture -b " + blockClaudeWorking + " --trim --unwrap"}
-			if calls := f.calls(t); !slices.Equal(calls, wantCall) {
-				t.Errorf("calls = %v, want %v", calls, wantCall)
-			}
+			f.assertCalls(t, "--autostart=false capture -b "+blockClaudeWorking+" --trim --unwrap")
 		})
 	}
 }
@@ -353,19 +367,17 @@ func TestExecClient_SendTextAndKeys(t *testing.T) {
 	f.put(t, "target-"+blockClaudeDone, "")
 	c := f.client(staticResolver(nil))
 
-	if err := c.SendText(context.Background(), blockClaudeDone, "続けて"); err != nil {
+	// 文面は空白を含んでも 1 引数、キーは 1 つずつ別の引数で渡る。
+	if err := c.SendText(context.Background(), blockClaudeDone, "続けて ください"); err != nil {
 		t.Fatalf("SendText() error = %v", err)
 	}
 	if err := c.SendKeys(context.Background(), blockClaudeDone, "esc", "enter"); err != nil {
 		t.Fatalf("SendKeys() error = %v", err)
 	}
-	want := []string{
-		"--autostart=false send -b " + blockClaudeDone + " 続けて",
-		"--autostart=false send-key -b " + blockClaudeDone + " esc enter",
-	}
-	if got := f.calls(t); !slices.Equal(got, want) {
-		t.Errorf("calls =\n%v\nwant\n%v", got, want)
-	}
+	f.assertCalls(t,
+		"--autostart=false send -b "+blockClaudeDone+" '続けて ください'",
+		"--autostart=false send-key -b "+blockClaudeDone+" esc enter",
+	)
 }
 
 func TestExecClient_Reachable(t *testing.T) {
@@ -389,10 +401,7 @@ func TestExecClient_Reachable(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("Reachable() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			wantCall := []string{"--autostart=false api call server.status"}
-			if calls := f.calls(t); !slices.Equal(calls, wantCall) {
-				t.Errorf("calls = %v, want %v", calls, wantCall)
-			}
+			f.assertCalls(t, "--autostart=false api call server.status")
 		})
 	}
 }

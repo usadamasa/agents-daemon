@@ -1,5 +1,16 @@
 # Changelog
 
+## [2026.1017.0](https://github.com/usadamasa/agents-daemon/compare/2026.1016.0...2026.1017.0) - 2026-10-17
+
+- ci: GitHub Actions の固定を pinact から gh-actions-lock へ移行する by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/67
+- docs: rex の症状表に server の資源上限の行を足す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/70
+- herdr のサポートを廃止して rex 専用にする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/71
+- 開発ツールの管理を aqua から nix の devShell へ移す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/72
+- docs: multiplexer.Client を残す理由を doc comment に書く by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/74
+- rex preview.15 の program_status の自己申告に合わせ、前景にいない process の record を使わない by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/76
+- rex の更新に追従する maintainer 用 skill (changelog と rex-premise marker の突き合わせ) by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/81
+- daemon から compact の自動化と prompt cache の追跡を外し、利用上限からの再開だけにする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/83
+
 ## [2026.1016.0](https://github.com/usadamasa/agents-daemon/compare/2026.1011.1...2026.1016.0) - 2026-10-16
 
 - ci: 全ジョブ成功時に ci-status-check を success にする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/57

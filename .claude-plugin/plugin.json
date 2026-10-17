@@ -1,6 +1,6 @@
 {
   "name": "agents-daemon",
-  "version": "2026.1016.0",
+  "version": "2026.1017.0",
   "description": "Resume Claude Code sessions stopped by usage limits, via a resident daemon watching rex blocks",
   "author": {
     "name": "usadamasa"

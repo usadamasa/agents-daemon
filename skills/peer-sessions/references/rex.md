@@ -120,3 +120,4 @@ rex block call -b work process
 | `window target "<id>" not found` | ID の桁を間違えている。`rex window ls` の ID 列をそのまま使う |
 | `send` したのに動かない | `send-key -b <target> enter` を送っていない |
 | `wait` が Usage を出して終わる | 子が非 0 で終わっただけ。exit code と `--json` の 1 行目が結果 |
+| `split` `run` `new` が上限を理由に拒否される | server の資源上限 (既定: session 64、block 合計 1024、window 64 / session、pane 64 / window) に当たっている。`--keep-open` で作った block の閉じ忘れが溜まりやすいので `rex block ls` で数えて閉じる。上限は `rex server start --max-*` で変えられるが server の再起動が要る |

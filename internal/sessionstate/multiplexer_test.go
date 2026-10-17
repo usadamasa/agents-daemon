@@ -12,10 +12,10 @@ func envOf(m map[string]string) func(string) string {
 }
 
 // clearMultiplexerEnv はテストを走らせる端末の多重化ツールの環境変数を空にする｡
-// rex や herdr の中で go test を打つと継承した値が context file に混ざるため｡
+// rex の中で go test を打つと継承した値が context file に混ざるため｡
 func clearMultiplexerEnv(t *testing.T) {
 	t.Helper()
-	for _, key := range []string{"REX_SESSION", "REX_BLOCK", "HERDR_PANE_ID"} {
+	for _, key := range []string{"REX_SESSION", "REX_BLOCK"} {
 		t.Setenv(key, "")
 	}
 }
@@ -29,18 +29,12 @@ func TestMultiplexerRefFromEnv(t *testing.T) {
 	}{
 		{
 			name:   "REX_BLOCK があれば rex",
-			env:    map[string]string{"REX_SESSION": "session:01a1", "REX_BLOCK": "block:01a1", "HERDR_PANE_ID": "p1"},
+			env:    map[string]string{"REX_SESSION": "session:01a1", "REX_BLOCK": "block:01a1"},
 			want:   MultiplexerRef{Kind: MultiplexerKindRex, Session: "session:01a1", Block: "block:01a1"},
 			wantOK: true,
 		},
 		{
-			name:   "REX_BLOCK が無く HERDR_PANE_ID があれば herdr",
-			env:    map[string]string{"REX_SESSION": "session:01a1", "HERDR_PANE_ID": "p1"},
-			want:   MultiplexerRef{Kind: MultiplexerKindHerdr, Pane: "p1"},
-			wantOK: true,
-		},
-		{
-			name: "どちらも無ければ無し",
+			name: "REX_BLOCK が無ければ無し",
 			env:  map[string]string{"REX_SESSION": "session:01a1"},
 		},
 	} {
@@ -65,12 +59,6 @@ func TestIngestStatuslineWithEnv_multiplexer(t *testing.T) {
 			env:  map[string]string{"REX_SESSION": "session:01a1", "REX_BLOCK": "block:01a1"},
 			want: `{"session_id":"sess-1","used_percentage":12,"observed_at":` + observed +
 				`,"multiplexer":{"kind":"rex","session":"session:01a1","block":"block:01a1"}}` + "\n",
-		},
-		{
-			name: "herdr の pane を書く",
-			env:  map[string]string{"HERDR_PANE_ID": "w1:p2"},
-			want: `{"session_id":"sess-1","used_percentage":12,"observed_at":` + observed +
-				`,"multiplexer":{"kind":"herdr","pane":"w1:p2"}}` + "\n",
 		},
 		{
 			name: "多重化ツールの外なら multiplexer を書かない",
@@ -113,10 +101,10 @@ func TestListMultiplexerBlocks(t *testing.T) {
 		writeFile(t, filepath.Join(s.Context, name), content)
 	}
 
-	t.Run("kind ごとに block / pane から session_id を引く", func(t *testing.T) {
+	t.Run("kind の block から session_id を引く (他の kind と multiplexer 無しは読み飛ばす)", func(t *testing.T) {
 		s := New(t.TempDir())
 		writeContext(t, s, "a.json", `{"session_id":"a","observed_at":10,"multiplexer":{"kind":"rex","session":"session:1","block":"block:1"}}`)
-		writeContext(t, s, "b.json", `{"session_id":"b","observed_at":10,"multiplexer":{"kind":"herdr","pane":"p1"}}`)
+		writeContext(t, s, "b.json", `{"session_id":"b","observed_at":10,"multiplexer":{"kind":"tmux","block":"%1"}}`)
 		writeContext(t, s, "c.json", `{"session_id":"c","observed_at":10}`)
 
 		rex, err := s.ListMultiplexerBlocks(MultiplexerKindRex)
@@ -125,13 +113,6 @@ func TestListMultiplexerBlocks(t *testing.T) {
 		}
 		if want := map[string]string{"block:1": "a"}; !reflect.DeepEqual(rex, want) {
 			t.Errorf("ListMultiplexerBlocks(rex) = %v, want %v", rex, want)
-		}
-		herdr, err := s.ListMultiplexerBlocks(MultiplexerKindHerdr)
-		if err != nil {
-			t.Fatalf("ListMultiplexerBlocks(herdr) error = %v", err)
-		}
-		if want := map[string]string{"p1": "b"}; !reflect.DeepEqual(herdr, want) {
-			t.Errorf("ListMultiplexerBlocks(herdr) = %v, want %v", herdr, want)
 		}
 	})
 
@@ -168,9 +149,9 @@ func TestListMultiplexerBlocks(t *testing.T) {
 			t.Errorf("ResolveMultiplexerBlock() = %q, %v, want \"\", nil", got, err)
 		}
 		// kind が違えば同じ ID でも一致しない
-		got, err = s.ResolveMultiplexerBlock(MultiplexerKindHerdr, "block:1")
+		got, err = s.ResolveMultiplexerBlock("tmux", "block:1")
 		if err != nil || got != "" {
-			t.Errorf("ResolveMultiplexerBlock(herdr) = %q, %v, want \"\", nil", got, err)
+			t.Errorf("ResolveMultiplexerBlock(tmux) = %q, %v, want \"\", nil", got, err)
 		}
 	})
 

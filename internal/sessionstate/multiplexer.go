@@ -9,37 +9,25 @@ import (
 )
 
 // 端末多重化ツールの種類｡context/<session_id>.json の multiplexer.kind に書く値｡
-const (
-	MultiplexerKindRex   = "rex"
-	MultiplexerKindHerdr = "herdr"
-)
+const MultiplexerKindRex = "rex"
 
-// MultiplexerRef は Claude Code が動いている端末多重化ツールの場所｡rex は Session と Block､
-// herdr は Pane だけを持つ｡
+// MultiplexerRef は Claude Code が動いている端末多重化ツールの場所 (rex の Session と Block)｡
 type MultiplexerRef struct {
 	Kind    string
 	Session string
 	Block   string
-	Pane    string
 }
 
-// ID は kind の中で場所を指す ID (rex は block､herdr は pane)｡
+// ID は kind の中で場所を指す ID (rex は block)｡
 func (r MultiplexerRef) ID() string {
-	if r.Kind == MultiplexerKindRex {
-		return r.Block
-	}
-	return r.Pane
+	return r.Block
 }
 
 // MultiplexerRefFromEnv は statusline の command が Claude Code から継承した環境変数から場所を読む｡
-// REX_BLOCK を HERDR_PANE_ID より先に見るのは､herdr の中で rex を動かすと両方が見えるため
-// (内側が Claude Code の直接の親)｡空の値は無いものとして扱う｡
+// 空の値は無いものとして扱う｡
 func MultiplexerRefFromEnv(getenv func(string) string) (MultiplexerRef, bool) {
 	if block := getenv("REX_BLOCK"); block != "" {
 		return MultiplexerRef{Kind: MultiplexerKindRex, Session: getenv("REX_SESSION"), Block: block}, true
-	}
-	if pane := getenv("HERDR_PANE_ID"); pane != "" {
-		return MultiplexerRef{Kind: MultiplexerKindHerdr, Pane: pane}, true
 	}
 	return MultiplexerRef{}, false
 }
@@ -49,22 +37,21 @@ type multiplexerFile struct {
 	Kind    string `json:"kind"`
 	Session string `json:"session,omitempty"`
 	Block   string `json:"block,omitempty"`
-	Pane    string `json:"pane,omitempty"`
 }
 
 func newMultiplexerFile(ref MultiplexerRef, ok bool) *multiplexerFile {
 	if !ok {
 		return nil
 	}
-	return &multiplexerFile{Kind: ref.Kind, Session: ref.Session, Block: ref.Block, Pane: ref.Pane}
+	return &multiplexerFile{Kind: ref.Kind, Session: ref.Session, Block: ref.Block}
 }
 
 func (m *multiplexerFile) ref() MultiplexerRef {
-	return MultiplexerRef{Kind: m.Kind, Session: m.Session, Block: m.Block, Pane: m.Pane}
+	return MultiplexerRef{Kind: m.Kind, Session: m.Session, Block: m.Block}
 }
 
-// ListMultiplexerBlocks は context/ を 1 回走査し､kind の block (herdr は pane) の ID から
-// session_id への対応を返す｡herdr も rex も､pane と session の対応はこの記録 (statusline が書く) だけから引く｡
+// ListMultiplexerBlocks は context/ を 1 回走査し､kind の block の ID から session_id への対応を返す｡
+// block と session の対応はこの記録 (statusline が書く) だけから引く｡
 //
 // 同じ ID の記録が複数あれば observed_at が最新のもの (同値なら名前順で先) を採る｡
 // 同じ block で Claude Code を起動し直すと､古い session の記録が prune まで残るため｡
@@ -104,7 +91,7 @@ func (s Store) ListMultiplexerBlocks(kind string) (map[string]string, error) {
 	return sessions, nil
 }
 
-// ResolveMultiplexerBlock は kind の block (herdr は pane) の ID から session_id を引く｡
+// ResolveMultiplexerBlock は kind の block の ID から session_id を引く｡
 // 無ければ ("", nil)｡複数の ID を引くなら ListMultiplexerBlocks で 1 回の走査に済ませる｡
 func (s Store) ResolveMultiplexerBlock(kind, id string) (string, error) {
 	sessions, err := s.ListMultiplexerBlocks(kind)

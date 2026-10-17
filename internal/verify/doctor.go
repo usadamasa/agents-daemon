@@ -73,10 +73,7 @@ func RunDoctor(ctx context.Context, w io.Writer, in DoctorInput) error {
 
 // backendLabel は backend と､それを選んだ根拠の環境変数｡
 func backendLabel(kind string) string {
-	if kind == sessionstate.MultiplexerKindRex {
-		return kind + " (REX_SESSION あり)"
-	}
-	return kind + " (REX_SESSION なし)"
+	return kind + " (REX_SESSION あり)"
 }
 
 // reportPanes は pane 一覧のうち Claude agent と判定されたものを列挙する｡

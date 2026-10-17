@@ -509,7 +509,10 @@ func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 	}
 
 	store := sessionstate.New(p.StateDir())
-	kind := backend.Detect(os.Getenv)
+	kind, err := backend.Detect(os.Getenv)
+	if err != nil {
+		return err
+	}
 	client, err := backend.New(kind, store)
 	if err != nil {
 		return err

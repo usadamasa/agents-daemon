@@ -1,5 +1,5 @@
 // Package detect は Claude Code pane の画面テキストを分類する｡
-// herdr pane read --source detection は ANSI 除去済みのテキストを返すが､
+// 多重化ツールの capture は ANSI 除去済みのテキストを返すが､
 // このパッケージは呼び出し元が生テキストを渡してくる場合にも備えて ANSI を自前で除去する｡
 package detect
 
@@ -152,7 +152,7 @@ var (
 )
 
 // stripANSI は ANSI エスケープシーケンスを除去する｡
-// herdr pane read --source detection は除去済みテキストを返すが､
+// 多重化ツールの capture は除去済みテキストを返すが､
 // 呼び出し元が生テキストを渡してくる場合に備えて防御的に処理する｡
 func stripANSI(s string) string {
 	s = oscEscapeRe.ReplaceAllString(s, "")
@@ -257,7 +257,7 @@ func compilePatterns(patterns []string) ([]*regexp.Regexp, error) {
 }
 
 // Classify は screen を分類する｡n には画面末尾から対象にする行数を渡す
-// (herdr pane read --source detection --lines N のフッター部分)｡0 以下なら全行を対象にする｡
+// (画面のフッター部分)｡0 以下なら全行を対象にする｡
 //
 // 上限判定には二重のシグナルを要求する: limitPatterns (または追加 limit パターン) に
 // 一致する行があり､かつその近傍 (nearbyWindow 行以内) に resetPatterns が一致する行が

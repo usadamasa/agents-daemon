@@ -1,6 +1,6 @@
 # AGENTS.md
 
-端末多重化ツール (herdr / rex) の pane 越しに､利用上限からの自動再開と context の自動 compact を担う
+端末多重化ツール rex の block 越しに､利用上限からの自動再開と context の自動 compact を担う
 常駐デーモンの Claude Code plugin｡
 Go のデーモンと､それを配線する hook・skill を持つ｡
 
@@ -9,22 +9,19 @@ Go のデーモンと､それを配線する hook・skill を持つ｡
 | パス | 中身 |
 | ---- | ---- |
 | `.claude-plugin/plugin.json` | plugin manifest｡version の実体はここ 1 箇所｡marketplace.json は agents-marketplace リポジトリが持つ |
-| `hooks/hooks.json` | SessionStart / PostCompact / UserPromptSubmit / Stop の配線 |
+| `hooks/hooks.json` | SessionStart / PostCompact / UserPromptSubmit の配線 |
 | `hooks/ensure-daemon.sh`, `hooks/build-daemon.sh` | バイナリの用意 (detach build) と `daemon --ensure` |
 | `hooks/compaction-recovery.sh`, `hooks/userpromptsubmit-compaction-recovery.sh` | 圧縮完了 marker と復旧ガイドの注入 |
 | `hooks/ttl-guard.sh` | UserPromptSubmit の stdin を `ttl-guard` へ渡し､cache 失効後の最初の prompt を止める (exit 2) |
-| `hooks/herdr-title.sh` | UserPromptSubmit / Stop の stdin を `herdr-title` へ渡し､セッション名とブランチを herdr の space 欄とタブ行へ写す (`internal/hookreport`) |
 | `hooks/lib/` | hook 共通の logger､marker の置き場 (`compact-markers.sh`)､バイナリの置き場 (`daemon-bin.sh`) |
 | `scripts/get-session-id.sh` | compact-prep / setup skill が呼ぶ session_id の取得 |
 | `skills/compact-prep/` | `/compact` 前の state file 保存 |
 | `skills/agents-daemon/` | 運用と切り分けの手引き｡配線・判定・設定キーの詳細は `references/` |
 | `skills/setup/` | install 後の前提確認｡backend ごとの手順と配線の詳細は `references/` |
-| `skills/peer-sessions/` | 別セッション (peer) へ作業を渡す手順 (`ListAgents` / `SendMessage`)｡多重化ツールごとの pane / block 操作は `references/herdr.md` `references/rex.md` |
-| `skills/herdr/` | herdr の CLI の手引き｡`herdr --skill` の出力をそのまま置いた生成物で､手で編集しない｡herdr を更新したら `task herdr-skill` で作り直す (`herdr --version` を commit message に書く) |
+| `skills/peer-sessions/` | 別セッション (peer) へ作業を渡す手順 (`ListAgents` / `SendMessage`)｡rex の block 操作は `references/rex.md` |
 | `cmd/agents-daemon/` | Go の main (cobra) |
 | `internal/` | daemon の本体｡パス定数は `internal/apppath`｡statusline の描画は `internal/statusline`､cost の台帳は `internal/spend`､sidecar の原子的な書き込みは `internal/statefile` |
-| `internal/multiplexer`, `internal/herdrcli`, `internal/rexcli`, `internal/backend` | pane 操作の interface (`multiplexer.Client`) とその herdr / rex 実装｡`backend` が環境 (`REX_SESSION`) で選ぶ｡`herdrcli` は hook が使う socket の client (`SocketClient`) も持つ |
-| `internal/hookreport` | hook から呼ばれてセッションの状態を多重化ツールへ写す処理 (`herdr-title`)｡hook script は stdin を渡すだけ |
+| `internal/multiplexer`, `internal/rexcli`, `internal/backend` | pane 操作の interface (`multiplexer.Client`) とその rex 実装｡`backend` が環境に `REX_SESSION` があることを確かめる (無ければ `daemon --ensure` は何もせず戻る) |
 | `tests/` | hook と script の bats テスト (`tests/lib/`､`tests/fixtures/`) |
 | `.claude/skills/catching-up-with-claude-code-changelog/` | Claude Code の更新後に CHANGELOG・バイナリ・docs を追い､この repo の前提 (画面の文言､hook と statusline の field､本体の新機能との重なり) を点検して issue に落とす手順｡plugin には同梱しない保守用 skill |
 
@@ -51,9 +48,8 @@ bats は hook を `/bin/bash` で起動する (本番の shebang と同じ bash 
   hooks.json では `"\"${CLAUDE_PLUGIN_ROOT}/hooks/...\""` と引用符で囲む (validate が未引用を警告する)｡
 - データを読む・加工する処理 (transcript､JSON) はバイナリのサブコマンドに持たせ､hook は stdin を渡すだけにする
   (`ingest-statusline` / `ttl-guard`)｡bash 3.2 と jq で timestamp や大きなファイルを扱わない｡
-- hook から herdr を叩くときは CLI (`herdr`) ではなく `HERDR_SOCKET_PATH` の socket を使う (`herdrcli.SocketClient`)｡
-  hook は Claude Code の PATH を継承し､非対話で起動されたセッションでは homebrew のパスが載らない｡
-  daemon が CLI を使うのは逆で､detach 後の長い稼働で起動時の socket path が古くなりうるため｡
+- hook から多重化ツールを叩かない｡hook は Claude Code の PATH を継承し､非対話で起動されたセッションでは
+  homebrew のパスが載らない｡多重化ツールへの操作は daemon に持たせる｡
 - Stop hook で transcript を読まない｡transcript は非同期に書かれ､Stop の時点ではターンの最後の応答を
   含まないことがある (Claude Code の hooks のドキュメント)｡cache の状態は daemon が tick で読む｡
 
@@ -92,7 +88,7 @@ hook・skill・daemon は別プロセスで､ファイル越しに繋がる｡�
 | `skills/compact-prep/SKILL.md` の保存先 | `internal/apppath` | `compact-state/<session_id>.md` |
 | `.claude-plugin/plugin.json` の skill 名 | `internal/config` の `compactAutoPrepMessage` 既定 | `/agents-daemon:compact-prep` |
 | 利用者の `statusLine.command`､または自前の statusline に足す 1 行 (`skills/setup/references/statusline.md`) | `hooks/lib/daemon-bin.sh` と `Taskfile.yml` の `install` | `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon statusline` (または `ingest-statusline`)｡`context/` `rate-limits/` の書式は `internal/sessionstate` が読み書き両方で持つ |
-| `statusline` / `ingest-statusline` が `context/<sid>.json` の `multiplexer` に書く場所 (環境変数 `REX_SESSION` / `REX_BLOCK` / `HERDR_PANE_ID` から) | `internal/sessionstate` の `ListMultiplexerBlocks` を `internal/herdrcli` と `internal/rexcli` が引く (`internal/backend` が配線) | herdr の pane / rex の block から session_id への対応｡herdr の `agent_session` は読まない｡書式と読み方は `internal/sessionstate/multiplexer.go` が両方持つ |
+| `statusline` / `ingest-statusline` が `context/<sid>.json` の `multiplexer` に書く場所 (環境変数 `REX_SESSION` / `REX_BLOCK` から) | `internal/sessionstate` の `ListMultiplexerBlocks` を `internal/rexcli` が引く (`internal/backend` が配線) | rex の block から session_id への対応｡書式と読み方は `internal/sessionstate/multiplexer.go` が両方持つ |
 | statusline の stdin の `transcript_path` (`statusline` / `ingest-statusline` が `context/` へ写す) | `internal/sessionstate` の `CacheLoader` | daemon が辿る transcript｡読み方 (`lastMainResponse`) は `ttl-guard` と `statusline` の ⏱ (cache の残り時間) と共有する |
 | 利用者の settings の `env` の `CLAUDE_STATUSLINE_SPEND_CAP` | `cmd/agents-daemon/cmd_statusline.go` の `spendCapEnv` | 月額上限 (USD)｡あるときだけ `statusline` が `cost/` の台帳 (`internal/spend`) を書き､📅 / 🧾 を出す |
 | `hooks/ttl-guard.sh` (UserPromptSubmit hook) | `hooks/lib/daemon-bin.sh` | 同じバイナリの `ttl-guard`｡exit 2 だけが「止める」で､それ以外は通す｡`cache-ack/` の書式と判定は `internal/sessionstate` が持つ (daemon が書き､`ttl-guard` が読む) |

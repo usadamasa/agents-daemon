@@ -21,7 +21,7 @@ statusline・hook・skill・daemon が別々のタイミングで動き､ファ
                                               │
                                               ├─ PaneList ────────────> Claude の pane 一覧
                                               ├─ PaneRead ────────────> 各 pane の画面テキスト
-                                              │  (backend は herdr か rex｡下の「多重化ツールの backend」)
+                                              │  (backend は rex｡下の「多重化ツールの backend」)
                                               │
                                               │  ここで判定 (下の表)
                                               │
@@ -33,9 +33,6 @@ statusline・hook・skill・daemon が別々のタイミングで動き､ファ
 
 [4] UserPromptSubmit hook ──stdin──> agents-daemon ttl-guard ── transcript と cache-ack/<session_id> を見て
                                                                失効後の最初の prompt を止める (exit 2)
-
-[5] UserPromptSubmit / Stop hook ──stdin──> agents-daemon herdr-title ── HERDR_SOCKET_PATH の socket へ
-                                                                        セッション名とブランチを報告する (herdr だけ)
 ```
 
 ### [1] statusline が上限情報を渡し､バイナリが落とす
@@ -121,15 +118,11 @@ daemon は `observed_at` の新しさでセッションが生きているかも�
 | 環境変数 | 書く値 |
 | ---- | ---- |
 | `REX_BLOCK` がある | `{"kind": "rex", "session": $REX_SESSION, "block": $REX_BLOCK}` |
-| `HERDR_PANE_ID` がある | `{"kind": "herdr", "pane": $HERDR_PANE_ID}` |
-| どちらも無い | フィールドを付けない |
+| 無い | フィールドを付けない |
 
-`REX_BLOCK` を先に見るのは､herdr の中で rex を動かすと両方が見え､Claude Code の直接の親は内側の rex だから｡
-backend は pane (rex は block) から session_id をこの記録で逆引きする (`Store.ListMultiplexerBlocks`)｡同じ ID の
-記録が複数あれば `observed_at` が最新のものを採る (同じ pane で Claude Code を起動し直すと古い記録が残る)｡
-`context/` は 7 日で消えるだけなので､5 時間の上限待ちを跨いでも対応は残る｡herdr の pane が持つ
-`agent_session` (herdr の integration script が SessionStart で入れる値) は読まない｡herdr と rex の対応付けを
-1 本にし､`herdr integration install claude` への依存を切るため｡制約 (別 workspace への `pane move`､初回描画までの
+backend は block から session_id をこの記録で逆引きする (`Store.ListMultiplexerBlocks`)｡同じ ID の
+記録が複数あれば `observed_at` が最新のものを採る (同じ block で Claude Code を起動し直すと古い記録が残る)｡
+`context/` は 7 日で消えるだけなので､5 時間の上限待ちを跨いでも対応は残る｡制約 (初回描画までの
 数秒) は [operations.md](operations.md) の「既知の制約」｡
 
 #### daemon が transcript から求める cache の状態
@@ -278,7 +271,7 @@ pane ごとに次を評価する｡上限側の詳細は [rate-limit.md](rate-li
 | `$STATE/cache-ack/<session_id>` | daemon と `agents-daemon ttl-guard` | daemon は非スラッシュの prompt を送る直前 (cache が失効しているか状態が分からないとき)､ttl-guard は失効後の prompt を判定したとき | 直近の応答の開始時刻の文字列そのまま､または sentinel `daemon-unknown` ([cache.md](cache.md)) | daemon と ttl-guard が 90 日で消す |
 | `$STATE/cache-idle-compacted/<session_id>` | daemon | idle compact の `/compact` を送る直前 | 空ファイル｡mtime が送信時刻 ([compact.md](compact.md)) | 消さずに直近の応答の時刻との比較で解く (daemon が 7 日で消す) |
 | `$STATE/daemon.pid` | daemon | 起動時に作成､終了時に削除 | 稼働中デーモンの PID | daemon |
-| `$STATE/status.json` | daemon | 毎 tick (既定 5 秒) | backend (herdr / rex)､監視中の pane 一覧と各 pane の監視状態・試行回数・待機期限・直近の判定・cache の状態 | 上書き |
+| `$STATE/status.json` | daemon | 毎 tick (既定 5 秒) | backend (rex)､監視中の pane 一覧と各 pane の監視状態・試行回数・待機期限・直近の判定・cache の状態 | 上書き |
 | `$STATE/logs/daemon.log` | daemon | 報告に値する出来事があったときだけ | 上限検知と待ち時間､再開送信 (cache の状態つき)､ユーザーの自己再開､ゲート抑制､ネイティブへの譲り､compact 停止の催促､idle compact の見送り (理由つき)､エラー | rotate |
 | `$STATE/logs/daemon.log.YYYY-MM-DD` | daemon | 日付が変わって最初に書くとき | 前日までの `daemon.log` をそのまま退避したもの | daemon が 7 日で消す |
 | `$STATE/logs/build.log` | `hooks/build-daemon.sh` | SessionStart が build を起こしたとき | build の開始・完了・失敗 | 消さない (追記) |

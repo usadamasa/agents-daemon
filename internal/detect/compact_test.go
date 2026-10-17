@@ -144,7 +144,7 @@ func TestPromptIsEmpty(t *testing.T) {
 	})
 
 	t.Run("実機の入力行 (❯ の後が U+00A0) で true", func(t *testing.T) {
-		// herdr pane read で採取した実バイト｡Claude Code は ❯ の後を
+		// 多重化ツールの capture で採取した実バイト｡Claude Code は ❯ の後を
 		// NO-BREAK SPACE で埋めるため､\s だけの正規表現では当たらない｡
 		real := "⏺ 直前の応答\n\n─────\n❯ \n─────\n  🌸 Sonnet 5 ･ﾟ 🧠 0k (0%)\n"
 		if !PromptIsEmpty(real, 15) {

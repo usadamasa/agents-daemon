@@ -20,9 +20,8 @@ func newSimulateCmd() *cobra.Command {
 			"画面を出して､daemon と同じ monitor.Tick を走らせる｡既定では dry-run (--send を\n" +
 			"付けると使い捨て pane に限って実際に送信する)｡使い捨て pane の前景は画面を cat した\n" +
 			"あと cat -v で居座る script で､送った esc・文字列・enter を解釈せずそのまま画面に書く｡\n" +
-			"backend は daemon と同じく REX_SESSION の有無で選ぶ｡herdr では pane report-agent で\n" +
-			"Claude agent に登録し (HERDR_ENV=1 が要る)､rex では script が Claude Code と同じ\n" +
-			"OSC 7501 を printf して program_status に載せる (REX_BLOCK が要る)｡\n\n" +
+			"REX_SESSION と REX_BLOCK のある rex の block 内で打つ｡script が Claude Code と同じ\n" +
+			"OSC 7501 を printf して program_status に載せ､Claude agent に見せる｡\n\n" +
 			"simulate は自分が作った pane 以外には構造的に一切書き込めない (multiplexer.Client を\n" +
 			"scopedClient で包み､作成した pane_id 以外への呼び出しを拒否する)｡実 Claude\n" +
 			"セッションが乗った pane を壊さないための安全策で､テストでも確認している｡\n\n" +

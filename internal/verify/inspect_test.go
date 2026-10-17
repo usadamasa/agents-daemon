@@ -19,7 +19,7 @@ import (
 
 // 2026-08-16 に実機 (Claude Code 2.1.224) で採取した通常のフッター｡
 // internal/detect のテストと同じ現物 (誤検知しないことの確認が主目的)｡
-const inspectSampleNormalScreen = `  Bash(herdr pane read "$HERDR_PANE_ID" --source detection --lines 12)
+const inspectSampleNormalScreen = `  Bash(rex capture -b "$REX_BLOCK" --trim --unwrap)
 
 · Tinkering… (2m 52s · ↓ 9.0k tokens · thought for 8s)
   ⎿  Tip: Use /btw to ask a quick side question without interrupting Claude's current work

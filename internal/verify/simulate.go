@@ -101,7 +101,7 @@ func RunSimulate(ctx context.Context, w io.Writer, p apppath.Paths, opts Simulat
 	_, _ = fmt.Fprintf(w, "  Claude agent として見えました (agent=%s agent_status=%s)\n", pane.Agent, pane.AgentStatus)
 
 	// script の cat が画面に出るのを待つ｡コマンドの投入はレンダリング完了を待たずに戻る
-	// (herdr で実測: 固定 500ms 待機では画面反映前に読んでしまい none 判定になることがあった)｡
+	// (実測: 固定 500ms 待機では画面反映前に読んでしまい none 判定になることがあった)｡
 	if marker := lastNonEmptyLine(screenContent); marker != "" {
 		if err := waitForScreenContent(ctx, execClient, ownedPaneID, marker, writeScreenTimeout); err != nil {
 			return err

@@ -1,6 +1,6 @@
 # agents-daemon
 
-端末多重化ツール (herdr または rex) の pane で動く Claude Code セッションを見守る常駐デーモンと､
+端末多重化ツール rex の block で動く Claude Code セッションを見守る常駐デーモンと､
 それを配線する Claude Code plugin｡
 
 ## 何をするか
@@ -19,30 +19,25 @@ plugin が持つもの:
 | SessionStart hook | daemon のバイナリを用意し､`daemon --ensure` で起こす |
 | PostCompact hook | 圧縮完了の marker を置く |
 | UserPromptSubmit hook | marker を見て､圧縮直後の 1 ターンだけ復旧ガイドを注入する｡cache 失効後の最初の prompt を止める (`ttl-guard`) |
-| UserPromptSubmit / Stop hook (herdr) | セッション名 (端末タイトル) と今いるブランチを herdr の space 欄とタブ行へ写す (`herdr-title`)｡rex では何もしない |
 | `agents-daemon:compact-prep` skill | `/compact` 前に作業状態を state file へ保存する |
 | `agents-daemon:agents-daemon` skill | 運用と切り分けの手引き (症状から引く) |
 | `agents-daemon:setup` skill | 前提の確認と statusline の配線､peer messaging の切り分け |
-| `agents-daemon:peer-sessions` skill | 別セッション (peer) へ作業を渡す手順と､herdr / rex ごとの pane 操作 |
-| `agents-daemon:herdr` skill | herdr の CLI の手引き (`herdr --skill` の出力を同梱) |
+| `agents-daemon:peer-sessions` skill | 別セッション (peer) へ作業を渡す手順と､rex の block 操作 |
 | `agents-daemon statusline` | `statusLine.command` に向ける statusline｡描画と､daemon が読む state file の書き込みを同じプロセスで行う |
 | `agents-daemon ingest-statusline` | 自前の statusline から stdin を渡して state file だけを書かせるサブコマンド |
 
 ## 前提
 
-- **herdr または rex**: daemon は多重化ツールの CLI で pane を見て送信する｡
-  どちらの外で動く Claude Code にも何も届かない｡daemon は起動時の環境で片方を選ぶ｡`REX_SESSION` があれば rex､無ければ herdr｡
-  - **[herdr](https://herdr.dev)**: `herdr pane list` / `pane read` / `pane send-text` を使う｡
-    `herdr integration install claude` (herdr 生成の SessionStart hook) は要らない｡
-  - **rex**: `rex ls` / `block call` / `capture` / `send` を使う｡server の socket は
-    `~/Library/Application Support/rex/server.sock`｡
-    sandbox の中の Bash から `doctor` や setup skill で rex を叩くなら､
-    `sandbox.network.allowUnixSockets` に `~/Library/Application Support/rex` を足す｡
-    rex `0.0.1791570264-g7b5bf3` と Claude Code `2.1.296` で測った (2026-10-10)｡
+- **rex**: daemon は rex の CLI (`rex ls` / `block call` / `capture` / `send`) で block を見て送信する｡
+  rex の外で動く Claude Code には何も届かず､`REX_SESSION` の無いセッションの SessionStart では daemon を起こさない
+  (statusline と `ttl-guard` は rex の外でも動く)｡server の socket は `~/Library/Application Support/rex/server.sock`｡
+  sandbox の中の Bash から `doctor` や setup skill で rex を叩くなら､
+  `sandbox.network.allowUnixSockets` に `~/Library/Application Support/rex` を足す｡
+  rex `0.0.1791570264-g7b5bf3` と Claude Code `2.1.296` で測った (2026-10-10)｡
 - **statusline の配線**: 使用率と解除時刻と transcript のパスは statusline の stdin にしか来ない｡
   `statusLine.command` をこの plugin のバイナリの `statusline` に向けるか､自前の statusline から
   `ingest-statusline` へ stdin を渡す 1 行を足す (下の「セットアップ」で行う)｡
-  pane (rex は block) と session の対応も statusline が書く記録から引くので､herdr でも rex でも必須になる｡
+  block と session の対応も statusline が書く記録から引くので､必須になる｡
 - **Go toolchain**: SessionStart hook が plugin のソースから `go build` でバイナリを建てる｡
   hook は Claude Code を起動したシェルの PATH で `go` を探す｡無ければ `brew install go` などで入れる｡
   初回の build では Go module のダウンロードにネットワークを使う｡
@@ -66,7 +61,7 @@ build の経過は `${XDG_STATE_HOME:-~/.local/state}/agents-daemon/logs/build.l
 
 ## セットアップ
 
-install 後に herdr の pane か rex の block の中で Claude Code を起動し､`/agents-daemon:setup` を実行する｡
+install 後に rex の block の中で Claude Code を起動し､`/agents-daemon:setup` を実行する｡
 前提がそろっているかを確かめ､statusline への配線が無ければ足す案を出す｡
 
 ## 設定
@@ -90,7 +85,7 @@ context の自動 compact を使う最小例:
 agents-daemon status                     # 稼働状況､監視中の pane､ログの末尾
 agents-daemon logs -n 80                 # daemon.log の末尾
 agents-daemon doctor                     # 前提条件の診断
-agents-daemon inspect --pane <id>        # 生きた pane の画面を分類する (rex は block ID)
+agents-daemon inspect --pane <block id>  # 生きた block の画面を分類する
 agents-daemon daemon --foreground --dry-run  # 送信せずに判定だけ回す
 agents-daemon stop                       # 停止
 COLUMNS=200 agents-daemon statusline < in.json  # statusline を描画し､state file も書く (statusLine.command が呼ぶ)

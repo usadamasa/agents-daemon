@@ -5,13 +5,12 @@ description: >-
   上限が解除されても再開が飛ばない､context が閾値を超えても compact が投入されない､圧縮後に作業が再開しない､
   関係ない pane を誤検知して打ち込む､prompt が cache 失効の警告で止められる､daemon が起きない､
   バイナリがビルドされない・直したコードが動かない､
-  herdr のタブ名や space 欄のセッション名が変わらない､
   といった症状から引く｡statusline / hook / skill / daemon のファイル越しの配線と､設定キーの一覧も持つ｡
 ---
 
 # agents-daemon
 
-端末多重化ツール (herdr か rex) の pane を経由して動く常駐デーモン｡役目は 2 つ｡
+端末多重化ツール rex の block を経由して動く常駐デーモン｡役目は 2 つ｡
 
 - 5 時間ウィンドウの利用上限で止まったセッションを､解除時刻に再開させる
 - context 使用率が閾値を超えたら `/agents-daemon:compact-prep` → `/compact` を投入し､圧縮後の作業まで再開させる
@@ -30,8 +29,8 @@ description: >-
   `transcript_path` を辿って transcript から求める｡UserPromptSubmit hook から呼ばれた `agents-daemon ttl-guard` は
   cache 失効後の最初の prompt を止め､daemon が送る前に書く `cache-ack/<session_id>` を見て daemon の
   送信は通す｡SessionStart hook が daemon を起こし､
-  daemon が herdr か rex 経由で pane を見て､これらのファイルの有無と mtime で判断する｡
-  backend の選び方と操作の対応は [architecture.md](references/architecture.md) の「多重化ツールの backend」｡
+  daemon が rex 経由で block を見て､これらのファイルの有無と mtime で判断する｡
+  rex の外では daemon を起こさない｡操作の対応は [architecture.md](references/architecture.md) の「多重化ツールの backend」｡
 - **statusline の配線は 2 通り｡** `statusLine.command` をバイナリの `statusline` に向ける (描画と state file の
   書き込みを同じプロセスで行う) か､自前の statusline から stdin を `ingest-statusline` へ渡す 1 行を足す｡
   取り出しと書式はどちらもバイナリ (`internal/sessionstate`) が持つ｡
@@ -45,9 +44,7 @@ description: >-
   残らず､画面判定 (`internal/detect/compact.go`) は候補を作れない｡代わりに
   PostCompact hook が置く marker を見る｡この経路はユーザーが手で打った `/compact` でも
   本体の autocompact でも動く｡
-- hook の配線元は plugin の `hooks/hooks.json` (SessionStart / PostCompact / UserPromptSubmit / Stop)｡
-  Stop と UserPromptSubmit の `herdr-title` は herdr の space 欄とタブ行にセッション名を出すだけで､
-  daemon の判定には関わらない ([architecture.md](references/architecture.md) の「[5]」)｡
+- hook の配線元は plugin の `hooks/hooks.json` (SessionStart / PostCompact / UserPromptSubmit)｡
 - marker と state file の置き場は `hooks/lib/compact-markers.sh` の定数 (hook /
   skill 側) と `internal/apppath` (daemon 側) が対で持つ｡片方だけ変えると protocol が
   黙って壊れる｡cwd 相対にしないのは､daemon が別プロセスであり hook に渡る cwd も
@@ -76,7 +73,7 @@ description: >-
 
 | ファイル | 中身 |
 | ---- | ---- |
-| [architecture.md](references/architecture.md) | statusline / hook / skill / daemon の連動､バイナリの用意と差し替え､多重化ツールの backend (herdr / rex)､毎 tick の判定表､出力されるファイル､ログの rotate |
+| [architecture.md](references/architecture.md) | statusline / hook / skill / daemon の連動､バイナリの用意と差し替え､多重化ツールの backend (rex)､毎 tick の判定表､出力されるファイル､ログの rotate |
 | [rate-limit.md](references/rate-limit.md) | ネイティブ auto-continue との分担､limit 検知の二重シグナルとゲート､待機時刻の決め方 |
 | [compact.md](references/compact.md) | context 閾値からの 3 段､marker 経路､cache の失効前の compact (idle compact)､compact 直後の停止 |
 | [cache.md](references/cache.md) | prompt cache の失効と daemon の送信､ack マーカーの規約､対象の prompt 4 つ､送信ログと status の cache 表示 |
@@ -100,9 +97,8 @@ description: >-
 | daemon の再開が止められる・`compactStallMessage` が繰り返し打たれる | cache.md の「TTL guard」の ack の規則､ログの `ack 済み` / `session 未紐づけ` |
 | daemon が起きない・バイナリがビルドされない | architecture.md の「バイナリの用意と差し替え」､`build.log` |
 | 直したコードが動いていない | architecture.md の「バイナリの用意と差し替え」 |
-| 送信が pane に届かない | pane-io.md､operations.md の「既知の制約」(pane 内 tmux､herdr / rex 不在) |
-| `doctor` の pane 一覧が `session_id=(なし)` になる | statusline が新しいバイナリ (`statusline` か `ingest-statusline`) を呼んでいるか､`context/<sid>.json` に `multiplexer` があるか｡architecture.md の「statusline が書く state」｡herdr で別 workspace へ `pane move` した pane なら operations.md の「既知の制約」 |
-| rex のセッションなのに daemon が何も送らない | `doctor` の daemon の節の backend 不一致の警告｡operations.md の「既知の制約」(daemon は 1 つの backend しか見ない) |
+| 送信が block に届かない | pane-io.md､operations.md の「既知の制約」(block 内 tmux､rex 不在) |
+| `doctor` の pane 一覧が `session_id=(なし)` になる | statusline が新しいバイナリ (`statusline` か `ingest-statusline`) を呼んでいるか､`context/<sid>.json` に `multiplexer` があるか｡architecture.md の「statusline が書く state」 |
+| rex のセッションなのに daemon が起きない・何も送らない | `doctor` の daemon の節の backend 不一致の警告 (herdr を見ていた旧バイナリの daemon が残っている)｡`agents-daemon stop` して起こし直す｡hook のログに `REX_SESSION が無いため` と出ていれば rex の外で起動したセッション |
 | `ListAgents` / `SendMessage` がツール一覧に無く `/list-agents` も認識されない (peer へ作業を渡せない) | `agents-daemon:setup` skill の「peer messaging」 |
-| herdr のタブ名や space 欄の `$claude` / `$branch` が変わらない | architecture.md の「[5]」｡`HERDR_ENV` `HERDR_SOCKET_PATH` `HERDR_PANE_ID` がそろっているか､バイナリが `herdr-title` を持つ版か (hook のログに `herdr-title failed` が出る) |
 | hook が 10 秒の timeout に当たっている疑い (prompt の送信が遅い､hook の効果が出ない) | `claude --debug` で起動し､`Hooks: UserPromptSubmit [...] finished with status 0 (31ms)` の行 (Claude Code 2.1.296+) で hook ごとの所要時間を見る｡`timed out after <N>ms` なら当たっている |

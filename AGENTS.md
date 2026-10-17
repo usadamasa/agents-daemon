@@ -1,8 +1,9 @@
 # AGENTS.md
 
-端末多重化ツール rex の block 越しに､利用上限からの自動再開を担う常駐デーモンの Claude Code plugin｡
-Go のデーモンと､それを配線する hook・skill を持つ｡context の compact と prompt cache の失効は Claude Code 本体に
-任せる (以前持っていた compact の自動化と ttl-guard は #59 で外した)｡
+Claude Code のセッション群のそばに常駐し､セッションの中からはできないこと (止まったセッションへの働きかけ､
+セッションを跨いだ状態の集約､時間で動く掃除､多重化ツール rex への操作) を背後で担うデーモンの Claude Code plugin｡
+Go のデーモンと､それを配線する hook・skill を持つ｡役割の区分と「本体ができることは本体に任せる」境界は
+README の「役割」が持つ｡機能を足す・外す判断はそこに照らす｡
 
 ## レイアウト
 

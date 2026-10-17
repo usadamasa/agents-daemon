@@ -16,7 +16,7 @@ import (
 // 毎 tick 書くとログが埋まり、書かないと pane が unknown のままになった理由が追えない。
 func TestDaemonRuntimeTick_UnknownReasonLoggedOnce(t *testing.T) {
 	const reason = "record に owner.pid が無い (テスト)"
-	pane := claudePane("p1", "t1", multiplexer.AgentStatusUnknown)
+	pane := claudePane("p1", multiplexer.AgentStatusUnknown)
 	pane.UnknownReason = reason
 	client := &multiplexerfake.Client{
 		PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) {

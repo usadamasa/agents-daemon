@@ -168,8 +168,7 @@ OSC 7501 で状態を報告し､daemon は `block call -b BLOCK program_status`
 | `fallbackWaitHours` | `5` | 解除時刻がどこからも取れないときの待ち |
 | `maxRetries` | `5` | クールダウンに入るまでの再開試行回数 |
 | `retryMessage` | `Continue where you left off.` | 再開時に送る文面 |
-| `readSource` | `recent-unwrapped` | herdr の画面取得ソース｡`recent` / `recent-unwrapped` / `visible`｡rex では無視 (可視領域だけを読む) |
-| `readLines` | `25` | 1 回に読む行数 |
+| `readLines` | `25` | 1 回に読む行数 (可視領域の末尾から) |
 | `detectionTailLines` | `15` | 判定に使う末尾行数 |
 | `usedPercentageThreshold` | `90` | ゲートの閾値 (これ未満なら発火しない) |
 | `stateMaxAgeSeconds` | `900` | ゲート判定で使用率を信用する上限の古さ (`resets_at` には効かない) |
@@ -179,7 +178,6 @@ OSC 7501 で状態を報告し､daemon は `block call -b BLOCK program_status`
 | `dismissMenu` | `true` | 送信前に Escape を送る |
 | `menuDismissDelayMs` | `300` | Escape の後の待ち |
 | `submitDelayMs` | `400` | テキストと Enter の間の待ち |
-| `engagedLabel` | `retry engaged` | 待機中に pane へ出すラベル |
 | `customPatterns` | `[]` | 上限として扱う追加の正規表現 |
 | `idleShutdownMinutes` | `30` | Claude pane が 0 のまま続いたら自己終了する |
 | `deferToNativeAutoContinue` | `true` | ネイティブの auto-continue が再開を予約している間は手を出さない |
@@ -292,17 +290,12 @@ Claude Code の画面の文言は安定した API ではない｡変わって検
   取れないので､画面の安定・`agent_status`・クールダウンで代替している｡
   誤って突かれるのが嫌なら `compactStallEnabled` を false にする
   (marker 経路の再開は `compactResumeEnabled` で別に制御する)｡
-- **`visible` を選ぶと pane の viewport に制限される｡** 既定の `recent-unwrapped` は
-  スクロールバックから取るので影響を受けないが､`visible` に変えると表示領域に
-  収まる範囲しか返らず､判定に必要な行が溢れる｡詳細は
-  [pane-io.md](pane-io.md) の「読み取り元」を参照｡
-- **rex は常に可視領域だけを読む｡** `readSource` は効かず､scrollback を読む手段が無い｡
-  小さい block では上限の文言が流れた時点で検知が効かなくなる ([pane-io.md](pane-io.md) の「rex の読み取り元」)｡
-- **待機中のラベルは `--state-label` で出す｡** herdr 0.8.0 に `--custom-status` は存在しない｡
-- **rex では待機中のラベルが出ない｡** `ReportMetadata` は rex では何もしない｡表示に使える `block rename` は
-  利用者が付けた label を潰すため｡待機の状況は `agents-daemon status` で見る｡
+- **rex は常に可視領域だけを読む｡** scrollback を読む手段が無い｡
+  小さい block では上限の文言が流れた時点で検知が効かなくなる ([pane-io.md](pane-io.md) の「読み取り元」)｡
+- **待機中のラベルは出ない｡** 表示に使える `block rename` は利用者が付けた label を潰すため｡
+  待機の状況は `agents-daemon status` で見る｡
 - **rex の送信は実機で測っていない｡** `send` / `send-key` の組み立ては fake の rex で確かめただけで､
-  daemon が渡すキー名 (`esc` `enter`) は herdr のもの｡rex でそのまま通るかは未測定｡
+  daemon が渡すキー名 (`esc` `enter`) が rex でそのまま通るかは未測定｡
 - **rex の状態は Claude Code の OSC 7501 の報告に頼る｡** 対応は CHANGELOG 2.1.295 にあるが payload の書式は
   公式ドキュメントに無いので､Claude Code の版で変わりうる｡測った版は上の「rex の状態の対応」｡
 - rex 側の制約 (可視領域だけ､ラベルが出ない､送信が未測定) が今の版でも残っているかは､

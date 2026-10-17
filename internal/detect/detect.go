@@ -91,7 +91,7 @@ var (
 	// この状態では **Escape が取り消しキー** なので､待機明けに Escape を送ると
 	// ネイティブの継続そのものを潰す｡だで検知したら手を出さない｡
 	// cc-premise: 2.1.299 limit-screen auto-continue のバナーと降りた通知の文言 (native_continue_test.go)
-	autoContinueArmedPattern =regexp.MustCompile(`(?i)(?:usage limit|limit (?:has )?reset).*\bcontinuing (?:automatically|shortly|now)\b`)
+	autoContinueArmedPattern = regexp.MustCompile(`(?i)(?:usage limit|limit (?:has )?reset).*\bcontinuing (?:automatically|shortly|now)\b`)
 
 	// nativeStoodDownPattern はネイティブが継続を諦めたことを伝える通知｡
 	// 予約中のバナーは画面下部で描き直される要素なので､取り消されても直前の
@@ -108,7 +108,7 @@ var (
 	// 要件を満たすようになった｡待機に入ると解除時刻に送信 → 再び弾かれる､を
 	// maxRetries まで繰り返す｡上流も retry watchdog 側で同じ扱いにしている (2.1.232)｡
 	// cc-premise: 2.1.299 limit-screen spend limit / usage credit の文言
-	hardCapPatterns =[]*regexp.Regexp{
+	hardCapPatterns = []*regexp.Regexp{
 		regexp.MustCompile(`(?i)\bspend limit\b`),
 		regexp.MustCompile(`(?i)usage credit limit`),
 		regexp.MustCompile(`(?i)credit balance (?:is )?too low`),
@@ -127,7 +127,7 @@ var (
 	// 任意の文章も入るので､裸の語句では issue のタイトルやログの引用に当たる｡
 	// リトライ中のカウントダウン行には接頭辞が付かず､その間は Claude Code に任せる｡
 	// cc-premise: 2.1.296 transient API Error 行の接頭辞とリトライ表示 (detect_test.go)
-	transientAnchorPattern =regexp.MustCompile(`(?i)\bAPI Error\b`)
+	transientAnchorPattern = regexp.MustCompile(`(?i)\bAPI Error\b`)
 
 	// transientPatterns は直近の出力ブロック内 (latestOutputBlock) の､transientAnchorPattern と
 	// 同じ行でのみ判定する｡

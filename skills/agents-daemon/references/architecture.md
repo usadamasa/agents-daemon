@@ -201,58 +201,39 @@ build の数秒後には新しい版が動いている｡hook も手動操作も
 
 ### [3] デーモンが監視して再開する
 
-単一プロセスが全 Claude pane を見る｡pane ごとの状態は `terminal_id` をキーに
-プロセス内で持つ (herdr の `pane_id` は herdr 再起動で変わりうる｡rex は block ID をそのまま使う)｡
+単一プロセスが全 Claude pane を見る｡pane ごとの状態は `terminal_id` (rex の block ID) をキーに
+プロセス内で持つ｡
 
 ### 多重化ツールの backend
 
-daemon は pane 操作を `internal/multiplexer` の `Client` interface 越しに行い､実装は herdr (`internal/herdrcli`)
-と rex (`internal/rexcli`) の 2 つ｡`internal/backend` が起動時の環境で選ぶ｡`REX_SESSION` があれば rex､
-無ければ herdr｡daemon は SessionStart hook の環境を継承するので､最初に起こしたセッションの側に決まる｡
-選んだ backend は `status.json` の `backend` に書き､`doctor` が今の環境と違えば警告する｡
+daemon は pane 操作を `internal/multiplexer` の `Client` interface 越しに行い､実装は rex (`internal/rexcli`)｡
+`internal/backend` が起動時の環境に `REX_SESSION` があることを確かめ､無ければ `daemon --ensure` は
+stderr に 1 行出して何もせずに戻る (素の端末の SessionStart で毎回 daemon を起こさない)｡hook はこの判定を
+持たず､バイナリの build は常に行う｡同じバイナリを `statusline` / `ingest-statusline` / `ttl-guard` が使い､
+これらは多重化ツールを要らないため｡
+backend は `status.json` の `backend` に書き､`doctor` が今の環境と違えば警告する (herdr を見ていた
+旧バイナリの daemon が残った移行期に効く)｡
 
-| 操作 | herdr | rex |
-| ---- | ---- | ---- |
-| PaneList | `pane list` | `ls --json`､session ごとに `block ls -s S --json`､flavor が `com.superlogical.terminal.shell` の block ごとに `block call -b B program_status` と `block call -b B process` |
-| PaneRead | `pane read P --source S --lines N` | `capture -b B --trim --unwrap` の末尾 N 行｡`Source` は無視 |
-| SendText | `pane send-text P TEXT` | `send -b B TEXT` |
-| SendKeys | `pane send-keys P KEY...` | `send-key -b B KEY...` |
-| ReportMetadata | `pane report-metadata P --source ... --state-label ...` | 何もしない (`block rename` は利用者の label を潰す) |
-| Reachable | `status --json` の `server.running` | `api call server.status` の `pid` が正 |
-| session_id | `context/<sid>.json` の `multiplexer.pane` から逆引き (上の「statusline が書く state」) | `context/<sid>.json` の `multiplexer.block` から逆引き (同) |
+| 操作 | rex |
+| ---- | ---- |
+| PaneList | `ls --json`､session ごとに `block ls -s S --json`､flavor が `com.superlogical.terminal.shell` の block ごとに `block call -b B program_status` と `block call -b B process` |
+| PaneRead | `capture -b B --trim --unwrap` の末尾 N 行 |
+| SendText | `send -b B TEXT` |
+| SendKeys | `send-key -b B KEY...` |
+| Reachable | `api call server.status` の `pid` が正 |
+| session_id | `context/<sid>.json` の `multiplexer.block` から逆引き (上の「statusline が書く state」) |
+
+待機中のラベルは出さない｡rex で表示に使える `block rename` は利用者が付けた label を潰すため｡
 
 rex の呼び出しには全部 `--autostart=false` を付け､子プロセスの環境から `REX_SESSION` / `REX_BLOCK` を外す｡
 `REX_SESSION` があると rex は block の解決をその session の中に閉じ､外せば完全 ID で別 session の block も
 解決する (実測)｡`block ls` と `block call` の間に閉じた block (exit 3) は読み飛ばし､PaneList の失敗に数えない｡
 
 rex の列挙は 1 tick に `ls` 1 回､session ごとに `block ls` 1 回､shell の block ごとに 2 回の fork になる｡
-herdr の `pane list` 1 回より重いので､block が多い環境ほど tick あたりの時間が伸びる｡
+block が多い環境ほど tick あたりの時間が伸びる｡
 
 rex で Agent と AgentStatus を決めるのは Claude Code 自身が OSC 7501 で報告する `program_status` で､
 状態の対応は [operations.md](operations.md) の「rex の状態の対応」｡
-
-### [5] herdr の space 欄とタブ行にセッション名を出す
-
-herdr が space 欄に出せる built-in token は pane の cwd から引くもので､worktree へ移ったセッションを追わない｡
-端末タイトル (Claude Code がセッションの要約に更新し続ける) は agents 欄にしか出ない｡
-`hooks/herdr-title.sh` (UserPromptSubmit / Stop) が stdin を `agents-daemon herdr-title` へ渡し､
-バイナリ (`internal/hookreport`) が次を `HERDR_SOCKET_PATH` の socket で herdr へ報告する｡
-rex や herdr の外では何もしない (`HERDR_ENV=1` と `HERDR_SOCKET_PATH` と `HERDR_PANE_ID` がそろったときだけ動く)｡
-
-| 面 | 書き込み先 | 値 | hook が無いときの表示 |
-| ---- | ---- | ---- | ---- |
-| space 欄 | workspace metadata の token `claude` (`workspace.report_metadata`) | `pane.current` の `terminal_title_stripped` | 出す口が無い |
-| space 欄 | 同 token `branch` | `foreground_cwd` (git の外なら `cwd`) の `git branch --show-current` | built-in が pane の cwd のブランチを出す |
-| タブ行 | タブの label (`tab.rename`) | 端末タイトル｡空ならタブの番号へ戻す | 連番 |
-
-- 描く側は利用者の herdr config の `$claude` と `$branch` の行｡plugin は token を報告するだけ｡
-- 書き込み先のタブと workspace は `pane.current` (`caller_pane_id` = `HERDR_PANE_ID`) から取る｡herdr が注入する
-  `HERDR_TAB_ID` / `HERDR_WORKSPACE_ID` は pane 作成時の値のままで､`herdr pane move` の後は元のタブを指す｡
-- 空の token は null で送って消す｡`tab.rename` に空を渡すと空の label になるので､番号を渡す｡
-- source は `claude-config:claude-title`｡agents-config の `herdr-claude-title.sh` から移したもので､移行期間は
-  両方の hook が同じ source に報告し､seq (UnixNano) の新しい方が勝つ｡
-- 値を取り直すのは hook の発火時点だけ｡agents 欄は端末タイトルを直に読むので､長いターンの間は space 欄とずれる｡
-- 失敗は exit 0 で理由を stderr に出す (hook のログ)｡herdr との往復と git を合わせて 4 秒で諦める｡
 
 ## 毎 tick の判定
 

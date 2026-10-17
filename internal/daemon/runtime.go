@@ -30,21 +30,15 @@ import (
 // ログを埋め尽くすのを防ぐ｡
 const maxConsecutiveTickFailures = 10
 
-// metadataSource は ReportMetadata の Source に渡す固定値 (herdr の report-metadata --source)｡
-// monitor パッケージ内の同名定数 (非公開) と揃えてある｡
-const metadataSource = "agents-daemon"
-
 // paneEntry は daemon が pane 1 枚ぶんに保持する監視状態｡
 type paneEntry struct {
 	state      *monitor.PaneState
-	pane       multiplexer.Pane // 直近の tick で観測した pane 情報 (シャットダウン時のラベル解除に使う)
 	lastSeenAt time.Time
 	lastLogKey string // 直前にログへ書いた内容の識別子 (同じ状態が続く間の重複を抑える)
 }
 
 // daemonRuntime は 1 回の --foreground 実行に閉じたループの可変状態をまとめる｡
-// pane ごとの状態機械は TerminalID をキーにする (herdr の pane_id は herdr 再起動で
-// 変わりうるが､terminal_id はその herdr 実行内で安定するため｡rex は block ID)｡
+// pane ごとの状態機械は TerminalID (rex は block ID) をキーにする｡
 type daemonRuntime struct {
 	client multiplexer.Client
 	// backend は client の多重化ツールの種類｡status.json に書くだけで判定には使わない｡
@@ -158,7 +152,6 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 			entry = &paneEntry{state: &monitor.PaneState{}}
 			r.panes[pane.TerminalID] = entry
 		}
-		entry.pane = pane
 		entry.lastSeenAt = now
 
 		// state はセッションごとに別ファイル｡pane に対応するものだけを読む｡
@@ -424,24 +417,6 @@ func (r *daemonRuntime) contextUsage(sessionID string, c *sessionstate.Cache) st
 	return fmt.Sprintf("入力 %d tokens", c.ContextTokens)
 }
 
-// clearAllLabels は待機ラベルを表示している可能性のある全 pane へ
-// ClearStateLabels を送る｡シャットダウン時に「ラベルが残ったまま」に
-// ならないようにするためのベストエフォート処理で､失敗してもログするだけで
-// シャットダウン自体は止めない｡
-func (r *daemonRuntime) clearAllLabels(ctx context.Context) {
-	for _, entry := range r.panes {
-		if entry.state.Status != monitor.StatusWaiting {
-			continue
-		}
-		if err := r.client.ReportMetadata(ctx, entry.pane.PaneID, multiplexer.ReportMetadataOptions{
-			Source:           metadataSource,
-			ClearStateLabels: true,
-		}); err != nil {
-			r.log.Logf("pane %s のラベル解除に失敗: %v", entry.pane.PaneID, err)
-		}
-	}
-}
-
 // EnsureDaemon は生存している daemon が無ければこのバイナリを detach 起動する｡
 // SessionStart hook から呼ばれる想定なので､常に高速に戻り､hook を絶対に
 // ブロック/失敗させない設計にする｡
@@ -557,9 +532,6 @@ func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 	defer stop()
 
 	cleanup := func(reason string) {
-		cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		runtime.clearAllLabels(cleanupCtx)
-		cancel()
 		if err := RemovePIDFile(p.PIDFile()); err != nil {
 			log.Logf("PID ファイルの削除に失敗: %v", err)
 		}

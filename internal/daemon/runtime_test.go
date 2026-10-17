@@ -90,9 +90,6 @@ func TestDaemonRuntimeTick_NewPaneGetsFreshState(t *testing.T) {
 	if !entry.lastSeenAt.Equal(now) {
 		t.Errorf("entry.lastSeenAt = %v, want %v", entry.lastSeenAt, now)
 	}
-	if entry.pane.PaneID != "p1" {
-		t.Errorf("entry.pane.PaneID = %q, want %q", entry.pane.PaneID, "p1")
-	}
 }
 
 func TestDaemonRuntimeTick_DisappearedPaneEntryDropped(t *testing.T) {

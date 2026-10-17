@@ -59,7 +59,6 @@ func TestLoad(t *testing.T) {
 			"fallbackWaitHours": 2.5,
 			"maxRetries": 3,
 			"retryMessage": "resume please",
-			"readSource": "visible",
 			"readLines": 40,
 			"detectionTailLines": 20,
 			"usedPercentageThreshold": 50,
@@ -70,7 +69,6 @@ func TestLoad(t *testing.T) {
 			"dismissMenu": false,
 			"menuDismissDelayMs": 100,
 			"submitDelayMs": 200,
-			"engagedLabel": "waiting",
 			"customPatterns": ["foo.*bar"],
 			"idleShutdownMinutes": 15,
 			"deferToNativeAutoContinue": false,
@@ -102,7 +100,6 @@ func TestLoad(t *testing.T) {
 			FallbackWaitHours:       2.5,
 			MaxRetries:              3,
 			RetryMessage:            "resume please",
-			ReadSource:              "visible",
 			ReadLines:               40,
 			DetectionTailLines:      20,
 			UsedPercentageThreshold: 50,
@@ -113,7 +110,6 @@ func TestLoad(t *testing.T) {
 			DismissMenu:             false,
 			MenuDismissDelayMs:      100,
 			SubmitDelayMs:           200,
-			EngagedLabel:            "waiting",
 			CustomPatterns:          []string{"foo.*bar"},
 			IdleShutdownMinutes:     15,
 
@@ -159,7 +155,7 @@ func TestLoad(t *testing.T) {
 			"pollIntervalSeconds": 0,
 			"marginSeconds": 45,
 			"maxRetries": "not-a-number",
-			"readSource": "carrier-pigeon",
+			"readLines": 2,
 			"retryMessage": "",
 			"usedPercentageThreshold": 150
 		}`)
@@ -177,8 +173,8 @@ func TestLoad(t *testing.T) {
 		if cfg.MaxRetries != def.MaxRetries {
 			t.Errorf("maxRetries: got %d, want default %d", cfg.MaxRetries, def.MaxRetries)
 		}
-		if cfg.ReadSource != def.ReadSource {
-			t.Errorf("readSource: got %q, want default %q", cfg.ReadSource, def.ReadSource)
+		if cfg.ReadLines != def.ReadLines {
+			t.Errorf("readLines: got %d, want default %d", cfg.ReadLines, def.ReadLines)
 		}
 		if cfg.RetryMessage != def.RetryMessage {
 			t.Errorf("retryMessage: got %q, want default %q", cfg.RetryMessage, def.RetryMessage)

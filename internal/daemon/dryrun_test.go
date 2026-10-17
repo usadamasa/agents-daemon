@@ -85,9 +85,6 @@ func TestDryRunClient_WriteOperationsNeverReachInner(t *testing.T) {
 		SendKeysFunc: func(context.Context, string, ...string) error {
 			return errors.New("実際のペインへ送信されてしまった")
 		},
-		ReportMetadataFunc: func(context.Context, string, multiplexer.ReportMetadataOptions) error {
-			return errors.New("実際のペインが更新されてしまった")
-		},
 	}
 	logPath := filepath.Join(t.TempDir(), "daemon.log")
 	log := applog.NewLogger(logPath, time.Now)
@@ -106,12 +103,6 @@ func TestDryRunClient_WriteOperationsNeverReachInner(t *testing.T) {
 		}
 	})
 
-	t.Run("ReportMetadataはinnerに到達せず常に成功を返す", func(t *testing.T) {
-		if err := c.ReportMetadata(ctx, "p1", multiplexer.ReportMetadataOptions{Source: metadataSource}); err != nil {
-			t.Errorf("ReportMetadata() error = %v, want nil", err)
-		}
-	})
-
 	if len(inner.Calls) != 0 {
 		t.Fatalf("inner.Calls = %v, want 空 (書き込み系は inner に到達してはいけない)", inner.Calls)
 	}
@@ -124,7 +115,7 @@ func TestDryRunClient_WriteOperationsNeverReachInner(t *testing.T) {
 		t.Fatalf("ログファイルが読めない: %v", err)
 	}
 	logged := string(data)
-	for _, want := range []string{"p1 へテキストを送信しない", "p1 へキーを送信しない", "p1 のラベルを更新しない"} {
+	for _, want := range []string{"p1 へテキストを送信しない", "p1 へキーを送信しない"} {
 		if !strings.Contains(logged, want) {
 			t.Errorf("ログに %q が含まれていない: %q", want, logged)
 		}

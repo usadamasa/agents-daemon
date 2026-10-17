@@ -71,9 +71,8 @@ func readReturning(screen string, err error) func(ctx context.Context, paneID st
 }
 
 func TestTick_AgentStatusNeverGatesDetection(t *testing.T) {
-	// herdr の agent_status は PTY の出力活動から推定される値で､上限で止まった
-	// pane を working と報告し続けることがある (teammate ウィジェットの経過時間
-	// カウンタのように毎秒再描画される要素があると idle へ落ちない)｡
+	// agent_status は Claude Code の自己申告 (OSC 7501) で､上限で止まった pane が
+	// working のまま申告され続けることがある (上限の画面は turn の途中で止まるため)｡
 	//
 	// 上限で止まった pane は「working に見える pane」と区別できないため､
 	// agent_status を判定に使うと上限を取りこぼす｡判定は画面テキストの分類
@@ -540,7 +539,7 @@ func TestTick_ScreenUnreadable_DuringWait_StaysWaiting(t *testing.T) {
 
 func TestTick_ReadError_DoesNotKillMachine(t *testing.T) {
 	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
-	boom := errors.New("herdr unreachable")
+	boom := errors.New("rex unreachable")
 
 	t.Run("監視中", func(t *testing.T) {
 		client := &multiplexerfake.Client{PaneReadFunc: readReturning("", boom)}
@@ -602,16 +601,6 @@ func TestTick_TransientFromMonitoring_NoMarginAdded(t *testing.T) {
 	want := now.Add(time.Duration(cfg.TransientWaitSeconds) * time.Second)
 	if !ps.WaitUntil.Equal(want) {
 		t.Errorf("WaitUntil = %v, want %v (transient の初回待機に margin は乗せない)", ps.WaitUntil, want)
-	}
-
-	var gotLabel bool
-	for _, call := range client.Calls {
-		if call == "ReportMetadata:pane-1" {
-			gotLabel = true
-		}
-	}
-	if !gotLabel {
-		t.Errorf("Calls = %v, 待機に入ったら engaged ラベルを表示するべき", client.Calls)
 	}
 }
 

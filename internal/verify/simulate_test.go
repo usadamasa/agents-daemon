@@ -115,16 +115,6 @@ func TestScopedClient_所有pane以外への操作を拒否する(t *testing.T) 
 		}
 	})
 
-	t.Run("ReportMetadata: 他 pane は拒否する", func(t *testing.T) {
-		fake := newFake()
-		c := newScopedClient(fake, owned)
-		err := c.ReportMetadata(context.Background(), other, multiplexer.ReportMetadataOptions{Source: "x"})
-		assertPaneNotOwned(t, err)
-		if len(fake.Calls) != 0 {
-			t.Errorf("拒否されたのに inner が呼ばれている: %v", fake.Calls)
-		}
-	})
-
 	t.Run("PaneList と Reachable は pane を特定しない読み取りなので常に inner へ委譲する", func(t *testing.T) {
 		fake := newFake()
 		c := newScopedClient(fake, owned)
@@ -150,9 +140,6 @@ func TestSimulateDryRunClient_送信系はinnerを呼ばずログだけ出す(t 
 	}
 	if err := c.SendKeys(context.Background(), "p1", "esc", "enter"); err != nil {
 		t.Fatalf("SendKeys() error = %v", err)
-	}
-	if err := c.ReportMetadata(context.Background(), "p1", multiplexer.ReportMetadataOptions{Source: "x"}); err != nil {
-		t.Fatalf("ReportMetadata() error = %v", err)
 	}
 
 	if len(fake.Calls) != 0 {

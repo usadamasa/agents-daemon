@@ -200,11 +200,9 @@ func TestRunInspect_サンプル画面での分類(t *testing.T) {
 		if got, want := len(client.Calls), 2; got != want {
 			t.Fatalf("Client への呼び出し回数 = %d, want %d (%v)", got, want, client.Calls)
 		}
-		// 期待値は設定の既定から引く｡読み取り元の既定は viewport 制限を避けるために
-		// 変わりうるので､ここに値を直書きすると既定を変えるたびに嘘になる｡
-		wantSource := multiplexer.PaneReadSource(config.Default().ReadSource)
-		if gotOpts.Source != wantSource {
-			t.Errorf("PaneReadOptions.Source = %v, want %v (config.Default() の readSource)", gotOpts.Source, wantSource)
+		// 期待値は設定の既定から引く｡ここに値を直書きすると既定を変えるたびに嘘になる｡
+		if want := config.Default().ReadLines; gotOpts.Lines != want {
+			t.Errorf("PaneReadOptions.Lines = %d, want %d (config.Default() の readLines)", gotOpts.Lines, want)
 		}
 		if !strings.Contains(buf.String(), "判定結果: limit") {
 			t.Errorf("pane 読み取り結果が分類に反映されていない: %s", buf.String())
@@ -223,7 +221,7 @@ func TestRunInspect_サンプル画面での分類(t *testing.T) {
 			t.Fatalf("RunInspect() error = %v", err)
 		}
 		for _, call := range client.Calls {
-			if strings.HasPrefix(call, "SendText") || strings.HasPrefix(call, "SendKeys") || strings.HasPrefix(call, "ReportMetadata") {
+			if strings.HasPrefix(call, "SendText") || strings.HasPrefix(call, "SendKeys") {
 				t.Fatalf("inspect が送信系メソッドを呼んでしまっている: %v", client.Calls)
 			}
 		}

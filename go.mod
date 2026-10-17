@@ -2,7 +2,10 @@ module github.com/usadamasa/agents-daemon
 
 go 1.26.3
 
-require github.com/spf13/cobra v1.10.2
+require (
+	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51
+	github.com/spf13/cobra v1.10.2
+)
 
 require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect

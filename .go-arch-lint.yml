@@ -12,6 +12,9 @@ components:
 vendors:
   cobra:
     in: github.com/spf13/cobra
+  # rexcli のテストが fake の rex に渡った引数列を戻すのに使う。
+  shellquote:
+    in: github.com/kballard/go-shellquote
 
 deps:
   cmd_main:
@@ -22,3 +25,5 @@ deps:
   internal:
     mayDependOn:
       - internal
+    canUse:
+      - shellquote

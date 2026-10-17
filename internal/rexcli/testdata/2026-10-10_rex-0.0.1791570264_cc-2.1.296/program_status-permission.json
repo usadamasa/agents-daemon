@@ -1,0 +1,1 @@
+{"records":[{"state":"blocked","kind":"permission","app":"claude-code","effective_app":"claude-code","msg":"approve Bash: rm -rf ./tmp/junk","updated_at":"2026-10-10T18:51:48.057417+09:00","owner":{"pid":94252,"name":"2.1.296"}}]}

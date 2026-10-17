@@ -1,5 +1,8 @@
-// Package multiplexer は端末多重化ツールの pane 操作を表す中立の interface と型を持つ｡
-// rex の backend (rexcli) がこれを実装し､backend 固有の JSON は backend に閉じる｡
+// Package multiplexer は端末多重化ツールの pane 操作を表す interface と型を持つ｡
+//
+// 実装は rex (rexcli) の 1 つだけだが､interface は意図して残している (#73)｡daemon / monitor / verify が
+// rex の CLI (exec.Command と rex 固有の JSON) に直接依存しないための境界であり､テストが
+// multiplexerfake を差し込む口でもある｡複数 backend を抽象する目的の層ではない｡
 package multiplexer
 
 import (
@@ -54,8 +57,8 @@ type PaneReadOptions struct {
 // backend は PaneList / PaneGet の呼び出しごとに 1 回だけ呼ぶ｡
 type SessionResolver func() (map[string]string, error)
 
-// Client は多重化ツールが提供する pane 操作の抽象｡daemon はこの interface にのみ
-// 依存し､exec.Command を直接呼ばない｡
+// Client は多重化ツールが提供する pane 操作｡実装は rexcli.NewExecClient と multiplexerfake.Client の
+// 2 つで､daemon はこの interface にのみ依存し､exec.Command を直接呼ばない｡
 type Client interface {
 	// PaneList は現在の全 pane を返す｡
 	PaneList(ctx context.Context) ([]Pane, error)

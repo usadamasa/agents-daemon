@@ -36,7 +36,7 @@ rex version --json
 
 `rex_version` (`0.0.1792158932-g88fd41`) と `built_at` を控える。rex の CLI は changelog の版 (`preview.15`) を出さない
 (`api call server.version` も同じ)。changelog の版は `list_changelog` の一覧から、`built_at` の日付と同じ日かその直後の
-post を取る (preview.15 は build が 2026-10-16 13:55Z、post が同日 18:23Z。post が build より後に出る)。
+post を取る。post は build より後に出る (preview.15 は build が 2026-10-16 13:55Z、post が同日 18:23Z)。
 
 前回見た版は [references/last-checked.md](references/last-checked.md) の最後の行。範囲はその次の版から今の版まで。
 `rex_version` が前回と同じなら changelog は読まず、手順 4 の実機の点検だけ行う。
@@ -48,7 +48,7 @@ post を取る (preview.15 は build が 2026-10-16 13:55Z、post が同日 18:2
 - **前提に当たるか**: 「前提の洗い出し」の topic の検索語に当たる項目。「rex CLI」「Rex Server」の節が本命で、
   macOS App の節は飛ばしてよい
 - **アイデアになるか**: daemon が polling や画面の読み取りでやっていることを rex が直接出せるようになった項目
-  (block の新しい method や event、`rex events` の形、Lua の `rex.after` のような常駐の手段)
+  (block の新しい method や event、Lua の常駐の手段)
 
 ### 3. marker の一覧を出す
 
@@ -73,13 +73,13 @@ guard が拒否する。先に `printenv REX_BLOCK REX_SESSION` で値を取り�
 go run ./cmd/agents-daemon doctor
 ```
 
-自分の block (`REX_BLOCK` の値) の `pane=` 行が `agent_status=working` (Bash ツールの実行中は working) で、
-`unknown の理由` の行が付いていなければ、record の `owner.pid` と前景の pid の突き合わせは通っている。理由の行が
-出たら、その文面が欄の有無を言っている (`record に owner.pid が無い`)。
+自分の block (`REX_BLOCK` の値) の `pane=` 行が `agent_status=working` で、`unknown の理由` の行が
+付いていなければ、record の `owner.pid` と前景の pid の突き合わせは通っている。Bash ツールの実行中は working になる。
+理由の行が出たら、その文面が欄の有無を言っている (`record に owner.pid が無い`)。
 
 次に固定のコマンドを打ち、コードが読む欄だけを突き合わせる。実機の JSON には fixture に無い欄がある
 (`block ls` の `owner` など)。それはずれではない。
-ずれは「コードが読む欄が無い・名前が違う・型が違う・exit code が違う」。
+ずれとして扱うのは、コードが読む欄の欠落・名前の違い・型の違い・exit code の違い。
 
 | コマンド | コードが読む欄 | 突き合わせる先 |
 | ---- | ---- | ---- |
@@ -96,7 +96,7 @@ go run ./cmd/agents-daemon doctor
   来なければ `timeout 30` に伸ばして次のターンで打ち直す。それでも来なければ、外形 (`session_event` →
   `block_event` → `name`) が #78 の形のままかだけ見て、record の中身は `program_status` の応答 (同じ record) で
   代用する。
-- `rex block inspect "$REX_BLOCK"` の METHOD / EVENT の一覧で、`program_status` と `process` が残っているか、
+- `rex --autostart=false block inspect "$REX_BLOCK"` の METHOD / EVENT の一覧で、`program_status` と `process` が残っているか、
   新しい method や event が増えていないかも見る。
 
 ### 5. レポートを書いて issue にする

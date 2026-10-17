@@ -177,43 +177,6 @@ func TestRunDoctor(t *testing.T) {
 		}
 	})
 
-	t.Run("daemon の backend が今の環境と違えば警告する", func(t *testing.T) {
-		cases := []struct {
-			name        string
-			snapBackend string
-			snapPID     int
-			wantWarn    bool
-		}{
-			{"旧バイナリの herdr の daemon を rex の環境から見た", "herdr", os.Getpid(), true},
-			{"同じ backend なら警告しない", sessionstate.MultiplexerKindRex, os.Getpid(), false},
-			{"変更前の daemon (記録なし) は警告しない", "", os.Getpid(), false},
-			{"前の daemon が残した snapshot は警告しない", "herdr", os.Getpid() + 1, false},
-		}
-		for _, tc := range cases {
-			t.Run(tc.name, func(t *testing.T) {
-				p := apppath.New(t.TempDir(), "", "")
-				writeFixturePIDFile(t, p.PIDFile(), os.Getpid())
-				writeFixtureSnapshot(t, p.StatusFile(), daemon.StatusSnapshot{
-					PID:       tc.snapPID,
-					Backend:   tc.snapBackend,
-					StartedAt: fixedNow.Add(-time.Hour),
-					UpdatedAt: fixedNow,
-				})
-				client := &multiplexerfake.Client{
-					ReachableFunc: func(context.Context) error { return nil },
-					PaneListFunc:  func(context.Context) ([]multiplexer.Pane, error) { return nil, nil },
-				}
-				var buf bytes.Buffer
-				if err := RunDoctor(context.Background(), &buf, doctorInput(client, sessionstate.MultiplexerKindRex, p, fixedNow)); err != nil {
-					t.Fatalf("RunDoctor() error = %v (警告は exit code を変えない)", err)
-				}
-				warned := strings.Contains(buf.String(), "⚠ daemon の backend")
-				if warned != tc.wantWarn {
-					t.Errorf("警告の有無 = %v, want %v:\n%s", warned, tc.wantWarn, buf.String())
-				}
-			})
-		}
-	})
 }
 
 func TestReportPeerMessaging(t *testing.T) {

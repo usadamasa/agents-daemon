@@ -21,7 +21,7 @@ func newDoctorCmd() *cobra.Command {
 			"設定ファイルの状態､daemon の稼働状況､peer messaging の socket (CLAUDE_CODE_MESSAGING_SOCKET)､\n" +
 			"解決済みパスを順に確認して報告する｡rex の外 (REX_SESSION なし) と､rex の server へ\n" +
 			"到達できない場合のみ実際に壊れているとみなし exit 1 にする｡他の項目は情報提供のみで\n" +
-			"exit 0 (state ファイルがまだ無い､daemon が起動していない､daemon の backend が今の環境と違う等)｡",
+			"exit 0 (state ファイルがまだ無い､daemon が起動していない等)｡",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			p, err := apppath.FromEnv()
 			if err != nil {

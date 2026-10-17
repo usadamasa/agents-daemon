@@ -99,6 +99,6 @@ description: >-
 | 直したコードが動いていない | architecture.md の「バイナリの用意と差し替え」 |
 | 送信が block に届かない | pane-io.md､operations.md の「既知の制約」(block 内 tmux､rex 不在) |
 | `doctor` の pane 一覧が `session_id=(なし)` になる | statusline が新しいバイナリ (`statusline` か `ingest-statusline`) を呼んでいるか､`context/<sid>.json` に `multiplexer` があるか｡architecture.md の「statusline が書く state」 |
-| rex のセッションなのに daemon が起きない・何も送らない | `doctor` の daemon の節の backend 不一致の警告 (herdr を見ていた旧バイナリの daemon が残っている)｡`agents-daemon stop` して起こし直す｡hook のログに `REX_SESSION が無いため` と出ていれば rex の外で起動したセッション |
+| rex のセッションなのに daemon が起きない | hook のログに `REX_SESSION が無いため` と出ていれば rex の外で起動したセッション｡`doctor` の daemon の節で起動中の daemon の pid を見る |
 | `ListAgents` / `SendMessage` がツール一覧に無く `/list-agents` も認識されない (peer へ作業を渡せない) | `agents-daemon:setup` skill の「peer messaging」 |
 | hook が 10 秒の timeout に当たっている疑い (prompt の送信が遅い､hook の効果が出ない) | `claude --debug` で起動し､`Hooks: UserPromptSubmit [...] finished with status 0 (31ms)` の行 (Claude Code 2.1.296+) で hook ごとの所要時間を見る｡`timed out after <N>ms` なら当たっている |

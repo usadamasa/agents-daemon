@@ -60,7 +60,7 @@ func RunDoctor(ctx context.Context, w io.Writer, in DoctorInput) error {
 	reportConfigState(w, in.Paths)
 
 	_, _ = fmt.Fprintln(w, "\n-- daemon --")
-	reportDaemonState(w, in.Paths, in.Kind, in.Now)
+	reportDaemonState(w, in.Paths, in.Now)
 
 	_, _ = fmt.Fprintln(w, "\n-- peer messaging (ListAgents / SendMessage) --")
 	reportPeerMessaging(w, in.Getenv)
@@ -254,8 +254,7 @@ func configFields(cfg, def config.Config) []configFieldReport {
 }
 
 // reportDaemonState は PID ファイルと status.json から daemon の稼働状況を報告する｡
-// daemon の backend が今の環境の kind と違えば警告する｡
-func reportDaemonState(w io.Writer, p apppath.Paths, kind string, now time.Time) {
+func reportDaemonState(w io.Writer, p apppath.Paths, now time.Time) {
 	pid, err := daemon.ReadPIDFile(p.PIDFile())
 	if err != nil {
 		_, _ = fmt.Fprintf(w, "  PID ファイルの読み込みに失敗: %v\n", err)
@@ -278,13 +277,6 @@ func reportDaemonState(w io.Writer, p apppath.Paths, kind string, now time.Time)
 	}
 	_, _ = fmt.Fprintf(w, "  最終 tick: %s (%s 前)\n", snap.UpdatedAt.Format(time.RFC3339), now.Sub(snap.UpdatedAt).Round(time.Second))
 	_, _ = fmt.Fprintf(w, "  監視中 pane: %d 件\n", len(snap.Panes))
-	// 前の daemon が残した snapshot や､backend を記録する前の daemon とは比べない｡
-	if snap.PID == pid && snap.Backend != "" {
-		_, _ = fmt.Fprintf(w, "  backend: %s\n", snap.Backend)
-		if snap.Backend != kind {
-			_, _ = fmt.Fprintf(w, "  ⚠ daemon の backend (%s) が今の環境 (%s) と違います｡daemon はこの環境のセッションを監視していません\n", snap.Backend, kind)
-		}
-	}
 }
 
 // reportPeerMessaging は Claude Code の cross-session messaging がこのプロセスの環境で

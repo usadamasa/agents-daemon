@@ -203,9 +203,7 @@ daemon は pane 操作を `internal/multiplexer` の `Client` interface 越し�
 `internal/backend` が起動時の環境に `REX_SESSION` があることを確かめ､無ければ `daemon --ensure` は
 stderr に 1 行出して何もせずに戻る (素の端末の SessionStart で毎回 daemon を起こさない)｡hook はこの判定を
 持たず､バイナリの build は常に行う｡同じバイナリを `statusline` / `ingest-statusline` / `ttl-guard` が使い､
-これらは多重化ツールを要らないため｡
-backend は `status.json` の `backend` に書き､`doctor` が今の環境と違えば警告する (herdr を見ていた
-旧バイナリの daemon が残った移行期に効く)｡
+これらは多重化ツールを要らないため｡backend は `status.json` の `backend` に書き､`status` が表示する｡
 
 | 操作 | rex |
 | ---- | ---- |

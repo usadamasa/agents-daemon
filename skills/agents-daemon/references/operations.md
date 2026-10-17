@@ -84,8 +84,7 @@ Claude Code の OSC 7501 の書式は 2.1.296 のバイナリから読んだも�
 (「rex の状態の対応」参照)｡
 
 `doctor` は rex の server への到達性､Claude pane の一覧 (`session_id` が引けなければ `(なし)`) を出す｡
-rex の外 (`REX_SESSION` なし) では exit 1 で止まる｡daemon の `status.json` の backend が今の環境と違えば
-警告する (herdr を見ていた旧バイナリの daemon が残っているとき)｡末尾の「peer messaging」は
+rex の外 (`REX_SESSION` なし) では exit 1 で止まる｡末尾の「peer messaging」は
 `CLAUDE_CODE_MESSAGING_SOCKET` と socket の有無で､Claude Code のセッション内 (Bash ツール) から呼んだときだけ
 意味を持つ (切り分けは `agents-daemon:setup` skill の `references/peer-messaging.md`)｡
 `inspect --pane` の pane ID は block ID｡

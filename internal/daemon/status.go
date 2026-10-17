@@ -57,8 +57,7 @@ func cacheStatus(c *sessionstate.Cache, now time.Time) *CacheStatus {
 // tick のたびに上書きし､`status` コマンドがこれを読んで表示する｡
 type StatusSnapshot struct {
 	PID int `json:"pid"`
-	// Backend は daemon が見ている多重化ツール (rex)｡doctor が今の環境と突き合わせ､herdr を見ていた
-	// 旧バイナリの daemon が残っていれば警告する｡
+	// Backend は daemon が見ている多重化ツール (rex)｡status / doctor が表示に使う｡
 	// 記録を始める前の daemon が書いたものでは空になる｡
 	Backend   string       `json:"backend,omitempty"`
 	StartedAt time.Time    `json:"started_at"`

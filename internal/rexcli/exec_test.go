@@ -67,6 +67,13 @@ const (
 	psSubagentOnly = `{"records":[{"id":"a01b73b4e3800b31f","state":"working","app":"claude-code","updated_at":"2026-10-10T18:29:58.836427+09:00"}]}`
 	psUnknownState = `{"records":[{"state":"starting","app":"claude-code","updated_at":"2026-10-10T18:29:58.836427+09:00","owner":{"pid":15470,"name":"2.1.296"}}]}`
 	psOtherApp     = `{"records":[{"state":"working","app":"cargo","effective_app":"cargo","updated_at":"2026-10-17T14:00:00.000000+09:00","owner":{"pid":15470,"name":"cargo"}}]}`
+	// rex が owner を付けなくなった (または名前を変えた) ときの形｡実測ではなく想定｡
+	psNoOwner = `{"records":[{"state":"done","app":"claude-code","effective_app":"claude-code","updated_at":"2026-10-17T14:00:00.000000+09:00"}]}`
+)
+
+const (
+	reasonNoOwner    = "record に owner.pid が無い (rex の版が変わった可能性｡record を使えず agent_status が unknown のままになる)"
+	reasonStaleOwner = "record の owner (pid 73002) が前景 (pid 70904) と違う (前の Claude の record が残っている)"
 )
 
 // processJSON は `block call process` の応答｡pid と argv0 は前景 process のもの｡
@@ -391,21 +398,23 @@ func TestToPane(t *testing.T) {
 		argv0      string
 		wantAgent  string
 		wantStatus multiplexer.AgentStatus
+		wantReason string
 	}{
-		{"作業中の claude-code", psWorking, pidClaudeWorking, "claude", "claude", multiplexer.AgentStatusWorking},
-		{"ターン終了の done", psDone, pidClaudeDone, "claude", "claude", multiplexer.AgentStatusDone},
-		{"起動直後の idle", psStartup, pidClaudeStartup, "claude", "claude", multiplexer.AgentStatusIdle},
-		{"--shell=none で起動すると argv0 が絶対パス", psStartup, pidClaudeStartup, "/Users/usadamasa/.local/bin/claude", "claude", multiplexer.AgentStatusIdle},
-		{"permission prompt は blocked", psPermission, 94252, "claude", "claude", multiplexer.AgentStatusBlocked},
-		{"permission を断った後の idle", psIdle, 94252, "claude", "claude", multiplexer.AgentStatusIdle},
-		{"event 形の id 空の root record", psEmptyID, pidClaudeWorking, "claude", "claude", multiplexer.AgentStatusWorking},
-		{"未知の state は unknown", psUnknownState, pidClaudeWorking, "claude", "claude", multiplexer.AgentStatusUnknown},
-		{"record 無しでも argv0 が claude なら Claude", psEmpty, pidClaudeWorking, "claude", "claude", multiplexer.AgentStatusUnknown},
-		{"shell だけの block", psEmpty, pidShell, "-zsh", "", multiplexer.AgentStatusUnknown},
-		{"subagent の record は見ない", psSubagentOnly, pidShell, "-zsh", "", multiplexer.AgentStatusUnknown},
-		{"Claude が死んで done の record だけ残った shell", psStaleDone, pidShell, "-zsh", "", multiplexer.AgentStatusUnknown},
-		{"前の Claude の record が残る中で claude を起動し直した直後", psStaleDone, pidClaudeStartup, "claude", "claude", multiplexer.AgentStatusUnknown},
-		{"claude-code 以外の app の record", psOtherApp, pidClaudeWorking, "cargo", "", multiplexer.AgentStatusUnknown},
+		{"作業中の claude-code", psWorking, pidClaudeWorking, "claude", "claude", multiplexer.AgentStatusWorking, ""},
+		{"ターン終了の done", psDone, pidClaudeDone, "claude", "claude", multiplexer.AgentStatusDone, ""},
+		{"起動直後の idle", psStartup, pidClaudeStartup, "claude", "claude", multiplexer.AgentStatusIdle, ""},
+		{"--shell=none で起動すると argv0 が絶対パス", psStartup, pidClaudeStartup, "/Users/usadamasa/.local/bin/claude", "claude", multiplexer.AgentStatusIdle, ""},
+		{"permission prompt は blocked", psPermission, 94252, "claude", "claude", multiplexer.AgentStatusBlocked, ""},
+		{"permission を断った後の idle", psIdle, 94252, "claude", "claude", multiplexer.AgentStatusIdle, ""},
+		{"event 形の id 空の root record", psEmptyID, pidClaudeWorking, "claude", "claude", multiplexer.AgentStatusWorking, ""},
+		{"未知の state は unknown", psUnknownState, pidClaudeWorking, "claude", "claude", multiplexer.AgentStatusUnknown, ""},
+		{"record 無しでも argv0 が claude なら Claude", psEmpty, pidClaudeWorking, "claude", "claude", multiplexer.AgentStatusUnknown, ""},
+		{"shell だけの block", psEmpty, pidShell, "-zsh", "", multiplexer.AgentStatusUnknown, ""},
+		{"subagent の record は見ない", psSubagentOnly, pidShell, "-zsh", "", multiplexer.AgentStatusUnknown, ""},
+		{"Claude が死んで done の record だけ残った shell", psStaleDone, pidShell, "-zsh", "", multiplexer.AgentStatusUnknown, ""},
+		{"前の Claude の record が残る中で claude を起動し直した直後", psStaleDone, pidClaudeStartup, "claude", "claude", multiplexer.AgentStatusUnknown, reasonStaleOwner},
+		{"claude-code 以外の app の record", psOtherApp, pidClaudeWorking, "cargo", "", multiplexer.AgentStatusUnknown, ""},
+		{"rex が owner を付けなくなったら理由を残す", psNoOwner, pidClaudeWorking, "claude", "claude", multiplexer.AgentStatusUnknown, reasonNoOwner},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -420,7 +429,7 @@ func TestToPane(t *testing.T) {
 			got := toPane(blockClaudeWorking, ps, proc, "sid")
 			want := multiplexer.Pane{
 				PaneID: blockClaudeWorking, TerminalID: blockClaudeWorking, CWD: "/w",
-				Agent: tt.wantAgent, AgentStatus: tt.wantStatus, SessionID: "sid",
+				Agent: tt.wantAgent, AgentStatus: tt.wantStatus, SessionID: "sid", UnknownReason: tt.wantReason,
 			}
 			if got != want {
 				t.Errorf("toPane() = %+v, want %+v", got, want)

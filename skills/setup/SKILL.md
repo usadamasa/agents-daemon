@@ -44,7 +44,7 @@ printenv REX_SESSION
 ```
 
 値が出なければ NG｡rex の外 (素のターミナル､IDE) で動いていて､daemon は `REX_SESSION` の無いセッションの
-SessionStart では起きない (statusline と `ttl-guard` は動く)｡rex の block の中で Claude Code を起動し直してもらう｡
+SessionStart では起きない (statusline は動く)｡rex の block の中で Claude Code を起動し直してもらう｡
 到達性と sandbox の socket 許可の手順は [rex.md](references/rex.md) にあり､`Read` で開いて従う｡
 
 ### このセッションの block と session_id の対応
@@ -176,7 +176,5 @@ agents-daemon setup
 - 残っていること: <利用者の作業 | なし>
 ```
 
-context の自動 compact は既定で off｡使うかを聞き､
-使うなら `${XDG_CONFIG_HOME:-$HOME/.config}/agents-daemon/config.json` に
-`{"compactAutoEnabled": true}` を書く案を示す (既存のファイルがあればキーを足す)｡他の設定キーは
-`agents-daemon:agents-daemon` skill の [operations.md](../agents-daemon/references/operations.md) にある｡
+設定キーは `agents-daemon:agents-daemon` skill の [operations.md](../agents-daemon/references/operations.md) にある｡
+既定値で動くので､聞かれなければ config.json は作らない｡

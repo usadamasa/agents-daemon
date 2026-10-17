@@ -42,7 +42,7 @@ type Pane struct {
 	SessionID     string
 	TerminalTitle string
 	// UnknownReason は agent の record があるのに使えず AgentStatus が unknown になった理由｡空なら該当しない｡
-	// rex の版が変わって record の形が崩れたときに compact の催促が黙って止まらないよう､daemon はログに､
+	// rex の版が変わって record の形が崩れたときに判定が黙って止まらないよう､daemon はログに､
 	// doctor は pane 一覧に出す｡
 	UnknownReason string
 }

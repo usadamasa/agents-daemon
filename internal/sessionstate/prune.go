@@ -17,39 +17,17 @@ const (
 	// 5 時間先で､LatestWindow は未来の resets_at しか使わないため､24 時間より
 	// 古い state が判定に効くことは無い｡
 	rateLimitRetention = 24 * time.Hour
-	// compactRetention は compact 関連の state と cache state を残す期間｡利用上限より
-	// 長く取るのは､復旧用 state file が「次のプロンプトで注入される」まで待つ側であり､
-	// セッションが放置されている間に消すと復旧材料そのものを失うため｡
-	compactRetention = 7 * 24 * time.Hour
-	// cacheAckRetention は cache の ack マーカーを残す期間｡ack は時間で失効させない
-	// (待った時間が長くなっても書き直しのコストは同じ) ので compact 系より長く取る｡
-	// 値は参考実装 (claude-token-audit の ttl-guard) の KEEP_DAYS と同じ｡
-	cacheAckRetention = 90 * 24 * time.Hour
+	// contextRetention は context state を残す期間｡block から session を逆引きする記録で､
+	// 5 時間の上限待ちを跨いでも対応が残るよう利用上限より長く取る｡
+	contextRetention = 7 * 24 * time.Hour
 )
 
-// Prune は保持期間を過ぎた sidecar file を削除し､消した数を利用上限 state と
-// それ以外 (compact 関連と cache と cache-ack) に分けて返す｡ディレクトリが空文字列 (ゼロ値の
-// Store) または存在しない場合は何もしない｡
-func (s Store) Prune(now time.Time) (rateLimits, compacts int, err error) {
-	var errs []error
-
-	rateLimits, err = pruneDir(s.RateLimits, now, rateLimitRetention)
-	if err != nil {
-		errs = append(errs, err)
-	}
-	for _, dir := range []string{s.Context, s.CompactState, s.Compacted, s.Cache, s.IdleCompacted} {
-		n, dirErr := pruneDir(dir, now, compactRetention)
-		if dirErr != nil {
-			errs = append(errs, dirErr)
-		}
-		compacts += n
-	}
-	n, ackErr := pruneDir(s.CacheAck, now, cacheAckRetention)
-	if ackErr != nil {
-		errs = append(errs, ackErr)
-	}
-	compacts += n
-	return rateLimits, compacts, errors.Join(errs...)
+// Prune は保持期間を過ぎた sidecar file を削除し､消した数を利用上限 state と context に
+// 分けて返す｡ディレクトリが空文字列 (ゼロ値の Store) または存在しない場合は何もしない｡
+func (s Store) Prune(now time.Time) (rateLimits, contexts int, err error) {
+	rateLimits, rateErr := pruneDir(s.RateLimits, now, rateLimitRetention)
+	contexts, contextErr := pruneDir(s.Context, now, contextRetention)
+	return rateLimits, contexts, errors.Join(rateErr, contextErr)
 }
 
 // pruneDir は dir 直下の通常ファイルのうち､mtime が now から maxAge より古いものを

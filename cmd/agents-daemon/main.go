@@ -1,6 +1,5 @@
 // agents-daemon は Claude Code が 5 時間ウィンドウの利用上限で停止したとき､
 // 上限が解除された時刻に自動でプロンプトを送って作業を再開するツール｡
-// context の使用率が閾値を超えた pane へ /compact を投入する役も担う｡
 //
 // サブコマンド:
 //
@@ -13,20 +12,15 @@
 //	simulate  使い捨て pane を使った end-to-end 検証
 //	statusline         Claude Code の statusline を描画し､同じプロセスで state file と cost の記録を書く
 //	ingest-statusline  statusline の stdin から context/ と rate-limits/ の state file を書く (自前の statusline から呼ぶ)
-//	ttl-guard          UserPromptSubmit hook の stdin を見て､cache 失効後の最初の prompt を止める
 package main
 
 import (
-	"errors"
 	"fmt"
 	"os"
 )
 
 func main() {
 	if err := newRootCmd().Execute(); err != nil {
-		if ec, ok := errors.AsType[exitCodeError](err); ok {
-			os.Exit(ec.code)
-		}
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

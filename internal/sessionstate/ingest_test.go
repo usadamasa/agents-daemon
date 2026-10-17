@@ -50,52 +50,25 @@ func TestIngestStatusline_context(t *testing.T) {
 		}
 	})
 
-	t.Run("使用率は整数に丸め､daemon が読める形になる", func(t *testing.T) {
+	t.Run("使用率は整数に丸める", func(t *testing.T) {
 		s := New(t.TempDir())
 		if err := s.IngestStatusline([]byte(inputFull), ingestNow); err != nil {
 			t.Fatalf("IngestStatusline() error = %v", err)
 		}
-
-		state, err := s.LoadCompact("sess-1")
-		if err != nil {
-			t.Fatalf("LoadCompact() error = %v", err)
-		}
-		if !state.HasContext {
-			t.Fatal("HasContext = false")
-		}
-		if state.UsedPercentage != 63 {
-			t.Errorf("UsedPercentage = %v, want 63 (63.4 を丸めたもの)", state.UsedPercentage)
-		}
-		if !state.ObservedAt.Equal(ingestNow) {
-			t.Errorf("ObservedAt = %v, want %v", state.ObservedAt, ingestNow)
+		if got := readContextRaw(t, s, "sess-1"); !strings.Contains(got, `"used_percentage":63,`) {
+			t.Errorf("context file = %q, want used_percentage 63 (63.4 を丸めたもの)", got)
 		}
 	})
 
-	t.Run("context_window_size を記録し､daemon が読める形になる", func(t *testing.T) {
+	t.Run("transcript_path と context_window_size は写さない (読む側が無い)", func(t *testing.T) {
 		s := New(t.TempDir())
-		input := `{"session_id": "sess-1", "context_window": {"used_percentage": 68, "context_window_size": 200000}}`
+		input := `{"session_id": "sess-1", "transcript_path": "/x/t.jsonl", "context_window": {"used_percentage": 12, "context_window_size": 200000}}`
 		if err := s.IngestStatusline([]byte(input), ingestNow); err != nil {
 			t.Fatalf("IngestStatusline() error = %v", err)
 		}
-
-		state, err := s.LoadCompact("sess-1")
-		if err != nil {
-			t.Fatalf("LoadCompact() error = %v", err)
-		}
-		if state.ContextWindowSize != 200000 {
-			t.Errorf("ContextWindowSize = %d, want 200000", state.ContextWindowSize)
-		}
-	})
-
-	t.Run("transcript_path を記録する", func(t *testing.T) {
-		// daemon はこれを辿って transcript から cache の状態を求める｡
-		s := New(t.TempDir())
-		input := `{"session_id": "sess-1", "transcript_path": "/x/t.jsonl", "context_window": {"used_percentage": 12}}`
-		if err := s.IngestStatusline([]byte(input), ingestNow); err != nil {
-			t.Fatalf("IngestStatusline() error = %v", err)
-		}
-		if got := readContextRaw(t, s, "sess-1"); !strings.Contains(got, `"transcript_path":"/x/t.jsonl"`) {
-			t.Errorf("context file = %q, want transcript_path", got)
+		got := readContextRaw(t, s, "sess-1")
+		if strings.Contains(got, "transcript_path") || strings.Contains(got, "context_window_size") {
+			t.Errorf("context file = %q, want neither transcript_path nor context_window_size", got)
 		}
 	})
 

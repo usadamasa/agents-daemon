@@ -11,7 +11,6 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"time"
 
@@ -47,13 +46,8 @@ type daemonRuntime struct {
 	backend string
 	log     *applog.Logger
 	// statusPath と store はプロセスの生存期間で固定なのでここに置く｡
-	statusPath string
-	store      sessionstate.Store
-	cache      *sessionstate.CacheLoader
-	// dryRun は pane への送信をしない稼働｡client 側 (dryRunClient) が握りつぶすが､
-	// cache の ack マーカーは client を通らないのでここでも見る｡書くと利用者自身の
-	// 次の prompt が TTL guard を素通りする｡
-	dryRun              bool
+	statusPath          string
+	store               sessionstate.Store
 	sleep               func(time.Duration)
 	startedAt           time.Time
 	panes               map[string]*paneEntry
@@ -62,14 +56,12 @@ type daemonRuntime struct {
 	lastHousekeepAt     time.Time // ゼロ値は「まだ 1 度も掃除していない」
 }
 
-func newDaemonRuntime(client multiplexer.Client, log *applog.Logger, statusPath string, store sessionstate.Store, dryRun bool, sleep func(time.Duration), startedAt time.Time) *daemonRuntime {
+func newDaemonRuntime(client multiplexer.Client, log *applog.Logger, statusPath string, store sessionstate.Store, sleep func(time.Duration), startedAt time.Time) *daemonRuntime {
 	return &daemonRuntime{
 		client:     client,
 		store:      store,
-		cache:      sessionstate.NewCacheLoader(store),
 		log:        log,
 		statusPath: statusPath,
-		dryRun:     dryRun,
 		sleep:      sleep,
 		startedAt:  startedAt,
 		panes:      map[string]*paneEntry{},
@@ -116,26 +108,9 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 		Config:     cfg,
 		Sleep:      r.sleep,
 		Account:    account,
-		// compact 関連の state は監視状態の最後まで到達した pane ぶんだけ読む｡
-		// 読み込みエラーは「state 無し」として継続する (statusline や hook の
-		// 書きかけを踏んだだけで監視全体を止めない)｡
-		CompactState: func(sessionID string) *sessionstate.Compact {
-			state, err := r.store.LoadCompact(sessionID)
-			if err != nil {
-				r.log.Logf("session %s の compact state の読み込みに失敗､state 無しとして継続します: %v", sessionID, err)
-				return nil
-			}
-			return state
-		},
-		// cache の状態は idle compact の判定と prompt を送る直前に読む｡
-		// 読み込みエラーは「cache の状態が無い」(送らない側) として継続する｡
-		CacheState:        r.loadCache,
-		CacheAck:          r.writeCacheAck,
-		MarkIdleCompacted: r.markIdleCompacted,
 	}
 
 	seen := make(map[string]bool, len(panes))
-	sessions := make(map[string]bool, len(panes))
 	claudeCount := 0
 	statusPanes := make([]PaneStatus, 0, len(panes))
 
@@ -145,9 +120,6 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 		}
 		claudeCount++
 		seen[pane.TerminalID] = true
-		if sid := pane.SessionID; sid != "" {
-			sessions[sid] = true
-		}
 
 		entry, ok := r.panes[pane.TerminalID]
 		if !ok {
@@ -166,10 +138,10 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 
 		outcome, tickErr := monitor.Tick(ctx, deps, pane, entry.state, rateState, now)
 		r.logOutcome(pane, outcome, tickErr)
-		statusPanes = append(statusPanes, r.paneStatus(pane, entry, outcome, now))
+		statusPanes = append(statusPanes, paneStatus(pane, entry, outcome, now))
 	}
 
-	r.forgetUnseen(seen, sessions)
+	r.forgetUnseen(seen)
 
 	if err := writeStatusSnapshot(r.statusPath, os.Getpid(), r.backend, r.startedAt, now, statusPanes); err != nil {
 		r.log.Logf("status snapshot の書き込みに失敗: %v", err)
@@ -190,7 +162,7 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 }
 
 // logUnknownReason は record があるのに使えず unknown になった理由を､理由が変わったときだけログに残す｡
-// unknown の pane には compact の催促も idle compact も送らないので､理由が無いと「静かに止まった」ように見える｡
+// 理由が無いと「静かに止まった」ように見える｡
 func (r *daemonRuntime) logUnknownReason(pane multiplexer.Pane, entry *paneEntry) {
 	if pane.UnknownReason == entry.loggedUnknownReason {
 		return
@@ -201,19 +173,18 @@ func (r *daemonRuntime) logUnknownReason(pane multiplexer.Pane, entry *paneEntry
 	}
 }
 
-// forgetUnseen は消えた pane のエントリと､消えた session の cache の memo を捨てる｡
-// 捨てずに放置するとどちらも pane の入れ替わりのたびに無限に育ってしまう｡
-func (r *daemonRuntime) forgetUnseen(terminals, sessions map[string]bool) {
+// forgetUnseen は消えた pane のエントリを捨てる｡
+// 捨てずに放置すると pane の入れ替わりのたびに無限に育ってしまう｡
+func (r *daemonRuntime) forgetUnseen(terminals map[string]bool) {
 	for terminalID := range r.panes {
 		if !terminals[terminalID] {
 			delete(r.panes, terminalID)
 		}
 	}
-	r.cache.Retain(sessions)
 }
 
 // paneStatus は status.json に書く pane 1 枚ぶんのスナップショットを組む｡
-func (r *daemonRuntime) paneStatus(pane multiplexer.Pane, entry *paneEntry, outcome monitor.Outcome, now time.Time) PaneStatus {
+func paneStatus(pane multiplexer.Pane, entry *paneEntry, outcome monitor.Outcome, now time.Time) PaneStatus {
 	return PaneStatus{
 		PaneID:        pane.PaneID,
 		TerminalID:    pane.TerminalID,
@@ -224,54 +195,12 @@ func (r *daemonRuntime) paneStatus(pane multiplexer.Pane, entry *paneEntry, outc
 		Attempts:      entry.state.Attempts,
 		LastOutcome:   outcome.String(),
 		LastTickAt:    now,
-		Cache:         cacheStatus(r.statusCache(pane), now),
 	}
-}
-
-// statusCache は status に載せる cache の状態｡working な pane の transcript は応答のたびに
-// 伸びるので読み直さず､前回読んだ値を出す｡
-func (r *daemonRuntime) statusCache(pane multiplexer.Pane) *sessionstate.Cache {
-	if pane.AgentStatus == multiplexer.AgentStatusWorking {
-		return r.cache.Cached(pane.SessionID)
-	}
-	return r.loadCache(pane.SessionID)
-}
-
-// loadCache は pane のセッションの prompt cache の状態を transcript から求める｡無ければ nil｡
-// 読み込みエラーはログに残して nil を返す (idle compact は送らず､ack は sentinel になる)｡
-func (r *daemonRuntime) loadCache(sessionID string) *sessionstate.Cache {
-	c, err := r.cache.Load(sessionID)
-	if err != nil {
-		r.log.Logf("session %s の cache の状態の読み込みに失敗､状態無しとして継続します: %v", sessionID, err)
-		return nil
-	}
-	return c
-}
-
-// writeCacheAck は cache の ack マーカーを書く｡dry-run では書かない (理由は dryRun を参照)｡
-func (r *daemonRuntime) writeCacheAck(sessionID, value string) error {
-	if r.dryRun {
-		r.log.Logf("dry-run: session %s の cache ack (%s) は書きません", sessionID, value)
-		return nil
-	}
-	return r.store.WriteCacheAck(sessionID, value)
-}
-
-// markIdleCompacted は idle compact の marker を書く｡dry-run では /compact も送らないので書かない｡
-func (r *daemonRuntime) markIdleCompacted(sessionID string) error {
-	if r.dryRun {
-		r.log.Logf("dry-run: session %s の idle compact marker は書きません", sessionID)
-		return nil
-	}
-	return r.store.MarkIdleCompacted(sessionID)
 }
 
 // logOutcome は tick 1 回の結果をログへ書く｡「静かな tick」(監視中で異常無し､
 // 対象外､待機継続中) はログしない｡次の朝に読んで意味が分かる粒度に絞る:
 // 上限検知と待ち時間､送信の実施､ユーザーの自己復帰､ゲート抑制､エラー｡
-//
-// prompt を送った出来事には cache の状態を添える (cacheSuffix)｡失効後の送信は文脈全体を
-// 書き直すので､どれだけ書き直したかを後から追えるようにする｡
 func (r *daemonRuntime) logOutcome(pane multiplexer.Pane, outcome monitor.Outcome, err error) {
 	// 同じ状態が続く間は書かない｡tick は既定 5 秒ごとなので､待機や抑制が
 	// 続くだけで日に数千行に膨れ､後から読めるログでなくなる｡状態が切り替わった
@@ -296,7 +225,7 @@ func (r *daemonRuntime) logOutcome(pane multiplexer.Pane, outcome monitor.Outcom
 	case monitor.OutcomeWaiting:
 		r.log.Logf("pane %s (%s): 利用上限/一時エラーを検知し待機に入りました", pane.PaneID, pane.CWD)
 	case monitor.OutcomeRetried:
-		r.log.Logf("pane %s (%s): 再開メッセージを送信しました (%d 回目)%s", pane.PaneID, pane.CWD, entry.state.Attempts, r.cacheSuffix(pane, entry))
+		r.log.Logf("pane %s (%s): 再開メッセージを送信しました (%d 回目)", pane.PaneID, pane.CWD, entry.state.Attempts)
 	case monitor.OutcomeRecoveredByUser:
 		r.log.Logf("pane %s (%s): ユーザー自身が復帰したため監視状態へ戻します", pane.PaneID, pane.CWD)
 	case monitor.OutcomeMaxRetries:
@@ -312,16 +241,6 @@ func (r *daemonRuntime) logOutcome(pane multiplexer.Pane, outcome monitor.Outcom
 	case monitor.OutcomeHardCap:
 		r.log.Logf("pane %s (%s): 待っても解除されない上限 (spend limit / usage credit) のため待機に入りません", pane.PaneID, pane.CWD)
 	default:
-		// compact 周りは別関数に分けてある (1 つの switch に並べると
-		// 循環複雑度が lint の閾値を超える)｡
-		if msg, sent := compactOutcomeMessage(outcome, entry); msg != "" {
-			suffix := ""
-			if sent {
-				suffix = r.cacheSuffix(pane, entry)
-			}
-			r.log.Logf("pane %s (%s): %s%s", pane.PaneID, pane.CWD, msg, suffix)
-			return
-		}
 		r.log.Logf("pane %s (%s): %s", pane.PaneID, pane.CWD, outcome)
 	}
 }
@@ -332,104 +251,11 @@ func logKey(outcome monitor.Outcome, err error, entry *paneEntry) string {
 	if err != nil {
 		key += "|" + err.Error()
 	}
-	if entry == nil {
-		return key
-	}
-	switch outcome {
-	case monitor.OutcomeRetried:
+	if entry != nil && outcome == monitor.OutcomeRetried {
 		// 送信は 1 回ずつが独立した出来事なので､試行回数を混ぜて毎回残す｡
 		return fmt.Sprintf("%s|%d", key, entry.state.Attempts)
-	case monitor.OutcomeIdleCompactHeld:
-		// 見送りは理由が変わったときだけ残す｡同じ理由は窓が閉じるまで毎 tick 続く｡
-		return key + "|" + entry.state.IdleCompactHeld.String()
-	default:
-		return key
 	}
-}
-
-// compactOutcomeMessage は compact 周りの Outcome に対応するログ本文と､それが prompt の
-// 送信を伴う出来事かを返す｡該当しなければ空文字列｡
-func compactOutcomeMessage(outcome monitor.Outcome, entry *paneEntry) (msg string, sent bool) {
-	if outcome == monitor.OutcomeIdleCompactHeld && entry != nil {
-		return "idle compact: 失効前の窓は開いていますが送りません: " + entry.state.IdleCompactHeld.String(), false
-	}
-	switch outcome {
-	case monitor.OutcomeCompactNudged:
-		return "compact 直後に止まっていたため継続を促しました (画面判定)", true
-	case monitor.OutcomeCompactNudgeCapped:
-		return "compact 直後の停止へ継続を促した回数が上限に達したため送りません (詰まっている可能性があります)", false
-	case monitor.OutcomeCompactPrepSent:
-		return "context 使用率が閾値を超えたため compact-prep を投入しました", true
-	case monitor.OutcomeCompactSent:
-		return "compact-prep の state file を確認したため /compact を投入しました", true
-	case monitor.OutcomeCompactPrepTimeout:
-		return "compact-prep の state file が現れないまま時間切れになりました", false
-	case monitor.OutcomeCompactResumed:
-		return "圧縮完了 marker を検知したため作業の再開を促しました", true
-	case monitor.OutcomeIdleCompactPrepSent:
-		return "idle compact: cache の失効が近いため compact-prep を投入しました", true
-	case monitor.OutcomeIdleCompactSent:
-		return "idle compact: marker を書いて /compact を投入しました (利用者が戻るまで再開は送りません)", true
-	case monitor.OutcomeIdleCompactShortTTL:
-		return "idle compact: cache の TTL が短く失効前に compact を終えられないためスキップしました", false
-	default:
-		return "", false
-	}
-}
-
-// cacheSuffix は送信ログに添える cache の状態｡形は次のいずれか｡
-//
-//	/ cache=warm (経過 3 分､TTL 60 分)
-//	/ cache=expired (経過 312 分､TTL 60 分､context 使用率 63%､ack 済み)
-//	/ cache=unknown (状態無し､ack=daemon-unknown)
-//
-// 失効後の送信は文脈全体を書き直すので context 使用率を併記し､どれだけ書き直したかを
-// 後から追えるようにする｡使用率は送信時点の cache (直近の応答の入力トークン数) から求める｡
-// statusline の観測は idle な pane では古い｡window の大きさが無ければトークン数をそのまま出す｡
-// スラッシュの prompt は guard を素通りするので ack は無い｡
-func (r *daemonRuntime) cacheSuffix(pane multiplexer.Pane, entry *paneEntry) string {
-	if entry == nil {
-		return ""
-	}
-	send := entry.state.LastSend
-	var b strings.Builder
-	fmt.Fprintf(&b, " / cache=%s (", send.State())
-	switch c := send.Cache; {
-	case c == nil && pane.SessionID == "":
-		b.WriteString("session 未紐づけ")
-	case c == nil:
-		b.WriteString("状態無し")
-	default:
-		fmt.Fprintf(&b, "経過 %d 分､TTL %d 分", int(send.At.Sub(c.LastRequestAt)/time.Minute), int(c.TTL/time.Minute))
-		if c.Expired(send.At) {
-			fmt.Fprintf(&b, "､%s", r.contextUsage(pane.SessionID, c))
-		}
-	}
-	switch {
-	case send.AckErr != nil:
-		fmt.Fprintf(&b, "､ack の書き込みに失敗: %v", send.AckErr)
-	case send.Ack != "" && r.dryRun:
-		b.WriteString("､ack は dry-run で省略")
-	case send.Ack == sessionstate.CacheAckUnknown:
-		fmt.Fprintf(&b, "､ack=%s", send.Ack)
-	case send.Ack != "":
-		b.WriteString("､ack 済み")
-	case send.Slash:
-		b.WriteString("､スラッシュなので ack なし")
-	}
-	b.WriteString(")")
-	return b.String()
-}
-
-// contextUsage は失効後の送信ログに添える context の量｡使用率が求まれば「context 使用率 63%」､
-// window の大きさの記録が無ければ「入力 137034 tokens」｡
-func (r *daemonRuntime) contextUsage(sessionID string, c *sessionstate.Cache) string {
-	if cs, err := r.store.LoadCompact(sessionID); err == nil {
-		if pct, ok := cs.CacheUsedPercentage(c); ok {
-			return fmt.Sprintf("context 使用率 %.0f%%", pct)
-		}
-	}
-	return fmt.Sprintf("入力 %d tokens", c.ContextTokens)
+	return key
 }
 
 // EnsureDaemon は生存している daemon が無ければこのバイナリを detach 起動する｡
@@ -531,7 +357,7 @@ func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 	}
 
 	now := time.Now()
-	runtime := newDaemonRuntime(client, log, p.StatusFile(), store, dryRun, time.Sleep, now)
+	runtime := newDaemonRuntime(client, log, p.StatusFile(), store, time.Sleep, now)
 	runtime.backend = kind
 	runtime.housekeep(p.LogFile(), now)
 

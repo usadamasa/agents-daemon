@@ -47,38 +47,6 @@ type PaneState struct {
 	Status    Status
 	WaitUntil time.Time
 	Attempts  int
-
-	// CompactSignature は compact 停止の候補として観測している画面の署名
-	// (compact 境界行から空の入力行まで)｡空文字列は「候補ではない」｡
-	CompactSignature string
-	// CompactSeenAt は CompactSignature を最初に観測した時刻｡ここから
-	// CompactStallQuietSeconds のあいだ変わらなければ「止まっている」と見なす｡
-	CompactSeenAt time.Time
-	// CompactNudgedAt は直近で compact 停止の継続要求を送った時刻｡
-	CompactNudgedAt time.Time
-	// CompactNudges は今の停止に対して継続要求を送った回数｡停止が解けたら 0 に戻る｡
-	CompactNudges int
-
-	// CompactPrepSentAt は /compact-prep を投入した時刻｡非ゼロは
-	// 「state file が書かれるのを待っている」を意味する｡
-	CompactPrepSentAt time.Time
-	// CompactPrepIdle は待っている compact-prep が idle compact (idle_compact.go) の
-	// 発火かどうか｡2 段目で marker を書くかと､ログの出し分けに使う｡
-	CompactPrepIdle bool
-	// IdleCompactShortTTLReported は OutcomeIdleCompactShortTTL を既に返したか｡
-	IdleCompactShortTTLReported bool
-	// IdleCompactHeld は直近に OutcomeIdleCompactHeld を返したときの判定｡判断には使わず､daemon が
-	// ログの本文と重複除去のキーに使う｡
-	IdleCompactHeld IdleCompactCheck
-	// CompactAutoSentAt は自動 compact の段が直近で何かを送った (あるいは
-	// 時間切れで諦めた) 時刻｡1 段目のクールダウンの起点｡
-	CompactAutoSentAt time.Time
-	// CompactResumedAt は圧縮完了 marker を見て再開を送った時刻｡
-	CompactResumedAt time.Time
-
-	// LastSend は直近で prompt を送ったときの cache の状態｡判断には使わず､daemon が
-	// ログに書くために残す (cache_ack.go)｡
-	LastSend SendReport
 }
 
 // Outcome は Tick が 1 tick ぶんに行った (あるいは行わなかった) ことを表す｡
@@ -124,63 +92,24 @@ const (
 	// OutcomeHardCap は待っても解除されない上限 (spend limit / usage credit) を
 	// 検知し､待機に入らなかったことを表す｡
 	OutcomeHardCap
-	// OutcomeCompactNudged は compact 直後に止まった pane へ継続を促す
-	// メッセージを送ったことを表す (画面判定による fallback 経路)｡
-	OutcomeCompactNudged
-	// OutcomeCompactNudgeCapped は同じ停止への継続要求が上限回数に達したため
-	// 送らなかったことを表す｡詰まった run は人が見る｡
-	OutcomeCompactNudgeCapped
-	// OutcomeCompactPrepSent は context 使用率が閾値を超えた pane へ
-	// /compact-prep を投入したことを表す｡
-	OutcomeCompactPrepSent
-	// OutcomeCompactSent は compact-prep の state file を確認して /compact を
-	// 投入したことを表す｡
-	OutcomeCompactSent
-	// OutcomeCompactPrepTimeout は /compact-prep を投入したが state file が
-	// 現れないまま時間切れになったことを表す｡
-	OutcomeCompactPrepTimeout
-	// OutcomeCompactResumed は圧縮完了 marker を見て作業の再開を促す
-	// メッセージを送ったことを表す｡
-	OutcomeCompactResumed
-	// OutcomeIdleCompactPrepSent は cache の失効が近い idle な pane へ
-	// /compact-prep を投入したことを表す (idle compact)｡
-	OutcomeIdleCompactPrepSent
-	// OutcomeIdleCompactSent は idle compact の marker を書いて /compact を投入したことを表す｡
-	OutcomeIdleCompactSent
-	// OutcomeIdleCompactShortTTL は idle compact の条件を満たしたが､TTL が短く 2 段を
-	// 失効前に終えられないため送らなかったことを表す｡
-	OutcomeIdleCompactShortTTL
-	// OutcomeIdleCompactHeld は cache の失効前の窓が開いているのに idle compact を送らなかったことを
-	// 表す｡理由は PaneState.IdleCompactHeld｡
-	OutcomeIdleCompactHeld
 )
 
 // outcomeNames は Outcome のログ向けの識別子｡
 var outcomeNames = map[Outcome]string{
-	OutcomeStillWaiting:        "still-waiting",
-	OutcomeScreenUnreadable:    "screen-unreadable",
-	OutcomeRecoveredByUser:     "recovered-by-user",
-	OutcomeNotClaudeAgent:      "not-claude-agent",
-	OutcomeMaxRetries:          "max-retries",
-	OutcomeRetried:             "retried",
-	OutcomeMonitoring:          "monitoring",
-	OutcomeGateSuppressed:      "gate-suppressed",
-	OutcomeWaiting:             "waiting",
-	OutcomeReadError:           "read-error",
-	OutcomeSendError:           "send-error",
-	OutcomeNativeAutoContinue:  "native-auto-continue",
-	OutcomeResumeEnter:         "resume-enter",
-	OutcomeHardCap:             "hard-cap",
-	OutcomeCompactNudged:       "compact-nudged",
-	OutcomeCompactNudgeCapped:  "compact-nudge-capped",
-	OutcomeCompactPrepSent:     "compact-prep-sent",
-	OutcomeCompactSent:         "compact-sent",
-	OutcomeCompactPrepTimeout:  "compact-prep-timeout",
-	OutcomeCompactResumed:      "compact-resumed",
-	OutcomeIdleCompactPrepSent: "idle-compact-prep-sent",
-	OutcomeIdleCompactSent:     "idle-compact-sent",
-	OutcomeIdleCompactShortTTL: "idle-compact-short-ttl",
-	OutcomeIdleCompactHeld:     "idle-compact-held",
+	OutcomeStillWaiting:       "still-waiting",
+	OutcomeScreenUnreadable:   "screen-unreadable",
+	OutcomeRecoveredByUser:    "recovered-by-user",
+	OutcomeNotClaudeAgent:     "not-claude-agent",
+	OutcomeMaxRetries:         "max-retries",
+	OutcomeRetried:            "retried",
+	OutcomeMonitoring:         "monitoring",
+	OutcomeGateSuppressed:     "gate-suppressed",
+	OutcomeWaiting:            "waiting",
+	OutcomeReadError:          "read-error",
+	OutcomeSendError:          "send-error",
+	OutcomeNativeAutoContinue: "native-auto-continue",
+	OutcomeResumeEnter:        "resume-enter",
+	OutcomeHardCap:            "hard-cap",
 }
 
 // String は Outcome をログ向けの識別子文字列にする｡
@@ -214,31 +143,12 @@ type Deps struct {
 	// Sleep は recover 中の一時停止に使う｡本番では time.Sleep を渡す想定｡
 	// テストは実際に待たないよう no-op またはログ記録用の関数を渡す｡
 	Sleep func(time.Duration)
+	// 以下は tick ごとに daemon が読み直して全 pane で共有する state｡
 	// Account はアカウント全体で最も新しい 5 時間ウィンドウの state
 	// (sessionstate.Store.LatestWindow)｡resets_at はアカウント共通なので､自分の state を
 	// 持たない pane の起床時刻をここから引く｡Config と同じく tick ごとに daemon が
 	// 読み直して全 pane で共有する｡無ければ nil｡
 	Account *sessionstate.RateLimit
-	// CompactState は pane のセッションに対応する compact 関連の state
-	// (context 使用率 / compact-prep の state file / 圧縮完了 marker) を返す｡
-	// daemon が実装を差し､読み込みエラーは daemon 側でログに出して nil を返す｡
-	//
-	// rateState のように引数で渡さないのは､compact の 3 段はいずれも監視状態の
-	// 最後まで到達しないと使わないため｡到達しない tick でファイルを読まずに済む｡
-	// このフィールド自体が nil なら compact の自動化は適用しない｡
-	CompactState func(sessionID string) *sessionstate.Compact
-	// CacheState は pane のセッションの prompt cache の状態 (sessionstate.CacheLoader.Load) を
-	// 返す｡読むのは prompt を送る直前と､idle な pane での idle compact の判定 (有効なときか
-	// marker があるとき) だけ｡nil は「状態無し」｡このフィールド自体が nil なら cache の状態は
-	// 見ず ack も書かない｡
-	CacheState func(sessionID string) *sessionstate.Cache
-	// CacheAck は cache-ack/<session_id> に value を書く (sessionstate.Store.WriteCacheAck)｡
-	// 失効後に非スラッシュの prompt を送る前に呼ばれる｡dry-run の daemon は no-op を差す｡
-	CacheAck func(sessionID, value string) error
-	// MarkIdleCompacted は cache-idle-compacted/<session_id> を書く
-	// (sessionstate.Store.MarkIdleCompacted)｡idle compact の /compact を送る前に呼ばれ､
-	// 失敗したら送らない｡dry-run の daemon は no-op を差す｡
-	MarkIdleCompacted func(sessionID string) error
 }
 
 // Tick は pane 1 枚ぶんの 1 tick を処理し､ps を必要に応じて書き換える｡
@@ -292,8 +202,8 @@ func Tick(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *PaneState, 
 		return tickWaiting(ctx, deps, pane, ps, kind, limited, now)
 	}
 
-	gateSuppressed := kind == detect.KindLimit && LimitGate(deps.Config, rateState, now).Suppresses()
-	return tickMonitoring(ctx, deps, pane, ps, kind, limited && !gateSuppressed, gateSuppressed, rateState, screen, now)
+	gateSuppressed := kind == detect.KindLimit && LimitGate(deps.Config, rateState, now).suppresses()
+	return tickMonitoring(deps, ps, kind, limited && !gateSuppressed, gateSuppressed, rateState, screen, now)
 }
 
 // tickNative は「このツールが待機に入ってはいけない」画面を処理する｡
@@ -351,8 +261,9 @@ const (
 	GateBelowThreshold
 )
 
-// Suppresses は limit 検知を抑制するかを返す｡
-func (g Gate) Suppresses() bool {
+// suppresses は limit 検知を抑制するかを返す｡判定は Tick の中だけで使い､inspect は
+// String の説明文を出す｡
+func (g Gate) suppresses() bool {
 	return g == GateBelowThreshold
 }
 
@@ -411,7 +322,7 @@ func tickWaiting(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *Pane
 	if kind == detect.KindTransient {
 		ps.Attempts++
 		ps.WaitUntil = now.Add(transientBackoff(ps.Attempts, deps.Config))
-		if err := recoverPane(ctx, deps, pane, ps, now); err != nil {
+		if err := recoverPane(ctx, deps, pane); err != nil {
 			return OutcomeSendError, fmt.Errorf("pane %s への再開送信に失敗: %w", pane.PaneID, err)
 		}
 		return OutcomeRetried, nil
@@ -434,19 +345,19 @@ func tickWaiting(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *Pane
 		return OutcomeResumeEnter, nil
 	}
 
-	if err := recoverPane(ctx, deps, pane, ps, now); err != nil {
+	if err := recoverPane(ctx, deps, pane); err != nil {
 		return OutcomeSendError, fmt.Errorf("pane %s への再開送信に失敗: %w", pane.PaneID, err)
 	}
 	return OutcomeRetried, nil
 }
 
-// tickMonitoring は監視状態での 1 tick を処理する｡
-func tickMonitoring(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *PaneState, kind detect.Kind, limited bool, gateSuppressed bool, rateState *sessionstate.RateLimit, screen string, now time.Time) (Outcome, error) {
+// tickMonitoring は監視状態での 1 tick を処理する｡上限でも一時エラーでもない画面には何もしない｡
+func tickMonitoring(deps Deps, ps *PaneState, kind detect.Kind, limited bool, gateSuppressed bool, rateState *sessionstate.RateLimit, screen string, now time.Time) (Outcome, error) {
 	if gateSuppressed {
 		return OutcomeGateSuppressed, nil
 	}
 	if !limited {
-		return tickCompact(ctx, deps, pane, ps, screen, now)
+		return OutcomeMonitoring, nil
 	}
 
 	ps.Status = StatusWaiting
@@ -599,9 +510,7 @@ func transientBackoff(attempts int, cfg config.Config) time.Duration {
 
 // recoverPane は再開の分割送信 (esc → 一時停止 → メッセージ送信 → 一時停止 → enter) を行う｡
 // Claude のペースト検知と /rate-limit-options メニューを避けるため､キー入力を分けている｡
-// 送る前に cache の ack を残す (cache_ack.go)｡
-func recoverPane(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *PaneState, now time.Time) error {
-	ackBeforeSend(deps, pane, ps, deps.Config.RetryMessage, now)
+func recoverPane(ctx context.Context, deps Deps, pane multiplexer.Pane) error {
 	if deps.Config.DismissMenu {
 		if err := deps.Client.SendKeys(ctx, pane.PaneID, "esc"); err != nil {
 			return err

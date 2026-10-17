@@ -31,11 +31,11 @@ func (r *daemonRuntime) housekeep(logPath string, now time.Time) {
 	if err != nil {
 		r.log.Logf("rotated ログの削除でエラー: %v", err)
 	}
-	states, compacts, err := r.store.Prune(now)
+	states, contexts, err := r.store.Prune(now)
 	if err != nil {
 		r.log.Logf("sidecar file の削除でエラー: %v", err)
 	}
-	if logs > 0 || states > 0 || compacts > 0 {
-		r.log.Logf("保持期間を過ぎたファイルを削除しました: rotated ログ %d 件､利用上限 state %d 件､compact / cache state %d 件", logs, states, compacts)
+	if logs > 0 || states > 0 || contexts > 0 {
+		r.log.Logf("保持期間を過ぎたファイルを削除しました: rotated ログ %d 件､利用上限 state %d 件､context state %d 件", logs, states, contexts)
 	}
 }

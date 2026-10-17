@@ -28,8 +28,9 @@ func TestDaemonRuntimeTick_StaleCompactedMarkerSendsNothing(t *testing.T) {
 	writeContextSidecar(t, r.store.Context, "session-a", map[string]any{
 		"used_percentage": 25, "observed_at": now.Add(-time.Hour).Unix(),
 	})
-	marker := filepath.Join(r.store.Compacted, "session-a")
-	if err := os.MkdirAll(r.store.Compacted, 0o755); err != nil {
+	compactedDir := filepath.Join(filepath.Dir(r.store.Context), "compacted")
+	marker := filepath.Join(compactedDir, "session-a")
+	if err := os.MkdirAll(compactedDir, 0o755); err != nil {
 		t.Fatalf("compacted ディレクトリの作成に失敗: %v", err)
 	}
 	if err := os.WriteFile(marker, nil, 0o644); err != nil {
@@ -52,7 +53,8 @@ func TestDaemonRuntimeTick_StaleCompactedMarkerSendsNothing(t *testing.T) {
 	if got := r.panes["term-a"].lastLogKey; got != "monitoring" {
 		t.Errorf("outcome = %q, want monitoring", got)
 	}
-	if log := readLog(t, statusPath); strings.Contains(log, "再開") {
-		t.Errorf("再開のログがある:\n%s", log)
+	// 静かな tick はログファイルも作らない｡
+	if _, err := os.Stat(filepath.Join(filepath.Dir(statusPath), "daemon.log")); !os.IsNotExist(err) {
+		t.Errorf("何も送っていないのにログが書かれた (err=%v):\n%s", err, readLog(t, statusPath))
 	}
 }

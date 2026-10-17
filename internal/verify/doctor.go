@@ -1,6 +1,6 @@
-// Package verify は `doctor` / `inspect` / `simulate` サブコマンドの実装を提供する｡
+// Package verify は `doctor` / `inspect` サブコマンドの実装を提供する｡
 // いずれも daemon (internal/daemon) と同じ検知・判定経路 (monitor パッケージ) を
-// 送信せずに覗き見る､または使い捨て pane に対してのみ実際に通す診断ツール｡
+// 送信せずに覗き見る診断ツール｡使い捨て pane へ実際に通す `simulate` は internal/simulate｡
 package verify
 
 import (
@@ -228,22 +228,6 @@ func configFields(cfg, def config.Config) []configFieldReport {
 		{"customPatterns", cfg.CustomPatterns, def.CustomPatterns},
 		{"idleShutdownMinutes", cfg.IdleShutdownMinutes, def.IdleShutdownMinutes},
 		{"deferToNativeAutoContinue", cfg.DeferToNativeAutoContinue, def.DeferToNativeAutoContinue},
-		{"compactStallEnabled", cfg.CompactStallEnabled, def.CompactStallEnabled},
-		{"compactStallQuietSeconds", cfg.CompactStallQuietSeconds, def.CompactStallQuietSeconds},
-		{"compactStallCooldownMinutes", cfg.CompactStallCooldownMinutes, def.CompactStallCooldownMinutes},
-		{"compactStallMaxNudges", cfg.CompactStallMaxNudges, def.CompactStallMaxNudges},
-		{"compactStallMessage", cfg.CompactStallMessage, def.CompactStallMessage},
-		{"compactAutoEnabled", cfg.CompactAutoEnabled, def.CompactAutoEnabled},
-		{"compactAutoThresholdPercent", cfg.CompactAutoThresholdPercent, def.CompactAutoThresholdPercent},
-		{"compactAutoPrepMessage", cfg.CompactAutoPrepMessage, def.CompactAutoPrepMessage},
-		{"compactAutoMessage", cfg.CompactAutoMessage, def.CompactAutoMessage},
-		{"compactAutoPrepTimeoutMinutes", cfg.CompactAutoPrepTimeoutMinutes, def.CompactAutoPrepTimeoutMinutes},
-		{"compactAutoCooldownMinutes", cfg.CompactAutoCooldownMinutes, def.CompactAutoCooldownMinutes},
-		{"compactResumeEnabled", cfg.CompactResumeEnabled, def.CompactResumeEnabled},
-		{"compactResumeDelaySeconds", cfg.CompactResumeDelaySeconds, def.CompactResumeDelaySeconds},
-		{"cacheIdleCompactEnabled", cfg.CacheIdleCompactEnabled, def.CacheIdleCompactEnabled},
-		{"cacheIdleCompactLeadSeconds", cfg.CacheIdleCompactLeadSeconds, def.CacheIdleCompactLeadSeconds},
-		{"cacheIdleCompactThresholdPercent", cfg.CacheIdleCompactThresholdPercent, def.CacheIdleCompactThresholdPercent},
 	}
 	out := make([]configFieldReport, 0, len(raw))
 	for _, r := range raw {

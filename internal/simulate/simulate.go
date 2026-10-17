@@ -1,4 +1,8 @@
-package verify
+// Package simulate は `simulate` サブコマンドの実装を提供する｡使い捨て pane を作り､
+// daemon (internal/daemon) と同じ検知・判定経路 (monitor パッケージ) をその pane に対してだけ
+// 実際に通す end-to-end の検証ツール｡読むだけの診断 (internal/verify の doctor / inspect) とは
+// 違い､pane の作成と送信を伴う｡
+package simulate
 
 import (
 	"context"
@@ -37,16 +41,16 @@ const defaultSimulateScreen = `  ⏺ Bash(task test)
 ────────────────────────────────────────────────────────────────────────────
 `
 
-// SimulateOptions は RunSimulate の呼び出しオプション｡
-type SimulateOptions struct {
+// Options は Run の呼び出しオプション｡
+type Options struct {
 	Send       bool
 	Keep       bool
 	ScreenFile string
 }
 
-// RunSimulate は simulate の本体｡使い捨て pane の作成から後始末まで一貫して行う｡
+// Run は simulate の本体｡使い捨て pane の作成から後始末まで一貫して行う｡
 // backend は daemon と同じ規則 (REX_SESSION があること) で選ぶ｡
-func RunSimulate(ctx context.Context, w io.Writer, p apppath.Paths, opts SimulateOptions) error {
+func Run(ctx context.Context, w io.Writer, p apppath.Paths, opts Options) error {
 	kind, execClient, err := backend.Connect(os.Getenv, sessionstate.New(p.StateDir()))
 	if err != nil {
 		return err
@@ -213,7 +217,7 @@ func cleanupSimulatePane(ctx context.Context, w io.Writer, host simulateHost, ow
 // 1 回目の Tick で limit を検知して待機状態に入った場合､2 回目は起床時刻を過ぎたと
 // 仮定した合成の now を渡して再送信の経路 (recoverPane 経由の SendText/SendKeys) まで
 // 確認する｡実時間では待たない (上限解除まで数時間かかるため)｡
-func runSimulateTicks(ctx context.Context, w io.Writer, p apppath.Paths, ownedPaneID string, execClient multiplexer.Client, opts SimulateOptions) error {
+func runSimulateTicks(ctx context.Context, w io.Writer, p apppath.Paths, ownedPaneID string, execClient multiplexer.Client, opts Options) error {
 	cfg, cfgErr := config.Load(p.ConfigFile())
 	if cfgErr != nil {
 		_, _ = fmt.Fprintf(w, "設定の読み込みに失敗､デフォルト値で継続します: %v\n", cfgErr)
@@ -224,7 +228,7 @@ func runSimulateTicks(ctx context.Context, w io.Writer, p apppath.Paths, ownedPa
 		return fmt.Errorf("分類器の構築に失敗: %w", err)
 	}
 	store := sessionstate.New(p.StateDir())
-	rateState, stateErr := store.LoadRateLimit(paneSessionID(ctx, execClient, ownedPaneID))
+	rateState, stateErr := store.LoadRateLimit(multiplexer.SessionIDOf(ctx, execClient, ownedPaneID))
 	if stateErr != nil {
 		_, _ = fmt.Fprintf(w, "利用上限 state の読み込みに失敗､state 無しとして扱います: %v\n", stateErr)
 		rateState = nil

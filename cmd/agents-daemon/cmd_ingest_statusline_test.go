@@ -42,9 +42,6 @@ func TestNewIngestStatuslineCmd(t *testing.T) {
 		if !strings.Contains(string(data), `"used_percentage":43,`) {
 			t.Errorf("context file = %q, want used_percentage 43", data)
 		}
-		if !strings.Contains(string(data), `"context_window_size":200000`) {
-			t.Errorf("context file = %q, want context_window_size 200000", data)
-		}
 	})
 
 	t.Run("壊れた JSON でも exit 0 (nil) で stdout は空｡理由は stderr に出す", func(t *testing.T) {

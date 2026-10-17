@@ -129,28 +129,4 @@ func TestNewStatuslineCmd(t *testing.T) {
 			t.Errorf("stdout に branch が無い:\n%q", stdout)
 		}
 	})
-
-	t.Run("transcript から prompt cache の残り時間を出す", func(t *testing.T) {
-		// 5 分前に 1h の cache write があった transcript｡残りは 55 分前後｡
-		at := time.Now().Add(-5 * time.Minute).UTC().Format("2006-01-02T15:04:05.000Z")
-		transcript := filepath.Join(t.TempDir(), "sess-1.jsonl")
-		body := `{"type":"assistant","isSidechain":false,"timestamp":"` + at + `","message":{"id":"msg_1","model":"claude-fable-5-1","usage":{"input_tokens":3,"cache_creation_input_tokens":500,"cache_read_input_tokens":1000,"cache_creation":{"ephemeral_1h_input_tokens":500,"ephemeral_5m_input_tokens":0}}}}` + "\n"
-		if err := os.WriteFile(transcript, []byte(body), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		stdout, stderr, _ := runStatuslineCmd(t, `{"model": {"display_name": "Opus"}, "workspace": {"current_dir": "/tmp"}, "session_id": "sess-1", "transcript_path": "`+transcript+`"}`, "200", "")
-		if stderr != "" {
-			t.Errorf("stderr = %q, want empty", stderr)
-		}
-		if !strings.Contains(stdout, "⏱ cache 54m") && !strings.Contains(stdout, "⏱ cache 55m") {
-			t.Errorf("stdout に cache の残り時間が無い:\n%q", stdout)
-		}
-	})
-
-	t.Run("transcript が無ければ cache の項目を出さない", func(t *testing.T) {
-		stdout, stderr, _ := runStatuslineCmd(t, statuslineInput, "200", "")
-		if stderr != "" || strings.Contains(stdout, "⏱") {
-			t.Errorf("stdout = %q, stderr = %q", stdout, stderr)
-		}
-	})
 }

@@ -1,4 +1,4 @@
-package verify
+package simulate
 
 import (
 	"bytes"
@@ -30,9 +30,9 @@ func TestRunSimulate_前提が無ければ止める(t *testing.T) {
 			t.Setenv("REX_SESSION", tc.session)
 			t.Setenv("REX_BLOCK", tc.block)
 			var buf bytes.Buffer
-			err := RunSimulate(context.Background(), &buf, apppath.New(t.TempDir(), "", ""), SimulateOptions{})
+			err := Run(context.Background(), &buf, apppath.New(t.TempDir(), "", ""), Options{})
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("RunSimulate() error = %v, want %s に触れるエラー", err, tc.want)
+				t.Fatalf("Run() error = %v, want %s に触れるエラー", err, tc.want)
 			}
 			if buf.Len() != 0 {
 				t.Errorf("止める前に何かした: %s", buf.String())
@@ -224,8 +224,8 @@ func TestRunSimulate_RealRex(t *testing.T) {
 
 	home := t.TempDir()
 	var buf bytes.Buffer
-	if err := RunSimulate(context.Background(), &buf, apppath.New(home, "", ""), SimulateOptions{}); err != nil {
-		t.Fatalf("RunSimulate() error = %v\n出力:\n%s", err, buf.String())
+	if err := Run(context.Background(), &buf, apppath.New(home, "", ""), Options{}); err != nil {
+		t.Fatalf("Run() error = %v\n出力:\n%s", err, buf.String())
 	}
 	out := buf.String()
 	t.Logf("simulate 出力:\n%s", out)

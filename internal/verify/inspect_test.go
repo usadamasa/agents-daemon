@@ -11,10 +11,8 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/config"
-	"github.com/usadamasa/agents-daemon/internal/monitor"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
-	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 )
 
 // 2026-08-16 に実機 (Claude Code 2.1.224) で採取した通常のフッター｡
@@ -140,44 +138,16 @@ func TestRunInspect_サンプル画面での分類(t *testing.T) {
 		}
 	})
 
-	t.Run("通常の画面では idle compact の判定を並べる", func(t *testing.T) {
-		// #26: 送らなかった理由を state とコードの突き合わせ無しに読めるようにする｡
+	t.Run("通常の画面では何もしないと報告する", func(t *testing.T) {
 		home := t.TempDir()
 		file := writeInspectFixture(t, home, "normal.txt", inspectSampleNormalScreen)
-		p := apppath.New(home, "", "")
-		store := sessionstate.New(p.StateDir())
-		// 直近の応答は 50 分前 (1h TTL なので失効の 10 分前､窓が開いた直後)｡入力 60000 tokens は
-		// 200k の window で 30% になり､閾値 (既定 40%) に届かない｡
-		last := fixedNow.Add(-50 * time.Minute)
-		transcript := filepath.Join(home, "transcript.jsonl")
-		line := `{"type":"assistant","isSidechain":false,"timestamp":"` + last.Format(time.RFC3339Nano) +
-			`","message":{"id":"msg_1","model":"claude-haiku-4-5","usage":{"input_tokens":10,"cache_creation_input_tokens":990,"cache_read_input_tokens":59000,"cache_creation":{"ephemeral_1h_input_tokens":990,"ephemeral_5m_input_tokens":0}}}}` + "\n"
-		if err := os.WriteFile(transcript, []byte(line), 0o644); err != nil {
-			t.Fatalf("WriteFile() error = %v", err)
-		}
-		writeJSONFile(t, filepath.Join(store.Context, inspectTestSessionID+".json"), map[string]any{
-			"session_id": inspectTestSessionID, "used_percentage": 30, "observed_at": last.Add(time.Second).Unix(),
-			"context_window_size": 200000, "transcript_path": transcript,
-		})
 
 		var buf bytes.Buffer
-		if err := RunInspect(context.Background(), &buf, &multiplexerfake.Client{}, p, "", file, inspectTestSessionID, fixedNow); err != nil {
+		if err := RunInspect(context.Background(), &buf, &multiplexerfake.Client{}, apppath.New(home, "", ""), "", file, inspectTestSessionID, fixedNow); err != nil {
 			t.Fatalf("RunInspect() error = %v", err)
 		}
-		out := buf.String()
-		for _, want := range []string{
-			"idle compact",
-			last.Format(time.RFC3339),                  // 直近の応答の時刻
-			"TTL 60 分",                                 // TTL (送信ログと同じ書式)
-			last.Add(time.Hour).Format(time.RFC3339),   // 失効時刻
-			"窓: 開いている",                                 // 失効の lead 秒前を過ぎた
-			"使用率: 30% / 閾値 40%",                        // 60000 / 200000
-			"marker: ありません",                            // idle compact の marker
-			monitor.IdleCompactBelowThreshold.String(), // 判定
-		} {
-			if !strings.Contains(out, want) {
-				t.Errorf("idle compact の判定に %q が無い｡出力:\n%s", want, out)
-			}
+		if out := buf.String(); !strings.Contains(out, "daemon は何もしません") {
+			t.Errorf("通常の画面の報告が無い｡出力:\n%s", out)
 		}
 	})
 

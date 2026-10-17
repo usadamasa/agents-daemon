@@ -53,6 +53,21 @@ func IsClaudeAgent(p Pane) bool {
 	return strings.Contains(strings.ToLower(p.Agent), "claude")
 }
 
+// SessionIDOf は pane に紐づく Claude セッション ID を引く｡pane が取得できない､
+// または agent session が紐づいていない場合は空文字列を返す (state 無しとして扱う)｡
+// 利用上限 state はセッションごとに別ファイルなので､この対応付けが取れないと
+// どの state を読むべきかが決まらない｡
+func SessionIDOf(ctx context.Context, client Client, paneID string) string {
+	if paneID == "" {
+		return ""
+	}
+	pane, err := client.PaneGet(ctx, paneID)
+	if err != nil {
+		return ""
+	}
+	return pane.SessionID
+}
+
 // PaneReadOptions は PaneRead の呼び出しオプション｡
 type PaneReadOptions struct {
 	Lines int // 0 以下なら行数を指定しない

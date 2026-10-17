@@ -4,13 +4,29 @@
 
 ## 読み取り元
 
-rex は `capture -b BLOCK --trim --unwrap` で読み、末尾 `readLines` 行に絞る。
-capture が返すのは block の可視領域だけで (52 行の block で 52 行。実測)、`format` method の入力にも
-scrollback や行数の指定が無い。rex には scrollback を読む手段が無く、block を小さく分割していると
-`readLines` に何を指定しても表示行数で頭打ちになり、上限の表示がスクロールで流れた時点で検知が
-黙って効かなくなる。上限の文言が流れる前に読めているうちは検知できるが、小さい block (10 行程度) で
-limit の文と reset の行が可視領域に収まるかは測っていない。`--unwrap` で折り返しは 1 行に戻るので、
-上限の文言が画面幅で折り返されても 1 行の中で limit と reset の両方を拾える。
+rex は `capture -b BLOCK --trim --unwrap` で読み、末尾 `readLines` 行に絞る。判定 (`detect.Classify` と
+起床時刻の読み取り) は更に末尾 `detectionTailLines` 行だけを見るので、`readLines` がそれ以上あれば判定は変わらない。
+
+<!-- rex-premise: preview.15 cli capture は alternate screen では可視の行だけ、通常の画面では scrollback も返す -->
+<!-- cc-premise: 2.1.302 limit-screen Claude Code は alternate screen (?1049h) で描き、上限の文は画面の下から 10 行目に出る -->
+
+Claude Code は alternate screen で描くので、Claude の block の capture は可視の行数で頭打ちになる
+(24 行の block で 24 行。alternate screen でない shell の block は scrollback ごと返り、500 行出すと 512 行)。
+`format` method の入力にも scrollback や行数の指定が無く、block を小さく分割していると `readLines` に
+何を指定しても表示行数で頭打ちになる。上限の表示が画面から押し出された時点で検知は黙って効かなくなる。
+
+実機の上限到達画面 (`internal/detect/real_sample_test.go`、statusline 3 行) を alternate screen に出し、
+`block call resize` で高さを変えて `inspect --pane` で測った下限は次のとおり。
+
+| block の行数 | 判定 | 画面の先頭 |
+| ---- | ---- | ---- |
+| 24 | limit | 上限の文の 3 行上から全部 |
+| 11 | limit | 上限の文 (下から 10 行目) |
+| 10 | none | `/upgrade` の行。上限の文が画面の外へ出る |
+
+statusline が 1 行少なければ下限も 1 行下がる。`/rate-limit-options` のメニューが出た状態と Claude Code 自身の
+再描画 (縮めた後の描き直し) は測っておらず、メニューの分だけ下限は上がりうる (#39)。
+`--unwrap` で端末の折り返しは 1 行に戻るが、Claude Code が自分で改行した行は戻らない。
 
 ## 送信
 

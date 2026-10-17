@@ -79,9 +79,7 @@ shell を受け手にすると ESC の直後の文字を Meta として食う (z
 
 登録が rex に載ったことを daemon と同じ経路 (`PaneGet` → `IsClaudeAgent`) で待ってから画面を読む｡
 rex の `capture` は可視領域しか返さないので､使い捨て block は自分の block の 40% の高さで割る｡
-Claude Code の OSC 7501 の書式は 2.1.296 のバイナリから読んだもの｡対応そのものは CHANGELOG 2.1.295 が
-「Program Status Protocol (OSC 7501)」として名指ししたが､payload の書式を書いた docs のページはまだ無い
-(「rex の状態の対応」参照)｡
+OSC 7501 の書式と判定の条件は [program-status.md](program-status.md)｡
 
 `doctor` は rex の server への到達性､Claude pane の一覧 (`session_id` が引けなければ `(なし)`) を出す｡
 rex の外 (`REX_SESSION` なし) では exit 1 で止まる｡末尾の「peer messaging」は
@@ -124,46 +122,6 @@ rex の送信が未測定なのはこの教訓がまだ果たされていない�
 同じ日に､既定の読み取り元が pane の viewport に制限されることも判明した
 ([pane-io.md](pane-io.md) の「読み取り元」参照)｡どちらも実際に動かすまで
 気づけなかった類の失敗で､`--dry-run` や `simulate` だけでは踏めなかった｡
-
-### rex の状態の対応
-
-2026-10-10 (rex `0.0.1791570264-g7b5bf3`､Claude Code `2.1.296`) と 2026-10-17 (rex `0.0.1792158932-g88fd41`
-= preview.15､Claude Code `2.1.302`､#69) に測った｡rex では Claude Code 自身が OSC 7501 で状態を報告し､
-daemon は `block call -b BLOCK program_status` の `records` から読む｡protocol の仕様は
-[rex の docs](https://www.superlogical.com/rex/docs/build/program-status)｡Claude Code がどの状況でどの値を
-出すかは docs に無く､バイナリと実測から読んだものなので､版が変われば測り直す｡
-
-<!-- cc-premise: 2.1.302 osc7501 state / app / kind の値と画面の状況の対応 (バイナリの builder と実測) -->
-<!-- rex-premise: preview.15 program_status rex は process 名から record を補わない｡owner.pid が record に付く -->
-
-使うのは root record (`id` が無いか空) だけで､`id` に agent ID を持つ record は subagent のもの｡
-`app` は Claude Code では常に `claude-code`｡preview.13 までの rex は OSC 7501 を出す前の Claude Code のために
-process 名から `app: claude` の record を補っていたが､preview.15 で補いをやめた｡
-
-| 画面の状況 | `state` | `kind` | `agent_status` |
-| ---- | ---- | ---- | ---- |
-| 起動直後 (自己申告は起動から数秒以内) | `idle` | - | `idle` |
-| 作業中 (`msg` は今の作業､`progress` はタスクの完了率) | `working` | - | `working` |
-| ターンを終えて利用者の入力待ち (`msg` は要約) | `done` | - | `done` |
-| 利用者が止めた (Esc)､permission prompt を断った後 | `idle` | - | `idle` |
-| permission prompt､sandbox の network 要求､worker の要求､goal の提案 (`msg` は `approve <tool>: <command>`) | `blocked` | `permission` | `blocked` |
-| 利用者の入力待ち (MCP の elicitation など｡AskUserQuestion がここに入るかは未確認) | `blocked` | `question` | `blocked` |
-| 認証失敗でターンが終わり､まだ sign in していない | `blocked` | `auth` | `blocked` |
-| その他の dialog (trust dialog､Session paused､model の切り替え確認など) | `blocked` | 無し | `blocked` |
-| API error でターンが終わった (`msg` は失敗の理由) | `error` | - | `unknown` |
-| 上のどれでもない値 | その他 | - | `unknown` |
-| shell だけの block | `records: []` | - | Claude agent ではない |
-
-- record を使うのは `app` が `claude-code` で､record の `owner.pid` が前景 process の pid と一致するときだけ｡
-  OSC 7501 の仕様では `done` と `error` の record は process の終了と shell prompt を生き延びるので､
-  Claude Code が SIGKILL などで終わると素の shell に `done` が残る (実測｡`/exit` なら `state=clear` で消える)｡
-  一致しない record は無視し､前景の `argv0` (basename) が `claude` なら Claude agent として `unknown` にする｡
-- OSC 7501 の payload は `key=value` を `:` で繋いだもの (`state=idle:app=claude-code`､`title` と `msg` は base64)｡
-  終端は BEL｡`simulate` はこれをシェルの `printf` で出して使い捨て block を Claude に見せる (script の pid が
-  `owner.pid` になり､`exec cat` で同じ pid のまま前景に居座る)｡
-- `done` と `idle` はどちらも入力待ち｡`blocked` は利用者の操作待ちで､daemon は打ち込まない｡
-- `error` の `msg` には上限到達の文言も載りうるが､daemon の上限検知は画面を読む (rate-limit.md)｡
-  record を前段のゲートに使う案は未着手｡
 
 ## 設定
 
@@ -293,8 +251,8 @@ Claude Code の画面の文言は安定した API ではない｡変わって検
   待機の状況は `agents-daemon status` で見る｡
 - **rex の送信は実機で測っていない｡** `send` / `send-key` の組み立ては fake の rex で確かめただけで､
   daemon が渡すキー名 (`esc` `enter`) が rex でそのまま通るかは未測定｡
-- **rex の状態は Claude Code の OSC 7501 の報告に頼る｡** 対応は CHANGELOG 2.1.295 にあるが payload の書式は
-  公式ドキュメントに無いので､Claude Code の版で変わりうる｡測った版は上の「rex の状態の対応」｡
+- **rex の状態は Claude Code の OSC 7501 の報告に頼る｡** どの状況でどの値が来るかは公式ドキュメントに無く､
+  Claude Code の版で変わりうる｡測った版と対応は [program-status.md](program-status.md)｡
 - rex 側の制約 (可視領域だけ､ラベルが出ない､送信が未測定) が今の版でも残っているかは､
   `agents-daemon:peer-sessions` skill の `references/rex.md` の「使い方・不具合・新機能の情報源」で
   docs と feedback を引いて確かめる｡

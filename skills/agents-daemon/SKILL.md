@@ -9,15 +9,15 @@ description: >-
 
 # agents-daemon
 
-Claude Code のセッション群のそばに 1 プロセスだけ常駐し､セッションの中からはできないこと
-(止まったセッションへの働きかけ､セッションを跨いだ状態の集約､時間で動く掃除､端末多重化ツール rex の
-block への操作) を背後で担う｡役割の区分と境界は README の「役割」にある｡
+Claude Code のセッション群のそばに 1 プロセスだけ常駐し､セッションの中からはできないことを背後で担う｡
+担うのは､止まったセッションへの働きかけ､セッションを跨いだ状態の集約､時間で動く掃除､
+端末多重化ツール rex の block への操作｡役割の区分と境界は plugin root の `README.md` の「役割」にある｡
 
 今あるセッションへの働きかけは､5 時間ウィンドウの利用上限で止まったセッションを解除時刻に再開させること｡
 ネイティブ機能 `autoContinueAtUsageLimit` (既定 on) を置き換えるものではなく､
 ネイティブが降りた場面を拾う側に回る｡
 
-境界の例: context の compact と prompt cache の失効には関わらない｡Claude Code 本体の autocompact・
+境界の例を挙げると､context の compact と prompt cache の失効には関わらない｡Claude Code 本体の autocompact・
 idle compaction (2.1.299) と失効後の footer の案内に任せる｡以前この plugin が持っていた compact の自動化
 (compact-prep → `/compact` → 再開) と ttl-guard は､本体が同じことをするようになった時点で #59 で外した｡
 本体の idle compaction の後に daemon が離席中の pane へ再開を打ち込む衝突が起きていたため｡

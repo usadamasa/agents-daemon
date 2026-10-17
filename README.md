@@ -6,18 +6,19 @@ Claude Code のセッション群のそばに常駐し､セッションの中�
 ## 役割
 
 Claude Code のセッションは自分が止まっている間は何もできず､自分以外のセッションの状態を知らず､
-時間が経っても勝手には動かない｡agents-daemon はセッションの外に 1 プロセスだけ常駐し､
-この「中からはできないこと」を引き受ける｡機能を足すときはこの区分のどれかに属するかで判断する｡
+時間が経っても勝手には動かず､自分の pane の外の端末を触れない｡agents-daemon はセッションの外に
+1 プロセスだけ常駐し､この「中からはできないこと」を引き受ける｡機能を足すときは下の表の区分のどれかに
+属するかで判断する｡
 
 | 区分 | 今ある機能 |
 | ---- | ---- |
 | 止まったセッションへの働きかけ | 5 時間ウィンドウの利用上限で止まったセッションを､解除時刻に再開させる (`internal/monitor`) |
 | セッションを跨いだ状態の集約 | statusline の stdin から利用上限・context・cost をセッション別の state file に落とし､daemon とコマンドが読む (`internal/sessionstate`､`internal/spend`) |
-| 時間で動く掃除 | ログと state file の保持期間を過ぎたものを消す (`internal/daemon/housekeeping.go`) |
+| 時間で動く掃除 | ログと state file のうち､保持期間を過ぎたものを消す (`internal/daemon/housekeeping.go`) |
 | 多重化ツールへの操作 | rex の block を列挙し､画面を読み､キーと文面を送る (`internal/rexcli`) |
 
 境界は 1 つ｡**Claude Code 本体が自分でできることは本体に任せる**｡auto-continue が再開を予約している間は
-手を出さず､ネイティブが降りた場面だけを拾う｡context の compact と prompt cache の失効も本体
+手を出さず､本体の auto-continue が降りた場面だけを拾う｡context の compact と prompt cache の失効も本体
 (autocompact､idle compaction､失効後の footer の案内) に任せる｡以前この plugin が持っていた compact の
 自動化と ttl-guard は､本体が同じことをするようになった時点でこの境界に従って外した (#59)｡
 

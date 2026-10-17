@@ -140,8 +140,8 @@ pane 一覧､セッションごとの rate-limits の鮮度､config.json の�
 
 ## 6. peer messaging
 
-daemon のプロセスは関わらないが､別セッション (peer) へ作業を渡す経路 (`agents-daemon:peer-sessions` skill) が
-このセッションで使えるかを､同じ場で確かめる｡
+別セッション (peer) へ作業を渡す経路 (`agents-daemon:peer-sessions` skill) がこのセッションで使えるかを､
+同じ場で確かめる｡daemon のプロセスはこの経路に関わらない｡
 
 ```sh
 printenv CLAUDE_CODE_MESSAGING_SOCKET

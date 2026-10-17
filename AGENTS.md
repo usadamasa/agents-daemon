@@ -67,6 +67,10 @@ devShell の go は `go.mod` の `go` 行と同じ系列 (`go_1_26`) にし、`G
 - skill 間の参照とスラッシュコマンドは名前空間付きで書く (`agents-daemon:compact-prep`､
   `/agents-daemon:compact-prep`)｡bare 名は `~/.claude/skills/` に残った旧コピーへ当たる｡
 - skill 内の references は相対リンクで書き､読む手順は `Read` で書く｡
+- この repo を保守する手順 (利用者の運用ではなく maintainer だけが使うもの) の skill は `.claude/skills/` に置き、
+  plugin の `skills/` には入れない。`skills/` に置くと install した全セッションに description が載り、
+  validate と tagpr のリリースにも乗る。名前には作業の性質 (追従、changelog など) を入れ、レイアウト表に 1 行足す。
+  frontmatter は `claude plugin validate --strict .claude/skills` で確かめる。
 
 ## Claude Code の挙動を書くときの決めごと
 

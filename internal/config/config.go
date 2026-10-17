@@ -27,8 +27,9 @@ type Config struct {
 	// limit / rate / overloaded のような検知語を含めてはいけない。含めると
 	// 監視が自分自身の送信を再検知して無限ループする。
 	RetryMessage string
-	// ReadLines は pane の画面を末尾から何行読むか。rex の capture は可視領域しか返さないので、
-	// block を小さく分割していると判定に必要な行が画面から溢れうる (pane-io.md)。
+	// ReadLines は pane の画面を末尾から何行読むか。判定は更に末尾 DetectionTailLines 行だけを見るので、
+	// それ以上あれば判定は変わらない。Claude Code は alternate screen で描き、rex の capture は可視の
+	// 行数で頭打ちになるため、block が低いと判定に要る行が溢れる。下限の実測は pane-io.md にある。
 	ReadLines               int
 	DetectionTailLines      int
 	UsedPercentageThreshold float64

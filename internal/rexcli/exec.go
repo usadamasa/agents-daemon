@@ -187,9 +187,10 @@ func (c *execClient) blockPane(ctx context.Context, blockID string, sessions map
 	return toPane(blockID, ps, proc, sessions[blockID]), nil
 }
 
-// PaneRead は block の可視領域を返す (rex の capture は scrollback を読めない)。
+// PaneRead は block の画面を返す。Claude Code は alternate screen で描くので、Claude の block では
+// 可視の行数で頭打ちになる (alternate screen でない block では scrollback も返る)。
 // opts.Lines > 0 なら末尾 Lines 行に絞る。
-// rex-premise: preview.15 cli capture は可視領域のみ、--trim と --unwrap がある
+// rex-premise: preview.15 cli capture は alternate screen では可視の行だけ、通常の画面では scrollback も返す。--trim と --unwrap がある
 func (c *execClient) PaneRead(ctx context.Context, paneID string, opts multiplexer.PaneReadOptions) (string, error) {
 	out, err := c.run(ctx, "capture", "-b", paneID, "--trim", "--unwrap")
 	if err != nil {

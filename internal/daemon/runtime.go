@@ -39,7 +39,7 @@ type paneEntry struct {
 }
 
 // daemonRuntime は 1 回の --foreground 実行に閉じたループの可変状態をまとめる。
-// pane ごとの状態機械は TerminalID (rex は block ID) をキーにする。
+// pane ごとの状態機械は PaneID (rex の block ID) をキーにする。
 type daemonRuntime struct {
 	client multiplexer.Client
 	// backend は client の多重化ツールの種類。status.json に書くだけで判定には使わない。
@@ -119,12 +119,12 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 			continue
 		}
 		claudeCount++
-		seen[pane.TerminalID] = true
+		seen[pane.PaneID] = true
 
-		entry, ok := r.panes[pane.TerminalID]
+		entry, ok := r.panes[pane.PaneID]
 		if !ok {
 			entry = &paneEntry{state: &monitor.PaneState{}}
-			r.panes[pane.TerminalID] = entry
+			r.panes[pane.PaneID] = entry
 		}
 		entry.lastSeenAt = now
 		r.logUnknownReason(pane, entry)
@@ -175,10 +175,10 @@ func (r *daemonRuntime) logUnknownReason(pane multiplexer.Pane, entry *paneEntry
 
 // forgetUnseen は消えた pane のエントリを捨てる。
 // 捨てずに放置すると pane の入れ替わりのたびに無限に育ってしまう。
-func (r *daemonRuntime) forgetUnseen(terminals map[string]bool) {
-	for terminalID := range r.panes {
-		if !terminals[terminalID] {
-			delete(r.panes, terminalID)
+func (r *daemonRuntime) forgetUnseen(seen map[string]bool) {
+	for paneID := range r.panes {
+		if !seen[paneID] {
+			delete(r.panes, paneID)
 		}
 	}
 }
@@ -187,7 +187,6 @@ func (r *daemonRuntime) forgetUnseen(terminals map[string]bool) {
 func paneStatus(pane multiplexer.Pane, entry *paneEntry, outcome monitor.Outcome, now time.Time) PaneStatus {
 	return PaneStatus{
 		PaneID:        pane.PaneID,
-		TerminalID:    pane.TerminalID,
 		CWD:           pane.CWD,
 		AgentStatus:   string(pane.AgentStatus),
 		MonitorStatus: monitorStatusString(entry.state.Status),
@@ -205,7 +204,7 @@ func (r *daemonRuntime) logOutcome(pane multiplexer.Pane, outcome monitor.Outcom
 	// 同じ状態が続く間は書かない。tick は既定 5 秒ごとなので、待機や抑制が
 	// 続くだけで日に数千行に膨れ、後から読めるログでなくなる。状態が切り替わった
 	// ときだけ書き、静かな結果も key は更新して「戻ってきた」を検出できるようにする。
-	entry := r.panes[pane.TerminalID]
+	entry := r.panes[pane.PaneID]
 	key := logKey(outcome, err, entry)
 	if entry != nil {
 		repeated := entry.lastLogKey == key

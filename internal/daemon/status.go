@@ -14,7 +14,6 @@ import (
 // PaneStatus は status.json に書き出す pane 1 枚分のスナップショット。
 type PaneStatus struct {
 	PaneID        string     `json:"pane_id"`
-	TerminalID    string     `json:"terminal_id"`
 	CWD           string     `json:"cwd"`
 	AgentStatus   string     `json:"agent_status"`
 	MonitorStatus string     `json:"monitor_status"`

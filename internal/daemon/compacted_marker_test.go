@@ -17,7 +17,7 @@ import (
 // 2 件 (2026-10-13、10-16) がこのテストの元。compact 後の再開は daemon の役目ではない。
 func TestDaemonRuntimeTick_StaleCompactedMarkerSendsNothing(t *testing.T) {
 	now := time.Date(2026, 10, 16, 3, 0, 22, 0, time.UTC)
-	pane := claudePaneWithSession("pane-a", "term-a", "session-a", multiplexer.AgentStatusIdle)
+	pane := claudePaneWithSession("pane-a", "session-a", multiplexer.AgentStatusIdle)
 	client := &multiplexerfake.Client{
 		PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) { return []multiplexer.Pane{pane}, nil },
 		PaneReadFunc: func(context.Context, string, multiplexer.PaneReadOptions) (string, error) {
@@ -50,7 +50,7 @@ func TestDaemonRuntimeTick_StaleCompactedMarkerSendsNothing(t *testing.T) {
 			t.Fatalf("compact 後の pane へ送信した: %v", client.Calls)
 		}
 	}
-	if got := r.panes["term-a"].lastLogKey; got != "monitoring" {
+	if got := r.panes["pane-a"].lastLogKey; got != "monitoring" {
 		t.Errorf("outcome = %q, want monitoring", got)
 	}
 	// 静かな tick はログファイルも作らない。

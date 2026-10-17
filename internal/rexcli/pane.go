@@ -43,7 +43,6 @@ const claudeApp = "claude-code"
 func toPane(blockID string, ps programStatusResult, proc processResult, sessionID string) multiplexer.Pane {
 	pane := multiplexer.Pane{
 		PaneID:      blockID,
-		TerminalID:  blockID,
 		AgentStatus: multiplexer.AgentStatusUnknown,
 		SessionID:   sessionID,
 	}

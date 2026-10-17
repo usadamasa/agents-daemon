@@ -102,7 +102,7 @@ func TestToPane(t *testing.T) {
 			}
 			got := toPane("block:x", ps, proc, "sid")
 			want := multiplexer.Pane{
-				PaneID: "block:x", TerminalID: "block:x", CWD: "/w",
+				PaneID: "block:x", CWD: "/w",
 				Agent: tt.wantAgent, AgentStatus: tt.wantStatus, SessionID: "sid", UnknownReason: tt.wantReason,
 			}
 			if got != want {

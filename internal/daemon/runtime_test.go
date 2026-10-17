@@ -55,22 +55,20 @@ func readLog(t *testing.T, statusPath string) string {
 	return string(data)
 }
 
-func claudePane(paneID, terminalID string, status multiplexer.AgentStatus) multiplexer.Pane {
+func claudePane(paneID string, status multiplexer.AgentStatus) multiplexer.Pane {
 	return multiplexer.Pane{
 		Agent:       "claude-code",
 		AgentStatus: status,
 		PaneID:      paneID,
-		TerminalID:  terminalID,
 		CWD:         "/tmp/project",
 	}
 }
 
-func nonClaudePane(paneID, terminalID string) multiplexer.Pane {
+func nonClaudePane(paneID string) multiplexer.Pane {
 	return multiplexer.Pane{
 		Agent:       "bash",
 		AgentStatus: multiplexer.AgentStatusIdle,
 		PaneID:      paneID,
-		TerminalID:  terminalID,
 	}
 }
 
@@ -84,7 +82,7 @@ func missingConfigPath(t *testing.T) string {
 func TestDaemonRuntimeTick_NewPaneGetsFreshState(t *testing.T) {
 	client := &multiplexerfake.Client{
 		PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) {
-			return []multiplexer.Pane{claudePane("p1", "t1", multiplexer.AgentStatusIdle)}, nil
+			return []multiplexer.Pane{claudePane("p1", multiplexer.AgentStatusIdle)}, nil
 		},
 	}
 	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
@@ -101,9 +99,9 @@ func TestDaemonRuntimeTick_NewPaneGetsFreshState(t *testing.T) {
 	if len(r.panes) != 1 {
 		t.Fatalf("len(r.panes) = %d, want 1", len(r.panes))
 	}
-	entry, ok := r.panes["t1"]
+	entry, ok := r.panes["p1"]
 	if !ok {
-		t.Fatal("terminal_id t1 のエントリが作られていない")
+		t.Fatal("pane p1 のエントリが作られていない")
 	}
 	if entry.state == nil {
 		t.Fatal("entry.state が nil (フレッシュな状態機械が割り当てられていない)")
@@ -127,7 +125,7 @@ func TestDaemonRuntimeTick_DisappearedPaneEntryDropped(t *testing.T) {
 	r, _ := newTestRuntime(t, client, now)
 	cfgPath := missingConfigPath(t)
 
-	panesNow = []multiplexer.Pane{claudePane("p1", "t1", multiplexer.AgentStatusIdle)}
+	panesNow = []multiplexer.Pane{claudePane("p1", multiplexer.AgentStatusIdle)}
 	if _, _, err := r.tick(context.Background(), cfgPath, now); err != nil {
 		t.Fatalf("1回目の tick() error = %v", err)
 	}
@@ -147,7 +145,7 @@ func TestDaemonRuntimeTick_DisappearedPaneEntryDropped(t *testing.T) {
 func TestDaemonRuntimeTick_NonClaudePaneNeverGetsEntry(t *testing.T) {
 	client := &multiplexerfake.Client{
 		PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) {
-			return []multiplexer.Pane{nonClaudePane("p1", "t1")}, nil
+			return []multiplexer.Pane{nonClaudePane("p1")}, nil
 		},
 	}
 	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
@@ -185,8 +183,8 @@ func TestDaemonRuntimeTick_MissingSessionStateDoesNotLeakToOtherPanes(t *testing
 
 	const limitScreen = "Try again in 5 minutes"
 
-	paneA := claudePaneWithSession("pane-a", "term-a", "session-a", multiplexer.AgentStatusIdle)
-	paneB := claudePaneWithSession("pane-b", "term-b", "session-b", multiplexer.AgentStatusIdle)
+	paneA := claudePaneWithSession("pane-a", "session-a", multiplexer.AgentStatusIdle)
+	paneB := claudePaneWithSession("pane-b", "session-b", multiplexer.AgentStatusIdle)
 
 	client := &multiplexerfake.Client{
 		PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) {
@@ -205,10 +203,10 @@ func TestDaemonRuntimeTick_MissingSessionStateDoesNotLeakToOtherPanes(t *testing
 		t.Fatalf("tick() error = %v", err)
 	}
 
-	if got := r.panes["term-a"].state.Status; got != monitor.StatusMonitoring {
+	if got := r.panes["pane-a"].state.Status; got != monitor.StatusMonitoring {
 		t.Errorf("pane-a の state.Status = %v, want Monitoring (自分の state が 10%% なのでゲートで抑制されるべき)", got)
 	}
-	if got := r.panes["term-b"].state.Status; got != monitor.StatusWaiting {
+	if got := r.panes["pane-b"].state.Status; got != monitor.StatusWaiting {
 		t.Errorf("pane-b の state.Status = %v, want Waiting (state が無いならゲートを適用せず画面の判定に従うべき)", got)
 	}
 }
@@ -247,7 +245,7 @@ func TestDaemonRuntimeTick_IdleShutdown(t *testing.T) {
 
 	// 3回目: Claude pane が再出現 → idleSince がリセットされる (ゼロ値に戻る)。
 	t2 := t1.Add(time.Second)
-	panesNow = []multiplexer.Pane{claudePane("p1", "t1", multiplexer.AgentStatusIdle)}
+	panesNow = []multiplexer.Pane{claudePane("p1", multiplexer.AgentStatusIdle)}
 	if shutdown, _, err := r.tick(ctx, cfgPath, t2); err != nil || shutdown {
 		t.Fatalf("3回目の tick (pane再出現): shutdown=%v, err=%v, want false, nil", shutdown, err)
 	}
@@ -368,8 +366,8 @@ func TestDaemonRuntimeTick_ConsecutiveFailures(t *testing.T) {
 
 // claudePaneWithSession は SessionID (backend が sidecar から引いた値) まで埋めた Claude pane を作る。
 // pane と Claude セッションの対応付けは SessionID だけが持つ。
-func claudePaneWithSession(paneID, terminalID, sessionID string, status multiplexer.AgentStatus) multiplexer.Pane {
-	pane := claudePane(paneID, terminalID, status)
+func claudePaneWithSession(paneID, sessionID string, status multiplexer.AgentStatus) multiplexer.Pane {
+	pane := claudePane(paneID, status)
 	pane.SessionID = sessionID
 	return pane
 }
@@ -407,8 +405,8 @@ func TestDaemonRuntimeTick_RateStateIsMatchedPerSession(t *testing.T) {
 
 	const limitScreen = "Try again in 5 minutes"
 
-	paneA := claudePaneWithSession("pane-a", "term-a", "session-a", multiplexer.AgentStatusIdle)
-	paneB := claudePaneWithSession("pane-b", "term-b", "session-b", multiplexer.AgentStatusIdle)
+	paneA := claudePaneWithSession("pane-a", "session-a", multiplexer.AgentStatusIdle)
+	paneB := claudePaneWithSession("pane-b", "session-b", multiplexer.AgentStatusIdle)
 
 	client := &multiplexerfake.Client{
 		PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) {
@@ -428,11 +426,11 @@ func TestDaemonRuntimeTick_RateStateIsMatchedPerSession(t *testing.T) {
 		t.Fatalf("tick() error = %v", err)
 	}
 
-	if got := r.panes["term-a"].state.Status; got != monitor.StatusWaiting {
+	if got := r.panes["pane-a"].state.Status; got != monitor.StatusWaiting {
 		t.Errorf("pane-a の state.Status = %v, want Waiting "+
 			"(session-a は 100%% 消化済みなのでゲートで抑制されてはいけない)", got)
 	}
-	if got := r.panes["term-b"].state.Status; got != monitor.StatusMonitoring {
+	if got := r.panes["pane-b"].state.Status; got != monitor.StatusMonitoring {
 		t.Errorf("pane-b の state.Status = %v, want Monitoring "+
 			"(session-b は 10%% なのでゲートで抑制されるべき)", got)
 	}

@@ -21,9 +21,11 @@ import (
 const defaultTimeout = 10 * time.Second
 
 // shellFlavor は terminal の block の flavor｡これ以外の block は program_status を持たない｡
+// rex-premise: preview.15 cli block ls の flavor の値
 const shellFlavor = "com.superlogical.terminal.shell"
 
 // exitTargetNotFound は rex が block や session を解決できなかったときの exit code (実測)｡
+// rex-premise: preview.15 cli 存在しない block への block call は exit 3
 const exitTargetNotFound = 3
 
 // execClient は rex CLI を subprocess として呼び出す multiplexer.Client 実装｡
@@ -73,6 +75,7 @@ func (c *execClient) run(ctx context.Context, args ...string) ([]byte, error) {
 	}
 
 	// server が落ちているときに CLI が起こさないよう､全呼び出しで autostart を切る｡
+	// rex-premise: preview.15 cli --autostart は global option で既定 true
 	full := append([]string{"--autostart=false"}, args...)
 	// #nosec G204 -- binPath は "rex" か REX_BIN_PATH の値 (利用者自身の環境)､args はこの
 	// パッケージ内で組み立てた固定のサブコマンドと block ID のみ｡
@@ -170,6 +173,7 @@ func (c *execClient) PaneList(ctx context.Context) ([]multiplexer.Pane, error) {
 	var panes []multiplexer.Pane
 	for _, s := range ls.Sessions {
 		// block ls だけは -s が必須 (無いと exit 2)｡
+		// rex-premise: preview.15 cli block ls は -s 必須
 		var blocks blockLsResult
 		if err := c.runJSON(ctx, &blocks, "block", "ls", "-s", s.SessionID, "--json"); err != nil {
 			return nil, err
@@ -282,6 +286,7 @@ func agentStatus(state string) multiplexer.AgentStatus {
 
 // PaneRead は block の可視領域を返す (rex の capture は scrollback を読めない)｡
 // opts.Lines > 0 なら末尾 Lines 行に絞る｡
+// rex-premise: preview.15 cli capture は可視領域のみ､--trim と --unwrap がある
 func (c *execClient) PaneRead(ctx context.Context, paneID string, opts multiplexer.PaneReadOptions) (string, error) {
 	out, err := c.run(ctx, "capture", "-b", paneID, "--trim", "--unwrap")
 	if err != nil {

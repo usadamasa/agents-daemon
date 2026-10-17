@@ -1,5 +1,14 @@
 # Changelog
 
+## [2026.1017.1](https://github.com/usadamasa/agents-daemon/compare/2026.1017.0...2026.1017.1) - 2026-10-17
+
+- docs: daemon の役割を「セッションの中からはできないことを担う土台」に書き直す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/85
+- docs: md の句読点を全角の「。、」へ揃える by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/92
+- style: Go・sh・設定ファイルの句読点を全角の「。、」へ揃える by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/93
+- rexcli のテストを振る舞い単位に畳み、配線と写像でファイルを分ける by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/94
+- Pane.TerminalID を PaneID に統合する (#73) by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/95
+- capture の読み取り範囲と block の高さの下限を実測に合わせる (#73) by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/96
+
 ## [2026.1017.0](https://github.com/usadamasa/agents-daemon/compare/2026.1016.0...2026.1017.0) - 2026-10-17
 
 - ci: GitHub Actions の固定を pinact から gh-actions-lock へ移行する by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/67

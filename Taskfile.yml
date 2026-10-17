@@ -15,12 +15,6 @@ tasks:
     cmds:
       - hooks/build-daemon.sh
 
-  herdr-skill:
-    desc: skills/herdr/SKILL.md を herdr --skill の出力で作り直す (herdr を更新したとき)
-    # 生成物なので手で編集しない｡peer-sessions の reference が前提にする ID と状態の規則はここが正｡
-    cmds:
-      - herdr --skill > skills/herdr/SKILL.md
-
   test:
     desc: Go テストと bats テストを実行
     cmds:

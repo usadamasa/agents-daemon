@@ -16,7 +16,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 )
 
-// defaultTimeout は rex コマンド 1 回あたりのタイムアウト (herdrcli と同じ)｡
+// defaultTimeout は rex コマンド 1 回あたりのタイムアウト｡
 const defaultTimeout = 10 * time.Second
 
 // shellFlavor は terminal の block の flavor｡これ以外の block は program_status を持たない｡
@@ -80,7 +80,7 @@ func (c *execClient) run(ctx context.Context, args ...string) ([]byte, error) {
 	var outBuf, errBuf bytes.Buffer
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf
-	// 期限超過で kill した後､パイプを継承した孫プロセスで Wait が止まらないようにする (herdrcli と同じ)｡
+	// 期限超過で kill した後､パイプを継承した孫プロセスで Wait が止まらないようにする｡
 	cmd.WaitDelay = 100 * time.Millisecond
 	runErr := cmd.Run()
 

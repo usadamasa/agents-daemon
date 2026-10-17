@@ -8,7 +8,7 @@ func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "agents-daemon",
 		Short: "Claude Code の利用上限待ちを自動検知し､解除後に再開する",
-		Long: "agents-daemon は端末多重化ツール (herdr / rex) 越しに Claude Code の pane を監視し､\n" +
+		Long: "agents-daemon は端末多重化ツール (rex) 越しに Claude Code の block を監視し､\n" +
 			"5 時間ウィンドウの利用上限や一時的なエラーを検知したら､解除後に\n" +
 			"自動で再開プロンプトを送るデーモンと CLI を提供する｡",
 		SilenceUsage: true,
@@ -23,6 +23,5 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(newStatuslineCmd())
 	root.AddCommand(newIngestStatuslineCmd())
 	root.AddCommand(newTTLGuardCmd())
-	root.AddCommand(newHerdrTitleCmd())
 	return root
 }

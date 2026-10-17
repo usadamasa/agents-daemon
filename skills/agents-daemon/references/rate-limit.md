@@ -76,7 +76,7 @@ spend-limit と out-of-credits で即座に失敗する｡
 
 ## `agent_status` は判定に使わない
 
-rex の `agent_status` は Claude Code 自身が OSC 7501 で申告する state (operations.md の「rex の状態の対応」)｡
+rex の `agent_status` は Claude Code 自身が OSC 7501 で申告する state ([program-status.md](program-status.md))｡
 上限で止まった pane は turn の途中で止まるので､`working` のまま申告され続ける｡
 
 2026-08-19 の取りこぼし (当時の backend は herdr で､PTY の出力活動から状態を推定していた) は

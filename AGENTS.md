@@ -79,6 +79,10 @@ devShell の go は `go.mod` の `go` 行と同じ系列 (`go_1_26`) にし、`G
   (Go と sh はコメント､md は `<!-- -->`)｡`<version>` は最後に確かめた Claude Code の版､`<topic>` は
   `.claude/skills/catching-up-with-claude-code-changelog/SKILL.md` の topic 一覧のどれか｡
   skill がこの marker を grep して､更新後に見直す箇所の一覧にする｡確かめ直したら `<version>` を上げる｡
+- rex の版で変わりうる挙動 (`program_status` の record の中身､CLI の引数と exit code) も同じ形で
+  `rex-premise: <version> <topic> [メモ]` を置く｡`<version>` は changelog の版 (`preview.15`)､`<topic>` は
+  `program_status` か `cli`｡rex を上げたら `rg -n 'rex-premise'` で一覧し､changelog
+  (superlogical MCP の `read_changelog`) と突き合わせる｡
 
 ## state を書くときの決めごと
 

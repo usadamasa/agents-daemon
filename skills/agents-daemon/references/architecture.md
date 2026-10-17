@@ -224,7 +224,7 @@ rex の列挙は 1 tick に `ls` 1 回､session ごとに `block ls` 1 回､sh
 block が多い環境ほど tick あたりの時間が伸びる｡
 
 rex で Agent と AgentStatus を決めるのは Claude Code 自身が OSC 7501 で報告する `program_status` で､
-状態の対応は [operations.md](operations.md) の「rex の状態の対応」｡
+状態の対応と record を使う条件は [program-status.md](program-status.md)｡
 
 ## 毎 tick の判定
 

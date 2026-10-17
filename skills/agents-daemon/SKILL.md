@@ -78,7 +78,8 @@ description: >-
 | [compact.md](references/compact.md) | context 閾値からの 3 段､marker 経路､cache の失効前の compact (idle compact)､compact 直後の停止 |
 | [cache.md](references/cache.md) | prompt cache の失効と daemon の送信､ack マーカーの規約､対象の prompt 4 つ､送信ログと status の cache 表示 |
 | [pane-io.md](references/pane-io.md) | 画面の読み取り元､送信のキーストロークと文面の制約 |
-| [operations.md](references/operations.md) | コマンドと `--dry-run`､実機での検証順序､rex の状態の対応､設定キー一覧､既知の制約 |
+| [program-status.md](references/program-status.md) | rex の `program_status` (OSC 7501) と `agent_status` の対応､record を使う条件 (owner.pid と foreground の pid の突き合わせ)､payload の書式 |
+| [operations.md](references/operations.md) | コマンドと `--dry-run`､実機での検証順序､設定キー一覧､既知の制約 |
 
 ## 症状から引くところ
 
@@ -90,6 +91,7 @@ description: >-
 | 上限が解除されても再開しない | rate-limit.md の「待機時刻の決め方」「ゲート」 |
 | 関係ない pane にプロンプトが打ち込まれた | rate-limit.md の「limit の判定は 2 つの手がかりを要求する」「ゲート」 |
 | context が閾値を超えても compact が走らない | compact.md の「送信の条件」､operations.md の「既知の制約」 |
+| `doctor` の pane 一覧が全部 `agent_status=unknown`､daemon.log に `agent_status を判定できません` が出る (rex を上げた直後) | program-status.md の「record を使う条件」｡rex の record の形が変わった疑い |
 | 圧縮後に作業が再開しない | compact.md の「なぜ画面を読まないか」「compact 直後の停止」｡離席中の圧縮なら「idle compact」(再開しないのが仕様) |
 | 離席中の pane で idle compact が走らない | `inspect --pane <id>` の「idle compact」の判定､daemon.log の `idle-compact-held`｡compact.md の「送らなかった理由の追い方」 |
 | 再開の送信が高くついた・どれだけ書き直したか知りたい | cache.md の「ログ」(送信行末の `cache=expired` と context 使用率) |

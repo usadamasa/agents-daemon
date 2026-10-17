@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -13,7 +14,8 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 )
 
-// 実測 (tmp/rex-measurements.md､rex 0.0.1791570264､Claude Code 2.1.296) の ID と JSON｡
+// 実測の ID と JSON｡2026-10-10 (rex 0.0.1791570264､Claude Code 2.1.296) と
+// 2026-10-17 (rex 0.0.1792158932 = preview.15､Claude Code 2.1.302､#69) のもの｡
 const (
 	sessionA = "session:01a12439-0839-7829-a4cb-aeac453570c1"
 	sessionB = "session:01a1250f-c100-71e0-aed0-4a433569cf00"
@@ -21,9 +23,17 @@ const (
 	blockClaudeWorking = "block:01a12439-083a-74f9-9827-49c3478b2469"
 	blockShell         = "block:01a1250f-c101-7290-9025-733c2a16aca7"
 	blockClaudeDone    = "block:01a12540-cd47-7943-a503-91a06c58fab5"
-	blockTrustDialog   = "block:01a12543-98e9-7288-8614-755491e41d4d"
+	blockStartup       = "block:01a14841-3085-7cb5-afbd-fc949b43a888"
+	blockStaleDone     = "block:01a14843-aebd-7c50-8b92-f40f4d3f5324"
 	blockClosed        = "block:01a12599-0000-7000-8000-000000000001"
 	blockNotShell      = "block:01a12599-0000-7000-8000-000000000002"
+
+	// foreground の process の pid｡record の owner.pid と突き合わせる｡
+	pidClaudeWorking = 15470
+	pidClaudeDone    = 17633
+	pidClaudeStartup = 70904
+	pidClaudeKilled  = 73002
+	pidShell         = 72817
 
 	sidWorking = "0d5e717f-82c5-4e71-ac74-799f7197e0de"
 	sidDone    = "6b1f3c2a-1111-4222-8333-944455556666"
@@ -43,21 +53,34 @@ const (
 	psWorking = `{"records":[` +
 		`{"state":"working","app":"claude-code","effective_app":"claude-code","msg":"Showing rex CLI help for relevant subcommands","updated_at":"2026-10-10T18:30:19.629038+09:00","owner":{"pid":15470,"name":"2.1.296"}},` +
 		`{"id":"a01b73b4e3800b31f","state":"done","app":"claude-code","effective_app":"claude-code","title":"Map herdrcli and its consumers","updated_at":"2026-10-10T18:29:58.836427+09:00","owner":{"pid":15470,"name":"2.1.296"}}]}`
-	psDone        = `{"records":[{"state":"done","app":"claude-code","effective_app":"claude-code","msg":"guard-gql-read の PR 作成待ち","updated_at":"2026-10-10T18:16:09.305373+09:00","owner":{"pid":17633,"name":"2.1.296"}}]}`
-	psTrustDialog = `{"records":[{"state":"blocked","app":"claude","effective_app":"claude","updated_at":"2026-10-10T18:47:01.189802+09:00","owner":{"pid":89100,"name":"2.1.296"}}]}`
-	psPermission  = `{"records":[{"state":"blocked","kind":"permission","app":"claude-code","effective_app":"claude-code","msg":"approve Bash: rm -rf ./tmp/junk","updated_at":"2026-10-10T18:51:48.057417+09:00","owner":{"pid":94252,"name":"2.1.296"}}]}`
-	psIdle        = `{"records":[{"state":"idle","app":"claude-code","effective_app":"claude-code","updated_at":"2026-10-10T18:52:20.000000+09:00","owner":{"pid":94252,"name":"2.1.296"}}]}`
-	psEmpty       = `{"records":[]}`
+	psDone       = `{"records":[{"state":"done","app":"claude-code","effective_app":"claude-code","msg":"guard-gql-read の PR 作成待ち","updated_at":"2026-10-10T18:16:09.305373+09:00","owner":{"pid":17633,"name":"2.1.296"}}]}`
+	psPermission = `{"records":[{"state":"blocked","kind":"permission","app":"claude-code","effective_app":"claude-code","msg":"approve Bash: rm -rf ./tmp/junk","updated_at":"2026-10-10T18:51:48.057417+09:00","owner":{"pid":94252,"name":"2.1.296"}}]}`
+	psIdle       = `{"records":[{"state":"idle","app":"claude-code","effective_app":"claude-code","updated_at":"2026-10-10T18:52:20.000000+09:00","owner":{"pid":94252,"name":"2.1.296"}}]}`
+	psEmpty      = `{"records":[]}`
+	// 起動直後｡Claude Code 自身が数秒以内に出す (rex preview.15 は process 名から record を補わない)｡
+	psStartup = `{"records":[{"state":"idle","app":"claude-code","effective_app":"claude-code","updated_at":"2026-10-17T14:06:38.636286+09:00","owner":{"pid":70904,"name":"2.1.302"}}]}`
+	// done のまま SIGKILL で終わった Claude Code の record｡foreground が shell に戻っても次の prompt が出ても残る
+	// (OSC 7501 の仕様: done と error は process の終了と shell prompt を生き延びる)｡
+	psStaleDone = `{"records":[{"state":"done","app":"claude-code","effective_app":"claude-code","msg":"replied 'ok' as requested; no tools used","updated_at":"2026-10-17T14:09:30.224596+09:00","owner":{"pid":73002,"name":"2.1.302"}}]}`
 	// event payload の root record は "id":"" で来る｡
-	psEmptyID      = `{"records":[{"id":"","state":"working","app":"claude-code","updated_at":"2026-10-10T18:30:41.644437+09:00"}]}`
+	psEmptyID      = `{"records":[{"id":"","state":"working","app":"claude-code","updated_at":"2026-10-10T18:30:41.644437+09:00","owner":{"pid":15470,"name":"2.1.296"}}]}`
 	psSubagentOnly = `{"records":[{"id":"a01b73b4e3800b31f","state":"working","app":"claude-code","updated_at":"2026-10-10T18:29:58.836427+09:00"}]}`
-	psUnknownState = `{"records":[{"state":"starting","app":"claude-code","updated_at":"2026-10-10T18:29:58.836427+09:00"}]}`
+	psUnknownState = `{"records":[{"state":"starting","app":"claude-code","updated_at":"2026-10-10T18:29:58.836427+09:00","owner":{"pid":15470,"name":"2.1.296"}}]}`
+	psOtherApp     = `{"records":[{"state":"working","app":"cargo","effective_app":"cargo","updated_at":"2026-10-17T14:00:00.000000+09:00","owner":{"pid":15470,"name":"cargo"}}]}`
+	// rex が owner を付けなくなった (または名前を変えた) ときの形｡実測ではなく想定｡
+	psNoOwner = `{"records":[{"state":"done","app":"claude-code","effective_app":"claude-code","updated_at":"2026-10-17T14:00:00.000000+09:00"}]}`
 )
 
-func processJSON(argv0, cwd string) string {
+const (
+	reasonNoOwner    = "record に owner.pid が無い (rex の版が変わった可能性｡record を使えず agent_status が unknown のままになる)"
+	reasonStaleOwner = "record の owner (pid 73002) が foreground の process (pid 70904) と違う (前の Claude の record が残っている)"
+)
+
+// processJSON は `block call process` の応答｡pid と argv0 は foreground の process のもの｡
+func processJSON(pid int, argv0, cwd string) string {
 	return `{"last_exit":null,` +
 		`"child":{"pid":33929,"user_id":0,"user":"root","name":"login","path":"/usr/bin/login"},` +
-		`"foreground":{"pid":15470,"user_id":501,"user":"usadamasa","name":"2.1.296","path":"/Users/usadamasa/.local/share/claude/versions/2.1.296","invoked_path":"/Users/usadamasa/.local/bin/claude","argv0":"` + argv0 + `","cwd":"` + cwd + `"},` +
+		`"foreground":{"pid":` + strconv.Itoa(pid) + `,"user_id":501,"user":"usadamasa","name":"2.1.296","path":"/Users/usadamasa/.local/share/claude/versions/2.1.296","invoked_path":"/Users/usadamasa/.local/bin/claude","argv0":"` + argv0 + `","cwd":"` + cwd + `"},` +
 		`"ancestors":[{"pid":33930,"user_id":501,"user":"usadamasa","name":"zsh","path":"/bin/zsh","invoked_path":"/bin/zsh","argv0":"-zsh","cwd":"` + cwd + `"}],` +
 		`"home":"/Users/usadamasa"}`
 }
@@ -164,7 +187,8 @@ func staticResolver(m map[string]string) multiplexer.SessionResolver {
 }
 
 // setupTwoSessions は 2 session の実測に近い構成を作る｡session A に作業中の Claude と shell だけの block､
-// session B に入力待ちの Claude､trust dialog の Claude､block ls の後に閉じた block､shell 以外の block｡
+// session B に入力待ちの Claude､起動直後の Claude､Claude が死んで done の record だけ残った shell､
+// block ls の後に閉じた block､shell 以外の block｡
 func setupTwoSessions(t *testing.T) *fakeRex {
 	t.Helper()
 	f := newFakeRex(t)
@@ -175,14 +199,16 @@ func setupTwoSessions(t *testing.T) *fakeRex {
 	))
 	f.put(t, "block-ls-"+sessionB+".json", blockLsJSON(
 		[2]string{blockClaudeDone, shellFlavor},
-		[2]string{blockTrustDialog, shellFlavor},
+		[2]string{blockStartup, shellFlavor},
+		[2]string{blockStaleDone, shellFlavor},
 		[2]string{blockClosed, shellFlavor},
 		[2]string{blockNotShell, "com.superlogical.browser"},
 	))
-	f.putBlock(t, blockClaudeWorking, psWorking, processJSON("claude", "/Users/usadamasa/src/github.com/usadamasa/agents-daemon"))
-	f.putBlock(t, blockShell, psEmpty, processJSON("-zsh", "/Users/usadamasa"))
-	f.putBlock(t, blockClaudeDone, psDone, processJSON("claude", "/Users/usadamasa/src/github.com/usadamasa/guard"))
-	f.putBlock(t, blockTrustDialog, psTrustDialog, processJSON("claude", "/Users/usadamasa/tmp/new"))
+	f.putBlock(t, blockClaudeWorking, psWorking, processJSON(pidClaudeWorking, "claude", "/Users/usadamasa/src/github.com/usadamasa/agents-daemon"))
+	f.putBlock(t, blockShell, psEmpty, processJSON(pidShell, "-zsh", "/Users/usadamasa"))
+	f.putBlock(t, blockClaudeDone, psDone, processJSON(pidClaudeDone, "claude", "/Users/usadamasa/src/github.com/usadamasa/guard"))
+	f.putBlock(t, blockStartup, psStartup, processJSON(pidClaudeStartup, "/Users/usadamasa/.local/bin/claude", "/Users/usadamasa/tmp/new"))
+	f.putBlock(t, blockStaleDone, psStaleDone, processJSON(pidShell, "-zsh", "/Users/usadamasa/src/github.com/usadamasa/agents-daemon"))
 	return f
 }
 
@@ -202,13 +228,17 @@ func TestExecClient_PaneList_TwoSessions(t *testing.T) {
 		{PaneID: blockClaudeWorking, TerminalID: blockClaudeWorking, CWD: "/Users/usadamasa/src/github.com/usadamasa/agents-daemon", Agent: "claude", AgentStatus: multiplexer.AgentStatusWorking, SessionID: sidWorking},
 		{PaneID: blockShell, TerminalID: blockShell, CWD: "/Users/usadamasa", AgentStatus: multiplexer.AgentStatusUnknown},
 		{PaneID: blockClaudeDone, TerminalID: blockClaudeDone, CWD: "/Users/usadamasa/src/github.com/usadamasa/guard", Agent: "claude", AgentStatus: multiplexer.AgentStatusDone, SessionID: sidDone},
-		{PaneID: blockTrustDialog, TerminalID: blockTrustDialog, CWD: "/Users/usadamasa/tmp/new", Agent: "claude", AgentStatus: multiplexer.AgentStatusBlocked},
+		{PaneID: blockStartup, TerminalID: blockStartup, CWD: "/Users/usadamasa/tmp/new", Agent: "claude", AgentStatus: multiplexer.AgentStatusIdle},
+		{PaneID: blockStaleDone, TerminalID: blockStaleDone, CWD: "/Users/usadamasa/src/github.com/usadamasa/agents-daemon", AgentStatus: multiplexer.AgentStatusUnknown},
 	}
 	if !slices.Equal(panes, want) {
 		t.Errorf("PaneList() =\n%+v\nwant\n%+v", panes, want)
 	}
 	if multiplexer.IsClaudeAgent(panes[1]) {
 		t.Errorf("shell だけの block を Claude と判定した: %+v", panes[1])
+	}
+	if multiplexer.IsClaudeAgent(panes[4]) {
+		t.Errorf("Claude が死んで done の record だけ残った shell を Claude と判定した: %+v", panes[4])
 	}
 }
 
@@ -244,7 +274,7 @@ func TestExecClient_PaneList_ArgsOfEachCall(t *testing.T) {
 	f := newFakeRex(t)
 	f.put(t, "ls.json", `{"sessions":[{"session_id":"`+sessionA+`","label":"shy-alcove"}]}`)
 	f.put(t, "block-ls-"+sessionA+".json", blockLsJSON([2]string{blockClaudeWorking, shellFlavor}))
-	f.putBlock(t, blockClaudeWorking, psWorking, processJSON("claude", "/x"))
+	f.putBlock(t, blockClaudeWorking, psWorking, processJSON(pidClaudeWorking, "claude", "/x"))
 
 	if _, err := f.client(staticResolver(nil)).PaneList(context.Background()); err != nil {
 		t.Fatalf("PaneList() error = %v", err)
@@ -271,8 +301,8 @@ func TestExecClient_PaneList_SkipsBlockClosedAfterBlockLs(t *testing.T) {
 			t.Errorf("閉じた block が PaneList に残った: %+v", p)
 		}
 	}
-	if len(panes) != 4 {
-		t.Errorf("len(panes) = %d, want 4 (閉じた block の前後の block は残る)", len(panes))
+	if len(panes) != 5 {
+		t.Errorf("len(panes) = %d, want 5 (閉じた block の前後の block は残る)", len(panes))
 	}
 }
 
@@ -285,7 +315,7 @@ func TestExecClient_PaneList_SkipsBlockClosedBetweenMethods(t *testing.T) {
 	))
 	// program_status は返ったが process の前に閉じた｡
 	f.put(t, "program_status-"+blockClosed+".json", psDone)
-	f.putBlock(t, blockClaudeWorking, psWorking, processJSON("claude", "/x"))
+	f.putBlock(t, blockClaudeWorking, psWorking, processJSON(pidClaudeWorking, "claude", "/x"))
 
 	panes, err := f.client(staticResolver(nil)).PaneList(context.Background())
 	if err != nil {
@@ -315,7 +345,7 @@ func TestExecClient_PaneList_NonNotFoundBlockFailureIsError(t *testing.T) {
 	f := newFakeRex(t)
 	f.put(t, "ls.json", `{"sessions":[{"session_id":"`+sessionA+`","label":"shy-alcove"}]}`)
 	f.put(t, "block-ls-"+sessionA+".json", blockLsJSON([2]string{blockClaudeWorking, shellFlavor}))
-	f.putBlock(t, blockClaudeWorking, "not json", processJSON("claude", "/x"))
+	f.putBlock(t, blockClaudeWorking, "not json", processJSON(pidClaudeWorking, "claude", "/x"))
 	if _, err := f.client(staticResolver(nil)).PaneList(context.Background()); err == nil {
 		t.Fatal("PaneList() error = nil, want program_status の parse 失敗")
 	}
@@ -364,20 +394,27 @@ func TestToPane(t *testing.T) {
 	tests := []struct {
 		name       string
 		ps         string
+		pid        int
 		argv0      string
 		wantAgent  string
 		wantStatus multiplexer.AgentStatus
+		wantReason string
 	}{
-		{"作業中の claude-code", psWorking, "claude", "claude", multiplexer.AgentStatusWorking},
-		{"ターン終了の done", psDone, "claude", "claude", multiplexer.AgentStatusDone},
-		{"trust dialog は app=claude で blocked", psTrustDialog, "2.1.296", "claude", multiplexer.AgentStatusBlocked},
-		{"permission prompt は blocked", psPermission, "claude", "claude", multiplexer.AgentStatusBlocked},
-		{"permission を断った後の idle", psIdle, "claude", "claude", multiplexer.AgentStatusIdle},
-		{"event 形の id 空の root record", psEmptyID, "claude", "claude", multiplexer.AgentStatusWorking},
-		{"未知の state は unknown", psUnknownState, "claude", "claude", multiplexer.AgentStatusUnknown},
-		{"record 無しでも argv0 が claude なら Claude", psEmpty, "claude", "claude", multiplexer.AgentStatusUnknown},
-		{"shell だけの block", psEmpty, "-zsh", "", multiplexer.AgentStatusUnknown},
-		{"subagent の record は見ない", psSubagentOnly, "-zsh", "", multiplexer.AgentStatusUnknown},
+		{"作業中の claude-code", psWorking, pidClaudeWorking, "claude", "claude", multiplexer.AgentStatusWorking, ""},
+		{"ターン終了の done", psDone, pidClaudeDone, "claude", "claude", multiplexer.AgentStatusDone, ""},
+		{"起動直後の idle", psStartup, pidClaudeStartup, "claude", "claude", multiplexer.AgentStatusIdle, ""},
+		{"--shell=none で起動すると argv0 が絶対パス", psStartup, pidClaudeStartup, "/Users/usadamasa/.local/bin/claude", "claude", multiplexer.AgentStatusIdle, ""},
+		{"permission prompt は blocked", psPermission, 94252, "claude", "claude", multiplexer.AgentStatusBlocked, ""},
+		{"permission を断った後の idle", psIdle, 94252, "claude", "claude", multiplexer.AgentStatusIdle, ""},
+		{"event 形の id 空の root record", psEmptyID, pidClaudeWorking, "claude", "claude", multiplexer.AgentStatusWorking, ""},
+		{"未知の state は unknown", psUnknownState, pidClaudeWorking, "claude", "claude", multiplexer.AgentStatusUnknown, ""},
+		{"record 無しでも argv0 が claude なら Claude", psEmpty, pidClaudeWorking, "claude", "claude", multiplexer.AgentStatusUnknown, ""},
+		{"shell だけの block", psEmpty, pidShell, "-zsh", "", multiplexer.AgentStatusUnknown, ""},
+		{"subagent の record は見ない", psSubagentOnly, pidShell, "-zsh", "", multiplexer.AgentStatusUnknown, ""},
+		{"Claude が死んで done の record だけ残った shell", psStaleDone, pidShell, "-zsh", "", multiplexer.AgentStatusUnknown, ""},
+		{"前の Claude の record が残る中で claude を起動し直した直後", psStaleDone, pidClaudeStartup, "claude", "claude", multiplexer.AgentStatusUnknown, reasonStaleOwner},
+		{"claude-code 以外の app の record", psOtherApp, pidClaudeWorking, "cargo", "", multiplexer.AgentStatusUnknown, ""},
+		{"rex が owner を付けなくなったら理由を残す", psNoOwner, pidClaudeWorking, "claude", "claude", multiplexer.AgentStatusUnknown, reasonNoOwner},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -386,13 +423,13 @@ func TestToPane(t *testing.T) {
 				t.Fatalf("program_status の parse に失敗: %v", err)
 			}
 			var proc processResult
-			if err := json.Unmarshal([]byte(processJSON(tt.argv0, "/w")), &proc); err != nil {
+			if err := json.Unmarshal([]byte(processJSON(tt.pid, tt.argv0, "/w")), &proc); err != nil {
 				t.Fatalf("process の parse に失敗: %v", err)
 			}
 			got := toPane(blockClaudeWorking, ps, proc, "sid")
 			want := multiplexer.Pane{
 				PaneID: blockClaudeWorking, TerminalID: blockClaudeWorking, CWD: "/w",
-				Agent: tt.wantAgent, AgentStatus: tt.wantStatus, SessionID: "sid",
+				Agent: tt.wantAgent, AgentStatus: tt.wantStatus, SessionID: "sid", UnknownReason: tt.wantReason,
 			}
 			if got != want {
 				t.Errorf("toPane() = %+v, want %+v", got, want)
@@ -403,7 +440,7 @@ func TestToPane(t *testing.T) {
 
 func TestExecClient_PaneGet(t *testing.T) {
 	f := newFakeRex(t)
-	f.putBlock(t, blockClaudeDone, psDone, processJSON("claude", "/w"))
+	f.putBlock(t, blockClaudeDone, psDone, processJSON(pidClaudeDone, "claude", "/w"))
 	c := f.client(staticResolver(map[string]string{blockClaudeDone: sidDone}))
 
 	got, err := c.PaneGet(context.Background(), blockClaudeDone)

@@ -86,6 +86,9 @@ func reportPanes(w io.Writer, panes []multiplexer.Pane) {
 		claudeCount++
 		_, _ = fmt.Fprintf(w, "  pane=%s cwd=%s agent_status=%s session_id=%s\n",
 			pane.PaneID, pane.CWD, pane.AgentStatus, defaultString(pane.SessionID, "(なし)"))
+		if pane.UnknownReason != "" {
+			_, _ = fmt.Fprintf(w, "    unknown の理由: %s\n", pane.UnknownReason)
+		}
 	}
 	if claudeCount == 0 {
 		_, _ = fmt.Fprintln(w, "  Claude agent の pane が見つかりません")

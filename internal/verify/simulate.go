@@ -47,15 +47,11 @@ type SimulateOptions struct {
 // RunSimulate は simulate の本体｡使い捨て pane の作成から後始末まで一貫して行う｡
 // backend は daemon と同じ規則 (REX_SESSION があること) で選ぶ｡
 func RunSimulate(ctx context.Context, w io.Writer, p apppath.Paths, opts SimulateOptions) error {
-	kind, err := backend.Detect(os.Getenv)
+	kind, execClient, err := backend.Connect(os.Getenv, sessionstate.New(p.StateDir()))
 	if err != nil {
 		return err
 	}
 	host, err := newSimulateHost(kind, os.Getenv)
-	if err != nil {
-		return err
-	}
-	execClient, err := backend.New(kind, sessionstate.New(p.StateDir()))
 	if err != nil {
 		return err
 	}

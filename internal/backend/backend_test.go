@@ -28,15 +28,18 @@ func TestDetect(t *testing.T) {
 	}
 }
 
-func TestNew(t *testing.T) {
+func TestConnect(t *testing.T) {
 	store := sessionstate.New(t.TempDir())
-	c, err := New(sessionstate.MultiplexerKindRex, store)
-	if err != nil || c == nil {
-		t.Errorf("New(rex) = %v, %v; want client", c, err)
-	}
-	for _, kind := range []string{"herdr", "tmux"} {
-		if _, err := New(kind, store); err == nil {
-			t.Errorf("New(%q) error = nil, want 未対応の error", kind)
+	t.Run("rex の中なら rex の client", func(t *testing.T) {
+		kind, c, err := Connect(func(string) string { return "session:01a1" }, store)
+		if err != nil || c == nil || kind != sessionstate.MultiplexerKindRex {
+			t.Errorf("Connect() = %q, %v, %v; want rex, client, nil", kind, c, err)
 		}
-	}
+	})
+	t.Run("rex の外なら ErrNoRexSession", func(t *testing.T) {
+		_, c, err := Connect(func(string) string { return "" }, store)
+		if !errors.Is(err, ErrNoRexSession) || c != nil {
+			t.Errorf("Connect() = %v, %v; want nil, ErrNoRexSession", c, err)
+		}
+	})
 }

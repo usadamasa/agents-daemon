@@ -27,11 +27,7 @@ func newDoctorCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			kind, err := backend.Detect(os.Getenv)
-			if err != nil {
-				return err
-			}
-			client, err := backend.New(kind, sessionstate.New(p.StateDir()))
+			kind, client, err := backend.Connect(os.Getenv, sessionstate.New(p.StateDir()))
 			if err != nil {
 				return err
 			}

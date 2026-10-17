@@ -1,9 +1,8 @@
-// Package backend は環境から端末多重化ツール (rex) を選び､その multiplexer.Client を作る｡
+// Package backend は環境から端末多重化ツール (rex) を確かめ､その multiplexer.Client を作る｡
 package backend
 
 import (
 	"errors"
-	"fmt"
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/rexcli"
@@ -22,14 +21,13 @@ func Detect(getenv func(string) string) (string, error) {
 	return "", ErrNoRexSession
 }
 
-// New は kind の Client を作る｡block から session_id を引く対応は､statusline が
-// `context/<sid>.json` に書いた記録 (store) から取る｡
-func New(kind string, store sessionstate.Store) (multiplexer.Client, error) {
-	resolve := func() (map[string]string, error) { return store.ListMultiplexerBlocks(kind) }
-	switch kind {
-	case sessionstate.MultiplexerKindRex:
-		return rexcli.NewExecClient(resolve), nil
-	default:
-		return nil, fmt.Errorf("未対応の多重化ツール: %q", kind)
+// Connect は Detect で backend を確かめ､その Client を作る｡block から session_id を引く対応は､
+// statusline が `context/<sid>.json` に書いた記録 (store) から取る｡
+func Connect(getenv func(string) string, store sessionstate.Store) (string, multiplexer.Client, error) {
+	kind, err := Detect(getenv)
+	if err != nil {
+		return "", nil, err
 	}
+	resolve := func() (map[string]string, error) { return store.ListMultiplexerBlocks(kind) }
+	return kind, rexcli.NewExecClient(resolve), nil
 }

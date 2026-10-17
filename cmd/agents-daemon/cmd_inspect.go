@@ -36,13 +36,10 @@ func newInspectCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// --file は client に触らないので､rex の外でも保存済みの画面を読める｡
 			var client multiplexer.Client
 			if paneID != "" {
-				kind, err := backend.Detect(os.Getenv)
-				if err != nil {
-					return err
-				}
-				if client, err = backend.New(kind, sessionstate.New(p.StateDir())); err != nil {
+				if _, client, err = backend.Connect(os.Getenv, sessionstate.New(p.StateDir())); err != nil {
 					return err
 				}
 			}

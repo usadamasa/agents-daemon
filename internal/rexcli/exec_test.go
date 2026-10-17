@@ -54,16 +54,19 @@ type fakeRex struct {
 }
 
 // newFakeRex は引数で fixture を選んで返す fake の rex を書く。fixture が無ければ実機と同じく
-// `block target "…" not found` を stderr に出して exit 3 になる。`fail-<fixture 名>` を置くと exit 1 になる。呼び出しごとに引数を
-// calls.log へ、環境変数を env.log へ追記する。--autostart=false が先頭に無い呼び出しは拒むので、
-// 成功を確かめるテストはどれも autostart を切っていることを確かめている。
+// `block target "…" not found` を stderr に出して exit 3 になる。`fail-<fixture 名>` を置くと exit 1 になる。
+// 呼び出しごとに引数を 1 つずつ single quote で囲って calls.log へ、環境変数を env.log へ追記する。
+// --autostart=false が先頭に無い呼び出しは拒むので、成功を確かめるテストはどれも autostart を切っていることを確かめている。
 func newFakeRex(t *testing.T) *fakeRex {
 	t.Helper()
 	dir := t.TempDir()
 	script := `#!/bin/sh
 d=` + shellQuote(dir) + `
 env >> "$d/env.log"
-printf '%s\n' "$*" >> "$d/calls.log"
+for a in "$@"; do
+  printf "'%s' " "$(printf '%s' "$a" | sed "s/'/'\\\\''/g")"
+done >> "$d/calls.log"
+echo >> "$d/calls.log"
 if [ "$1" != "--autostart=false" ]; then
   echo "Error: --autostart=false がない" >&2
   exit 2

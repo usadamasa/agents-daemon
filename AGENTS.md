@@ -23,13 +23,14 @@ Go のデーモンと､それを配線する hook・skill を持つ｡
 | `internal/` | daemon の本体｡パス定数は `internal/apppath`｡statusline の描画は `internal/statusline`､cost の台帳は `internal/spend`､sidecar の原子的な書き込みは `internal/statefile` |
 | `internal/multiplexer`, `internal/rexcli`, `internal/backend` | pane 操作の interface (`multiplexer.Client`) とその rex 実装｡`backend` が環境に `REX_SESSION` があることを確かめる (無ければ `daemon --ensure` は何もせず戻る) |
 | `tests/` | hook と script の bats テスト (`tests/lib/`､`tests/fixtures/`) |
+| `flake.nix` | 開発ツールの devShell (版は `flake.lock` が固定する)。nixpkgs に無い spm-go はここでビルドする |
 | `.claude/skills/catching-up-with-claude-code-changelog/` | Claude Code の更新後に CHANGELOG・バイナリ・docs を追い､この repo の前提 (画面の文言､hook と statusline の field､本体の新機能との重なり) を点検して issue に落とす手順｡plugin には同梱しない保守用 skill |
 
 ## 検証
 
 ```sh
 task test                                   # go test ./... と bats tests/
-task lint                                   # Go の全静的解析｡aqua のツールが要る
+task lint                                   # Go の全静的解析。devShell のツールが要る
 shellcheck hooks/*.sh hooks/lib/*.sh scripts/*.sh tests/lib/*.bash tests/fixtures/fake-go .envrc
 claude plugin validate --strict .           # plugin manifest と hooks.json
 claude plugin validate --strict skills      # skill の frontmatter
@@ -37,6 +38,11 @@ claude plugin validate --strict skills      # skill の frontmatter
 
 hook のテストは fake の `go` とバイナリで回るので､Go のビルドが通らなくても hook 側だけ確かめられる｡
 bats は hook を `/bin/bash` で起動する (本番の shebang と同じ bash 3.2 で非互換を拾うため)｡
+
+Go と lint・テストのツールは `flake.nix` の devShell が揃え、`.envrc` (nix-direnv の `use flake`) が読み込む。
+devShell の go は `go.mod` の `go` 行と同じ系列 (`go_1_26`) にし、`GOTOOLCHAIN=local` でずれを即座に落とす。
+版を上げるときは `nix flake update`。devShell は開発用で、利用者の環境で hook がバイナリをビルドするときは
+利用者の PATH の go を使う。
 
 ## hook を書くときの決めごと
 
@@ -61,6 +67,10 @@ bats は hook を `/bin/bash` で起動する (本番の shebang と同じ bash 
 - skill 間の参照とスラッシュコマンドは名前空間付きで書く (`agents-daemon:compact-prep`､
   `/agents-daemon:compact-prep`)｡bare 名は `~/.claude/skills/` に残った旧コピーへ当たる｡
 - skill 内の references は相対リンクで書き､読む手順は `Read` で書く｡
+- この repo を保守する手順 (利用者の運用ではなく maintainer だけが使うもの) の skill は `.claude/skills/` に置き、
+  plugin の `skills/` には入れない。`skills/` に置くと install した全セッションに description が載り、
+  validate と tagpr のリリースにも乗る。名前には作業の性質 (追従、changelog など) を入れ、レイアウト表に 1 行足す。
+  frontmatter は `claude plugin validate --strict .claude/skills` で確かめる。
 
 ## Claude Code の挙動を書くときの決めごと
 

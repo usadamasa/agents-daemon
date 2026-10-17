@@ -13,6 +13,7 @@ concurrency:
 permissions:
   contents: read
 
+# Go と lint・テストのツールは flake.nix の devShell から取る (.github/actions/setup-nix)。版の正本は flake.lock
 jobs:
   go-test:
     name: go test
@@ -20,10 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6.0.3
 
-      - uses: actions/setup-go@v6.4.0
-        with:
-          go-version-file: go.mod
-          cache: false
+      - uses: $/.github/actions/setup-nix
 
       - name: go vet
         run: go vet ./...
@@ -43,14 +41,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6.0.3
 
-      - uses: actions/setup-go@v6.4.0
-        with:
-          go-version-file: go.mod
-          cache: false
-
-      - uses: aquaproj/aqua-installer@v3.1.2
-        with:
-          aqua_version: v2.53.3
+      - uses: $/.github/actions/setup-nix
 
       - name: Run all linters
         run: task lint
@@ -61,23 +52,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6.0.3
 
-      - uses: actions/setup-go@v6.4.0
-        with:
-          go-version-file: go.mod
-          cache: false
-
-      - uses: aquaproj/aqua-installer@v3.1.2
-        with:
-          aqua_version: v2.53.3
+      - uses: $/.github/actions/setup-nix
 
       # hook のテストは fake の go とバイナリで回るが、ソースが build できることもここで確かめる｡
       - name: Build Go binaries
         run: task build
-
-      - name: Install bats-core
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y bats
 
       - name: Run bats tests
         run: bats tests/
@@ -88,10 +67,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6.0.3
 
-      - name: Install shellcheck
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y shellcheck
+      # apt の shellcheck ではなく devShell で固定した版を使い、ローカルと結果を揃える
+      - uses: $/.github/actions/setup-nix
 
       - name: Run shellcheck
         run: shellcheck hooks/*.sh hooks/lib/*.sh scripts/*.sh tests/lib/*.bash tests/fixtures/fake-go .envrc
@@ -102,7 +79,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6.0.3
 
-      # ubuntu-latest は node と npm を同梱するので setup-node は要らない
+      # ubuntu-latest は node と npm を同梱するので setup-node は要らない。
+      # nodejs は devShell に入れず setup-nix も通さない。devShell の npm は global prefix が /nix/store になり npm i -g が落ちる
       - name: Install Claude Code
         run: npm i -g @anthropic-ai/claude-code
 

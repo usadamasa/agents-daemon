@@ -1,5 +1,6 @@
 /bin/
 /tmp/
+/.direnv/
 coverage.out
 .DS_Store
 .env

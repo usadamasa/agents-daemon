@@ -97,10 +97,15 @@ agents-daemon ingest-statusline < in.json  # statusline の stdin から state f
 ```sh
 task build    # ./bin/ へビルド
 task test     # go test と bats tests/
-task lint     # Go の静的解析 (aqua のツールを使う)
+task lint     # Go の静的解析 (devShell のツールを使う)
 task install  # hook と同じ cache のパスへビルドする
 claude plugin validate --strict .
 ```
+
+開発には flakes を有効にした [Nix](https://nixos.org/) と、[direnv](https://direnv.net/) と
+[nix-direnv](https://github.com/nix-community/nix-direnv) を使う。Go・task・golangci-lint・shellcheck・bats・jq などは
+`flake.nix` の devShell で揃え、版は `flake.lock` が固定する nixpkgs で決まる。`.envrc` が `use flake` で devShell を
+読み込むので `direnv allow` する。CI も同じ flake を使う。plugin を使うだけなら Nix は要らない。
 
 clone をそのまま読み込ませると､hook と skill の編集は install し直さずに反映される｡
 このリポジトリは marketplace.json を持たないので､`--plugin-dir` でセッション単位に読み込む｡

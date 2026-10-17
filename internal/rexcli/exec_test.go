@@ -52,7 +52,7 @@ type fakeRex struct {
 }
 
 // newFakeRex は引数で fixture を選んで返す fake の rex を書く。fixture が無ければ実機と同じく
-// `block target "…" not found` を stderr に出して exit 3 になる。呼び出しごとに引数を
+// `block target "…" not found` を stderr に出して exit 3 になる。`fail-<fixture 名>` を置くと exit 1 になる。呼び出しごとに引数を
 // calls.log へ、環境変数を env.log へ追記する。--autostart=false が先頭に無い呼び出しは拒むので、
 // 成功を確かめるテストはどれも autostart を切っていることを確かめている。
 func newFakeRex(t *testing.T) *fakeRex {
@@ -68,7 +68,10 @@ if [ "$1" != "--autostart=false" ]; then
 fi
 shift
 emit() {
-  if [ -f "$d/$1" ]; then
+  if [ -f "$d/fail-$1" ]; then
+    echo "Error: server error" >&2
+    exit 1
+  elif [ -f "$d/$1" ]; then
     cat "$d/$1"
   else
     echo "Error: block target \"$2\" not found" >&2
@@ -209,17 +212,24 @@ func TestExecClient_PaneList(t *testing.T) {
 
 // not found 以外の失敗は block を飛ばさずエラーにする。
 func TestExecClient_PaneList_FailureIsError(t *testing.T) {
+	oneBlock := func(programStatus string) map[string]string {
+		return map[string]string{
+			"ls.json":                        lsJSON(sessionA),
+			"block-ls-" + sessionA + ".json": blockLsJSON([2]string{blockClaudeWorking, shellFlavor}),
+			"program_status-" + blockClaudeWorking + ".json": programStatus,
+		}
+	}
+	failing := oneBlock(psEmpty)
+	failing["fail-program_status-"+blockClaudeWorking+".json"] = ""
 	tests := []struct {
 		name     string
 		fixtures map[string]string
+		wantErr  string
 	}{
-		{"ls が失敗", nil},
-		{"block ls が失敗", map[string]string{"ls.json": lsJSON(sessionA)}},
-		{"program_status が JSON でない", map[string]string{
-			"ls.json":                        lsJSON(sessionA),
-			"block-ls-" + sessionA + ".json": blockLsJSON([2]string{blockClaudeWorking, shellFlavor}),
-			"program_status-" + blockClaudeWorking + ".json": "not json",
-		}},
+		{"ls が失敗", nil, "not found"},
+		{"block ls が失敗", map[string]string{"ls.json": lsJSON(sessionA)}, "not found"},
+		{"block call が exit 3 以外で失敗", failing, "server error"},
+		{"program_status が JSON でない", oneBlock("not json"), "応答の parse に失敗"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -227,8 +237,9 @@ func TestExecClient_PaneList_FailureIsError(t *testing.T) {
 			for name, content := range tt.fixtures {
 				f.put(t, name, content)
 			}
-			if _, err := f.client(staticResolver(nil)).PaneList(context.Background()); err == nil {
-				t.Fatal("PaneList() error = nil")
+			_, err := f.client(staticResolver(nil)).PaneList(context.Background())
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("PaneList() error = %v, want %q を含む", err, tt.wantErr)
 			}
 		})
 	}
@@ -378,6 +389,10 @@ func TestExecClient_Reachable(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("Reachable() error = %v, wantErr %v", err, tt.wantErr)
 			}
+			wantCall := []string{"--autostart=false api call server.status"}
+			if calls := f.calls(t); !slices.Equal(calls, wantCall) {
+				t.Errorf("calls = %v, want %v", calls, wantCall)
+			}
 		})
 	}
 }
@@ -401,8 +416,8 @@ func TestExecClient_Timeout(t *testing.T) {
 
 func TestNewExecClient_BinPath(t *testing.T) {
 	t.Setenv("REX_BIN_PATH", "/custom/rex")
-	if c := NewExecClient(staticResolver(nil)).(*execClient); c.binPath != "/custom/rex" {
-		t.Errorf("binPath = %q, want /custom/rex", c.binPath)
+	if c := NewExecClient(staticResolver(nil)).(*execClient); c.binPath != "/custom/rex" || c.timeout != 10*time.Second {
+		t.Errorf("binPath = %q, timeout = %v, want /custom/rex, 10s", c.binPath, c.timeout)
 	}
 	t.Setenv("REX_BIN_PATH", "")
 	if c := NewExecClient(staticResolver(nil)).(*execClient); c.binPath != "rex" {

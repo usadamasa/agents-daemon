@@ -87,6 +87,7 @@ func TestToPane(t *testing.T) {
 		{"Claude が死んで done の record だけ残った shell", staleDone, pidShell, "-zsh", "", multiplexer.AgentStatusUnknown, ""},
 		{"前の Claude の record が残る中で claude を起動し直した直後", staleDone, pidClaudeStartup, "claude", "claude", multiplexer.AgentStatusUnknown, reasonStaleOwner},
 		{"claude-code 以外の app の record", psOtherApp, pidClaudeWorking, "cargo", "", multiplexer.AgentStatusUnknown, ""},
+		{"claude-code 以外の app の record は理由に数えない", psOtherApp, pidClaudeWorking, "claude", "claude", multiplexer.AgentStatusUnknown, ""},
 		{"rex が owner を付けなくなったら理由を残す", psNoOwner, pidClaudeWorking, "claude", "claude", multiplexer.AgentStatusUnknown, reasonNoOwner},
 	}
 	for _, tt := range tests {

@@ -104,8 +104,8 @@ func TestLoad(t *testing.T) {
 		}
 	})
 
-	t.Run("旧版の compact / cache のキーは無視され､他のキーはそのまま効く", func(t *testing.T) {
-		// 利用者の config.json に残ったキーで起動が止まったり他のキーが落ちたりしない｡
+	t.Run("旧版の compact / cache のキーは無視され、他のキーはそのまま効く", func(t *testing.T) {
+		// 利用者の config.json に残ったキーで起動が止まったり他のキーが落ちたりしない。
 		path := writeTestFile(t, `{"compactAutoEnabled": true, "cacheIdleCompactEnabled": false, "marginSeconds": 45}`)
 		cfg, err := Load(path)
 		if err != nil {

@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// view は full モードの最小の View｡bats の make_input "Opus" "/tmp" に当たる｡
+// view は full モードの最小の View。bats の make_input "Opus" "/tmp" に当たる。
 func view(model, dir string) View {
 	return View{Input: Input{Model: model, CurrentDir: dir}, Mode: ModeFull, Home: "/home/u"}
 }
@@ -17,7 +17,7 @@ func timep(t time.Time) *time.Time { return &t }
 
 var renderNow = time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC)
 
-// withRateLimits は 5h の使用率とリセットまでの秒数､7d の使用率 (負なら無し) を足す｡
+// withRateLimits は 5h の使用率とリセットまでの秒数、7d の使用率 (負なら無し) を足す。
 func withRateLimits(v View, fiveHour, resetIn, sevenDay int) View {
 	v.FiveHourPercent = intp(fiveHour)
 	v.FiveHourResetsAt = timep(renderNow.Add(time.Duration(resetIn) * time.Second))
@@ -180,7 +180,7 @@ func TestRender_worktree(t *testing.T) {
 func TestRender_lines(t *testing.T) {
 	out := lines(render(t, view("Opus", "/tmp")))
 	if len(out) != 3 {
-		t.Fatalf("出力が %d 行､want 3:\n%q", len(out), out)
+		t.Fatalf("出力が %d 行、want 3:\n%q", len(out), out)
 	}
 	assertContains(t, out[0], "🌸 Opus")
 	assertContains(t, out[1], "🧠")
@@ -230,7 +230,7 @@ func TestRender_rateLimits(t *testing.T) {
 }
 
 func TestRender_modes(t *testing.T) {
-	t.Run("compact は 1 行に畳み､model・cost・version・output_style を落とす", func(t *testing.T) {
+	t.Run("compact は 1 行に畳み、model・cost・version・output_style を落とす", func(t *testing.T) {
 		v := view("Opus", "/w/repo")
 		v.OutputStyle, v.Version, v.Cost = "mikawa", "2.1.233", 1.23
 		v.ContextTokens, v.ContextPercent = 45000, 12
@@ -269,7 +269,7 @@ func TestRender_modes(t *testing.T) {
 }
 
 func TestRender_spend(t *testing.T) {
-	t.Run("その日を 📅､当月と上限を 🧾 で出す", func(t *testing.T) {
+	t.Run("その日を 📅、当月と上限を 🧾 で出す", func(t *testing.T) {
 		v := view("Opus", "/tmp")
 		v.Spend = &SpendView{Day: 3.79, Month: 3.79, Cap: 10000}
 		out := render(t, v)
@@ -298,7 +298,7 @@ func TestRender_spend(t *testing.T) {
 			assertContains(t, render(t, v), tc.color+"🧾")
 		}
 	})
-	t.Run("1000 未満の上限はそのまま､1000 以上は k", func(t *testing.T) {
+	t.Run("1000 未満の上限はそのまま、1000 以上は k", func(t *testing.T) {
 		v := view("Opus", "/tmp")
 		v.Spend = &SpendView{Day: 30, Month: 30, Cap: 300}
 		assertContains(t, render(t, v), "/ $300 (10%)")

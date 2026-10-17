@@ -79,8 +79,8 @@ func TestClassify(t *testing.T) {
 
 	t.Run("Claude Code の API Error 行なら ⏺ でも ⎿ でも transient と判定する", func(t *testing.T) {
 		// 文言は Claude Code 2.1.296 の bundle から採った (接頭辞 "API Error" と
-		// "Repeated 529 Overloaded errors" ､"Server is temporarily limiting requests (not your usage limit)" ､
-		// "This is a server-side issue, usually temporary — try again in a moment.")｡
+		// "Repeated 529 Overloaded errors" 、"Server is temporarily limiting requests (not your usage limit)" 、
+		// "This is a server-side issue, usually temporary — try again in a moment.")。
 		for _, line := range []string{
 			`⏺ API Error: 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}`,
 			`⏺ API Error: Repeated 529 Overloaded errors. The API is at capacity — this is usually temporary. Try again in a moment.`,
@@ -97,7 +97,7 @@ func TestClassify(t *testing.T) {
 	})
 
 	t.Run("API Error の無い行の transient 語句は tool result の文章なので拾わない", func(t *testing.T) {
-		// tool result (⎿ の下の継続行) には利用者とツールが書く任意の文章が流れる｡
+		// tool result (⎿ の下の継続行) には利用者とツールが書く任意の文章が流れる。
 		for _, screen := range []string{
 			"⏺ Bash(gh issue list)\n  ⎿  owner/repo#1\tlist の同期を速くする\n     owner/repo#2\tステータスバーが \"rate limited\" と出る",
 			"⏺ Bash(kubectl logs api)\n  ⎿  upstream overloaded, shedding load\n     retrying",
@@ -112,9 +112,9 @@ func TestClassify(t *testing.T) {
 	})
 
 	t.Run("Claude Code 自身がリトライ中のカウントダウン行は接頭辞が無いので拾わない", func(t *testing.T) {
-		// 2.1.296 の描画は `<エラー文言> · Retrying in Ns · attempt n/m` で､3 回目までは
-		// 文言が "API error" に伏せられ､以降は接頭辞無しの formatted エラーになる｡
-		// この間は Claude Code 自身が回復中なので手を出さない｡
+		// 2.1.296 の描画は `<エラー文言> · Retrying in Ns · attempt n/m` で、3 回目までは
+		// 文言が "API error" に伏せられ、以降は接頭辞無しの formatted エラーになる。
+		// この間は Claude Code 自身が回復中なので手を出さない。
 		for _, line := range []string{
 			"  ⎿  API error · Retrying in 2s · attempt 1/10",
 			`  ⎿  529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}} · Retrying in 8s · attempt 3/10`,

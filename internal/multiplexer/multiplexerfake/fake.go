@@ -1,7 +1,7 @@
-// Package multiplexerfake は multiplexer.Client のテスト用実装を提供する｡multiplexer 本体から
-// 切り出しているのは､これがテスト scaffolding であり､multiplexer の公開 API (実運用で使う型・関数) とは
-// 性質が異なるため｡daemon / verify / monitor いずれのテストも､実クライアントを
-// 一切経由せずにこのパッケージだけを import すればよい｡
+// Package multiplexerfake は multiplexer.Client のテスト用実装を提供する。multiplexer 本体から
+// 切り出しているのは、これがテスト scaffolding であり、multiplexer の公開 API (実運用で使う型・関数) とは
+// 性質が異なるため。daemon / verify / monitor いずれのテストも、実クライアントを
+// 一切経由せずにこのパッケージだけを import すればよい。
 package multiplexerfake
 
 import (
@@ -11,8 +11,8 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 )
 
-// Client は multiplexer.Client のテスト用実装｡各メソッドの挙動を *Func フィールドで
-// 差し替えられる｡
+// Client は multiplexer.Client のテスト用実装。各メソッドの挙動を *Func フィールドで
+// 差し替えられる。
 type Client struct {
 	PaneListFunc  func(ctx context.Context) ([]multiplexer.Pane, error)
 	PaneGetFunc   func(ctx context.Context, paneID string) (multiplexer.Pane, error)
@@ -21,10 +21,10 @@ type Client struct {
 	SendKeysFunc  func(ctx context.Context, paneID string, keys ...string) error
 	ReachableFunc func(ctx context.Context) error
 
-	// Calls は呼ばれた操作の履歴｡テストの assertion に使う｡
+	// Calls は呼ばれた操作の履歴。テストの assertion に使う。
 	Calls []string
-	// SentTexts は SendText へ渡された文字列の履歴｡何を送ったかを問う
-	// テスト (どの文面を投入したか) が Calls では区別できないため別に持つ｡
+	// SentTexts は SendText へ渡された文字列の履歴。何を送ったかを問う
+	// テスト (どの文面を投入したか) が Calls では区別できないため別に持つ。
 	SentTexts []string
 }
 

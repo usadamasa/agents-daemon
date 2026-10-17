@@ -20,7 +20,7 @@ func TestValidSessionID(t *testing.T) {
 }
 
 func TestWriteJSONAtomic(t *testing.T) {
-	t.Run("親ディレクトリを作り､JSON 1 行と改行を書く｡一時ファイルは残らない", func(t *testing.T) {
+	t.Run("親ディレクトリを作り、JSON 1 行と改行を書く。一時ファイルは残らない", func(t *testing.T) {
 		dir := filepath.Join(t.TempDir(), "sub")
 		path := filepath.Join(dir, "x.json")
 		if err := WriteJSONAtomic(path, ".x.*", map[string]int{"a": 1}); err != nil {

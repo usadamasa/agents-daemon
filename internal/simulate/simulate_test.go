@@ -148,7 +148,7 @@ func TestSimulateDryRunClient_送信系はinnerを呼ばずログだけ出す(t 
 	out := buf.String()
 	for _, want := range []string{"[dry-run]", "Continue where you left off.", "esc enter"} {
 		if !strings.Contains(out, want) {
-			t.Errorf("出力に %q が含まれていない｡出力:\n%s", want, out)
+			t.Errorf("出力に %q が含まれていない。出力:\n%s", want, out)
 		}
 	}
 }
@@ -199,18 +199,18 @@ func assertPaneNotOwned(t *testing.T, err error) {
 	}
 }
 
-// realRexSimulateEnv を 1 にしたときだけ TestRunSimulate_RealRex が動く｡rex の block の中で
-// `go test ./...` を打つのは日常の開発ループで､そのたびに利用者の session へ block を割って
-// 打ち込むのは避けたい｡
+// realRexSimulateEnv を 1 にしたときだけ TestRunSimulate_RealRex が動く。rex の block の中で
+// `go test ./...` を打つのは日常の開発ループで、そのたびに利用者の session へ block を割って
+// 打ち込むのは避けたい。
 const realRexSimulateEnv = "AGENTS_DAEMON_REAL_REX_SIMULATE"
 
-// TestRunSimulate_RealRex は実 rex に対する統合テスト｡rex の block 内 (REX_SESSION と REX_BLOCK
-// あり) で realRexSimulateEnv=1 を付けて打つ｡
+// TestRunSimulate_RealRex は実 rex に対する統合テスト。rex の block 内 (REX_SESSION と REX_BLOCK
+// あり) で realRexSimulateEnv=1 を付けて打つ。
 //
 // これは「simulate が本当に実 pane に対して検知〜送信の経路を通せる」ことを保証する
-// 最終防衛線｡実 Claude セッションへ触れないことはここでは確認しない｡それは
+// 最終防衛線。実 Claude セッションへ触れないことはここでは確認しない。それは
 // scopedClient のユニットテスト (所有 pane 以外への操作を全て拒否する) が
-// 型と経路のレベルで保証しており､実行結果の観察に頼るより確実なため｡
+// 型と経路のレベルで保証しており、実行結果の観察に頼るより確実なため。
 func TestRunSimulate_RealRex(t *testing.T) {
 	if os.Getenv(realRexSimulateEnv) != "1" {
 		t.Skipf("%s=1 が無いので skip する", realRexSimulateEnv)
@@ -250,7 +250,7 @@ func TestRunSimulate_RealRex(t *testing.T) {
 
 var createdPanePattern = regexp.MustCompile(`pane (\S+) を作成しました`)
 
-// createdPaneID は simulate の出力から､作成した使い捨て pane の ID を取り出す｡
+// createdPaneID は simulate の出力から、作成した使い捨て pane の ID を取り出す。
 func createdPaneID(out string) string {
 	m := createdPanePattern.FindStringSubmatch(out)
 	if len(m) < 2 {

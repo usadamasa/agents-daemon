@@ -8,8 +8,8 @@ import (
 	"testing"
 )
 
-// rex の外 (REX_SESSION なし) の SessionStart は素の端末でも走る｡--ensure はそこで
-// daemon を起こさず､hook を失敗させない (exit 0) ことを確かめる｡
+// rex の外 (REX_SESSION なし) の SessionStart は素の端末でも走る。--ensure はそこで
+// daemon を起こさず、hook を失敗させない (exit 0) ことを確かめる。
 func TestDaemonCmd_rexの外では起動しない(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

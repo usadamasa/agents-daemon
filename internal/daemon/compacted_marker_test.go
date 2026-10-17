@@ -12,9 +12,9 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
 )
 
-// 旧版の PostCompact hook が置いた compacted/<sid> が残っていても､daemon は再開を送らない｡
+// 旧版の PostCompact hook が置いた compacted/<sid> が残っていても、daemon は再開を送らない。
 // Claude Code 本体の idle compaction の後に離席中の pane へ「Continue the task」を打ち込んだ
-// 2 件 (2026-10-13､10-16) がこのテストの元｡compact 後の再開は daemon の役目ではない｡
+// 2 件 (2026-10-13、10-16) がこのテストの元。compact 後の再開は daemon の役目ではない。
 func TestDaemonRuntimeTick_StaleCompactedMarkerSendsNothing(t *testing.T) {
 	now := time.Date(2026, 10, 16, 3, 0, 22, 0, time.UTC)
 	pane := claudePaneWithSession("pane-a", "term-a", "session-a", multiplexer.AgentStatusIdle)
@@ -36,7 +36,7 @@ func TestDaemonRuntimeTick_StaleCompactedMarkerSendsNothing(t *testing.T) {
 	if err := os.WriteFile(marker, nil, 0o644); err != nil {
 		t.Fatalf("marker の書き込みに失敗: %v", err)
 	}
-	// 3 段目の猶予 (旧 compactResumeDelaySeconds = 60) を過ぎた marker｡
+	// 3 段目の猶予 (旧 compactResumeDelaySeconds = 60) を過ぎた marker。
 	if err := os.Chtimes(marker, now.Add(-2*time.Minute), now.Add(-2*time.Minute)); err != nil {
 		t.Fatalf("marker の mtime 変更に失敗: %v", err)
 	}
@@ -53,7 +53,7 @@ func TestDaemonRuntimeTick_StaleCompactedMarkerSendsNothing(t *testing.T) {
 	if got := r.panes["term-a"].lastLogKey; got != "monitoring" {
 		t.Errorf("outcome = %q, want monitoring", got)
 	}
-	// 静かな tick はログファイルも作らない｡
+	// 静かな tick はログファイルも作らない。
 	if _, err := os.Stat(filepath.Join(filepath.Dir(statusPath), "daemon.log")); !os.IsNotExist(err) {
 		t.Errorf("何も送っていないのにログが書かれた (err=%v):\n%s", err, readLog(t, statusPath))
 	}

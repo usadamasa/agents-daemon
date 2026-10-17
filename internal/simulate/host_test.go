@@ -47,7 +47,7 @@ func TestNewSimulateHost_前提チェック(t *testing.T) {
 func TestSimulateScript(t *testing.T) {
 	t.Run("rex: OSC 7501 を出してから画面を cat し cat -v で居座る", func(t *testing.T) {
 		got := simulateScript(claudeProgramStatusCommand)
-		// Claude Code 2.1.296 と同じ書式: OSC 7501 ; state=<state>:app=claude-code BEL｡
+		// Claude Code 2.1.296 と同じ書式: OSC 7501 ; state=<state>:app=claude-code BEL。
 		wantOrder := []string{
 			"#!/bin/sh\n",
 			`printf '\033]7501;state=idle:app=claude-code\a'` + "\n",
@@ -74,14 +74,14 @@ func TestSimulateScript(t *testing.T) {
 	})
 }
 
-// fakeCLI は呼び出しを calls.log へ追記し､サブコマンドごとの fixture (stdout) を返す fake の CLI｡
+// fakeCLI は呼び出しを calls.log へ追記し、サブコマンドごとの fixture (stdout) を返す fake の CLI。
 type fakeCLI struct {
 	dir string
 	bin string
 }
 
-// newFakeCLI は fixtures の key (引数の先頭の語を空白で繋いだもの) に一致する呼び出しにその内容を返す｡
-// skipFirst は calls.log と fixture の照合から除く先頭の引数 (rex の --autostart=false)｡
+// newFakeCLI は fixtures の key (引数の先頭の語を空白で繋いだもの) に一致する呼び出しにその内容を返す。
+// skipFirst は calls.log と fixture の照合から除く先頭の引数 (rex の --autostart=false)。
 func newFakeCLI(t *testing.T, name, skipFirst string, fixtures map[string]string) *fakeCLI {
 	t.Helper()
 	dir := t.TempDir()
@@ -122,7 +122,7 @@ func (f *fakeCLI) calls(t *testing.T) []string {
 	return strings.Split(strings.TrimSpace(string(data)), "\n")
 }
 
-// 実測 (rex.md) の split --json の形｡API の new_split は block_ids / anchor_block_id / split_ids / revision を返す｡
+// 実測 (rex.md) の split --json の形。API の new_split は block_ids / anchor_block_id / split_ids / revision を返す。
 const rexSplitJSON = `{"anchor_block_id":"block:mine","block_ids":["block:01a1-new"],"split_ids":["split:01a1"],"revision":7,"window_id":"window:01a1"}`
 
 func newFakeRex(t *testing.T, splitJSON string) (*fakeCLI, *rexHost) {

@@ -8,8 +8,8 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 )
 
-// doctor の pane 一覧は､record があるのに使えなかった理由を pane の行に添える｡
-// rex の版が変わって全 pane が unknown になったとき､ここが唯一の手がかりになる｡
+// doctor の pane 一覧は、record があるのに使えなかった理由を pane の行に添える。
+// rex の版が変わって全 pane が unknown になったとき、ここが唯一の手がかりになる。
 func TestReportPanes_UnknownReason(t *testing.T) {
 	const reason = "record に owner.pid が無い (テスト)"
 	var buf bytes.Buffer

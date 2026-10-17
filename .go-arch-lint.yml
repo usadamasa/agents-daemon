@@ -2,7 +2,7 @@ version: 3
 
 workdir: .
 
-# この設定自体の健全性は `go tool analyze-arch-lint --metrics` と `--strict .` で見る｡
+# この設定自体の健全性は `go tool analyze-arch-lint --metrics` と `--strict .` で見る。
 components:
   cmd_main:
     in: "cmd/*"

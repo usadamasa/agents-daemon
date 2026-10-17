@@ -6,14 +6,14 @@ import (
 )
 
 // 2026-08-16 に実機 (Claude Code 2.1.224 / サブスクリプション契約) で 5 時間ウィンドウの
-// 上限に到達したときの実際の表示｡推測ではなく現物なので､文言が変わったことに
-// 気づくための基準として残す｡
+// 上限に到達したときの実際の表示。推測ではなく現物なので、文言が変わったことに
+// 気づくための基準として残す。
 //
 //	You've hit your session limit · resets 12:30pm (Asia/Tokyo)
 //	/upgrade to increase your usage limit.
 //
-// 重要なのは limit 文言と reset 文言が同じ 1 行に同居している点｡二段構え
-// (limit 文言 + 近くの reset 文言) の要件はこれで満たされる｡
+// 重要なのは limit 文言と reset 文言が同じ 1 行に同居している点。二段構え
+// (limit 文言 + 近くの reset 文言) の要件はこれで満たされる。
 const realLimitScreen = `  ⏺ Bash(task test)
   ⎿  ✅ テスト完了
 
@@ -48,16 +48,16 @@ func TestClassify_実機で観測した上限到達画面(t *testing.T) {
 	})
 
 	t.Run("絶対時刻なので相対待ち時間は取れない", func(t *testing.T) {
-		// 待機時刻は statusline の resets_at から取る設計なので､ここで
-		// パースできないことは想定どおり｡取れてしまう方が事故になる｡
+		// 待機時刻は statusline の resets_at から取る設計なので、ここで
+		// パースできないことは想定どおり。取れてしまう方が事故になる。
 		if d, ok := ParseRelativeWait(realLimitScreen, 15); ok {
 			t.Errorf("ParseRelativeWait() = (%v, true), want ok=false", d)
 		}
 	})
 
 	t.Run("絶対時刻は statusline の resets_at と同じ時刻に読める", func(t *testing.T) {
-		// 同じ事象の statusline は resets_at = 1786851000 を渡していた (skills/agents-daemon/references/architecture.md 参照)｡
-		// 画面の 12:30pm (Asia/Tokyo) がその epoch に一致することを固定する｡
+		// 同じ事象の statusline は resets_at = 1786851000 を渡していた (skills/agents-daemon/references/architecture.md 参照)。
+		// 画面の 12:30pm (Asia/Tokyo) がその epoch に一致することを固定する。
 		now := time.Date(2026, 8, 16, 1, 0, 0, 0, time.UTC) // 10:00 JST
 		got, ok := ParseAbsoluteReset(realLimitScreen, 15, now, time.UTC)
 		if !ok {

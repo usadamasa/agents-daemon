@@ -12,8 +12,8 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
 )
 
-// record があるのに使えない pane (rex が owner を付けなくなった等) は､理由を 1 回だけログに残す｡
-// 毎 tick 書くとログが埋まり､書かないと pane が unknown のままになった理由が追えない｡
+// record があるのに使えない pane (rex が owner を付けなくなった等) は、理由を 1 回だけログに残す。
+// 毎 tick 書くとログが埋まり、書かないと pane が unknown のままになった理由が追えない。
 func TestDaemonRuntimeTick_UnknownReasonLoggedOnce(t *testing.T) {
 	const reason = "record に owner.pid が無い (テスト)"
 	pane := claudePane("p1", "t1", multiplexer.AgentStatusUnknown)

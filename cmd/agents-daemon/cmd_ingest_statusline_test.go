@@ -8,8 +8,8 @@ import (
 	"testing"
 )
 
-// runIngest は ingest-statusline を stdin 付きで実行し､stdout / stderr の中身と
-// Execute の戻り値を返す｡XDG_STATE_HOME は一時ディレクトリへ向ける｡
+// runIngest は ingest-statusline を stdin 付きで実行し、stdout / stderr の中身と
+// Execute の戻り値を返す。XDG_STATE_HOME は一時ディレクトリへ向ける。
 func runIngest(t *testing.T, stdin string) (stdout, stderr string, stateDir string, err error) {
 	t.Helper()
 	root := t.TempDir()
@@ -27,7 +27,7 @@ func runIngest(t *testing.T, stdin string) (stdout, stderr string, stateDir stri
 }
 
 func TestNewIngestStatuslineCmd(t *testing.T) {
-	t.Run("stdin の JSON から context/<sid>.json を書き､stdout には何も出さない", func(t *testing.T) {
+	t.Run("stdin の JSON から context/<sid>.json を書き、stdout には何も出さない", func(t *testing.T) {
 		stdout, _, stateDir, err := runIngest(t, `{"session_id": "sess-1", "context_window": {"used_percentage": 42.6, "context_window_size": 200000}}`)
 		if err != nil {
 			t.Fatalf("Execute() error = %v", err)
@@ -44,7 +44,7 @@ func TestNewIngestStatuslineCmd(t *testing.T) {
 		}
 	})
 
-	t.Run("壊れた JSON でも exit 0 (nil) で stdout は空｡理由は stderr に出す", func(t *testing.T) {
+	t.Run("壊れた JSON でも exit 0 (nil) で stdout は空。理由は stderr に出す", func(t *testing.T) {
 		stdout, stderr, stateDir, err := runIngest(t, `{"session_id": `)
 		if err != nil {
 			t.Fatalf("Execute() error = %v, want nil (statusline は毎描画で呼ぶので fail-silent)", err)
@@ -53,7 +53,7 @@ func TestNewIngestStatuslineCmd(t *testing.T) {
 			t.Errorf("stdout = %q, want empty", stdout)
 		}
 		if stderr == "" {
-			t.Error("stderr が空｡手で実行したときに理由が分からない")
+			t.Error("stderr が空。手で実行したときに理由が分からない")
 		}
 		if _, statErr := os.Stat(filepath.Join(stateDir, "context")); !os.IsNotExist(statErr) {
 			t.Errorf("壊れた入力で context/ が作られている: %v", statErr)

@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-// TestNew_ディレクトリ名が固定されている は protocol の固定｡書き手 (IngestStatusline) も
-// このパッケージにあるが､setup skill の確認手順と architecture.md がパスを直に書くので固定する｡
+// TestNew_ディレクトリ名が固定されている は protocol の固定。書き手 (IngestStatusline) も
+// このパッケージにあるが、setup skill の確認手順と architecture.md がパスを直に書くので固定する。
 func TestNew_ディレクトリ名が固定されている(t *testing.T) {
 	s := New("/state")
 
@@ -43,8 +43,8 @@ func TestRateLimitFile_不正なsessionIDを拒否する(t *testing.T) {
 	})
 }
 
-// fresh は IsFresh の本体｡未来の観測を拒むことが要点で､
-// 拒まないとクロックスキューのある state で送信が起きる｡
+// fresh は IsFresh の本体。未来の観測を拒むことが要点で、
+// 拒まないとクロックスキューのある state で送信が起きる。
 func Test_fresh(t *testing.T) {
 	now := time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)
 	maxAge := 5 * time.Minute

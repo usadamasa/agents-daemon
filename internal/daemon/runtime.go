@@ -1,6 +1,6 @@
-// Package daemon は agents-daemon の監視デーモンの実体 (ポーリングループ､
-// PID ファイル､status snapshot､dry-run 経路) を提供する｡cmd_daemon.go /
-// cmd_status.go / cmd_stop.go はこのパッケージを薄く呼び出すだけの cobra 配線に徹する｡
+// Package daemon は agents-daemon の監視デーモンの実体 (ポーリングループ、
+// PID ファイル、status snapshot、dry-run 経路) を提供する。cmd_daemon.go /
+// cmd_status.go / cmd_stop.go はこのパッケージを薄く呼び出すだけの cobra 配線に徹する。
 package daemon
 
 import (
@@ -25,27 +25,27 @@ import (
 )
 
 // maxConsecutiveTickFailures は PaneList の取得にこの回数だけ連続で
-// 失敗したら daemon が自己終了する閾値｡多重化ツールの server が落ちたまま無限に回り続けて
-// ログを埋め尽くすのを防ぐ｡
+// 失敗したら daemon が自己終了する閾値。多重化ツールの server が落ちたまま無限に回り続けて
+// ログを埋め尽くすのを防ぐ。
 const maxConsecutiveTickFailures = 10
 
-// paneEntry は daemon が pane 1 枚ぶんに保持する監視状態｡
+// paneEntry は daemon が pane 1 枚ぶんに保持する監視状態。
 type paneEntry struct {
 	state      *monitor.PaneState
 	lastSeenAt time.Time
 	lastLogKey string // 直前にログへ書いた内容の識別子 (同じ状態が続く間の重複を抑える)
-	// loggedUnknownReason は最後にログへ書いた Pane.UnknownReason｡同じ理由が続く間は書かない｡
+	// loggedUnknownReason は最後にログへ書いた Pane.UnknownReason。同じ理由が続く間は書かない。
 	loggedUnknownReason string
 }
 
-// daemonRuntime は 1 回の --foreground 実行に閉じたループの可変状態をまとめる｡
-// pane ごとの状態機械は TerminalID (rex は block ID) をキーにする｡
+// daemonRuntime は 1 回の --foreground 実行に閉じたループの可変状態をまとめる。
+// pane ごとの状態機械は TerminalID (rex は block ID) をキーにする。
 type daemonRuntime struct {
 	client multiplexer.Client
-	// backend は client の多重化ツールの種類｡status.json に書くだけで判定には使わない｡
+	// backend は client の多重化ツールの種類。status.json に書くだけで判定には使わない。
 	backend string
 	log     *applog.Logger
-	// statusPath と store はプロセスの生存期間で固定なのでここに置く｡
+	// statusPath と store はプロセスの生存期間で固定なのでここに置く。
 	statusPath          string
 	store               sessionstate.Store
 	sleep               func(time.Duration)
@@ -68,14 +68,14 @@ func newDaemonRuntime(client multiplexer.Client, log *applog.Logger, statusPath 
 	}
 }
 
-// tick は 1 回分のポーリングを処理する｡設定を毎回読み直すことで､daemon を
-// 再起動せずに設定変更 (閾値・パターン等) を反映できる (参考実装からの踏襲)｡
-// 返り値の cfg は呼び出し元がポーリング間隔の更新に使う｡shutdown=true は
-// 呼び出し元がループを終了すべきことを表す｡
+// tick は 1 回分のポーリングを処理する。設定を毎回読み直すことで、daemon を
+// 再起動せずに設定変更 (閾値・パターン等) を反映できる (参考実装からの踏襲)。
+// 返り値の cfg は呼び出し元がポーリング間隔の更新に使う。shutdown=true は
+// 呼び出し元がループを終了すべきことを表す。
 func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time) (shutdown bool, cfg config.Config, err error) {
 	cfg, cfgErr := config.Load(cfgPath)
 	if cfgErr != nil {
-		r.log.Logf("設定の読み込みでエラー､デフォルト値で継続します: %v", cfgErr)
+		r.log.Logf("設定の読み込みでエラー、デフォルト値で継続します: %v", cfgErr)
 	}
 
 	classifier, err := detect.NewClassifier(cfg.CustomPatterns)
@@ -94,11 +94,11 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 	}
 	r.consecutiveFailures = 0
 
-	// アカウント全体で最新のウィンドウは tick ごとに 1 回だけ読み､全 pane で共有する｡
-	// 自分の state を持たない pane (上限中に開いた新規セッション) の起床時刻はここから引く｡
+	// アカウント全体で最新のウィンドウは tick ごとに 1 回だけ読み、全 pane で共有する。
+	// 自分の state を持たない pane (上限中に開いた新規セッション) の起床時刻はここから引く。
 	account, accountErr := r.store.LatestWindow(now)
 	if accountErr != nil {
-		r.log.Logf("アカウント全体の利用上限 state の走査に失敗､無しとして継続します: %v", accountErr)
+		r.log.Logf("アカウント全体の利用上限 state の走査に失敗、無しとして継続します: %v", accountErr)
 		account = nil
 	}
 
@@ -129,10 +129,10 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 		entry.lastSeenAt = now
 		r.logUnknownReason(pane, entry)
 
-		// state はセッションごとに別ファイル｡pane に対応するものだけを読む｡
+		// state はセッションごとに別ファイル。pane に対応するものだけを読む。
 		rateState, stateErr := r.store.LoadRateLimit(pane.SessionID)
 		if stateErr != nil {
-			r.log.Logf("pane %s の利用上限 state の読み込みに失敗､state 無しとして継続します: %v", pane.PaneID, stateErr)
+			r.log.Logf("pane %s の利用上限 state の読み込みに失敗、state 無しとして継続します: %v", pane.PaneID, stateErr)
 			rateState = nil
 		}
 
@@ -161,8 +161,8 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 	return false, cfg, nil
 }
 
-// logUnknownReason は record があるのに使えず unknown になった理由を､理由が変わったときだけログに残す｡
-// 理由が無いと「静かに止まった」ように見える｡
+// logUnknownReason は record があるのに使えず unknown になった理由を、理由が変わったときだけログに残す。
+// 理由が無いと「静かに止まった」ように見える。
 func (r *daemonRuntime) logUnknownReason(pane multiplexer.Pane, entry *paneEntry) {
 	if pane.UnknownReason == entry.loggedUnknownReason {
 		return
@@ -173,8 +173,8 @@ func (r *daemonRuntime) logUnknownReason(pane multiplexer.Pane, entry *paneEntry
 	}
 }
 
-// forgetUnseen は消えた pane のエントリを捨てる｡
-// 捨てずに放置すると pane の入れ替わりのたびに無限に育ってしまう｡
+// forgetUnseen は消えた pane のエントリを捨てる。
+// 捨てずに放置すると pane の入れ替わりのたびに無限に育ってしまう。
 func (r *daemonRuntime) forgetUnseen(terminals map[string]bool) {
 	for terminalID := range r.panes {
 		if !terminals[terminalID] {
@@ -183,7 +183,7 @@ func (r *daemonRuntime) forgetUnseen(terminals map[string]bool) {
 	}
 }
 
-// paneStatus は status.json に書く pane 1 枚ぶんのスナップショットを組む｡
+// paneStatus は status.json に書く pane 1 枚ぶんのスナップショットを組む。
 func paneStatus(pane multiplexer.Pane, entry *paneEntry, outcome monitor.Outcome, now time.Time) PaneStatus {
 	return PaneStatus{
 		PaneID:        pane.PaneID,
@@ -198,13 +198,13 @@ func paneStatus(pane multiplexer.Pane, entry *paneEntry, outcome monitor.Outcome
 	}
 }
 
-// logOutcome は tick 1 回の結果をログへ書く｡「静かな tick」(監視中で異常無し､
-// 対象外､待機継続中) はログしない｡次の朝に読んで意味が分かる粒度に絞る:
-// 上限検知と待ち時間､送信の実施､ユーザーの自己復帰､ゲート抑制､エラー｡
+// logOutcome は tick 1 回の結果をログへ書く。「静かな tick」(監視中で異常無し、
+// 対象外、待機継続中) はログしない。次の朝に読んで意味が分かる粒度に絞る:
+// 上限検知と待ち時間、送信の実施、ユーザーの自己復帰、ゲート抑制、エラー。
 func (r *daemonRuntime) logOutcome(pane multiplexer.Pane, outcome monitor.Outcome, err error) {
-	// 同じ状態が続く間は書かない｡tick は既定 5 秒ごとなので､待機や抑制が
-	// 続くだけで日に数千行に膨れ､後から読めるログでなくなる｡状態が切り替わった
-	// ときだけ書き､静かな結果も key は更新して「戻ってきた」を検出できるようにする｡
+	// 同じ状態が続く間は書かない。tick は既定 5 秒ごとなので、待機や抑制が
+	// 続くだけで日に数千行に膨れ、後から読めるログでなくなる。状態が切り替わった
+	// ときだけ書き、静かな結果も key は更新して「戻ってきた」を検出できるようにする。
 	entry := r.panes[pane.TerminalID]
 	key := logKey(outcome, err, entry)
 	if entry != nil {
@@ -245,26 +245,26 @@ func (r *daemonRuntime) logOutcome(pane multiplexer.Pane, outcome monitor.Outcom
 	}
 }
 
-// logKey は logOutcome の重複除去のキー｡同じ Outcome でも別の出来事として残すものは値を混ぜる｡
+// logKey は logOutcome の重複除去のキー。同じ Outcome でも別の出来事として残すものは値を混ぜる。
 func logKey(outcome monitor.Outcome, err error, entry *paneEntry) string {
 	key := outcome.String()
 	if err != nil {
 		key += "|" + err.Error()
 	}
 	if entry != nil && outcome == monitor.OutcomeRetried {
-		// 送信は 1 回ずつが独立した出来事なので､試行回数を混ぜて毎回残す｡
+		// 送信は 1 回ずつが独立した出来事なので、試行回数を混ぜて毎回残す。
 		return fmt.Sprintf("%s|%d", key, entry.state.Attempts)
 	}
 	return key
 }
 
-// EnsureDaemon は生存している daemon が無ければこのバイナリを detach 起動する｡
-// SessionStart hook から呼ばれる想定なので､常に高速に戻り､hook を絶対に
-// ブロック/失敗させない設計にする｡
+// EnsureDaemon は生存している daemon が無ければこのバイナリを detach 起動する。
+// SessionStart hook から呼ばれる想定なので、常に高速に戻り、hook を絶対に
+// ブロック/失敗させない設計にする。
 func EnsureDaemon(p apppath.Paths, dryRun bool) error {
 	if err := checkRunning(p.PIDFile()); err != nil {
 		if errors.Is(err, ErrAlreadyRunning) {
-			return nil // 既に動いている｡何もしない｡
+			return nil // 既に動いている。何もしない。
 		}
 		return err
 	}
@@ -276,15 +276,15 @@ func EnsureDaemon(p apppath.Paths, dryRun bool) error {
 	return spawnDetached(exe, dryRun, p)
 }
 
-// spawnDetached は exe を `daemon --foreground` として detach 起動する｡
-// 呼び出し元 (hook 経由の EnsureDaemon､実行ファイル更新時の入れ替え) を
-// ブロックしないよう､Wait せずに切り離す｡
+// spawnDetached は exe を `daemon --foreground` として detach 起動する。
+// 呼び出し元 (hook 経由の EnsureDaemon、実行ファイル更新時の入れ替え) を
+// ブロックしないよう、Wait せずに切り離す。
 func spawnDetached(exe string, dryRun bool, p apppath.Paths) error {
 	if err := os.MkdirAll(filepath.Dir(p.LogFile()), 0o700); err != nil {
 		return fmt.Errorf("ログディレクトリの作成に失敗: %w", err)
 	}
-	// 子の stdout / stderr は現行ログへ向ける (panic の痕跡を残すため)｡子が日付境界で
-	// rotate しても､この fd は rename 後のファイルを指し続けるので追記先は失われない｡
+	// 子の stdout / stderr は現行ログへ向ける (panic の痕跡を残すため)。子が日付境界で
+	// rotate しても、この fd は rename 後のファイルを指し続けるので追記先は失われない。
 	logFile, err := os.OpenFile(p.LogFile(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600) // #nosec G304 -- 固定パターンから組み立てたパス
 	if err != nil {
 		return fmt.Errorf("ログファイルを開けません: %w", err)
@@ -293,8 +293,8 @@ func spawnDetached(exe string, dryRun bool, p apppath.Paths) error {
 
 	args := []string{"daemon", "--foreground"}
 	if dryRun {
-		// detach 起動でも dry-run を引き継ぐ｡引き継がないと --ensure --dry-run が
-		// 実際には送信する daemon を生む､という最も危険な取り違えになる｡
+		// detach 起動でも dry-run を引き継ぐ。引き継がないと --ensure --dry-run が
+		// 実際には送信する daemon を生む、という最も危険な取り違えになる。
 		args = append(args, "--dry-run")
 	}
 	cmd := exec.Command(exe, args...) // #nosec G204 -- 自分自身の実行ファイルパスのみを起動する
@@ -305,12 +305,12 @@ func spawnDetached(exe string, dryRun bool, p apppath.Paths) error {
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("daemon の起動に失敗: %w", err)
 	}
-	// Wait しない (detach させるため)｡Release は Wait を呼ばない場合の後始末｡
+	// Wait しない (detach させるため)。Release は Wait を呼ばない場合の後始末。
 	return cmd.Process.Release()
 }
 
-// RunForeground は --foreground の本体｡SessionStart から detach 起動された
-// 子プロセスも最終的にここへ辿り着く｡
+// RunForeground は --foreground の本体。SessionStart から detach 起動された
+// 子プロセスも最終的にここへ辿り着く。
 func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 	if err := checkRunning(p.PIDFile()); err != nil {
 		return err
@@ -346,14 +346,14 @@ func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 
 	if dryRun {
 		client = newDryRunClient(client, log)
-		log.Logf("dry-run モード: 検知と判定は通常どおり行うが､pane への送信とラベル更新はしない")
+		log.Logf("dry-run モード: 検知と判定は通常どおり行うが、pane への送信とラベル更新はしない")
 	}
 
-	// 実行ファイルの差し替えに気づくための基準｡取得できなければ更新検知だけを
-	// 諦める (path が空の stamp は changed() が常に false を返す)｡
+	// 実行ファイルの差し替えに気づくための基準。取得できなければ更新検知だけを
+	// 諦める (path が空の stamp は changed() が常に false を返す)。
 	stamp, stampErr := currentBinaryStamp()
 	if stampErr != nil {
-		log.Logf("実行ファイルの情報を取得できないため､更新の自動反映を無効にします: %v", stampErr)
+		log.Logf("実行ファイルの情報を取得できないため、更新の自動反映を無効にします: %v", stampErr)
 	}
 
 	now := time.Now()
@@ -386,12 +386,12 @@ func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 			cleanup("context がキャンセルされた")
 			return nil
 		case <-time.After(pollInterval):
-			// 実行ファイルが差し替わっていたら､後始末をしてから新しい版へ
-			// 入れ替わる (理由は selfupdate.go を参照)｡
+			// 実行ファイルが差し替わっていたら、後始末をしてから新しい版へ
+			// 入れ替わる (理由は selfupdate.go を参照)。
 			if stamp.changed() {
 				cleanup("実行ファイルが更新されたため入れ替わります")
 				if err := spawnDetached(stamp.path, dryRun, p); err != nil {
-					log.Logf("新しい版の起動に失敗しました｡次回の SessionStart で起動されます: %v", err)
+					log.Logf("新しい版の起動に失敗しました。次回の SessionStart で起動されます: %v", err)
 				}
 				return nil
 			}

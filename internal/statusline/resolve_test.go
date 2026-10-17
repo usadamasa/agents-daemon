@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// initRepo は空リポジトリを 1 コミット済みで作る (branch 検証の前提)｡
+// initRepo は空リポジトリを 1 コミット済みで作る (branch 検証の前提)。
 func initRepo(t *testing.T, dir string) {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o750); err != nil {
@@ -58,7 +58,7 @@ func TestGitBranch(t *testing.T) {
 }
 
 func TestProjectBranch(t *testing.T) {
-	// 起動元が git 管理外でも 🏠 は出すので､branch の欄は (detached) で埋める｡
+	// 起動元が git 管理外でも 🏠 は出すので、branch の欄は (detached) で埋める。
 	if got := ProjectBranch(t.TempDir()); got != "(detached)" {
 		t.Errorf("ProjectBranch(非 git) = %q, want (detached)", got)
 	}

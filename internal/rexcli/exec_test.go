@@ -14,8 +14,8 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 )
 
-// 実測の ID と JSON｡2026-10-10 (rex 0.0.1791570264､Claude Code 2.1.296) と
-// 2026-10-17 (rex 0.0.1792158932 = preview.15､Claude Code 2.1.302､#69) のもの｡
+// 実測の ID と JSON。2026-10-10 (rex 0.0.1791570264、Claude Code 2.1.296) と
+// 2026-10-17 (rex 0.0.1792158932 = preview.15、Claude Code 2.1.302、#69) のもの。
 const (
 	sessionA = "session:01a12439-0839-7829-a4cb-aeac453570c1"
 	sessionB = "session:01a1250f-c100-71e0-aed0-4a433569cf00"
@@ -28,7 +28,7 @@ const (
 	blockClosed        = "block:01a12599-0000-7000-8000-000000000001"
 	blockNotShell      = "block:01a12599-0000-7000-8000-000000000002"
 
-	// foreground の process の pid｡record の owner.pid と突き合わせる｡
+	// foreground の process の pid。record の owner.pid と突き合わせる。
 	pidClaudeWorking = 15470
 	pidClaudeDone    = 17633
 	pidClaudeStartup = 70904
@@ -57,26 +57,26 @@ const (
 	psPermission = `{"records":[{"state":"blocked","kind":"permission","app":"claude-code","effective_app":"claude-code","msg":"approve Bash: rm -rf ./tmp/junk","updated_at":"2026-10-10T18:51:48.057417+09:00","owner":{"pid":94252,"name":"2.1.296"}}]}`
 	psIdle       = `{"records":[{"state":"idle","app":"claude-code","effective_app":"claude-code","updated_at":"2026-10-10T18:52:20.000000+09:00","owner":{"pid":94252,"name":"2.1.296"}}]}`
 	psEmpty      = `{"records":[]}`
-	// 起動直後｡Claude Code 自身が数秒以内に出す (rex preview.15 は process 名から record を補わない)｡
+	// 起動直後。Claude Code 自身が数秒以内に出す (rex preview.15 は process 名から record を補わない)。
 	psStartup = `{"records":[{"state":"idle","app":"claude-code","effective_app":"claude-code","updated_at":"2026-10-17T14:06:38.636286+09:00","owner":{"pid":70904,"name":"2.1.302"}}]}`
-	// done のまま SIGKILL で終わった Claude Code の record｡foreground が shell に戻っても次の prompt が出ても残る
-	// (OSC 7501 の仕様: done と error は process の終了と shell prompt を生き延びる)｡
+	// done のまま SIGKILL で終わった Claude Code の record。foreground が shell に戻っても次の prompt が出ても残る
+	// (OSC 7501 の仕様: done と error は process の終了と shell prompt を生き延びる)。
 	psStaleDone = `{"records":[{"state":"done","app":"claude-code","effective_app":"claude-code","msg":"replied 'ok' as requested; no tools used","updated_at":"2026-10-17T14:09:30.224596+09:00","owner":{"pid":73002,"name":"2.1.302"}}]}`
-	// event payload の root record は "id":"" で来る｡
+	// event payload の root record は "id":"" で来る。
 	psEmptyID      = `{"records":[{"id":"","state":"working","app":"claude-code","updated_at":"2026-10-10T18:30:41.644437+09:00","owner":{"pid":15470,"name":"2.1.296"}}]}`
 	psSubagentOnly = `{"records":[{"id":"a01b73b4e3800b31f","state":"working","app":"claude-code","updated_at":"2026-10-10T18:29:58.836427+09:00"}]}`
 	psUnknownState = `{"records":[{"state":"starting","app":"claude-code","updated_at":"2026-10-10T18:29:58.836427+09:00","owner":{"pid":15470,"name":"2.1.296"}}]}`
 	psOtherApp     = `{"records":[{"state":"working","app":"cargo","effective_app":"cargo","updated_at":"2026-10-17T14:00:00.000000+09:00","owner":{"pid":15470,"name":"cargo"}}]}`
-	// rex が owner を付けなくなった (または名前を変えた) ときの形｡実測ではなく想定｡
+	// rex が owner を付けなくなった (または名前を変えた) ときの形。実測ではなく想定。
 	psNoOwner = `{"records":[{"state":"done","app":"claude-code","effective_app":"claude-code","updated_at":"2026-10-17T14:00:00.000000+09:00"}]}`
 )
 
 const (
-	reasonNoOwner    = "record に owner.pid が無い (rex の版が変わった可能性｡record を使えず agent_status が unknown のままになる)"
+	reasonNoOwner    = "record に owner.pid が無い (rex の版が変わった可能性。record を使えず agent_status が unknown のままになる)"
 	reasonStaleOwner = "record の owner (pid 73002) が foreground の process (pid 70904) と違う (前の Claude の record が残っている)"
 )
 
-// processJSON は `block call process` の応答｡pid と argv0 は foreground の process のもの｡
+// processJSON は `block call process` の応答。pid と argv0 は foreground の process のもの。
 func processJSON(pid int, argv0, cwd string) string {
 	return `{"last_exit":null,` +
 		`"child":{"pid":33929,"user_id":0,"user":"root","name":"login","path":"/usr/bin/login"},` +
@@ -87,15 +87,15 @@ func processJSON(pid int, argv0, cwd string) string {
 
 const serverStatusJSON = `{"pid":46997,"instance_id":"a842cc30-1b60-4180-862a-1d2843681d21","host_id":"dfd31eaf-0189-45ad-9a36-10c09f3cb111","started_at":"2026-10-10T02:13:17.525033Z","exit_empty":false,"session_count":2,"tailscale":{"state":"disabled","allow_tailnet_members":false},"config":{"generation":1,"hash":""}}`
 
-// fakeRex は fixture のディレクトリと､それを読む fake の rex｡
+// fakeRex は fixture のディレクトリと、それを読む fake の rex。
 type fakeRex struct {
 	dir string
 	bin string
 }
 
-// newFakeRex は引数で fixture を選んで返す fake の rex を書く｡fixture が無ければ実機と同じく
-// `block target "…" not found` を stderr に出して exit 3 になる｡呼び出しごとに引数を
-// calls.log へ､環境変数を env.log へ追記する｡--autostart=false が先頭に無い呼び出しは拒む｡
+// newFakeRex は引数で fixture を選んで返す fake の rex を書く。fixture が無ければ実機と同じく
+// `block target "…" not found` を stderr に出して exit 3 になる。呼び出しごとに引数を
+// calls.log へ、環境変数を env.log へ追記する。--autostart=false が先頭に無い呼び出しは拒む。
 func newFakeRex(t *testing.T) *fakeRex {
 	t.Helper()
 	dir := t.TempDir()
@@ -159,7 +159,7 @@ func (f *fakeRex) client(resolve multiplexer.SessionResolver) *execClient {
 	return &execClient{binPath: f.bin, timeout: noCommandTimeout, resolve: resolve}
 }
 
-// noCommandTimeout はタイムアウトを課さない｡fake の shell 起動の遅れでテストが落ちないようにする｡
+// noCommandTimeout はタイムアウトを課さない。fake の shell 起動の遅れでテストが落ちないようにする。
 const noCommandTimeout = 0
 
 func readLines(t *testing.T, path string) []string {
@@ -186,9 +186,9 @@ func staticResolver(m map[string]string) multiplexer.SessionResolver {
 	return func() (map[string]string, error) { return m, nil }
 }
 
-// setupTwoSessions は 2 session の実測に近い構成を作る｡session A に作業中の Claude と shell だけの block､
-// session B に入力待ちの Claude､起動直後の Claude､Claude が死んで done の record だけ残った shell､
-// block ls の後に閉じた block､shell 以外の block｡
+// setupTwoSessions は 2 session の実測に近い構成を作る。session A に作業中の Claude と shell だけの block、
+// session B に入力待ちの Claude、起動直後の Claude、Claude が死んで done の record だけ残った shell、
+// block ls の後に閉じた block、shell 以外の block。
 func setupTwoSessions(t *testing.T) *fakeRex {
 	t.Helper()
 	f := newFakeRex(t)
@@ -313,7 +313,7 @@ func TestExecClient_PaneList_SkipsBlockClosedBetweenMethods(t *testing.T) {
 		[2]string{blockClosed, shellFlavor},
 		[2]string{blockClaudeWorking, shellFlavor},
 	))
-	// program_status は返ったが process の前に閉じた｡
+	// program_status は返ったが process の前に閉じた。
 	f.put(t, "program_status-"+blockClosed+".json", psDone)
 	f.putBlock(t, blockClaudeWorking, psWorking, processJSON(pidClaudeWorking, "claude", "/x"))
 

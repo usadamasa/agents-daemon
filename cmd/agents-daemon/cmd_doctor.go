@@ -12,16 +12,16 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/verify"
 )
 
-// newDoctorCmd は `agents-daemon doctor` を組み立てる｡
+// newDoctorCmd は `agents-daemon doctor` を組み立てる。
 func newDoctorCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "doctor",
 		Short: "daemon が動作するための前提条件を診断する",
-		Long: "多重化ツール (rex) の到達性､Claude pane の見え方､statusline state の鮮度､\n" +
-			"設定ファイルの状態､daemon の稼働状況､peer messaging の socket (CLAUDE_CODE_MESSAGING_SOCKET)､\n" +
-			"解決済みパスを順に確認して報告する｡rex の外 (REX_SESSION なし) と､rex の server へ\n" +
-			"到達できない場合のみ実際に壊れているとみなし exit 1 にする｡他の項目は情報提供のみで\n" +
-			"exit 0 (state ファイルがまだ無い､daemon が起動していない等)｡",
+		Long: "多重化ツール (rex) の到達性、Claude pane の見え方、statusline state の鮮度、\n" +
+			"設定ファイルの状態、daemon の稼働状況、peer messaging の socket (CLAUDE_CODE_MESSAGING_SOCKET)、\n" +
+			"解決済みパスを順に確認して報告する。rex の外 (REX_SESSION なし) と、rex の server へ\n" +
+			"到達できない場合のみ実際に壊れているとみなし exit 1 にする。他の項目は情報提供のみで\n" +
+			"exit 0 (state ファイルがまだ無い、daemon が起動していない等)。",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			p, err := apppath.FromEnv()
 			if err != nil {

@@ -7,10 +7,12 @@ import "github.com/spf13/cobra"
 func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "agents-daemon",
-		Short: "Claude Code の利用上限待ちを自動検知し､解除後に再開する",
-		Long: "agents-daemon は端末多重化ツール (rex) 越しに Claude Code の block を監視し､\n" +
-			"5 時間ウィンドウの利用上限や一時的なエラーを検知したら､解除後に\n" +
-			"自動で再開プロンプトを送るデーモンと CLI を提供する｡",
+		Short: "Claude Code のセッションのそばに常駐し､セッションの中からはできないことを背後で担う",
+		Long: "agents-daemon は Claude Code のセッション群のそばに 1 プロセスだけ常駐し､\n" +
+			"セッションの中からはできないこと (止まったセッションへの働きかけ､セッションを跨いだ\n" +
+			"状態の集約､時間で動く掃除､端末多重化ツール rex の block への操作) を背後で担う｡\n" +
+			"今ある働きかけは､5 時間ウィンドウの利用上限や一時的なエラーで止まったセッションを\n" +
+			"解除後に再開させること｡",
 		SilenceUsage: true,
 	}
 	root.AddCommand(newDaemonCmd())

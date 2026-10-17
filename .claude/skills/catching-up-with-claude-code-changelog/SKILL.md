@@ -52,9 +52,10 @@ index に載る週しか存在せず、404 が普通。
 読みながら 2 つの目で拾う。
 
 - **前提に当たるか**: 下の「前提の洗い出し」で出した版の引用と検索語に当たる項目
-- **アイデアになるか**: daemon が pane 越しにやっていることを本体が直接できるようになった項目 (hook の新 event や
-  新 field、statusline の新 field、新しい設定キー、OSC、`claude` のサブコマンド)。daemon の役目 (上限からの再開、
-  多重化ツールへの状態の報告) に関わるものを候補にする。compact と prompt cache は本体に任せると決めた (#59) ので、
+- **アイデアになるか**: daemon が pane 越しにやっていることを本体が直接できるようになった項目。hook の新 event や
+  新 field、statusline の新 field、新しい設定キー、OSC、`claude` のサブコマンドが当たる。daemon の役割の区分
+  (README「役割」: 止まったセッションへの働きかけ、セッションを跨いだ状態の集約、時間で動く掃除、多重化ツールへの操作) の
+  どれかに属するものを候補にする。compact と prompt cache は本体に任せると決めた (#59) ので、
   その周りの変化は「daemon の守備範囲が戻るか」ではなく「docs の説明が古くなっていないか」の目で読む
 
 該当しない項目 (mods、cloud sessions、Slack、Code Review、VS Code) は飛ばしてよい。
@@ -142,7 +143,7 @@ rg -n -o 'cc-premise: [0-9.]+ [a-z0-9-]+.*' --glob '!tmp/**' . | sort -t' ' -k3,
 - 前提が崩れていたら、直す PR か issue に marker のある行を指す
 - 表に無い topic が出てきたら、この表に足す (`awk '{print $3}' | sort -u` で漏れを見る)
 
-| topic | daemon の役目 | CHANGELOG の検索語 |
+| topic | 前提が支える機能 | CHANGELOG の検索語 |
 | ---- | ---- | ---- |
 | `limit-screen` | 上限の検知と再開 | usage limit, rate limit, auto-continue, continuing automatically, press enter, spend limit, usage credits, autoContinueAtUsageLimit, rate-limit-options |
 | `transient` | transient の引き取り | API Error, overloaded, 529, retry, backoff, RETRY_WATCHDOG |

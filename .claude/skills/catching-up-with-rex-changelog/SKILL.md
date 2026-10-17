@@ -114,7 +114,7 @@ rex-premise: <version> <topic> [メモ]
 - `<topic>`: 下の表の 1 語
 - Go と sh はコメント行、md は `<!-- rex-premise: … -->` の 1 行
 
-| topic | daemon の役目 | changelog の検索語 |
+| topic | 前提が支える機能 | changelog の検索語 |
 | ---- | ---- | ---- |
 | `program_status` | record から Agent と `agent_status` を決める | OSC7501, OSC 7501, program status, activity, owner, record, status report |
 | `cli` | `block call` / `block ls` / `capture` / `send` の引数と応答、exit code、`--autostart` | rex CLI, block call, block ls, capture, send-key, autostart, exit code, `--json`, events |

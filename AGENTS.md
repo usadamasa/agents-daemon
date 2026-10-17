@@ -25,6 +25,7 @@ Go のデーモンと､それを配線する hook・skill を持つ｡
 | `tests/` | hook と script の bats テスト (`tests/lib/`､`tests/fixtures/`) |
 | `flake.nix` | 開発ツールの devShell (版は `flake.lock` が固定する)。nixpkgs に無い spm-go はここでビルドする |
 | `.claude/skills/catching-up-with-claude-code-changelog/` | Claude Code の更新後に CHANGELOG・バイナリ・docs を追い､この repo の前提 (画面の文言､hook と statusline の field､本体の新機能との重なり) を点検して issue に落とす手順｡plugin には同梱しない保守用 skill |
+| `.claude/skills/catching-up-with-rex-changelog/` | rex の更新後に changelog (superlogical MCP) と自分の block への固定コマンドの応答を `rex-premise` marker と `internal/rexcli` の fixture と突き合わせ､ずれを issue に落とす手順｡前回見た版は `references/last-checked.md`｡plugin には同梱しない保守用 skill |
 
 ## 検証
 
@@ -81,8 +82,8 @@ devShell の go は `go.mod` の `go` 行と同じ系列 (`go_1_26`) にし、`G
   skill がこの marker を grep して､更新後に見直す箇所の一覧にする｡確かめ直したら `<version>` を上げる｡
 - rex の版で変わりうる挙動 (`program_status` の record の中身､CLI の引数と exit code) も同じ形で
   `rex-premise: <version> <topic> [メモ]` を置く｡`<version>` は changelog の版 (`preview.15`)､`<topic>` は
-  `program_status` か `cli`｡rex を上げたら `rg -n 'rex-premise'` で一覧し､changelog
-  (superlogical MCP の `read_changelog`) と突き合わせる｡
+  `program_status` か `cli`｡rex を上げたら `.claude/skills/catching-up-with-rex-changelog/SKILL.md` の手順で
+  一覧し､changelog (superlogical MCP の `read_changelog`) と実機の応答と突き合わせる｡
 
 ## state を書くときの決めごと
 

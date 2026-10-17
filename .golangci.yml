@@ -19,24 +19,24 @@ linters:
 
   # しきい値は目標値 (gocognit 20 / gocyclo 15 / cyclop 15 / funlen 80 行 40 文 /
   # nestif 5 / maintidx 20) で測り、
-  # 超えたものだけ実測最大値の直上へ置いた｡ここから上がる変更はレビューで理由を問う｡
+  # 超えたものだけ実測最大値の直上へ置いた。ここから上がる変更はレビューで理由を問う。
   settings:
     # 認知的複雑度: 実測最大値 28 (RunForeground)
     gocognit:
       min-complexity: 29
 
     # 循環複雑度 (McCabe): 実測最大値 21 (Outcome.String)
-    # Outcome.String は列挙値を文字列へ写す switch で、分岐の数がそのまま値になる｡
+    # Outcome.String は列挙値を文字列へ写す switch で、分岐の数がそのまま値になる。
     # 次点は logOutcome / RunForeground の 18
     gocyclo:
       min-complexity: 22
 
-    # 循環複雑度 (cyclop): 実測最大値 22 (Outcome.String)｡次点は logOutcome の 19
+    # 循環複雑度 (cyclop): 実測最大値 22 (Outcome.String)。次点は logOutcome の 19
     cyclop:
       max-complexity: 23
 
-    # 関数の長さ: 行数は実測最大値 106 (daemonRuntime.tick)｡次点は RunForeground の 93｡
-    # 文数は実測最大値 51 (RunInspect)｡次点は tick の 49
+    # 関数の長さ: 行数は実測最大値 106 (daemonRuntime.tick)。次点は RunForeground の 93。
+    # 文数は実測最大値 51 (RunInspect)。次点は tick の 49
     funlen:
       lines: 107
       statements: 52
@@ -45,7 +45,7 @@ linters:
     nestif:
       min-complexity: 5
 
-    # 保守性指数: 20 未満は保守困難｡目標値のまま違反なし
+    # 保守性指数: 20 未満は保守困難。目標値のまま違反なし
     maintidx:
       under: 20
 

@@ -78,7 +78,7 @@ func TestParseInput(t *testing.T) {
 		}
 	})
 
-	t.Run("5 時間ウィンドウの切り替わりでは five_hour が null で届く｡値なしとして扱う", func(t *testing.T) {
+	t.Run("5 時間ウィンドウの切り替わりでは five_hour が null で届く。値なしとして扱う", func(t *testing.T) {
 		in, err := ParseInput([]byte(`{"rate_limits": {"five_hour": {"used_percentage": null, "resets_at": null}, "seven_day": {"used_percentage": 47, "resets_at": 1788235200}}}`))
 		if err != nil {
 			t.Fatalf("ParseInput() error = %v", err)

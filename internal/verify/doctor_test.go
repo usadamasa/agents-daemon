@@ -21,15 +21,15 @@ import (
 
 var errFakeUnreachable = errors.New("fake: rex unreachable")
 
-// noEnv は環境変数が 1 つも無い getenv｡doctor の既存の項目は環境に依らない｡
+// noEnv は環境変数が 1 つも無い getenv。doctor の既存の項目は環境に依らない。
 func noEnv(string) string { return "" }
 
-// doctorInput は fixedNow と noEnv を固定した DoctorInput を組む｡
+// doctorInput は fixedNow と noEnv を固定した DoctorInput を組む。
 func doctorInput(client multiplexer.Client, kind string, p apppath.Paths, now time.Time) DoctorInput {
 	return DoctorInput{Client: client, Kind: kind, Paths: p, Now: now, Getenv: noEnv}
 }
 
-// envOf は m だけを持つ getenv を返す｡
+// envOf は m だけを持つ getenv を返す。
 func envOf(m map[string]string) func(string) string {
 	return func(k string) string { return m[k] }
 }
@@ -37,7 +37,7 @@ func envOf(m map[string]string) func(string) string {
 func TestRunDoctor(t *testing.T) {
 	fixedNow := time.Date(2026, 8, 16, 13, 0, 0, 0, time.UTC)
 
-	t.Run("rex に到達できないと error を返し､以降の項目は診断しない", func(t *testing.T) {
+	t.Run("rex に到達できないと error を返し、以降の項目は診断しない", func(t *testing.T) {
 		client := &multiplexerfake.Client{
 			ReachableFunc: func(context.Context) error { return errFakeUnreachable },
 		}
@@ -75,14 +75,14 @@ func TestRunDoctor(t *testing.T) {
 			"OK: rex server は稼働しています",
 			"pane=p1", "session_id=session-abc",
 			"state ファイルはまだありません",
-			"は存在しません｡全項目デフォルト値で動作します",
+			"は存在しません。全項目デフォルト値で動作します",
 			"daemon は起動していません",
 			"-- peer messaging",
 			"CLAUDE_CODE_MESSAGING_SOCKET: (なし)",
 			"config:      " + filepath.Join(home, ".config", "agents-daemon", "config.json"),
 		} {
 			if !strings.Contains(out, want) {
-				t.Errorf("出力に %q が含まれていない｡出力:\n%s", want, out)
+				t.Errorf("出力に %q が含まれていない。出力:\n%s", want, out)
 			}
 		}
 		if strings.Contains(out, "pane=p2") {
@@ -180,8 +180,8 @@ func TestRunDoctor(t *testing.T) {
 }
 
 func TestReportPeerMessaging(t *testing.T) {
-	// パスは全て t.TempDir() からの相対で書く｡実パス (/tmp/claude-501 等) を書かないのは､
-	// sandbox 内の go test では t.TempDir() 自体が /tmp/claude-<uid> の下になり､fixture が環境と交差するため｡
+	// パスは全て t.TempDir() からの相対で書く。実パス (/tmp/claude-501 等) を書かないのは、
+	// sandbox 内の go test では t.TempDir() 自体が /tmp/claude-<uid> の下になり、fixture が環境と交差するため。
 	cases := []struct {
 		name         string
 		tmpdir       string // CLAUDE_CODE_TMPDIR (空なら未設定)
@@ -209,8 +209,8 @@ func TestReportPeerMessaging(t *testing.T) {
 			wantNone: []string{"OK: socket"},
 		},
 		{
-			// 親セッションの Bash ツールにも CLAUDE_CODE_TMPDIR は来る (実測: /tmp/claude-501)｡
-			// socket が /tmp/cc-socks/ に居る通常のセッションで警告してはいけない｡
+			// 親セッションの Bash ツールにも CLAUDE_CODE_TMPDIR は来る (実測: /tmp/claude-501)。
+			// socket が /tmp/cc-socks/ に居る通常のセッションで警告してはいけない。
 			name:         "CLAUDE_CODE_TMPDIR があっても socket がその外なら警告しない",
 			tmpdir:       "claude-501",
 			socket:       "cc-socks/123.sock",
@@ -292,7 +292,7 @@ func TestReportConfigState_カスタム値はデフォルトと異なる印が�
 
 	customLine, ok := findLineContaining(buf.String(), "pollIntervalSeconds")
 	if !ok {
-		t.Fatalf("pollIntervalSeconds の行が出力に無い｡出力:\n%s", buf.String())
+		t.Fatalf("pollIntervalSeconds の行が出力に無い。出力:\n%s", buf.String())
 	}
 	if !strings.Contains(customLine, "42") || !strings.Contains(customLine, "(*)") {
 		t.Errorf("カスタム値の差分マークが無い: %q", customLine)
@@ -300,14 +300,14 @@ func TestReportConfigState_カスタム値はデフォルトと異なる印が�
 
 	defaultLine, ok := findLineContaining(buf.String(), "marginSeconds")
 	if !ok {
-		t.Fatalf("marginSeconds の行が出力に無い｡出力:\n%s", buf.String())
+		t.Fatalf("marginSeconds の行が出力に無い。出力:\n%s", buf.String())
 	}
 	if strings.Contains(defaultLine, "(*)") {
 		t.Errorf("デフォルト値のままの行に差分マークが付いている: %q", defaultLine)
 	}
 }
 
-// touchFile は path に空ファイルを作る (親ディレクトリも作る)｡socket の存在だけを見る fixture 用｡
+// touchFile は path に空ファイルを作る (親ディレクトリも作る)。socket の存在だけを見る fixture 用。
 func touchFile(t *testing.T, path string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
@@ -318,7 +318,7 @@ func touchFile(t *testing.T, path string) {
 	}
 }
 
-// findLineContaining は out の中から substr を含む最初の行を返す｡
+// findLineContaining は out の中から substr を含む最初の行を返す。
 func findLineContaining(out, substr string) (string, bool) {
 	for _, line := range strings.Split(out, "\n") {
 		if strings.Contains(line, substr) {
@@ -328,8 +328,8 @@ func findLineContaining(out, substr string) (string, bool) {
 	return "", false
 }
 
-// mustRateLimitFile は sessionID に対応する利用上限 state のパスを返す｡
-// ファイル名の組み立ては sessionstate が唯一の実装元なので､テストもそこを通す｡
+// mustRateLimitFile は sessionID に対応する利用上限 state のパスを返す。
+// ファイル名の組み立ては sessionstate が唯一の実装元なので、テストもそこを通す。
 func mustRateLimitFile(t *testing.T, p apppath.Paths, sessionID string) string {
 	t.Helper()
 	path, err := sessionstate.New(p.StateDir()).RateLimitFile(sessionID)
@@ -339,7 +339,7 @@ func mustRateLimitFile(t *testing.T, p apppath.Paths, sessionID string) string {
 	return path
 }
 
-// writeJSONFile はテスト用に path へ v を JSON として書き込む (親ディレクトリも作る)｡
+// writeJSONFile はテスト用に path へ v を JSON として書き込む (親ディレクトリも作る)。
 func writeJSONFile(t *testing.T, path string, v any) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -354,12 +354,12 @@ func writeJSONFile(t *testing.T, path string, v any) {
 	}
 }
 
-// writeFixturePIDFile / writeFixtureSnapshot は doctor が読む状態を作る｡
+// writeFixturePIDFile / writeFixtureSnapshot は doctor が読む状態を作る。
 //
-// daemon 側の書き込み関数を呼ばないのは､それらを「テストのためだけに公開する」
-// ことになり､daemon の API surface を実際の用途以上に広げてしまうため
-// (analyze-modularity の high_public_ratio がこれを検出した)｡読み取りに使う
-// StatusSnapshot 型は公開されているので､書式の知識はここへ漏れない｡
+// daemon 側の書き込み関数を呼ばないのは、それらを「テストのためだけに公開する」
+// ことになり、daemon の API surface を実際の用途以上に広げてしまうため
+// (analyze-modularity の high_public_ratio がこれを検出した)。読み取りに使う
+// StatusSnapshot 型は公開されているので、書式の知識はここへ漏れない。
 func writeFixturePIDFile(t *testing.T, path string, pid int) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {

@@ -6,13 +6,13 @@ import (
 	"testing"
 )
 
-// envOf は map を getenv の形へ写す｡無いキーは空文字列になる (os.Getenv と同じ)｡
+// envOf は map を getenv の形へ写す。無いキーは空文字列になる (os.Getenv と同じ)。
 func envOf(m map[string]string) func(string) string {
 	return func(key string) string { return m[key] }
 }
 
-// clearMultiplexerEnv はテストを走らせる端末の多重化ツールの環境変数を空にする｡
-// rex の中で go test を打つと継承した値が context file に混ざるため｡
+// clearMultiplexerEnv はテストを走らせる端末の多重化ツールの環境変数を空にする。
+// rex の中で go test を打つと継承した値が context file に混ざるため。
 func clearMultiplexerEnv(t *testing.T) {
 	t.Helper()
 	for _, key := range []string{"REX_SESSION", "REX_BLOCK"} {
@@ -117,7 +117,7 @@ func TestListMultiplexerBlocks(t *testing.T) {
 	})
 
 	t.Run("同じ block の記録が複数あれば observed_at が最新のものを採る", func(t *testing.T) {
-		// 同じ block で Claude Code を起動し直すと､古い session の記録が prune まで残る｡
+		// 同じ block で Claude Code を起動し直すと、古い session の記録が prune まで残る。
 		s := New(t.TempDir())
 		writeContext(t, s, "old.json", `{"session_id":"old","observed_at":10,"multiplexer":{"kind":"rex","block":"block:1"}}`)
 		writeContext(t, s, "new.json", `{"session_id":"new","observed_at":20,"multiplexer":{"kind":"rex","block":"block:1"}}`)

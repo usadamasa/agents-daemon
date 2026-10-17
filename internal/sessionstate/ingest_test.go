@@ -8,8 +8,8 @@ import (
 	"time"
 )
 
-// statusline の stdin を模した入力｡実機の形 (rate_limits は初回 API レスポンス後に
-// だけ現れ､ウィンドウの切り替わりでは five_hour が null で届く) をそのまま使う｡
+// statusline の stdin を模した入力。実機の形 (rate_limits は初回 API レスポンス後に
+// だけ現れ、ウィンドウの切り替わりでは five_hour が null で届く) をそのまま使う。
 const (
 	inputFull = `{
 		"session_id": "sess-1",
@@ -99,7 +99,7 @@ func TestIngestStatusline_context(t *testing.T) {
 }
 
 func TestIngestStatusline_rateLimits(t *testing.T) {
-	t.Run("five_hour.resets_at があれば書き､seven_day も付ける", func(t *testing.T) {
+	t.Run("five_hour.resets_at があれば書き、seven_day も付ける", func(t *testing.T) {
 		s := New(t.TempDir())
 		if err := s.IngestStatusline([]byte(inputFull), ingestNow); err != nil {
 			t.Fatalf("IngestStatusline() error = %v", err)
@@ -128,9 +128,9 @@ func TestIngestStatusline_rateLimits(t *testing.T) {
 		}
 	})
 
-	t.Run("five_hour が null なら書かず､既存ファイルを残す", func(t *testing.T) {
-		// 5 時間ウィンドウの切り替わりで five_hour が null の描画が来る｡ここで上書きすると
-		// 直前の resets_at が消え､上限待ちの pane の起床時刻が計算できなくなる｡
+	t.Run("five_hour が null なら書かず、既存ファイルを残す", func(t *testing.T) {
+		// 5 時間ウィンドウの切り替わりで five_hour が null の描画が来る。ここで上書きすると
+		// 直前の resets_at が消え、上限待ちの pane の起床時刻が計算できなくなる。
 		s := New(t.TempDir())
 		if err := s.IngestStatusline([]byte(inputFull), ingestNow); err != nil {
 			t.Fatalf("1 回目 error = %v", err)
@@ -149,7 +149,7 @@ func TestIngestStatusline_rateLimits(t *testing.T) {
 		}
 	})
 
-	t.Run("rate_limits が無ければ書かず､既存ファイルを残す", func(t *testing.T) {
+	t.Run("rate_limits が無ければ書かず、既存ファイルを残す", func(t *testing.T) {
 		s := New(t.TempDir())
 		writeFile(t, mustPath(t, s, "sess-1"), `{"five_hour": {"used_percentage": 1, "resets_at": 1}}`)
 
@@ -173,7 +173,7 @@ func TestIngestStatusline_rateLimits(t *testing.T) {
 		if strings.Contains(raw, "seven_day") {
 			t.Errorf("seven_day が書かれている: %q", raw)
 		}
-		// used_percentage だけ null は実機で見ていないが､読み手は null を 0 に読むので 0 で書く
+		// used_percentage だけ null は実機で見ていないが、読み手は null を 0 に読むので 0 で書く
 		if !strings.Contains(raw, `"five_hour":{"used_percentage":0,"resets_at":1786851000}`) {
 			t.Errorf("five_hour = %q, want used_percentage 0", raw)
 		}
@@ -247,7 +247,7 @@ func readFileString(t *testing.T, path string) string {
 	return string(data)
 }
 
-// assertNoFiles は root 配下にファイルが 1 つも無いことを確かめる (ディレクトリだけなら許す)｡
+// assertNoFiles は root 配下にファイルが 1 つも無いことを確かめる (ディレクトリだけなら許す)。
 func assertNoFiles(t *testing.T, root string) {
 	t.Helper()
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {

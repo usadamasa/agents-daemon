@@ -1,8 +1,8 @@
 #!/usr/bin/env bats
-# build-daemon.sh の排他と失敗時の後始末を検証する｡
+# build-daemon.sh の排他と失敗時の後始末を検証する。
 #
-# 複数セッションの SessionStart が同時に build を起こしても二重に建てない (mkdir の lock)｡
-# go build が失敗したら cache のバイナリと stamp を触らず､lock も残さない｡
+# 複数セッションの SessionStart が同時に build を起こしても二重に建てない (mkdir の lock)。
+# go build が失敗したら cache のバイナリと stamp を触らず、lock も残さない。
 
 bats_require_minimum_version 1.5.0
 
@@ -18,7 +18,7 @@ teardown() {
   teardown_daemon_fixture
 }
 
-@test "生きているプロセスが lock を持っていれば build せずに exit 0 し､その lock を消さない" {
+@test "生きているプロセスが lock を持っていれば build せずに exit 0 し、その lock を消さない" {
   mkdir -p "$LOCK"
   printf '%s\n' "$$" >"$LOCK/pid"
 
@@ -31,8 +31,8 @@ teardown() {
   [ "$(<"$LOCK/pid")" = "$$" ]
 }
 
-@test "持ち主が死んだ lock は残骸として消し､build を進める" {
-  # 既に終了したプロセスの PID を持ち主にする (SIGKILL で cleanup が走らなかった状態)｡
+@test "持ち主が死んだ lock は残骸として消し、build を進める" {
+  # 既に終了したプロセスの PID を持ち主にする (SIGKILL で cleanup が走らなかった状態)。
   local dead_pid
   dead_pid=$(bash -c 'printf "%s" "$$"')
   mkdir -p "$LOCK"
@@ -56,7 +56,7 @@ teardown() {
   [ ! -d "$LOCK" ]
 }
 
-@test "go build が失敗したら既存のバイナリと stamp を残し､一時ファイルと lock を片付ける" {
+@test "go build が失敗したら既存のバイナリと stamp を残し、一時ファイルと lock を片付ける" {
   make_fake_daemon "$TEST_TMPDIR/old-daemon.calls" "$BIN"
   printf '%s\n' "0000.0000.0" >"$STAMP"
   cp "$BIN" "$TEST_TMPDIR/old-bin"

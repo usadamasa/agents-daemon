@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// testNow は月の途中の日付に固定する｡「前日」が同じ月に収まり､月初の分岐を避けるため｡
+// testNow は月の途中の日付に固定する。「前日」が同じ月に収まり、月初の分岐を避けるため。
 var testNow = time.Date(2026, 9, 15, 12, 0, 0, 0, time.UTC)
 
 const (
@@ -23,14 +23,14 @@ func newLedger(t *testing.T) Ledger {
 	return New(t.TempDir())
 }
 
-// seed は <day>/<sid>.json に過去の記録を置く｡
+// seed は <day>/<sid>.json に過去の記録を置く。
 func seed(t *testing.T, l Ledger, day, sessionID string, total, carried float64) {
 	t.Helper()
 	writeFile(t, filepath.Join(l.Dir, day, sessionID+".json"),
 		`{"session_id":"`+sessionID+`","total_cost_usd":`+ftoa(total)+`,"carried_usd":`+ftoa(carried)+`}`+"\n")
 }
 
-// ftoa は JSON と同じ最短表記 (3.79､2､4.1) にする｡
+// ftoa は JSON と同じ最短表記 (3.79、2、4.1) にする。
 func ftoa(v float64) string {
 	return strconv.FormatFloat(v, 'f', -1, 64)
 }
@@ -75,7 +75,7 @@ func mustRecord(t *testing.T, l Ledger, sessionID string, total float64) {
 }
 
 func TestRecord(t *testing.T) {
-	t.Run("その日の記録を作り､合算はその日と当月に同じ額が入る", func(t *testing.T) {
+	t.Run("その日の記録を作り、合算はその日と当月に同じ額が入る", func(t *testing.T) {
 		l := newLedger(t)
 		mustRecord(t, l, "sess-A", 3.79)
 		got := readFileString(t, filepath.Join(l.Dir, today, "sess-A.json"))
@@ -148,8 +148,8 @@ func TestRecord(t *testing.T) {
 		}
 	})
 
-	t.Run("前日までの記録が既に差し引き済みなら､その分だけを繰り越す", func(t *testing.T) {
-		// 一昨日 2.00､昨日は累計 5.00 (繰り越し 2.00) → 計上済みは 5.00｡今日の累計 7.00 なら今日は 2.00｡
+	t.Run("前日までの記録が既に差し引き済みなら、その分だけを繰り越す", func(t *testing.T) {
+		// 一昨日 2.00、昨日は累計 5.00 (繰り越し 2.00) → 計上済みは 5.00。今日の累計 7.00 なら今日は 2.00。
 		l := newLedger(t)
 		seed(t, l, "2026-09-13", "sess-A", 2.00, 0)
 		seed(t, l, yesterday, "sess-A", 5.00, 2.00)
@@ -160,7 +160,7 @@ func TestRecord(t *testing.T) {
 		}
 	})
 
-	t.Run("保持期間より古い日は消え､差し引きにも混ざらない", func(t *testing.T) {
+	t.Run("保持期間より古い日は消え、差し引きにも混ざらない", func(t *testing.T) {
 		l := newLedger(t)
 		seed(t, l, "2020-01-01", "sess-A", 99.00, 0)
 		seed(t, l, yesterday, "sess-A", 2.00, 0)

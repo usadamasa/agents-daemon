@@ -1,4 +1,4 @@
-# tagpr の設定 (git config 形式)｡https://github.com/Songmu/tagpr
+# tagpr の設定 (git config 形式)。https://github.com/Songmu/tagpr
 [tagpr]
   releaseBranch = main
   versionFile = .claude-plugin/plugin.json

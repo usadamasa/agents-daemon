@@ -10,9 +10,9 @@ import (
 	"time"
 )
 
-// runStatuslineCmd は statusline を stdin 付きで実行する｡HOME と XDG_STATE_HOME は一時ディレクトリへ
-// 向ける｡幅 (COLUMNS) と月額上限 (CLAUDE_STATUSLINE_SPEND_CAP) は呼び出し元の環境を引き継がず､
-// 引数で毎回決める (work profile の settings が上限を入れているため､空で「未設定」にする)｡
+// runStatuslineCmd は statusline を stdin 付きで実行する。HOME と XDG_STATE_HOME は一時ディレクトリへ
+// 向ける。幅 (COLUMNS) と月額上限 (CLAUDE_STATUSLINE_SPEND_CAP) は呼び出し元の環境を引き継がず、
+// 引数で毎回決める (work profile の settings が上限を入れているため、空で「未設定」にする)。
 func runStatuslineCmd(t *testing.T, stdin, columns, spendCap string) (stdout, stderr, stateDir string) {
 	t.Helper()
 	root := t.TempDir()
@@ -40,14 +40,14 @@ const statuslineInput = `{"model": {"display_name": "Opus"}, "workspace": {"curr
 	"cost": {"total_cost_usd": 3.79}, "context_window": {"total_input_tokens": 100000, "used_percentage": 50, "context_window_size": 200000}}`
 
 func TestNewStatuslineCmd(t *testing.T) {
-	t.Run("3 行を描画し､同じプロセスで context/<sid>.json を書く", func(t *testing.T) {
+	t.Run("3 行を描画し、同じプロセスで context/<sid>.json を書く", func(t *testing.T) {
 		stdout, stderr, stateDir := runStatuslineCmd(t, statuslineInput, "200", "")
 		if stderr != "" {
 			t.Errorf("stderr = %q, want empty", stderr)
 		}
 		lines := strings.Split(stdout, "\n")
 		if len(lines) != 3 {
-			t.Fatalf("stdout が %d 行､want 3:\n%q", len(lines), stdout)
+			t.Fatalf("stdout が %d 行、want 3:\n%q", len(lines), stdout)
 		}
 		for _, want := range []string{"🌸 Opus 💎", "🧠 100k (50%)", "💰 $3.79", "📁 /tmp"} {
 			if !strings.Contains(stdout, want) {
@@ -99,13 +99,13 @@ func TestNewStatuslineCmd(t *testing.T) {
 		}
 	})
 
-	t.Run("壊れた JSON でも exit 0 で stdout は空｡理由は stderr", func(t *testing.T) {
+	t.Run("壊れた JSON でも exit 0 で stdout は空。理由は stderr", func(t *testing.T) {
 		stdout, stderr, _ := runStatuslineCmd(t, `{"session_id": `, "200", "")
 		if stdout != "" {
 			t.Errorf("stdout = %q, want empty", stdout)
 		}
 		if stderr == "" {
-			t.Error("stderr が空｡手で実行したときに理由が分からない")
+			t.Error("stderr が空。手で実行したときに理由が分からない")
 		}
 	})
 

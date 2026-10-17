@@ -1,7 +1,7 @@
 // Package config は agents-daemon の設定 (${XDG_CONFIG_HOME:-~/.config}/agents-daemon/config.json) を
-// 読み込み､検証する｡ファイルが存在しない場合は全項目デフォルトとして扱い､
-// 個々のキーが不正な場合もそのキーだけデフォルトへ落として起動を継続する｡
-// 設定ファイルの typo で監視全体が黙って無効化される事故を避けるための方針である｡
+// 読み込み、検証する。ファイルが存在しない場合は全項目デフォルトとして扱い、
+// 個々のキーが不正な場合もそのキーだけデフォルトへ落として起動を継続する。
+// 設定ファイルの typo で監視全体が黙って無効化される事故を避けるための方針である。
 package config
 
 import (
@@ -12,23 +12,23 @@ import (
 	"strings"
 )
 
-// defaultRetryMessage は上限解除後の再開で pane へ送る文面｡上限の検知語 (limit / rate 等) を
-// 含めてはいけない (自分の送信を自分で検知して再送を繰り返す)｡
+// defaultRetryMessage は上限解除後の再開で pane へ送る文面。上限の検知語 (limit / rate 等) を
+// 含めてはいけない (自分の送信を自分で検知して再送を繰り返す)。
 const defaultRetryMessage = "Continue where you left off."
 
-// Config は agents-daemon の検証済み設定｡
+// Config は agents-daemon の検証済み設定。
 type Config struct {
 	Enabled             bool
 	PollIntervalSeconds int
 	MarginSeconds       int
 	FallbackWaitHours   float64
 	MaxRetries          int
-	// RetryMessage は resume 時にペインへ送るテキスト｡入力行へエコーされるため､
-	// limit / rate / overloaded のような検知語を含めてはいけない｡含めると
-	// 監視が自分自身の送信を再検知して無限ループする｡
+	// RetryMessage は resume 時にペインへ送るテキスト。入力行へエコーされるため、
+	// limit / rate / overloaded のような検知語を含めてはいけない。含めると
+	// 監視が自分自身の送信を再検知して無限ループする。
 	RetryMessage string
-	// ReadLines は pane の画面を末尾から何行読むか｡rex の capture は可視領域しか返さないので､
-	// block を小さく分割していると判定に必要な行が画面から溢れうる (pane-io.md)｡
+	// ReadLines は pane の画面を末尾から何行読むか。rex の capture は可視領域しか返さないので、
+	// block を小さく分割していると判定に必要な行が画面から溢れうる (pane-io.md)。
 	ReadLines               int
 	DetectionTailLines      int
 	UsedPercentageThreshold float64
@@ -41,13 +41,13 @@ type Config struct {
 	SubmitDelayMs           int
 	CustomPatterns          []string
 	IdleShutdownMinutes     int
-	// DeferToNativeAutoContinue が true のとき､Claude Code 自身の auto-continue
-	// (2.1.234 の autoContinueAtUsageLimit) がカウントダウン中の pane には手を出さない｡
-	// この状態では Escape が取り消しキーなので､送信するとネイティブの継続を潰す｡
+	// DeferToNativeAutoContinue が true のとき、Claude Code 自身の auto-continue
+	// (2.1.234 の autoContinueAtUsageLimit) がカウントダウン中の pane には手を出さない。
+	// この状態では Escape が取り消しキーなので、送信するとネイティブの継続を潰す。
 	DeferToNativeAutoContinue bool
 }
 
-// Default は全項目デフォルト値の Config を返す｡
+// Default は全項目デフォルト値の Config を返す。
 func Default() Config {
 	return Config{
 		Enabled:                 true,
@@ -73,10 +73,10 @@ func Default() Config {
 	}
 }
 
-// rawConfig は設定ファイルをそのまま受ける入れ物｡フィールドをポインタにしているのは
+// rawConfig は設定ファイルをそのまま受ける入れ物。フィールドをポインタにしているのは
 // 「キーが省略された」(nil のまま) と「キーは書かれているが値が不正」(非 nil だが
-// validate で弾かれる) を区別するため｡bool のように 0 値が意味を持つ型では
-// 非ポインタだと「省略」と「明示的な false/0」を取り違えてしまう｡
+// validate で弾かれる) を区別するため。bool のように 0 値が意味を持つ型では
+// 非ポインタだと「省略」と「明示的な false/0」を取り違えてしまう。
 type rawConfig struct {
 	Enabled                 *bool     `json:"enabled"`
 	PollIntervalSeconds     *int      `json:"pollIntervalSeconds"`
@@ -100,10 +100,10 @@ type rawConfig struct {
 	DeferToNativeAutoContinue *bool `json:"deferToNativeAutoContinue"`
 }
 
-// Load は path から設定を読み込む｡
+// Load は path から設定を読み込む。
 // ファイルが存在しない場合はエラーにせずデフォルト値を返す (ツールは設定ファイルが
-// 無い状態でも動く必要がある)｡JSON の構文が壊れている場合や個々のキーの型/値が
-// 不正な場合も､そのキーだけデフォルトへ落として起動を継続する｡
+// 無い状態でも動く必要がある)。JSON の構文が壊れている場合や個々のキーの型/値が
+// 不正な場合も、そのキーだけデフォルトへ落として起動を継続する。
 func Load(path string) (Config, error) {
 	cfg := Default()
 
@@ -115,9 +115,9 @@ func Load(path string) (Config, error) {
 		return cfg, err
 	}
 
-	// Unmarshal が型不一致のフィールドをスキップして「できる範囲まで」埋めてくれるため､
-	// ここで返るエラーは無視してよい (壊れたキーは raw 側で nil のまま残り､
-	// 後段の applyRaw がデフォルトへ落とす)｡
+	// Unmarshal が型不一致のフィールドをスキップして「できる範囲まで」埋めてくれるため、
+	// ここで返るエラーは無視してよい (壊れたキーは raw 側で nil のまま残り、
+	// 後段の applyRaw がデフォルトへ落とす)。
 	var raw rawConfig
 	_ = json.Unmarshal(data, &raw)
 
@@ -125,19 +125,19 @@ func Load(path string) (Config, error) {
 	return cfg, nil
 }
 
-// applyRaw は raw の各キーを検証し､妥当なものだけ cfg へ反映する｡
-// applyRaw は raw の各キーを検証しつつ cfg へ反映する｡値が不正なキーは
-// 黙って既定値のままにする (タイプミス 1 つで監視全体が止まらないようにするため)｡
+// applyRaw は raw の各キーを検証し、妥当なものだけ cfg へ反映する。
+// applyRaw は raw の各キーを検証しつつ cfg へ反映する。値が不正なキーは
+// 黙って既定値のままにする (タイプミス 1 つで監視全体が止まらないようにするため)。
 //
-// 意味のまとまりで 3 つに割ってある｡1 関数に並べると認知的複雑度が
-// lint の閾値を超えるうえ､どのキーがどの役割かも読み取りにくくなるため｡
+// 意味のまとまりで 3 つに割ってある。1 関数に並べると認知的複雑度が
+// lint の閾値を超えるうえ、どのキーがどの役割かも読み取りにくくなるため。
 func applyRaw(cfg *Config, raw *rawConfig) {
 	applyRawBasics(cfg, raw)
 	applyRawDetection(cfg, raw)
 	applyRawRecovery(cfg, raw)
 }
 
-// applyRawBasics は稼働そのものに関わる設定を反映する｡
+// applyRawBasics は稼働そのものに関わる設定を反映する。
 func applyRawBasics(cfg *Config, raw *rawConfig) {
 	if raw.Enabled != nil {
 		cfg.Enabled = *raw.Enabled
@@ -159,7 +159,7 @@ func applyRawBasics(cfg *Config, raw *rawConfig) {
 	}
 }
 
-// applyRawDetection は「上限に当たったと判断してよいか」に関わる設定を反映する｡
+// applyRawDetection は「上限に当たったと判断してよいか」に関わる設定を反映する。
 func applyRawDetection(cfg *Config, raw *rawConfig) {
 	if v := raw.ReadLines; v != nil && *v >= 5 {
 		cfg.ReadLines = *v
@@ -178,7 +178,7 @@ func applyRawDetection(cfg *Config, raw *rawConfig) {
 	}
 }
 
-// applyRawRecovery は再開の送り方と一時エラーの扱いに関わる設定を反映する｡
+// applyRawRecovery は再開の送り方と一時エラーの扱いに関わる設定を反映する。
 func applyRawRecovery(cfg *Config, raw *rawConfig) {
 	if v := raw.RetryMessage; v != nil && strings.TrimSpace(*v) != "" {
 		cfg.RetryMessage = *v
@@ -192,7 +192,7 @@ func applyRawRecovery(cfg *Config, raw *rawConfig) {
 	if v := raw.TransientMaxWaitSeconds; v != nil && *v >= 1 {
 		cfg.TransientMaxWaitSeconds = *v
 	}
-	// 上限が下限を下回る組み合わせは意味を成さないので引き上げる｡
+	// 上限が下限を下回る組み合わせは意味を成さないので引き上げる。
 	cfg.TransientMaxWaitSeconds = max(cfg.TransientMaxWaitSeconds, cfg.TransientWaitSeconds)
 	if raw.DeferToNativeAutoContinue != nil {
 		cfg.DeferToNativeAutoContinue = *raw.DeferToNativeAutoContinue
@@ -208,8 +208,8 @@ func applyRawRecovery(cfg *Config, raw *rawConfig) {
 	}
 }
 
-// sanitizePatterns はコンパイルできない正規表現を除外する｡不正な 1 件のために
-// 設定全体を破棄しない｡
+// sanitizePatterns はコンパイルできない正規表現を除外する。不正な 1 件のために
+// 設定全体を破棄しない。
 func sanitizePatterns(patterns []string) []string {
 	filtered := make([]string, 0, len(patterns))
 	for _, p := range patterns {

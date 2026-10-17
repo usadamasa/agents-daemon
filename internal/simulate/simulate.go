@@ -1,7 +1,7 @@
-// Package simulate は `simulate` サブコマンドの実装を提供する｡使い捨て pane を作り､
+// Package simulate は `simulate` サブコマンドの実装を提供する。使い捨て pane を作り、
 // daemon (internal/daemon) と同じ検知・判定経路 (monitor パッケージ) をその pane に対してだけ
-// 実際に通す end-to-end の検証ツール｡読むだけの診断 (internal/verify の doctor / inspect) とは
-// 違い､pane の作成と送信を伴う｡
+// 実際に通す end-to-end の検証ツール。読むだけの診断 (internal/verify の doctor / inspect) とは
+// 違い、pane の作成と送信を伴う。
 package simulate
 
 import (
@@ -23,13 +23,13 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 )
 
-// simulateMetadataSource は simulate が使い捨て block に付ける label｡利用者が付けた label と
-// 見分けがつくよう､ツール名を含めた固定値にする｡
+// simulateMetadataSource は simulate が使い捨て block に付ける label。利用者が付けた label と
+// 見分けがつくよう、ツール名を含めた固定値にする。
 const simulateMetadataSource = "agents-daemon-simulate"
 
-// defaultSimulateScreen は --screen-file を省略した場合に使う内蔵の limit 画面｡
+// defaultSimulateScreen は --screen-file を省略した場合に使う内蔵の limit 画面。
 // 2026-08-16 に実機 (Claude Code 2.1.224) で観測した文面と同じ形
-// (internal/detect/real_sample_test.go の realLimitScreen 参照)｡
+// (internal/detect/real_sample_test.go の realLimitScreen 参照)。
 const defaultSimulateScreen = `  ⏺ Bash(task test)
   ⎿  ✅ テスト完了
 
@@ -41,15 +41,15 @@ const defaultSimulateScreen = `  ⏺ Bash(task test)
 ────────────────────────────────────────────────────────────────────────────
 `
 
-// Options は Run の呼び出しオプション｡
+// Options は Run の呼び出しオプション。
 type Options struct {
 	Send       bool
 	Keep       bool
 	ScreenFile string
 }
 
-// Run は simulate の本体｡使い捨て pane の作成から後始末まで一貫して行う｡
-// backend は daemon と同じ規則 (REX_SESSION があること) で選ぶ｡
+// Run は simulate の本体。使い捨て pane の作成から後始末まで一貫して行う。
+// backend は daemon と同じ規則 (REX_SESSION があること) で選ぶ。
 func Run(ctx context.Context, w io.Writer, p apppath.Paths, opts Options) error {
 	kind, execClient, err := backend.Connect(os.Getenv, sessionstate.New(p.StateDir()))
 	if err != nil {
@@ -75,8 +75,8 @@ func Run(ctx context.Context, w io.Writer, p apppath.Paths, opts Options) error 
 	if err != nil {
 		return err
 	}
-	// script は sh が読みながら実行し､screen は script が起動直後に cat する｡どちらも開いた
-	// fd があれば削除後も読めるので､pane の後始末と一緒に消してよい｡
+	// script は sh が読みながら実行し、screen は script が起動直後に cat する。どちらも開いた
+	// fd があれば削除後も読めるので、pane の後始末と一緒に消してよい。
 	defer removeFiles()
 
 	_, _ = fmt.Fprintf(w, "使い捨て pane を作成します (backend=%s)...\n", kind)
@@ -92,16 +92,16 @@ func Run(ctx context.Context, w io.Writer, p apppath.Paths, opts Options) error 
 		return err
 	}
 	_, _ = fmt.Fprintf(w, "  pane %s: %s\n", ownedPaneID, marked)
-	// 登録が backend に載ったことを､daemon と同じ経路 (PaneGet → IsClaudeAgent) で確かめる｡
-	// rex では script が OSC 7501 を出して record に載るまでの時間が挟まる｡
+	// 登録が backend に載ったことを、daemon と同じ経路 (PaneGet → IsClaudeAgent) で確かめる。
+	// rex では script が OSC 7501 を出して record に載るまでの時間が挟まる。
 	pane, err := waitForClaudeAgent(ctx, execClient, ownedPaneID, markTimeout)
 	if err != nil {
 		return err
 	}
 	_, _ = fmt.Fprintf(w, "  Claude agent として見えました (agent=%s agent_status=%s)\n", pane.Agent, pane.AgentStatus)
 
-	// script の cat が画面に出るのを待つ｡コマンドの投入はレンダリング完了を待たずに戻る
-	// (実測: 固定 500ms 待機では画面反映前に読んでしまい none 判定になることがあった)｡
+	// script の cat が画面に出るのを待つ。コマンドの投入はレンダリング完了を待たずに戻る
+	// (実測: 固定 500ms 待機では画面反映前に読んでしまい none 判定になることがあった)。
 	if marker := lastNonEmptyLine(screenContent); marker != "" {
 		if err := waitForScreenContent(ctx, execClient, ownedPaneID, marker, writeScreenTimeout); err != nil {
 			return err
@@ -112,7 +112,7 @@ func Run(ctx context.Context, w io.Writer, p apppath.Paths, opts Options) error 
 	return runSimulateTicks(ctx, w, p, ownedPaneID, execClient, opts)
 }
 
-// writeSimulateFiles は script と画面テキストを一時ディレクトリに書き､そのパスと削除関数を返す｡
+// writeSimulateFiles は script と画面テキストを一時ディレクトリに書き、そのパスと削除関数を返す。
 func writeSimulateFiles(script, screen string) (scriptPath, screenPath string, remove func(), err error) {
 	dir, err := os.MkdirTemp("", "agents-daemon-simulate-")
 	if err != nil {
@@ -125,21 +125,21 @@ func writeSimulateFiles(script, screen string) (scriptPath, screenPath string, r
 		remove()
 		return "", "", nil, fmt.Errorf("script の書き込みに失敗: %w", err)
 	}
-	if err := os.WriteFile(screenPath, []byte(screen), 0o600); err != nil { // #nosec G703 -- screenPath は MkdirTemp のディレクトリ配下の固定名｡screen の中身は --screen-file の内容で､パスには使わない
+	if err := os.WriteFile(screenPath, []byte(screen), 0o600); err != nil { // #nosec G703 -- screenPath は MkdirTemp のディレクトリ配下の固定名。screen の中身は --screen-file の内容で、パスには使わない
 		remove()
 		return "", "", nil, fmt.Errorf("画面テキストの書き込みに失敗: %w", err)
 	}
 	return scriptPath, screenPath, remove, nil
 }
 
-// writeScreenTimeout は画面への反映を待つ最大時間｡
+// writeScreenTimeout は画面への反映を待つ最大時間。
 const writeScreenTimeout = 5 * time.Second
 
-// markTimeout は Claude agent の登録が backend に載るのを待つ最大時間｡
+// markTimeout は Claude agent の登録が backend に載るのを待つ最大時間。
 const markTimeout = 5 * time.Second
 
-// waitForClaudeAgent は paneID が multiplexer.IsClaudeAgent を満たすまで PaneGet をポーリングし､
-// 満たした時点の Pane を返す｡
+// waitForClaudeAgent は paneID が multiplexer.IsClaudeAgent を満たすまで PaneGet をポーリングし、
+// 満たした時点の Pane を返す。
 func waitForClaudeAgent(ctx context.Context, client multiplexer.Client, paneID string, timeout time.Duration) (multiplexer.Pane, error) {
 	deadline := time.Now().Add(timeout)
 	var last multiplexer.Pane
@@ -165,9 +165,9 @@ func waitForClaudeAgent(ctx context.Context, client multiplexer.Client, paneID s
 	}
 }
 
-// lastNonEmptyLine は s の最後の空白以外を含む行を trim して返す｡--source detection は
-// pane の viewport に収まる範囲しか見せない (実測)｡中身が viewport より長いと先頭の行から
-// 順にスクロールアウトするため､待ち受けの目印には終端側の行を使う方が生き残りやすい｡
+// lastNonEmptyLine は s の最後の空白以外を含む行を trim して返す。--source detection は
+// pane の viewport に収まる範囲しか見せない (実測)。中身が viewport より長いと先頭の行から
+// 順にスクロールアウトするため、待ち受けの目印には終端側の行を使う方が生き残りやすい。
 func lastNonEmptyLine(s string) string {
 	lines := strings.Split(s, "\n")
 	for i := len(lines) - 1; i >= 0; i-- {
@@ -178,7 +178,7 @@ func lastNonEmptyLine(s string) string {
 	return ""
 }
 
-// waitForScreenContent は paneID の画面に substr が現れるまでポーリングする｡
+// waitForScreenContent は paneID の画面に substr が現れるまでポーリングする。
 func waitForScreenContent(ctx context.Context, client multiplexer.Client, paneID, substr string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	var lastScreen string
@@ -197,10 +197,10 @@ func waitForScreenContent(ctx context.Context, client multiplexer.Client, paneID
 	}
 }
 
-// cleanupSimulatePane は使い捨て pane の後始末をする｡ownedPaneID は必ず
-// host.SplitPane がこのプロセス自身で作った値であり､呼び出し元にそれ以外の
-// pane_id を渡す手段は無い｡失敗しても simulate 全体は失敗させず､手動での
-// 後始末コマンドを案内するだけに留める｡
+// cleanupSimulatePane は使い捨て pane の後始末をする。ownedPaneID は必ず
+// host.SplitPane がこのプロセス自身で作った値であり、呼び出し元にそれ以外の
+// pane_id を渡す手段は無い。失敗しても simulate 全体は失敗させず、手動での
+// 後始末コマンドを案内するだけに留める。
 func cleanupSimulatePane(ctx context.Context, w io.Writer, host simulateHost, ownedPaneID string, keep bool) {
 	if keep {
 		_, _ = fmt.Fprintf(w, "--keep が指定されたため pane %s は残しています (`%s` で手動削除してください)\n", ownedPaneID, host.CloseCommand(ownedPaneID))
@@ -213,14 +213,14 @@ func cleanupSimulatePane(ctx context.Context, w io.Writer, host simulateHost, ow
 	_, _ = fmt.Fprintf(w, "pane %s を閉じました\n", ownedPaneID)
 }
 
-// runSimulateTicks は monitor.Tick を daemon と同じ設定で実行し､結果を w へ表示する｡
-// 1 回目の Tick で limit を検知して待機状態に入った場合､2 回目は起床時刻を過ぎたと
+// runSimulateTicks は monitor.Tick を daemon と同じ設定で実行し、結果を w へ表示する。
+// 1 回目の Tick で limit を検知して待機状態に入った場合、2 回目は起床時刻を過ぎたと
 // 仮定した合成の now を渡して再送信の経路 (recoverPane 経由の SendText/SendKeys) まで
-// 確認する｡実時間では待たない (上限解除まで数時間かかるため)｡
+// 確認する。実時間では待たない (上限解除まで数時間かかるため)。
 func runSimulateTicks(ctx context.Context, w io.Writer, p apppath.Paths, ownedPaneID string, execClient multiplexer.Client, opts Options) error {
 	cfg, cfgErr := config.Load(p.ConfigFile())
 	if cfgErr != nil {
-		_, _ = fmt.Fprintf(w, "設定の読み込みに失敗､デフォルト値で継続します: %v\n", cfgErr)
+		_, _ = fmt.Fprintf(w, "設定の読み込みに失敗、デフォルト値で継続します: %v\n", cfgErr)
 		cfg = config.Default()
 	}
 	classifier, err := detect.NewClassifier(cfg.CustomPatterns)
@@ -230,12 +230,12 @@ func runSimulateTicks(ctx context.Context, w io.Writer, p apppath.Paths, ownedPa
 	store := sessionstate.New(p.StateDir())
 	rateState, stateErr := store.LoadRateLimit(multiplexer.SessionIDOf(ctx, execClient, ownedPaneID))
 	if stateErr != nil {
-		_, _ = fmt.Fprintf(w, "利用上限 state の読み込みに失敗､state 無しとして扱います: %v\n", stateErr)
+		_, _ = fmt.Fprintf(w, "利用上限 state の読み込みに失敗、state 無しとして扱います: %v\n", stateErr)
 		rateState = nil
 	}
 	account, accountErr := store.LatestWindow(time.Now())
 	if accountErr != nil {
-		_, _ = fmt.Fprintf(w, "アカウント全体の利用上限 state の走査に失敗､無しとして扱います: %v\n", accountErr)
+		_, _ = fmt.Fprintf(w, "アカウント全体の利用上限 state の走査に失敗、無しとして扱います: %v\n", accountErr)
 		account = nil
 	}
 
@@ -279,10 +279,10 @@ func runSimulateTicks(ctx context.Context, w io.Writer, p apppath.Paths, ownedPa
 	return nil
 }
 
-// scopedClient は multiplexer.Client を包み､ownedPaneID 以外の pane を対象にした呼び出しを
-// 全て拒否する｡simulate は自分が作った使い捨て pane 以外に絶対に触れてはいけないので､
-// 「呼び出し側が正しい pane_id を渡す」という規律に頼るのではなく､型システムの外側で
-// 機械的に強制できるガードとして実装する｡
+// scopedClient は multiplexer.Client を包み、ownedPaneID 以外の pane を対象にした呼び出しを
+// 全て拒否する。simulate は自分が作った使い捨て pane 以外に絶対に触れてはいけないので、
+// 「呼び出し側が正しい pane_id を渡す」という規律に頼るのではなく、型システムの外側で
+// 機械的に強制できるガードとして実装する。
 type scopedClient struct {
 	inner       multiplexer.Client
 	ownedPaneID string
@@ -337,10 +337,10 @@ func (c *scopedClient) Reachable(ctx context.Context) error {
 	return c.inner.Reachable(ctx)
 }
 
-// simulateDryRunClient は daemon パッケージの dryRunClient と同じ考え方の decorator｡
-// dryRunClient をそのまま使わない理由は､それが daemon のログファイル
-// (*applog.Logger) 前提であるのに対し､simulate は「何を送るはずだったか」を
-// そのままコマンドの標準出力 w に表示したいから｡
+// simulateDryRunClient は daemon パッケージの dryRunClient と同じ考え方の decorator。
+// dryRunClient をそのまま使わない理由は、それが daemon のログファイル
+// (*applog.Logger) 前提であるのに対し、simulate は「何を送るはずだったか」を
+// そのままコマンドの標準出力 w に表示したいから。
 type simulateDryRunClient struct {
 	inner multiplexer.Client
 	w     io.Writer

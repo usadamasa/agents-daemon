@@ -1,12 +1,12 @@
 #!/bin/bash
-# plugin のソースから agents-daemon を go build し､XDG cache の固定パスへ置いて起動する｡
-# ensure-daemon.sh (SessionStart hook) が detach して呼ぶ｡出力は build.log へ流れる｡
+# plugin のソースから agents-daemon を go build し、XDG cache の固定パスへ置いて起動する。
+# ensure-daemon.sh (SessionStart hook) が detach して呼ぶ。出力は build.log へ流れる。
 #
-# - 同時に起きた build は mkdir の lock で 1 本に絞る｡持ち主が生きていれば「ビルド中」として終わり､
+# - 同時に起きた build は mkdir の lock で 1 本に絞る。持ち主が生きていれば「ビルド中」として終わり、
 #   死んでいれば残骸として消して取り直す
-# - 建てたバイナリは同一ディレクトリの一時ファイルから mv で差し替える｡動作中の daemon は
-#   実行ファイルの差し替えを検知して自分で入れ替わるので､ここでは止めない
-# - go が無ければエラー終了する｡PATH に何が居るかは仮定しない (入れ方は README)
+# - 建てたバイナリは同一ディレクトリの一時ファイルから mv で差し替える。動作中の daemon は
+#   実行ファイルの差し替えを検知して自分で入れ替わるので、ここでは止めない
+# - go が無ければエラー終了する。PATH に何が居るかは仮定しない (入れ方は README)
 
 set -euo pipefail
 
@@ -27,10 +27,10 @@ if ! mkdir -p "$DAEMON_BIN_DIR"; then
   exit 1
 fi
 
-# lock は mkdir の原子性で取り､持ち主の PID を中に置く｡取れなかったときは持ち主が生きているかで
-# 「ビルド中」と「残骸」を分ける｡残骸 (SIGKILL 等で cleanup が走らなかった) は消して取り直す｡
-# mkdir と pid の書き込みの間に別の build が覗くと残骸と誤認するが､起きるのは二重 build 1 回で､
-# バイナリは mv で原子的に置かれるので壊れない｡
+# lock は mkdir の原子性で取り、持ち主の PID を中に置く。取れなかったときは持ち主が生きているかで
+# 「ビルド中」と「残骸」を分ける。残骸 (SIGKILL 等で cleanup が走らなかった) は消して取り直す。
+# mkdir と pid の書き込みの間に別の build が覗くと残骸と誤認するが、起きるのは二重 build 1 回で、
+# バイナリは mv で原子的に置かれるので壊れない。
 take_lock() {
   mkdir "$DAEMON_BUILD_LOCK" 2>/dev/null || return 1
   if ! printf '%s\n' "$$" >"$DAEMON_BUILD_LOCK/pid"; then
@@ -45,7 +45,7 @@ release_lock() {
   rmdir "$DAEMON_BUILD_LOCK" || log_error "rmdir failed: $DAEMON_BUILD_LOCK"
 }
 
-# lock の持ち主の PID を stdout に出す｡pid ファイルが無いか形が不正なら空｡
+# lock の持ち主の PID を stdout に出す。pid ファイルが無いか形が不正なら空。
 lock_holder() {
   local pid=""
   [ -f "$DAEMON_BUILD_LOCK/pid" ] && pid=$(<"$DAEMON_BUILD_LOCK/pid")
@@ -82,7 +82,7 @@ cleanup() {
   fi
   release_lock
 }
-# lock を取った後で trap を張る｡先に張ると､lock を取れずに抜ける経路が他の build の lock を消す｡
+# lock を取った後で trap を張る。先に張ると、lock を取れずに抜ける経路が他の build の lock を消す。
 trap cleanup EXIT
 trap 'exit 1' INT TERM
 
@@ -112,7 +112,7 @@ if ! mv "$tmp_bin" "$DAEMON_BIN"; then
 fi
 tmp_bin=""
 
-# stamp はバイナリを置いた後に書く｡逆順だと､途中で落ちたとき古いバイナリが新しい version を名乗る｡
+# stamp はバイナリを置いた後に書く。逆順だと、途中で落ちたとき古いバイナリが新しい version を名乗る。
 if ! tmp_stamp=$(mktemp "$DAEMON_BIN_DIR/.agents-daemon.version.XXXXXX"); then
   log_error "mktemp failed in $DAEMON_BIN_DIR"
   exit 1

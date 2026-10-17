@@ -1,4 +1,4 @@
-// Package backend は環境から端末多重化ツール (rex) を確かめ､その multiplexer.Client を作る｡
+// Package backend は環境から端末多重化ツール (rex) を確かめ、その multiplexer.Client を作る。
 package backend
 
 import (
@@ -9,11 +9,11 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 )
 
-// ErrNoRexSession は rex の外で起動され､監視する block が無いことを表す｡
-// daemon --ensure はこれを受けて何もせずに終わる (素の端末の SessionStart で毎回 daemon を起こさない)｡
+// ErrNoRexSession は rex の外で起動され、監視する block が無いことを表す。
+// daemon --ensure はこれを受けて何もせずに終わる (素の端末の SessionStart で毎回 daemon を起こさない)。
 var ErrNoRexSession = errors.New("REX_SESSION が無いため rex の block を監視できません (rex の外で起動されました)")
 
-// Detect は使う backend の種類を返す｡REX_SESSION があれば rex､無ければ ErrNoRexSession｡
+// Detect は使う backend の種類を返す。REX_SESSION があれば rex、無ければ ErrNoRexSession。
 func Detect(getenv func(string) string) (string, error) {
 	if getenv("REX_SESSION") != "" {
 		return sessionstate.MultiplexerKindRex, nil
@@ -21,8 +21,8 @@ func Detect(getenv func(string) string) (string, error) {
 	return "", ErrNoRexSession
 }
 
-// Connect は Detect で backend を確かめ､その Client を作る｡block から session_id を引く対応は､
-// statusline が `context/<sid>.json` に書いた記録 (store) から取る｡
+// Connect は Detect で backend を確かめ、その Client を作る。block から session_id を引く対応は、
+// statusline が `context/<sid>.json` に書いた記録 (store) から取る。
 func Connect(getenv func(string) string, store sessionstate.Store) (string, multiplexer.Client, error) {
 	kind, err := Detect(getenv)
 	if err != nil {

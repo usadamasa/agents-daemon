@@ -29,7 +29,7 @@ func touchAged(t *testing.T, path string, age time.Duration, now time.Time) {
 func TestHousekeep(t *testing.T) {
 	now := time.Date(2026, 8, 28, 12, 0, 0, 0, time.UTC)
 
-	t.Run("古い rotated ログと state を消し､消した数をログに残す", func(t *testing.T) {
+	t.Run("古い rotated ログと state を消し、消した数をログに残す", func(t *testing.T) {
 		dir := t.TempDir()
 		logPath := filepath.Join(dir, "logs", "daemon.log")
 		store := sessionstate.New(dir)
@@ -38,7 +38,7 @@ func TestHousekeep(t *testing.T) {
 		touchAged(t, applog.RotatedPath(logPath, "2026-08-27"), 24*time.Hour, now)
 		touchAged(t, filepath.Join(store.RateLimits, "old.json"), 30*time.Hour, now)
 		touchAged(t, filepath.Join(store.RateLimits, "fresh.json"), time.Hour, now)
-		// context の保持期間は rate-limits より長い (上限待ちを跨いで block と session の対応を残す)｡
+		// context の保持期間は rate-limits より長い (上限待ちを跨いで block と session の対応を残す)。
 		touchAged(t, filepath.Join(contextDir, "old-session.json"), 8*24*time.Hour, now)
 		touchAged(t, filepath.Join(contextDir, "fresh-session.json"), 30*time.Hour, now)
 

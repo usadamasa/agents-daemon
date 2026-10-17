@@ -11,22 +11,33 @@ import (
 	"testing"
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
-	"github.com/usadamasa/agents-daemon/internal/herdrcli"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
 )
 
-func TestRunSimulate_rexではREX_BLOCKが無ければ止める(t *testing.T) {
-	t.Setenv("REX_SESSION", "session:01a12439-0839-7829-a4cb-aeac453570c1")
-	t.Setenv("REX_BLOCK", "")
-	t.Setenv("HERDR_ENV", "1")
-	var buf bytes.Buffer
-	err := RunSimulate(context.Background(), &buf, apppath.New(t.TempDir(), "", ""), SimulateOptions{})
-	if err == nil || !strings.Contains(err.Error(), "REX_BLOCK") {
-		t.Fatalf("RunSimulate() error = %v, want REX_BLOCK に触れるエラー", err)
+func TestRunSimulate_前提が無ければ止める(t *testing.T) {
+	cases := []struct {
+		name    string
+		session string
+		block   string
+		want    string
+	}{
+		{"rex の外", "", "", "REX_SESSION"},
+		{"rex の中だが REX_BLOCK が無い", "session:01a12439-0839-7829-a4cb-aeac453570c1", "", "REX_BLOCK"},
 	}
-	if buf.Len() != 0 {
-		t.Errorf("止める前に何かした: %s", buf.String())
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("REX_SESSION", tc.session)
+			t.Setenv("REX_BLOCK", tc.block)
+			var buf bytes.Buffer
+			err := RunSimulate(context.Background(), &buf, apppath.New(t.TempDir(), "", ""), SimulateOptions{})
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("RunSimulate() error = %v, want %s に触れるエラー", err, tc.want)
+			}
+			if buf.Len() != 0 {
+				t.Errorf("止める前に何かした: %s", buf.String())
+			}
+		})
 	}
 }
 
@@ -104,16 +115,6 @@ func TestScopedClient_所有pane以外への操作を拒否する(t *testing.T) 
 		}
 	})
 
-	t.Run("ReportMetadata: 他 pane は拒否する", func(t *testing.T) {
-		fake := newFake()
-		c := newScopedClient(fake, owned)
-		err := c.ReportMetadata(context.Background(), other, multiplexer.ReportMetadataOptions{Source: "x"})
-		assertPaneNotOwned(t, err)
-		if len(fake.Calls) != 0 {
-			t.Errorf("拒否されたのに inner が呼ばれている: %v", fake.Calls)
-		}
-	})
-
 	t.Run("PaneList と Reachable は pane を特定しない読み取りなので常に inner へ委譲する", func(t *testing.T) {
 		fake := newFake()
 		c := newScopedClient(fake, owned)
@@ -139,9 +140,6 @@ func TestSimulateDryRunClient_送信系はinnerを呼ばずログだけ出す(t 
 	}
 	if err := c.SendKeys(context.Background(), "p1", "esc", "enter"); err != nil {
 		t.Fatalf("SendKeys() error = %v", err)
-	}
-	if err := c.ReportMetadata(context.Background(), "p1", multiplexer.ReportMetadataOptions{Source: "x"}); err != nil {
-		t.Fatalf("ReportMetadata() error = %v", err)
 	}
 
 	if len(fake.Calls) != 0 {
@@ -201,67 +199,18 @@ func assertPaneNotOwned(t *testing.T, err error) {
 	}
 }
 
-// TestRunSimulate_RealHerdr は実 herdr に対する統合テスト｡herdr が PATH に無い､
-// server に到達できない､または HERDR_ENV=1 のセッション内で実行されていない
-// (使い捨て pane を split する基準となる pane が無い) 場合は skip する｡
-//
-// これは「simulate が本当に実 pane に対して検知〜送信の経路を通せる」ことを保証する
-// 最終防衛線｡実 Claude セッションへ触れないことはここでは確認しない — それは
-// scopedClient のユニットテスト (所有 pane 以外への操作を全て拒否する) が
-// 型と経路のレベルで保証しており､実行結果の観察に頼るより確実なため｡
-func TestRunSimulate_RealHerdr(t *testing.T) {
-	if _, err := exec.LookPath("herdr"); err != nil {
-		t.Skip("herdr が PATH に無いので skip する")
-	}
-	if os.Getenv("HERDR_ENV") != "1" {
-		t.Skip("HERDR_ENV=1 のセッション内でないので skip する")
-	}
-	if os.Getenv("REX_SESSION") != "" {
-		t.Skip("herdr の中の rex で動いており backend が rex になるので skip する")
-	}
-
-	client := herdrcli.NewExecClient(func() (map[string]string, error) { return nil, nil })
-	ctx := context.Background()
-	if err := client.Reachable(ctx); err != nil {
-		t.Skipf("herdr server に到達できないので skip する: %v", err)
-	}
-
-	home := t.TempDir()
-	var buf bytes.Buffer
-	if err := RunSimulate(ctx, &buf, apppath.New(home, "", ""), SimulateOptions{}); err != nil {
-		t.Fatalf("RunSimulate() error = %v\n出力:\n%s", err, buf.String())
-	}
-	out := buf.String()
-	t.Logf("simulate 出力:\n%s", out)
-
-	for _, want := range []string{
-		"を作成しました",
-		"Claude agent として herdr に登録しました",
-		"1 回目の Tick → Outcome:",
-		"を閉じました",
-	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("出力に %q が含まれていない", want)
-		}
-	}
-
-	// 後始末は「作った pane を閉じたか」までを見る｡実際に pane list から消えるのは
-	// herdr 側の反映待ちで､ここで待ち受けると時間に依存したテストになる
-	// (pane 数の比較でも消滅のポーリングでも flaky になった)｡close を呼んだことは
-	// 上の出力検査で確認済みで､閉じる対象が自分の作った pane に限られることは
-	// scopedClient のユニットテストが保証している｡
-	if createdPaneID(out) == "" {
-		t.Errorf("出力から作成した pane ID を取り出せない:\n%s", out)
-	}
-}
-
 // realRexSimulateEnv を 1 にしたときだけ TestRunSimulate_RealRex が動く｡rex の block の中で
 // `go test ./...` を打つのは日常の開発ループで､そのたびに利用者の session へ block を割って
-// 打ち込むのは避けたい (herdr は HERDR_ENV=1 のセッション自体が検証専用なので opt-in にしていない)｡
+// 打ち込むのは避けたい｡
 const realRexSimulateEnv = "AGENTS_DAEMON_REAL_REX_SIMULATE"
 
 // TestRunSimulate_RealRex は実 rex に対する統合テスト｡rex の block 内 (REX_SESSION と REX_BLOCK
 // あり) で realRexSimulateEnv=1 を付けて打つ｡
+//
+// これは「simulate が本当に実 pane に対して検知〜送信の経路を通せる」ことを保証する
+// 最終防衛線｡実 Claude セッションへ触れないことはここでは確認しない｡それは
+// scopedClient のユニットテスト (所有 pane 以外への操作を全て拒否する) が
+// 型と経路のレベルで保証しており､実行結果の観察に頼るより確実なため｡
 func TestRunSimulate_RealRex(t *testing.T) {
 	if os.Getenv(realRexSimulateEnv) != "1" {
 		t.Skipf("%s=1 が無いので skip する", realRexSimulateEnv)

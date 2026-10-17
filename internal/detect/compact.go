@@ -36,7 +36,7 @@ var (
 // sp は TUI が描いた行に対して使う空白の文字クラス｡
 //
 // \s だけでは実機に当たらない｡Claude Code の入力行は ❯ の後を U+00A0
-// (NO-BREAK SPACE) で埋めており (herdr pane read の実バイトで確認:
+// (NO-BREAK SPACE) で埋めており (多重化ツールの capture の実バイトで確認:
 // e2 9d af c2 a0)､Go の \s は [\t\n\f\r ] しか含まない｡\p{Zs} (Unicode の
 // 空白区切り) を足して初めて一致する｡
 //

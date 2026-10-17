@@ -12,22 +12,6 @@ import (
 	"strings"
 )
 
-// 有効な readSource の値｡
-//
-// herdr の "detection" と "visible" は pane の viewport に収まる範囲しか返さない
-// (実測: viewport 16 行の pane に --lines 150 を指定しても 16 行しか返らず､
-// 古い行から順に落ちる)｡ペインを小さく分割していると判定に必要な行が画面から
-// 溢れ､検知が黙って効かなくなる｡"recent" 系はスクロールバックから取るため
-// 指定した行数がそのまま得られる｡
-//
-// この理由で "detection" は選べる値から外した｡"visible" は「今見えているものだけ」
-// という別の用途があるので残すが､既定にはしない｡
-const (
-	ReadSourceVisible         = "visible"
-	ReadSourceRecent          = "recent"
-	ReadSourceRecentUnwrapped = "recent-unwrapped"
-)
-
 // pane へ送る文面の既定値｡いずれも上限の検知語 (limit / rate 等) を含めてはいけない
 // (自分の送信を自分で検知して再送を繰り返す)｡
 const (
@@ -57,8 +41,9 @@ type Config struct {
 	// RetryMessage は resume 時にペインへ送るテキスト｡入力行へエコーされるため､
 	// limit / rate / overloaded のような検知語を含めてはいけない｡含めると
 	// 監視が自分自身の送信を再検知して無限ループする｡
-	RetryMessage            string
-	ReadSource              string
+	RetryMessage string
+	// ReadLines は pane の画面を末尾から何行読むか｡rex の capture は可視領域しか返さないので､
+	// block を小さく分割していると判定に必要な行が画面から溢れうる (pane-io.md)｡
 	ReadLines               int
 	DetectionTailLines      int
 	UsedPercentageThreshold float64
@@ -69,7 +54,6 @@ type Config struct {
 	DismissMenu             bool
 	MenuDismissDelayMs      int
 	SubmitDelayMs           int
-	EngagedLabel            string
 	CustomPatterns          []string
 	IdleShutdownMinutes     int
 	// DeferToNativeAutoContinue が true のとき､Claude Code 自身の auto-continue
@@ -139,7 +123,6 @@ func Default() Config {
 		FallbackWaitHours:       5,
 		MaxRetries:              5,
 		RetryMessage:            defaultRetryMessage,
-		ReadSource:              ReadSourceRecentUnwrapped,
 		ReadLines:               25,
 		DetectionTailLines:      15,
 		UsedPercentageThreshold: 90,
@@ -150,7 +133,6 @@ func Default() Config {
 		DismissMenu:             true,
 		MenuDismissDelayMs:      300,
 		SubmitDelayMs:           400,
-		EngagedLabel:            "retry engaged",
 		CustomPatterns:          []string{},
 		IdleShutdownMinutes:     30,
 
@@ -188,7 +170,6 @@ type rawConfig struct {
 	FallbackWaitHours       *float64  `json:"fallbackWaitHours"`
 	MaxRetries              *int      `json:"maxRetries"`
 	RetryMessage            *string   `json:"retryMessage"`
-	ReadSource              *string   `json:"readSource"`
 	ReadLines               *int      `json:"readLines"`
 	DetectionTailLines      *int      `json:"detectionTailLines"`
 	UsedPercentageThreshold *float64  `json:"usedPercentageThreshold"`
@@ -199,7 +180,6 @@ type rawConfig struct {
 	DismissMenu             *bool     `json:"dismissMenu"`
 	MenuDismissDelayMs      *int      `json:"menuDismissDelayMs"`
 	SubmitDelayMs           *int      `json:"submitDelayMs"`
-	EngagedLabel            *string   `json:"engagedLabel"`
 	CustomPatterns          *[]string `json:"customPatterns"`
 	IdleShutdownMinutes     *int      `json:"idleShutdownMinutes"`
 
@@ -289,9 +269,6 @@ func applyRawBasics(cfg *Config, raw *rawConfig) {
 
 // applyRawDetection は「上限に当たったと判断してよいか」に関わる設定を反映する｡
 func applyRawDetection(cfg *Config, raw *rawConfig) {
-	if v := raw.ReadSource; v != nil && isValidReadSource(*v) {
-		cfg.ReadSource = *v
-	}
 	if v := raw.ReadLines; v != nil && *v >= 5 {
 		cfg.ReadLines = *v
 	}
@@ -336,9 +313,6 @@ func applyRawRecovery(cfg *Config, raw *rawConfig) {
 	}
 	if v := raw.SubmitDelayMs; v != nil && *v >= 0 {
 		cfg.SubmitDelayMs = *v
-	}
-	if v := raw.EngagedLabel; v != nil && strings.TrimSpace(*v) != "" {
-		cfg.EngagedLabel = *v
 	}
 }
 
@@ -403,15 +377,6 @@ func applyRawCacheIdleCompact(cfg *Config, raw *rawConfig) {
 	}
 	if v := raw.CacheIdleCompactThresholdPercent; v != nil && *v > 0 && *v <= 100 {
 		cfg.CacheIdleCompactThresholdPercent = *v
-	}
-}
-
-func isValidReadSource(s string) bool {
-	switch s {
-	case ReadSourceVisible, ReadSourceRecent, ReadSourceRecentUnwrapped:
-		return true
-	default:
-		return false
 	}
 }
 

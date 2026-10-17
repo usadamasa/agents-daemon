@@ -14,13 +14,12 @@ import (
 // Client は multiplexer.Client のテスト用実装｡各メソッドの挙動を *Func フィールドで
 // 差し替えられる｡
 type Client struct {
-	PaneListFunc       func(ctx context.Context) ([]multiplexer.Pane, error)
-	PaneGetFunc        func(ctx context.Context, paneID string) (multiplexer.Pane, error)
-	PaneReadFunc       func(ctx context.Context, paneID string, opts multiplexer.PaneReadOptions) (string, error)
-	SendTextFunc       func(ctx context.Context, paneID, text string) error
-	SendKeysFunc       func(ctx context.Context, paneID string, keys ...string) error
-	ReportMetadataFunc func(ctx context.Context, paneID string, opts multiplexer.ReportMetadataOptions) error
-	ReachableFunc      func(ctx context.Context) error
+	PaneListFunc  func(ctx context.Context) ([]multiplexer.Pane, error)
+	PaneGetFunc   func(ctx context.Context, paneID string) (multiplexer.Pane, error)
+	PaneReadFunc  func(ctx context.Context, paneID string, opts multiplexer.PaneReadOptions) (string, error)
+	SendTextFunc  func(ctx context.Context, paneID, text string) error
+	SendKeysFunc  func(ctx context.Context, paneID string, keys ...string) error
+	ReachableFunc func(ctx context.Context) error
 
 	// Calls は呼ばれた操作の履歴｡テストの assertion に使う｡
 	Calls []string
@@ -68,14 +67,6 @@ func (f *Client) SendKeys(ctx context.Context, paneID string, keys ...string) er
 	f.Calls = append(f.Calls, "SendKeys:"+paneID)
 	if f.SendKeysFunc != nil {
 		return f.SendKeysFunc(ctx, paneID, keys...)
-	}
-	return nil
-}
-
-func (f *Client) ReportMetadata(ctx context.Context, paneID string, opts multiplexer.ReportMetadataOptions) error {
-	f.Calls = append(f.Calls, "ReportMetadata:"+paneID)
-	if f.ReportMetadataFunc != nil {
-		return f.ReportMetadataFunc(ctx, paneID, opts)
 	}
 	return nil
 }

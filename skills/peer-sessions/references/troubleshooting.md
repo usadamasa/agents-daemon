@@ -28,10 +28,8 @@
 | ---- | ---- |
 | `ListAgents` も `/list-agents` も無い | 上の「機能そのものが無い」 |
 | 宛先を拒否される | listing の名前をそのまま使っているか。同名が 2 行なら `[ref]` を付ける |
-| 送ったのに相手が動かない | 配送通知が来ていれば「受信側の扱い」。来ていなければ各 reference の「送ったのに相手が動き出さないとき」 |
+| 送ったのに相手が動かない | 配送通知が来ていれば「受信側の扱い」。来ていなければ `rex.md` の「症状と対処」 |
 | idle 通知だけ届いて本文が来ない | 相手が `SendMessage` で返していないか、返す手段が無い (本文の「peer は素のセッションとして立てる」) |
-| `herdr agent list` が `PermissionDenied`、`rex` が `connect: operation not permitted` | sandbox が多重化ツールの socket を塞いでいる。`agents-daemon:setup` skill の 2 段目 |
-| `pane_not_found` | `herdr.md` の「background job から叩くとき」 |
-| `agent_prompt_stalled` | `herdr.md` の「送ったのに相手が動き出さないとき」 |
+| `rex` が `connect: operation not permitted` | sandbox が rex の socket を塞いでいる。`agents-daemon:setup` skill の 2 段目 |
 | `block target "<label>" not found` | `rex.md` の「症状と対処」 |
 | rex の症状が `rex.md` の表に無い | `rex.md` の「使い方・不具合・新機能の情報源」。feedback を `search_feedback` で引く |

@@ -17,7 +17,7 @@ rex --autostart=false api call server.status | jq -c '{pid, session_count}'
 
 - `rex` を `excludedCommands` に置く形は取らない｡rex の操作は `rex events --json | jq` のようにパイプと組み合わせるので､
   excluded にすると guard が照合外れで落とす
-- 許可は再起動なしで次の Bash 呼び出しから効く (2026-10-10､Claude Code 2.1.296 で実測｡herdr とは違う)｡
+- 許可は再起動なしで次の Bash 呼び出しから効く (2026-10-10､Claude Code 2.1.296 で実測)｡
   効いているかは sandbox 内から `rex ls` がセッション一覧を返すことで確かめる
 
 ## block と session_id の対応

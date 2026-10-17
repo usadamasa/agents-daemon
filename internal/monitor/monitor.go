@@ -191,9 +191,6 @@ func (o Outcome) String() string {
 	return "unknown"
 }
 
-// metadataSource は ReportMetadata の Source に渡す固定値 (herdr の report-metadata --source)｡
-const metadataSource = "agents-daemon"
-
 // 以下は参考実装 (monitor-core.js) が config に無い値として直書きしている定数を､
 // そのまま同じ倍率で移植したもの｡個別の設定項目にする理由が無いため定数のままにする｡
 const (
@@ -206,10 +203,6 @@ const (
 	// retryWaitAfterSend は通常の (transient でない) 再送信後､次に画面を
 	// 確認するまでの待ち時間｡
 	retryWaitAfterSend = 30 * time.Second
-	// engagedLabelTTLPollMultiplier は待機ラベルの TTL を PollIntervalSeconds の
-	// 何倍にするか｡daemon が異常終了して更新が止まっても､この時間が過ぎれば
-	// herdr 側でラベルが自動的に消える｡
-	engagedLabelTTLPollMultiplier = 10
 )
 
 // Deps は状態遷移に必要な依存をまとめたもの｡テストでは Client に
@@ -261,10 +254,7 @@ func Tick(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *PaneState, 
 		return OutcomeStillWaiting, nil
 	}
 
-	screen, err := deps.Client.PaneRead(ctx, pane.PaneID, multiplexer.PaneReadOptions{
-		Source: multiplexer.PaneReadSource(deps.Config.ReadSource),
-		Lines:  deps.Config.ReadLines,
-	})
+	screen, err := deps.Client.PaneRead(ctx, pane.PaneID, multiplexer.PaneReadOptions{Lines: deps.Config.ReadLines})
 	if err != nil {
 		if ps.Status == StatusWaiting {
 			// 読み取り失敗をユーザーの resume と取り違えない｡待機はそのまま継続する｡
@@ -284,7 +274,7 @@ func Tick(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *PaneState, 
 		kind = detect.KindLimit
 	}
 
-	if outcome, handled, err := tickNative(ctx, deps, pane, ps, kind); handled {
+	if outcome, handled, err := tickNative(ps, kind); handled {
 		return outcome, err
 	}
 
@@ -311,7 +301,7 @@ func Tick(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *PaneState, 
 //
 // Enter 待ち (KindResumeReady) はここでは扱わない｡あれは待機して送る状態なので､
 // 通常の状態機械 (待機 → 送信 → maxRetries で打ち切り) にそのまま乗せる｡
-func tickNative(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *PaneState, kind detect.Kind) (Outcome, bool, error) {
+func tickNative(ps *PaneState, kind detect.Kind) (Outcome, bool, error) {
 	switch kind {
 	case detect.KindAutoContinueArmed:
 		// ネイティブがカウントダウン中｡この状態では Escape が取り消しキーなので
@@ -319,13 +309,13 @@ func tickNative(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *PaneS
 		// 潰す｡ネイティブが降りた画面は別の文言になり､そのとき改めて拾える｡
 		// (この分岐へ来るのは deferToNativeAutoContinue が有効なときだけ｡
 		// 無効なら呼び出し元が KindLimit へ落としてある｡)
-		standDown(ctx, deps, pane, ps)
+		standDown(ps)
 		return OutcomeNativeAutoContinue, true, nil
 
 	case detect.KindSpendLimit:
 		// 待っても解除されない上限｡待機に入ると解除時刻に送信 → 再び弾かれる､を
 		// maxRetries まで繰り返すだけになる｡
-		standDown(ctx, deps, pane, ps)
+		standDown(ps)
 		return OutcomeHardCap, true, nil
 
 	default:
@@ -333,15 +323,13 @@ func tickNative(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *PaneS
 	}
 }
 
-// standDown は待機中だった pane を監視状態へ戻す｡ラベル解除の失敗で状態遷移
-// そのものを止めない (ベストエフォート)｡
-func standDown(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *PaneState) {
+// standDown は待機中だった pane を監視状態へ戻す｡
+func standDown(ps *PaneState) {
 	if ps.Status != StatusWaiting {
 		return
 	}
 	ps.Status = StatusMonitoring
 	ps.Attempts = 0
-	_ = clearEngagedLabel(ctx, deps, pane)
 }
 
 // Gate は limit 検知に対するゲートの判定結果と､その根拠を表す｡inspect が
@@ -412,8 +400,6 @@ func tickWaiting(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *Pane
 	if !limited {
 		ps.Status = StatusMonitoring
 		ps.Attempts = 0
-		// ラベル解除の失敗で状態遷移そのものを止めない｡ベストエフォートで扱う｡
-		_ = clearEngagedLabel(ctx, deps, pane)
 		return OutcomeRecoveredByUser, nil
 	}
 
@@ -473,10 +459,6 @@ func tickMonitoring(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *P
 		ps.WaitUntil = now
 	default:
 		ps.WaitUntil, _ = ComputeLimitWake(deps.Config, rateState, deps.Account, screen, now)
-	}
-
-	if err := publishEngagedLabel(ctx, deps, pane); err != nil {
-		return OutcomeWaiting, fmt.Errorf("pane %s へのラベル表示に失敗: %w", pane.PaneID, err)
 	}
 	return OutcomeWaiting, nil
 }
@@ -633,25 +615,4 @@ func recoverPane(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *Pane
 	deps.Sleep(time.Duration(deps.Config.SubmitDelayMs) * time.Millisecond)
 
 	return deps.Client.SendKeys(ctx, pane.PaneID, "enter")
-}
-
-// publishEngagedLabel と clearEngagedLabel は待機ラベルの表示/解除だけを担う｡
-// 状態遷移の判断ロジック (tickWaiting/tickMonitoring) から分離してあるので､
-// ラベル表示の失敗が遷移テストの assertion に混ざらない｡
-
-func publishEngagedLabel(ctx context.Context, deps Deps, pane multiplexer.Pane) error {
-	return deps.Client.ReportMetadata(ctx, pane.PaneID, multiplexer.ReportMetadataOptions{
-		Source: metadataSource,
-		StateLabels: map[multiplexer.AgentStatus]string{
-			pane.AgentStatus: deps.Config.EngagedLabel,
-		},
-		TTLMillis: deps.Config.PollIntervalSeconds * 1000 * engagedLabelTTLPollMultiplier,
-	})
-}
-
-func clearEngagedLabel(ctx context.Context, deps Deps, pane multiplexer.Pane) error {
-	return deps.Client.ReportMetadata(ctx, pane.PaneID, multiplexer.ReportMetadataOptions{
-		Source:           metadataSource,
-		ClearStateLabels: true,
-	})
 }

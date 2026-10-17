@@ -21,7 +21,7 @@ statusline・hook・skill・daemon が別々のタイミングで動き､ファ
                                               │
                                               ├─ PaneList ────────────> Claude の pane 一覧
                                               ├─ PaneRead ────────────> 各 pane の画面テキスト
-                                              │  (backend は herdr か rex｡下の「多重化ツールの backend」)
+                                              │  (backend は rex｡下の「多重化ツールの backend」)
                                               │
                                               │  ここで判定 (下の表)
                                               │
@@ -33,9 +33,6 @@ statusline・hook・skill・daemon が別々のタイミングで動き､ファ
 
 [4] UserPromptSubmit hook ──stdin──> agents-daemon ttl-guard ── transcript と cache-ack/<session_id> を見て
                                                                失効後の最初の prompt を止める (exit 2)
-
-[5] UserPromptSubmit / Stop hook ──stdin──> agents-daemon herdr-title ── HERDR_SOCKET_PATH の socket へ
-                                                                        セッション名とブランチを報告する (herdr だけ)
 ```
 
 ### [1] statusline が上限情報を渡し､バイナリが落とす
@@ -121,15 +118,11 @@ daemon は `observed_at` の新しさでセッションが生きているかも�
 | 環境変数 | 書く値 |
 | ---- | ---- |
 | `REX_BLOCK` がある | `{"kind": "rex", "session": $REX_SESSION, "block": $REX_BLOCK}` |
-| `HERDR_PANE_ID` がある | `{"kind": "herdr", "pane": $HERDR_PANE_ID}` |
-| どちらも無い | フィールドを付けない |
+| 無い | フィールドを付けない |
 
-`REX_BLOCK` を先に見るのは､herdr の中で rex を動かすと両方が見え､Claude Code の直接の親は内側の rex だから｡
-backend は pane (rex は block) から session_id をこの記録で逆引きする (`Store.ListMultiplexerBlocks`)｡同じ ID の
-記録が複数あれば `observed_at` が最新のものを採る (同じ pane で Claude Code を起動し直すと古い記録が残る)｡
-`context/` は 7 日で消えるだけなので､5 時間の上限待ちを跨いでも対応は残る｡herdr の pane が持つ
-`agent_session` (herdr の integration script が SessionStart で入れる値) は読まない｡herdr と rex の対応付けを
-1 本にし､`herdr integration install claude` への依存を切るため｡制約 (別 workspace への `pane move`､初回描画までの
+backend は block から session_id をこの記録で逆引きする (`Store.ListMultiplexerBlocks`)｡同じ ID の
+記録が複数あれば `observed_at` が最新のものを採る (同じ block で Claude Code を起動し直すと古い記録が残る)｡
+`context/` は 7 日で消えるだけなので､5 時間の上限待ちを跨いでも対応は残る｡制約 (初回描画までの
 数秒) は [operations.md](operations.md) の「既知の制約」｡
 
 #### daemon が transcript から求める cache の状態
@@ -201,58 +194,37 @@ build の数秒後には新しい版が動いている｡hook も手動操作も
 
 ### [3] デーモンが監視して再開する
 
-単一プロセスが全 Claude pane を見る｡pane ごとの状態は `terminal_id` をキーに
-プロセス内で持つ (herdr の `pane_id` は herdr 再起動で変わりうる｡rex は block ID をそのまま使う)｡
+単一プロセスが全 Claude pane を見る｡pane ごとの状態は `terminal_id` (rex の block ID) をキーに
+プロセス内で持つ｡
 
 ### 多重化ツールの backend
 
-daemon は pane 操作を `internal/multiplexer` の `Client` interface 越しに行い､実装は herdr (`internal/herdrcli`)
-と rex (`internal/rexcli`) の 2 つ｡`internal/backend` が起動時の環境で選ぶ｡`REX_SESSION` があれば rex､
-無ければ herdr｡daemon は SessionStart hook の環境を継承するので､最初に起こしたセッションの側に決まる｡
-選んだ backend は `status.json` の `backend` に書き､`doctor` が今の環境と違えば警告する｡
+daemon は pane 操作を `internal/multiplexer` の `Client` interface 越しに行い､実装は rex (`internal/rexcli`)｡
+`internal/backend` が起動時の環境に `REX_SESSION` があることを確かめ､無ければ `daemon --ensure` は
+stderr に 1 行出して何もせずに戻る (素の端末の SessionStart で毎回 daemon を起こさない)｡hook はこの判定を
+持たず､バイナリの build は常に行う｡同じバイナリを `statusline` / `ingest-statusline` / `ttl-guard` が使い､
+これらは多重化ツールを要らないため｡backend は `status.json` の `backend` に書き､`status` が表示する｡
 
-| 操作 | herdr | rex |
-| ---- | ---- | ---- |
-| PaneList | `pane list` | `ls --json`､session ごとに `block ls -s S --json`､flavor が `com.superlogical.terminal.shell` の block ごとに `block call -b B program_status` と `block call -b B process` |
-| PaneRead | `pane read P --source S --lines N` | `capture -b B --trim --unwrap` の末尾 N 行｡`Source` は無視 |
-| SendText | `pane send-text P TEXT` | `send -b B TEXT` |
-| SendKeys | `pane send-keys P KEY...` | `send-key -b B KEY...` |
-| ReportMetadata | `pane report-metadata P --source ... --state-label ...` | 何もしない (`block rename` は利用者の label を潰す) |
-| Reachable | `status --json` の `server.running` | `api call server.status` の `pid` が正 |
-| session_id | `context/<sid>.json` の `multiplexer.pane` から逆引き (上の「statusline が書く state」) | `context/<sid>.json` の `multiplexer.block` から逆引き (同) |
+| 操作 | rex |
+| ---- | ---- |
+| PaneList | `ls --json`､session ごとに `block ls -s S --json`､flavor が `com.superlogical.terminal.shell` の block ごとに `block call -b B program_status` と `block call -b B process` |
+| PaneRead | `capture -b B --trim --unwrap` の末尾 N 行 |
+| SendText | `send -b B TEXT` |
+| SendKeys | `send-key -b B KEY...` |
+| Reachable | `api call server.status` の `pid` が正 |
+| session_id | `context/<sid>.json` の `multiplexer.block` から逆引き (上の「statusline が書く state」) |
+
+待機中のラベルは出さない｡rex で表示に使える `block rename` は利用者が付けた label を潰すため｡
 
 rex の呼び出しには全部 `--autostart=false` を付け､子プロセスの環境から `REX_SESSION` / `REX_BLOCK` を外す｡
 `REX_SESSION` があると rex は block の解決をその session の中に閉じ､外せば完全 ID で別 session の block も
 解決する (実測)｡`block ls` と `block call` の間に閉じた block (exit 3) は読み飛ばし､PaneList の失敗に数えない｡
 
 rex の列挙は 1 tick に `ls` 1 回､session ごとに `block ls` 1 回､shell の block ごとに 2 回の fork になる｡
-herdr の `pane list` 1 回より重いので､block が多い環境ほど tick あたりの時間が伸びる｡
+block が多い環境ほど tick あたりの時間が伸びる｡
 
 rex で Agent と AgentStatus を決めるのは Claude Code 自身が OSC 7501 で報告する `program_status` で､
 状態の対応は [operations.md](operations.md) の「rex の状態の対応」｡
-
-### [5] herdr の space 欄とタブ行にセッション名を出す
-
-herdr が space 欄に出せる built-in token は pane の cwd から引くもので､worktree へ移ったセッションを追わない｡
-端末タイトル (Claude Code がセッションの要約に更新し続ける) は agents 欄にしか出ない｡
-`hooks/herdr-title.sh` (UserPromptSubmit / Stop) が stdin を `agents-daemon herdr-title` へ渡し､
-バイナリ (`internal/hookreport`) が次を `HERDR_SOCKET_PATH` の socket で herdr へ報告する｡
-rex や herdr の外では何もしない (`HERDR_ENV=1` と `HERDR_SOCKET_PATH` と `HERDR_PANE_ID` がそろったときだけ動く)｡
-
-| 面 | 書き込み先 | 値 | hook が無いときの表示 |
-| ---- | ---- | ---- | ---- |
-| space 欄 | workspace metadata の token `claude` (`workspace.report_metadata`) | `pane.current` の `terminal_title_stripped` | 出す口が無い |
-| space 欄 | 同 token `branch` | `foreground_cwd` (git の外なら `cwd`) の `git branch --show-current` | built-in が pane の cwd のブランチを出す |
-| タブ行 | タブの label (`tab.rename`) | 端末タイトル｡空ならタブの番号へ戻す | 連番 |
-
-- 描く側は利用者の herdr config の `$claude` と `$branch` の行｡plugin は token を報告するだけ｡
-- 書き込み先のタブと workspace は `pane.current` (`caller_pane_id` = `HERDR_PANE_ID`) から取る｡herdr が注入する
-  `HERDR_TAB_ID` / `HERDR_WORKSPACE_ID` は pane 作成時の値のままで､`herdr pane move` の後は元のタブを指す｡
-- 空の token は null で送って消す｡`tab.rename` に空を渡すと空の label になるので､番号を渡す｡
-- source は `claude-config:claude-title`｡agents-config の `herdr-claude-title.sh` から移したもので､移行期間は
-  両方の hook が同じ source に報告し､seq (UnixNano) の新しい方が勝つ｡
-- 値を取り直すのは hook の発火時点だけ｡agents 欄は端末タイトルを直に読むので､長いターンの間は space 欄とずれる｡
-- 失敗は exit 0 で理由を stderr に出す (hook のログ)｡herdr との往復と git を合わせて 4 秒で諦める｡
 
 ## 毎 tick の判定
 
@@ -297,7 +269,7 @@ pane ごとに次を評価する｡上限側の詳細は [rate-limit.md](rate-li
 | `$STATE/cache-ack/<session_id>` | daemon と `agents-daemon ttl-guard` | daemon は非スラッシュの prompt を送る直前 (cache が失効しているか状態が分からないとき)､ttl-guard は失効後の prompt を判定したとき | 直近の応答の開始時刻の文字列そのまま､または sentinel `daemon-unknown` ([cache.md](cache.md)) | daemon と ttl-guard が 90 日で消す |
 | `$STATE/cache-idle-compacted/<session_id>` | daemon | idle compact の `/compact` を送る直前 | 空ファイル｡mtime が送信時刻 ([compact.md](compact.md)) | 消さずに直近の応答の時刻との比較で解く (daemon が 7 日で消す) |
 | `$STATE/daemon.pid` | daemon | 起動時に作成､終了時に削除 | 稼働中デーモンの PID | daemon |
-| `$STATE/status.json` | daemon | 毎 tick (既定 5 秒) | backend (herdr / rex)､監視中の pane 一覧と各 pane の監視状態・試行回数・待機期限・直近の判定・cache の状態 | 上書き |
+| `$STATE/status.json` | daemon | 毎 tick (既定 5 秒) | backend (rex)､監視中の pane 一覧と各 pane の監視状態・試行回数・待機期限・直近の判定・cache の状態 | 上書き |
 | `$STATE/logs/daemon.log` | daemon | 報告に値する出来事があったときだけ | 上限検知と待ち時間､再開送信 (cache の状態つき)､ユーザーの自己再開､ゲート抑制､ネイティブへの譲り､compact 停止の催促､idle compact の見送り (理由つき)､エラー | rotate |
 | `$STATE/logs/daemon.log.YYYY-MM-DD` | daemon | 日付が変わって最初に書くとき | 前日までの `daemon.log` をそのまま退避したもの | daemon が 7 日で消す |
 | `$STATE/logs/build.log` | `hooks/build-daemon.sh` | SessionStart が build を起こしたとき | build の開始・完了・失敗 | 消さない (追記) |

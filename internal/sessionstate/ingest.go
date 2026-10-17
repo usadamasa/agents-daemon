@@ -53,7 +53,7 @@ func (s Store) IngestStatusline(input []byte, now time.Time) error {
 }
 
 // IngestStatuslineWithEnv は IngestStatusline の本体で､環境変数を getenv から読む｡
-// statusline の command は Claude Code の子プロセスなので REX_BLOCK / HERDR_PANE_ID を
+// statusline の command は Claude Code の子プロセスなので REX_BLOCK を
 // 継承しており､その場所を context/<session_id>.json の multiplexer に書く (MultiplexerRefFromEnv)｡
 func (s Store) IngestStatuslineWithEnv(input []byte, getenv func(string) string, now time.Time) error {
 	var in statuslineInput

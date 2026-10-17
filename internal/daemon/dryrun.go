@@ -49,8 +49,3 @@ func (c dryRunClient) SendKeys(_ context.Context, paneID string, keys ...string)
 	c.log.Logf("[dry-run] pane %s へキーを送信しない: %s", paneID, strings.Join(keys, " "))
 	return nil
 }
-
-func (c dryRunClient) ReportMetadata(_ context.Context, paneID string, _ multiplexer.ReportMetadataOptions) error {
-	c.log.Logf("[dry-run] pane %s のラベルを更新しない", paneID)
-	return nil
-}

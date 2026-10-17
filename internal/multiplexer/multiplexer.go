@@ -1,5 +1,5 @@
 // Package multiplexer は端末多重化ツールの pane 操作を表す中立の interface と型を持つ｡
-// herdr と rex の backend がこれを実装し､backend 固有の JSON は各 backend に閉じる｡
+// rex の backend (rexcli) がこれを実装し､backend 固有の JSON は backend に閉じる｡
 package multiplexer
 
 import (
@@ -8,7 +8,7 @@ import (
 )
 
 // AgentStatus は backend が pane に対して報告する agent の状態｡
-// 値の意味は herdr のもので､他の backend は同名の値へ写す｡
+// rex では Claude Code 自身が OSC 7501 で申告する state をそのまま写す｡
 type AgentStatus string
 
 const (
@@ -39,39 +39,14 @@ type Pane struct {
 }
 
 // IsClaudeAgent は pane が Claude Code の agent を持つかを判定する｡
-// 参考実装 (herdr-claude-auto-retry の herdr.js, isClaudeAgent) にならい､
 // agent フィールドへの大文字小文字を無視した部分一致で判定する｡
 func IsClaudeAgent(p Pane) bool {
 	return strings.Contains(strings.ToLower(p.Agent), "claude")
 }
 
-// PaneReadSource は PaneRead が読む画面の範囲｡値は herdr の `pane read --source` の 4 値｡
-// rex は可視領域しか読めないので無視する｡
-type PaneReadSource string
-
-const (
-	SourceVisible         PaneReadSource = "visible"
-	SourceRecent          PaneReadSource = "recent"
-	SourceRecentUnwrapped PaneReadSource = "recent-unwrapped"
-	SourceDetection       PaneReadSource = "detection"
-)
-
 // PaneReadOptions は PaneRead の呼び出しオプション｡
 type PaneReadOptions struct {
-	Source PaneReadSource // 空文字列なら backend のデフォルトに委ねる
-	Lines  int            // 0 以下なら行数を指定しない
-}
-
-// ReportMetadataOptions は ReportMetadata の呼び出しオプション｡
-//
-// Source はメタデータの出所を区別するための必須識別子｡
-// StateLabels は agent の状態ごとに pane へ添える表示ラベル｡
-type ReportMetadataOptions struct {
-	Source           string
-	Agent            string
-	StateLabels      map[AgentStatus]string
-	ClearStateLabels bool
-	TTLMillis        int // 0 以下なら TTL を指定しない
+	Lines int // 0 以下なら行数を指定しない
 }
 
 // SessionResolver は pane (rex は block) の ID から Claude Code の session_id への対応を返す｡
@@ -92,8 +67,6 @@ type Client interface {
 	SendText(ctx context.Context, paneID, text string) error
 	// SendKeys は pane へキー入力を送る (例: "esc", "enter")｡
 	SendKeys(ctx context.Context, paneID string, keys ...string) error
-	// ReportMetadata は pane に表示用メタデータ (待機ラベル等) を添える｡
-	ReportMetadata(ctx context.Context, paneID string, opts ReportMetadataOptions) error
 	// Reachable は backend の server に到達できるかを確認する (doctor コマンド用)｡
 	// 到達できなければ理由を含む error を返す｡
 	Reachable(ctx context.Context) error

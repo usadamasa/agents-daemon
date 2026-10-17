@@ -62,8 +62,9 @@ rex run --focus=false --cwd "$PWD" --label peer-b --json -- \
   claude --name peer-b --model "${CLAUDE_CODE_SUBAGENT_MODEL:?}"
 ```
 
-数秒後に `ListAgents` へ `peer-b` として現れる。rex には herdr の `agent prompt` に当たるものは
-無く、画面へ直接投入するなら `send -b peer-b '<本文>'` と `send-key -b peer-b enter` を使う。
+数秒後に `ListAgents` へ `peer-b` として現れる。本文は `SendMessage` で送る。rex には Claude の
+入力欄へ本文を渡す専用のコマンドが無く、画面へ直接投入するなら `send -b peer-b '<本文>'` と
+`send-key -b peer-b enter` を使う。
 
 ### 畳む
 

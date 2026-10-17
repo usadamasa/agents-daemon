@@ -18,7 +18,7 @@ func TestClassify(t *testing.T) {
 
 	t.Run("実機で採取した通常のフッターは none", func(t *testing.T) {
 		screen := strings.Join([]string{
-			`  Bash(herdr pane read "$HERDR_PANE_ID" --source detection --lines 12)`,
+			`  Bash(rex capture -b "$REX_BLOCK" --trim --unwrap)`,
 			``,
 			`· Tinkering… (2m 52s · ↓ 9.0k tokens · thought for 8s)`,
 			`  ⎿  Tip: Use /btw to ask a quick side question without interrupting Claude's current work`,

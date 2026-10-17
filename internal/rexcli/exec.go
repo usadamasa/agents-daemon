@@ -16,7 +16,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 )
 
-// defaultTimeout は rex コマンド 1 回あたりのタイムアウト (herdrcli と同じ)｡
+// defaultTimeout は rex コマンド 1 回あたりのタイムアウト｡
 const defaultTimeout = 10 * time.Second
 
 // shellFlavor は terminal の block の flavor｡これ以外の block は program_status を持たない｡
@@ -80,7 +80,7 @@ func (c *execClient) run(ctx context.Context, args ...string) ([]byte, error) {
 	var outBuf, errBuf bytes.Buffer
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf
-	// 期限超過で kill した後､パイプを継承した孫プロセスで Wait が止まらないようにする (herdrcli と同じ)｡
+	// 期限超過で kill した後､パイプを継承した孫プロセスで Wait が止まらないようにする｡
 	cmd.WaitDelay = 100 * time.Millisecond
 	runErr := cmd.Run()
 
@@ -246,8 +246,8 @@ func agentStatus(state string) multiplexer.AgentStatus {
 	}
 }
 
-// PaneRead は block の可視領域を返す｡rex の capture は scrollback を読めないので opts.Source は
-// 無視する｡opts.Lines > 0 なら末尾 Lines 行に絞る｡
+// PaneRead は block の可視領域を返す (rex の capture は scrollback を読めない)｡
+// opts.Lines > 0 なら末尾 Lines 行に絞る｡
 func (c *execClient) PaneRead(ctx context.Context, paneID string, opts multiplexer.PaneReadOptions) (string, error) {
 	out, err := c.run(ctx, "capture", "-b", paneID, "--trim", "--unwrap")
 	if err != nil {
@@ -281,11 +281,6 @@ func (c *execClient) SendText(ctx context.Context, paneID, text string) error {
 func (c *execClient) SendKeys(ctx context.Context, paneID string, keys ...string) error {
 	_, err := c.run(ctx, append([]string{"send-key", "-b", paneID}, keys...)...)
 	return err
-}
-
-// ReportMetadata は何もしない｡rex で表示に使える block rename は利用者が付けた label を潰す｡
-func (c *execClient) ReportMetadata(context.Context, string, multiplexer.ReportMetadataOptions) error {
-	return nil
 }
 
 type serverStatusResult struct {

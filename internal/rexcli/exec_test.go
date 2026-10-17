@@ -443,7 +443,7 @@ func TestExecClient_PaneRead(t *testing.T) {
 			f := newFakeRex(t)
 			f.put(t, "capture-"+blockClaudeWorking+".txt", screen)
 			got, err := f.client(staticResolver(nil)).PaneRead(context.Background(), blockClaudeWorking,
-				multiplexer.PaneReadOptions{Source: multiplexer.SourceRecent, Lines: tt.lines})
+				multiplexer.PaneReadOptions{Lines: tt.lines})
 			if err != nil {
 				t.Fatalf("PaneRead() error = %v", err)
 			}
@@ -452,7 +452,7 @@ func TestExecClient_PaneRead(t *testing.T) {
 			}
 			wantCall := []string{"--autostart=false capture -b " + blockClaudeWorking + " --trim --unwrap"}
 			if calls := f.calls(t); !slices.Equal(calls, wantCall) {
-				t.Errorf("calls = %v, want %v (Source は無視する)", calls, wantCall)
+				t.Errorf("calls = %v, want %v", calls, wantCall)
 			}
 		})
 	}
@@ -488,20 +488,6 @@ func TestExecClient_SendKeys_MissingBlockIsError(t *testing.T) {
 	f := newFakeRex(t)
 	if err := f.client(staticResolver(nil)).SendKeys(context.Background(), blockClosed, "enter"); err == nil {
 		t.Fatal("SendKeys() error = nil, want not found")
-	}
-}
-
-func TestExecClient_ReportMetadata_DoesNotExec(t *testing.T) {
-	f := newFakeRex(t)
-	err := f.client(staticResolver(nil)).ReportMetadata(context.Background(), blockClaudeDone, multiplexer.ReportMetadataOptions{
-		Source:      "agents-daemon",
-		StateLabels: map[multiplexer.AgentStatus]string{multiplexer.AgentStatusIdle: "waiting"},
-	})
-	if err != nil {
-		t.Fatalf("ReportMetadata() error = %v, want nil", err)
-	}
-	if calls := f.calls(t); len(calls) != 0 {
-		t.Errorf("rex を呼んだ: %v", calls)
 	}
 }
 

@@ -1,7 +1,7 @@
 {
   "name": "agents-daemon",
   "version": "2026.1016.0",
-  "description": "Resume Claude Code sessions stopped by usage limits and drive /compact-prep then /compact when context runs high, via a resident daemon watching herdr panes",
+  "description": "Resume Claude Code sessions stopped by usage limits and drive /compact-prep then /compact when context runs high, via a resident daemon watching rex blocks",
   "author": {
     "name": "usadamasa"
   },
@@ -11,7 +11,6 @@
     "./skills/compact-prep",
     "./skills/agents-daemon",
     "./skills/setup",
-    "./skills/peer-sessions",
-    "./skills/herdr"
+    "./skills/peer-sessions"
   ]
 }

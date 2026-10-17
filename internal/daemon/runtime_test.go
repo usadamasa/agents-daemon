@@ -90,9 +90,6 @@ func TestDaemonRuntimeTick_NewPaneGetsFreshState(t *testing.T) {
 	if !entry.lastSeenAt.Equal(now) {
 		t.Errorf("entry.lastSeenAt = %v, want %v", entry.lastSeenAt, now)
 	}
-	if entry.pane.PaneID != "p1" {
-		t.Errorf("entry.pane.PaneID = %q, want %q", entry.pane.PaneID, "p1")
-	}
 }
 
 func TestDaemonRuntimeTick_DisappearedPaneEntryDropped(t *testing.T) {
@@ -259,7 +256,7 @@ func TestDaemonRuntimeTick_IdleShutdown(t *testing.T) {
 }
 
 func TestDaemonRuntimeTick_ConsecutiveFailures(t *testing.T) {
-	sentinelErr := errors.New("herdr に到達できない")
+	sentinelErr := errors.New("rex に到達できない")
 	cfgPath := missingConfigPath(t)
 	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 	ctx := context.Background()

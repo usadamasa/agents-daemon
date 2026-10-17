@@ -234,14 +234,11 @@ func loadInspectScreen(ctx context.Context, client multiplexer.Client, cfg confi
 		return string(data), fmt.Sprintf("file:%s", file), nil
 	}
 
-	screen, err = client.PaneRead(ctx, paneID, multiplexer.PaneReadOptions{
-		Source: multiplexer.PaneReadSource(cfg.ReadSource),
-		Lines:  cfg.ReadLines,
-	})
+	screen, err = client.PaneRead(ctx, paneID, multiplexer.PaneReadOptions{Lines: cfg.ReadLines})
 	if err != nil {
 		return "", "", fmt.Errorf("pane %s の読み取りに失敗: %w", paneID, err)
 	}
-	return screen, fmt.Sprintf("pane:%s (source=%s lines=%d)", paneID, cfg.ReadSource, cfg.ReadLines), nil
+	return screen, fmt.Sprintf("pane:%s (lines=%d)", paneID, cfg.ReadLines), nil
 }
 
 // reportScannedLines は Classify が実際に走査した末尾 n 行を表示する｡

@@ -74,17 +74,16 @@ out of credits のいずれかがあれば､待機に入らず `hard-cap` と�
 文言は `internal/detect` が持つ｡上流も同じ扱いで､retry watchdog は organization
 spend-limit と out-of-credits で即座に失敗する｡
 
-## herdr の `agent_status` は判定に使わない
+## `agent_status` は判定に使わない
 
-herdr は PTY の出力活動から `idle` / `working` / `blocked` を推定する｡上限で止まった
-pane はこの推定と相性が悪い｡teammate ウィジェットの経過時間カウンタのように毎秒
-再描画される要素が画面に残っていると､pane は永久に `working` と報告される｡
+rex の `agent_status` は Claude Code 自身が OSC 7501 で申告する state (operations.md の「rex の状態の対応」)｡
+上限で止まった pane は turn の途中で止まるので､`working` のまま申告され続ける｡
 
-2026-08-19 の取りこぼしはこれが直接原因だった｡上限で止まった pane を herdr が 5 時間
-以上 `working` と報告し続け､`working` を対象外にしていたデーモンは画面を一度も読まな
-かった (`status.json` の `last_outcome` がずっと `skipped`)｡
+2026-08-19 の取りこぼし (当時の backend は herdr で､PTY の出力活動から状態を推定していた) は
+これと同じ形だった｡上限で止まった pane が 5 時間以上 `working` と報告され続け､`working` を対象外に
+していたデーモンは画面を一度も読まなかった (`status.json` の `last_outcome` がずっと `skipped`)｡
 
-**上限で止まった pane は､活動ヒューリスティックからは「働いている pane」と区別できない｡**
+**上限で止まった pane は､`agent_status` からは「働いている pane」と区別できない｡**
 そのため `agent_status` は status 表示のためだけに残し､判定は画面テキストの分類だけで行う｡
 稼働中の pane も毎 tick 読むことになるが､読み取りは副作用が無い｡
 

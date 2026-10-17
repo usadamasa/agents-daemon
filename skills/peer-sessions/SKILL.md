@@ -3,7 +3,7 @@ name: peer-sessions
 description: >-
   Claude Code の別セッション (peer) へ作業を渡す、話しかける、様子を見るときに使う。
   「新しいセッションで引き継いで」「フレッシュな頭で見てほしい」のような依頼、
-  ListAgents / SendMessage の使い方、端末多重化ツール (herdr、rex) のペイン操作、
+  ListAgents / SendMessage の使い方、端末多重化ツール (rex) の block 操作、
   送ったのに届かない・idle 通知だけ来る・pane_not_found といった症状で引く。
 ---
 
@@ -11,12 +11,10 @@ description: >-
 
 同じマシンで動いている Claude Code のセッション同士が、`ListAgents` で互いを発見し
 `SendMessage` で本文を送り合う。各セッションが unix domain socket を bind し、Claude Code 本体が
-その上で配送する。peer を立てる器は端末多重化ツールのペインで、その操作は多重化ツールごとの
-reference に置く。
+その上で配送する。peer を立てる器は端末多重化ツール (rex) の window で、その操作は reference に置く。
 
 | reference | 内容 |
 | ---- | ---- |
-| `references/herdr.md` | herdr のペイン操作と、help どおりに叩いても動かない箇所 |
 | `references/rex.md` | rex の block / window 操作と実測の挙動、docs と feedback (MCP) の引き方 |
 | `references/troubleshooting.md` | 送ったのに届かない、ツールが無い、といった症状の切り分け |
 
@@ -33,23 +31,20 @@ reference に置く。
 「新しいセッションで」「引き継いで」「別セッションで」「フレッシュな頭で」は、peer を立てて渡す
 作業の依頼として扱う。起動をユーザーへ差し戻さない。
 
-まず、自分がどの多重化ツールのペインに居るかを確かめる。
+まず、自分が rex の中に居るかを確かめる。
 
 ```sh
-if [ -n "${REX_SESSION:-}" ]; then printf 'rex\n'
-elif [ "${HERDR_ENV:-}" = 1 ]; then printf 'herdr\n'
-else printf 'none\n'; fi
+printenv REX_SESSION
 ```
 
 | 結果 | 次にすること |
 | ---- | ---- |
-| `herdr` | `references/herdr.md` の手順でペインを割り、`herdr agent start` で claude を起動する |
-| `rex` | `references/rex.md` の手順で `rex run` から claude を起動する |
-| `none` | ペインを作れないので、ユーザーへ起動を頼む (下の「モデルの指定」の形でコマンドを渡す) |
+| 値が出る | `references/rex.md` の手順で `rex run` から claude を起動する |
+| 空 | window を作れないので、ユーザーへ起動を頼む (下の「モデルの指定」の形でコマンドを渡す) |
 
 起動してから渡すまでを 1 ターンでやりきる。
 
-1. ペイン (herdr) か window (rex) を、フォーカスを奪わずに作る。渡す先が別リポジトリなら
+1. window を、フォーカスを奪わずに作る。渡す先が別リポジトリなら
    cwd をそのパスにする。自分の worktree は渡さない
 2. そこで `claude --name <name> --model "${CLAUDE_CODE_SUBAGENT_MODEL:?}"` を起動する
 3. `ListAgents` に `<name>` が並ぶのを確かめる
@@ -154,13 +149,13 @@ glob と見て `no matches found` になる。
 
 ## 委譲先セッションの寿命
 
-寿命は担当 PR に揃える。担当 PR がクローズ (マージ含む) されたら、ペイン (herdr) か
-window (rex) ごと畳む。閉じるコマンドは各 reference にある。空いたセッションを次のタスクへ
-使い回さず、依頼が出たその時点で立て直す。開いているペインの数がそのまま進行中の作業の数になる。
+寿命は担当 PR に揃える。担当 PR がクローズ (マージ含む) されたら、window ごと畳む。
+閉じるコマンドは reference にある。空いたセッションを次のタスクへ使い回さず、依頼が出たその時点で
+立て直す。開いている window の数がそのまま進行中の作業の数になる。
 複数 PR を 1 セッションへ束ねるなら、束ねた全部が閉じるまでが寿命。渡すときからこれを前提に
 スコープを切る。
 
-**1 エージェント = 1 タブ (window)**。指示者セッションも独立したタブに置く。同じタブへペイン
+**1 エージェント = 1 window**。指示者セッションも独立した window に置く。同じ window へ block
 分割で並べると 1 枚が小さすぎて中身が読めず、ユーザーが進捗を追えない。
 
 ## 届く範囲

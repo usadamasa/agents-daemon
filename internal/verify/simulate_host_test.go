@@ -36,10 +36,10 @@ func TestNewSimulateHost_前提チェック(t *testing.T) {
 			t.Errorf("ownBlock = %q, want block:mine", rh.ownBlock)
 		}
 	})
-	t.Run("herdr は HERDR_ENV=1 が要る", func(t *testing.T) {
-		_, err := newSimulateHost(sessionstate.MultiplexerKindHerdr, func(string) string { return "" })
-		if err == nil || !strings.Contains(err.Error(), "HERDR_ENV") {
-			t.Fatalf("newSimulateHost(herdr) error = %v, want HERDR_ENV に触れるエラー", err)
+	t.Run("未対応の kind は error", func(t *testing.T) {
+		_, err := newSimulateHost("tmux", func(string) string { return "" })
+		if err == nil || !strings.Contains(err.Error(), "未対応") {
+			t.Fatalf("newSimulateHost(tmux) error = %v, want 未対応の error", err)
 		}
 	})
 }
@@ -63,10 +63,10 @@ func TestSimulateScript(t *testing.T) {
 			rest = rest[i+len(want):]
 		}
 	})
-	t.Run("herdr: OSC 7501 の行は無い", func(t *testing.T) {
+	t.Run("名乗るコマンドが空なら OSC 7501 の行は無い", func(t *testing.T) {
 		got := simulateScript("")
 		if strings.Contains(got, "7501") {
-			t.Errorf("herdr の script に OSC 7501 がある:\n%s", got)
+			t.Errorf("script に OSC 7501 がある:\n%s", got)
 		}
 		if !strings.Contains(got, "exec /bin/cat -v\n") {
 			t.Errorf("受け手の cat -v が無い:\n%s", got)
@@ -185,64 +185,6 @@ func TestRexHost_ClosePane(t *testing.T) {
 	}
 	if got := h.CloseCommand("block:01a1-new"); got != "rex block close block:01a1-new" {
 		t.Errorf("CloseCommand() = %q", got)
-	}
-}
-
-const herdrSplitJSON = `{"result":{"pane":{"pane_id":"wH:pNew"}}}`
-
-func newFakeHerdr(t *testing.T, splitJSON string) (*fakeCLI, *herdrHost) {
-	t.Helper()
-	f := newFakeCLI(t, "herdr", "", map[string]string{"pane split": splitJSON})
-	return f, &herdrHost{bin: f.bin}
-}
-
-func TestHerdrHost_SplitPane_shellを開いてからscriptを打ち込む(t *testing.T) {
-	f, h := newFakeHerdr(t, herdrSplitJSON)
-	got, err := h.SplitPane(context.Background(), "/tmp/sim/simulate.sh", "/tmp/sim/screen.txt")
-	if err != nil {
-		t.Fatalf("SplitPane() error = %v", err)
-	}
-	if got != "wH:pNew" {
-		t.Errorf("SplitPane() = %q, want wH:pNew", got)
-	}
-	want := []string{
-		"pane split --current --direction down --ratio 0.2 --no-focus",
-		"pane run wH:pNew /bin/sh /tmp/sim/simulate.sh /tmp/sim/screen.txt",
-		"pane send-keys wH:pNew enter",
-	}
-	calls := f.calls(t)
-	if strings.Join(calls, "\n") != strings.Join(want, "\n") {
-		t.Errorf("呼び出し =\n%s\nwant\n%s", strings.Join(calls, "\n"), strings.Join(want, "\n"))
-	}
-}
-
-func TestHerdrHost_SplitPane_応答のerrorで失敗(t *testing.T) {
-	_, h := newFakeHerdr(t, `{"error":{"code":"not_found","message":"no current pane"}}`)
-	_, err := h.SplitPane(context.Background(), "/tmp/sim/simulate.sh", "/tmp/sim/screen.txt")
-	if err == nil || !strings.Contains(err.Error(), "no current pane") {
-		t.Fatalf("SplitPane() error = %v, want herdr のエラーを含む", err)
-	}
-}
-
-func TestHerdrHost_MarkAsClaudeAgentとClosePane(t *testing.T) {
-	f, h := newFakeHerdr(t, herdrSplitJSON)
-	if _, err := h.MarkAsClaudeAgent(context.Background(), "wH:pNew"); err != nil {
-		t.Fatalf("MarkAsClaudeAgent() error = %v", err)
-	}
-	if err := h.ClosePane(context.Background(), "wH:pNew"); err != nil {
-		t.Fatalf("ClosePane() error = %v", err)
-	}
-	want := []string{
-		"pane report-agent wH:pNew --source agents-daemon-simulate --agent claude --state idle",
-		"pane release-agent wH:pNew --source agents-daemon-simulate --agent claude",
-		"pane close wH:pNew",
-	}
-	calls := f.calls(t)
-	if strings.Join(calls, "\n") != strings.Join(want, "\n") {
-		t.Errorf("呼び出し =\n%s\nwant\n%s", strings.Join(calls, "\n"), strings.Join(want, "\n"))
-	}
-	if h.ProgramStatusCommand() != "" {
-		t.Errorf("herdr の ProgramStatusCommand() = %q, want 空", h.ProgramStatusCommand())
 	}
 }
 

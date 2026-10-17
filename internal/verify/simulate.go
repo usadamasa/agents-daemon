@@ -19,9 +19,8 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 )
 
-// simulateMetadataSource は simulate が herdr へ渡す --source 識別子 (rex では block の label)｡
-// daemon パッケージ本体の metadataSource ("agents-daemon") とは別の値にして､
-// 本番の daemon が書いたラベルと simulate の後始末を取り違えないようにする｡
+// simulateMetadataSource は simulate が使い捨て block に付ける label｡利用者が付けた label と
+// 見分けがつくよう､ツール名を含めた固定値にする｡
 const simulateMetadataSource = "agents-daemon-simulate"
 
 // defaultSimulateScreen は --screen-file を省略した場合に使う内蔵の limit 画面｡
@@ -46,14 +45,13 @@ type SimulateOptions struct {
 }
 
 // RunSimulate は simulate の本体｡使い捨て pane の作成から後始末まで一貫して行う｡
-// backend は daemon と同じ規則 (REX_SESSION の有無) で選ぶ｡
+// backend は daemon と同じ規則 (REX_SESSION があること) で選ぶ｡
 func RunSimulate(ctx context.Context, w io.Writer, p apppath.Paths, opts SimulateOptions) error {
-	kind := backend.Detect(os.Getenv)
-	host, err := newSimulateHost(kind, os.Getenv)
+	kind, execClient, err := backend.Connect(os.Getenv, sessionstate.New(p.StateDir()))
 	if err != nil {
 		return err
 	}
-	execClient, err := backend.New(kind, sessionstate.New(p.StateDir()))
+	host, err := newSimulateHost(kind, os.Getenv)
 	if err != nil {
 		return err
 	}
@@ -99,7 +97,7 @@ func RunSimulate(ctx context.Context, w io.Writer, p apppath.Paths, opts Simulat
 	_, _ = fmt.Fprintf(w, "  Claude agent として見えました (agent=%s agent_status=%s)\n", pane.Agent, pane.AgentStatus)
 
 	// script の cat が画面に出るのを待つ｡コマンドの投入はレンダリング完了を待たずに戻る
-	// (herdr で実測: 固定 500ms 待機では画面反映前に読んでしまい none 判定になることがあった)｡
+	// (実測: 固定 500ms 待機では画面反映前に読んでしまい none 判定になることがあった)｡
 	if marker := lastNonEmptyLine(screenContent); marker != "" {
 		if err := waitForScreenContent(ctx, execClient, ownedPaneID, marker, writeScreenTimeout); err != nil {
 			return err
@@ -176,13 +174,12 @@ func lastNonEmptyLine(s string) string {
 	return ""
 }
 
-// waitForScreenContent は paneID の画面 (detection source) に substr が現れるまで
-// ポーリングする｡
+// waitForScreenContent は paneID の画面に substr が現れるまでポーリングする｡
 func waitForScreenContent(ctx context.Context, client multiplexer.Client, paneID, substr string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	var lastScreen string
 	for {
-		screen, err := client.PaneRead(ctx, paneID, multiplexer.PaneReadOptions{Source: multiplexer.SourceDetection, Lines: 40})
+		screen, err := client.PaneRead(ctx, paneID, multiplexer.PaneReadOptions{Lines: 40})
 		if err == nil {
 			lastScreen = screen
 			if strings.Contains(screen, substr) {
@@ -332,13 +329,6 @@ func (c *scopedClient) SendKeys(ctx context.Context, paneID string, keys ...stri
 	return c.inner.SendKeys(ctx, paneID, keys...)
 }
 
-func (c *scopedClient) ReportMetadata(ctx context.Context, paneID string, opts multiplexer.ReportMetadataOptions) error {
-	if err := c.guard(paneID); err != nil {
-		return err
-	}
-	return c.inner.ReportMetadata(ctx, paneID, opts)
-}
-
 func (c *scopedClient) Reachable(ctx context.Context) error {
 	return c.inner.Reachable(ctx)
 }
@@ -375,10 +365,5 @@ func (c simulateDryRunClient) SendText(_ context.Context, paneID, text string) e
 
 func (c simulateDryRunClient) SendKeys(_ context.Context, paneID string, keys ...string) error {
 	_, _ = fmt.Fprintf(c.w, "  [dry-run] pane %s へ送るはずだったキー: %s\n", paneID, strings.Join(keys, " "))
-	return nil
-}
-
-func (c simulateDryRunClient) ReportMetadata(_ context.Context, paneID string, _ multiplexer.ReportMetadataOptions) error {
-	_, _ = fmt.Fprintf(c.w, "  [dry-run] pane %s のラベル更新はしない\n", paneID)
 	return nil
 }

@@ -34,10 +34,6 @@ tasks:
 
   lint:
     desc: Go の全静的解析を実行
-    env:
-      # spm-go がローカルレジストリ由来なので policy を渡す (CI は direnv を通らない)｡
-      # 絶対パスにするのは､go-arch-lint が各パッケージのディレクトリを cwd にして go を起動するため｡
-      AQUA_POLICY_CONFIG: '{{.TASKFILE_DIR}}/aqua/policy.yaml'
     cmds:
       - golangci-lint run --timeout 5m ./...
       - go-arch-lint check

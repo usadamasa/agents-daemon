@@ -232,20 +232,32 @@ func toPane(blockID string, ps programStatusResult, proc processResult, sessionI
 		pane.Agent = "claude"
 		pane.AgentStatus = agentStatus(root.State)
 	case proc.Foreground != nil && filepath.Base(proc.Foreground.Argv0) == "claude":
-		// record が無い (起動直後の自己申告がまだ) か､前の Claude の record が残っている｡
+		// record が無い (起動直後の自己申告がまだ) か､record はあるが使えない｡
 		// --shell=none で起動した block では argv0 が絶対パスになる (実測)｡
 		pane.Agent = "claude"
+		if root != nil && root.App == claudeApp {
+			pane.UnknownReason = unverifiedReason(root, proc.Foreground.PID)
+		}
 	}
 	return pane
 }
 
-// isForeground は record を書いた process が今も前景にいるかを返す｡
+// isForeground は record を書いた process が今も foreground にいるかを返す｡
 // OSC 7501 の仕様では done と error の record は process の終了と shell prompt を生き延びるので､
 // Claude Code が SIGKILL で終わる (/exit なら state=clear を出して消す) と素の shell に
 // app=claude-code の done が残る (実測､#69)｡その block を Claude の pane と見て compact の催促や
-// 再開の文面を shell へ打たないよう､前景の pid が一致する record だけを使う｡
+// 再開の文面を shell へ打たないよう､foreground の pid が一致する record だけを使う｡
 func isForeground(record *programStatusRecord, proc processResult) bool {
 	return proc.Foreground != nil && record.Owner.PID == proc.Foreground.PID
+}
+
+// unverifiedReason は Claude Code の record を使えなかった理由｡owner が無いのは rex の版が変わって
+// 欄が消えた (か名前が変わった) ときで､放置すると全 pane が unknown のまま compact の催促が止まる｡
+func unverifiedReason(record *programStatusRecord, foregroundPID int) string {
+	if record.Owner.PID == 0 {
+		return "record に owner.pid が無い (rex の版が変わった可能性｡record を使えず agent_status が unknown のままになる)"
+	}
+	return fmt.Sprintf("record の owner (pid %d) が foreground の process (pid %d) と違う (前の Claude の record が残っている)", record.Owner.PID, foregroundPID)
 }
 
 // rootRecord は subagent ではない Claude Code 本体の record を返す｡無ければ nil｡

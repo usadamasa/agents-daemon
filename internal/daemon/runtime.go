@@ -35,6 +35,8 @@ type paneEntry struct {
 	state      *monitor.PaneState
 	lastSeenAt time.Time
 	lastLogKey string // 直前にログへ書いた内容の識別子 (同じ状態が続く間の重複を抑える)
+	// loggedUnknownReason は最後にログへ書いた Pane.UnknownReason｡同じ理由が続く間は書かない｡
+	loggedUnknownReason string
 }
 
 // daemonRuntime は 1 回の --foreground 実行に閉じたループの可変状態をまとめる｡
@@ -153,6 +155,7 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 			r.panes[pane.TerminalID] = entry
 		}
 		entry.lastSeenAt = now
+		r.logUnknownReason(pane, entry)
 
 		// state はセッションごとに別ファイル｡pane に対応するものだけを読む｡
 		rateState, stateErr := r.store.LoadRateLimit(pane.SessionID)
@@ -184,6 +187,18 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 	}
 
 	return false, cfg, nil
+}
+
+// logUnknownReason は record があるのに使えず unknown になった理由を､理由が変わったときだけログに残す｡
+// unknown の pane には compact の催促も idle compact も送らないので､理由が無いと「静かに止まった」ように見える｡
+func (r *daemonRuntime) logUnknownReason(pane multiplexer.Pane, entry *paneEntry) {
+	if pane.UnknownReason == entry.loggedUnknownReason {
+		return
+	}
+	entry.loggedUnknownReason = pane.UnknownReason
+	if pane.UnknownReason != "" {
+		r.log.Logf("pane %s: agent_status を判定できません: %s", pane.PaneID, pane.UnknownReason)
+	}
 }
 
 // forgetUnseen は消えた pane のエントリと､消えた session の cache の memo を捨てる｡

@@ -28,7 +28,7 @@ const (
 	blockClosed        = "block:01a12599-0000-7000-8000-000000000001"
 	blockNotShell      = "block:01a12599-0000-7000-8000-000000000002"
 
-	// 前景 process の pid｡record の owner.pid と突き合わせる｡
+	// foreground の process の pid｡record の owner.pid と突き合わせる｡
 	pidClaudeWorking = 15470
 	pidClaudeDone    = 17633
 	pidClaudeStartup = 70904
@@ -59,7 +59,7 @@ const (
 	psEmpty      = `{"records":[]}`
 	// 起動直後｡Claude Code 自身が数秒以内に出す (rex preview.15 は process 名から record を補わない)｡
 	psStartup = `{"records":[{"state":"idle","app":"claude-code","effective_app":"claude-code","updated_at":"2026-10-17T14:06:38.636286+09:00","owner":{"pid":70904,"name":"2.1.302"}}]}`
-	// done のまま SIGKILL で終わった Claude Code の record｡前景が shell に戻っても次の prompt が出ても残る
+	// done のまま SIGKILL で終わった Claude Code の record｡foreground が shell に戻っても次の prompt が出ても残る
 	// (OSC 7501 の仕様: done と error は process の終了と shell prompt を生き延びる)｡
 	psStaleDone = `{"records":[{"state":"done","app":"claude-code","effective_app":"claude-code","msg":"replied 'ok' as requested; no tools used","updated_at":"2026-10-17T14:09:30.224596+09:00","owner":{"pid":73002,"name":"2.1.302"}}]}`
 	// event payload の root record は "id":"" で来る｡
@@ -73,10 +73,10 @@ const (
 
 const (
 	reasonNoOwner    = "record に owner.pid が無い (rex の版が変わった可能性｡record を使えず agent_status が unknown のままになる)"
-	reasonStaleOwner = "record の owner (pid 73002) が前景 (pid 70904) と違う (前の Claude の record が残っている)"
+	reasonStaleOwner = "record の owner (pid 73002) が foreground の process (pid 70904) と違う (前の Claude の record が残っている)"
 )
 
-// processJSON は `block call process` の応答｡pid と argv0 は前景 process のもの｡
+// processJSON は `block call process` の応答｡pid と argv0 は foreground の process のもの｡
 func processJSON(pid int, argv0, cwd string) string {
 	return `{"last_exit":null,` +
 		`"child":{"pid":33929,"user_id":0,"user":"root","name":"login","path":"/usr/bin/login"},` +

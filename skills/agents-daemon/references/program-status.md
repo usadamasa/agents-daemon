@@ -30,12 +30,15 @@ docs に無く、2.1.302 のバイナリと実測 (2026-10-17、rex preview.15�
 - root record (`id` が無いか空) だけ。`id` 付きは subagent のもの。
 - `app` が `claude-code`。Claude Code は固定でこれを出す
   (preview.13 までの rex が process 名から補っていた `claude` は preview.15 では来ない)。
-- record の `owner.pid` が前景 process の pid と一致する。仕様では `done` と `error` は process の終了と shell prompt
+- record の `owner.pid` が `foreground` の process の pid と一致する。仕様では `done` と `error` は process の終了と shell prompt
   を生き延びる。そのため Claude Code が SIGKILL で終わると素の shell に `done` が残る (実測。`/exit` は `state=clear` で消す)。
-- 条件を満たす record が無くても、前景の `argv0` (basename) が `claude` なら Claude agent として `unknown`。
+- 条件を満たす record が無くても、`foreground` の `argv0` (basename) が `claude` なら Claude agent として `unknown`。
+  record があるのに使えなかったときは理由を daemon のログ (`agent_status を判定できません`) と `doctor` の
+  pane 一覧 (`unknown の理由`) に出す。`owner` は rex 独自の欄なので、rex の版が変わって欄が消えると全 pane が
+  `unknown` になり compact の催促が止まる。その状態を黙って通さないための出口。
 
 ## payload の書式
 
 `key=value` を `:` で繋ぎ、終端は BEL (`state=idle:app=claude-code`。`title` と `msg` は base64)。
 `agents-daemon simulate` ([operations.md](operations.md)) の使い捨て block の script はこれを `printf` で出し、
-`exec cat` で同じ pid のまま前景に居座って `owner.pid` の条件を満たす。
+`exec cat` で同じ pid のまま foreground に居座って `owner.pid` の条件を満たす。

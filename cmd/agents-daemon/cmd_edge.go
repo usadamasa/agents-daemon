@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
+	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/parking"
@@ -17,8 +18,13 @@ func newEdgeCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "edge", Short: "セッションをまたぐ作業の依存 (before が済まないと after を始められない) を書く・消す・一覧する"}
 
 	var before, after edge.Endpoint
-	var note string
-	endpointFlags := func(c *cobra.Command) {
+	// endpointCmd は両端を flag で受け、run に置き場と cwd の domain の決め方を渡す add / rm を作る。
+	endpointCmd := func(use, short string, run func(edge.Store, func(string) domain.Domain) (any, error)) *cobra.Command {
+		c := &cobra.Command{Use: use, Short: short, Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
+			return withPlacer(cmd, "", func(p apppath.Paths, placer parking.Placer, _ string) (any, error) {
+				return run(edge.New(p.StateDir()), placer.Classify)
+			})
+		}}
 		c.Flags().StringVar(&before.Ref, "before", "", "先に済ませる作業の参照 (session:<名前> / issue:<owner>/<repo>#<番号> / pr:<owner>/<repo>#<番号> / task:<session_id>/<task_id>)")
 		c.Flags().StringVar(&before.CWD, "before-cwd", "", "before の作業のセッションの cwd (絶対パス)")
 		c.Flags().StringVar(&after.Ref, "after", "", "before の後に始める作業の参照")
@@ -26,30 +32,16 @@ func newEdgeCmd() *cobra.Command {
 		for _, name := range []string{"before", "before-cwd", "after", "after-cwd"} {
 			_ = c.MarkFlagRequired(name)
 		}
+		return c
 	}
-	add := &cobra.Command{
-		Use:   "add",
-		Short: "辺を書き、{created, edge} を出す。同じ辺の二重登録は書き直すだけ",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return withPlacer(cmd, "", func(p apppath.Paths, placer parking.Placer, _ string) (any, error) {
-				return edge.New(p.StateDir()).Add(before, after, note, placer.Classify, time.Now())
-			})
-		},
-	}
-	endpointFlags(add)
+	var note string
+	add := endpointCmd("add", "辺を書き、{created, edge} を出す。同じ辺の二重登録は書き直すだけ", func(s edge.Store, classify func(string) domain.Domain) (any, error) {
+		return s.Add(before, after, note, classify, time.Now())
+	})
 	add.Flags().StringVar(&note, "note", "", "辺の補足 (何の後か)")
-	rm := &cobra.Command{
-		Use:   "rm",
-		Short: "辺を消し、{removed, id} を出す。無い辺は removed が false",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return withPlacer(cmd, "", func(p apppath.Paths, placer parking.Placer, _ string) (any, error) {
-				return edge.New(p.StateDir()).Remove(before, after, placer.Classify)
-			})
-		},
-	}
-	endpointFlags(rm)
+	rm := endpointCmd("rm", "辺を消し、{removed, id} を出す。無い辺は removed が false", func(s edge.Store, classify func(string) domain.Domain) (any, error) {
+		return s.Remove(before, after, classify)
+	})
 
 	var cwd, session, repo, ref string
 	var here bool

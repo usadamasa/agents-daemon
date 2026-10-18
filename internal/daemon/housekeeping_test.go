@@ -38,8 +38,8 @@ func TestHousekeep(t *testing.T) {
 		contextDir := store.Context.Dir
 		touchAged(t, applog.RotatedPath(logPath, "2026-08-01"), 20*24*time.Hour, now)
 		touchAged(t, applog.RotatedPath(logPath, "2026-08-27"), 24*time.Hour, now)
-		touchAged(t, filepath.Join(store.RateLimits.Dir,"old.json"), 30*time.Hour, now)
-		touchAged(t, filepath.Join(store.RateLimits.Dir,"fresh.json"), time.Hour, now)
+		touchAged(t, filepath.Join(store.RateLimits.Dir, "old.json"), 30*time.Hour, now)
+		touchAged(t, filepath.Join(store.RateLimits.Dir, "fresh.json"), time.Hour, now)
 		// context の保持期間は rate-limits より長い (上限待ちを跨いで block と session の対応を残す)。
 		touchAged(t, filepath.Join(contextDir, "old-session.json"), 8*24*time.Hour, now)
 		touchAged(t, filepath.Join(contextDir, "fresh-session.json"), 30*time.Hour, now)
@@ -78,10 +78,10 @@ func TestHousekeep(t *testing.T) {
 		if _, err := os.Stat(applog.RotatedPath(logPath, "2026-08-27")); err != nil {
 			t.Errorf("1 日前の rotated ログは残るべき: %v", err)
 		}
-		if _, err := os.Stat(filepath.Join(store.RateLimits.Dir,"old.json")); !os.IsNotExist(err) {
+		if _, err := os.Stat(filepath.Join(store.RateLimits.Dir, "old.json")); !os.IsNotExist(err) {
 			t.Errorf("30 時間前の state は消えるべき (err=%v)", err)
 		}
-		if _, err := os.Stat(filepath.Join(store.RateLimits.Dir,"fresh.json")); err != nil {
+		if _, err := os.Stat(filepath.Join(store.RateLimits.Dir, "fresh.json")); err != nil {
 			t.Errorf("1 時間前の state は残るべき: %v", err)
 		}
 

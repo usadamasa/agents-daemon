@@ -64,3 +64,8 @@ linters:
           - gocognit
           - gocyclo
           - maintidx
+
+# v2 では整形の検査が linters から分かれ、ここで有効にしないと run は整形のずれを報告しない
+formatters:
+  enable:
+    - gofmt

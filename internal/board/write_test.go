@@ -70,3 +70,19 @@ func TestWrite(t *testing.T) {
 		t.Errorf("moved.Domain = %q, want work", moved.Domain)
 	}
 }
+
+// パーキングは開いたセッションの domain の open のメモだけを載せる。
+func TestWrite_parking(t *testing.T) {
+	p := paths(t)
+	writeFile(t, p.ConfigFile(), `{"homePaths": ["/src/home"]}`)
+	dir := filepath.Join(p.StateDir(), "parking")
+	src := `"sources":[{"session_id":"H","cwd":"/src/home/a","at":"2026-10-18T09:00:00Z"}]`
+	writeFile(t, filepath.Join(dir, "home", "1.json"), `{"id":"1","repo":"/src/home/a","kind":"aside","title":"開いている","status":"open",`+src+`}`)
+	writeFile(t, filepath.Join(dir, "home", "2.json"), `{"id":"2","repo":"/src/home/a","kind":"aside","title":"捨てた","status":"discarded",`+src+`}`)
+	writeFile(t, filepath.Join(dir, "work", "3.json"), `{"id":"3","repo":"/work/b","kind":"aside","title":"業務","status":"open",`+src+`}`)
+
+	home := writeBoard(t, p, Viewer{CWD: "/src/home/a", UserHome: "/u"})
+	if len(home.Rows) != 1 || len(home.Rows[0].Parking) != 1 || home.Rows[0].Parking[0].Title != "開いている" {
+		t.Errorf("home = %+v", home.Rows)
+	}
+}

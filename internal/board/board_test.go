@@ -8,6 +8,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/daemon"
 	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
+	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
 
@@ -112,6 +113,62 @@ func TestBuild_rowsAndColumns(t *testing.T) {
 	}
 	if strings.Join(order, ",") != "A/4,B/1,A/2,A/3,A/1" {
 		t.Errorf("order = %v", order)
+	}
+}
+
+// パーキングのメモは repo の行の parking に並ぶ。タスクの無い repo のメモも行になる。
+// sources は新しい順で、セッションの名前はカードと同じ規則で付ける。
+func TestBuild_parking(t *testing.T) {
+	const main, wt, other = "/src/home/agents-daemon", "/src/home/agents-daemon/.claude/worktrees/x", "/src/home/dotfile"
+	memo := parking.Item{
+		ID: "20261018T090000-aaaa", Domain: domain.Home, Repo: main, Status: parking.StatusOpen,
+		Entry: parking.Entry{Kind: parking.KindAside, Title: "保持期間の根拠が無い", Detail: "d", Files: []string{"a.go"}, DefaultTaken: "やらない"},
+		Sources: []parking.Source{
+			{SessionID: "B", TaskID: "1", CWD: wt, At: t0},
+			{SessionID: "A", CWD: main, Detail: "別の補足", At: t0.Add(time.Hour)},
+		},
+	}
+	lone := parking.Item{
+		ID: "20261018T100000-bbbb", Domain: domain.Home, Repo: other, Status: parking.StatusOpen,
+		Entry:   parking.Entry{Kind: parking.KindPreference, Title: "alias の命名"},
+		Sources: []parking.Source{{SessionID: "C", CWD: other, At: t0}},
+	}
+	b := Build(Input{
+		Domain:   domain.Home,
+		PID:      42,
+		Snapshot: snapshot(daemon.PaneStatus{PaneID: "p1", SessionID: "A", CWD: main}),
+		Tasks:    []tasklog.Task{task("A", "1", "調査", "in_progress", main)},
+		Parking:  []parking.Item{memo, lone},
+		Classify: homeUnder("/src/home"),
+		Locate: places(map[string]gitrepo.Place{
+			main:  {Repo: main, Branch: "main"},
+			wt:    {Repo: main, Branch: "fix-ci"},
+			other: {Repo: other, Branch: "alias"},
+		}),
+	})
+
+	if len(b.Rows) != 2 || b.Rows[0].Title != "agents-daemon" || b.Rows[1].Title != "dotfile" {
+		t.Fatalf("rows = %+v", b.Rows)
+	}
+	if len(b.Rows[1].Cards) != 0 || len(b.Rows[1].Parking) != 1 || b.Rows[1].Parking[0].ID != lone.ID {
+		t.Errorf("メモだけの行 = %+v", b.Rows[1])
+	}
+	got := b.Rows[0].Parking
+	if len(got) != 1 {
+		t.Fatalf("parking = %+v", got)
+	}
+	p := got[0]
+	if p.ID != memo.ID || p.Kind != parking.KindAside || p.Title != memo.Title || p.Detail != "d" || p.DefaultTaken != "やらない" || len(p.Files) != 1 {
+		t.Errorf("card = %+v", p)
+	}
+	if len(p.Sources) != 2 || p.Sources[0].SessionID != "A" || p.Sources[0].Detail != "別の補足" || p.Sources[1].SessionID != "B" {
+		t.Fatalf("sources = %+v, want 新しい順", p.Sources)
+	}
+	if p.Sources[0].Session != "main" || !p.Sources[0].Live || p.Sources[1].Session != "fix-ci" || p.Sources[1].Live {
+		t.Errorf("source の名前と Live = %+v", p.Sources)
+	}
+	if b.Rows[1].Parking[0].Sources[0].Session != "alias" {
+		t.Errorf("終了したセッションの名前 = %+v", b.Rows[1].Parking[0].Sources)
 	}
 }
 

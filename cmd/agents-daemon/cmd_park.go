@@ -96,6 +96,14 @@ func newParkCmd() *cobra.Command {
 
 // withPark は置き場と置き先の決め方を環境から組んで fn を呼び、結果を JSON で stdout に書く。
 func withPark(cmd *cobra.Command, cwd string, fn func(parking.Store, parking.Placer, string) (any, error)) error {
+	return withPlacer(cmd, cwd, func(p apppath.Paths, placer parking.Placer, cwd string) (any, error) {
+		return fn(parking.New(p.StateDir()), placer, cwd)
+	})
+}
+
+// withPlacer は domain の決め方 (config とタスクの記録) を環境から組んで fn を呼び、結果を JSON で stdout に書く。
+// cwd が空なら今の cwd にする。park と edge が使う。
+func withPlacer(cmd *cobra.Command, cwd string, fn func(apppath.Paths, parking.Placer, string) (any, error)) error {
 	p, err := apppath.FromEnv()
 	if err != nil {
 		return err
@@ -108,7 +116,7 @@ func withPark(cmd *cobra.Command, cwd string, fn func(parking.Store, parking.Pla
 	// 設定が読めなくても Load は既定値 (すべて業務) を返す。業務のものが私用の側へ出ない向きに倒れる。
 	cfg, _ := config.Load(p.ConfigFile())
 	placer := parking.Placer{Tasks: tasklog.New(p.StateDir()), Classify: domain.New(os.Getenv("HOME"), cfg.HomePaths, cfg.DefaultDomain).Classify}
-	v, err := fn(parking.New(p.StateDir()), placer, cwd)
+	v, err := fn(p, placer, cwd)
 	if err != nil {
 		return err
 	}

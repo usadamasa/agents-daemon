@@ -48,7 +48,7 @@ func TestPrune(t *testing.T) {
 // 同じ辺を登録し直すと mtime が進み、保持期間を数え直す。
 func TestPrune_reAddRefreshes(t *testing.T) {
 	s := New(t.TempDir())
-	before, after := Spec{Ref: "session:a", CWD: "/home/a"}, Spec{Ref: "session:b", CWD: "/home/b"}
+	before, after := Endpoint{Ref: "session:a", CWD: "/home/a"}, Endpoint{Ref: "session:b", CWD: "/home/b"}
 	added := mustAdd(t, s, before, after, "", testNow)
 	path := filepath.Join(s.Dir, "home", added.Edge.ID+".json")
 	stale := testNow.Add(-Retention)

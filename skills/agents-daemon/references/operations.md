@@ -14,6 +14,7 @@ agents-daemon stop                             # SIGTERM を送って停止
 agents-daemon dream harvest --incremental      # 直近の transcript を集める (Stop hook が --detach 付きで呼ぶ)
 agents-daemon dream mine|stage|adopt|forget    # 記憶階層の consolidation の実行系 (agents-daemon:dream skill)
 agents-daemon prune-worktrees [--dry-run]      # 放置された Claude Code の worktree を回収する (SessionStart hook が --hook 付きで呼ぶ)
+agents-daemon edge add|rm|list                 # セッションをまたぐ作業の依存を書く・消す・一覧する (下の「セッションをまたぐ辺を書く」)
 ```
 
 ### `--dry-run`
@@ -65,6 +66,27 @@ Claude Code の sandbox の中で叩くと、`git worktree remove` は main work
 ディレクトリに書く。worktree の中から叩くと cwd の外への書き込みになるので、sandbox の書き込み許可
 (`sandbox.filesystem.allowWrite`) にリポジトリの親ディレクトリが入っていないリポジトリでは `operation not permitted`
 になる。その場合は利用者が `!` で打つか、main worktree を cwd にして叩く。
+
+### セッションをまたぐ辺を書く
+
+作業を別のセッションへ渡す側 (workspace の skill など) が、渡すときに「何の後か」を書く (#134)。辺は
+「`--before` が済まないと `--after` を始められない」を表す。結果は JSON で stdout に出る。
+
+```sh
+agents-daemon edge add \
+  --before session:ad-135 --before-cwd ~/src/github.com/usadamasa/agents-daemon \
+  --after issue:usadamasa/agents-daemon#143 --after-cwd ~/src/github.com/usadamasa/agents-daemon \
+  --note "段 4 のリリースの後"                       # {"created": true, "edge": {...}}
+agents-daemon edge rm --before ... --before-cwd ... --after ... --after-cwd ...   # {"removed": true, "id": "..."}
+agents-daemon edge list --cwd <dir> [--here | --repo <main worktree>] [--ref <参照>]
+```
+
+- 参照は `session:<セッション名>` (`claude --name` の名前)、`issue:<owner>/<repo>#<番号>`、`pr:<owner>/<repo>#<番号>`、
+  `task:<session_id>/<task_id>` のどれか
+- `--before-cwd` / `--after-cwd` は、その作業のセッションを起こしたディレクトリ (絶対パス)。両端の domain (私用か業務) は
+  ここから決め、違えば書かずに失敗する。書く側のセッション自身の cwd は見ない
+- 同じ参照の組 (向きを含む) は同じ辺になる。登録し直すと note と repo を書き直し、保持期間 (7 日) を数え直す
+- `list` は `--cwd` (と `--session`) の domain の辺だけを出す。`--repo` / `--here` / `--ref` はどちらかの端点で絞る
 
 ### 検証用コマンド
 

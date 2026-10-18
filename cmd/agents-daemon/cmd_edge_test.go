@@ -105,9 +105,9 @@ func TestEdgeAdd_refused(t *testing.T) {
 	work := filepath.Join(root, "work", "b")
 	mkdirs(t, home, work)
 	for name, args := range map[string][]string{
-		"私用と業務をまたぐ": {"--before", "session:a", "--before-cwd", home, "--after", "session:b", "--after-cwd", work},
+		"私用と業務をまたぐ":     {"--before", "session:a", "--before-cwd", home, "--after", "session:b", "--after-cwd", work},
 		"after-cwd が無い": {"--before", "session:a", "--before-cwd", home, "--after", "session:b"},
-		"参照の種類が範囲外":   {"--before", "branch:a", "--before-cwd", home, "--after", "session:b", "--after-cwd", home},
+		"参照の種類が範囲外":     {"--before", "branch:a", "--before-cwd", home, "--after", "session:b", "--after-cwd", home},
 	} {
 		if _, err := runEdge(t, append([]string{"add"}, args...)...); err == nil {
 			t.Errorf("%s: edge add が通った", name)

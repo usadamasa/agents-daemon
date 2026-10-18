@@ -41,6 +41,7 @@ plugin が持つもの:
 | `agents-daemon status --board` | mod が読むボードの JSON (タスクの記録と status.json を組み直したもの) を出す |
 | `agents-daemon ingest-task` | PostToolUse hook の stdin からタスクを `tasks/<domain>/` に記録する。私用 (`home`) と業務 (`work`) は config の `homePaths` / `defaultDomain` で分ける |
 | `agents-daemon park add\|set\|list\|adopt` | パーキングロット (タスクの途中で見つけた脇の件) を `parking/<domain>/` に置く・status を書き換える・一覧する・終了したセッションのタスクをメモへ移す。同じ件は 1 件にまとめる (#121) |
+| `agents-daemon edge add\|rm\|list` | 作業を渡す側が、セッションをまたぐ作業の依存 (辺) を `edges/<domain>/` に書く・消す・一覧する (#134。使い方は `skills/agents-daemon/references/operations.md`) |
 | `park` tool (mod、`hooks/park.tsx`) | model が聞かずに脇のことをメモとしてパーキングロットへ置く tool と、repo の open のメモの数を出す prompt の hint 行 (#121) |
 | パーキングの band (mod、`hooks/band.tsx`) | セッションの開始時とタスクの完了時に、その repo のメモとそのタスクの途中で置いたメモを入力欄の上に出す (#121) |
 

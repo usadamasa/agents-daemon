@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/applog"
+	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
@@ -56,8 +57,16 @@ func TestHousekeep(t *testing.T) {
 		r.parking = parking.New(dir)
 		parkFile := filepath.Join(r.parking.Dir, "home", "p1.json")
 		touchAged(t, parkFile, 91*24*time.Hour, now)
+		// 辺は 1 週間更新されなければ消える (internal/edge のテスト)。
+		r.edges = edge.New(dir)
+		edgeFile := filepath.Join(r.edges.Dir, "home", "e1.json")
+		touchAged(t, edgeFile, 8*24*time.Hour, now)
 
 		r.housekeep(logPath, now)
+
+		if _, err := os.Stat(edgeFile); !os.IsNotExist(err) {
+			t.Errorf("8 日前の辺は消えるべき (err=%v)", err)
+		}
 
 		if _, err := os.Stat(taskFile); !os.IsNotExist(err) {
 			t.Errorf("8 日前のタスクの記録は消えるべき (err=%v)", err)
@@ -92,7 +101,7 @@ func TestHousekeep(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ログが読めない: %v", err)
 		}
-		if !strings.Contains(string(data), "rotated ログ 1 件") || !strings.Contains(string(data), "利用上限 state 1 件") || !strings.Contains(string(data), "タスクの記録 1 件") || !strings.Contains(string(data), "パーキング 1 件") {
+		if !strings.Contains(string(data), "rotated ログ 1 件") || !strings.Contains(string(data), "利用上限 state 1 件") || !strings.Contains(string(data), "タスクの記録 1 件") || !strings.Contains(string(data), "パーキング 1 件") || !strings.Contains(string(data), "辺 1 件") {
 			t.Errorf("削除件数のログが無い: %q", data)
 		}
 	})

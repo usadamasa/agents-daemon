@@ -1,11 +1,7 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
 	"os"
 	"time"
 
@@ -16,9 +12,8 @@ import (
 
 // newPruneWorktreesCmd は `agents-daemon prune-worktrees` を組み立てる。
 //
-// 誰も使っていない Claude Code の worktree (`.claude/worktrees/` 配下) を回収する。判定と git 操作は
-// internal/worktree が持つ。--hook は SessionStart hook (hooks/prune-worktrees.sh) 用で、stdin の hook 入力の
-// cwd を起点にし、何があっても 0 で戻り、回収したときだけ systemMessage を stdout に出す。
+// 誰も使っていない Claude Code の worktree (`.claude/worktrees/` 配下) を回収する。判定・git 操作・hook 入力の
+// 読み取りは internal/worktree が持つ。--hook は SessionStart hook (hooks/prune-worktrees.sh) 用。
 func newPruneWorktreesCmd() *cobra.Command {
 	var (
 		dryRun, force, hook bool
@@ -45,7 +40,7 @@ func newPruneWorktreesCmd() *cobra.Command {
 				DryRun: dryRun,
 			}
 			if hook {
-				return runPruneWorktreesHook(cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr(), opts)
+				return worktree.RunHook(cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr(), opts)
 			}
 			cwd, err := os.Getwd()
 			if err != nil {
@@ -62,38 +57,4 @@ func newPruneWorktreesCmd() *cobra.Command {
 	f.IntVar(&minAgeDays, "min-age-days", int(worktree.DefaultMinAge/(24*time.Hour)), "N 日以上経過したものだけ回収する")
 	f.BoolVar(&hook, "hook", false, "SessionStart hook として動く (stdin の cwd を使い、常に 0 で戻る)")
 	return cmd
-}
-
-// runPruneWorktreesHook は SessionStart hook として回収を回す。セッション開始を止めないことを最優先にし、
-// git リポジトリ外でも、git が何を返しても nil を返す。失敗は stderr に残す。
-func runPruneWorktreesHook(stdin io.Reader, stdout, stderr io.Writer, opts worktree.Opts) error {
-	opts.Cwd = hookCwd(stdin)
-	var report bytes.Buffer
-	opts.Stdout = &report
-	if err := worktree.Run(opts); err != nil && !errors.Is(err, worktree.ErrNotRepository) {
-		_, _ = fmt.Fprintf(stderr, "%s prune-worktrees: %v\n", time.Now().Format(time.RFC3339), err)
-	}
-	if report.Len() == 0 {
-		return nil
-	}
-	out, err := json.Marshal(map[string]string{"systemMessage": report.String()})
-	if err != nil {
-		return nil
-	}
-	_, _ = fmt.Fprintln(stdout, string(out))
-	return nil
-}
-
-// hookCwd は hook 入力 (JSON) の cwd を返す。読めなければプロセスの cwd に落とす。
-func hookCwd(stdin io.Reader) string {
-	var input struct {
-		Cwd string `json:"cwd"`
-	}
-	if err := json.NewDecoder(stdin).Decode(&input); err == nil && input.Cwd != "" {
-		if info, err := os.Stat(input.Cwd); err == nil && info.IsDir() {
-			return input.Cwd
-		}
-	}
-	cwd, _ := os.Getwd()
-	return cwd
 }

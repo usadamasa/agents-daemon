@@ -12,6 +12,7 @@ import (
 )
 
 // pruneTestRepo は main と、過去に戻した放置 worktree 1 つ (`.claude/worktrees/stale`) を持つリポジトリを作る。
+// 判定の網羅は internal/worktree のテストが持ち、ここでは flag の配線だけを見る。
 func pruneTestRepo(t *testing.T) (repo, stale string) {
 	t.Helper()
 	repo = filepath.Join(t.TempDir(), "repo")
@@ -103,9 +104,9 @@ func TestPruneWorktreesCmd_OutsideRepositoryFails(t *testing.T) {
 	}
 }
 
-func TestPruneWorktreesCmd_Hook_UsesCwdFromStdinAndReportsSystemMessage(t *testing.T) {
+func TestPruneWorktreesCmd_HookReadsCwdFromStdin(t *testing.T) {
 	repo, stale := pruneTestRepo(t)
-	t.Chdir(t.TempDir()) // hook 入力の cwd を使い、プロセスの cwd に頼らない
+	t.Chdir(t.TempDir())
 
 	input, _ := json.Marshal(map[string]string{"cwd": repo})
 	out, err := execPrune(t, string(input), "--hook")
@@ -115,54 +116,8 @@ func TestPruneWorktreesCmd_Hook_UsesCwdFromStdinAndReportsSystemMessage(t *testi
 	if _, err := os.Stat(stale); err == nil {
 		t.Error("stale worktree が残っている")
 	}
-	var msg struct {
-		SystemMessage string `json:"systemMessage"`
-	}
-	if err := json.Unmarshal([]byte(out), &msg); err != nil {
-		t.Fatalf("stdout が JSON でない: %q (%v)", out, err)
-	}
-	if !strings.Contains(msg.SystemMessage, "stale") {
-		t.Errorf("systemMessage に回収の報告が無い: %q", msg.SystemMessage)
-	}
-}
-
-func TestPruneWorktreesCmd_Hook_SilentWhenNothingToDo(t *testing.T) {
-	repo, _ := pruneTestRepo(t)
-	t.Chdir(t.TempDir())
-
-	input, _ := json.Marshal(map[string]string{"cwd": repo})
-	out, err := execPrune(t, string(input), "--hook", "--min-age-days", "99999")
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	if out != "" {
-		t.Errorf("回収するものが無いのに stdout がある: %q", out)
-	}
-}
-
-func TestPruneWorktreesCmd_Hook_OutsideRepositorySucceedsSilently(t *testing.T) {
-	notrepo := t.TempDir()
-	t.Chdir(notrepo)
-
-	input, _ := json.Marshal(map[string]string{"cwd": notrepo})
-	out, err := execPrune(t, string(input), "--hook")
-	if err != nil {
-		t.Errorf("hook はセッションを止めない (err = %v)", err)
-	}
-	if out != "" {
-		t.Errorf("stdout がある: %q", out)
-	}
-}
-
-func TestPruneWorktreesCmd_Hook_ToleratesNonJSONInput(t *testing.T) {
-	t.Chdir(t.TempDir())
-
-	out, err := execPrune(t, "not json at all", "--hook")
-	if err != nil {
-		t.Errorf("hook はセッションを止めない (err = %v)", err)
-	}
-	if out != "" {
-		t.Errorf("stdout がある: %q", out)
+	if !strings.Contains(out, `"systemMessage"`) {
+		t.Errorf("systemMessage が無い: %q", out)
 	}
 }
 

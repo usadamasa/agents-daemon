@@ -17,7 +17,7 @@ function world(on: On, run: (argv: readonly string[]) => ProcessRunResult) {
   on('session.id', async () => ({ value: 'SELF' }))
   on('session.cwd', async () => ({ value: CWD }))
   on('process.run', async (_$, e) => {
-    ran.push({ argv: [...e.argv], stdin: e.stdin })
+    ran.push({ argv: [...e.argv], stdin: e.init?.stdin })
     return { value: run(e.argv) }
   })
   on('ui.status', async (_$, e) => {
@@ -45,7 +45,7 @@ function item(id: string) {
   return { id, domain: 'home', repo: CWD, kind: 'aside', title: 't', sources: [], status: 'open' }
 }
 
-// add と list に答える。list は open の件を count 件返す。
+// add と list に答える。list は open のメモを count 個返す。
 function answer(count: number, created: boolean) {
   return (argv: readonly string[]) => {
     if (argv[2] === 'add') return output(JSON.stringify({ created, item: item('20261019T010000-abcd1234') }))
@@ -55,7 +55,7 @@ function answer(count: number, created: boolean) {
 
 const START = { cwd: CWD, surface: 'terminal', isInteractive: true } as const
 
-test('session.start で park の tool を登録し、その repo の open の件数を status 行に出す', async ($, on) => {
+test('session.start で park の tool を登録し、その repo の open のメモの数を status 行に出す', async ($, on) => {
   const w = world(on, answer(2, true))
   await $.session.start(START)
 
@@ -73,7 +73,7 @@ test('session.start で park の tool を登録し、その repo の open の件
   expect(tool.description).toMatch(/危ない操作の確認/)
 
   expect(w.ran.map(r => r.argv)).toEqual([LIST])
-  expect(w.statuses).toEqual(['パーキング 2 件'])
+  expect(w.statuses).toEqual(['パーキングのメモ 2'])
 })
 
 test('tool の呼び出しは park add に JSON を stdin で渡し、新しく置いたことを返す', async ($, on) => {
@@ -97,19 +97,19 @@ test('tool の呼び出しは park add に JSON を stdin で渡し、新しく�
     default_taken: 'やらない',
     session_id: 'SELF',
   })
-  expect(String(res.result)).toMatch(/^置きました \(20261019T010000-abcd1234\)。既定 \(やらない\) で進めてください/)
-  // 置いた後に件数を読み直す。
+  expect(String(res.result)).toMatch(/^メモを置きました \(20261019T010000-abcd1234\)。既定 \(やらない\) で進めてください/)
+  // 置いた後に数を読み直す。
   expect(w.ran[1].argv).toEqual(LIST)
-  expect(w.statuses.at(-1)).toBe('パーキング 1 件')
+  expect(w.statuses.at(-1)).toBe('パーキングのメモ 1')
 })
 
-test('既に置かれていた件にまとまったら、そう伝える', async ($, on) => {
+test('既に置かれていたメモにまとまったら、そう伝える', async ($, on) => {
   const w = world(on, answer(1, false))
   await $.session.start(START)
 
   const res = await $.tool.call({ tool: TOOL, kind: 'scope', title: 't' } as never)
-  expect(String(res.result)).toMatch(/^既に置かれていた件 \(20261019T010000-abcd1234\) にまとめました。既定で進めてください/)
-  expect(w.statuses.at(-1)).toBe('パーキング 1 件')
+  expect(String(res.result)).toMatch(/^既に置かれていたメモ \(20261019T010000-abcd1234\) にまとめました。既定で進めてください/)
+  expect(w.statuses.at(-1)).toBe('パーキングのメモ 1')
 })
 
 test('model が session_id を入れてきても、このセッションの ID で上書きする', async ($, on) => {
@@ -126,12 +126,12 @@ test('park add が失敗したら、置けなかった理由を model へ返す'
   await $.session.start(START)
 
   const res = await $.tool.call({ tool: TOOL, kind: 'decision', title: 't' } as never)
-  expect(res.isError).toBe(true)
-  expect(res.text).toMatch(/置けませんでした: kind "decision"/)
+  // deny の文面は model にエラーの結果として届く。
+  expect(res.deny).toMatch(/^メモを置けませんでした: kind "decision"/)
   expect(w.statuses.at(-1)).toBeUndefined()
 })
 
-test('open の件が無ければ status 行を消し、main loop の turn.complete で読み直す', async ($, on) => {
+test('open のメモが無ければ status 行を消し、main loop の turn.complete で読み直す', async ($, on) => {
   let count = 0
   const w = world(on, () => output(JSON.stringify(Array.from({ length: count }, (_, i) => item(`id${i}`)))))
   await $.session.start(START)
@@ -142,5 +142,5 @@ test('open の件が無ければ status 行を消し、main loop の turn.comple
   await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', agentId: 'a1', reason: 'answer' })
   expect(w.statuses).toEqual([undefined])
   await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' })
-  expect(w.statuses).toEqual([undefined, 'パーキング 3 件'])
+  expect(w.statuses).toEqual([undefined, 'パーキングのメモ 3'])
 })

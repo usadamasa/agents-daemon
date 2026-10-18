@@ -72,7 +72,7 @@ func TestAdd_mergesSameItem(t *testing.T) {
 	}
 }
 
-// Add は新しい件を作ったか、既存の件にまとめたかを返す。同じ置き方の二重送信もまとめた側になる。
+// Add は新しいメモを作ったか、既存のメモにまとめたかを返す。同じ置き方の二重送信もまとめた側になる。
 func TestAdd_reportsCreated(t *testing.T) {
 	s := New(t.TempDir())
 	cases := []struct {
@@ -94,7 +94,7 @@ func TestAdd_reportsCreated(t *testing.T) {
 	}
 }
 
-// まとめるときは、後から置いた側の detail が最初の件と違えば sources に残す。同じなら残さない。
+// まとめるときは、後から置いた側の detail が最初のメモと違えば sources に残す。同じなら残さない。
 func TestAdd_keepsLaterDetailInSource(t *testing.T) {
 	s := New(t.TempDir())
 	mustAdd(t, s, domain.Home, testRepo, aside("t"), source("s1", ""))

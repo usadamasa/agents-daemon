@@ -105,7 +105,7 @@ func TestParkAdd(t *testing.T) {
 	}
 	added := decodeAdded(t, stdout)
 	if !added.Created {
-		t.Errorf("新しい件なのに created = false")
+		t.Errorf("新しいメモなのに created = false")
 	}
 	item := added.Item
 	if item.Domain != "home" || item.Repo != gitrepo.Locate(repo).Repo || item.Repo == "" {
@@ -232,7 +232,7 @@ func TestParkListAndSet(t *testing.T) {
 	}
 }
 
-// --here は --cwd の repo (main worktree のパス) で絞る。linked worktree からでも main の件が出る。
+// --here は --cwd の repo (main worktree のパス) で絞る。linked worktree からでも main で置いたメモが出る。
 func TestParkList_here(t *testing.T) {
 	root := parkTestEnv(t)
 	repo, wt := parkTestRepo(t, filepath.Join(root, "src", "home", "app"))

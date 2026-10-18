@@ -155,7 +155,9 @@ stdin に渡す。`session_id` と cwd は inputSchema に無く、model は書�
 同じ入力で決まる。結果の `created` で「メモを置きました」と「既に置かれていたメモにまとめました」を分けて返す。
 status 行には `park list --here --status open` の数 (このセッションの repo の open のメモ) を出し、session.start、
 park の後、main loop の turn.complete で読み直す。全セッションで常に動くため、clock での定期の読み直しはしない。
-<!-- cc-premise: 2.1.302 hooks mods の tool.register / tool.call / ui.status / turn.complete と、modules が 1 つ・matcher の無い hook が event ごとに 1 つという制約 -->
+<!-- cc-premise: 2.1.302 hooks mods の tool.register / tool.call / ui.status / turn.complete -->
+<!-- cc-premise: 2.1.302 hooks modules は 1 つ、matcher の無い hook は event ごとに 1 つ -->
+<!-- cc-premise: 2.1.302 hooks tool.register は local の port を開く (sandbox の中の claude -p では落ちる) -->
 
 #### バイナリの用意と差し替え
 

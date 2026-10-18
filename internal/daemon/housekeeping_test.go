@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/applog"
+	"github.com/usadamasa/agents-daemon/internal/boardlog"
+	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
 	"github.com/usadamasa/agents-daemon/internal/parking"
@@ -61,8 +63,21 @@ func TestHousekeep(t *testing.T) {
 		r.edges = edge.New(dir)
 		edgeFile := filepath.Join(r.edges.Dir, "home", "e1.json")
 		touchAged(t, edgeFile, 8*24*time.Hour, now)
+		// ボードの経路のログは daemon.log と同じ 7 日で消す。
+		r.boardLogs = boardlog.Paths(dir)
+		boardOld := applog.RotatedPath(boardlog.Path(dir, domain.Work), "2026-08-01")
+		boardFresh := applog.RotatedPath(boardlog.Path(dir, domain.Home), "2026-08-27")
+		touchAged(t, boardOld, 20*24*time.Hour, now)
+		touchAged(t, boardFresh, 24*time.Hour, now)
 
 		r.housekeep(logPath, now)
+
+		if _, err := os.Stat(boardOld); !os.IsNotExist(err) {
+			t.Errorf("20 日前のボードのログは消えるべき (err=%v)", err)
+		}
+		if _, err := os.Stat(boardFresh); err != nil {
+			t.Errorf("1 日前のボードのログは残るべき: %v", err)
+		}
 
 		if _, err := os.Stat(edgeFile); !os.IsNotExist(err) {
 			t.Errorf("8 日前の辺は消えるべき (err=%v)", err)
@@ -101,7 +116,7 @@ func TestHousekeep(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ログが読めない: %v", err)
 		}
-		if !strings.Contains(string(data), "rotated ログ 1 件") || !strings.Contains(string(data), "利用上限 state 1 件") || !strings.Contains(string(data), "タスクの記録 1 件") || !strings.Contains(string(data), "パーキング 1 件") || !strings.Contains(string(data), "辺 1 件") {
+		if !strings.Contains(string(data), "rotated ログ 2 件") || !strings.Contains(string(data), "利用上限 state 1 件") || !strings.Contains(string(data), "タスクの記録 1 件") || !strings.Contains(string(data), "パーキング 1 件") || !strings.Contains(string(data), "辺 1 件") {
 			t.Errorf("削除件数のログが無い: %q", data)
 		}
 	})

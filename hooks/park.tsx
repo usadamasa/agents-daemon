@@ -63,12 +63,13 @@ export const registerPark: Register = on => {
     return next(e)
   })
 
-  // エンジンの hint の文面は置き換えず、tail で末尾に足す (terminal だけが描く)。
+  // エンジンの hint の文面は置き換えず、tail で末尾に足す (terminal だけが描く)。区切りの「·」はエンジンが付ける。
+  // cc-premise: 2.1.302 hooks PromptHint の tail の前にエンジンが「 · 」を挟む (実機で確認)
   on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
     const count = await read($, parked)
     if (count === 0) return next(e)
 
-    return next({ ...e, props: { ...e.props, tail: ` · パーキングのメモ ${count}` } })
+    return next({ ...e, props: { ...e.props, tail: `パーキングのメモ ${count}` } })
   })
 }
 

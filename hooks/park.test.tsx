@@ -89,7 +89,7 @@ test('session.start で park の tool を登録し、その repo の open のメ
 
   expect(w.ran.map(r => r.argv)).toEqual([LIST])
   // status 行はエンジンが警告の印付きで描くので使わない。hint 行は置き換えず、末尾に足す。
-  expect(await hint($, w)).toBe(' · パーキングのメモ 2')
+  expect(await hint($, w)).toBe('パーキングのメモ 2')
   expect(w.statuses).toEqual([])
 })
 
@@ -117,7 +117,7 @@ test('tool の呼び出しは park add に JSON を stdin で渡し、新しく�
   expect(String(res.result)).toMatch(/^メモを置きました \(20261019T010000-abcd1234\)。既定 \(やらない\) で進めてください/)
   // 置いた後に数を読み直す。
   expect(w.ran[1].argv).toEqual(LIST)
-  expect(await hint($, w)).toBe(' · パーキングのメモ 1')
+  expect(await hint($, w)).toBe('パーキングのメモ 1')
 })
 
 test('既に置かれていたメモにまとまったら、そう伝える', async ($, on) => {
@@ -126,7 +126,7 @@ test('既に置かれていたメモにまとまったら、そう伝える', as
 
   const res = await $.tool.call({ tool: TOOL, kind: 'scope', title: 't' } as never)
   expect(String(res.result)).toMatch(/^既に置かれていたメモ \(20261019T010000-abcd1234\) にまとめました。既定で進めてください/)
-  expect(await hint($, w)).toBe(' · パーキングのメモ 1')
+  expect(await hint($, w)).toBe('パーキングのメモ 1')
 })
 
 test('model が session_id を入れてきても、このセッションの ID で上書きする', async ($, on) => {
@@ -159,5 +159,5 @@ test('open のメモが無ければ hint 行に足さず、main loop の turn.co
   await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', agentId: 'a1', reason: 'answer' })
   expect(await hint($, w)).toBeUndefined()
   await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' })
-  expect(await hint($, w)).toBe(' · パーキングのメモ 3')
+  expect(await hint($, w)).toBe('パーキングのメモ 3')
 })

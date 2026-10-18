@@ -197,7 +197,7 @@ func TestAdd_doesNotMergeDifferentItems(t *testing.T) {
 	if other := mustAdd(t, s, domain.Work, testRepo, aside("t"), source("s1", "")); other.ID == base.ID {
 		t.Errorf("domain が違うのにまとめた")
 	}
-	if _, err := s.Set(domain.Home, base.ID, StatusDiscarded); err != nil {
+	if _, _, err := s.Set(domain.Home, base.ID, StatusDiscarded); err != nil {
 		t.Fatal(err)
 	}
 	if again := mustAdd(t, s, domain.Home, testRepo, aside("t"), source("s1", "")); again.ID == base.ID {
@@ -247,20 +247,24 @@ func TestSet(t *testing.T) {
 	s := New(t.TempDir())
 	item := mustAdd(t, s, domain.Home, testRepo, aside("t"), source("s1", ""))
 
-	got, err := s.Set(domain.Home, item.ID, StatusHanded)
+	got, from, err := s.Set(domain.Home, item.ID, StatusHanded)
 	if err != nil || got.Status != StatusHanded {
 		t.Fatalf("Set() = %+v, %v", got, err)
+	}
+	// 書き換える前の status はログに出す。
+	if from != StatusOpen {
+		t.Errorf("from = %q, want open", from)
 	}
 	if list, _ := s.List(domain.Home); list[0].Status != StatusHanded {
 		t.Errorf("書き戻されていない: %+v", list)
 	}
-	if _, err := s.Set(domain.Home, item.ID, "done"); err == nil {
+	if _, _, err := s.Set(domain.Home, item.ID, "done"); err == nil {
 		t.Errorf("範囲外の status を通した")
 	}
-	if _, err := s.Set(domain.Work, item.ID, StatusOpen); err == nil {
+	if _, _, err := s.Set(domain.Work, item.ID, StatusOpen); err == nil {
 		t.Errorf("別の domain の件を書き換えた")
 	}
-	if _, err := s.Set(domain.Home, "../x", StatusOpen); err == nil {
+	if _, _, err := s.Set(domain.Home, "../x", StatusOpen); err == nil {
 		t.Errorf("ファイル名に使えない id を通した")
 	}
 }
@@ -277,7 +281,7 @@ func TestPrune(t *testing.T) {
 	s := New(t.TempDir())
 	open := mustAdd(t, s, domain.Home, testRepo, aside("open"), source("s1", ""))
 	handed := mustAdd(t, s, domain.Work, testRepo, aside("handed"), source("s1", ""))
-	if _, err := s.Set(domain.Work, handed.ID, StatusHanded); err != nil {
+	if _, _, err := s.Set(domain.Work, handed.ID, StatusHanded); err != nil {
 		t.Fatal(err)
 	}
 	now := time.Now()

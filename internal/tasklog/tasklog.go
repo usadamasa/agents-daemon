@@ -92,59 +92,74 @@ type hookInput struct {
 	ToolResponse json.RawMessage `json:"tool_response"`
 }
 
+// Result は 1 回の Ingest で何をしたか。ボードの経路のログ (internal/boardlog) に出す。Tool が空なら記録しない
+// ツールで、Domain が空なら置き場を決める前に失敗した。
+type Result struct {
+	Tool      string
+	SessionID string
+	AgentID   string
+	Domain    domain.Domain
+	// Written は書いたタスクの数 (TodoWrite はリストの項目の数)、Removed は消したタスクの数。
+	Written, Removed int
+}
+
 // Ingest は PostToolUse hook の stdin を読み、ツールに応じてタスクを書く。Task 系でも TodoWrite でもない
-// ツールは何もしない。domain は classify が cwd から決める。
-func (s Store) Ingest(input []byte, classify func(cwd string) domain.Domain, now time.Time) error {
+// ツールは何もしない。domain は classify が cwd から決める。失敗しても、分かったところまでの Result を返す。
+func (s Store) Ingest(input []byte, classify func(cwd string) domain.Domain, now time.Time) (Result, error) {
 	if s.Dir == "" {
-		return errors.New("tasks の置き場所が無い")
+		return Result{}, errors.New("tasks の置き場所が無い")
 	}
 	var in hookInput
 	if err := json.Unmarshal(input, &in); err != nil {
-		return fmt.Errorf("hook 入力の JSON を読めない: %w", err)
+		return Result{}, fmt.Errorf("hook 入力の JSON を読めない: %w", err)
 	}
 	if !statefile.ValidSessionID(in.SessionID) {
-		return fmt.Errorf("session ID %q はファイル名に使えない", in.SessionID)
+		return Result{Tool: in.ToolName}, fmt.Errorf("session ID %q はファイル名に使えない", in.SessionID)
 	}
 	switch in.ToolName {
 	case "TaskCreate", "TaskUpdate", "TaskList", "TodoWrite":
 	default:
-		return nil
+		return Result{}, nil
 	}
-	dir, err := s.sessionDir(in.SessionID, classify(in.CWD))
+	res := Result{Tool: in.ToolName, SessionID: in.SessionID, AgentID: in.AgentID}
+	dir, d, err := s.sessionDir(in.SessionID, classify(in.CWD))
 	if err != nil {
-		return err
+		return res, err
 	}
-	w := writer{dir: dir, in: in, now: now}
+	res.Domain = d
+	w := &writer{dir: dir, in: in, now: now}
 	switch in.ToolName {
 	case "TaskCreate":
-		return w.create()
+		err = w.create()
 	case "TaskUpdate":
-		return w.update()
+		err = w.update()
 	case "TaskList":
-		return w.sync()
+		err = w.sync()
 	default:
-		return w.todos()
+		err = w.todos()
 	}
+	res.Written, res.Removed = w.written, w.removed
+	return res, err
 }
 
-// sessionDir はセッションのタスクを置くディレクトリを決める。1 つのセッションが私用と業務の両方の
+// sessionDir はセッションのタスクを置くディレクトリとその domain を決める。1 つのセッションが私用と業務の両方の
 // ディレクトリを触ったら業務に倒す (#121): 業務と判定されたら私用の側にあった記録を業務へ移し、
 // 私用と判定されても業務の側に記録があれば業務のまま書く。業務の記録が私用の側へ出ないようにするため。
-func (s Store) sessionDir(sessionID string, d domain.Domain) (string, error) {
+func (s Store) sessionDir(sessionID string, d domain.Domain) (string, domain.Domain, error) {
 	home := filepath.Join(s.Dir, string(domain.Home), sessionID)
 	work := filepath.Join(s.Dir, string(domain.Work), sessionID)
 	if d == domain.Home {
 		if _, err := os.Stat(work); err == nil {
-			return work, nil
+			return work, domain.Work, nil
 		}
-		return home, nil
+		return home, domain.Home, nil
 	}
 	if _, err := os.Stat(home); err == nil {
 		if err := moveToWork(home, work); err != nil {
-			return "", err
+			return "", domain.Work, err
 		}
 	}
-	return work, nil
+	return work, domain.Work, nil
 }
 
 // moveToWork は私用の側にあったセッションの記録を業務の側へ移す。業務の側にも既にあれば
@@ -193,14 +208,15 @@ func (s Store) List(d domain.Domain) ([]Task, error) {
 	return tasks, nil
 }
 
-// writer は 1 回の hook 入力ぶんの書き込み。
+// writer は 1 回の hook 入力ぶんの書き込み。書いた数と消した数を数える。
 type writer struct {
-	dir string
-	in  hookInput
-	now time.Time
+	dir              string
+	in               hookInput
+	now              time.Time
+	written, removed int
 }
 
-func (w writer) create() error {
+func (w *writer) create() error {
 	var input struct {
 		Subject     string `json:"subject"`
 		Description string `json:"description"`
@@ -223,7 +239,7 @@ func (w writer) create() error {
 	return w.write(t)
 }
 
-func (w writer) update() error {
+func (w *writer) update() error {
 	var input struct {
 		TaskID       string   `json:"taskId"`
 		Subject      *string  `json:"subject"`
@@ -267,7 +283,7 @@ func (w writer) update() error {
 
 // sync は TaskList の結果で全件を同期し直す。一覧に無いタスクのファイルは消す。
 // TaskList の blockedBy には完了していない blocker しか載らないので、そのまま置き換える。
-func (w writer) sync() error {
+func (w *writer) sync() error {
 	var resp struct {
 		Tasks []struct {
 			ID        string   `json:"id"`
@@ -305,15 +321,19 @@ func (w writer) sync() error {
 		if listed[name] {
 			continue
 		}
-		if err := os.Remove(filepath.Join(w.dir, name)); err != nil && !errors.Is(err, os.ErrNotExist) {
-			errs = append(errs, err)
+		if err := os.Remove(filepath.Join(w.dir, name)); err != nil {
+			if !errors.Is(err, os.ErrNotExist) {
+				errs = append(errs, err)
+			}
+			continue
 		}
+		w.removed++
 	}
 	return errors.Join(errs...)
 }
 
 // todos は TodoWrite のリスト全体で todos.json を置き換える。
-func (w writer) todos() error {
+func (w *writer) todos() error {
 	var input struct {
 		Todos []Todo `json:"todos"`
 	}
@@ -324,22 +344,26 @@ func (w writer) todos() error {
 	if list.Todos == nil {
 		list.Todos = []Todo{}
 	}
-	return statefile.WriteJSONAtomic(filepath.Join(w.dir, todosFile), ".todos.*", list)
+	if err := statefile.WriteJSONAtomic(filepath.Join(w.dir, todosFile), ".todos.*", list); err != nil {
+		return err
+	}
+	w.written = len(list.Todos)
+	return nil
 }
 
 // base は hook 入力から埋まる欄だけを持つタスク。
-func (w writer) base(id string) Task {
+func (w *writer) base(id string) Task {
 	return Task{ID: id, SessionID: w.in.SessionID, AgentID: w.in.AgentID, CWD: w.in.CWD, UpdatedAt: w.now}
 }
 
-func (w writer) path(id string) (string, error) {
+func (w *writer) path(id string) (string, error) {
 	if !statefile.ValidSessionID(id) {
 		return "", fmt.Errorf("task ID %q はファイル名に使えない", id)
 	}
 	return filepath.Join(w.dir, id+".json"), nil
 }
 
-func (w writer) read(id string) (Task, bool) {
+func (w *writer) read(id string) (Task, bool) {
 	path, err := w.path(id)
 	if err != nil {
 		return Task{}, false
@@ -347,22 +371,30 @@ func (w writer) read(id string) (Task, bool) {
 	return readTask(path)
 }
 
-func (w writer) write(t Task) error {
+func (w *writer) write(t Task) error {
 	path, err := w.path(t.ID)
 	if err != nil {
 		return err
 	}
-	return statefile.WriteJSONAtomic(path, ".task.*", t)
+	if err := statefile.WriteJSONAtomic(path, ".task.*", t); err != nil {
+		return err
+	}
+	w.written++
+	return nil
 }
 
-func (w writer) remove(id string) error {
+func (w *writer) remove(id string) error {
 	path, err := w.path(id)
 	if err != nil {
 		return err
 	}
-	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := os.Remove(path); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
 		return fmt.Errorf("タスクの記録を消せない: %w", err)
 	}
+	w.removed++
 	return nil
 }
 

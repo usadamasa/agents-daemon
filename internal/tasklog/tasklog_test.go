@@ -31,7 +31,7 @@ func allWork(string) domain.Domain { return domain.Work }
 func ingest(t *testing.T, s Store, classify func(string) domain.Domain, names ...string) {
 	t.Helper()
 	for i, name := range names {
-		if err := s.Ingest(fixture(t, name), classify, t0.Add(time.Duration(i)*time.Minute)); err != nil {
+		if _, err := s.Ingest(fixture(t, name), classify, t0.Add(time.Duration(i)*time.Minute)); err != nil {
 			t.Fatalf("Ingest(%s) error = %v", name, err)
 		}
 	}
@@ -98,8 +98,13 @@ func TestIngest_taskListAddsAndRemoves(t *testing.T) {
 	ingest(t, s, allHome, "task-create-alpha", "task-create-beta")
 	input := withTool(t, fixture(t, "task-list"), "TaskList", nil,
 		map[string]any{"tasks": []map[string]any{{"id": "2", "subject": "beta", "status": "in_progress", "blockedBy": []string{}}, {"id": "7", "subject": "before hook", "status": "pending", "blockedBy": []string{}}}})
-	if err := s.Ingest(input, allHome, t0); err != nil {
+	res, err := s.Ingest(input, allHome, t0)
+	if err != nil {
 		t.Fatal(err)
+	}
+	// ログに出す件数: 一覧の 2 件を書き、一覧から消えた 1 件 (alpha) を消した。
+	if want := (Result{Tool: "TaskList", SessionID: fixtureSession, Domain: domain.Home, Written: 2, Removed: 1}); res != want {
+		t.Errorf("Result = %+v, want %+v", res, want)
 	}
 
 	got := byID(t, s, domain.Home)
@@ -121,12 +126,15 @@ func TestIngest_updateCases(t *testing.T) {
 		name  string
 		input map[string]any
 		resp  map[string]any
-		check func(t *testing.T, got map[string]Task)
+		// written と removed はログに出す件数。
+		written, removed int
+		check            func(t *testing.T, got map[string]Task)
 	}{
 		{
-			name:  "deleted になったら記録を消す",
-			input: map[string]any{"taskId": "1", "status": "deleted"},
-			resp:  map[string]any{"success": true, "taskId": "1", "updatedFields": []string{"status"}},
+			name:    "deleted になったら記録を消す",
+			input:   map[string]any{"taskId": "1", "status": "deleted"},
+			resp:    map[string]any{"success": true, "taskId": "1", "updatedFields": []string{"status"}},
+			removed: 1,
 			check: func(t *testing.T, got map[string]Task) {
 				if _, ok := got["1"]; ok {
 					t.Errorf("deleted のタスクが残っている")
@@ -144,9 +152,10 @@ func TestIngest_updateCases(t *testing.T) {
 			},
 		},
 		{
-			name:  "作成を記録していないタスクの更新は、分かる欄だけで作る",
-			input: map[string]any{"taskId": "9", "status": "in_progress", "subject": "late"},
-			resp:  map[string]any{"success": true, "taskId": "9", "updatedFields": []string{"status", "subject"}},
+			name:    "作成を記録していないタスクの更新は、分かる欄だけで作る",
+			input:   map[string]any{"taskId": "9", "status": "in_progress", "subject": "late"},
+			resp:    map[string]any{"success": true, "taskId": "9", "updatedFields": []string{"status", "subject"}},
+			written: 1,
 			check: func(t *testing.T, got map[string]Task) {
 				if got["9"].Status != "in_progress" || got["9"].Subject != "late" {
 					t.Errorf("task 9 = %+v", got["9"])
@@ -154,9 +163,10 @@ func TestIngest_updateCases(t *testing.T) {
 			},
 		},
 		{
-			name:  "同じ blocker を二度足しても 1 つ",
-			input: map[string]any{"taskId": "1", "addBlockedBy": []string{"5", "5"}, "owner": "teammate"},
-			resp:  map[string]any{"success": true, "taskId": "1", "updatedFields": []string{"blockedBy", "owner"}},
+			name:    "同じ blocker を二度足しても 1 つ",
+			input:   map[string]any{"taskId": "1", "addBlockedBy": []string{"5", "5"}, "owner": "teammate"},
+			resp:    map[string]any{"success": true, "taskId": "1", "updatedFields": []string{"blockedBy", "owner"}},
+			written: 1,
 			check: func(t *testing.T, got map[string]Task) {
 				if len(got["1"].BlockedBy) != 1 || got["1"].Owner != "teammate" {
 					t.Errorf("task 1 = %+v", got["1"])
@@ -168,8 +178,12 @@ func TestIngest_updateCases(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			s := New(t.TempDir())
 			ingest(t, s, allHome, "task-create-alpha")
-			if err := s.Ingest(withTool(t, fixture(t, "task-update-completed"), "TaskUpdate", tc.input, tc.resp), allHome, t0); err != nil {
+			res, err := s.Ingest(withTool(t, fixture(t, "task-update-completed"), "TaskUpdate", tc.input, tc.resp), allHome, t0)
+			if err != nil {
 				t.Fatal(err)
+			}
+			if res.Tool != "TaskUpdate" || res.Written != tc.written || res.Removed != tc.removed {
+				t.Errorf("Result = %+v, want written %d removed %d", res, tc.written, tc.removed)
 			}
 			tc.check(t, byID(t, s, domain.Home))
 		})
@@ -180,8 +194,13 @@ func TestIngest_todoWrite(t *testing.T) {
 	s := New(t.TempDir())
 	todos := []map[string]any{{"content": "a", "status": "completed", "activeForm": "doing a"}, {"content": "b", "status": "pending", "activeForm": "doing b"}}
 	input := withTool(t, fixture(t, "task-list"), "TodoWrite", map[string]any{"todos": todos}, map[string]any{"oldTodos": []any{}, "newTodos": todos})
-	if err := s.Ingest(input, allHome, t0); err != nil {
+	res, err := s.Ingest(input, allHome, t0)
+	if err != nil {
 		t.Fatal(err)
+	}
+	// TodoWrite はリスト全体を置き換えるので、書いた件数はリストの項目の数。
+	if res.Tool != "TodoWrite" || res.Written != 2 || res.Removed != 0 {
+		t.Errorf("Result = %+v", res)
 	}
 	data, err := os.ReadFile(filepath.Join(s.Dir, "home", fixtureSession, "todos.json"))
 	if err != nil {
@@ -199,20 +218,30 @@ func TestIngest_todoWrite(t *testing.T) {
 
 func TestIngest_ignoresOtherToolsAndBadIDs(t *testing.T) {
 	s := New(t.TempDir())
-	if err := s.Ingest(withTool(t, fixture(t, "task-list"), "Bash", map[string]any{"command": "ls"}, map[string]any{}), allHome, t0); err != nil {
+	res, err := s.Ingest(withTool(t, fixture(t, "task-list"), "Bash", map[string]any{"command": "ls"}, map[string]any{}), allHome, t0)
+	if err != nil {
 		t.Errorf("Task 系でないツールでエラー: %v", err)
+	}
+	// 記録しないツールは Result も空にし、ログに出さない。
+	if res != (Result{}) {
+		t.Errorf("Task 系でないツールの Result = %+v", res)
 	}
 	if _, err := os.Stat(s.Dir); err == nil {
 		t.Errorf("Task 系でないツールで何かを書いた")
 	}
 
 	bad := withSession(t, fixture(t, "task-create-alpha"), "../escape")
-	if err := s.Ingest(bad, allHome, t0); err == nil {
+	if _, err := s.Ingest(bad, allHome, t0); err == nil {
 		t.Errorf("ディレクトリの外へ出る session ID を受け付けた")
 	}
 	badTask := withTool(t, fixture(t, "task-create-alpha"), "TaskCreate", map[string]any{"subject": "x"}, map[string]any{"task": map[string]any{"id": "../x", "subject": "x"}})
-	if err := s.Ingest(badTask, allHome, t0); err == nil {
+	res, err = s.Ingest(badTask, allHome, t0)
+	if err == nil {
 		t.Errorf("ディレクトリの外へ出る task ID を受け付けた")
+	}
+	// 失敗しても、置き場を決めた後なら domain を返す (失敗のログの置き場に使う)。
+	if res.Tool != "TaskCreate" || res.Domain != domain.Home || res.Written != 0 {
+		t.Errorf("失敗した TaskCreate の Result = %+v", res)
 	}
 }
 
@@ -239,9 +268,16 @@ func TestIngest_domains(t *testing.T) {
 	t.Run("業務の記録があるセッションは、私用の cwd でも業務に書く", func(t *testing.T) {
 		s := New(t.TempDir())
 		ingest(t, s, allWork, "task-create-alpha")
-		ingest(t, s, allHome, "task-create-beta")
+		res, err := s.Ingest(fixture(t, "task-create-beta"), allHome, t0)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if home := byID(t, s, domain.Home); len(home) != 0 {
 			t.Errorf("私用の側に書いた: %+v", home)
+		}
+		// ログも書いた側 (業務) に出す。
+		if res.Domain != domain.Work {
+			t.Errorf("Result.Domain = %q, want work", res.Domain)
 		}
 	})
 }
@@ -285,7 +321,7 @@ func TestListTodosAndHasSession(t *testing.T) {
 	s := New(t.TempDir())
 	todos := []map[string]any{{"content": "a", "status": "in_progress", "activeForm": "doing a"}}
 	input := withTool(t, fixture(t, "task-list"), "TodoWrite", map[string]any{"todos": todos}, map[string]any{})
-	if err := s.Ingest(input, allWork, t0); err != nil {
+	if _, err := s.Ingest(input, allWork, t0); err != nil {
 		t.Fatal(err)
 	}
 	lists, err := s.ListTodos(domain.Work)

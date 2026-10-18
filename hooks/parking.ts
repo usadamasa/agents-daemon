@@ -2,6 +2,7 @@ import type { EngineInterface } from 'claude-code'
 
 import type { BoardCard, BoardData, ParkedMemo, ParkingCard, ParkingSource } from '../types'
 import { daemonBin } from './daemon-bin'
+import { logEvent } from './log'
 
 // パーキングのメモの見せ方と、ボード (#121 の段 6) からの操作。行と列の描き方には依存させず、ボードの形が
 // 変わっても (#134) そのまま使えるようにする。描くのは hooks/board.tsx と hooks/band.tsx。
@@ -113,10 +114,16 @@ export async function discard($: EngineInterface, memo: ParkingCard): Promise<st
 
 // handOff は text を to へ送り、届いたときだけメモを handed にする。届かなかったメモは open のまま残す。
 export async function handOff($: EngineInterface, memo: ParkingCard, to: Destination, text: string): Promise<string> {
+  const sent = { via: 'memo', memo: memo.id, to: to.session_id }
   try {
     const result = await $.session.send({ to: { sessionId: to.session_id }, text })
-    if (!result.isDelivered) return `${to.session} へ送れませんでした: ${result.reason}`
+    if (!result.isDelivered) {
+      await logEvent($, 'mod.send', { ...sent, delivered: false, reason: result.reason })
+      return `${to.session} へ送れませんでした: ${result.reason}`
+    }
+    await logEvent($, 'mod.send', { ...sent, delivered: true })
   } catch (err) {
+    await logEvent($, 'mod.send', { ...sent, delivered: false, reason: String(err) })
     return `${to.session} へ送れませんでした: ${String(err)}`
   }
   const failure = await park($, ['set', memo.id, '--status', 'handed'])

@@ -164,6 +164,8 @@ test('タスクの無いボードと、daemon が動いていないことを描�
 function parkWorld(on: On, data: unknown, ran: string[][], delivered = true) {
   world(on, argv => {
     if (argv[1] === 'status') return output(JSON.stringify(data))
+    // ボードの経路のログ (hooks/log.ts) は log.test.tsx が見る。
+    if (argv[1] === 'board-log') return output('')
     ran.push([...argv.slice(1)])
     return output(JSON.stringify({ created: true, item: { id: 'x' } }))
   })

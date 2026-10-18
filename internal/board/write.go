@@ -71,6 +71,12 @@ func Write(w io.Writer, p apppath.Paths, v Viewer) error {
 	return json.NewEncoder(w).Encode(b)
 }
 
+// ViewerDomain はボードを開いたセッションの domain (Write が描く domain と同じ)。`logs --board` が読むログを
+// 決めるのに使う。
+func ViewerDomain(p apppath.Paths, v Viewer) domain.Domain {
+	return tasklog.LoadPlacer(p, v.UserHome).Domain(v.SessionID, v.CWD)
+}
+
 func other(d domain.Domain) domain.Domain {
 	if d == domain.Home {
 		return domain.Work

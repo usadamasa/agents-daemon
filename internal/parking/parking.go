@@ -144,28 +144,29 @@ func (s Store) add(d domain.Domain, repo string, e Entry, src Source) (Added, er
 	return added, err
 }
 
-// Set は domain の件 id の status を書き換え、書いた後の件を返す。
-func (s Store) Set(d domain.Domain, id, status string) (Item, error) {
+// Set は domain の件 id の status を書き換え、書いた後の件と書き換える前の status を返す。
+func (s Store) Set(d domain.Domain, id, status string) (Item, string, error) {
 	if s.Dir == "" {
-		return Item{}, errors.New("parking の置き場所が無い")
+		return Item{}, "", errors.New("parking の置き場所が無い")
 	}
 	if err := validStatus(status); err != nil {
-		return Item{}, err
+		return Item{}, "", err
 	}
 	if !statefile.ValidSessionID(id) {
-		return Item{}, fmt.Errorf("id %q はファイル名に使えない", id)
+		return Item{}, "", fmt.Errorf("id %q はファイル名に使えない", id)
 	}
 	var item Item
+	var from string
 	err := s.locked(d, func(dir string) error {
 		var ok bool
 		item, ok = readItem(filepath.Join(dir, id+".json"))
 		if !ok {
 			return fmt.Errorf("%s の件 %s が無い", d, id)
 		}
-		item.Status = status
+		from, item.Status = item.Status, status
 		return write(dir, item)
 	})
-	return item, err
+	return item, from, err
 }
 
 // List は domain の件を id の順 (置いた順) に返す。壊れたファイルは読み飛ばす。

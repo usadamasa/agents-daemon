@@ -97,6 +97,7 @@ daemon は毎 tick 読み直すので、編集は数秒で反映される。
 ```sh
 agents-daemon status                     # 稼働状況、監視中の pane、ログの末尾
 agents-daemon logs -n 80                 # daemon.log の末尾
+agents-daemon logs --board               # ボードの経路のログの末尾 (cwd の domain の分)
 agents-daemon doctor                     # 前提条件の診断
 agents-daemon inspect --pane <block id>  # 生きた block の画面を分類する
 agents-daemon daemon --foreground --dry-run  # 送信せずに判定だけ回す

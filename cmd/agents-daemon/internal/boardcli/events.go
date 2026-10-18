@@ -1,0 +1,99 @@
+package boardcli
+
+import (
+	"fmt"
+	"io"
+	"time"
+
+	"github.com/usadamasa/agents-daemon/internal/boardlog"
+	"github.com/usadamasa/agents-daemon/internal/domain"
+	"github.com/usadamasa/agents-daemon/internal/parking"
+	"github.com/usadamasa/agents-daemon/internal/tasklog"
+)
+
+// ボードの経路の出来事 (internal/boardlog の package doc の一覧) を、記録と park の操作の結果から組んで書く。
+// boardlog に持たせないのは、boardlog が tasklog と parking を import しないため (tasklog の Ca を増やさない)。
+
+// logIngest は ingest-task の結果を書く。記録しないツールは書かない。置き場を決める前に失敗したら業務の側に書く
+// (判定できないものは業務に倒す #121 と同じ向き)。
+func logIngest(stateDir string, res tasklog.Result, err error, now time.Time) {
+	if err == nil && res.Tool == "" {
+		return
+	}
+	d := res.Domain
+	if d == "" {
+		d = domain.Work
+	}
+	var fields []string
+	if res.AgentID != "" {
+		fields = append(fields, kv("agent", res.AgentID))
+	}
+	if res.Tool != "" {
+		fields = append(fields, kv("tool", res.Tool))
+	}
+	if err != nil {
+		_ = boardlog.Record(stateDir, d, res.SessionID, "ingest-task.failed", append(fields, kv("reason", err)), now)
+		return
+	}
+	_ = boardlog.Record(stateDir, d, res.SessionID, "ingest-task", append(fields, kv("written", res.Written), kv("removed", res.Removed)), now)
+}
+
+// parkAdd は stdin の Request で s.Park を走らせ、結果を置き先の domain のログに書く (park add)。
+func parkAdd(stateDir string, s parking.Store, stdin io.Reader, cwd string, p tasklog.Placer, now time.Time) (parking.Added, error) {
+	req, err := parking.ReadRequest(stdin)
+	if err != nil {
+		parkFailed(stateDir, p.Domain("", cwd), now, "add", "", err)
+		return parking.Added{}, err
+	}
+	added, err := s.Park(req, cwd, p, now)
+	if err != nil {
+		parkFailed(stateDir, p.Domain(req.SessionID, cwd), now, "add", req.SessionID, err)
+		return added, err
+	}
+	fields := []string{kv("memo", added.Item.ID), kv("kind", added.Item.Kind), kv("created", added.Created)}
+	// 同じ置き方をまとめたときは sources に足さないので、最後の source では今回のタスクを引けない。
+	if task := p.Tasks.ActiveTaskID(added.Item.Domain, req.SessionID); task != "" {
+		fields = append(fields, kv("task", task))
+	}
+	_ = boardlog.Record(stateDir, added.Item.Domain, req.SessionID, "park.add", fields, now)
+	return added, nil
+}
+
+// parkSet は開いたセッション (session、cwd) の domain で s.Set を走らせ、status の変化を書く (park set)。
+func parkSet(stateDir string, s parking.Store, p tasklog.Placer, session, cwd, id, status string, now time.Time) (parking.Item, error) {
+	d := p.Domain(session, cwd)
+	item, from, err := s.Set(d, id, status)
+	if err != nil {
+		parkFailed(stateDir, d, now, "set", session, err, kv("memo", id))
+		return item, err
+	}
+	_ = boardlog.Record(stateDir, d, session, "park.set", []string{kv("memo", id), kv("from", from), kv("to", status)}, now)
+	return item, nil
+}
+
+// parkAdopt は s.Adopt を走らせ、移したタスクとメモを書く (park adopt)。
+func parkAdopt(stateDir string, s parking.Store, p tasklog.Placer, viewer, cwd, sessionID, taskID string, now time.Time) (parking.Added, error) {
+	d := p.Domain(viewer, cwd)
+	added, err := s.Adopt(viewer, cwd, sessionID, taskID, p, now)
+	if err != nil {
+		parkFailed(stateDir, d, now, "adopt", viewer, err, kv("from_session", sessionID), kv("task", taskID))
+		return added, err
+	}
+	fields := []string{kv("from_session", sessionID), kv("task", taskID), kv("memo", added.Item.ID), kv("created", added.Created)}
+	_ = boardlog.Record(stateDir, d, viewer, "park.adopt", fields, now)
+	return added, nil
+}
+
+// parkFailed は park の操作の失敗を書く。op を先頭に、session、extra、reason の順に並べる。
+func parkFailed(stateDir string, d domain.Domain, now time.Time, op, session string, err error, extra ...string) {
+	fields := []string{kv("op", op)}
+	if session != "" {
+		fields = append(fields, kv("session", session))
+	}
+	fields = append(append(fields, extra...), kv("reason", err))
+	_ = boardlog.Record(stateDir, d, "", "park.failed", fields, now)
+}
+
+func kv(key string, value any) string {
+	return key + "=" + fmt.Sprint(value)
+}

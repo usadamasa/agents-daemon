@@ -82,6 +82,8 @@ declare module 'claude-code' {
       parked: ParkedMemo[]
       // band は入力欄の上に出すメモ (hooks/band.tsx)。出さないときは null。
       band: Band | null
+      // logged はボードの経路のログに slot ごとに最後に書いた中身 (hooks/log.ts)。同じものを書き直さないため。
+      logged: Record<string, string>
     }
   }
 }

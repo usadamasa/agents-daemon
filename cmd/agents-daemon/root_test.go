@@ -12,7 +12,7 @@ func TestRootCmd_registersAllCommands(t *testing.T) {
 		names = append(names, c.Name())
 	}
 	want := []string{
-		"daemon", "doctor", "dream", "edge", "ingest-statusline", "ingest-task", "inspect",
+		"board-log", "daemon", "doctor", "dream", "edge", "ingest-statusline", "ingest-task", "inspect",
 		"logs", "park", "prune-worktrees", "simulate", "status", "statusline", "stop",
 	}
 	slices.Sort(names)

@@ -84,6 +84,21 @@ func TestWrite(t *testing.T) {
 		})
 	}
 
+	t.Run("セッション名があれば書く", func(t *testing.T) {
+		s := New(t.TempDir())
+		if err := s.Write(Record{SessionID: "sess-1", SessionName: "ad-board-cards", UsedPercentage: 12, ObservedAt: observedAt}); err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
+		data, err := os.ReadFile(filepath.Join(s.Dir, "sess-1.json"))
+		if err != nil {
+			t.Fatalf("ReadFile() error = %v", err)
+		}
+		want := `{"session_id":"sess-1","session_name":"ad-board-cards","used_percentage":12,"observed_at":` + observed + `}` + "\n"
+		if string(data) != want {
+			t.Errorf("context file = %q, want %q", data, want)
+		}
+	})
+
 	t.Run("session ID が空か不正ならエラーで何も書かない", func(t *testing.T) {
 		s := New(t.TempDir())
 		for _, id := range []string{"", "../../etc/passwd"} {
@@ -198,4 +213,33 @@ func TestListMultiplexerBlocks(t *testing.T) {
 			t.Errorf("ListMultiplexerBlocks() = %v, %v, want empty, nil", got, err)
 		}
 	})
+}
+
+// セッション名は session ID ごとに引ける。名前の無い記録と壊れたファイルは載せない。
+func TestListSessionNames(t *testing.T) {
+	s := New(t.TempDir())
+	now := time.Date(2026, 10, 19, 0, 0, 0, 0, time.UTC)
+	for _, rec := range []Record{
+		{SessionID: "a", SessionName: "ad-board-cards", ObservedAt: now},
+		{SessionID: "b", ObservedAt: now},
+	} {
+		if err := s.Write(rec); err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(s.Dir, "broken.json"), []byte(`{"session_id":"x","session_name":`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.ListSessionNames()
+	if err != nil {
+		t.Fatalf("ListSessionNames() error = %v", err)
+	}
+	if want := map[string]string{"a": "ad-board-cards"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("ListSessionNames() = %v, want %v", got, want)
+	}
+
+	if got, err := (Store{}).ListSessionNames(); err != nil || len(got) != 0 {
+		t.Errorf("ゼロ値の Store = %v, %v, want empty, nil", got, err)
+	}
 }

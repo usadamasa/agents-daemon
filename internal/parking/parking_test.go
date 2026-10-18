@@ -24,11 +24,11 @@ func source(sessionID, taskID string) Source {
 
 func mustAdd(t *testing.T, s Store, d domain.Domain, repo string, e Entry, src Source) Item {
 	t.Helper()
-	item, err := s.Add(d, repo, e, src)
+	added, err := s.Add(d, repo, e, src)
 	if err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
-	return item
+	return added.Item
 }
 
 // 置いた件は parking/<domain>/<id>.json に open で書かれ、List で読める。
@@ -69,6 +69,47 @@ func TestAdd_mergesSameItem(t *testing.T) {
 	}
 	if got, _ := s.List(domain.Home); len(got) != 1 {
 		t.Errorf("件数 = %d, want 1", len(got))
+	}
+}
+
+// Add は新しいメモを作ったか、既存のメモにまとめたかを返す。同じ置き方の二重送信もまとめた側になる。
+func TestAdd_reportsCreated(t *testing.T) {
+	s := New(t.TempDir())
+	cases := []struct {
+		src  Source
+		want bool
+	}{
+		{source("s1", "3"), true},
+		{source("s2", "1"), false},
+		{source("s2", "1"), false},
+	}
+	for i, c := range cases {
+		added, err := s.Add(domain.Home, testRepo, aside("t"), c.src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if added.Created != c.want {
+			t.Errorf("%d 回目の Created = %v, want %v", i+1, added.Created, c.want)
+		}
+	}
+}
+
+// まとめるときは、後から置いた側の detail が最初のメモと違えば sources に残す。同じなら残さない。
+func TestAdd_keepsLaterDetailInSource(t *testing.T) {
+	s := New(t.TempDir())
+	mustAdd(t, s, domain.Home, testRepo, aside("t"), source("s1", ""))
+	same := mustAdd(t, s, domain.Home, testRepo, aside("t"), source("s2", ""))
+	if same.Sources[1].Detail != "" {
+		t.Errorf("同じ detail を sources に残した: %+v", same.Sources[1])
+	}
+	other := aside("t")
+	other.Detail = "別のファイルでも同じ"
+	merged := mustAdd(t, s, domain.Home, testRepo, other, source("s3", ""))
+	if merged.Detail != "detail" || merged.Sources[2].Detail != "別のファイルでも同じ" {
+		t.Errorf("merged = %+v", merged)
+	}
+	if merged.Sources[0].Detail != "" {
+		t.Errorf("最初の source に detail を入れた: %+v", merged.Sources[0])
 	}
 }
 

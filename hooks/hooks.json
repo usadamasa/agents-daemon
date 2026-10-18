@@ -1,6 +1,6 @@
 {
   "modules": [
-    "./board.tsx"
+    "./register.ts"
   ],
   "hooks": {
     "SessionStart": [

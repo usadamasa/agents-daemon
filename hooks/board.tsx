@@ -2,6 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { BoardCard, BoardData } from '../types'
+import { daemonBin } from './daemon-bin'
 
 // タスクのボード (#121) を pane に描き、選んだタスクのセッションへ指示を送る mod。
 // 行は repo、列はタスクの状態で、ボードの中身は `agents-daemon status --board` (internal/board) が組む。
@@ -22,16 +23,15 @@ const notice = atom({ plugin: 'agents-daemon', key: 'notice' } as const, '')
 // timer はボードの読み直し。pane を開いている間だけ動かす。
 let timer: Timer | undefined
 
-export const register: Register = on => {
-  on('session.start', async ($, e, next) => {
-    await $.command.register({
-      name: 'board',
-      description: 'agents-daemon のタスクのボードを表示し、選んだタスクのセッションへ指示を送る',
-    })
-
-    return next(e)
+// startBoard は session.start で /board を登録する (session.start の hook は hooks/register.ts が持つ)。
+export async function startBoard($: EngineInterface) {
+  await $.command.register({
+    name: 'board',
+    description: 'agents-daemon のタスクのボードを表示し、選んだタスクのセッションへ指示を送る',
   })
+}
 
+export const registerBoard: Register = on => {
   on('command.run', { command: 'board' }, async $ => {
     await refresh($)
     timer?.cancel()
@@ -151,13 +151,6 @@ async function refresh($: EngineInterface) {
   } catch (err) {
     await update($, error, () => String(err))
   }
-}
-
-// daemonBin は hooks/lib/daemon-bin.sh と同じ規則でバイナリの置き場を返す (AGENTS.md「パス定数の対」)。
-async function daemonBin($: EngineInterface): Promise<string> {
-  const cache = (await $.env.get('XDG_CACHE_HOME')) || `${await $.env.get('HOME')}/.cache`
-
-  return `${cache}/agents-daemon/bin/agents-daemon`
 }
 
 // canSend はカードのセッションへ指示を送れるか。終了したセッションと自分自身には送らない。

@@ -1,11 +1,8 @@
 ---
 name: dream
 description: >-
-  Claude Code の記憶階層 (CLAUDE.md, auto memory, SKILL.md 群) を横断して再編し、
-  重複・矛盾・陳腐化を除去する consolidation スキル｡
-  記憶ファイルが肥大化した、同じことが複数箇所に書いてある、参照先が古い、
-  相対日付が残っている、skill が triggering しないと感じたときに使う｡
-  settings.json や hook の構成管理は対象外｡
+  Claude Code の記憶階層 (CLAUDE.md、auto memory、skill) を横断して重複・矛盾・陳腐化を除く consolidation。
+  記憶ファイルが肥大化した、同じことが複数箇所にある、参照先が古い、skill が triggering しないと感じたときに使う。
 ---
 
 <!-- writing-gate-disable pink-elephant -->

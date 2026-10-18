@@ -10,6 +10,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/applog"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
+	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
 
 func touchAged(t *testing.T, path string, age time.Duration, now time.Time) {
@@ -46,8 +47,16 @@ func TestHousekeep(t *testing.T) {
 		t.Cleanup(func() { _ = log.Close() })
 		r := newDaemonRuntime(&multiplexerfake.Client{}, log, filepath.Join(dir, "status.json"), store, func(time.Duration) {}, now)
 
+		// タスクの記録は 1 週間更新されなければ消える (保持期間の細部は internal/tasklog のテスト)。
+		r.tasks = tasklog.New(dir)
+		taskFile := filepath.Join(r.tasks.Dir, "home", "s1", "1.json")
+		touchAged(t, taskFile, 8*24*time.Hour, now)
+
 		r.housekeep(logPath, now)
 
+		if _, err := os.Stat(taskFile); !os.IsNotExist(err) {
+			t.Errorf("8 日前のタスクの記録は消えるべき (err=%v)", err)
+		}
 		if _, err := os.Stat(filepath.Join(contextDir, "old-session.json")); !os.IsNotExist(err) {
 			t.Errorf("8 日前の context は消えるべき (err=%v)", err)
 		}
@@ -75,7 +84,7 @@ func TestHousekeep(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ログが読めない: %v", err)
 		}
-		if !strings.Contains(string(data), "rotated ログ 1 件") || !strings.Contains(string(data), "利用上限 state 1 件") {
+		if !strings.Contains(string(data), "rotated ログ 1 件") || !strings.Contains(string(data), "利用上限 state 1 件") || !strings.Contains(string(data), "タスクの記録 1 件") {
 			t.Errorf("削除件数のログが無い: %q", data)
 		}
 	})

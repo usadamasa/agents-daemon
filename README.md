@@ -28,6 +28,7 @@ plugin が持つもの:
 | ---- | ---- |
 | SessionStart hook | daemon のバイナリを用意し、`daemon --ensure` で起こす。続けて `prune-worktrees --hook` で放置 worktree を回収する |
 | Stop hook | `dream harvest` を起こす |
+| PostToolUse hook | Task 系ツール (TaskCreate / TaskUpdate / TaskList) と TodoWrite の呼び出しを `ingest-task` に渡し、セッションのタスクを記録する (#121) |
 | `agents-daemon:agents-daemon` skill | 運用と切り分けの手引き (症状から引く) |
 | `agents-daemon:setup` skill | 前提の確認と statusline の配線、peer messaging の切り分け |
 | `agents-daemon:peer-sessions` skill | 別セッション (peer) へ作業を渡す手順と、rex の block 操作 |
@@ -36,6 +37,7 @@ plugin が持つもの:
 | `agents-daemon ingest-statusline` | 自前の statusline から stdin を渡して state file だけを書かせるサブコマンド |
 | `agents-daemon dream` | consolidation の実行系 (`harvest` / `mine` / `stage` / `adopt` / `forget`) |
 | `agents-daemon prune-worktrees` | 誰も使っていない Claude Code の worktree の回収 (SessionStart hook が `--hook` 付きで呼ぶ。手で叩く形は `skills/agents-daemon/references/operations.md`) |
+| `agents-daemon ingest-task` | PostToolUse hook の stdin からタスクを `tasks/<domain>/` に記録する。私用 (`home`) と業務 (`work`) は config の `homePaths` / `defaultDomain` で分ける |
 
 ## 前提
 

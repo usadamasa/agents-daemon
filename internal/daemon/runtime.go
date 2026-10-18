@@ -56,7 +56,7 @@ type daemonRuntime struct {
 	// parking は `park add` が書くパーキングの件 (internal/parking)。daemon は housekeeping で消すだけ。
 	// ゼロ値は何も消さない。
 	parking             parking.Store
-	sleep             func(time.Duration)
+	sleep               func(time.Duration)
 	startedAt           time.Time
 	panes               map[string]*paneEntry
 	consecutiveFailures int

@@ -10,7 +10,8 @@ README の「役割」が持つ。機能を足す・外す判断はそこに照�
 | パス | 中身 |
 | ---- | ---- |
 | `.claude-plugin/plugin.json` | plugin manifest。version の実体はここ 1 箇所。marketplace.json は agents-marketplace リポジトリが持つ |
-| `hooks/hooks.json` | SessionStart と Stop の配線 |
+| `hooks/hooks.json` | SessionStart と Stop の配線と、mod (`hooks/board.tsx`) の読み込み (`modules`) |
+| `hooks/board.tsx`, `hooks/board.test.tsx`, `types/index.d.ts` | セッションのボードを pane に描く mod (Claude Code の mods)。`board` コマンドで開き、`agents-daemon status --board` の JSON を数秒ごとに読み直す。カードを選んで `$.session.send` で指示を送る。`types/` は mod が `$.state` に置く値の型。テストは `claude plugin test .` |
 | `hooks/ensure-daemon.sh`, `hooks/build-daemon.sh` | バイナリの用意 (detach build) と `daemon --ensure` |
 | `hooks/dream-harvest.sh` | Stop で `dream harvest --detach` を exec する |
 | `hooks/prune-worktrees.sh` | SessionStart で `prune-worktrees --hook` に stdin を渡す |
@@ -21,7 +22,7 @@ README の「役割」が持つ。機能を足す・外す判断はそこに照�
 | `skills/peer-sessions/` | 別セッション (peer) へ作業を渡す手順 (`ListAgents` / `SendMessage`)。rex の block 操作は `references/rex.md` |
 | `skills/dream/` | 記憶階層の consolidation の手引き。実行系の呼び方は `references/pipeline.md` |
 | `cmd/agents-daemon/` | Go の main (cobra) |
-| `internal/` | daemon の本体。パス定数は `internal/apppath`。statusline の描画は `internal/statusline`、cost の台帳は `internal/spend`、sidecar の原子的な書き込みは `internal/statefile`。読むだけの診断 (`doctor` / `inspect`) は `internal/verify`、使い捨て pane へ送る e2e (`simulate`) は `internal/simulate`。dream の実行系は `internal/dream`、放置 worktree の回収は `internal/worktree` |
+| `internal/` | daemon の本体。パス定数は `internal/apppath`。statusline の描画は `internal/statusline`、cost の台帳は `internal/spend`、sidecar の原子的な書き込みは `internal/statefile`。読むだけの診断 (`doctor` / `inspect`) は `internal/verify`、使い捨て pane へ送る e2e (`simulate`) は `internal/simulate`。dream の実行系は `internal/dream`、放置 worktree の回収は `internal/worktree`、status.json をボードに組み直すのは `internal/board` |
 | `internal/multiplexer`, `internal/rexcli`, `internal/backend` | pane 操作の interface (`multiplexer.Client`) とその rex 実装。`backend` が環境に `REX_SESSION` があることを確かめる (無ければ `daemon --ensure` は何もせず戻る) |
 | `tests/` | hook と script の bats テスト (`tests/lib/`、`tests/fixtures/`) |
 | `flake.nix` | 開発ツールの devShell (版は `flake.lock` が固定する)。go-arch-metrics の CLI は go.mod の tool directive が固定する |
@@ -36,6 +37,7 @@ task lint                                   # Go の全静的解析。devShell �
 shellcheck hooks/*.sh hooks/lib/*.sh scripts/*.sh tests/lib/*.bash tests/fixtures/fake-go .envrc
 claude plugin validate --strict .           # plugin manifest と hooks.json
 claude plugin validate --strict skills      # skill の frontmatter
+claude plugin test .                        # mod (hooks/board.tsx) のテスト
 ```
 
 hook のテストは fake の `go` とバイナリで回るので、Go のビルドが通らなくても hook 側だけ確かめられる。
@@ -108,6 +110,7 @@ hook・skill・daemon は別プロセスで、ファイル越しに繋がる。�
 | `hooks/lib/daemon-bin.sh` | `Taskfile.yml` の `install` | `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon` |
 | 利用者の `statusLine.command`、または自前の statusline に足す 1 行 (`skills/setup/references/statusline.md`) | `hooks/lib/daemon-bin.sh` と `Taskfile.yml` の `install` | `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon statusline` (または `ingest-statusline`)。`rate-limits/` の書式は `internal/ratelimit`、`context/` の書式は `internal/sessioncontext` が読み書き両方で持つ |
 | `statusline` / `ingest-statusline` が `context/<sid>.json` の `multiplexer` に書く場所 (環境変数 `REX_SESSION` / `REX_BLOCK` から) | `internal/sessioncontext` の `ListMultiplexerBlocks` を `internal/rexcli` が引く (`internal/backend` が配線) | rex の block から session_id への対応。書式と読み方は `internal/sessioncontext` が両方持つ |
+| `hooks/board.tsx` の `daemonBin` (mod が `agents-daemon status --board` を呼ぶ) | `hooks/lib/daemon-bin.sh` と `Taskfile.yml` の `install` | `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon`。mod は `$.env.get` で `XDG_CACHE_HOME` と `HOME` を読む |
 | 利用者の settings の `env` の `CLAUDE_STATUSLINE_SPEND_CAP` | `cmd/agents-daemon/cmd_statusline.go` の `spendCapEnv` | 月額上限 (USD)。あるときだけ `statusline` が `cost/` の台帳 (`internal/spend`) を書き、📅 / 🧾 を出す |
 
 ## リリース

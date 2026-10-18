@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/usadamasa/agents-daemon/internal/monitor"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
 )
@@ -26,5 +27,14 @@ func TestDaemonRuntimeTick_StatusRecordsBackend(t *testing.T) {
 	}
 	if snap.Backend != "rex" {
 		t.Errorf("snap.Backend = %q, want rex", snap.Backend)
+	}
+}
+
+// session_id は board がボードからセッションへ指示を送る宛先なので、pane から status.json へ写す。
+func TestPaneStatus_sessionID(t *testing.T) {
+	now := time.Date(2026, 10, 18, 9, 0, 0, 0, time.UTC)
+	got := paneStatus(multiplexer.Pane{PaneID: "p1", SessionID: "s1"}, &paneEntry{state: &monitor.PaneState{}}, 0, now)
+	if got.SessionID != "s1" {
+		t.Errorf("SessionID = %q, want s1", got.SessionID)
 	}
 }

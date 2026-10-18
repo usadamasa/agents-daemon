@@ -36,6 +36,8 @@ plugin が持つもの:
 | `agents-daemon ingest-statusline` | 自前の statusline から stdin を渡して state file だけを書かせるサブコマンド |
 | `agents-daemon dream` | consolidation の実行系 (`harvest` / `mine` / `stage` / `adopt` / `forget`) |
 | `agents-daemon prune-worktrees` | 誰も使っていない Claude Code の worktree の回収 (SessionStart hook が `--hook` 付きで呼ぶ。手で叩く形は `skills/agents-daemon/references/operations.md`) |
+| `board` コマンド (mod、`hooks/board.tsx`) | Claude Code の mods の pane に、daemon が見ているセッションをレーン (入力待ち・上限待ち・作業中・待機・その他) に分けて描く。カードを選ぶと、そのセッションへ指示を送れる。描画されるのは terminal 2.1.287 以降と Desktop の Code タブ 2.1.286 以降 (試作、#121) |
+| `agents-daemon status --board` | mod が読むボードの JSON (status.json をレーンに組み直したもの) を出す |
 
 ## 前提
 

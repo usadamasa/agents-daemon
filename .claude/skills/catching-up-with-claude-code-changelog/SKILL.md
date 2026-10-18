@@ -153,6 +153,7 @@ rg -n -o 'cc-premise: [0-9.]+ [a-z0-9-]+.*' --glob '!tmp/**' . | sort -t' ' -k3,
 | `peer-messaging` | 別セッションへの送受信 | ListAgents, SendMessage, messaging socket, cross-session |
 | `sandbox` | `dream forget` を sandbox の外で動かす設定 (setup skill) | excludedCommands, sandbox, excluded command, allowUnsandboxedCommands, Strict sandbox |
 | `worktrees` | 放置 worktree の回収 (`prune-worktrees`): 本体の sweep の範囲と lock reason の書式 | worktree, worktrees, cleanupPeriodDays, EnterWorktree, --worktree, worktree lock, sweep |
+| `mods` | セッションのボード (`hooks/board.tsx`): pane、`$.clock.every`、`$.process.run`、`$.session.send` の API | mods, plugin mods, hooks module, ui.render, Pane, session.send, process.run |
 
 ## やらないこと
 

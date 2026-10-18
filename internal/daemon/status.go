@@ -13,7 +13,10 @@ import (
 
 // PaneStatus は status.json に書き出す pane 1 枚分のスナップショット。
 type PaneStatus struct {
-	PaneID      string `json:"pane_id"`
+	PaneID string `json:"pane_id"`
+	// SessionID は pane で動いている Claude セッションの ID。紐づいていなければ省く。
+	// board がボードからセッションへ指示を送る宛先に使う。
+	SessionID   string `json:"session_id,omitempty"`
 	CWD         string `json:"cwd"`
 	AgentStatus string `json:"agent_status"`
 	// AgentKind と AgentMessage は Claude Code の自己申告 (record の kind / msg)。無ければ省く。

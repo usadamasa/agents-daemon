@@ -10,6 +10,7 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/applog"
 	"github.com/usadamasa/agents-daemon/internal/apppath"
+	"github.com/usadamasa/agents-daemon/internal/board"
 	"github.com/usadamasa/agents-daemon/internal/daemon"
 )
 
@@ -18,7 +19,8 @@ const statusLogTailLines = 20
 
 // newStatusCmd は `agents-daemon status` を組み立てる。
 func newStatusCmd() *cobra.Command {
-	return &cobra.Command{
+	var asBoard bool
+	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "daemon の稼働状況と監視中の pane 一覧を表示する",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -26,9 +28,14 @@ func newStatusCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if asBoard {
+				return board.Write(cmd.OutOrStdout(), p)
+			}
 			return printStatus(cmd.OutOrStdout(), p, time.Now())
 		},
 	}
+	cmd.Flags().BoolVar(&asBoard, "board", false, "pane をレーンに分けたボードを JSON で出す (plugin の mod hooks/board.tsx が読む)")
+	return cmd
 }
 
 // printStatus は daemon の稼働状況、status.json のスナップショット、現行ログの

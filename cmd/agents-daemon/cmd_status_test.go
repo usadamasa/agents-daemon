@@ -48,3 +48,20 @@ func TestPrintSnapshot_backend(t *testing.T) {
 		})
 	}
 }
+
+// --board は人向けの表示ではなく、mod (hooks/board.tsx) が読むボードの JSON を出す。
+func TestStatusCmd_board(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_STATE_HOME", "")
+	t.Setenv("XDG_CONFIG_HOME", "")
+	cmd := newRootCmd()
+	var buf strings.Builder
+	cmd.SetOut(&buf)
+	cmd.SetArgs([]string{"status", "--board"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("status --board error = %v", err)
+	}
+	if !strings.HasPrefix(buf.String(), `{"daemon_running":false,`) {
+		t.Errorf("出力がボードの JSON でない:\n%s", buf.String())
+	}
+}

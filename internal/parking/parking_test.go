@@ -72,6 +72,23 @@ func TestAdd_mergesSameItem(t *testing.T) {
 	}
 }
 
+// 正規化した title は同じ件かを見る鍵にだけ使い、保存する title は人が書いた形 (前後の空白だけ落とす) のまま。
+// まとめたときは最初に置いた形を残す。
+func TestAdd_keepsTitleAsWritten(t *testing.T) {
+	s := New(t.TempDir())
+	first := mustAdd(t, s, domain.Home, testRepo, aside("  Fix  README の  表記 "), source("s1", ""))
+	if first.Title != "Fix  README の  表記" {
+		t.Errorf("保存した title = %q", first.Title)
+	}
+	merged := mustAdd(t, s, domain.Home, testRepo, aside("fix readme の表記"), source("s2", ""))
+	if merged.ID != first.ID || merged.Title != "Fix  README の  表記" {
+		t.Errorf("まとめた後の item = %+v", merged)
+	}
+	if got, _ := s.List(domain.Home); len(got) != 1 || got[0].Title != "Fix  README の  表記" {
+		t.Errorf("List() = %+v", got)
+	}
+}
+
 // 大文字と小文字の違いも同じ件とみなす。
 func TestAdd_mergeIgnoresCase(t *testing.T) {
 	s := New(t.TempDir())

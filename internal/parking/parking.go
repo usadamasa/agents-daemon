@@ -55,7 +55,8 @@ const lockFile = ".lock"
 
 // Entry は置く側が決める中身。
 type Entry struct {
-	Kind         string   `json:"kind"`
+	Kind string `json:"kind"`
+	// Title は人が書いた形 (前後の空白だけ落とす)。同じ件かの判定は normalize した鍵で見る。
 	Title        string   `json:"title"`
 	Detail       string   `json:"detail,omitempty"`
 	Files        []string `json:"files,omitempty"`

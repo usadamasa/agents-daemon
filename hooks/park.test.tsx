@@ -7,10 +7,16 @@ const TOOL = 'mcp__agents-daemon__park'
 
 type Ran = { argv: string[]; stdin?: string }
 
-// world は plugin の下にいる engine の代わりを立てる。park の呼び出しは run が答え、status 行は statuses に溜める。
+// world は plugin の下にいる engine の代わりを立てる。park の呼び出しは run が答え、status 行は statuses に、
+// prompt の hint 行へ足した tail は tails に溜める。
 function world(on: On, run: (argv: readonly string[]) => ProcessRunResult) {
   const ran: Ran[] = []
   const statuses: (string | undefined)[] = []
+  const tails: (string | undefined)[] = []
+  on('ui.render', { component: 'PromptHint' }, async (_$, e) => {
+    tails.push((e.props as { tail?: string }).tail)
+    return { type: 'engine', ref: 1 }
+  })
   const tools: Record<string, unknown>[] = []
   mock.env(on, { HOME: '/home/u' })
   mock.clock(on)
@@ -32,7 +38,16 @@ function world(on: On, run: (argv: readonly string[]) => ProcessRunResult) {
   on('command.register', async (_$, e) => ({ value: { command: e.name } }))
   on('session.start', async (_$, e) => ({ cwd: e.cwd }))
   on('turn.complete', async () => ({ text: '' }))
-  return { ran, statuses, tools }
+  return { ran, statuses, tails, tools }
+}
+
+const HINT = { isDraft: false, isWorking: false, hint: '? for shortcuts' } as const
+
+// hint は prompt の hint 行を描き、plugin がエンジンの行の末尾に足した tail を返す。
+async function hint($: Parameters<Parameters<typeof test>[1]>[0], w: ReturnType<typeof world>) {
+  const ui = await $.ui.mount({ plugin: 'agents-daemon', surface: 'terminal', component: 'PromptHint', props: HINT })
+  await ui.unmount()
+  return w.tails.at(-1)
 }
 
 function output(stdout: string, exitCode = 0, stderr = ''): ProcessRunResult {
@@ -55,7 +70,7 @@ function answer(count: number, created: boolean) {
 
 const START = { cwd: CWD, surface: 'terminal', isInteractive: true } as const
 
-test('session.start で park の tool を登録し、その repo の open のメモの数を status 行に出す', async ($, on) => {
+test('session.start で park の tool を登録し、その repo の open のメモの数を hint 行の末尾に出す', async ($, on) => {
   const w = world(on, answer(2, true))
   await $.session.start(START)
 
@@ -73,7 +88,9 @@ test('session.start で park の tool を登録し、その repo の open のメ
   expect(tool.description).toMatch(/危ない操作の確認/)
 
   expect(w.ran.map(r => r.argv)).toEqual([LIST])
-  expect(w.statuses).toEqual(['パーキングのメモ 2'])
+  // status 行はエンジンが警告の印付きで描くので使わない。hint 行は置き換えず、末尾に足す。
+  expect(await hint($, w)).toBe(' · パーキングのメモ 2')
+  expect(w.statuses).toEqual([])
 })
 
 test('tool の呼び出しは park add に JSON を stdin で渡し、新しく置いたことを返す', async ($, on) => {
@@ -100,7 +117,7 @@ test('tool の呼び出しは park add に JSON を stdin で渡し、新しく�
   expect(String(res.result)).toMatch(/^メモを置きました \(20261019T010000-abcd1234\)。既定 \(やらない\) で進めてください/)
   // 置いた後に数を読み直す。
   expect(w.ran[1].argv).toEqual(LIST)
-  expect(w.statuses.at(-1)).toBe('パーキングのメモ 1')
+  expect(await hint($, w)).toBe(' · パーキングのメモ 1')
 })
 
 test('既に置かれていたメモにまとまったら、そう伝える', async ($, on) => {
@@ -109,7 +126,7 @@ test('既に置かれていたメモにまとまったら、そう伝える', as
 
   const res = await $.tool.call({ tool: TOOL, kind: 'scope', title: 't' } as never)
   expect(String(res.result)).toMatch(/^既に置かれていたメモ \(20261019T010000-abcd1234\) にまとめました。既定で進めてください/)
-  expect(w.statuses.at(-1)).toBe('パーキングのメモ 1')
+  expect(await hint($, w)).toBe(' · パーキングのメモ 1')
 })
 
 test('model が session_id を入れてきても、このセッションの ID で上書きする', async ($, on) => {
@@ -128,19 +145,19 @@ test('park add が失敗したら、置けなかった理由を model へ返す'
   const res = await $.tool.call({ tool: TOOL, kind: 'decision', title: 't' } as never)
   // deny の文面は model にエラーの結果として届く。
   expect(res.deny).toMatch(/^メモを置けませんでした: kind "decision"/)
-  expect(w.statuses.at(-1)).toBeUndefined()
+  expect(await hint($, w)).toBeUndefined()
 })
 
-test('open のメモが無ければ status 行を消し、main loop の turn.complete で読み直す', async ($, on) => {
+test('open のメモが無ければ hint 行に足さず、main loop の turn.complete で読み直す', async ($, on) => {
   let count = 0
   const w = world(on, () => output(JSON.stringify(Array.from({ length: count }, (_, i) => item(`id${i}`)))))
   await $.session.start(START)
-  expect(w.statuses).toEqual([undefined])
+  expect(await hint($, w)).toBeUndefined()
 
   count = 3
   // サブエージェントのターンでは読み直さない。
   await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', agentId: 'a1', reason: 'answer' })
-  expect(w.statuses).toEqual([undefined])
+  expect(await hint($, w)).toBeUndefined()
   await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' })
-  expect(w.statuses).toEqual([undefined, 'パーキングのメモ 3'])
+  expect(await hint($, w)).toBe(' · パーキングのメモ 3')
 })

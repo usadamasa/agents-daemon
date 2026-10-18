@@ -1,0 +1,29 @@
+{
+  "session_id": "0842a96d-f680-5b48-85cf-becc2edcaa49",
+  "transcript_path": "/home/u/.claude/projects/-home-u-src-github-com-usadamasa-agents-daemon/0842a96d-f680-5b48-85cf-becc2edcaa49.jsonl",
+  "cwd": "/home/u/src/github.com/usadamasa/agents-daemon",
+  "prompt_id": "09f586f6-437d-4796-a565-e7ccd6bf93e2",
+  "permission_mode": "default",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PostToolUse",
+  "tool_name": "TaskUpdate",
+  "tool_input": {
+    "taskId": "1",
+    "status": "completed"
+  },
+  "tool_response": {
+    "success": true,
+    "taskId": "1",
+    "updatedFields": [
+      "status"
+    ],
+    "statusChange": {
+      "from": "in_progress",
+      "to": "completed"
+    }
+  },
+  "tool_use_id": "toolu_01FL44LkDrkMucd3uYh1V5Co",
+  "duration_ms": 7
+}

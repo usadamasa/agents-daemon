@@ -26,6 +26,18 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "TaskCreate|TaskUpdate|TaskList|TodoWrite",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/ingest-task.sh\"",
+            "timeout": 5
+          }
+        ]
+      }
     ]
   }
 }

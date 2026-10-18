@@ -1,4 +1,4 @@
-package main
+package boardcli
 
 import (
 	"bytes"
@@ -155,6 +155,25 @@ func TestParkAdd_outsideGitIsWork(t *testing.T) {
 	}
 	if item := decodeAdded(t, stdout).Item; item.Domain != "work" || item.Repo != cwd {
 		t.Errorf("item = %+v", item)
+	}
+}
+
+// 設定が無ければ homePaths の下でも work に置く (業務のものが私用の側へ出ない向き)。
+func TestParkAdd_withoutConfigIsWork(t *testing.T) {
+	root := parkTestEnv(t)
+	if err := os.Remove(filepath.Join(root, "config", "agents-daemon", "config.json")); err != nil {
+		t.Fatal(err)
+	}
+	cwd := filepath.Join(root, "src", "home", "a")
+	if err := os.MkdirAll(cwd, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	stdout, _, err := runPark(t, parkInput, "add", "--cwd", cwd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if item := decodeAdded(t, stdout).Item; item.Domain != "work" {
+		t.Errorf("domain = %q, want work", item.Domain)
 	}
 }
 

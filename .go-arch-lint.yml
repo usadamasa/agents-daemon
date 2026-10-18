@@ -5,7 +5,7 @@ workdir: .
 # この設定自体の健全性は `go tool analyze-arch-lint --metrics` と `--strict .` で見る。
 components:
   cmd_main:
-    in: "cmd/*"
+    in: "cmd/**"
   internal:
     in: "internal/**"
 
@@ -19,6 +19,7 @@ vendors:
 deps:
   cmd_main:
     mayDependOn:
+      - cmd_main
       - internal
     canUse:
       - cobra

@@ -42,16 +42,6 @@ func (s Store) ListTodos(d domain.Domain) ([]TodoList, error) {
 	return lists, nil
 }
 
-// SessionDomain はセッションの domain。そのセッションの記録が業務の側にあれば業務 (業務に倒した
-// セッション)、無ければ cwd で決めた byCWD。ボードとパーキングが、業務のセッションの文面を私用の側へ
-// 出さないために使う。
-func (s Store) SessionDomain(sessionID string, byCWD domain.Domain) domain.Domain {
-	if sessionID != "" && s.HasSession(domain.Work, sessionID) {
-		return domain.Work
-	}
-	return byCWD
-}
-
 // ActiveTaskID はセッションの進行中のタスクのうち、最後に更新されたものの ID。無ければ空。
 func (s Store) ActiveTaskID(d domain.Domain, sessionID string) string {
 	if s.Dir == "" || !statefile.ValidSessionID(sessionID) {

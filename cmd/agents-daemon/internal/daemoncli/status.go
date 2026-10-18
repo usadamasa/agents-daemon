@@ -1,4 +1,4 @@
-package main
+package daemoncli
 
 import (
 	"os"
@@ -14,7 +14,6 @@ import (
 // newStatusCmd は `agents-daemon status` を組み立てる。
 //
 // --board はタスクのボードの JSON (internal/board) を出す。plugin の mod (hooks/board.tsx) が数秒ごとに読む。
-// 独立のサブコマンドにしないのは、cmd パッケージが analyze-modularity の行数の上限に近いため。
 func newStatusCmd() *cobra.Command {
 	var (
 		asBoard bool

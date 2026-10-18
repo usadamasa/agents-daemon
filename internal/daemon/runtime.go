@@ -1,6 +1,6 @@
 // Package daemon は agents-daemon の監視デーモンの実体 (ポーリングループ、
-// PID ファイル、status snapshot、dry-run 経路) を提供する。cmd_daemon.go /
-// cmd_status.go / cmd_stop.go はこのパッケージを薄く呼び出すだけの cobra 配線に徹する。
+// PID ファイル、status snapshot、dry-run 経路) を提供する。cmd/agents-daemon/internal/daemoncli の
+// daemon / status / stop はこのパッケージを薄く呼び出すだけの cobra 配線に徹する。
 package daemon
 
 import (

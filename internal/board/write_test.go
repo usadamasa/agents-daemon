@@ -37,6 +37,7 @@ func writeFile(t *testing.T, path, data string) {
 func writeBoard(t *testing.T, p apppath.Paths, v Viewer) Board {
 	t.Helper()
 	var buf bytes.Buffer
+	v.UserHome = "/u"
 	if err := Write(&buf, p, v); err != nil {
 		t.Fatalf("Write() error = %v", err)
 	}
@@ -56,16 +57,16 @@ func TestWrite(t *testing.T) {
 	writeFile(t, filepath.Join(tasks, "home", "H", "1.json"), `{"id":"1","subject":"私用","status":"pending","session_id":"H","cwd":"/src/home/a"}`)
 	writeFile(t, filepath.Join(tasks, "work", "W", "1.json"), `{"id":"1","subject":"業務","status":"pending","session_id":"W","cwd":"/work/b"}`)
 
-	home := writeBoard(t, p, Viewer{CWD: "/src/home/a", UserHome: "/u"})
+	home := writeBoard(t, p, Viewer{CWD: "/src/home/a"})
 	if home.Domain != domain.Home || home.DaemonRunning || len(home.Rows) != 1 || home.Rows[0].Cards[0].Subject != "私用" {
 		t.Errorf("home = %+v", home)
 	}
-	work := writeBoard(t, p, Viewer{CWD: "/work/b", UserHome: "/u"})
+	work := writeBoard(t, p, Viewer{CWD: "/work/b"})
 	if work.Domain != domain.Work || len(work.Rows) != 1 || work.Rows[0].Cards[0].Subject != "業務" {
 		t.Errorf("work = %+v", work)
 	}
 	// 私用の cwd でも、記録が業務の側にあるセッションが開いたら業務を描く。
-	moved := writeBoard(t, p, Viewer{SessionID: "W", CWD: "/src/home/a", UserHome: "/u"})
+	moved := writeBoard(t, p, Viewer{SessionID: "W", CWD: "/src/home/a"})
 	if moved.Domain != domain.Work {
 		t.Errorf("moved.Domain = %q, want work", moved.Domain)
 	}
@@ -81,7 +82,7 @@ func TestWrite_parking(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "home", "2.json"), `{"id":"2","repo":"/src/home/a","kind":"aside","title":"捨てた","status":"discarded",`+src+`}`)
 	writeFile(t, filepath.Join(dir, "work", "3.json"), `{"id":"3","repo":"/work/b","kind":"aside","title":"業務","status":"open",`+src+`}`)
 
-	home := writeBoard(t, p, Viewer{CWD: "/src/home/a", UserHome: "/u"})
+	home := writeBoard(t, p, Viewer{CWD: "/src/home/a"})
 	if len(home.Rows) != 1 || len(home.Rows[0].Parking) != 1 || home.Rows[0].Parking[0].Title != "開いている" {
 		t.Errorf("home = %+v", home.Rows)
 	}

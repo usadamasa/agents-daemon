@@ -1,4 +1,4 @@
-package main
+package dreamcli
 
 import (
 	"bytes"
@@ -8,7 +8,16 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/spf13/cobra"
 )
+
+// testRoot は main の root と同じく SilenceUsage を立てた親にコマンドを載せる。
+func testRoot() *cobra.Command {
+	root := &cobra.Command{Use: "agents-daemon", SilenceUsage: true}
+	root.AddCommand(Commands()...)
+	return root
+}
 
 func TestDreamCmd_HasFivePhases(t *testing.T) {
 	cmd := newDreamCmd()
@@ -23,17 +32,6 @@ func TestDreamCmd_HasFivePhases(t *testing.T) {
 	}
 }
 
-func TestDreamCmd_IsRegisteredOnRoot(t *testing.T) {
-	root := newRootCmd()
-	sub, _, err := root.Find([]string{"dream", "harvest"})
-	if err != nil {
-		t.Fatalf("Find(dream harvest): %v", err)
-	}
-	if sub.Name() != "harvest" {
-		t.Errorf("Find(dream harvest) = %q", sub.Name())
-	}
-}
-
 func TestDreamHarvestCmd_FailureLineIsTimestamped(t *testing.T) {
 	// state の親を通常ファイルにして harvest-state.json の保存を失敗させる。
 	blocker := filepath.Join(t.TempDir(), "file")
@@ -45,7 +43,7 @@ func TestDreamHarvestCmd_FailureLineIsTimestamped(t *testing.T) {
 
 	// main は Execute の返り値を 1 行印字する。cobra 自身は何も出さない (二重に出さない) ことも見る。
 	var stderr bytes.Buffer
-	root := newRootCmd()
+	root := testRoot()
 	root.SetErr(&stderr)
 	root.SetArgs([]string{"dream", "harvest", "--projects-dir", t.TempDir()})
 	err := root.Execute()

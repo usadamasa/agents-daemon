@@ -26,7 +26,7 @@ README の「役割」が持つ。機能を足す・外す判断はそこに照�
 | `skills/setup/` | install 後の前提確認。backend ごとの手順と配線の詳細は `references/` |
 | `skills/peer-sessions/` | 別セッション (peer) へ作業を渡す手順 (`ListAgents` / `SendMessage`)。rex の block 操作は `references/rex.md` |
 | `skills/dream/` | 記憶階層の consolidation の手引き。実行系の呼び方は `references/pipeline.md` |
-| `cmd/agents-daemon/` | Go の main (cobra) |
+| `cmd/agents-daemon/` | Go の main と root の登録。コマンドの組み立ては `internal/<family>cli` (境界は architecture.md「CLI の組み立て」) |
 | `internal/` | daemon の本体。パス定数は `internal/apppath`。statusline の描画と実行は `internal/statusline`、cost の台帳は `internal/spend`、sidecar の原子的な書き込みは `internal/statefile`。読むだけの診断 (`doctor` / `inspect` / `status` / `logs`) は `internal/verify`、使い捨て pane へ送る e2e (`simulate`) は `internal/simulate`。dream の実行系は `internal/dream`、放置 worktree の回収は `internal/worktree`、cwd から私用と業務を判定するのは `internal/domain`、cwd の repo と branch を求めるのは `internal/gitrepo`、タスクの記録は `internal/tasklog`、パーキングロットの件は `internal/parking`、セッションをまたぐ辺は `internal/edge`、タスクの記録と status.json をボードに組むのは `internal/board` |
 | `internal/multiplexer`, `internal/rexcli`, `internal/backend` | pane 操作の interface (`multiplexer.Client`) とその rex 実装。`backend` が環境に `REX_SESSION` があることを確かめる (無ければ `daemon --ensure` は何もせず戻る) |
 | `tests/` | hook と script の bats テスト (`tests/lib/`、`tests/fixtures/`) |
@@ -118,8 +118,8 @@ hook・skill・daemon は別プロセスで、ファイル越しに繋がる。�
 | `hooks/daemon-bin.ts` の `daemonBin` (mod が `agents-daemon status --board` と `park` を呼ぶ) | `hooks/lib/daemon-bin.sh` と `Taskfile.yml` の `install` | `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon`。mod は `$.env.get` で `XDG_CACHE_HOME` と `HOME` を読む |
 | `hooks/board.tsx` の `BoardData` (`types/index.d.ts`) | `internal/board` の `Board` | `status --board` の JSON の形。片方の欄を変えたらもう片方も変える |
 | `hooks/park.tsx` の `FIELDS` と `Added` | `internal/parking` の `Request` と `Added` | `park add` の stdin と stdout の JSON の形 |
-| `hooks/parking.ts` の `park` が組む引数 | `cmd/agents-daemon/cmd_park.go` の `set` と `adopt` | `park set <id> --status <status>`、`park adopt <session_id> <task_id>` に `--session` と `--cwd` を添える |
-| `hooks/band.tsx` の `showCompleted` が組む引数 | `cmd/agents-daemon/cmd_park.go` の `list` の `--task` | `park list --status open --task <task_id> --session <id> --cwd <cwd>` |
+| `hooks/parking.ts` の `park` が組む引数 | `cmd/agents-daemon/internal/boardcli/park.go` の `set` と `adopt` | `park set <id> --status <status>`、`park adopt <session_id> <task_id>` に `--session` と `--cwd` を添える |
+| `hooks/band.tsx` の `showCompleted` が組む引数 | `cmd/agents-daemon/internal/boardcli/park.go` の `list` の `--task` | `park list --status open --task <task_id> --session <id> --cwd <cwd>` |
 | 利用者の settings の `env` の `CLAUDE_STATUSLINE_SPEND_CAP` | `internal/statusline/run.go` の `SpendCapEnv` | 月額上限 (USD)。あるときだけ `statusline` が `cost/` の台帳 (`internal/spend`) を書き、📅 / 🧾 を出す |
 
 ## リリース

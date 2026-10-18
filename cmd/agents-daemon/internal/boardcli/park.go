@@ -1,4 +1,6 @@
-package main
+// Package boardcli はボードに載る記録 (タスク、パーキングロット、セッションをまたぐ辺) を書く・読むコマンド
+// (park、edge、ingest-task) の組み立てを持つ。
+package boardcli
 
 import (
 	"encoding/json"
@@ -9,12 +11,15 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
-	"github.com/usadamasa/agents-daemon/internal/config"
-	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
+
+// Commands は root に登録するコマンド。
+func Commands() []*cobra.Command {
+	return []*cobra.Command{newIngestTaskCmd(), newParkCmd(), newEdgeCmd()}
+}
 
 // newParkCmd は `agents-daemon park add|set|list` を組み立てる (internal/parking)。
 // domain と repo は --cwd (既定は今の cwd) から決め、結果は JSON で stdout に出す。
@@ -28,7 +33,7 @@ func newParkCmd() *cobra.Command {
 		Short: "stdin の JSON (kind、title、detail、files、default_taken、session_id) で件を置き、{created, item} を出す",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withPark(cmd, cwd, func(s parking.Store, p parking.Placer, cwd string) (any, error) {
+			return withPark(cmd, cwd, func(s parking.Store, p tasklog.Placer, cwd string) (any, error) {
 				req, err := parking.ReadRequest(cmd.InOrStdin())
 				if err != nil {
 					return nil, err
@@ -43,7 +48,7 @@ func newParkCmd() *cobra.Command {
 		Short: "件の status (open / handed / discarded) を書き換える",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withPark(cmd, cwd, func(s parking.Store, p parking.Placer, cwd string) (any, error) {
+			return withPark(cmd, cwd, func(s parking.Store, p tasklog.Placer, cwd string) (any, error) {
 				return s.Set(p.Domain(session, cwd), args[0], status)
 			})
 		},
@@ -60,7 +65,7 @@ func newParkCmd() *cobra.Command {
 			if task != "" && session == "" {
 				return errors.New("--task には --session が要る")
 			}
-			return withPark(cmd, cwd, func(s parking.Store, p parking.Placer, cwd string) (any, error) {
+			return withPark(cmd, cwd, func(s parking.Store, p tasklog.Placer, cwd string) (any, error) {
 				if here {
 					repo = gitrepo.RepoKey(cwd)
 				}
@@ -82,7 +87,7 @@ func newParkCmd() *cobra.Command {
 		Short: "終了したセッションの未完了のタスクを kind task のメモにし、タスクの記録を消して {created, item} を出す",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withPark(cmd, cwd, func(s parking.Store, p parking.Placer, cwd string) (any, error) {
+			return withPark(cmd, cwd, func(s parking.Store, p tasklog.Placer, cwd string) (any, error) {
 				return s.Adopt(session, cwd, args[0], args[1], p, time.Now())
 			})
 		},
@@ -94,16 +99,16 @@ func newParkCmd() *cobra.Command {
 	return cmd
 }
 
-// withPark は置き場と置き先の決め方を環境から組んで fn を呼び、結果を JSON で stdout に書く。
-func withPark(cmd *cobra.Command, cwd string, fn func(parking.Store, parking.Placer, string) (any, error)) error {
-	return withPlacer(cmd, cwd, func(p apppath.Paths, placer parking.Placer, cwd string) (any, error) {
+// withPark は置き場と domain の決め方を環境から組んで fn を呼び、結果を JSON で stdout に書く。
+func withPark(cmd *cobra.Command, cwd string, fn func(parking.Store, tasklog.Placer, string) (any, error)) error {
+	return withPlacer(cmd, cwd, func(p apppath.Paths, placer tasklog.Placer, cwd string) (any, error) {
 		return fn(parking.New(p.StateDir()), placer, cwd)
 	})
 }
 
-// withPlacer は domain の決め方 (config とタスクの記録) を環境から組んで fn を呼び、結果を JSON で stdout に書く。
+// withPlacer は domain の決め方を環境から組んで fn を呼び、結果を JSON で stdout に書く。
 // cwd が空なら今の cwd にする。park と edge が使う。
-func withPlacer(cmd *cobra.Command, cwd string, fn func(apppath.Paths, parking.Placer, string) (any, error)) error {
+func withPlacer(cmd *cobra.Command, cwd string, fn func(apppath.Paths, tasklog.Placer, string) (any, error)) error {
 	p, err := apppath.FromEnv()
 	if err != nil {
 		return err
@@ -113,10 +118,7 @@ func withPlacer(cmd *cobra.Command, cwd string, fn func(apppath.Paths, parking.P
 			return err
 		}
 	}
-	// 設定が読めなくても Load は既定値 (すべて業務) を返す。業務のものが私用の側へ出ない向きに倒れる。
-	cfg, _ := config.Load(p.ConfigFile())
-	placer := parking.Placer{Tasks: tasklog.New(p.StateDir()), Classify: domain.New(os.Getenv("HOME"), cfg.HomePaths, cfg.DefaultDomain).Classify}
-	v, err := fn(p, placer, cwd)
+	v, err := fn(p, tasklog.LoadPlacer(p, os.Getenv("HOME")), cwd)
 	if err != nil {
 		return err
 	}

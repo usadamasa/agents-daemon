@@ -117,6 +117,7 @@ hook・skill・daemon は別プロセスで、ファイル越しに繋がる。�
 | `hooks/daemon-bin.ts` の `daemonBin` (mod が `agents-daemon status --board` と `park` を呼ぶ) | `hooks/lib/daemon-bin.sh` と `Taskfile.yml` の `install` | `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon`。mod は `$.env.get` で `XDG_CACHE_HOME` と `HOME` を読む |
 | `hooks/board.tsx` の `BoardData` (`types/index.d.ts`) | `internal/board` の `Board` | `status --board` の JSON の形。片方の欄を変えたらもう片方も変える |
 | `hooks/park.tsx` の `FIELDS` と `Added` | `internal/parking` の `Request` と `Added` | `park add` の stdin と stdout の JSON の形 |
+| `hooks/parking.ts` の `park` が組む引数 | `cmd/agents-daemon/cmd_park.go` の `set` と `adopt` | `park set <id> --status <status>`、`park adopt <session_id> <task_id>` に `--session` と `--cwd` を添える |
 | 利用者の settings の `env` の `CLAUDE_STATUSLINE_SPEND_CAP` | `internal/statusline/run.go` の `SpendCapEnv` | 月額上限 (USD)。あるときだけ `statusline` が `cost/` の台帳 (`internal/spend`) を書き、📅 / 🧾 を出す |
 
 ## リリース

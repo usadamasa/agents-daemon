@@ -249,6 +249,23 @@ test('issue にするよう頼むのは私用のボードだけで、届いた�
   expect(ran).toEqual([['park', 'set', MEMO.id, '--status', 'handed', ...SELF_ARGS]])
 })
 
+test('同じ行に送り先が無ければ、そう出してメモは open のまま', async ($, on) => {
+  const ran: string[][] = []
+  const data = withParking('work')
+  // dotfile の行の C は終了したセッション。メモをそこへ移す。
+  const lone = { ...BOARD.rows[1], cards: [card('C/1', 'pending', 'alias を整理', 'C', { live: false })], parking: [MEMO] }
+  parkWorld(on, { ...data, rows: [BOARD.rows[0], lone] }, ran)
+
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($)
+  await ui.press({ key: `park:${MEMO.id}` })
+  expect(await ui.find({ type: 'Text', text: /送り先のセッションがありません/ })).toBeDefined()
+  // 別の行の生きているセッション (PEER) へはタスクにさせない。
+  expect(await ui.find({ key: 'task:PEER' })).toBeUndefined()
+  expect(await ui.find({ key: 'task:C' })).toBeUndefined()
+  expect(ran).toEqual([])
+})
+
 test('業務のボードには issue の操作を出さない', async ($, on) => {
   parkWorld(on, withParking('work'), [])
 

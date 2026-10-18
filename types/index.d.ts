@@ -1,4 +1,4 @@
-// hooks/board.tsx が $.state に置く値の型。形は `agents-daemon status --board` の JSON (internal/board) に合わせる。
+// hooks/board.tsx と hooks/park.tsx が $.state に置く値の型。形は `agents-daemon status --board` の JSON (internal/board) に合わせる。
 
 export type BoardColumn = {
   id: 'pending' | 'in_progress' | 'blocked' | 'completed'

@@ -158,6 +158,9 @@ export const registerBoard: Register = on => {
               </Text>
             ))}
             <Button key="discard" label="捨てる" variant="secondary" onPress={() => void act(() => discard($, chosenMemo.memo))} />
+            {taskDestinations(chosenMemo.row.cards, self).length === 0 && (
+              <Text dimColor>この repo に送り先のセッションがありません (タスクにするには同じ repo のセッションが要ります)</Text>
+            )}
             {taskDestinations(chosenMemo.row.cards, self).map(to => (
               <Button
                 key={`task:${to.session_id}`}

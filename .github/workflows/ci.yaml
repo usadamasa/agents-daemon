@@ -39,7 +39,10 @@ jobs:
     name: go lint
     runs-on: ubuntu-latest
     steps:
+      # analyze-modularity が揮発性を git の履歴から測る。shallow clone だと判定が効かない
       - uses: actions/checkout@v6.0.3
+        with:
+          fetch-depth: 0
 
       - uses: $/.github/actions/setup-nix
 

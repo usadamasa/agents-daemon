@@ -282,7 +282,7 @@ func reportDomain(w io.Writer, p apppath.Paths, panes []multiplexer.Pane, home s
 	if err != nil {
 		_, _ = fmt.Fprintf(w, "  設定の読み込みに失敗したため、既定 (すべて業務) で判定します: %v\n", err)
 	}
-	c := domain.New(home, cfg.HomePaths, cfg.DefaultDomain)
+	c := domain.FromConfig(home, cfg)
 	_, _ = fmt.Fprintf(w, "  homePaths に当たらない cwd: %s\n", c.Fallback())
 	if paths := c.HomePaths(); len(paths) > 0 {
 		_, _ = fmt.Fprintf(w, "  私用と判定するパス: %s\n", strings.Join(paths, ", "))

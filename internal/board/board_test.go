@@ -7,14 +7,15 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/daemon"
 	"github.com/usadamasa/agents-daemon/internal/domain"
+	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
 
 var t0 = time.Date(2026, 10, 18, 9, 0, 0, 0, time.UTC)
 
 // places は cwd → Place の表を Locate にする。表に無い cwd は git の外。
-func places(m map[string]Place) func(string) Place {
-	return func(cwd string) Place { return m[cwd] }
+func places(m map[string]gitrepo.Place) func(string) gitrepo.Place {
+	return func(cwd string) gitrepo.Place { return m[cwd] }
 }
 
 func homeUnder(prefix string) func(string) domain.Domain {
@@ -69,7 +70,7 @@ func TestBuild_rowsAndColumns(t *testing.T) {
 			task("C", "1", "alias を整理", "pending", other),
 		},
 		Classify: homeUnder("/src/home"),
-		Locate: places(map[string]Place{
+		Locate: places(map[string]gitrepo.Place{
 			main:  {Repo: main, Branch: "main"},
 			wt:    {Repo: main, Branch: "fix-ci"},
 			other: {Repo: other, Branch: "main"},

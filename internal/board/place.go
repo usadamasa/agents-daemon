@@ -1,23 +1,23 @@
 package board
 
 import (
-	"os/exec"
 	"path/filepath"
 	"sort"
-	"strings"
+
+	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 )
 
 // locator は cwd ごとの Place を 1 回だけ求めて覚える。
 type locator struct {
-	locate func(cwd string) Place
-	cache  map[string]Place
+	locate func(cwd string) gitrepo.Place
+	cache  map[string]gitrepo.Place
 }
 
-func (l locator) place(cwd string) Place {
+func (l locator) place(cwd string) gitrepo.Place {
 	if p, ok := l.cache[cwd]; ok {
 		return p
 	}
-	var p Place
+	var p gitrepo.Place
 	if l.locate != nil && cwd != "" {
 		p = l.locate(cwd)
 	}
@@ -70,32 +70,4 @@ func shortID(id string) string {
 		return id[:8]
 	}
 	return id
-}
-
-// Locate は git で cwd の repo (main worktree のパス) と branch を求める。git の外や git が無ければゼロ値。
-//
-// `--git-common-dir` は linked worktree からでも main worktree の .git を指すので、同じリポジトリの
-// worktree はすべて同じ行になる。bare リポジトリなど .git で終わらないときは common dir をそのまま使う。
-func Locate(cwd string) Place {
-	if !filepath.IsAbs(cwd) {
-		return Place{}
-	}
-	out, err := exec.Command("git", "-C", cwd, "rev-parse", "--path-format=absolute", "--git-common-dir", "--abbrev-ref", "HEAD").Output() // #nosec G204 -- shell を通さず、cwd は引数 1 つとして渡る
-	if err != nil {
-		return Place{}
-	}
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	if len(lines) != 2 {
-		return Place{}
-	}
-	common := filepath.Clean(lines[0])
-	if filepath.Base(common) == ".git" {
-		common = filepath.Dir(common)
-	}
-	branch := lines[1]
-	if branch == "HEAD" {
-		// detached HEAD は branch の名前にならない。
-		branch = ""
-	}
-	return Place{Repo: common, Branch: branch}
 }

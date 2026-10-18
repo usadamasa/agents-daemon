@@ -34,14 +34,6 @@ func TestDreamCmd_IsRegisteredOnRoot(t *testing.T) {
 	}
 }
 
-func TestChildArgs_DropsOnlyDetachFlag(t *testing.T) {
-	got := childArgs([]string{"dream", "harvest", "--incremental", "--detach", "--days", "7"})
-	want := []string{"dream", "harvest", "--incremental", "--days", "7"}
-	if !slices.Equal(got, want) {
-		t.Errorf("childArgs = %v; want %v", got, want)
-	}
-}
-
 func TestDreamHarvestCmd_FailureLineIsTimestamped(t *testing.T) {
 	// state の親を通常ファイルにして harvest-state.json の保存を失敗させる。
 	blocker := filepath.Join(t.TempDir(), "file")

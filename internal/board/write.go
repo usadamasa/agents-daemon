@@ -8,6 +8,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/config"
 	"github.com/usadamasa/agents-daemon/internal/daemon"
 	"github.com/usadamasa/agents-daemon/internal/domain"
+	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
 
@@ -37,7 +38,7 @@ func Write(w io.Writer, p apppath.Paths, v Viewer) error {
 	}
 	// 設定が読めなくても既定 (すべて業務) で描く。業務のものが私用の側へ出ない向きに倒れる。
 	cfg, _ := config.Load(p.ConfigFile())
-	c := domain.New(v.UserHome, cfg.HomePaths, cfg.DefaultDomain)
+	c := domain.FromConfig(v.UserHome, cfg)
 	store := tasklog.New(p.StateDir())
 
 	d := store.SessionDomain(v.SessionID, c.Classify(v.CWD))
@@ -57,7 +58,7 @@ func Write(w io.Writer, p apppath.Paths, v Viewer) error {
 		Todos:     todos,
 		Classify:  c.Classify,
 		Elsewhere: func(id string) bool { return store.HasSession(other(d), id) },
-		Locate:    Locate,
+		Locate:    gitrepo.Locate,
 	})
 	return json.NewEncoder(w).Encode(b)
 }

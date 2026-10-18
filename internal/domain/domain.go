@@ -10,6 +10,8 @@ package domain
 import (
 	"path/filepath"
 	"strings"
+
+	"github.com/usadamasa/agents-daemon/internal/config"
 )
 
 // Domain は作業の区分。タスクやパーキングの置き場 (<domain>/) の名前にもなる。
@@ -49,6 +51,11 @@ func New(userHome string, homePaths []string, defaultDomain string) Classifier {
 		c.homePaths = append(c.homePaths, filepath.Clean(p))
 	}
 	return c
+}
+
+// FromConfig は config の HomePaths と DefaultDomain から Classifier を作る。
+func FromConfig(userHome string, cfg config.Config) Classifier {
+	return New(userHome, cfg.HomePaths, cfg.DefaultDomain)
 }
 
 // Fallback は homePaths に当たらない cwd の domain。

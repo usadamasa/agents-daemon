@@ -2,14 +2,12 @@ package main
 
 import (
 	"encoding/json"
-	"io"
 	"os"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
-	"github.com/usadamasa/agents-daemon/internal/board"
 	"github.com/usadamasa/agents-daemon/internal/config"
 	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/parking"
@@ -28,7 +26,13 @@ func newParkCmd() *cobra.Command {
 		Short: "stdin の JSON (kind、title、detail、files、default_taken、session_id) で件を置く",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withPark(cmd, cwd, func(e parkEnv) (any, error) { return e.add(cmd.InOrStdin()) })
+			return withPark(cmd, cwd, func(s parking.Store, p parking.Placer, cwd string) (any, error) {
+				req, err := parking.ReadRequest(cmd.InOrStdin())
+				if err != nil {
+					return nil, err
+				}
+				return s.Park(req, cwd, p, time.Now())
+			})
 		},
 	}
 	var status, session string
@@ -37,8 +41,8 @@ func newParkCmd() *cobra.Command {
 		Short: "件の status (open / handed / discarded) を書き換える",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withPark(cmd, cwd, func(e parkEnv) (any, error) {
-				return e.store.Set(e.tasks.SessionDomain(session, e.domain), args[0], status)
+			return withPark(cmd, cwd, func(s parking.Store, p parking.Placer, cwd string) (any, error) {
+				return s.Set(p.Domain(session, cwd), args[0], status)
 			})
 		},
 	}
@@ -50,8 +54,8 @@ func newParkCmd() *cobra.Command {
 		Short: "cwd の domain の件を JSON の配列で出す",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withPark(cmd, cwd, func(e parkEnv) (any, error) {
-				return e.store.Find(e.tasks.SessionDomain(session, e.domain), repo, listStatus)
+			return withPark(cmd, cwd, func(s parking.Store, p parking.Placer, cwd string) (any, error) {
+				return s.Find(p.Domain(session, cwd), repo, listStatus)
 			})
 		},
 	}
@@ -64,16 +68,8 @@ func newParkCmd() *cobra.Command {
 	return cmd
 }
 
-// parkEnv は 1 回の park の実行で使う置き場と、cwd から決めた domain。
-type parkEnv struct {
-	store  parking.Store
-	tasks  tasklog.Store
-	domain domain.Domain
-	cwd    string
-}
-
-// withPark は cwd から parkEnv を組んで fn を呼び、結果を JSON で stdout に書く。
-func withPark(cmd *cobra.Command, cwd string, fn func(parkEnv) (any, error)) error {
+// withPark は置き場と置き先の決め方を環境から組んで fn を呼び、結果を JSON で stdout に書く。
+func withPark(cmd *cobra.Command, cwd string, fn func(parking.Store, parking.Placer, string) (any, error)) error {
 	p, err := apppath.FromEnv()
 	if err != nil {
 		return err
@@ -85,27 +81,10 @@ func withPark(cmd *cobra.Command, cwd string, fn func(parkEnv) (any, error)) err
 	}
 	// 設定が読めなくても Load は既定値 (すべて業務) を返す。業務のものが私用の側へ出ない向きに倒れる。
 	cfg, _ := config.Load(p.ConfigFile())
-	c := domain.New(os.Getenv("HOME"), cfg.HomePaths, cfg.DefaultDomain)
-	e := parkEnv{store: parking.New(p.StateDir()), tasks: tasklog.New(p.StateDir()), domain: c.Classify(cwd), cwd: cwd}
-	v, err := fn(e)
+	placer := parking.Placer{Tasks: tasklog.New(p.StateDir()), Classify: domain.FromConfig(os.Getenv("HOME"), cfg).Classify}
+	v, err := fn(parking.New(p.StateDir()), placer, cwd)
 	if err != nil {
 		return err
 	}
 	return json.NewEncoder(cmd.OutOrStdout()).Encode(v)
-}
-
-func (e parkEnv) add(stdin io.Reader) (parking.Item, error) {
-	in, err := parking.ReadRequest(stdin)
-	if err != nil {
-		return parking.Item{}, err
-	}
-	// 業務に倒したセッションの件は、cwd が私用でも業務に置く (ボードと同じ規則)。
-	d := e.tasks.SessionDomain(in.SessionID, e.domain)
-	repo := board.Locate(e.cwd).Repo
-	if repo == "" {
-		// git の外はボードの行と同じく cwd を鍵にする。
-		repo = e.cwd
-	}
-	src := parking.Source{SessionID: in.SessionID, TaskID: e.tasks.ActiveTaskID(d, in.SessionID), CWD: e.cwd, At: time.Now()}
-	return e.store.Add(d, repo, in.Entry, src)
 }

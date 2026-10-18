@@ -21,6 +21,7 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/daemon"
 	"github.com/usadamasa/agents-daemon/internal/domain"
+	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
@@ -99,13 +100,6 @@ type Board struct {
 	Rows      []Row      `json:"rows"`
 }
 
-// Place は cwd がどの repo のどの branch か。
-type Place struct {
-	// Repo は main worktree のパス。git の外なら空。
-	Repo   string
-	Branch string
-}
-
 // Input はボードを組む材料。
 type Input struct {
 	Domain domain.Domain
@@ -120,7 +114,7 @@ type Input struct {
 	// 私用のボードに描かないために使う。nil なら見ない。
 	Elsewhere func(sessionID string) bool
 	// Locate は cwd の repo と branch を決める。同じ cwd では 1 回だけ呼ぶ。
-	Locate func(cwd string) Place
+	Locate func(cwd string) gitrepo.Place
 }
 
 // Build はボードを組む。
@@ -128,7 +122,7 @@ func Build(in Input) Board {
 	b := Board{Domain: in.Domain, Columns: columns, Rows: []Row{}}
 	var panes map[string]*daemon.PaneStatus
 	b.DaemonRunning, b.UpdatedAt, panes = livePanes(in)
-	b.Rows = arrange(collect(in, panes), panes, locator{locate: in.Locate, cache: map[string]Place{}})
+	b.Rows = arrange(collect(in, panes), panes, locator{locate: in.Locate, cache: map[string]gitrepo.Place{}})
 	return b
 }
 

@@ -5,3 +5,5 @@ coverage.out
 .DS_Store
 .env
 PLAN.md
+# mod を --plugin-dir で読み込むと Claude Code が書く (型は .claude-plugin/types/ が自前の .gitignore で除外する)
+tsconfig.json

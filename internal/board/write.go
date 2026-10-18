@@ -40,7 +40,7 @@ func Write(w io.Writer, p apppath.Paths, v Viewer) error {
 	c := domain.New(v.UserHome, cfg.HomePaths, cfg.DefaultDomain)
 	store := tasklog.New(p.StateDir())
 
-	d := viewerDomain(store, c, v)
+	d := store.SessionDomain(v.SessionID, c.Classify(v.CWD))
 	tasks, err := store.List(d)
 	if err != nil {
 		return err
@@ -60,15 +60,6 @@ func Write(w io.Writer, p apppath.Paths, v Viewer) error {
 		Locate:    Locate,
 	})
 	return json.NewEncoder(w).Encode(b)
-}
-
-// viewerDomain はボードを開いたセッションの domain。そのセッションの記録が業務の側にあれば業務
-// (tasklog が業務に倒したセッション)、無ければ cwd で決める。
-func viewerDomain(store tasklog.Store, c domain.Classifier, v Viewer) domain.Domain {
-	if v.SessionID != "" && store.HasSession(domain.Work, v.SessionID) {
-		return domain.Work
-	}
-	return c.Classify(v.CWD)
 }
 
 func other(d domain.Domain) domain.Domain {

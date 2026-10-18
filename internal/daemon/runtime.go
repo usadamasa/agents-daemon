@@ -21,6 +21,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/detect"
 	"github.com/usadamasa/agents-daemon/internal/monitor"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
+	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
@@ -51,8 +52,11 @@ type daemonRuntime struct {
 	store      sessionstate.Store
 	// tasks は hook が書くタスクの記録 (internal/tasklog)。daemon は housekeeping で消すだけ。
 	// ゼロ値は何も消さない。
-	tasks               tasklog.Store
-	sleep               func(time.Duration)
+	tasks tasklog.Store
+	// parking は `park add` が書くパーキングの件 (internal/parking)。daemon は housekeeping で消すだけ。
+	// ゼロ値は何も消さない。
+	parking             parking.Store
+	sleep             func(time.Duration)
 	startedAt           time.Time
 	panes               map[string]*paneEntry
 	consecutiveFailures int
@@ -371,6 +375,7 @@ func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 	runtime := newDaemonRuntime(client, log, p.StatusFile(), store, time.Sleep, now)
 	runtime.backend = kind
 	runtime.tasks = tasklog.New(p.StateDir())
+	runtime.parking = parking.New(p.StateDir())
 	runtime.housekeep(p.LogFile(), now)
 
 	sigCh := make(chan os.Signal, 1)

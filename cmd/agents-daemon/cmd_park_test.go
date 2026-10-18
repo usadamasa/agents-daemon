@@ -111,6 +111,23 @@ func TestParkAdd(t *testing.T) {
 	}
 }
 
+// 業務の側にタスクの記録があるセッションは、cwd が私用でも業務に置く (ボードと同じ規則)。
+func TestParkAdd_sessionTiltedToWork(t *testing.T) {
+	root := parkTestEnv(t)
+	cwd := filepath.Join(root, "src", "home", "a")
+	if err := os.MkdirAll(cwd, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	writeTaskRecord(t, root, "work", "s1", `{"id": "1", "subject": "a", "status": "in_progress", "session_id": "s1"}`)
+	stdout, _, err := runPark(t, parkInput, "add", "--cwd", cwd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if item := decodeItem(t, stdout); item.Domain != "work" || item.Sources[0].TaskID != "1" {
+		t.Errorf("item = %+v, want work に task 1 で置く", item)
+	}
+}
+
 // git の外は cwd を repo にし (ボードの行と同じ)、homePaths の外は work に置く。
 func TestParkAdd_outsideGitIsWork(t *testing.T) {
 	root := parkTestEnv(t)

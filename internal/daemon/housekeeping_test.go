@@ -9,6 +9,7 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/applog"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
+	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
@@ -51,11 +52,18 @@ func TestHousekeep(t *testing.T) {
 		r.tasks = tasklog.New(dir)
 		taskFile := filepath.Join(r.tasks.Dir, "home", "s1", "1.json")
 		touchAged(t, taskFile, 8*24*time.Hour, now)
+		// パーキングは 90 日更新されなければ消える (status ごとの期間は internal/parking のテスト)。
+		r.parking = parking.New(dir)
+		parkFile := filepath.Join(r.parking.Dir, "home", "p1.json")
+		touchAged(t, parkFile, 91*24*time.Hour, now)
 
 		r.housekeep(logPath, now)
 
 		if _, err := os.Stat(taskFile); !os.IsNotExist(err) {
 			t.Errorf("8 日前のタスクの記録は消えるべき (err=%v)", err)
+		}
+		if _, err := os.Stat(parkFile); !os.IsNotExist(err) {
+			t.Errorf("91 日前のパーキングの件は消えるべき (err=%v)", err)
 		}
 		if _, err := os.Stat(filepath.Join(contextDir, "old-session.json")); !os.IsNotExist(err) {
 			t.Errorf("8 日前の context は消えるべき (err=%v)", err)
@@ -84,7 +92,7 @@ func TestHousekeep(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ログが読めない: %v", err)
 		}
-		if !strings.Contains(string(data), "rotated ログ 1 件") || !strings.Contains(string(data), "利用上限 state 1 件") || !strings.Contains(string(data), "タスクの記録 1 件") {
+		if !strings.Contains(string(data), "rotated ログ 1 件") || !strings.Contains(string(data), "利用上限 state 1 件") || !strings.Contains(string(data), "タスクの記録 1 件") || !strings.Contains(string(data), "パーキング 1 件") {
 			t.Errorf("削除件数のログが無い: %q", data)
 		}
 	})

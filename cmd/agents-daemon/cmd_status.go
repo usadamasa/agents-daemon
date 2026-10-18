@@ -8,6 +8,7 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/board"
+	"github.com/usadamasa/agents-daemon/internal/tasklog"
 	"github.com/usadamasa/agents-daemon/internal/verify"
 )
 
@@ -36,10 +37,7 @@ func newStatusCmd() *cobra.Command {
 					return err
 				}
 			}
-			if viewer.UserHome, err = os.UserHomeDir(); err != nil {
-				return err
-			}
-			return board.Write(cmd.OutOrStdout(), p, viewer)
+			return board.Write(cmd.OutOrStdout(), p, tasklog.LoadPlacer(p, os.Getenv("HOME")), viewer)
 		},
 	}
 	f := cmd.Flags()

@@ -10,8 +10,8 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
 
-func homePlacer(stateDir string) Placer {
-	return Placer{Tasks: tasklog.New(stateDir), Classify: func(string) domain.Domain { return domain.Home }}
+func homePlacer(stateDir string) tasklog.Placer {
+	return tasklog.Placer{Tasks: tasklog.New(stateDir), Classify: func(string) domain.Domain { return domain.Home }}
 }
 
 func writeTask(t *testing.T, stateDir string, d domain.Domain, task tasklog.Task) string {

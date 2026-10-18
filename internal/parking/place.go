@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
@@ -12,22 +11,10 @@ import (
 // AdoptedDefault は Adopt で移したメモの default_taken。
 const AdoptedDefault = "セッションの終了で未完了のまま"
 
-// Placer は cwd とセッションから、件の置き先 (domain、repo、そのとき進行中のタスク) を決める。
-type Placer struct {
-	Tasks tasklog.Store
-	// Classify は cwd の domain を決める (config の homePaths / defaultDomain)。
-	Classify func(cwd string) domain.Domain
-}
-
-// Domain はセッションの domain。業務に倒したセッションは、cwd が私用でも業務にする (ボードと同じ規則)。
-func (p Placer) Domain(sessionID, cwd string) domain.Domain {
-	return p.Tasks.SessionDomain(sessionID, p.Classify(cwd))
-}
-
-// Park は cwd のセッションが置いた件を、置き先を決めてから add する。repo はボードの行と同じ鍵
-// (main worktree のパス、git の外なら cwd)。kind task は Adopt だけが置く。
+// Park は cwd のセッションが置いた件を、置き先 (domain、repo、そのとき進行中のタスク) を決めてから add する。
+// repo はボードの行と同じ鍵 (main worktree のパス、git の外なら cwd)。kind task は Adopt だけが置く。
 // 外から置く入口は Park と Adopt だけにし、domain と repo の決め方を呼び出し側に任せない。
-func (s Store) Park(req Request, cwd string, p Placer, now time.Time) (Added, error) {
+func (s Store) Park(req Request, cwd string, p tasklog.Placer, now time.Time) (Added, error) {
 	if req.Kind == KindTask {
 		return Added{}, fmt.Errorf("kind %q はボードからタスクを移すときだけ使う", KindTask)
 	}
@@ -39,7 +26,7 @@ func (s Store) Park(req Request, cwd string, p Placer, now time.Time) (Added, er
 // Adopt は終了したセッションに残った未完了のタスクを kind task のメモにし、タスクの記録を消す。
 // viewer と cwd はボードを開いたセッションで、その domain の側にあるタスクだけを移す (私用と業務を混ぜない)。
 // セッションが終了したかは見ない。ボードが終了したセッションのカードにだけ操作を出す。
-func (s Store) Adopt(viewer, cwd, sessionID, taskID string, p Placer, now time.Time) (Added, error) {
+func (s Store) Adopt(viewer, cwd, sessionID, taskID string, p tasklog.Placer, now time.Time) (Added, error) {
 	d := p.Domain(viewer, cwd)
 	t, ok := p.Tasks.Get(d, sessionID, taskID)
 	if !ok {

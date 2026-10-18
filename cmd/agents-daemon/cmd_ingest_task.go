@@ -9,8 +9,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
-	"github.com/usadamasa/agents-daemon/internal/config"
-	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
 
@@ -43,7 +41,6 @@ func ingestTask(stdin io.Reader, now time.Time) error {
 	if err != nil {
 		return err
 	}
-	// 設定が読めなくても Load は既定値 (すべて業務) を返すので、そのまま記録する。
-	cfg, _ := config.Load(p.ConfigFile())
-	return tasklog.New(p.StateDir()).Ingest(input, domain.New(os.Getenv("HOME"), cfg.HomePaths, cfg.DefaultDomain).Classify, now)
+	placer := tasklog.LoadPlacer(p, os.Getenv("HOME"))
+	return placer.Tasks.Ingest(input, placer.Classify, now)
 }

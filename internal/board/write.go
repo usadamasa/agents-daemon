@@ -5,7 +5,6 @@ import (
 	"io"
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
-	"github.com/usadamasa/agents-daemon/internal/config"
 	"github.com/usadamasa/agents-daemon/internal/daemon"
 	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
@@ -18,13 +17,11 @@ import (
 type Viewer struct {
 	SessionID string
 	CWD       string
-	// UserHome は config の homePaths の ~ を展開する先。
-	UserHome string
 }
 
 // Write はボードを組み、JSON で w へ書く。daemon が動いていなくてもタスクの記録は描く
 // (daemon_running が false で、カードはすべて Live でない)。
-func Write(w io.Writer, p apppath.Paths, v Viewer) error {
+func Write(w io.Writer, p apppath.Paths, placer tasklog.Placer, v Viewer) error {
 	pid, err := daemon.ReadPIDFile(p.PIDFile())
 	if err != nil {
 		return err
@@ -38,12 +35,8 @@ func Write(w io.Writer, p apppath.Paths, v Viewer) error {
 			return err
 		}
 	}
-	// 設定が読めなくても既定 (すべて業務) で描く。業務のものが私用の側へ出ない向きに倒れる。
-	cfg, _ := config.Load(p.ConfigFile())
-	c := domain.New(v.UserHome, cfg.HomePaths, cfg.DefaultDomain)
-	store := tasklog.New(p.StateDir())
-
-	d := store.SessionDomain(v.SessionID, c.Classify(v.CWD))
+	store := placer.Tasks
+	d := placer.Domain(v.SessionID, v.CWD)
 	tasks, err := store.List(d)
 	if err != nil {
 		return err
@@ -67,7 +60,7 @@ func Write(w io.Writer, p apppath.Paths, v Viewer) error {
 		Tasks:        tasks,
 		Todos:        todos,
 		Parking:      memos,
-		Classify:     c.Classify,
+		Classify:     placer.Classify,
 		Elsewhere:    func(id string) bool { return store.HasSession(other(d), id) },
 		Locate:       gitrepo.Locate,
 		SessionNames: names,

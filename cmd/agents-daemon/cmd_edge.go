@@ -9,7 +9,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
-	"github.com/usadamasa/agents-daemon/internal/parking"
+	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
 
 // newEdgeCmd は `agents-daemon edge add|rm|list` を組み立てる (internal/edge)。結果は JSON で stdout に出す。
@@ -21,7 +21,7 @@ func newEdgeCmd() *cobra.Command {
 	// endpointCmd は両端を flag で受け、run に置き場と cwd の domain の決め方を渡す add / rm を作る。
 	endpointCmd := func(use, short string, run func(edge.Store, func(string) domain.Domain) (any, error)) *cobra.Command {
 		c := &cobra.Command{Use: use, Short: short, Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
-			return withPlacer(cmd, "", func(p apppath.Paths, placer parking.Placer, _ string) (any, error) {
+			return withPlacer(cmd, "", func(p apppath.Paths, placer tasklog.Placer, _ string) (any, error) {
 				return run(edge.New(p.StateDir()), placer.Classify)
 			})
 		}}
@@ -50,7 +50,7 @@ func newEdgeCmd() *cobra.Command {
 		Short: "--cwd の domain の辺を JSON の配列で出す",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withPlacer(cmd, cwd, func(p apppath.Paths, placer parking.Placer, cwd string) (any, error) {
+			return withPlacer(cmd, cwd, func(p apppath.Paths, placer tasklog.Placer, cwd string) (any, error) {
 				if here {
 					repo = gitrepo.RepoKey(cwd)
 				}

@@ -193,9 +193,10 @@ socket ファイルの有無 (`ls -l "$CLAUDE_CODE_MESSAGING_SOCKET"`) だけで
 rg -n 'agents-daemon dream forget' ~/.claude/settings.json
 ```
 
-行が無ければ NG。行があるときの最終確認は、消してよい memory 1 件で `dream forget --dry-run <name>` の対象を見てから
-`dream forget <name>` を打つ。sandbox の中なら `operation not permitted` で失敗し、効いていれば消えて `MEMORY.md` の
-索引行も消える。消してよい memory が無ければ、行の有無だけで判定し、その旨を報告に残す。
+行が無ければ NG。行があるときの最終確認は docs にある方法で行う: Manual mode に切り替えて、消してよい memory 1 件で
+`dream forget <name>` を打ってもらう。要素に当たっていれば権限プロンプトの題名が「Bash command (unsandboxed)」になり、
+承認すると消えて `MEMORY.md` の索引行も消える。題名にそれが無ければ sandbox の中で動き、`operation not permitted` で失敗する。
+消してよい memory が無ければ、行の有無だけで判定し、その旨を報告に残す。
 
 ## 報告
 

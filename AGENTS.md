@@ -16,6 +16,7 @@ README の「役割」が持つ。機能を足す・外す判断はそこに照�
 | `hooks/park.tsx`, `hooks/park.test.tsx` | model が呼べる tool `park` (パーキングロットにメモを置く) と、repo の open のメモの数を出す prompt の hint 行 |
 | `hooks/band.tsx`, `hooks/band.test.tsx` | 入力欄の上の band にメモを出す (session.start とタスクの完了) |
 | `hooks/parking.ts` | メモの見せ方 (時刻の JST 表示を含む) とボードからの操作 (捨てる、タスクにする、issue にするよう頼む、パーキングへ移す) |
+| `hooks/log.ts`, `hooks/log.test.tsx` | mod の出来事を `board-log` でボードの経路のログに残す |
 | `hooks/ensure-daemon.sh`, `hooks/build-daemon.sh` | バイナリの用意 (detach build) と `daemon --ensure` |
 | `hooks/dream-harvest.sh` | Stop で `dream harvest --detach` を exec する |
 | `hooks/prune-worktrees.sh` | SessionStart で `prune-worktrees --hook` に stdin を渡す |
@@ -27,7 +28,7 @@ README の「役割」が持つ。機能を足す・外す判断はそこに照�
 | `skills/peer-sessions/` | 別セッション (peer) へ作業を渡す手順 (`ListAgents` / `SendMessage`)。rex の block 操作は `references/rex.md` |
 | `skills/dream/` | 記憶階層の consolidation の手引き。実行系の呼び方は `references/pipeline.md` |
 | `cmd/agents-daemon/` | Go の main と root の登録。コマンドの組み立ては `internal/<family>cli` (境界は architecture.md「CLI の組み立て」) |
-| `internal/` | daemon の本体。パス定数は `internal/apppath`。statusline の描画と実行は `internal/statusline`、cost の台帳は `internal/spend`、sidecar の原子的な書き込みは `internal/statefile`。読むだけの診断 (`doctor` / `inspect` / `status` / `logs`) は `internal/verify`、使い捨て pane へ送る e2e (`simulate`) は `internal/simulate`。dream の実行系は `internal/dream`、放置 worktree の回収は `internal/worktree`、cwd から私用と業務を判定するのは `internal/domain`、cwd の repo と branch を求めるのは `internal/gitrepo`、タスクの記録は `internal/tasklog`、パーキングロットの件は `internal/parking`、セッションをまたぐ辺は `internal/edge`、タスクの記録と status.json をボードに組むのは `internal/board` |
+| `internal/` | daemon の本体。パス定数は `internal/apppath`。statusline の描画と実行は `internal/statusline`、cost の台帳は `internal/spend`、sidecar の原子的な書き込みは `internal/statefile`。読むだけの診断 (`doctor` / `inspect` / `status` / `logs`) は `internal/verify`、使い捨て pane へ送る e2e (`simulate`) は `internal/simulate`。dream の実行系は `internal/dream`、放置 worktree の回収は `internal/worktree`、cwd から私用と業務を判定するのは `internal/domain`、cwd の repo と branch を求めるのは `internal/gitrepo`、タスクの記録は `internal/tasklog`、パーキングロットの件は `internal/parking`、セッションをまたぐ辺は `internal/edge`、タスクの記録と status.json をボードに組むのは `internal/board`、ボードの経路の出来事のログは `internal/boardlog` |
 | `internal/multiplexer`, `internal/rexcli`, `internal/backend` | pane 操作の interface (`multiplexer.Client`) とその rex 実装。`backend` が環境に `REX_SESSION` があることを確かめる (無ければ `daemon --ensure` は何もせず戻る) |
 | `tests/` | hook と script の bats テスト (`tests/lib/`、`tests/fixtures/`) |
 | `flake.nix` | 開発ツールの devShell (版は `flake.lock` が固定する)。go-arch-metrics の CLI は go.mod の tool directive が固定する |
@@ -120,6 +121,7 @@ hook・skill・daemon は別プロセスで、ファイル越しに繋がる。�
 | `hooks/park.tsx` の `FIELDS` と `Added` | `internal/parking` の `Request` と `Added` | `park add` の stdin と stdout の JSON の形 |
 | `hooks/parking.ts` の `park` が組む引数 | `cmd/agents-daemon/internal/boardcli/park.go` の `set` と `adopt` | `park set <id> --status <status>`、`park adopt <session_id> <task_id>` に `--session` と `--cwd` を添える |
 | `hooks/band.tsx` の `showCompleted` が組む引数 | `cmd/agents-daemon/internal/boardcli/park.go` の `list` の `--task` | `park list --status open --task <task_id> --session <id> --cwd <cwd>` |
+| `hooks/log.ts` の `logEvent` が組む引数 | `cmd/agents-daemon/internal/boardcli/board_log.go` の `board-log` と `internal/boardlog` の `Record` | `board-log --session <id> --cwd <cwd> -- <event> key=value…`。出来事の名前は `internal/boardlog` の package doc |
 | 利用者の settings の `env` の `CLAUDE_STATUSLINE_SPEND_CAP` | `internal/statusline/run.go` の `SpendCapEnv` | 月額上限 (USD)。あるときだけ `statusline` が `cost/` の台帳 (`internal/spend`) を書き、📅 / 🧾 を出す |
 
 ## リリース

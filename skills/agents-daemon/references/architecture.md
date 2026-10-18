@@ -290,7 +290,7 @@ rex で Agent と AgentStatus を決めるのは Claude Code 自身が OSC 7501 
 
 | family | コマンド |
 | ---- | ---- |
-| `boardcli` | park、edge、ingest-task (ボードに載る記録を書く・読む) |
+| `boardcli` | park、edge、ingest-task (ボードに載る記録を書く・読む)、board-log (ボードの経路のログに mod の出来事を書く) |
 | `daemoncli` | daemon、stop、status、logs、doctor、inspect、simulate (daemon のライフサイクルと読むだけの診断) |
 | `dreamcli` | dream |
 | `statuslinecli` | statusline、ingest-statusline |
@@ -325,7 +325,7 @@ pane ごとに次を評価する。上限側の詳細は [rate-limit.md](rate-li
 設定は利用者が書くものなので XDG の config ディレクトリに置く。ランタイム状態は揮発物なので
 ハーネスの `~/.claude/` に混ぜず、XDG Base Directory の state ディレクトリ
 `${XDG_STATE_HOME:-~/.local/state}/agents-daemon/` (以下 `$STATE`) に置く。
-`XDG_STATE_HOME` は daemon と `statusline` / `ingest-statusline` / `ingest-task` / `park` / `edge` (`apppath.FromEnv`) が同じ規則で解決する。
+`XDG_STATE_HOME` は daemon と `statusline` / `ingest-statusline` / `ingest-task` / `park` / `edge` / `board-log` (`apppath.FromEnv`) が同じ規則で解決する。
 
 | パス | 書く主体 | いつ | 中身 | 消す主体 |
 | ---- | ---- | ---- | ---- | ---- |
@@ -340,6 +340,8 @@ pane ごとに次を評価する。上限側の詳細は [rate-limit.md](rate-li
 | `$STATE/status.json` | daemon | 毎 tick (既定 5 秒) | backend (rex)、監視中の pane 一覧と各 pane の自己申告 (`agent_status` と、あれば `agent_kind` / `agent_message`)・監視状態・試行回数・待機期限・直近の判定 | 上書き |
 | `$STATE/logs/daemon.log` | daemon | 報告に値する出来事があったときだけ | 上限検知と待ち時間、再開送信、ユーザーの自己再開、ゲート抑制、ネイティブへの譲り、エラー | rotate |
 | `$STATE/logs/daemon.log.YYYY-MM-DD` | daemon | 日付が変わって最初に書くとき | 前日までの `daemon.log` をそのまま退避したもの | daemon が 7 日で消す |
+| `$STATE/logs/board-<domain>.log` | `agents-daemon ingest-task` / `park add` / `park set` / `park adopt` と、mod (`hooks/log.ts`) が呼ぶ `agents-daemon board-log` | タスクの記録、メモの操作、mod の出来事 (tool の登録の失敗、ボードの数と読み込みの失敗、送信の結果) があったとき。mod は同じ失敗と同じ数を書き直さない | ボードの経路の出来事を 1 行 1 件 (`internal/boardlog`、出来事の一覧は package doc)。session ID、task ID、メモの id、件数、失敗の理由だけで、subject、title、detail、送った文面は書かない。`<domain>` で分け、業務の出来事を私用の側に出さない。`logs --board` が読む | rotate |
+| `$STATE/logs/board-<domain>.log.YYYY-MM-DD` | 上と同じ | 日付が変わって最初に書くとき | 前日までの `board-<domain>.log` をそのまま退避したもの | daemon が 7 日で消す |
 | `$STATE/logs/build.log` | `hooks/build-daemon.sh` | SessionStart が build を起こしたとき | build の開始・完了・失敗 | 消さない (追記) |
 | `$STATE/logs/dream-harvest.log` | Stop hook が detach した `agents-daemon dream harvest` | 失敗したときだけ (成功は無音) | 時刻付きの失敗の行と stderr | 消さない (追記) |
 | `$STATE/dream/harvest/<YYYY-MM-DD>.jsonl` | `agents-daemon dream harvest` (Stop hook と手動) | Stop のたび | 1 セッション 1 行の transcript の要約 (PII 除去済み)。日付は ts_start | `dream harvest` が 90 日で消す |
@@ -366,8 +368,11 @@ daemon の再起動を跨いで日付が変わっていた場合も、mtime か�
 退避する。退避先が既にあるとき (時計の巻き戻り等) は上書きせず、次の日付境界まで
 `daemon.log` へ追記し続ける。
 
+ボードの経路のログ (`board-<domain>.log`) も同じ規則で退避する。書くのは短命な CLI なので、1 行ごとに開いて閉じる。
+並行するプロセスの行は O_APPEND と 1 回の write で混ざらない。
+
 古いファイルは daemon 自身が消す。起動時と 1 時間ごとに、mtime が保持期間を過ぎた
-rotate 済みログ (7 日)、`rate-limits/` 配下の state (24 時間。ingest-statusline が rename 前に
+rotate 済みログ (`daemon.log` と `board-<domain>.log`、7 日)、`rate-limits/` 配下の state (24 時間。ingest-statusline が rename 前に
 死んで残った `.rate-limits.*` も同じ扱い)、`context/` 配下 (7 日) を削除する。何かを消したときだけログに残す。
 
 保持期間は設定キーにせず定数 (`internal/daemon/housekeeping.go`、`internal/ratelimit` と `internal/sessioncontext` の `Retention`) に置く。

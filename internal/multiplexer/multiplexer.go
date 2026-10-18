@@ -7,6 +7,7 @@ package multiplexer
 
 import (
 	"context"
+	"strconv"
 	"strings"
 )
 
@@ -25,6 +26,9 @@ const (
 	AgentStatusBlocked AgentStatus = "blocked"
 	// AgentStatusDone は idle と同じ実体だが、focused UI で未観測のままバックグラウンド作業が終わった状態。
 	AgentStatusDone AgentStatus = "done"
+	// AgentStatusError は Claude Code のターンが API error (rate limit を含む) で終わった状態。
+	// 上限到達時の自己申告がこれかは未実測で、daemon はログに残すだけで判定には使わない (#77)。
+	AgentStatusError AgentStatus = "error"
 	// AgentStatusUnknown は agent は存在するが backend が分類できない状態。完了の証明にはならない。
 	AgentStatusUnknown AgentStatus = "unknown"
 )
@@ -36,6 +40,11 @@ type Pane struct {
 	CWD         string
 	Agent       string
 	AgentStatus AgentStatus
+	// AgentKind は blocked の種類 (record の kind)。AgentMessage は record の msg (作業中の要約、prompt の内容、
+	// error の理由)。どちらも Claude Code の自己申告で、無ければ空。status / doctor / ログに出し、
+	// AgentKind は monitor が再開送信を見送る判断にも使う。
+	AgentKind    string
+	AgentMessage string
 	// SessionID は pane で動いている Claude セッションの ID (CLAUDE_CODE_SESSION_ID)。
 	// pane と Claude セッションの唯一の対応付けで、紐づいていなければ空。
 	SessionID     string
@@ -46,25 +55,23 @@ type Pane struct {
 	UnknownReason string
 }
 
+// RecordLabel は record の自己申告を 1 行にする (`agent_status=blocked kind=permission msg="approve …"`)。
+// kind と msg は空なら出さない。daemon のログ、status、doctor、inspect が同じ形で出す。
+func RecordLabel(p Pane) string {
+	label := "agent_status=" + string(p.AgentStatus)
+	if p.AgentKind != "" {
+		label += " kind=" + p.AgentKind
+	}
+	if p.AgentMessage != "" {
+		label += " msg=" + strconv.Quote(p.AgentMessage)
+	}
+	return label
+}
+
 // IsClaudeAgent は pane が Claude Code の agent を持つかを判定する。
 // agent フィールドへの大文字小文字を無視した部分一致で判定する。
 func IsClaudeAgent(p Pane) bool {
 	return strings.Contains(strings.ToLower(p.Agent), "claude")
-}
-
-// SessionIDOf は pane に紐づく Claude セッション ID を引く。pane が取得できない、
-// または agent session が紐づいていない場合は空文字列を返す (state 無しとして扱う)。
-// 利用上限 state はセッションごとに別ファイルなので、この対応付けが取れないと
-// どの state を読むべきかが決まらない。
-func SessionIDOf(ctx context.Context, client Client, paneID string) string {
-	if paneID == "" {
-		return ""
-	}
-	pane, err := client.PaneGet(ctx, paneID)
-	if err != nil {
-		return ""
-	}
-	return pane.SessionID
 }
 
 // PaneReadOptions は PaneRead の呼び出しオプション。

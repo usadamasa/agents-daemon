@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -208,6 +209,38 @@ func TestDaemonRuntimeTick_MissingSessionStateDoesNotLeakToOtherPanes(t *testing
 	}
 	if got := r.panes["pane-b"].state.Status; got != monitor.StatusWaiting {
 		t.Errorf("pane-b の state.Status = %v, want Waiting (state が無いならゲートを適用せず画面の判定に従うべき)", got)
+	}
+}
+
+// record の kind / msg は status.json と、待機に入る行のログに出す。上限到達時に Claude Code が何を
+// 自己申告するかは未実測で (#77)、次に上限を踏んだときの記録がここになる。
+func TestDaemonRuntimeTick_RecordInStatusAndLog(t *testing.T) {
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	pane := claudePane("p1", multiplexer.AgentStatusBlocked)
+	pane.AgentKind = "permission"
+	pane.AgentMessage = "approve Bash: rm -rf ./tmp/junk"
+	client := &multiplexerfake.Client{
+		PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) { return []multiplexer.Pane{pane}, nil },
+		PaneReadFunc: func(context.Context, string, multiplexer.PaneReadOptions) (string, error) {
+			return "Try again in 5 minutes", nil
+		},
+	}
+	r, statusPath := newTestRuntime(t, client, now)
+
+	if _, _, err := r.tick(context.Background(), missingConfigPath(t), now); err != nil {
+		t.Fatalf("tick() error = %v", err)
+	}
+
+	snap, err := ReadStatusSnapshot(statusPath)
+	if err != nil || snap == nil || len(snap.Panes) != 1 {
+		t.Fatalf("ReadStatusSnapshot() = %+v, %v; want pane 1 件", snap, err)
+	}
+	if got := snap.Panes[0]; got.AgentKind != "permission" || got.AgentMessage != pane.AgentMessage {
+		t.Errorf("status.json の record = kind %q, message %q; want permission, %q", got.AgentKind, got.AgentMessage, pane.AgentMessage)
+	}
+	log := readLog(t, statusPath)
+	if !strings.Contains(log, "待機に入りました") || !strings.Contains(log, "kind=permission") || !strings.Contains(log, pane.AgentMessage) {
+		t.Errorf("待機のログに record が無い:\n%s", log)
 	}
 }
 

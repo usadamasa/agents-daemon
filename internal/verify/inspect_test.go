@@ -179,6 +179,33 @@ func TestRunInspect_サンプル画面での分類(t *testing.T) {
 		}
 	})
 
+	t.Run("--pane 指定時は record (agent_status / kind / msg) を出す", func(t *testing.T) {
+		home := t.TempDir()
+		client := &multiplexerfake.Client{
+			PaneReadFunc: func(context.Context, string, multiplexer.PaneReadOptions) (string, error) {
+				return inspectSampleLimitScreen, nil
+			},
+			PaneGetFunc: func(_ context.Context, paneID string) (multiplexer.Pane, error) {
+				return multiplexer.Pane{PaneID: paneID, Agent: "claude", AgentStatus: multiplexer.AgentStatusBlocked,
+					AgentKind: "permission", AgentMessage: "approve Bash: rm", SessionID: inspectTestSessionID}, nil
+			},
+		}
+		var buf bytes.Buffer
+		if err := RunInspect(context.Background(), &buf, client, apppath.New(home, "", ""), "wH:p9", "", "", fixedNow); err != nil {
+			t.Fatalf("RunInspect() error = %v", err)
+		}
+		out := buf.String()
+		for _, want := range []string{"agent_status=blocked", "kind=permission", `msg="approve Bash: rm"`} {
+			if !strings.Contains(out, want) {
+				t.Errorf("出力に %q が無い:\n%s", want, out)
+			}
+		}
+		// PaneGet は 1 回 (record と session_id を同じ応答から取る)。
+		if got := strings.Count(strings.Join(client.Calls, ","), "PaneGet"); got != 1 {
+			t.Errorf("PaneGet の回数 = %d, want 1 (%v)", got, client.Calls)
+		}
+	})
+
 	t.Run("--pane 指定時は送信系メソッドを一切呼ばない", func(t *testing.T) {
 		home := t.TempDir()
 		client := &multiplexerfake.Client{

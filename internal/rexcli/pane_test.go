@@ -37,6 +37,8 @@ const (
 	psOtherApp     = `{"records":[{"state":"working","app":"cargo","effective_app":"cargo","updated_at":"2026-10-17T14:00:00.000000+09:00","owner":{"pid":15470,"name":"cargo"}}]}`
 	// rex が owner を付けなくなった (または名前を変えた) ときの形。
 	psNoOwner = `{"records":[{"state":"done","app":"claude-code","effective_app":"claude-code","updated_at":"2026-10-17T14:00:00.000000+09:00"}]}`
+	// API error でターンが終わった形 (2.1.302 のバイナリの読み。実測は #77)。
+	psError = `{"records":[{"state":"error","app":"claude-code","effective_app":"claude-code","msg":"API Error: 429 rate limit","updated_at":"2026-10-17T14:00:00.000000+09:00","owner":{"pid":15470,"name":"2.1.302"}}]}`
 )
 
 // measured は testdata の実測の応答を返す。
@@ -79,6 +81,7 @@ func TestToPane(t *testing.T) {
 		{"起動直後の idle", measured(t, measuredOct17, "program_status-startup.json"), pidClaudeStartup, "claude", "claude", multiplexer.AgentStatusIdle, ""},
 		{"permission prompt は blocked", measured(t, measuredOct10, "program_status-permission.json"), pidClaudePermission, "claude", "claude", multiplexer.AgentStatusBlocked, ""},
 		{"未知の state は unknown", psUnknownState, pidClaudeWorking, "claude", "claude", multiplexer.AgentStatusUnknown, ""},
+		{"API error は error", psError, pidClaudeWorking, "claude", "claude", multiplexer.AgentStatusError, ""},
 		// root record の選び方。
 		{"event 形の id 空の root record", psEmptyID, pidClaudeWorking, "claude", "claude", multiplexer.AgentStatusWorking, ""},
 		{"subagent の record だけなら状態を取らない", psSubagentOnly, pidClaudeWorking, "claude", "claude", multiplexer.AgentStatusUnknown, ""},
@@ -102,6 +105,8 @@ func TestToPane(t *testing.T) {
 				t.Fatalf("process の parse に失敗: %v", err)
 			}
 			got := toPane("block:x", ps, proc, "sid")
+			// kind と msg の写像は TestToPane_KindAndMessage で見る。
+			got.AgentKind, got.AgentMessage = "", ""
 			want := multiplexer.Pane{
 				PaneID: "block:x", CWD: "/w",
 				Agent: tt.wantAgent, AgentStatus: tt.wantStatus, SessionID: "sid", UnknownReason: tt.wantReason,
@@ -112,6 +117,40 @@ func TestToPane(t *testing.T) {
 			// daemon が Claude の pane と見て文面を打つかは IsClaudeAgent で決まる。
 			if isClaude, wantClaude := multiplexer.IsClaudeAgent(got), tt.wantAgent == "claude"; isClaude != wantClaude {
 				t.Errorf("IsClaudeAgent(%+v) = %v, want %v", got, isClaude, wantClaude)
+			}
+		})
+	}
+}
+
+// record の kind と msg は root record を使う分岐でだけ Pane に写す。使えない record (前の Claude の残骸) の
+// msg を載せると、daemon のログが別の process の状況を今のものとして出す。
+func TestToPane_KindAndMessage(t *testing.T) {
+	tests := []struct {
+		name        string
+		ps          string
+		pid         int
+		wantKind    string
+		wantMessage string
+	}{
+		{"permission prompt は kind と msg を持つ", measured(t, measuredOct10, "program_status-permission.json"), pidClaudePermission, "permission", "approve Bash: rm -rf ./tmp/junk"},
+		{"done は msg だけ", measured(t, measuredOct10, "program_status-done.json"), pidClaudeDone, "", "guard-gql-read の PR 作成待ち"},
+		{"error は msg に失敗の理由", psError, pidClaudeWorking, "", "API Error: 429 rate limit"},
+		{"idle は両方無し", measured(t, measuredOct17, "program_status-startup.json"), pidClaudeStartup, "", ""},
+		{"使えない record (owner が前景と違う) からは写さない", measured(t, measuredOct17, "program_status-stale-done.json"), pidClaudeStartup, "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var ps programStatusResult
+			if err := json.Unmarshal([]byte(tt.ps), &ps); err != nil {
+				t.Fatalf("program_status の parse に失敗: %v", err)
+			}
+			var proc processResult
+			if err := json.Unmarshal([]byte(processJSON(tt.pid, "claude", "/w")), &proc); err != nil {
+				t.Fatalf("process の parse に失敗: %v", err)
+			}
+			got := toPane("block:x", ps, proc, "sid")
+			if got.AgentKind != tt.wantKind || got.AgentMessage != tt.wantMessage {
+				t.Errorf("toPane() kind = %q, message = %q; want %q, %q", got.AgentKind, got.AgentMessage, tt.wantKind, tt.wantMessage)
 			}
 		})
 	}

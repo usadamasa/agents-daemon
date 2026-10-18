@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
 
 // TestNew_ディレクトリ名が固定されている は protocol の固定。setup skill の確認手順と
@@ -43,9 +45,9 @@ func clearMultiplexerEnv(t *testing.T) {
 
 func mustPath(t *testing.T, s Store, sessionID string) string {
 	t.Helper()
-	path, err := s.RateLimits.File(sessionID)
+	path, err := statefile.SessionPath(s.RateLimits.Dir, sessionID, ".json")
 	if err != nil {
-		t.Fatalf("RateLimits.File(%q) error = %v", sessionID, err)
+		t.Fatalf("SessionPath(%q) error = %v", sessionID, err)
 	}
 	return path
 }

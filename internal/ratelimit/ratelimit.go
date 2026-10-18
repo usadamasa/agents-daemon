@@ -98,9 +98,9 @@ func fresh(observedAt, now time.Time, maxAge time.Duration) bool {
 	return age >= 0 && age <= maxAge
 }
 
-// File は sessionID に対応する利用上限 state のパスを返す。
+// file は sessionID に対応する利用上限 state のパスを返す。
 // sessionID が空なら ("", nil)、不正な文字を含む場合はエラーを返す。
-func (s Store) File(sessionID string) (string, error) {
+func (s Store) file(sessionID string) (string, error) {
 	return statefile.SessionPath(s.Dir, sessionID, ".json")
 }
 
@@ -117,7 +117,7 @@ func (w Window) file() windowFile {
 // Write は sessionID の利用上限 state を書く。sevenDay は観測に無ければ nil。
 // 書き込みは同一ディレクトリの一時ファイル経由の rename で原子的に行う (statefile)。
 func (s Store) Write(sessionID string, observedAt time.Time, fiveHour Window, sevenDay *Window) error {
-	path, err := s.File(sessionID)
+	path, err := s.file(sessionID)
 	if err != nil {
 		return err
 	}
@@ -142,7 +142,7 @@ func (s Store) Write(sessionID string, observedAt time.Time, fiveHour Window, se
 // 判断材料が無いという正常系として (nil, nil) を返す。呼び出し元は nil の state を
 // 「ゲートを適用しない」として扱う。ファイルが無い場合も同じく (nil, nil)。
 func (s Store) Load(sessionID string) (*State, error) {
-	path, err := s.File(sessionID)
+	path, err := s.file(sessionID)
 	if err != nil || path == "" {
 		return nil, err
 	}

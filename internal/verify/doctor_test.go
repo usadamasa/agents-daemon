@@ -18,6 +18,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
 	"github.com/usadamasa/agents-daemon/internal/ratelimit"
 	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
+	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
 
 var errFakeUnreachable = errors.New("fake: rex unreachable")
@@ -406,12 +407,12 @@ func findLineContaining(out, substr string) (string, bool) {
 }
 
 // mustRateLimitFile は sessionID に対応する利用上限 state のパスを返す。
-// ファイル名の組み立ては ratelimit が唯一の実装元なので、テストもそこを通す。
+// ファイル名の組み立ては statefile.SessionPath が唯一の実装元なので、テストもそこを通す。
 func mustRateLimitFile(t *testing.T, p apppath.Paths, sessionID string) string {
 	t.Helper()
-	path, err := ratelimit.New(p.StateDir()).File(sessionID)
+	path, err := statefile.SessionPath(ratelimit.New(p.StateDir()).Dir, sessionID, ".json")
 	if err != nil {
-		t.Fatalf("ratelimit.Store.File(%q) error = %v", sessionID, err)
+		t.Fatalf("SessionPath(%q) error = %v", sessionID, err)
 	}
 	return path
 }

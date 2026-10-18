@@ -42,8 +42,8 @@ type MultiplexerRef struct {
 	Block   string
 }
 
-// ID は kind の中で場所を指す ID (rex は block)。
-func (r MultiplexerRef) ID() string {
+// id は kind の中で場所を指す ID (rex は block)。
+func (r MultiplexerRef) id() string {
 	return r.Block
 }
 
@@ -94,16 +94,10 @@ func (m *multiplexerFile) ref() MultiplexerRef {
 	return MultiplexerRef{Kind: m.Kind, Session: m.Session, Block: m.Block}
 }
 
-// File は sessionID に対応する context state のパスを返す。
-// sessionID が空なら ("", nil)、不正な文字を含む場合はエラーを返す。
-func (s Store) File(sessionID string) (string, error) {
-	return statefile.SessionPath(s.Dir, sessionID, ".json")
-}
-
 // Write は rec を context/<session_id>.json へ書く。
 // 書き込みは同一ディレクトリの一時ファイル経由の rename で原子的に行う (statefile)。
 func (s Store) Write(rec Record) error {
-	path, err := s.File(rec.SessionID)
+	path, err := statefile.SessionPath(s.Dir, rec.SessionID, ".json")
 	if err != nil {
 		return err
 	}
@@ -146,7 +140,7 @@ func (s Store) ListMultiplexerBlocks(kind string) (map[string]string, error) {
 		if !ok || raw.SessionID == "" || raw.Multiplexer == nil || raw.Multiplexer.Kind != kind {
 			continue
 		}
-		id := raw.Multiplexer.ref().ID()
+		id := raw.Multiplexer.ref().id()
 		if id == "" {
 			continue
 		}
@@ -157,16 +151,6 @@ func (s Store) ListMultiplexerBlocks(kind string) (map[string]string, error) {
 		observed[id] = raw.ObservedAt
 	}
 	return sessions, nil
-}
-
-// ResolveMultiplexerBlock は kind の block の ID から session_id を引く。
-// 無ければ ("", nil)。複数の ID を引くなら ListMultiplexerBlocks で 1 回の走査に済ませる。
-func (s Store) ResolveMultiplexerBlock(kind, id string) (string, error) {
-	sessions, err := s.ListMultiplexerBlocks(kind)
-	if err != nil {
-		return "", err
-	}
-	return sessions[id], nil
 }
 
 // readContextFile は context file を読む。読めない・壊れているなら false。

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
+	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
 
 // statusline の stdin を模した入力。実機の形 (rate_limits は初回 API レスポンス後に
@@ -282,9 +283,9 @@ func TestIngestStatusline_環境変数からmultiplexerを読む(t *testing.T) {
 
 func readContextRaw(t *testing.T, s Store, sessionID string) string {
 	t.Helper()
-	path, err := s.Context.File(sessionID)
+	path, err := statefile.SessionPath(s.Context.Dir, sessionID, ".json")
 	if err != nil {
-		t.Fatalf("Context.File() error = %v", err)
+		t.Fatalf("SessionPath() error = %v", err)
 	}
 	return readFileString(t, path)
 }

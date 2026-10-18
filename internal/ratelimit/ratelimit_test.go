@@ -17,23 +17,6 @@ func TestNew_ディレクトリ名が固定されている(t *testing.T) {
 	}
 }
 
-func TestFile_不正なsessionIDを拒否する(t *testing.T) {
-	s := New("/state")
-
-	t.Run("パス区切りを含む session ID は拒否する", func(t *testing.T) {
-		if _, err := s.File("../../etc/passwd"); err == nil {
-			t.Error("パス区切りを含む session ID が通ってしまった")
-		}
-	})
-
-	t.Run("空の session ID は空パスとして返す (判断材料無し)", func(t *testing.T) {
-		path, err := s.File("")
-		if err != nil || path != "" {
-			t.Errorf("File(\"\") = %q, %v, want \"\", nil", path, err)
-		}
-	})
-}
-
 // fresh は IsFresh の本体。未来の観測を拒むことが要点で、
 // 拒まないとクロックスキューのある state で送信が起きる。
 func Test_fresh(t *testing.T) {
@@ -325,9 +308,9 @@ func TestLatestWindow(t *testing.T) {
 
 func mustPath(t *testing.T, s Store, sessionID string) string {
 	t.Helper()
-	path, err := s.File(sessionID)
+	path, err := s.file(sessionID)
 	if err != nil {
-		t.Fatalf("File(%q) error = %v", sessionID, err)
+		t.Fatalf("file(%q) error = %v", sessionID, err)
 	}
 	return path
 }

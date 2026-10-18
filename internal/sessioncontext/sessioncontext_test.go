@@ -74,11 +74,7 @@ func TestWrite(t *testing.T) {
 			if err := s.Write(Record{SessionID: "sess-1", UsedPercentage: 12, ObservedAt: observedAt, Multiplexer: tt.mux}); err != nil {
 				t.Fatalf("Write() error = %v", err)
 			}
-			path, err := s.File("sess-1")
-			if err != nil {
-				t.Fatalf("File() error = %v", err)
-			}
-			data, err := os.ReadFile(path)
+			data, err := os.ReadFile(filepath.Join(s.Dir, "sess-1.json"))
 			if err != nil {
 				t.Fatalf("ReadFile() error = %v", err)
 			}
@@ -102,6 +98,15 @@ func TestWrite(t *testing.T) {
 }
 
 func TestListMultiplexerBlocks(t *testing.T) {
+	// resolve は kind の block の ID から session_id を 1 つ引く。無ければ空。
+	resolve := func(t *testing.T, s Store, kind, id string) string {
+		t.Helper()
+		sessions, err := s.ListMultiplexerBlocks(kind)
+		if err != nil {
+			t.Fatalf("ListMultiplexerBlocks(%s) error = %v", kind, err)
+		}
+		return sessions[id]
+	}
 	writeContext := func(t *testing.T, s Store, name, content string) {
 		t.Helper()
 		path := filepath.Join(s.Dir, name)
@@ -135,9 +140,8 @@ func TestListMultiplexerBlocks(t *testing.T) {
 		writeContext(t, s, "new.json", `{"session_id":"new","observed_at":20,"multiplexer":{"kind":"rex","block":"block:1"}}`)
 		writeContext(t, s, "zzz.json", `{"session_id":"zzz","observed_at":5,"multiplexer":{"kind":"rex","block":"block:1"}}`)
 
-		got, err := s.ResolveMultiplexerBlock(MultiplexerKindRex, "block:1")
-		if err != nil || got != "new" {
-			t.Errorf("ResolveMultiplexerBlock() = %q, %v, want \"new\", nil", got, err)
+		if got := resolve(t, s, MultiplexerKindRex, "block:1"); got != "new" {
+			t.Errorf("block:1 = %q, want \"new\"", got)
 		}
 	})
 
@@ -146,9 +150,8 @@ func TestListMultiplexerBlocks(t *testing.T) {
 		writeContext(t, s, "b.json", `{"session_id":"b","observed_at":10,"multiplexer":{"kind":"rex","block":"block:1"}}`)
 		writeContext(t, s, "a.json", `{"session_id":"a","observed_at":10,"multiplexer":{"kind":"rex","block":"block:1"}}`)
 
-		got, err := s.ResolveMultiplexerBlock(MultiplexerKindRex, "block:1")
-		if err != nil || got != "a" {
-			t.Errorf("ResolveMultiplexerBlock() = %q, %v, want \"a\", nil", got, err)
+		if got := resolve(t, s, MultiplexerKindRex, "block:1"); got != "a" {
+			t.Errorf("block:1 = %q, want \"a\"", got)
 		}
 	})
 
@@ -156,14 +159,12 @@ func TestListMultiplexerBlocks(t *testing.T) {
 		s := New(t.TempDir())
 		writeContext(t, s, "a.json", `{"session_id":"a","observed_at":10,"multiplexer":{"kind":"rex","block":"block:1"}}`)
 
-		got, err := s.ResolveMultiplexerBlock(MultiplexerKindRex, "block:2")
-		if err != nil || got != "" {
-			t.Errorf("ResolveMultiplexerBlock() = %q, %v, want \"\", nil", got, err)
+		if got := resolve(t, s, MultiplexerKindRex, "block:2"); got != "" {
+			t.Errorf("block:2 = %q, want \"\"", got)
 		}
 		// kind が違えば同じ ID でも一致しない
-		got, err = s.ResolveMultiplexerBlock("tmux", "block:1")
-		if err != nil || got != "" {
-			t.Errorf("ResolveMultiplexerBlock(tmux) = %q, %v, want \"\", nil", got, err)
+		if got := resolve(t, s, "tmux", "block:1"); got != "" {
+			t.Errorf("tmux の block:1 = %q, want \"\"", got)
 		}
 	})
 
@@ -192,9 +193,9 @@ func TestListMultiplexerBlocks(t *testing.T) {
 	})
 
 	t.Run("ゼロ値の Store は空", func(t *testing.T) {
-		got, err := Store{}.ResolveMultiplexerBlock(MultiplexerKindRex, "block:1")
-		if err != nil || got != "" {
-			t.Errorf("ResolveMultiplexerBlock() = %q, %v, want \"\", nil", got, err)
+		got, err := Store{}.ListMultiplexerBlocks(MultiplexerKindRex)
+		if err != nil || len(got) != 0 {
+			t.Errorf("ListMultiplexerBlocks() = %v, %v, want empty, nil", got, err)
 		}
 	})
 }

@@ -100,7 +100,7 @@ type Added struct {
 	Item    Item `json:"item"`
 }
 
-// Add は件を置く。同じ件が open であれば src を sources に足し (同じ session と task の組は足さない)、
+// Add は件を置く。同じ件が open であれば src を sources に足し (同じ session、task、detail の組は足さない)、
 // 無ければ新しい件を作る。書いた後の件を返す。
 func (s Store) Add(d domain.Domain, repo string, e Entry, src Source) (Added, error) {
 	if s.Dir == "" {
@@ -121,10 +121,10 @@ func (s Store) Add(d domain.Domain, repo string, e Entry, src Source) (Added, er
 		key := normalize(e.Title)
 		for _, existing := range readDir(dir) {
 			if existing.Status == StatusOpen && existing.Repo == repo && normalize(existing.Title) == key {
+				if e.Detail != existing.Detail {
+					src.Detail = e.Detail
+				}
 				if !hasSource(existing.Sources, src) {
-					if e.Detail != existing.Detail {
-						src.Detail = e.Detail
-					}
 					existing.Sources = append(existing.Sources, src)
 				}
 				added = Added{Item: existing}
@@ -249,9 +249,11 @@ func normalize(title string) string {
 	return strings.ToLower(strings.Join(strings.Fields(title), ""))
 }
 
+// hasSource は同じ置き方 (session、task、detail の組) が既にあるか。同じ source でも detail が新しければ
+// 後から分かった補足として残す。
 func hasSource(sources []Source, src Source) bool {
 	for _, s := range sources {
-		if s.SessionID == src.SessionID && s.TaskID == src.TaskID {
+		if s.SessionID == src.SessionID && s.TaskID == src.TaskID && s.Detail == src.Detail {
 			return true
 		}
 	}

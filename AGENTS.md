@@ -24,7 +24,7 @@ README の「役割」が持つ。機能を足す・外す判断はそこに照�
 | `internal/` | daemon の本体。パス定数は `internal/apppath`。statusline の描画は `internal/statusline`、cost の台帳は `internal/spend`、sidecar の原子的な書き込みは `internal/statefile`。読むだけの診断 (`doctor` / `inspect`) は `internal/verify`、使い捨て pane へ送る e2e (`simulate`) は `internal/simulate`。dream の実行系は `internal/dream`、放置 worktree の回収は `internal/worktree` |
 | `internal/multiplexer`, `internal/rexcli`, `internal/backend` | pane 操作の interface (`multiplexer.Client`) とその rex 実装。`backend` が環境に `REX_SESSION` があることを確かめる (無ければ `daemon --ensure` は何もせず戻る) |
 | `tests/` | hook と script の bats テスト (`tests/lib/`、`tests/fixtures/`) |
-| `flake.nix` | 開発ツールの devShell (版は `flake.lock` が固定する)。nixpkgs に無い spm-go はここでビルドする |
+| `flake.nix` | 開発ツールの devShell (版は `flake.lock` が固定する)。go-arch-metrics の CLI は go.mod の tool directive が固定する |
 | `.claude/skills/catching-up-with-claude-code-changelog/` | Claude Code の更新後に CHANGELOG・バイナリ・docs を追い、この repo の前提 (画面の文言、hook と statusline の field、本体の新機能との重なり) を点検して issue に落とす手順。plugin には同梱しない保守用 skill |
 | `.claude/skills/catching-up-with-rex-changelog/` | rex の更新後に changelog (superlogical MCP) と自分の block への固定コマンドの応答を `rex-premise` marker と `internal/rexcli` の fixture と突き合わせ、ずれを issue に落とす手順。前回見た版は `references/last-checked.md`。plugin には同梱しない保守用 skill |
 

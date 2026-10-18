@@ -41,7 +41,7 @@ tasks:
       # パッケージツリーの転記へ劣化していく方向はこちらが止める。指標の意味と対処は
       # `go tool analyze-arch-lint --metrics`。
       - go tool analyze-arch-lint --strict .
-      - govulncheck ./...
+      - go tool vulncheck ./...
       - gosec ./...
+      # 揮発性を git の履歴から測る。CI の checkout は fetch-depth: 0 にする
       - go tool analyze-modularity --strict .
-      - spm-go all

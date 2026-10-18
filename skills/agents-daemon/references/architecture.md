@@ -74,7 +74,8 @@ state file の出し分けは次のとおり。
 
 同じ呼び出しで `context/<session_id>.json` へも書く。こちらは `rate_limits` と違って**毎描画で必ず書く**。
 daemon が使うのは `multiplexer` (block から session_id への対応) で、同じ block の記録が複数あれば
-`observed_at` が最新のものを採る。`used_percentage` は参考として写すだけで、daemon は読まない。
+`observed_at` が最新のものを採る。`session_name` はボードのカードに出すセッションの名前になる。
+`used_percentage` は参考として写すだけで、daemon は読まない。
 
 #### statusline が書く state
 
@@ -99,10 +100,18 @@ daemon が使うのは `multiplexer` (block から session_id への対応) で�
 `$STATE/context/<session_id>.json` (毎描画):
 
 ```json
-{"session_id": "0f8e2a4c-1b3d-4e5f-8a9b-0c1d2e3f4a5b", "used_percentage": 63, "observed_at": 1786840000, "multiplexer": {"kind": "rex", "session": "session:01a1…", "block": "block:01a1…"}}
+{"session_id": "0f8e2a4c-1b3d-4e5f-8a9b-0c1d2e3f4a5b", "session_name": "ad-board-cards", "used_percentage": 63, "observed_at": 1786840000, "multiplexer": {"kind": "rex", "session": "session:01a1…", "block": "block:01a1…"}}
 ```
 
 `observed_at` はどちらも書いた時点の Unix epoch 秒。
+
+`session_name` は statusline の stdin の `session_name` をそのまま写し、入力に無ければ付けない。
+<!-- cc-premise: 2.1.302 statusline session_name は custom title、無ければ AI の題 -->
+中身は `--name` か `/rename` で付けた名前、無ければ Claude Code が会話から付けた題になる。`ListAgents` の名前とは
+同じとは限らない (同じ名前のセッションが既にいると `ListAgents` 側だけ `workspace-dc` のような接尾辞が付く)。
+ボード (`internal/board`) はこの名前をカードとパーキングの `sources` に出し、名前が無ければ session ID の先頭 8 文字、
+同じ名前のセッションが複数あれば名前の後ろに session ID の先頭を足す。記録は `context/` の保持期間 (7 日) の間残るので、
+終了したセッションのカードとメモにも名前が付く。
 
 `multiplexer` は Claude Code が動いている多重化ツールの場所。statusline のコマンドは Claude Code の環境を
 継承するので、バイナリが環境変数から読んで書く (`sessioncontext.MultiplexerRefFromEnv`)。
@@ -303,7 +312,7 @@ pane ごとに次を評価する。上限側の詳細は [rate-limit.md](rate-li
 | ---- | ---- | ---- | ---- | ---- |
 | `${XDG_CONFIG_HOME:-~/.config}/agents-daemon/config.json` | 人間 | 手で編集したとき | 設定 | 消さない |
 | `$STATE/rate-limits/<session_id>.json` | `agents-daemon statusline` または `ingest-statusline` (利用者の statusline が呼ぶ) | statusline の描画ごと (`rate_limits.five_hour.resets_at` があるときだけ) | そのセッションの 5 時間 / 7 日ウィンドウの使用率と reset 時刻、観測時刻、session_id | daemon が 24 時間で消す |
-| `$STATE/context/<session_id>.json` | `agents-daemon statusline` または `ingest-statusline` (利用者の statusline が呼ぶ) | statusline の描画ごと | そのセッションの context 使用率、観測時刻、session_id、多重化ツールの場所 | daemon が 7 日で消す |
+| `$STATE/context/<session_id>.json` | `agents-daemon statusline` または `ingest-statusline` (利用者の statusline が呼ぶ) | statusline の描画ごと | そのセッションの context 使用率、観測時刻、session_id、セッション名、多重化ツールの場所 | daemon が 7 日で消す |
 | `$STATE/cost/<YYYY-MM-DD>/<session_id>.json` | `agents-daemon statusline` (`CLAUDE_STATUSLINE_SPEND_CAP` があるとき) | statusline の描画ごと (累計が変わったときだけ書き直す) | そのセッションの累計 cost と前日までの繰り越し (`internal/spend`)。daemon は読まない | `statusline` がその日の最初の書き込みで 45 日より古い日を消す |
 | `$STATE/tasks/<domain>/<session_id>/<task_id>.json` と `…/todos.json` | `agents-daemon ingest-task` (PostToolUse hook `hooks/ingest-task.sh` が呼ぶ) | TaskCreate / TaskUpdate / TaskList / TodoWrite の呼び出しごと | タスク 1 つ (subject、status、blockedBy、session_id、cwd) と TodoWrite のリスト全体 (`internal/tasklog`)。`<domain>` は `home` か `work` (config の `homePaths` / `defaultDomain`)。読み手はタスクのボード (`status --board`、`internal/board`) | daemon が完了したタスクを 1 日、それ以外を 7 日 (更新が無ければ) で消す。`park adopt` (ボードの「パーキングへ移す」) がメモへ移したタスクを消す |
 | `$STATE/parking/<domain>/<id>.json` | `agents-daemon park add` / `park set` / `park adopt` | 件を置いたとき、status を書き換えたとき、終了したセッションのタスクをメモへ移したとき (kind `task`) | パーキングの件 1 つ (kind、title、detail、files、default_taken、repo、sources (session_id、置いたときの進行中の task_id、cwd、まとめたときに後から置いた側の detail、時刻)、status) (`internal/parking`)。repo はボードの行と同じ main worktree のパス。domain、repo、正規化した title が同じ open の件には sources を足す。`.lock` は書き込みを直列にするロック | daemon が open を 90 日、handed / discarded を 7 日 (更新が無ければ) で消す。同じ件が置き直されると数え直す。`.lock` は消さない |

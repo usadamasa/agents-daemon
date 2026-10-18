@@ -73,7 +73,7 @@ type Card struct {
 	Subject string `json:"subject"`
 	// SessionID はタスクのセッション。Live なら mod はここへ指示を送れる。
 	SessionID string `json:"session_id"`
-	// Session はカードの末尾に出すセッションの短い名前 (branch、無ければ session ID の先頭)。
+	// Session はカードの末尾に出すセッションの短い名前 (セッション名、無ければ session ID の先頭)。
 	Session string `json:"session"`
 	// Live はセッションが daemon の見ている pane で動いているか。終了したセッションの未完了のタスクは false。
 	Live bool `json:"live"`
@@ -143,8 +143,10 @@ type Input struct {
 	// Elsewhere はセッションの記録がほかの domain の側にあるか。業務に倒したセッションを、cwd だけで
 	// 私用のボードに描かないために使う。nil なら見ない。
 	Elsewhere func(sessionID string) bool
-	// Locate は cwd の repo と branch を決める。同じ cwd では 1 回だけ呼ぶ。
+	// Locate は cwd の repo を決める。同じ cwd では 1 回だけ呼ぶ。
 	Locate func(cwd string) gitrepo.Place
+	// SessionNames は session ID → セッション名 (statusline の session_name、sessioncontext.ListSessionNames)。
+	SessionNames map[string]string
 }
 
 // Build はボードを組む。
@@ -152,7 +154,7 @@ func Build(in Input) Board {
 	b := Board{Domain: in.Domain, Columns: columns, Rows: []Row{}}
 	var panes map[string]*daemon.PaneStatus
 	b.DaemonRunning, b.UpdatedAt, panes = livePanes(in)
-	b.Rows = arrange(collect(in, panes), in.Parking, panes, locator{locate: in.Locate, cache: map[string]gitrepo.Place{}})
+	b.Rows = arrange(collect(in, panes), in.Parking, panes, in.SessionNames, locator{locate: in.Locate, cache: map[string]gitrepo.Place{}})
 	return b
 }
 
@@ -202,26 +204,17 @@ func collect(in Input, panes map[string]*daemon.PaneStatus) []placed {
 }
 
 // arrange はカードとメモの source にセッションの名前を付け、repo の行へ分けて並べる。
-func arrange(cards []placed, memos []parking.Item, panes map[string]*daemon.PaneStatus, l locator) []Row {
-	// セッションの名前は、そのセッションの今の cwd (生きていれば pane、終わっていれば最後のカードか
-	// メモを置いたときの cwd) の branch。
-	cwds := map[string]string{}
+func arrange(cards []placed, memos []parking.Item, panes map[string]*daemon.PaneStatus, sessions map[string]string, l locator) []Row {
+	ids := map[string]bool{}
 	for _, c := range cards {
-		cwds[c.card.SessionID] = c.cwd
+		ids[c.card.SessionID] = true
 	}
 	for _, m := range memos {
 		for _, s := range m.Sources {
-			if _, ok := cwds[s.SessionID]; !ok {
-				cwds[s.SessionID] = s.CWD
-			}
+			ids[s.SessionID] = true
 		}
 	}
-	for id := range cwds {
-		if p := panes[id]; p != nil {
-			cwds[id] = p.CWD
-		}
-	}
-	names := sessionNames(cwds, l)
+	names := sessionNames(ids, sessions)
 
 	byRepo := map[string]*Row{}
 	rowOf := func(key, title string) *Row {

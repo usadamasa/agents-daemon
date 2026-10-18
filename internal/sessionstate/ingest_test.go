@@ -76,6 +76,17 @@ func TestIngestStatusline_context(t *testing.T) {
 		}
 	})
 
+	t.Run("session_name を写す", func(t *testing.T) {
+		s := New(t.TempDir())
+		input := `{"session_id": "sess-1", "session_name": "ad-board-cards", "context_window": {"used_percentage": 12}}`
+		if err := s.IngestStatusline([]byte(input), ingestNow); err != nil {
+			t.Fatalf("IngestStatusline() error = %v", err)
+		}
+		if got := readContextRaw(t, s, "sess-1"); !strings.Contains(got, `"session_name":"ad-board-cards",`) {
+			t.Errorf("context file = %q, want session_name", got)
+		}
+	})
+
 	t.Run("context_window が無ければ 0 で書く", func(t *testing.T) {
 		s := New(t.TempDir())
 		if err := s.IngestStatusline([]byte(`{"session_id": "sess-1"}`), ingestNow); err != nil {

@@ -76,6 +76,7 @@ func TestBuild_rowsAndColumns(t *testing.T) {
 			wt:    {Repo: main, Branch: "fix-ci"},
 			other: {Repo: other, Branch: "main"},
 		}),
+		SessionNames: map[string]string{"A": "workspace", "B": "fix-ci", "C": "workspace"},
 	})
 
 	if len(b.Rows) != 2 || b.Rows[0].Title != "agents-daemon" || b.Rows[1].Title != "dotfile" {
@@ -105,8 +106,8 @@ func TestBuild_rowsAndColumns(t *testing.T) {
 	if !got["A/2"].Live || got["B/1"].Live {
 		t.Errorf("Live: A は pane があり B は無い")
 	}
-	// 同じ branch 名 (main) のセッションが 2 つあるので session ID の先頭で見分ける。
-	if got["A/2"].Session != "main A" || got["B/1"].Session != "fix-ci" || got["C/1"].Session != "main C" {
+	// カードにはセッション名を出す (branch は使わない)。同じ名前のセッションが 2 つあるので session ID の先頭で見分ける。
+	if got["A/2"].Session != "workspace A" || got["B/1"].Session != "fix-ci" || got["C/1"].Session != "workspace C" {
 		t.Errorf("session names = %q / %q / %q", got["A/2"].Session, got["B/1"].Session, got["C/1"].Session)
 	}
 	// 列の順 (未着手 → 進行中 → ブロック → 完了)、列の中はセッションの名前の順に並ぶ。
@@ -148,6 +149,7 @@ func TestBuild_parking(t *testing.T) {
 			wt:    {Repo: main, Branch: "fix-ci"},
 			other: {Repo: other, Branch: "alias"},
 		}),
+		SessionNames: map[string]string{"A": "park-a", "B": "park-b"},
 	})
 
 	if len(b.Rows) != 2 || b.Rows[0].Title != "agents-daemon" || b.Rows[1].Title != "dotfile" {
@@ -167,11 +169,12 @@ func TestBuild_parking(t *testing.T) {
 	if len(p.Sources) != 2 || p.Sources[0].SessionID != "A" || p.Sources[0].Detail != "別の補足" || p.Sources[1].SessionID != "B" {
 		t.Fatalf("sources = %+v, want 新しい順", p.Sources)
 	}
-	if p.Sources[0].Session != "main" || !p.Sources[0].Live || p.Sources[1].Session != "fix-ci" || p.Sources[1].Live {
+	if p.Sources[0].Session != "park-a" || !p.Sources[0].Live || p.Sources[1].Session != "park-b" || p.Sources[1].Live {
 		t.Errorf("source の名前と Live = %+v", p.Sources)
 	}
-	if b.Rows[1].Parking[0].Sources[0].Session != "alias" {
-		t.Errorf("終了したセッションの名前 = %+v", b.Rows[1].Parking[0].Sources)
+	// 名前の記録が無いセッションは session ID の先頭に倒す。
+	if b.Rows[1].Parking[0].Sources[0].Session != "C" {
+		t.Errorf("名前の無いセッションの名前 = %+v", b.Rows[1].Parking[0].Sources)
 	}
 }
 

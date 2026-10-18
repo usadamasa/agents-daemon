@@ -232,21 +232,47 @@ func TestBuild_sessionsWithoutTasksAndTodos(t *testing.T) {
 	}
 }
 
+// タスクの無いセッションのカードには、Claude Code が申告した今の作業 (program_status の msg) を出す。
+// msg が無ければ (rex の外、申告の前) 「タスクなし」のまま。タスクのあるセッションのカードは msg で変えない。
+func TestBuild_sessionCardShowsAgentMessage(t *testing.T) {
+	b := Build(Input{
+		Domain: domain.Work,
+		PID:    42,
+		Snapshot: snapshot(
+			daemon.PaneStatus{PaneID: "p1", SessionID: "A", CWD: "/w/a", AgentStatus: "working", AgentMessage: "Checking the running daemon's version"},
+			daemon.PaneStatus{PaneID: "p2", SessionID: "B", CWD: "/w/b", AgentStatus: "working"},
+			daemon.PaneStatus{PaneID: "p3", SessionID: "C", CWD: "/w/c", AgentStatus: "working", AgentMessage: "別の作業"},
+		),
+		Tasks: []tasklog.Task{task("C", "1", "書く", "in_progress", "/w/c")},
+	})
+	got := byKey(b)
+	if c := got["A/session"]; c.Subject != "Checking the running daemon's version" || c.Kind != KindSession {
+		t.Errorf("A/session = %+v, want msg を subject に", c.Card)
+	}
+	if c := got["B/session"]; c.Subject != "タスクなし" {
+		t.Errorf("B/session = %+v, want タスクなし", c.Card)
+	}
+	if c := got["C/1"]; c.Subject != "書く" {
+		t.Errorf("C/1 = %+v, want タスクの subject のまま", c.Card)
+	}
+}
+
 // ボードは 1 つの domain しか描かない。ほかの domain の pane と、業務に倒したセッションは載せない。
 func TestBuild_domain(t *testing.T) {
 	b := Build(Input{
 		Domain: domain.Home,
 		PID:    42,
 		Snapshot: snapshot(
-			daemon.PaneStatus{PaneID: "p1", SessionID: "H", CWD: "/src/home/a"},
-			daemon.PaneStatus{PaneID: "p2", SessionID: "W", CWD: "/work/b"},
-			daemon.PaneStatus{PaneID: "p3", SessionID: "M", CWD: "/src/home/c"}, // 記録が業務の側にある
+			daemon.PaneStatus{PaneID: "p1", SessionID: "H", CWD: "/src/home/a", AgentMessage: "私用の作業"},
+			daemon.PaneStatus{PaneID: "p2", SessionID: "W", CWD: "/work/b", AgentMessage: "業務の作業"},
+			daemon.PaneStatus{PaneID: "p3", SessionID: "M", CWD: "/src/home/c", AgentMessage: "業務に倒した作業"}, // 記録が業務の側にある
 		),
 		Classify:  homeUnder("/src/home"),
 		Elsewhere: func(id string) bool { return id == "M" },
 	})
 	got := byKey(b)
-	if len(got) != 1 || got["H/session"].SessionID != "H" {
+	// 今の作業 (msg) もタスクの subject と同じく、自分の domain のボードにだけ出る。
+	if len(got) != 1 || got["H/session"].SessionID != "H" || got["H/session"].Subject != "私用の作業" {
 		t.Errorf("cards = %+v, want H だけ", got)
 	}
 	if b.Domain != domain.Home {

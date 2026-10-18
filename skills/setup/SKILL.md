@@ -182,7 +182,7 @@ rg -n 'agents-daemon dream forget' ~/.claude/settings.json
 | 結果 | 判定 |
 | ---- | ---- |
 | TaskCreate か TodoWrite がある | OK |
-| どちらも無い (`TaskStop` だけ) | 情報。ボードにはタスクが載らず、セッションごとの「タスクなし」のカードだけになる。使うなら settings の `env` に `"CLAUDE_CODE_ENABLE_TODO_TOOLS": "1"` を足し、Claude Code を起動し直す |
+| どちらも無い (`TaskStop` だけ) | 情報。ボードにはタスクが載らず、セッションごとのカード (今の作業か「タスクなし」) だけになる。使うなら settings の `env` に `"CLAUDE_CODE_ENABLE_TODO_TOOLS": "1"` を足し、Claude Code を起動し直す |
 
 ## 報告
 

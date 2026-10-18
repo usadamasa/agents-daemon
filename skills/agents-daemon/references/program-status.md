@@ -25,6 +25,7 @@ docs に無く、2.1.302 のバイナリと実測 (2026-10-17、rex preview.15�
 `done` と `idle` はどちらも入力待ち。`kind` と `msg` は `Pane` の `AgentKind` / `AgentMessage` に写し、
 `status.json` (`agent_kind` / `agent_message`)、`status`、`doctor` の pane 行、`inspect --pane` の `record:` 行、
 daemon.log の検知と送信の行に `agent_status=… kind=… msg="…"` の形で出す。
+タスクのボードは、タスクの記録が無いセッションのカードの見出しに `msg` を出す (無ければ「タスクなし」)。
 
 `blocked` のうち kind が `permission` / `question` / `auth` の pane には、待機明けでも再開を送らない
 (esc は prompt を断り、Enter は承認する。`internal/monitor` の `waitingOnPrompt`)。kind の無い `blocked` (dialog 一般) は

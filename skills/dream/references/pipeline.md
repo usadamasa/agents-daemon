@@ -14,7 +14,9 @@ dream の実行系。どのレイヤーを触るかではなく、どの順に�
 ~/.cache/agents-daemon/bin/agents-daemon dream stage --project -Users-x-src-repo
 ```
 
-`XDG_CACHE_HOME` を設定している環境ではその配下に読み替える。各 subcommand の flag は `--help` を参照。
+`XDG_CACHE_HOME` を設定している環境ではその配下に読み替える。パスは literal で書き、
+`"${XDG_CACHE_HOME:-$HOME/.cache}/..."` のような変数展開で command name を組まない (変数から来る command name は
+`excludedCommands` に当たっても sandbox に残り、`forget` が消せなくなる)。各 subcommand の flag は `--help` を参照。
 以下の表と references では `agents-daemon dream <phase>` と略記する。
 
 state は `${XDG_STATE_HOME:-~/.local/state}/agents-daemon/dream/` に置く (`harvest/`、`candidates/`、

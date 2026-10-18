@@ -2,9 +2,10 @@
 name: setup
 description: >-
   agents-daemon plugin を install した直後、または動いていない疑いがあるときに、前提 (rex、go と jq、
-  statusline の配線、バイナリ、peer messaging) がそろっているかを確かめて足りない配線を足す。
+  statusline の配線、バイナリ、peer messaging、`dream forget` の sandbox 除外) がそろっているかを確かめて足りない配線を足す。
   `doctor` で `session_id=(なし)`、state file が無い、sandbox 内から rex の socket に繋がらない、
-  `ListAgents` が無い、といった症状でも引く。「agents-daemon をセットアップして」「statusline を配線して」と言われたときにも使う。
+  `ListAgents` が無い、`dream forget` が `operation not permitted` で消せない、といった症状でも引く。
+  「agents-daemon をセットアップして」「statusline を配線して」と言われたときにも使う。
 ---
 
 # setup
@@ -158,6 +159,44 @@ socket ファイルの有無 (`ls -l "$CLAUDE_CODE_MESSAGING_SOCKET"`) だけで
 `CLAUDE_CODE_TMPDIR` 自体は親セッションの Bash ツールにも来る (sandbox が渡す) ので、
 変数があるだけでは入れ子と判断しない。
 
+## 7. dream forget の sandbox 除外
+
+`agents-daemon:dream` skill の `dream forget` は auto memory (`~/.claude/projects/<project>/memory/*.md`) を消す。
+このディレクトリは Claude Code 組み込みの sandbox 保護対象で、`allowWrite` で再許可する表現が無いため、sandbox の中では
+`operation not permitted` になる。`dream forget` だけを `sandbox.excludedCommands` で sandbox の外に出す
+(`rm` を出さない理由と削除範囲の制約は dream skill の `references/layer-auto-memory.md`)。dream を使わないなら不要で、情報に留める。
+
+<!-- cc-premise: 2.1.302 sandbox excludedCommands は Bash 許可ルールと同じ構文で呼び出しの文字列に当たる。変数から来る command name は sandbox に残る -->
+
+利用者の `~/.claude/settings.json` に足す行:
+
+```json
+{
+  "sandbox": {
+    "excludedCommands": ["*/agents-daemon/bin/agents-daemon dream forget *"]
+  }
+}
+```
+
+- 要素は `Bash(...)` の許可ルールと同じ構文で、`*` は任意の文字列に当たる。呼び出しの文字列そのものと照合するので、
+  basename だけの `agents-daemon dream forget *` は絶対パスで呼んだコマンドに当たらない。先頭の `*/` が
+  `~/.cache` と `/Users/x/.cache` と `XDG_CACHE_HOME` の実パスを吸収する
+- 呼ぶ側は `~/.cache/agents-daemon/bin/agents-daemon dream forget <name>` と literal のパスで打つ。
+  `"${XDG_CACHE_HOME:-$HOME/.cache}/..."` のように command name が変数から来る呼び出しは、要素に当たっても
+  sandbox に残る (docs の「Claude Code keeps a Bash call sandboxed when …」)。`cd` や `$(...)` や `>` を
+  同じ呼び出しに混ぜても同じ
+- 除外しても permission flow は通る (auto mode なら classifier、Manual なら prompt)
+
+確かめ方:
+
+```sh
+rg -n 'agents-daemon dream forget' ~/.claude/settings.json
+```
+
+行が無ければ NG。行があるときの最終確認は、消してよい memory 1 件で `dream forget --dry-run <name>` の対象を見てから
+`dream forget <name>` を打つ。sandbox の中なら `operation not permitted` で失敗し、効いていれば消えて `MEMORY.md` の
+索引行も消える。消してよい memory が無ければ、行の有無だけで判定し、その旨を報告に残す。
+
 ## 報告
 
 次の形でまとめる。
@@ -172,6 +211,7 @@ agents-daemon setup
 - バイナリ: <version | NG (build.log の要点)>
 - doctor: <要点>
 - peer messaging: <OK | 無効 (切り分けの結果) | 判定できず (理由)>
+- dream forget の sandbox 除外: <OK | NG (足す行) | 情報 (dream を使わない)>
 - 直したこと: <書き換えたファイルと中身の要約 | なし>
 - 残っていること: <利用者の作業 | なし>
 ```

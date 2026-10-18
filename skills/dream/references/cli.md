@@ -207,6 +207,8 @@ consolidation で役目を終えた auto memory を削除し、`MEMORY.md` の�
 ~/.cache/agents-daemon/bin/agents-daemon dream forget <name>...             # 削除
 ```
 
+パスは literal で打つ。変数から来る command name は `excludedCommands` に当たっても sandbox に残る。
+
 ### なぜ CLI が要るか
 
 `~/.claude/projects/**` は Claude Code 組み込みの sandbox 保護対象で、bash の `rm` は `Operation not permitted` になる。

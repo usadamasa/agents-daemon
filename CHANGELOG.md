@@ -1,5 +1,11 @@
 # Changelog
 
+## [2026.1018.4](https://github.com/usadamasa/agents-daemon/compare/2026.1018.3...2026.1018.4) - 2026-10-18
+
+- fix(rexcli): rex の自動更新で旧 build が消えても rex を引き直して続ける by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/110
+- feat(doctor): rex CLI の応答の形の点検を自分の block で行う節を足す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/111
+- feat(monitor): record の kind / msg を出し、利用者が答える prompt が開いた pane へは再開を送らない by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/113
+
 ## [2026.1018.3](https://github.com/usadamasa/agents-daemon/compare/2026.1018.2...2026.1018.3) - 2026-10-18
 
 - docs(skills): agents-daemon skill の SKILL.md を症状表と references の表に絞る by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/105

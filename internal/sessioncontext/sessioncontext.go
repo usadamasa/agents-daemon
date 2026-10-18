@@ -1,7 +1,7 @@
-// Package sessioncontext は context/<session_id>.json (statusline が観測した context 使用率と、
-// Claude Code が動いている端末多重化ツールの場所) の書式を読み書き両方で持つ。
+// Package sessioncontext は context/<session_id>.json (statusline が観測した context 使用率、
+// セッション名、Claude Code が動いている端末多重化ツールの場所) の書式を読み書き両方で持つ。
 // 書くのは statusline の stdin を受ける sessionstate.IngestStatusline、読むのは
-// block から session_id を逆引きする backend (rexcli へ渡す)。
+// block から session_id を逆引きする backend (rexcli へ渡す) と、カードにセッション名を付ける board。
 package sessioncontext
 
 import (
@@ -58,7 +58,9 @@ func MultiplexerRefFromEnv(getenv func(string) string) (MultiplexerRef, bool) {
 
 // Record は context/<session_id>.json に書く 1 回の観測。
 type Record struct {
-	SessionID      string
+	SessionID string
+	// SessionName は statusline の stdin の session_name。無ければ空。
+	SessionName    string
 	UsedPercentage float64
 	ObservedAt     time.Time
 	// Multiplexer は端末多重化ツールの外なら nil。
@@ -66,10 +68,11 @@ type Record struct {
 }
 
 // contextFile は context/<session_id>.json の生の形。読むのは ListMultiplexerBlocks
-// (block から session への逆引き) だけで、observed_at は同じ block の記録が複数あるときに
-// 最新を選ぶのに使う。
+// (block から session への逆引き) と ListSessionNames (ボードのカードの名前) で、observed_at は
+// 同じ block の記録が複数あるときに最新を選ぶのに使う。
 type contextFile struct {
 	SessionID      string  `json:"session_id"`
+	SessionName    string  `json:"session_name,omitempty"`
 	UsedPercentage float64 `json:"used_percentage"`
 	ObservedAt     int64   `json:"observed_at"`
 	// Multiplexer は ListMultiplexerBlocks が block から session を逆引きするのに使う。
@@ -106,6 +109,7 @@ func (s Store) Write(rec Record) error {
 	}
 	return statefile.WriteJSONAtomic(path, ".context.*", contextFile{
 		SessionID:      rec.SessionID,
+		SessionName:    rec.SessionName,
 		UsedPercentage: rec.UsedPercentage,
 		ObservedAt:     rec.ObservedAt.Unix(),
 		Multiplexer:    newMultiplexerFile(rec.Multiplexer),
@@ -119,25 +123,14 @@ func (s Store) Write(rec Record) error {
 // 同じ block で Claude Code を起動し直すと、古い session の記録が prune まで残るため。
 // 壊れたファイルは読み飛ばす。ディレクトリが無い・ゼロ値の Store なら空を返す。
 func (s Store) ListMultiplexerBlocks(kind string) (map[string]string, error) {
-	if s.Dir == "" {
-		return nil, nil
-	}
-	entries, err := os.ReadDir(s.Dir)
+	files, err := s.readAll()
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("context ディレクトリの走査に失敗: %w", err)
+		return nil, err
 	}
-
 	sessions := map[string]string{}
 	observed := map[string]int64{}
-	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
-			continue
-		}
-		raw, ok := readContextFile(filepath.Join(s.Dir, entry.Name()))
-		if !ok || raw.SessionID == "" || raw.Multiplexer == nil || raw.Multiplexer.Kind != kind {
+	for _, raw := range files {
+		if raw.Multiplexer == nil || raw.Multiplexer.Kind != kind {
 			continue
 		}
 		id := raw.Multiplexer.ref().id()
@@ -151,6 +144,47 @@ func (s Store) ListMultiplexerBlocks(kind string) (map[string]string, error) {
 		observed[id] = raw.ObservedAt
 	}
 	return sessions, nil
+}
+
+// ListSessionNames は context/ を 1 回走査し、session_id からセッション名への対応を返す。
+// 名前の無い記録は載せない。記録は prune (Retention) まで残るので、終了したセッションの名前も引ける。
+func (s Store) ListSessionNames() (map[string]string, error) {
+	files, err := s.readAll()
+	if err != nil {
+		return nil, err
+	}
+	names := map[string]string{}
+	for _, raw := range files {
+		if raw.SessionName != "" {
+			names[raw.SessionID] = raw.SessionName
+		}
+	}
+	return names, nil
+}
+
+// readAll は context/ 直下の記録を読む。壊れたファイルと session_id の無い記録は読み飛ばす。
+// ディレクトリが無い・ゼロ値の Store なら空を返す。
+func (s Store) readAll() ([]contextFile, error) {
+	if s.Dir == "" {
+		return nil, nil
+	}
+	entries, err := os.ReadDir(s.Dir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("context ディレクトリの走査に失敗: %w", err)
+	}
+	var files []contextFile
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		if raw, ok := readContextFile(filepath.Join(s.Dir, entry.Name())); ok && raw.SessionID != "" {
+			files = append(files, raw)
+		}
+	}
+	return files, nil
 }
 
 // readContextFile は context file を読む。読めない・壊れているなら false。

@@ -37,14 +37,14 @@ idle compaction (2.1.299) と失効後の footer の案内に任せる。以前�
 - statusline が書き出すのは Claude Code が statusline の stdin で渡す `rate_limits.five_hour` と
   `context_window.used_percentage`、環境変数 `REX_SESSION` / `REX_BLOCK`。`resets_at` は Unix epoch 秒で、
   これがあるので画面の時刻表記をパースしなくて済む。
-- hook の配線元は plugin の `hooks/hooks.json` (SessionStart だけ)。
+- hook の配線元は plugin の `hooks/hooks.json` (SessionStart で daemon を起こし、Stop で `dream harvest` を起こす)。
 - session_id の解決は `CLAUDE_CODE_SESSION_ID` を唯一の情報源にする
   (`scripts/get-session-id.sh`)。プロジェクトの JSONL の mtime から推測すると、
   同一プロジェクトで複数セッションが動いているときに他セッションの state file を読む。
 - 設定は `${XDG_CONFIG_HOME:-~/.config}/agents-daemon/config.json`。
-  ランタイム状態 (`daemon.pid` / `status.json` / `rate-limits/` / `context/` / `cost/` / `logs/`) は
+  ランタイム状態 (`daemon.pid` / `status.json` / `rate-limits/` / `context/` / `cost/` / `dream/` / `logs/`) は
   `${XDG_STATE_HOME:-~/.local/state}/agents-daemon/` に置く。
-  ログの rotate と古いファイルの削除は daemon 自身が行う。
+  ログの rotate と古いファイルの削除は daemon 自身が行う (`cost/` は statusline、`dream/` は `dream harvest` が消す)。
 - バイナリは `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon` に置く。plugin の
   install 先はバージョンごとに変わるため、その外の固定パスにする。用意するのは SessionStart hook で、
   詳細は [architecture.md](references/architecture.md) の「バイナリの用意と差し替え」。

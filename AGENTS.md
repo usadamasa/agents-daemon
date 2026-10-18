@@ -10,15 +10,18 @@ README の「役割」が持つ。機能を足す・外す判断はそこに照�
 | パス | 中身 |
 | ---- | ---- |
 | `.claude-plugin/plugin.json` | plugin manifest。version の実体はここ 1 箇所。marketplace.json は agents-marketplace リポジトリが持つ |
-| `hooks/hooks.json` | SessionStart の配線 |
+| `hooks/hooks.json` | SessionStart と Stop の配線 |
 | `hooks/ensure-daemon.sh`, `hooks/build-daemon.sh` | バイナリの用意 (detach build) と `daemon --ensure` |
+| `hooks/dream-harvest.sh` | Stop で `dream harvest --incremental --detach` を exec する。detach とログはバイナリ側 |
 | `hooks/lib/` | hook 共通の logger、バイナリの置き場 (`daemon-bin.sh`) |
 | `scripts/get-session-id.sh` | setup skill が呼ぶ session_id の取得 |
+| `scripts/migrate-cc-dream-state.sh` | 旧 cc-dream の state を `dream/` へ移す一回きりのスクリプト。移行が済んだら bats と一緒に消す |
 | `skills/agents-daemon/` | 運用と切り分けの手引き。配線・判定・設定キーの詳細は `references/` |
 | `skills/setup/` | install 後の前提確認。backend ごとの手順と配線の詳細は `references/` |
 | `skills/peer-sessions/` | 別セッション (peer) へ作業を渡す手順 (`ListAgents` / `SendMessage`)。rex の block 操作は `references/rex.md` |
-| `cmd/agents-daemon/` | Go の main (cobra) |
-| `internal/` | daemon の本体。パス定数は `internal/apppath`。statusline の描画は `internal/statusline`、cost の台帳は `internal/spend`、sidecar の原子的な書き込みは `internal/statefile`。読むだけの診断 (`doctor` / `inspect`) は `internal/verify`、使い捨て pane へ送る e2e (`simulate`) は `internal/simulate` |
+| `skills/dream/` | 記憶階層 (CLAUDE.md / auto memory / skill) の consolidation の手引き。実行系 `agents-daemon dream` の呼び方と実装リファレンスは `references/pipeline.md` と `references/cli.md` |
+| `cmd/agents-daemon/` | Go の main (cobra)。`dream` の 5 phase の配線は `cmd_dream.go` |
+| `internal/` | daemon の本体。パス定数は `internal/apppath`。statusline の描画は `internal/statusline`、cost の台帳は `internal/spend`、sidecar の原子的な書き込みは `internal/statefile`。読むだけの診断 (`doctor` / `inspect`) は `internal/verify`、使い捨て pane へ送る e2e (`simulate`) は `internal/simulate`。dream の実行系 (`harvest` / `mine` / `stage` / `adopt` / `forget` と state の置き場・掃除の `dreamstate`) は `internal/dream` |
 | `internal/multiplexer`, `internal/rexcli`, `internal/backend` | pane 操作の interface (`multiplexer.Client`) とその rex 実装。`backend` が環境に `REX_SESSION` があることを確かめる (無ければ `daemon --ensure` は何もせず戻る) |
 | `tests/` | hook と script の bats テスト (`tests/lib/`、`tests/fixtures/`) |
 | `flake.nix` | 開発ツールの devShell (版は `flake.lock` が固定する)。nixpkgs に無い spm-go はここでビルドする |
@@ -60,7 +63,9 @@ devShell の go は `go.mod` の `go` 行と同じ系列 (`go_1_26`) にし、`G
 - hook から多重化ツールを叩かない。hook は Claude Code の PATH を継承し、非対話で起動されたセッションでは
   homebrew のパスが載らない。多重化ツールへの操作は daemon に持たせる。
 - Stop hook で transcript を読まない。transcript は非同期に書かれ、Stop の時点ではターンの最後の応答を
-  含まないことがある (Claude Code の hooks のドキュメント)。
+  含まないことがある (Claude Code の hooks のドキュメント)。`dream-harvest.sh` が起こす `dream harvest` が
+  JSONL を走査するのはこの懸念に当たらない: 最後の assistant 応答を使わず、mtime で絞って session_id ごとに
+  last-wins で書き直すので、書き切れていないセッションは次の harvest で読み直される。
 
 ## skill を書くときの決めごと
 

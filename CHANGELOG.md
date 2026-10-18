@@ -1,5 +1,9 @@
 # Changelog
 
+## [2026.1018.7](https://github.com/usadamasa/agents-daemon/compare/2026.1018.6...2026.1018.7) - 2026-10-18
+
+- feat(board): タスクのボードを repo の行と状態の列で mod に描く by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/128
+
 ## [2026.1018.6](https://github.com/usadamasa/agents-daemon/compare/2026.1018.5...2026.1018.6) - 2026-10-18
 
 - feat(domain): cwd から私用と業務を判定する by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/123

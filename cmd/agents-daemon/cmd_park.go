@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"time"
 
@@ -49,18 +50,25 @@ func newParkCmd() *cobra.Command {
 	}
 	set.Flags().StringVar(&status, "status", "", "open / handed / discarded")
 	_ = set.MarkFlagRequired("status")
-	var repo, listStatus string
+	var repo, listStatus, task string
 	var here bool
 	list := &cobra.Command{
 		Use:   "list",
 		Short: "cwd の domain の件を JSON の配列で出す",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if task != "" && session == "" {
+				return errors.New("--task には --session が要る")
+			}
 			return withPark(cmd, cwd, func(s parking.Store, p parking.Placer, cwd string) (any, error) {
 				if here {
 					repo = gitrepo.RepoKey(cwd)
 				}
-				return s.Find(p.Domain(session, cwd), repo, listStatus)
+				items, err := s.Find(p.Domain(session, cwd), repo, listStatus)
+				if err != nil || task == "" {
+					return items, err
+				}
+				return parking.PlacedDuring(items, session, task), nil
 			})
 		},
 	}
@@ -68,6 +76,7 @@ func newParkCmd() *cobra.Command {
 	list.Flags().BoolVar(&here, "here", false, "--cwd の repo で絞る (mod は repo の鍵を持たないため)")
 	list.MarkFlagsMutuallyExclusive("repo", "here")
 	list.Flags().StringVar(&listStatus, "status", "", "status で絞る")
+	list.Flags().StringVar(&task, "task", "", "--session のセッションがこのタスクの途中で置いた件で絞る")
 	adopt := &cobra.Command{
 		Use:   "adopt <session_id> <task_id>",
 		Short: "終了したセッションの未完了のタスクを kind task のメモにし、タスクの記録を消して {created, item} を出す",

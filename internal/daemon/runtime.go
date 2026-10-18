@@ -189,6 +189,8 @@ func paneStatus(pane multiplexer.Pane, entry *paneEntry, outcome monitor.Outcome
 		PaneID:        pane.PaneID,
 		CWD:           pane.CWD,
 		AgentStatus:   string(pane.AgentStatus),
+		AgentKind:     pane.AgentKind,
+		AgentMessage:  pane.AgentMessage,
 		MonitorStatus: monitorStatusString(entry.state.Status),
 		WaitUntil:     zeroableTime(entry.state.WaitUntil),
 		Attempts:      entry.state.Attempts,
@@ -218,27 +220,32 @@ func (r *daemonRuntime) logOutcome(pane multiplexer.Pane, outcome monitor.Outcom
 		r.log.Logf("pane %s (%s): %s でエラー: %v", pane.PaneID, pane.CWD, outcome, err)
 		return
 	}
+	// 上限の検知と送信の行には Claude Code の自己申告 (record) を添える。上限到達時に record が何になるかは
+	// 未実測で (#77)、ここが実測の記録になる。logKey には混ぜない (msg が変わるだけで同じ出来事を書き直さない)。
+	record := multiplexer.RecordLabel(pane)
 	switch outcome {
 	case monitor.OutcomeMonitoring, monitor.OutcomeStillWaiting:
 		return
 	case monitor.OutcomeWaiting:
-		r.log.Logf("pane %s (%s): 利用上限/一時エラーを検知し待機に入りました", pane.PaneID, pane.CWD)
+		r.log.Logf("pane %s (%s): 利用上限/一時エラーを検知し待機に入りました (%s)", pane.PaneID, pane.CWD, record)
 	case monitor.OutcomeRetried:
-		r.log.Logf("pane %s (%s): 再開メッセージを送信しました (%d 回目)", pane.PaneID, pane.CWD, entry.state.Attempts)
+		r.log.Logf("pane %s (%s): 再開メッセージを送信しました (%d 回目) (%s)", pane.PaneID, pane.CWD, entry.state.Attempts, record)
 	case monitor.OutcomeRecoveredByUser:
 		r.log.Logf("pane %s (%s): ユーザー自身が復帰したため監視状態へ戻します", pane.PaneID, pane.CWD)
 	case monitor.OutcomeMaxRetries:
 		r.log.Logf("pane %s (%s): 再試行上限に達したためクールダウンに入ります", pane.PaneID, pane.CWD)
 	case monitor.OutcomeGateSuppressed:
-		r.log.Logf("pane %s (%s): 画面は上限に見えましたが statusline の使用率が閾値未満のため抑制しました", pane.PaneID, pane.CWD)
+		r.log.Logf("pane %s (%s): 画面は上限に見えましたが statusline の使用率が閾値未満のため抑制しました (%s)", pane.PaneID, pane.CWD, record)
 	case monitor.OutcomeNotClaudeAgent:
 		r.log.Logf("pane %s (%s): Claude agent でなくなったため待機を延長します", pane.PaneID, pane.CWD)
 	case monitor.OutcomeNativeAutoContinue:
-		r.log.Logf("pane %s (%s): Claude Code 自身の auto-continue が解除を待っているため手を引きます", pane.PaneID, pane.CWD)
+		r.log.Logf("pane %s (%s): Claude Code 自身の auto-continue が解除を待っているため手を引きます (%s)", pane.PaneID, pane.CWD, record)
 	case monitor.OutcomeResumeEnter:
-		r.log.Logf("pane %s (%s): 上限が解除済みで Enter 待ちだったため Enter を送りました", pane.PaneID, pane.CWD)
+		r.log.Logf("pane %s (%s): 上限が解除済みで Enter 待ちだったため Enter を送りました (%s)", pane.PaneID, pane.CWD, record)
 	case monitor.OutcomeHardCap:
-		r.log.Logf("pane %s (%s): 待っても解除されない上限 (spend limit / usage credit) のため待機に入りません", pane.PaneID, pane.CWD)
+		r.log.Logf("pane %s (%s): 待っても解除されない上限 (spend limit / usage credit) のため待機に入りません (%s)", pane.PaneID, pane.CWD, record)
+	case monitor.OutcomeBlockedByPrompt:
+		r.log.Logf("pane %s (%s): Claude Code が利用者の答えを待つ prompt を開いているため送信を見送り待機を延長します (%s)", pane.PaneID, pane.CWD, record)
 	default:
 		r.log.Logf("pane %s (%s): %s", pane.PaneID, pane.CWD, outcome)
 	}

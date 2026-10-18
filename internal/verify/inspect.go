@@ -40,8 +40,17 @@ func RunInspect(ctx context.Context, w io.Writer, client multiplexer.Client, p a
 	kind := classifier.Classify(screen, cfg.DetectionTailLines)
 	_, _ = fmt.Fprintf(w, "\n判定結果: %s\n", kind)
 
-	if sessionID == "" {
-		sessionID = multiplexer.SessionIDOf(ctx, client, paneID)
+	if paneID != "" {
+		// record (Claude Code の自己申告) と、どのセッションの利用上限 state を引くかを同じ応答から取る。
+		// 上限で止まった pane の record が何かは未実測で (#77)、ここで見た値が記録になる。
+		if pane, getErr := client.PaneGet(ctx, paneID); getErr != nil {
+			_, _ = fmt.Fprintf(w, "pane の情報を取れません (record と session_id は無しとして続けます): %v\n", getErr)
+		} else {
+			_, _ = fmt.Fprintf(w, "record: %s\n", multiplexer.RecordLabel(pane))
+			if sessionID == "" {
+				sessionID = pane.SessionID
+			}
+		}
 	}
 	if sessionID == "" {
 		_, _ = fmt.Fprintln(w, "\n対象セッションが決まらないため、利用上限 state によるゲート判定は行いません")

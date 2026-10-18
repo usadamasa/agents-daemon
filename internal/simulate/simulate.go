@@ -217,6 +217,16 @@ func cleanupSimulatePane(ctx context.Context, w io.Writer, host simulateHost, ow
 // 1 回目の Tick で limit を検知して待機状態に入った場合、2 回目は起床時刻を過ぎたと
 // 仮定した合成の now を渡して再送信の経路 (recoverPane 経由の SendText/SendKeys) まで
 // 確認する。実時間では待たない (上限解除まで数時間かかるため)。
+// sessionIDOf は使い捨て pane に紐づく Claude セッション ID を引く。取れなければ空 (state 無しとして扱う)。
+// 利用上限 state はセッションごとに別ファイルなので、この対応付けが取れないとどの state を読むかが決まらない。
+func sessionIDOf(ctx context.Context, client multiplexer.Client, paneID string) string {
+	pane, err := client.PaneGet(ctx, paneID)
+	if err != nil {
+		return ""
+	}
+	return pane.SessionID
+}
+
 func runSimulateTicks(ctx context.Context, w io.Writer, p apppath.Paths, ownedPaneID string, execClient multiplexer.Client, opts Options) error {
 	cfg, cfgErr := config.Load(p.ConfigFile())
 	if cfgErr != nil {
@@ -228,7 +238,7 @@ func runSimulateTicks(ctx context.Context, w io.Writer, p apppath.Paths, ownedPa
 		return fmt.Errorf("分類器の構築に失敗: %w", err)
 	}
 	store := sessionstate.New(p.StateDir())
-	rateState, stateErr := store.LoadRateLimit(multiplexer.SessionIDOf(ctx, execClient, ownedPaneID))
+	rateState, stateErr := store.LoadRateLimit(sessionIDOf(ctx, execClient, ownedPaneID))
 	if stateErr != nil {
 		_, _ = fmt.Fprintf(w, "利用上限 state の読み込みに失敗、state 無しとして扱います: %v\n", stateErr)
 		rateState = nil

@@ -87,6 +87,11 @@ rex の `agent_status` は Claude Code 自身が OSC 7501 で申告する state 
 そのため `agent_status` は status 表示のためだけに残し、判定は画面テキストの分類だけで行う。
 稼働中の pane も毎 tick 読むことになるが、読み取りは副作用が無い。
 
+例外は待機明けの送信の抑止だけ。Claude Code が `blocked` で kind が `permission` / `question` / `auth` と
+申告している (利用者が答える prompt が開いている) 間は、画面が上限に見えても送らず待機を延長する
+(`blocked-by-prompt`)。esc は prompt を断り、Enter は承認するため。限度の画面がこの kind で来ることは無いので、
+再開を止める側には倒れない ([program-status.md](program-status.md))。
+
 ## limit の判定は 2 つの手がかりを要求する
 
 画面に limit を示す文言があるだけでは発火しない。近く (前後 6 行以内) に reset 時刻を示す

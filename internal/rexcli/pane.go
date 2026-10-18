@@ -18,6 +18,9 @@ type programStatusRecord struct {
 	ID    string `json:"id"`
 	State string `json:"state"`
 	App   string `json:"app"`
+	// Kind は blocked の種類、Msg は状況の説明。どちらも任意 (無い状態がある)。
+	Kind  string `json:"kind"`
+	Msg   string `json:"msg"`
 	Owner struct {
 		PID int `json:"pid"`
 	} `json:"owner"`
@@ -54,6 +57,8 @@ func toPane(blockID string, ps programStatusResult, proc processResult, sessionI
 	case root != nil && root.App == claudeApp && isForeground(root, proc):
 		pane.Agent = "claude"
 		pane.AgentStatus = agentStatus(root.State)
+		pane.AgentKind = root.Kind
+		pane.AgentMessage = root.Msg
 	case proc.Foreground != nil && filepath.Base(proc.Foreground.Argv0) == "claude":
 		// record が無い (起動直後の自己申告がまだ) か、record はあるが使えない。
 		// --shell=none で起動した block では argv0 が絶対パスになる (実測)。
@@ -96,7 +101,7 @@ func rootRecord(records []programStatusRecord) *programStatusRecord {
 func agentStatus(state string) multiplexer.AgentStatus {
 	switch s := multiplexer.AgentStatus(state); s {
 	case multiplexer.AgentStatusWorking, multiplexer.AgentStatusDone,
-		multiplexer.AgentStatusIdle, multiplexer.AgentStatusBlocked:
+		multiplexer.AgentStatusIdle, multiplexer.AgentStatusBlocked, multiplexer.AgentStatusError:
 		return s
 	default:
 		return multiplexer.AgentStatusUnknown

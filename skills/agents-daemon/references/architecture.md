@@ -235,6 +235,7 @@ pane ごとに次を評価する。上限側の詳細は [rate-limit.md](rate-li
 | 待っても解除されない上限 (spend limit / usage credit) | 待機に入らない |
 | 画面が limit と判定され、ゲートを通過した | 待機に入る |
 | 待機中に limit が消えた | 監視に戻る (ユーザーが自分で再開した。プロンプトは送らない) |
+| 待機期限に達したが、Claude Code が `blocked` で kind が `permission` / `question` / `auth` | 送らず待機を延長する (利用者が答える prompt を esc / Enter で代行しない。[program-status.md](program-status.md)) |
 | 待機期限に達した | 再開プロンプトを送り、試行回数を増やす |
 | 試行回数が `maxRetries` に達した | 長いクールダウンに入る |
 | 一時的なサーバーエラー (5xx / 過負荷) | 指数バックオフで短周期リトライ |
@@ -254,7 +255,7 @@ pane ごとに次を評価する。上限側の詳細は [rate-limit.md](rate-li
 | `$STATE/context/<session_id>.json` | `agents-daemon statusline` または `ingest-statusline` (利用者の statusline が呼ぶ) | statusline の描画ごと | そのセッションの context 使用率、観測時刻、session_id、多重化ツールの場所 | daemon が 7 日で消す |
 | `$STATE/cost/<YYYY-MM-DD>/<session_id>.json` | `agents-daemon statusline` (`CLAUDE_STATUSLINE_SPEND_CAP` があるとき) | statusline の描画ごと (累計が変わったときだけ書き直す) | そのセッションの累計 cost と前日までの繰り越し (`internal/spend`)。daemon は読まない | `statusline` がその日の最初の書き込みで 45 日より古い日を消す |
 | `$STATE/daemon.pid` | daemon | 起動時に作成、終了時に削除 | 稼働中デーモンの PID | daemon |
-| `$STATE/status.json` | daemon | 毎 tick (既定 5 秒) | backend (rex)、監視中の pane 一覧と各 pane の監視状態・試行回数・待機期限・直近の判定 | 上書き |
+| `$STATE/status.json` | daemon | 毎 tick (既定 5 秒) | backend (rex)、監視中の pane 一覧と各 pane の自己申告 (`agent_status` と、あれば `agent_kind` / `agent_message`)・監視状態・試行回数・待機期限・直近の判定 | 上書き |
 | `$STATE/logs/daemon.log` | daemon | 報告に値する出来事があったときだけ | 上限検知と待ち時間、再開送信、ユーザーの自己再開、ゲート抑制、ネイティブへの譲り、エラー | rotate |
 | `$STATE/logs/daemon.log.YYYY-MM-DD` | daemon | 日付が変わって最初に書くとき | 前日までの `daemon.log` をそのまま退避したもの | daemon が 7 日で消す |
 | `$STATE/logs/build.log` | `hooks/build-daemon.sh` | SessionStart が build を起こしたとき | build の開始・完了・失敗 | 消さない (追記) |

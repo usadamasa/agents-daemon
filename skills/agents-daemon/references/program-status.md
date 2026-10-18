@@ -19,11 +19,17 @@ docs に無く、2.1.302 のバイナリと実測 (2026-10-17、rex preview.15�
 | 利用者の入力待ち (MCP の elicitation など。AskUserQuestion がここに入るかは未確認) | `blocked` | `question` | `blocked` |
 | 認証失敗でターンが終わり、まだ sign in していない | `blocked` | `auth` | `blocked` |
 | その他の dialog (trust dialog、Session paused など) | `blocked` | 無し | `blocked` |
-| API error でターンが終わった (`msg` は失敗の理由) | `error` | - | `unknown` |
+| API error でターンが終わった (`msg` は失敗の理由) | `error` | - | `error` |
 | shell だけの block | `records: []` | - | Claude agent ではない |
 
-`done` と `idle` はどちらも入力待ち。`blocked` は利用者の操作待ちで、daemon は打ち込まない。
-`error` と `blocked` を上限検知に使う案は #77。
+`done` と `idle` はどちらも入力待ち。`kind` と `msg` は `Pane` の `AgentKind` / `AgentMessage` に写し、
+`status.json` (`agent_kind` / `agent_message`)、`status`、`doctor` の pane 行、`inspect --pane` の `record:` 行、
+daemon.log の検知と送信の行に `agent_status=… kind=… msg="…"` の形で出す。
+
+`blocked` のうち kind が `permission` / `question` / `auth` の pane には、待機明けでも再開を送らない
+(esc は prompt を断り、Enter は承認する。`internal/monitor` の `waitingOnPrompt`)。kind の無い `blocked` (dialog 一般) は
+上限の画面がこの形で来るかを実測していないので送信を止めない。上限到達時の record の実測と、
+`error` / `blocked` を画面読み取りの前段ゲートにする案は #77。
 
 ## record を使う条件
 

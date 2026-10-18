@@ -214,9 +214,10 @@ func TestExecClient_PaneList(t *testing.T) {
 	}
 
 	t.Run("閉じた block を飛ばし session_id を埋める", func(t *testing.T) {
+		// msg は fixture の実測値 (作業中の要約と、ターン終了の要約)。
 		want := []multiplexer.Pane{
-			{PaneID: blockClaudeWorking, CWD: "/w/agents-daemon", Agent: "claude", AgentStatus: multiplexer.AgentStatusWorking, SessionID: sidWorking},
-			{PaneID: blockClaudeDone, CWD: "/w/guard", Agent: "claude", AgentStatus: multiplexer.AgentStatusDone, SessionID: sidDone},
+			{PaneID: blockClaudeWorking, CWD: "/w/agents-daemon", Agent: "claude", AgentStatus: multiplexer.AgentStatusWorking, AgentMessage: "Showing rex CLI help for relevant subcommands", SessionID: sidWorking},
+			{PaneID: blockClaudeDone, CWD: "/w/guard", Agent: "claude", AgentStatus: multiplexer.AgentStatusDone, AgentMessage: "guard-gql-read の PR 作成待ち", SessionID: sidDone},
 		}
 		if !slices.Equal(panes, want) {
 			t.Errorf("PaneList() =\n%+v\nwant\n%+v", panes, want)
@@ -315,7 +316,7 @@ func TestExecClient_PaneGet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PaneGet() error = %v", err)
 	}
-	want := multiplexer.Pane{PaneID: blockClaudeDone, CWD: "/w", Agent: "claude", AgentStatus: multiplexer.AgentStatusDone, SessionID: sidDone}
+	want := multiplexer.Pane{PaneID: blockClaudeDone, CWD: "/w", Agent: "claude", AgentStatus: multiplexer.AgentStatusDone, AgentMessage: "guard-gql-read の PR 作成待ち", SessionID: sidDone}
 	if got != want {
 		t.Errorf("PaneGet() = %+v, want %+v", got, want)
 	}

@@ -89,8 +89,9 @@ func reportPanes(w io.Writer, panes []multiplexer.Pane) {
 			continue
 		}
 		claudeCount++
-		_, _ = fmt.Fprintf(w, "  pane=%s cwd=%s agent_status=%s session_id=%s\n",
-			pane.PaneID, pane.CWD, pane.AgentStatus, defaultString(pane.SessionID, "(なし)"))
+		// RecordLabel は agent_status= から始まり、kind と msg はあるときだけ続く。
+		_, _ = fmt.Fprintf(w, "  pane=%s cwd=%s %s session_id=%s\n",
+			pane.PaneID, pane.CWD, multiplexer.RecordLabel(pane), defaultString(pane.SessionID, "(なし)"))
 		if pane.UnknownReason != "" {
 			_, _ = fmt.Fprintf(w, "    unknown の理由: %s\n", pane.UnknownReason)
 		}

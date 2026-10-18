@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"strconv"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -88,9 +89,21 @@ func printSnapshot(w io.Writer, snap *daemon.StatusSnapshot, pid int, now time.T
 		if pn.WaitUntil != nil {
 			wait = pn.WaitUntil.Format(time.RFC3339)
 		}
-		_, _ = fmt.Fprintf(w, "  %s  %s  agent=%s monitor=%s attempts=%d wait_until=%s last=%s\n",
-			pn.PaneID, pn.CWD, pn.AgentStatus, pn.MonitorStatus, pn.Attempts, wait, pn.LastOutcome)
+		_, _ = fmt.Fprintf(w, "  %s  %s  agent=%s%s monitor=%s attempts=%d wait_until=%s last=%s\n",
+			pn.PaneID, pn.CWD, pn.AgentStatus, recordColumns(pn), pn.MonitorStatus, pn.Attempts, wait, pn.LastOutcome)
 	}
+}
+
+// recordColumns は Claude Code の自己申告の kind と msg を、あるときだけ agent= の後ろに足す。
+func recordColumns(pn daemon.PaneStatus) string {
+	s := ""
+	if pn.AgentKind != "" {
+		s += " kind=" + pn.AgentKind
+	}
+	if pn.AgentMessage != "" {
+		s += " msg=" + strconv.Quote(pn.AgentMessage)
+	}
+	return s
 }
 
 // backendColumn は backend の表示。記録を始める前の daemon が書いた snapshot では空になる。

@@ -93,6 +93,9 @@ jobs:
           claude plugin validate --strict .claude-plugin/plugin.json
           claude plugin validate --strict skills
 
+      - name: Test the mod
+        run: claude plugin test .
+
   actions-lock:
     name: actions-lock verify
     runs-on: ubuntu-latest

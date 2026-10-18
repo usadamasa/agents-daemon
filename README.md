@@ -37,6 +37,8 @@ plugin が持つもの:
 | `agents-daemon ingest-statusline` | 自前の statusline から stdin を渡して state file だけを書かせるサブコマンド |
 | `agents-daemon dream` | consolidation の実行系 (`harvest` / `mine` / `stage` / `adopt` / `forget`) |
 | `agents-daemon prune-worktrees` | 誰も使っていない Claude Code の worktree の回収 (SessionStart hook が `--hook` 付きで呼ぶ。手で叩く形は `skills/agents-daemon/references/operations.md`) |
+| `board` コマンド (mod、`hooks/board.tsx`) | Claude Code の mods の pane にタスクのボードを描く。行は repo (worktree は同じ行)、列は未着手・進行中・ブロック・完了。入力待ちや上限待ちのセッションは進行中のカードに印が付く。開いたセッションの domain (私用か業務) だけを描き、カードを選ぶとそのタスクのセッションへ指示を送れる。描画されるのは terminal 2.1.287 以降と Desktop の Code タブ 2.1.286 以降 (#121) |
+| `agents-daemon status --board` | mod が読むボードの JSON (タスクの記録と status.json を組み直したもの) を出す |
 | `agents-daemon ingest-task` | PostToolUse hook の stdin からタスクを `tasks/<domain>/` に記録する。私用 (`home`) と業務 (`work`) は config の `homePaths` / `defaultDomain` で分ける |
 
 ## 前提

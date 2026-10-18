@@ -60,6 +60,12 @@ type fakeRex struct {
 func newFakeRex(t *testing.T) *fakeRex {
 	t.Helper()
 	dir := t.TempDir()
+	return newFakeRexAt(t, dir, filepath.Join(dir, "rex"))
+}
+
+// newFakeRexAt は fixture を dir から読む fake の rex を bin に書く。bin の親ディレクトリは作る。
+func newFakeRexAt(t *testing.T, dir, bin string) *fakeRex {
+	t.Helper()
 	script := `#!/bin/sh
 d=` + shellQuote(dir) + `
 env >> "$d/env.log"
@@ -97,7 +103,9 @@ case "$1" in
   *) echo "Error: unknown command $1" >&2; exit 2 ;;
 esac
 `
-	bin := filepath.Join(dir, "rex")
+	if err := os.MkdirAll(filepath.Dir(bin), 0o755); err != nil {
+		t.Fatalf("fake rex の置き場の作成に失敗: %v", err)
+	}
 	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
 		t.Fatalf("fake rex の作成に失敗: %v", err)
 	}
@@ -431,8 +439,9 @@ func TestNewExecClient_BinPath(t *testing.T) {
 	if c := NewExecClient(staticResolver(nil)).(*execClient); c.binPath != "/custom/rex" || c.timeout != 10*time.Second {
 		t.Errorf("binPath = %q, timeout = %v, want /custom/rex, 10s", c.binPath, c.timeout)
 	}
+	// 未設定なら最初の呼び出しで PATH から引く (daemon の起動時点で rex が無くても Client は作れる)。
 	t.Setenv("REX_BIN_PATH", "")
-	if c := NewExecClient(staticResolver(nil)).(*execClient); c.binPath != "rex" {
-		t.Errorf("binPath = %q, want rex", c.binPath)
+	if c := NewExecClient(staticResolver(nil)).(*execClient); c.binPath != "" {
+		t.Errorf("binPath = %q, want 空 (未解決)", c.binPath)
 	}
 }

@@ -85,7 +85,7 @@ func withPark(cmd *cobra.Command, cwd string, fn func(parkEnv) (any, error)) err
 	}
 	// 設定が読めなくても Load は既定値 (すべて業務) を返す。業務のものが私用の側へ出ない向きに倒れる。
 	cfg, _ := config.Load(p.ConfigFile())
-	c := domain.New(os.Getenv("HOME"), cfg.HomePaths, cfg.DefaultDomain)
+	c := cfg.Classifier(os.Getenv("HOME"))
 	e := parkEnv{store: parking.New(p.StateDir()), tasks: tasklog.New(p.StateDir()), domain: c.Classify(cwd), cwd: cwd}
 	v, err := fn(e)
 	if err != nil {

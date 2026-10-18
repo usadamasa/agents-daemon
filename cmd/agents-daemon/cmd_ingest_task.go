@@ -10,7 +10,6 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/config"
-	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
 
@@ -45,6 +44,5 @@ func ingestTask(stdin io.Reader, now time.Time) error {
 	}
 	// 設定が読めなくても Load は既定値 (すべて業務) を返すので、そのまま記録する。
 	cfg, _ := config.Load(p.ConfigFile())
-	classifier := domain.New(os.Getenv("HOME"), cfg.HomePaths, cfg.DefaultDomain)
-	return tasklog.New(p.StateDir()).Ingest(input, classifier.Classify, now)
+	return tasklog.New(p.StateDir()).Ingest(input, cfg.Classifier(os.Getenv("HOME")).Classify, now)
 }

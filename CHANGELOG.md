@@ -1,5 +1,9 @@
 # Changelog
 
+## [2026.1018.9](https://github.com/usadamasa/agents-daemon/compare/2026.1018.8...2026.1018.9) - 2026-10-18
+
+- パーキングロットにメモを置く park tool と status 行のメモの数を足す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/143
+
 ## [2026.1018.8](https://github.com/usadamasa/agents-daemon/compare/2026.1018.7...2026.1018.8) - 2026-10-18
 
 - chore: Claude Code が生成する tsconfig.json を ignore する by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/131

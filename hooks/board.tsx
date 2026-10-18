@@ -3,6 +3,8 @@ import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { BoardCard, BoardData, BoardRow, ParkingCard } from '../types'
 import { daemonBin } from './daemon-bin'
+import { logChange, logEvent, reason, settle } from './log'
+import type { Fields } from './log'
 import {
   adopt,
   canAdopt,
@@ -45,7 +47,7 @@ export async function startBoard($: EngineInterface) {
 
 export const registerBoard: Register = on => {
   on('command.run', { command: 'board' }, async $ => {
-    await refresh($)
+    await refresh($, true)
     timer?.cancel()
     timer = $.clock.every(POLL_MS, () => void refresh($))
     await $.ui.open({ id: PANE, title: TITLE })
@@ -92,11 +94,14 @@ export const registerBoard: Register = on => {
     const send = async (text: string) => {
       if (!chosenCard || !canSend(chosenCard, self) || text.trim() === '') return
       const to = `${chosenCard.session}`
+      const event = { via: 'instruction', to: chosenCard.session_id }
       try {
         const result = await $.session.send({ to: { sessionId: chosenCard.session_id }, text: instruction(chosenCard, text) })
         await update($, notice, () => (result.isDelivered ? `${to} へ送りました` : `${to} へ送れませんでした: ${result.reason}`))
+        await logEvent($, 'mod.send', result.isDelivered ? { ...event, delivered: true } : { ...event, delivered: false, reason: result.reason })
       } catch (err) {
         await update($, notice, () => `${to} へ送れませんでした: ${String(err)}`)
+        await logEvent($, 'mod.send', { ...event, delivered: false, reason: String(err) })
       }
     }
 
@@ -201,19 +206,35 @@ export const registerBoard: Register = on => {
 
 // refresh は `agents-daemon status --board` を走らせてボードを読み直す。失敗は error に置き、前のボードは残す。
 // 開いたセッションの ID と cwd を渡し、そのセッションの domain だけを描かせる (私用と業務を混ぜない)。
-async function refresh($: EngineInterface) {
+// 開いたとき (opened) は数をログに書き、それからは数か失敗の理由が変わったときだけ書く。
+async function refresh($: EngineInterface, opened = false) {
   try {
     const argv = [await daemonBin($), 'status', '--board', '--session', await $.session.id(), '--cwd', await $.session.cwd()]
     const { exitCode, stdout, stderr } = await $.process.run(argv, { timeoutMs: 10000 })
     if (exitCode !== 0) {
-      await update($, error, () => stderr.trim() || `exit ${exitCode}`)
+      const failure = stderr.trim() || `exit ${exitCode}`
+      await update($, error, () => failure)
+      await logChange($, 'board', 'mod.board.failed', { reason: failure })
       return
     }
     const data = JSON.parse(stdout) as BoardData
     await update($, board, () => data)
     await update($, error, () => '')
+    if (opened) await settle($, 'board')
+    await logChange($, 'board', opened ? 'mod.board.open' : 'mod.board.changed', counts(data))
   } catch (err) {
     await update($, error, () => String(err))
+    await logChange($, 'board', 'mod.board.failed', { reason: reason(err, 'status --board') })
+  }
+}
+
+// counts はボードの大きさ。カードの subject とメモの title は書かない。
+function counts(data: BoardData): Fields {
+  return {
+    rows: data.rows.length,
+    cards: data.rows.reduce((n, row) => n + row.cards.length, 0),
+    memos: data.rows.reduce((n, row) => n + row.parking.length, 0),
+    daemon_running: data.daemon_running,
   }
 }
 

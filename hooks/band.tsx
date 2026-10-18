@@ -3,6 +3,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Band, ParkedMemo } from '../types'
 import { daemonBin } from './daemon-bin'
+import { logChange, reason, settle } from './log'
 import { KIND_LABEL, parkedMemos, stamp } from './parking'
 
 // パーキングロット (#89) の取り出す側 (#121 の段 7)。入力欄の上の band にメモを出す。
@@ -81,13 +82,18 @@ async function showCompleted($: EngineInterface, taskId: string) {
       '--cwd',
       await $.session.cwd(),
     ]
-    const { exitCode, stdout } = await $.process.run(argv, { timeoutMs: 10000 })
-    if (exitCode !== 0) return
+    const { exitCode, stdout, stderr } = await $.process.run(argv, { timeoutMs: 10000 })
+    if (exitCode !== 0) {
+      await logChange($, 'band', 'mod.band.failed', { reason: stderr.trim() || `exit ${exitCode}` })
+      return
+    }
     const memos = parkedMemos(stdout)
+    await settle($, 'band')
     if (memos.length === 0) return
     const next: Band = { heading: `タスク #${taskId} の途中で置いたメモ ${memos.length} 件`, memos }
     await update($, band, () => next)
-  } catch {
+  } catch (err) {
     // バイナリがまだ build されていない間もここに来る。
+    await logChange($, 'band', 'mod.band.failed', { reason: reason(err, 'park list') })
   }
 }

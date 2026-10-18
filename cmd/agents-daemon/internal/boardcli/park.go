@@ -1,5 +1,5 @@
 // Package boardcli はボードに載る記録 (タスク、パーキングロット、セッションをまたぐ辺) を書く・読むコマンド
-// (park、edge、ingest-task) の組み立てを持つ。
+// (park、edge、ingest-task) と、ボードの経路のログに mod の出来事を書く board-log の組み立てを持つ。
 package boardcli
 
 import (
@@ -18,7 +18,7 @@ import (
 
 // Commands は root に登録するコマンド。
 func Commands() []*cobra.Command {
-	return []*cobra.Command{newIngestTaskCmd(), newParkCmd(), newEdgeCmd()}
+	return []*cobra.Command{newIngestTaskCmd(), newParkCmd(), newBoardLogCmd(), newEdgeCmd()}
 }
 
 // newParkCmd は `agents-daemon park add|set|list` を組み立てる (internal/parking)。
@@ -33,12 +33,8 @@ func newParkCmd() *cobra.Command {
 		Short: "stdin の JSON (kind、title、detail、files、default_taken、session_id) で件を置き、{created, item} を出す",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withPark(cmd, cwd, func(s parking.Store, p tasklog.Placer, cwd string) (any, error) {
-				req, err := parking.ReadRequest(cmd.InOrStdin())
-				if err != nil {
-					return nil, err
-				}
-				return s.Park(req, cwd, p, time.Now())
+			return withPlacer(cmd, cwd, func(paths apppath.Paths, p tasklog.Placer, cwd string) (any, error) {
+				return parkAdd(paths.StateDir(), parking.New(paths.StateDir()), cmd.InOrStdin(), cwd, p, time.Now())
 			})
 		},
 	}
@@ -48,8 +44,8 @@ func newParkCmd() *cobra.Command {
 		Short: "件の status (open / handed / discarded) を書き換える",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withPark(cmd, cwd, func(s parking.Store, p tasklog.Placer, cwd string) (any, error) {
-				return s.Set(p.Domain(session, cwd), args[0], status)
+			return withPlacer(cmd, cwd, func(paths apppath.Paths, p tasklog.Placer, cwd string) (any, error) {
+				return parkSet(paths.StateDir(), parking.New(paths.StateDir()), p, session, cwd, args[0], status, time.Now())
 			})
 		},
 	}
@@ -87,8 +83,8 @@ func newParkCmd() *cobra.Command {
 		Short: "終了したセッションの未完了のタスクを kind task のメモにし、タスクの記録を消して {created, item} を出す",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withPark(cmd, cwd, func(s parking.Store, p tasklog.Placer, cwd string) (any, error) {
-				return s.Adopt(session, cwd, args[0], args[1], p, time.Now())
+			return withPlacer(cmd, cwd, func(paths apppath.Paths, p tasklog.Placer, cwd string) (any, error) {
+				return parkAdopt(paths.StateDir(), parking.New(paths.StateDir()), p, session, cwd, args[0], args[1], time.Now())
 			})
 		},
 	}

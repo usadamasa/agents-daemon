@@ -2,6 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import { daemonBin } from './daemon-bin'
+import { logChange, logEvent, reason, settle } from './log'
 import { parkedMemos } from './parking'
 
 // パーキングロット (#89) の置く側 (#121 の段 5)。model が呼べる park の tool を登録し、呼ばれたら
@@ -47,8 +48,14 @@ const FIELDS = ['kind', 'title', 'detail', 'files', 'default_taken'] as const
 type Added = { created: boolean; item: { id: string } }
 
 // startPark は session.start で park の tool を登録し、メモの数を読む (session.start の hook は hooks/register.ts が持つ)。
+// 登録の失敗は engine が画面に一度出すだけなので、理由をログに残してから投げ直す (hook を飛ばす扱いは engine に任せる)。
 export async function startPark($: EngineInterface) {
-  await $.tool.register({ name: TOOL, description: DESCRIPTION, inputSchema: INPUT_SCHEMA, isDeferred: false })
+  try {
+    await $.tool.register({ name: TOOL, description: DESCRIPTION, inputSchema: INPUT_SCHEMA, isDeferred: false })
+  } catch (err) {
+    await logEvent($, 'mod.tool-register.failed', { reason: String(err) })
+    throw err
+  }
   await refreshStatus($)
 }
 
@@ -99,11 +106,16 @@ async function place($: EngineInterface, args: Record<string, unknown>): Promise
 async function refreshStatus($: EngineInterface) {
   try {
     const argv = [await daemonBin($), 'park', 'list', '--here', '--status', 'open', '--session', await $.session.id(), '--cwd', await $.session.cwd()]
-    const { exitCode, stdout } = await $.process.run(argv, { timeoutMs: 10000 })
-    if (exitCode !== 0) return
+    const { exitCode, stdout, stderr } = await $.process.run(argv, { timeoutMs: 10000 })
+    if (exitCode !== 0) {
+      await logChange($, 'hint', 'mod.hint.failed', { reason: stderr.trim() || `exit ${exitCode}` })
+      return
+    }
     const memos = parkedMemos(stdout)
     await update($, parked, () => memos)
-  } catch {
+    await settle($, 'hint')
+  } catch (err) {
     // バイナリがまだ build されていない間 (SessionStart の detach build) もここに来る。
+    await logChange($, 'hint', 'mod.hint.failed', { reason: reason(err, 'park list') })
   }
 }

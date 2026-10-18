@@ -17,6 +17,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/applog"
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/backend"
+	"github.com/usadamasa/agents-daemon/internal/boardlog"
 	"github.com/usadamasa/agents-daemon/internal/config"
 	"github.com/usadamasa/agents-daemon/internal/detect"
 	"github.com/usadamasa/agents-daemon/internal/edge"
@@ -59,7 +60,10 @@ type daemonRuntime struct {
 	edges edge.Store
 	// parking は `park add` が書くパーキングの件 (internal/parking)。daemon は housekeeping で消すだけ。
 	// ゼロ値は何も消さない。
-	parking             parking.Store
+	parking parking.Store
+	// boardLogs は CLI と mod が書くボードの経路のログ (internal/boardlog)。daemon は housekeeping で rotate 済みの
+	// ものを消すだけ。ゼロ値は何も消さない。
+	boardLogs           []string
 	sleep               func(time.Duration)
 	startedAt           time.Time
 	panes               map[string]*paneEntry
@@ -381,6 +385,7 @@ func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 	runtime.tasks = tasklog.New(p.StateDir())
 	runtime.parking = parking.New(p.StateDir())
 	runtime.edges = edge.New(p.StateDir())
+	runtime.boardLogs = boardlog.Paths(p.StateDir())
 	runtime.housekeep(p.LogFile(), now)
 
 	sigCh := make(chan os.Signal, 1)

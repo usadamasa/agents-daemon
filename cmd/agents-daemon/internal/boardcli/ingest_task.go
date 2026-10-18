@@ -42,5 +42,7 @@ func ingestTask(stdin io.Reader, now time.Time) error {
 		return err
 	}
 	placer := tasklog.LoadPlacer(p, os.Getenv("HOME"))
-	return placer.Tasks.Ingest(input, placer.Classify, now)
+	res, err := placer.Tasks.Ingest(input, placer.Classify, now)
+	logIngest(p.StateDir(), res, err, now)
+	return err
 }

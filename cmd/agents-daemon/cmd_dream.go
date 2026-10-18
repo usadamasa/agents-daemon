@@ -45,9 +45,10 @@ type dreamEnv struct {
 	home     string
 	cwd      string
 	stateDir string
+	logDir   string
 }
 
-// resolveDreamEnv は home・cwd・state ディレクトリを環境から 1 回で解決する。
+// resolveDreamEnv は home・cwd・state とログのディレクトリを環境から 1 回で解決する。
 // cwd は取れなくてもよい (project を flag で指定する phase がある) ので空で続ける。
 func resolveDreamEnv() (dreamEnv, error) {
 	home, err := os.UserHomeDir()
@@ -59,7 +60,7 @@ func resolveDreamEnv() (dreamEnv, error) {
 		return dreamEnv{}, err
 	}
 	cwd, _ := os.Getwd()
-	return dreamEnv{home: home, cwd: cwd, stateDir: dreamstate.Dir(p.StateDir())}, nil
+	return dreamEnv{home: home, cwd: cwd, stateDir: dreamstate.Dir(p.StateDir()), logDir: filepath.Dir(p.LogFile())}, nil
 }
 
 func newDreamHarvestCmd() *cobra.Command {
@@ -96,19 +97,15 @@ func newDreamHarvestCmd() *cobra.Command {
 
 // runDreamHarvest は detach なら自分を再起動して戻り、そうでなければこのプロセスで harvest を回す。
 func runDreamHarvest(opts harvest.Opts, detach bool) error {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return err
-	}
-	p, err := apppath.FromEnv()
+	env, err := resolveDreamEnv()
 	if err != nil {
 		return err
 	}
 	if detach {
-		return harvest.Detach(os.Args[1:], filepath.Dir(p.LogFile()))
+		return harvest.Detach(os.Args[1:], env.logDir)
 	}
-	opts.Home = home
-	opts.StateDir = dreamstate.Dir(p.StateDir())
+	opts.Home = env.home
+	opts.StateDir = env.stateDir
 	opts.Stderr = os.Stderr
 	return harvest.Run(opts)
 }

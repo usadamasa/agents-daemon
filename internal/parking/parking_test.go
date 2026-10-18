@@ -58,15 +58,20 @@ func TestAdd_writesOneFilePerItem(t *testing.T) {
 func TestPlacedDuring(t *testing.T) {
 	s := New(t.TempDir())
 	during := mustAdd(t, s, domain.Home, testRepo, aside("a"), source("s1", "3"))
-	merged := mustAdd(t, s, domain.Home, testRepo, aside("b"), source("s2", "3"))
-	merged = mustAdd(t, s, domain.Home, testRepo, aside("b"), source("s1", "3"))
+	mustAdd(t, s, domain.Home, testRepo, aside("b"), source("s2", "3"))
+	merged := mustAdd(t, s, domain.Home, testRepo, aside("b"), source("s1", "3"))
 	mustAdd(t, s, domain.Home, testRepo, aside("c"), source("s1", "4"))
 	mustAdd(t, s, domain.Home, testRepo, aside("d"), source("s2", "3"))
 	mustAdd(t, s, domain.Home, testRepo, aside("e"), source("s1", ""))
 	items, _ := s.List(domain.Home)
 
+	// 同じ時刻に置いた件の id は乱数の部分で並ぶので、順は見ない。
 	got := PlacedDuring(items, "s1", "3")
-	if len(got) != 2 || got[0].ID != during.ID || got[1].ID != merged.ID {
+	ids := map[string]bool{}
+	for _, item := range got {
+		ids[item.ID] = true
+	}
+	if len(got) != 2 || !ids[during.ID] || !ids[merged.ID] {
 		t.Errorf("PlacedDuring() = %+v, want %s と %s", got, during.ID, merged.ID)
 	}
 	if got := PlacedDuring(items, "s1", "9"); got == nil || len(got) != 0 {

@@ -79,11 +79,11 @@ test('session.start で、この repo の open のメモの数と新しいもの
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await mount($, surface)
     expect(await ui.find({ type: 'Text', text: /この repo のパーキングのメモ 4 件/ })).toBeDefined()
-    expect(await ui.find({ key: '20261018T020000-dddd', text: /\[脇\] 置き直したメモ 10\/19 01:28/ })).toBeDefined()
-    expect(await ui.find({ key: '20261018T010000-cccc', text: /三つ目 10\/18 11:00/ })).toBeDefined()
-    expect(await ui.find({ key: '20261018T000000-bbbb' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /\[脇\] 置き直したメモ 10\/19 01:28/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /三つ目 10\/18 11:00/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /二つ目/ })).toBeDefined()
     // 主なものは新しい 3 件まで。残りは数だけ。
-    expect(await ui.find({ key: '20261017T000000-aaaa' })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: /古いメモ/ })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: /ほか 1 件/ })).toBeDefined()
     await ui.unmount()
   }
@@ -129,7 +129,7 @@ test('TaskUpdate で completed になったタスクの途中で置いたメモ�
 
   const ui = await mount($, 'terminal')
   expect(await ui.find({ type: 'Text', text: /タスク #3 の途中で置いたメモ 1 件/ })).toBeDefined()
-  expect(await ui.find({ key: '20261018T000000-bbbb', text: /タスク 3 の脇 10\/18 10:00/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /タスク 3 の脇 10\/18 10:00/ })).toBeDefined()
   await ui.unmount()
 })
 

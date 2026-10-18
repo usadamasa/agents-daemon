@@ -1,4 +1,4 @@
-// hooks/board.tsx と hooks/park.tsx が $.state に置く値の型。形は `agents-daemon status --board` の JSON (internal/board) に合わせる。
+// hooks/board.tsx、hooks/park.tsx、hooks/band.tsx が $.state に置く値の型。形は `agents-daemon status --board` の JSON (internal/board) に合わせる。
 
 export type BoardColumn = {
   id: 'pending' | 'in_progress' | 'blocked' | 'completed'
@@ -38,6 +38,20 @@ export type ParkingCard = {
   sources: ParkingSource[]
 }
 
+// ParkedMemo は `park list` の 1 件を band と hint 行に出す分だけにしたもの。at は最後に置かれた時刻。
+export type ParkedMemo = {
+  id: string
+  kind: ParkingCard['kind']
+  title: string
+  at: string
+}
+
+// Band は入力欄の上の band に出すメモ。heading はどのメモか (この repo、完了したタスクの途中)。
+export type Band = {
+  heading: string
+  memos: ParkedMemo[]
+}
+
 export type BoardRow = {
   repo: string
   title: string
@@ -64,8 +78,10 @@ declare module 'claude-code' {
       target: string
       // notice は送信とメモの操作の結果。
       notice: string
-      // parked はこのセッションの repo の open のメモの数 (hooks/park.tsx が prompt の hint 行に出す)。
-      parked: number
+      // parked はこのセッションの repo の open のメモ (hooks/park.tsx が数を prompt の hint 行に出す)。
+      parked: ParkedMemo[]
+      // band は入力欄の上に出すメモ (hooks/band.tsx)。出さないときは null。
+      band: Band | null
     }
   }
 }

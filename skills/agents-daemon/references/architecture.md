@@ -210,6 +210,14 @@ rex の呼び出しには全部 `--autostart=false` を付け、子プロセス�
 rex の列挙は 1 tick に `ls` 1 回、session ごとに `block ls` 1 回、shell の block ごとに 2 回の fork になる。
 block が多い環境ほど tick あたりの時間が伸びる。
 
+<!-- rex-premise: preview.15 cli block の PATH は Versions/<build>/… で、更新で旧 build のディレクトリが消える -->
+
+rex のバイナリは最初の呼び出しで PATH から絶対パスに引いて覚える (`REX_BIN_PATH` があればそれで固定)。
+rex の自動更新は `…/RexServer/Versions/<build>/` を入れ替えて旧 build のディレクトリを消すので、
+daemon が hook から継いだ PATH の項は指す先を失う。呼び出しがバイナリ無しで落ちたら、PATH の
+`Versions/<build>/…` の項から一番新しい build の rex を引き直して同じ呼び出しを 1 回やり直し、tick の失敗に数えない。
+`REX_BIN_PATH` で固定しているときは引き直さない (`internal/rexcli/locate.go`)。
+
 rex で Agent と AgentStatus を決めるのは Claude Code 自身が OSC 7501 で報告する `program_status` で、
 状態の対応と record を使う条件は [program-status.md](program-status.md)。
 

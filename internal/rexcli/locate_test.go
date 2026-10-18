@@ -18,6 +18,11 @@ func versionsDir(root, build string) string {
 	return filepath.Join(root, "Versions", build, versionsBinDir)
 }
 
+// searchPath は dirs を PATH の形に繋ぐ。fake の rex (sh script) が使う sed と cat が引けるよう /usr/bin と /bin を後ろに足す。
+func searchPath(dirs ...string) string {
+	return strings.Join(append(dirs, "/usr/bin", "/bin"), string(os.PathListSeparator))
+}
+
 // fakeRexInVersions は build のディレクトリに fake の rex を置く。fixture は root/fixtures から読むので、
 // build のディレクトリを rename しても応答は変わらない。
 func fakeRexInVersions(t *testing.T, root, build string) *fakeRex {
@@ -54,7 +59,7 @@ func TestLocateBinary(t *testing.T) {
 		if err := os.MkdirAll(versionsDir(root, "1300"), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		t.Setenv("PATH", strings.Join([]string{t.TempDir(), versionsDir(root, "100")}, string(os.PathListSeparator)))
+		t.Setenv("PATH", searchPath(t.TempDir(), versionsDir(root, "100")))
 		got, err := locateBinary()
 		if err != nil || got != want {
 			t.Fatalf("locateBinary() = %q, %v; want %q", got, err, want)
@@ -77,7 +82,7 @@ func TestExecClient_RelocatesWhenBinaryVanishes(t *testing.T) {
 	root := t.TempDir()
 	f := fakeRexInVersions(t, root, "100")
 	f.put(t, "server-status.json", measured(t, measuredOct10, "server_status.json"))
-	t.Setenv("PATH", versionsDir(root, "100"))
+	t.Setenv("PATH", searchPath(versionsDir(root, "100")))
 
 	c := newExecClientWithTimeout(staticResolver(nil), noCommandTimeout)
 	if err := c.Reachable(context.Background()); err != nil {
@@ -105,7 +110,7 @@ func TestExecClient_PinnedBinPathIsNotRelocated(t *testing.T) {
 	f.put(t, "server-status.json", measured(t, measuredOct10, "server_status.json"))
 	fakeRexInVersions(t, root, "101")
 	t.Setenv("REX_BIN_PATH", f.bin)
-	t.Setenv("PATH", versionsDir(root, "100"))
+	t.Setenv("PATH", searchPath(versionsDir(root, "100")))
 
 	c := newExecClientWithTimeout(staticResolver(nil), noCommandTimeout)
 	if err := os.RemoveAll(filepath.Join(root, "Versions", "100")); err != nil {

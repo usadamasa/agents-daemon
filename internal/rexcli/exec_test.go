@@ -63,9 +63,12 @@ func newFakeRex(t *testing.T) *fakeRex {
 	return newFakeRexAt(t, dir, filepath.Join(dir, "rex"))
 }
 
-// newFakeRexAt は fixture を dir から読む fake の rex を bin に書く。bin の親ディレクトリは作る。
+// newFakeRexAt は fixture を dir から読む fake の rex を bin に書く。dir と bin の親ディレクトリは作る。
 func newFakeRexAt(t *testing.T, dir, bin string) *fakeRex {
 	t.Helper()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("fixture の置き場の作成に失敗: %v", err)
+	}
 	script := `#!/bin/sh
 d=` + shellQuote(dir) + `
 env >> "$d/env.log"

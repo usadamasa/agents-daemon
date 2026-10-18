@@ -118,8 +118,7 @@ backend は block から session_id をこの記録で逆引きする (`Store.Li
 数秒) は [operations.md](operations.md) の「既知の制約」。
 
 skill がセッションの中から自分の session_id を引くときは `CLAUDE_CODE_SESSION_ID` を唯一の情報源にする
-(`scripts/get-session-id.sh`)。プロジェクトの JSONL の mtime から推測すると、同一プロジェクトで複数セッションが
-動いているときに他セッションの state file を読む。
+(`scripts/get-session-id.sh`)。
 
 ### [2] SessionStart hook がデーモンを起こす
 

@@ -8,8 +8,8 @@ description: >-
 
 # agents-daemon
 
-agents-daemon の運用と切り分けの手引き。役割の区分と「本体ができることは本体に任せる」境界は plugin root の
-`README.md` の「役割」、部品のファイル越しの配線は [architecture.md](references/architecture.md)、
+agents-daemon の運用と切り分けの手引き。役割の区分と「本体ができることは本体に任せる」境界は
+plugin root の `README.md` の「役割」が持つ。部品のファイル越しの配線は [architecture.md](references/architecture.md)、
 コマンドと設定キーは [operations.md](references/operations.md) が持つ。
 
 ## 症状から引くところ
@@ -32,9 +32,11 @@ agents-daemon の運用と切り分けの手引き。役割の区分と「本体
 | hook が 10 秒の timeout に当たっている疑い (prompt の送信が遅い、hook の効果が出ない) | `claude --debug` で起動し、`Hooks: SessionStart [...] finished with status 0 (31ms)` の行 (Claude Code 2.1.296+) で hook ごとの所要時間を見る。`timed out after <N>ms` なら当たっている |
 | 圧縮後に作業が再開しない、離席中に context が圧縮された | daemon の役目ではない。Claude Code 本体の autocompact / idle compaction (`/config` の `Idle compaction`) の挙動 |
 
-表に無い症状の置き場: install 直後の前提の確認と statusline / peer messaging の配線は `agents-daemon:setup` skill、
-`dream harvest` (Stop hook) と記憶の consolidation は `agents-daemon:dream` skill、
-peer への送受信は `agents-daemon:peer-sessions` skill。
+表に無い症状は次の skill が持つ。
+
+- install 直後の前提の確認と statusline / peer messaging の配線は `agents-daemon:setup` skill
+- `dream harvest` (Stop hook) と記憶の consolidation は `agents-daemon:dream` skill
+- peer への送受信は `agents-daemon:peer-sessions` skill
 
 ## references
 

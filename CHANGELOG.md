@@ -1,5 +1,11 @@
 # Changelog
 
+## [2026.1018.5](https://github.com/usadamasa/agents-daemon/compare/2026.1018.4...2026.1018.5) - 2026-10-18
+
+- refactor: sessionstate を rate-limits と context の書式ごとに分ける by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/117
+- chore(metrics): go-arch-metrics を 2026.1018.3 に上げ、spm-go を外して測り直す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/119
+- chore(deps): go mod tidy で go.sum の使わない go-arch-metrics の行を消す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/120
+
 ## [2026.1018.4](https://github.com/usadamasa/agents-daemon/compare/2026.1018.3...2026.1018.4) - 2026-10-18
 
 - fix(rexcli): rex の自動更新で旧 build が消えても rex を引き直して続ける by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/110

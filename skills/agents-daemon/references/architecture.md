@@ -141,7 +141,7 @@ subagent の worktree (`claude agent` の lock) は Claude Code 本体の period
 持たないため (#97)。
 
 plugin は mod も持つ。`hooks/hooks.json` の `modules` に書ける module は 1 つなので、`hooks/register.ts` が
-`hooks/board.tsx` と `hooks/park.tsx` の hook を束ね、両方が使う `session.start` を持つ。`board` コマンドでタスクのボードを
+`hooks/board.tsx`、`hooks/park.tsx`、`hooks/band.tsx` の hook を束ね、皆が使う `session.start` を持つ。`board` コマンドでタスクのボードを
 pane に開き、`agents-daemon status --board --session <id> --cwd <cwd>` の JSON を数秒ごとに読み直して描く。
 ボードは `internal/board` が `$STATE/tasks/` (PostToolUse hook の `ingest-task` が書く) と `status.json` から組む。
 行は repo (`git rev-parse --git-common-dir` の main worktree)、列はタスクの状態で、`blockedBy` に完了していない
@@ -171,6 +171,25 @@ clock での定期の読み直しはしない。`$.ui.status` はエンジンが
 <!-- cc-premise: 2.1.302 hooks $.ui.status は「⚠ <plugin>: <text>」と警告の印付きで描かれる -->
 <!-- cc-premise: 2.1.302 hooks modules は 1 つ、matcher の無い hook は event ごとに 1 つ -->
 <!-- cc-premise: 2.1.302 hooks tool.register は local の port を開く (sandbox の中の claude -p では落ちる) -->
+
+`hooks/band.tsx` は入力欄の上の band (`ui.render` の `AbovePrompt`) にメモを出す (パーキングロットの取り出す側)。
+session.start では `hooks/park.tsx` が読んだ一覧 (この repo の open のメモ) を、TaskUpdate の結果が `completed` に
+なったときは `park list --status open --task <task_id> --session <id> --cwd <cwd>` (そのタスクの途中でこのセッションが
+置いたメモ) を出す。どちらも `--session` で開いたセッションの domain のメモだけを引く。新しい 3 件を種類と title と
+最後に置かれた時刻で出し、残りは数だけにする。完了したタスクの途中のメモが無ければ今の band を残す。
+「閉じる」で消え、survey があるときは譲る。
+<!-- cc-premise: 2.1.302 hooks mods の ui.render AbovePrompt (hasSurvey) と、TaskUpdate の結果の statusChange -->
+
+#### 時刻の書き方
+
+人が読む表示 (band、ボードのパーキングの列) は、メモの時刻を JST の `MM/DD HH:MM` で出す。変換は
+`hooks/parking.ts` の `stamp` が 1 箇所で持ち、記録の offset にも mod の時刻帯にも頼らない。
+
+メモの id (`20261018T162844-53de0c9a`) の時刻は UTC にする。id はファイル名と `park set <id>` の鍵なので、端末の
+時刻帯に左右されず、名前の並びが置いた順と一致する形にする。id の時刻は人に見せず、表示には `sources[].at` を使う。
+
+記録に書く時刻 (`sources[].at`、タスクの記録、`status.json`、ログ) は offset 付きの RFC 3339 のままにし、
+offset を揃えない。どの offset で書いても同じ瞬間に戻せるので、揃えるのは表示の側だけで足りる。
 
 #### バイナリの用意と差し替え
 

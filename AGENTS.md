@@ -11,10 +11,11 @@ README の「役割」が持つ。機能を足す・外す判断はそこに照�
 | ---- | ---- |
 | `.claude-plugin/plugin.json` | plugin manifest。version の実体はここ 1 箇所。marketplace.json は agents-marketplace リポジトリが持つ |
 | `hooks/hooks.json` | SessionStart、Stop、PostToolUse の配線と、mod の読み込み (`modules` の `hooks/register.ts`) |
-| `hooks/register.ts`, `hooks/daemon-bin.ts` | mod の入口。board と park の hook を束ね、`session.start` を持つ。`daemon-bin.ts` はバイナリの置き場 |
+| `hooks/register.ts`, `hooks/daemon-bin.ts` | mod の入口。board、park、band の hook を束ね、`session.start` を持つ。`daemon-bin.ts` はバイナリの置き場 |
 | `hooks/board.tsx`, `hooks/board.test.tsx`, `types/index.d.ts` | タスクのボードを pane に描く mod (Claude Code の mods)。`board` コマンドで開き、`agents-daemon status --board` の JSON を数秒ごとに読み直す。カードを選んで `$.session.send` でそのタスクのセッションへ指示を送る。`types/` は mod が `$.state` に置く値の型。テストは `claude plugin test .` |
 | `hooks/park.tsx`, `hooks/park.test.tsx` | model が呼べる tool `park` (パーキングロットにメモを置く) と、repo の open のメモの数を出す prompt の hint 行 |
-| `hooks/parking.ts` | ボードのメモの見せ方と操作 (捨てる、タスクにする、issue にするよう頼む、パーキングへ移す) |
+| `hooks/band.tsx`, `hooks/band.test.tsx` | 入力欄の上の band にメモを出す (session.start とタスクの完了) |
+| `hooks/parking.ts` | メモの見せ方 (時刻の JST 表示を含む) とボードからの操作 (捨てる、タスクにする、issue にするよう頼む、パーキングへ移す) |
 | `hooks/ensure-daemon.sh`, `hooks/build-daemon.sh` | バイナリの用意 (detach build) と `daemon --ensure` |
 | `hooks/dream-harvest.sh` | Stop で `dream harvest --detach` を exec する |
 | `hooks/prune-worktrees.sh` | SessionStart で `prune-worktrees --hook` に stdin を渡す |
@@ -118,6 +119,7 @@ hook・skill・daemon は別プロセスで、ファイル越しに繋がる。�
 | `hooks/board.tsx` の `BoardData` (`types/index.d.ts`) | `internal/board` の `Board` | `status --board` の JSON の形。片方の欄を変えたらもう片方も変える |
 | `hooks/park.tsx` の `FIELDS` と `Added` | `internal/parking` の `Request` と `Added` | `park add` の stdin と stdout の JSON の形 |
 | `hooks/parking.ts` の `park` が組む引数 | `cmd/agents-daemon/cmd_park.go` の `set` と `adopt` | `park set <id> --status <status>`、`park adopt <session_id> <task_id>` に `--session` と `--cwd` を添える |
+| `hooks/band.tsx` の `showCompleted` が組む引数 | `cmd/agents-daemon/cmd_park.go` の `list` の `--task` | `park list --status open --task <task_id> --session <id> --cwd <cwd>` |
 | 利用者の settings の `env` の `CLAUDE_STATUSLINE_SPEND_CAP` | `internal/statusline/run.go` の `SpendCapEnv` | 月額上限 (USD)。あるときだけ `statusline` が `cost/` の台帳 (`internal/spend`) を書き、📅 / 🧾 を出す |
 
 ## リリース

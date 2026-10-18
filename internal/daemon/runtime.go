@@ -58,7 +58,7 @@ type daemonRuntime struct {
 	// edges は `edge add` が書くセッションをまたぐ辺 (internal/edge)。daemon は housekeeping で消すだけ。
 	// ゼロ値は何も消さない。
 	edges edge.Store
-	// parking は `park add` が書くパーキングの件 (internal/parking)。daemon は housekeeping で消すだけ。
+	// parking は `park add` が書くパーキングのメモ (internal/parking)。daemon は housekeeping で消すだけ。
 	// ゼロ値は何も消さない。
 	parking parking.Store
 	// boardLogs は CLI と mod が書くボードの経路のログ (internal/boardlog)。daemon は housekeeping で rotate 済みの

@@ -8,8 +8,8 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 )
 
-// ボードの行の鍵はパーキングの件の repo (gitrepo.RepoKey) と同じになる。git の中、linked worktree、
-// git の外のどれでも一致しないと、パーキングの件がボードのどの行にも載らなくなる。
+// ボードの行の鍵はパーキングのメモの repo (gitrepo.RepoKey) と同じになる。git の中、linked worktree、
+// git の外のどれでも一致しないと、パーキングのメモがボードのどの行にも載らなくなる。
 func TestLocatorRow_matchesRepoKey(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git が無い")

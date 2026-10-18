@@ -130,7 +130,7 @@ func TestParkAdd(t *testing.T) {
 		t.Errorf("sources = %+v", item.Sources)
 	}
 
-	// main worktree から同じ件を置くと同じ件にまとまる。
+	// main worktree から同じメモを置くと同じメモにまとまる。
 	stdout, _, err = runPark(t, strings.Replace(parkInput, `"s1"`, `"s2"`, 1), "add", "--cwd", repo)
 	if err != nil {
 		t.Fatal(err)
@@ -207,7 +207,7 @@ func TestParkAdd_invalidInput(t *testing.T) {
 	}
 }
 
-// list は cwd の domain の件だけを出し、--repo と --status で絞る。set は status を書き換える。
+// list は cwd の domain のメモだけを出し、--repo と --status で絞る。set は status を書き換える。
 func TestParkListAndSet(t *testing.T) {
 	root := parkTestEnv(t)
 	home := filepath.Join(root, "src", "home", "a")
@@ -243,7 +243,7 @@ func TestParkListAndSet(t *testing.T) {
 		return items
 	}
 	if got := list("--cwd", home); len(got) != 2 {
-		t.Errorf("home の件数 = %d, want 2 (work の件を出さない)", len(got))
+		t.Errorf("home の件数 = %d, want 2 (work のメモを出さない)", len(got))
 	}
 	if got := list("--cwd", home, "--repo", home); len(got) != 1 || got[0].ID != first.ID {
 		t.Errorf("--repo で絞れていない: %+v", got)

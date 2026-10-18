@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-// Prune は保持期間を過ぎた件を mtime で消し、消した数を返す。open は OpenRetention、handed /
-// discarded と読めない件、消し損ねた一時ファイルは ClosedRetention で消す。ロックのファイルは残す。
+// Prune は保持期間を過ぎたメモを mtime で消し、消した数を返す。open は OpenRetention、handed /
+// discarded と読めないメモ、消し損ねた一時ファイルは ClosedRetention で消す。ロックのファイルは残す。
 func (s Store) Prune(now time.Time) (int, error) {
 	if s.Dir == "" {
 		return 0, nil

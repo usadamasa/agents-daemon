@@ -11,7 +11,7 @@ import (
 // AdoptedDefault は Adopt で移したメモの default_taken。
 const AdoptedDefault = "セッションの終了で未完了のまま"
 
-// Park は cwd のセッションが置いた件を、置き先 (domain、repo、そのとき進行中のタスク) を決めてから add する。
+// Park は cwd のセッションが置いたメモを、置き先 (domain、repo、そのとき進行中のタスク) を決めてから add する。
 // repo はボードの行と同じ鍵 (main worktree のパス、git の外なら cwd)。kind task は Adopt だけが置く。
 // 外から置く入口は Park と Adopt だけにし、domain と repo の決め方を呼び出し側に任せない。
 func (s Store) Park(req Request, cwd string, p tasklog.Placer, now time.Time) (Added, error) {

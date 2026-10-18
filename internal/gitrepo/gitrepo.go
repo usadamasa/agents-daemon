@@ -1,5 +1,5 @@
 // Package gitrepo は cwd がどのリポジトリのどの branch かを git で求める。タスクのボードの行の鍵と、
-// パーキングの件の repo が同じ規則になるよう、両方がここを使う。
+// パーキングのメモの repo が同じ規則になるよう、両方がここを使う。
 package gitrepo
 
 import (
@@ -43,7 +43,7 @@ func Locate(cwd string) Place {
 	return Place{Repo: common, Branch: branch}
 }
 
-// Key は p を求めた cwd の repo の鍵。git の外なら cwd そのものにする。ボードの行とパーキングの件が
+// Key は p を求めた cwd の repo の鍵。git の外なら cwd そのものにする。ボードの行とパーキングのメモが
 // 同じ行に並ぶよう、鍵の規則はここだけに置く。
 func (p Place) Key(cwd string) string {
 	if p.Repo != "" {

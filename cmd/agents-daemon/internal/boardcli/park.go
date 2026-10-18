@@ -25,12 +25,12 @@ func Commands() []*cobra.Command {
 // domain と repo は --cwd (既定は今の cwd) から決め、結果は JSON で stdout に出す。
 func newParkCmd() *cobra.Command {
 	var cwd string
-	cmd := &cobra.Command{Use: "park", Short: "パーキングロット (脇の件) を置く・書き換える・一覧する"}
+	cmd := &cobra.Command{Use: "park", Short: "パーキングロット (脇のメモ) を置く・書き換える・一覧する"}
 	cmd.PersistentFlags().StringVar(&cwd, "cwd", "", "置いた (開いた) セッションの cwd。domain と repo をここから決める (既定は今の cwd)")
 
 	add := &cobra.Command{
 		Use:   "add",
-		Short: "stdin の JSON (kind、title、detail、files、default_taken、session_id) で件を置き、{created, item} を出す",
+		Short: "stdin の JSON (kind、title、detail、files、default_taken、session_id) でメモを置き、{created, item} を出す",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return withPlacer(cmd, cwd, func(paths apppath.Paths, p tasklog.Placer, cwd string) (any, error) {
@@ -41,7 +41,7 @@ func newParkCmd() *cobra.Command {
 	var status, session string
 	set := &cobra.Command{
 		Use:   "set <id>",
-		Short: "件の status (open / handed / discarded) を書き換える",
+		Short: "メモの status (open / handed / discarded) を書き換える",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return withPlacer(cmd, cwd, func(paths apppath.Paths, p tasklog.Placer, cwd string) (any, error) {
@@ -55,7 +55,7 @@ func newParkCmd() *cobra.Command {
 	var here bool
 	list := &cobra.Command{
 		Use:   "list",
-		Short: "cwd の domain の件を JSON の配列で出す",
+		Short: "cwd の domain のメモを JSON の配列で出す",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if task != "" && session == "" {
@@ -77,7 +77,7 @@ func newParkCmd() *cobra.Command {
 	list.Flags().BoolVar(&here, "here", false, "--cwd の repo で絞る (mod は repo の鍵を持たないため)")
 	list.MarkFlagsMutuallyExclusive("repo", "here")
 	list.Flags().StringVar(&listStatus, "status", "", "status で絞る")
-	list.Flags().StringVar(&task, "task", "", "--session のセッションがこのタスクの途中で置いた件で絞る")
+	list.Flags().StringVar(&task, "task", "", "--session のセッションがこのタスクの途中で置いたメモで絞る")
 	adopt := &cobra.Command{
 		Use:   "adopt <session_id> <task_id>",
 		Short: "終了したセッションの未完了のタスクを kind task のメモにし、タスクの記録を消して {created, item} を出す",
@@ -89,7 +89,7 @@ func newParkCmd() *cobra.Command {
 		},
 	}
 	for _, c := range []*cobra.Command{set, list, adopt} {
-		c.Flags().StringVar(&session, "session", "", "開いたセッションの ID。記録が業務の側にあれば業務の件を扱う (status --board と同じ)")
+		c.Flags().StringVar(&session, "session", "", "開いたセッションの ID。記録が業務の側にあれば業務のメモを扱う (status --board と同じ)")
 	}
 	cmd.AddCommand(add, set, list, adopt)
 	return cmd

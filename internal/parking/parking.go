@@ -135,7 +135,7 @@ func (s Store) Set(d domain.Domain, id, status string) (Item, error) {
 	if s.Dir == "" {
 		return Item{}, errors.New("parking の置き場所が無い")
 	}
-	if err := ValidStatus(status); err != nil {
+	if err := validStatus(status); err != nil {
 		return Item{}, err
 	}
 	if !statefile.ValidSessionID(id) {
@@ -165,7 +165,7 @@ func (s Store) List(d domain.Domain) ([]Item, error) {
 // Find は domain の件のうち repo と status が一致するものを返す。空の条件は絞らない。該当なしは空の配列。
 func (s Store) Find(d domain.Domain, repo, status string) ([]Item, error) {
 	if status != "" {
-		if err := ValidStatus(status); err != nil {
+		if err := validStatus(status); err != nil {
 			return nil, err
 		}
 	}
@@ -197,8 +197,8 @@ func ReadRequest(r io.Reader) (Request, error) {
 	return req, nil
 }
 
-// ValidStatus は status が open / handed / discarded のどれかかを確かめる。
-func ValidStatus(status string) error {
+// validStatus は status が open / handed / discarded のどれかかを確かめる。
+func validStatus(status string) error {
 	switch status {
 	case StatusOpen, StatusHanded, StatusDiscarded:
 		return nil

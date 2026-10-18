@@ -30,6 +30,7 @@ const exitTargetNotFound = 3
 
 // execClient は rex CLI を subprocess として呼び出す multiplexer.Client 実装。
 type execClient struct {
+	// binPath は解決済みの rex の絶対パス。空なら次の呼び出しで locateBinary が埋める。
 	binPath string
 	timeout time.Duration
 	// resolve は block_id から session_id を引く (statusline が書いた sidecar)。
@@ -37,17 +38,25 @@ type execClient struct {
 }
 
 // NewExecClient は実 rex バイナリを叩く Client を返す。
-// バイナリパスは環境変数 REX_BIN_PATH で上書きできる (未設定なら PATH 上の "rex")。
+// バイナリは最初の呼び出しで PATH から引く。環境変数 REX_BIN_PATH があればそれで固定する。
 func NewExecClient(resolve multiplexer.SessionResolver) multiplexer.Client {
 	return newExecClientWithTimeout(resolve, defaultTimeout)
 }
 
 func newExecClientWithTimeout(resolve multiplexer.SessionResolver, timeout time.Duration) *execClient {
-	bin := os.Getenv("REX_BIN_PATH")
-	if bin == "" {
-		bin = "rex"
+	return &execClient{binPath: os.Getenv("REX_BIN_PATH"), timeout: timeout, resolve: resolve}
+}
+
+// bin は rex の絶対パスを返す。未解決なら PATH から引いて覚える。
+func (c *execClient) bin() (string, error) {
+	if c.binPath == "" {
+		bin, err := locateBinary()
+		if err != nil {
+			return "", err
+		}
+		c.binPath = bin
 	}
-	return &execClient{binPath: bin, timeout: timeout, resolve: resolve}
+	return c.binPath, nil
 }
 
 // childEnv は rex に渡す環境。REX_SESSION があると rex は block の解決をその session の中に
@@ -65,8 +74,27 @@ func childEnv() []string {
 }
 
 // run は rex を実行し stdout を返す。失敗は stderr を添えた error にする。
-// timeout が 0 以下なら制限時間を課さない (テスト用)。
+// rex の自動更新で覚えていたバイナリが消えていたら、引き直して同じ呼び出しを 1 回だけやり直す
+// (tick の失敗に数えさせない)。REX_BIN_PATH で固定していれば引き直しても同じパスなので、そのまま失敗を返す。
 func (c *execClient) run(ctx context.Context, args ...string) ([]byte, error) {
+	bin, err := c.bin()
+	if err != nil {
+		return nil, fmt.Errorf("rex %v: %w", args, err)
+	}
+	out, err := c.runWith(ctx, bin, args...)
+	if !binaryVanished(err) {
+		return out, err
+	}
+	c.binPath = ""
+	again, locateErr := c.bin()
+	if locateErr != nil || again == bin {
+		return nil, err
+	}
+	return c.runWith(ctx, again, args...)
+}
+
+// runWith は bin を rex として実行する。timeout が 0 以下なら制限時間を課さない (テスト用)。
+func (c *execClient) runWith(ctx context.Context, bin string, args ...string) ([]byte, error) {
 	runCtx := ctx
 	if c.timeout > 0 {
 		var cancel context.CancelFunc
@@ -77,9 +105,9 @@ func (c *execClient) run(ctx context.Context, args ...string) ([]byte, error) {
 	// server が落ちているときに CLI が起こさないよう、全呼び出しで autostart を切る。
 	// rex-premise: preview.15 cli --autostart は global option で既定 true
 	full := append([]string{"--autostart=false"}, args...)
-	// #nosec G204 -- binPath は "rex" か REX_BIN_PATH の値 (利用者自身の環境)、args はこの
+	// #nosec G204 -- bin は PATH か REX_BIN_PATH から引いた rex (利用者自身の環境)、args はこの
 	// パッケージ内で組み立てた固定のサブコマンドと block ID のみ。
-	cmd := exec.CommandContext(runCtx, c.binPath, full...)
+	cmd := exec.CommandContext(runCtx, bin, full...)
 	cmd.Env = childEnv()
 	var outBuf, errBuf bytes.Buffer
 	cmd.Stdout = &outBuf

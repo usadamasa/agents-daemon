@@ -1,5 +1,11 @@
 # Changelog
 
+## [2026.1018.6](https://github.com/usadamasa/agents-daemon/compare/2026.1018.5...2026.1018.6) - 2026-10-18
+
+- feat(domain): cwd から私用と業務を判定する by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/123
+- refactor(cmd): status と statusline の本体を internal へ移す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/125
+- feat(tasklog): PostToolUse hook でセッションのタスクを記録する by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/126
+
 ## [2026.1018.5](https://github.com/usadamasa/agents-daemon/compare/2026.1018.4...2026.1018.5) - 2026-10-18
 
 - refactor: sessionstate を rate-limits と context の書式ごとに分ける by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/117

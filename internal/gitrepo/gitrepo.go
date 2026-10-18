@@ -43,10 +43,16 @@ func Locate(cwd string) Place {
 	return Place{Repo: common, Branch: branch}
 }
 
-// RepoKey は cwd の repo の鍵。git の外なら cwd そのものにする。
-func RepoKey(cwd string) string {
-	if repo := Locate(cwd).Repo; repo != "" {
-		return repo
+// Key は p を求めた cwd の repo の鍵。git の外なら cwd そのものにする。ボードの行とパーキングの件が
+// 同じ行に並ぶよう、鍵の規則はここだけに置く。
+func (p Place) Key(cwd string) string {
+	if p.Repo != "" {
+		return p.Repo
 	}
 	return cwd
+}
+
+// RepoKey は cwd の repo の鍵 (Place.Key)。
+func RepoKey(cwd string) string {
+	return Locate(cwd).Key(cwd)
 }

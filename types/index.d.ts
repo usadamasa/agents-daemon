@@ -62,8 +62,10 @@ declare module 'claude-code' {
       error: string
       // target は指示を送るカードの key。未選択なら空。
       target: string
-      // notice は送信の結果。
+      // notice は送信とメモの操作の結果。
       notice: string
+      // parked はこのセッションの repo の open のメモの数 (hooks/park.tsx が prompt の hint 行に出す)。
+      parked: number
     }
   }
 }

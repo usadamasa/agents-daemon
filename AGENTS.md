@@ -13,7 +13,8 @@ README の「役割」が持つ。機能を足す・外す判断はそこに照�
 | `hooks/hooks.json` | SessionStart、Stop、PostToolUse の配線と、mod の読み込み (`modules` の `hooks/register.ts`) |
 | `hooks/register.ts`, `hooks/daemon-bin.ts` | mod の入口。board と park の hook を束ね、`session.start` を持つ。`daemon-bin.ts` はバイナリの置き場 |
 | `hooks/board.tsx`, `hooks/board.test.tsx`, `types/index.d.ts` | タスクのボードを pane に描く mod (Claude Code の mods)。`board` コマンドで開き、`agents-daemon status --board` の JSON を数秒ごとに読み直す。カードを選んで `$.session.send` でそのタスクのセッションへ指示を送る。`types/` は mod が `$.state` に置く値の型。テストは `claude plugin test .` |
-| `hooks/park.tsx`, `hooks/park.test.tsx` | model が呼べる tool `park` (パーキングロットにメモを置く) と、repo の open のメモの数を出す status 行 |
+| `hooks/park.tsx`, `hooks/park.test.tsx` | model が呼べる tool `park` (パーキングロットにメモを置く) と、repo の open のメモの数を出す prompt の hint 行 |
+| `hooks/parking.ts` | ボードのメモの見せ方と操作 (捨てる、タスクにする、issue にするよう頼む、パーキングへ移す) |
 | `hooks/ensure-daemon.sh`, `hooks/build-daemon.sh` | バイナリの用意 (detach build) と `daemon --ensure` |
 | `hooks/dream-harvest.sh` | Stop で `dream harvest --detach` を exec する |
 | `hooks/prune-worktrees.sh` | SessionStart で `prune-worktrees --hook` に stdin を渡す |

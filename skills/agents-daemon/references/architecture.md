@@ -149,13 +149,26 @@ pane に開き、`agents-daemon status --board --session <id> --cwd <cwd>` の J
 描くのは開いたセッションの domain だけで、指示を送れるのはボードに載った生きているセッションだけ。
 <!-- cc-premise: 2.1.302 hooks mods の pane / session.send / session.cwd と、PostToolUse の Task 系の形 -->
 
+ボードの JSON は行ごとに open のメモ (`$STATE/parking/`) をタスクの列とは別の欄 `parking` に持ち、メモだけの repo も
+行にする。メモの見せ方と操作は `hooks/parking.ts` が持ち、行と列の描き方には依存しない。操作はどれも
+`agents-daemon park ... --session <id> --cwd <cwd>` を呼び、開いたセッションの domain のメモとタスクだけを触る。
+
+- 捨てる: `park set <id> --status discarded`
+- タスクにする: 同じ repo の生きているセッションへ TaskCreate を頼む文面を送る
+- issue にするよう頼む: 私用のボードだけ。ボードに載っている生きているセッションへ頼む
+- タスクにする・issue にするよう頼むは、`$.session.send` が届いたときだけ `park set <id> --status handed` にする
+- パーキングへ移す: 終了したセッションの未完了のタスク (`kind: task` のカード) を `park adopt <session_id> <task_id>` で
+  `kind: task` のメモにし、タスクの記録を消す。`kind: task` は model の tool からは置けない
+
 `hooks/park.tsx` は model が呼べる tool `mcp__agents-daemon__park` を登録する (パーキングロットの置く側)。
 呼ばれたら `agents-daemon park add --cwd <cwd>` に、model が書いた欄とこのセッションの `session_id` を JSON で
 stdin に渡す。`session_id` と cwd は inputSchema に無く、model は書けないので、domain の判定は `status --board` と
 同じ入力で決まる。結果の `created` で「メモを置きました」と「既に置かれていたメモにまとめました」を分けて返す。
-status 行には `park list --here --status open` の数 (このセッションの repo の open のメモ) を出し、session.start、
-park の後、main loop の turn.complete で読み直す。全セッションで常に動くため、clock での定期の読み直しはしない。
-<!-- cc-premise: 2.1.302 hooks mods の tool.register / tool.call / ui.status / turn.complete -->
+prompt の hint 行の末尾 (`PromptHint` の `tail`) に `park list --here --status open` の数 (このセッションの repo の
+open のメモ) を出し、session.start、park の後、main loop の turn.complete で読み直す。全セッションで常に動くため、
+clock での定期の読み直しはしない。`$.ui.status` はエンジンが警告の印付きで描くので使わない。`tail` を描くのは terminal だけ。
+<!-- cc-premise: 2.1.302 hooks mods の tool.register / tool.call / turn.complete / ui.render PromptHint の tail -->
+<!-- cc-premise: 2.1.302 hooks $.ui.status は「⚠ <plugin>: <text>」と警告の印付きで描かれる -->
 <!-- cc-premise: 2.1.302 hooks modules は 1 つ、matcher の無い hook は event ごとに 1 つ -->
 <!-- cc-premise: 2.1.302 hooks tool.register は local の port を開く (sandbox の中の claude -p では落ちる) -->
 

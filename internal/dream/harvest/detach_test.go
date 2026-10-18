@@ -3,10 +3,19 @@ package harvest
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestChildArgs_DropsOnlyDetachFlag(t *testing.T) {
+	got := childArgs([]string{"dream", "harvest", "--incremental", "--detach", "--days", "7"})
+	want := []string{"dream", "harvest", "--incremental", "--days", "7"}
+	if !slices.Equal(got, want) {
+		t.Errorf("childArgs = %v; want %v", got, want)
+	}
+}
 
 // waitFor は cond が真になるまで最大 5 秒待つ。detach した子の完了待ちに使う。
 func waitFor(t *testing.T, cond func() bool) {

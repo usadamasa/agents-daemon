@@ -62,9 +62,6 @@ func resolveDreamEnv() (dreamEnv, error) {
 	return dreamEnv{home: home, cwd: cwd, stateDir: dreamstate.Dir(p.StateDir())}, nil
 }
 
-// detachFlag は harvest を Stop hook から起こすときの flag。親はこれを外した引数で自分を detach 起動する。
-const detachFlag = "--detach"
-
 func newDreamHarvestCmd() *cobra.Command {
 	var opts harvest.Opts
 	var detach bool
@@ -74,7 +71,7 @@ func newDreamHarvestCmd() *cobra.Command {
 		Long: "Claude Code の session JSONL を走査し、PII を除去して state の dream/harvest/YYYY-MM-DD.jsonl に\n" +
 			"集約する。cwd 非依存で動作する (Stop hook から任意 project 下で呼ばれる)。\n" +
 			"書き込みの前に dream/ 配下の保持期間を過ぎたファイルを消す。\n" +
-			detachFlag + " は Stop hook 用で、同じ引数の自分を detach 起動して即座に戻る。子の stderr は\n" +
+			harvest.DetachFlag + " は Stop hook 用で、同じ引数の自分を detach 起動して即座に戻る。子の stderr は\n" +
 			"logs/dream-harvest.log に残り、成功すれば何も書かない。",
 		Args: cobra.NoArgs,
 		// 失敗の行には時刻を付ける。stderr が hook 経由でログに流れたとき、いつの失敗か分かるようにするため。
@@ -92,7 +89,7 @@ func newDreamHarvestCmd() *cobra.Command {
 	f.IntVar(&opts.Days, "days", 14, "走査する直近日数 (mtime ベース)")
 	f.StringVar(&opts.ProjectGlob, "project-glob", "", "特定プロジェクトに絞る (canonical name の substring 一致)")
 	f.BoolVar(&opts.Incremental, "incremental", false, "前回 harvest 以降に更新されたセッションのみ処理")
-	f.BoolVar(&detach, strings.TrimPrefix(detachFlag, "--"), false, "同じ引数で自分を detach 起動し、待たずに戻る (Stop hook 用)")
+	f.BoolVar(&detach, strings.TrimPrefix(harvest.DetachFlag, "--"), false, "同じ引数で自分を detach 起動し、待たずに戻る (Stop hook 用)")
 	f.BoolVarP(&opts.Verbose, "verbose", "v", false, "処理サマリを stderr に出力")
 	return cmd
 }
@@ -108,28 +105,12 @@ func runDreamHarvest(opts harvest.Opts, detach bool) error {
 		return err
 	}
 	if detach {
-		exe, err := os.Executable()
-		if err != nil {
-			return fmt.Errorf("実行ファイルパスの取得に失敗: %w", err)
-		}
-		return harvest.SpawnDetached(exe, childArgs(os.Args[1:]), harvest.DetachLogPath(filepath.Dir(p.LogFile())))
+		return harvest.Detach(os.Args[1:], filepath.Dir(p.LogFile()))
 	}
 	opts.Home = home
 	opts.StateDir = dreamstate.Dir(p.StateDir())
 	opts.Stderr = os.Stderr
 	return harvest.Run(opts)
-}
-
-// childArgs は detach 起動する子に渡す引数。自分の引数から detach の flag だけを外す。
-func childArgs(args []string) []string {
-	out := make([]string, 0, len(args))
-	for _, a := range args {
-		if a == detachFlag {
-			continue
-		}
-		out = append(out, a)
-	}
-	return out
 }
 
 func newDreamMineCmd() *cobra.Command {

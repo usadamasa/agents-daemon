@@ -96,6 +96,9 @@ func TestBuild_rowsAndColumns(t *testing.T) {
 			t.Errorf("%s = column %q row %q, want %q / %q", key, c.Column, c.Row, w.column, w.row)
 		}
 	}
+	if got["B/1"].TaskID != "1" || got["A/3"].TaskID != "3" {
+		t.Errorf("task_id = %q / %q", got["B/1"].TaskID, got["A/3"].TaskID)
+	}
 	if got["A/3"].Blockers != 1 || got["A/4"].Blockers != 0 {
 		t.Errorf("blockers = %d / %d, want 1 / 0", got["A/3"].Blockers, got["A/4"].Blockers)
 	}

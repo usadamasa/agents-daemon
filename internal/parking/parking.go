@@ -31,6 +31,9 @@ const (
 	KindAside      = "aside"
 	KindScope      = "scope"
 	KindPreference = "preference"
+	// KindTask は終了したセッションに残った未完了のタスク。ボードの操作 (park adopt) だけが置き、
+	// model の tool には出さない。
+	KindTask = "task"
 )
 
 const (
@@ -219,10 +222,10 @@ func validStatus(status string) error {
 
 func validKind(kind string) error {
 	switch kind {
-	case KindAside, KindScope, KindPreference:
+	case KindAside, KindScope, KindPreference, KindTask:
 		return nil
 	}
-	return fmt.Errorf("kind %q は aside / scope / preference のどれでもない", kind)
+	return fmt.Errorf("kind %q は aside / scope / preference / task のどれでもない", kind)
 }
 
 // locked は domain のディレクトリを作り、ロックを取って fn を呼ぶ。

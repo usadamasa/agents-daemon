@@ -41,6 +41,7 @@ plugin が持つもの:
 | `agents-daemon status --board` | mod が読むボードの JSON (タスクの記録と status.json を組み直したもの) を出す |
 | `agents-daemon ingest-task` | PostToolUse hook の stdin からタスクを `tasks/<domain>/` に記録する。私用 (`home`) と業務 (`work`) は config の `homePaths` / `defaultDomain` で分ける |
 | `agents-daemon park add\|set\|list` | パーキングロット (タスクの途中で見つけた脇の件) を `parking/<domain>/` に置く・status を書き換える・一覧する。同じ件は 1 件にまとめる (#121) |
+| `park` tool (mod、`hooks/park.tsx`) | model が聞かずに脇のことをメモとしてパーキングロットへ置く tool と、repo の open のメモの数を出す status 行 (#121) |
 
 ## 前提
 

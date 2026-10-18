@@ -10,6 +10,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/config"
 	"github.com/usadamasa/agents-daemon/internal/domain"
+	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
@@ -23,7 +24,7 @@ func newParkCmd() *cobra.Command {
 
 	add := &cobra.Command{
 		Use:   "add",
-		Short: "stdin の JSON (kind、title、detail、files、default_taken、session_id) で件を置く",
+		Short: "stdin の JSON (kind、title、detail、files、default_taken、session_id) で件を置き、{created, item} を出す",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return withPark(cmd, cwd, func(s parking.Store, p parking.Placer, cwd string) (any, error) {
@@ -49,17 +50,23 @@ func newParkCmd() *cobra.Command {
 	set.Flags().StringVar(&status, "status", "", "open / handed / discarded")
 	_ = set.MarkFlagRequired("status")
 	var repo, listStatus string
+	var here bool
 	list := &cobra.Command{
 		Use:   "list",
 		Short: "cwd の domain の件を JSON の配列で出す",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return withPark(cmd, cwd, func(s parking.Store, p parking.Placer, cwd string) (any, error) {
+				if here {
+					repo = gitrepo.RepoKey(cwd)
+				}
 				return s.Find(p.Domain(session, cwd), repo, listStatus)
 			})
 		},
 	}
 	list.Flags().StringVar(&repo, "repo", "", "repo (main worktree のパス) で絞る")
+	list.Flags().BoolVar(&here, "here", false, "--cwd の repo で絞る (mod は repo の鍵を持たないため)")
+	list.MarkFlagsMutuallyExclusive("repo", "here")
 	list.Flags().StringVar(&listStatus, "status", "", "status で絞る")
 	for _, c := range []*cobra.Command{set, list} {
 		c.Flags().StringVar(&session, "session", "", "開いたセッションの ID。記録が業務の側にあれば業務の件を扱う (status --board と同じ)")

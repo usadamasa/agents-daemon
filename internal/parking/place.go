@@ -22,7 +22,7 @@ func (p Placer) Domain(sessionID, cwd string) domain.Domain {
 
 // Park は cwd のセッションが置いた件を、置き先を決めてから Add する。repo はボードの行と同じ鍵
 // (main worktree のパス、git の外なら cwd)。
-func (s Store) Park(req Request, cwd string, p Placer, now time.Time) (Item, error) {
+func (s Store) Park(req Request, cwd string, p Placer, now time.Time) (Added, error) {
 	d := p.Domain(req.SessionID, cwd)
 	src := Source{SessionID: req.SessionID, TaskID: p.Tasks.ActiveTaskID(d, req.SessionID), CWD: cwd, At: now}
 	return s.Add(d, gitrepo.RepoKey(cwd), req.Entry, src)

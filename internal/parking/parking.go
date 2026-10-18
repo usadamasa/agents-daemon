@@ -65,10 +65,12 @@ type Entry struct {
 
 // Source は件を置いたときのセッションと、そのとき進行中だったタスク。
 type Source struct {
-	SessionID string    `json:"session_id"`
-	TaskID    string    `json:"task_id,omitempty"`
-	CWD       string    `json:"cwd"`
-	At        time.Time `json:"at"`
+	SessionID string `json:"session_id"`
+	TaskID    string `json:"task_id,omitempty"`
+	CWD       string `json:"cwd"`
+	// Detail は既存のメモにまとめたとき、後から置いた側が書いた detail (メモの detail と違うときだけ)。
+	Detail string    `json:"detail,omitempty"`
+	At     time.Time `json:"at"`
 }
 
 // Item は置かれた件 1 つの記録。
@@ -92,42 +94,51 @@ func New(stateDir string) Store {
 	return Store{Dir: filepath.Join(stateDir, "parking")}
 }
 
+// Added は Add の結果。置いた側が「既に置かれていたメモ」と伝えられるよう、新しく作ったかを持つ。
+type Added struct {
+	Created bool `json:"created"`
+	Item    Item `json:"item"`
+}
+
 // Add は件を置く。同じ件が open であれば src を sources に足し (同じ session と task の組は足さない)、
 // 無ければ新しい件を作る。書いた後の件を返す。
-func (s Store) Add(d domain.Domain, repo string, e Entry, src Source) (Item, error) {
+func (s Store) Add(d domain.Domain, repo string, e Entry, src Source) (Added, error) {
 	if s.Dir == "" {
-		return Item{}, errors.New("parking の置き場所が無い")
+		return Added{}, errors.New("parking の置き場所が無い")
 	}
 	if err := validKind(e.Kind); err != nil {
-		return Item{}, err
+		return Added{}, err
 	}
 	e.Title = strings.TrimSpace(e.Title)
 	if e.Title == "" {
-		return Item{}, errors.New("title が空")
+		return Added{}, errors.New("title が空")
 	}
 	if !statefile.ValidSessionID(src.SessionID) {
-		return Item{}, fmt.Errorf("session ID %q はファイル名に使えない", src.SessionID)
+		return Added{}, fmt.Errorf("session ID %q はファイル名に使えない", src.SessionID)
 	}
-	var item Item
+	var added Added
 	err := s.locked(d, func(dir string) error {
 		key := normalize(e.Title)
 		for _, existing := range readDir(dir) {
 			if existing.Status == StatusOpen && existing.Repo == repo && normalize(existing.Title) == key {
-				item = existing
-				if !hasSource(item.Sources, src) {
-					item.Sources = append(item.Sources, src)
+				if !hasSource(existing.Sources, src) {
+					if e.Detail != existing.Detail {
+						src.Detail = e.Detail
+					}
+					existing.Sources = append(existing.Sources, src)
 				}
-				return write(dir, item)
+				added = Added{Item: existing}
+				return write(dir, existing)
 			}
 		}
 		id, err := newID(src.At)
 		if err != nil {
 			return err
 		}
-		item = Item{ID: id, Domain: d, Repo: repo, Entry: e, Sources: []Source{src}, Status: StatusOpen}
-		return write(dir, item)
+		added = Added{Created: true, Item: Item{ID: id, Domain: d, Repo: repo, Entry: e, Sources: []Source{src}, Status: StatusOpen}}
+		return write(dir, added.Item)
 	})
-	return item, err
+	return added, err
 }
 
 // Set は domain の件 id の status を書き換え、書いた後の件を返す。

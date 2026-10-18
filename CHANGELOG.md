@@ -1,5 +1,9 @@
 # Changelog
 
+## [2026.1018.10](https://github.com/usadamasa/agents-daemon/compare/2026.1018.9...2026.1018.10) - 2026-10-18
+
+- ボードにパーキングの列と操作を足す (#121 段 6) by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/147
+
 ## [2026.1018.9](https://github.com/usadamasa/agents-daemon/compare/2026.1018.8...2026.1018.9) - 2026-10-18
 
 - パーキングロットにメモを置く park tool と status 行のメモの数を足す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/143

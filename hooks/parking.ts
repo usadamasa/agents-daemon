@@ -1,12 +1,18 @@
 import type { EngineInterface } from 'claude-code'
 
-import type { BoardCard, BoardData, ParkingCard, ParkingSource } from '../types'
+import type { BoardCard, BoardData, ParkedMemo, ParkingCard, ParkingSource } from '../types'
 import { daemonBin } from './daemon-bin'
 
-// ボードのパーキングのメモ (#121 の段 6) の見せ方と操作。行と列の描き方には依存させず、ボードの形が
-// 変わっても (#134) そのまま使えるようにする。描くのは hooks/board.tsx。
+// パーキングのメモの見せ方と、ボード (#121 の段 6) からの操作。行と列の描き方には依存させず、ボードの形が
+// 変わっても (#134) そのまま使えるようにする。描くのは hooks/board.tsx と hooks/band.tsx。
 
-const KIND_LABEL: Record<ParkingCard['kind'], string> = { aside: '脇', scope: '範囲', preference: '好み', task: 'タスク' }
+export const KIND_LABEL: Record<ParkingCard['kind'], string> = { aside: '脇', scope: '範囲', preference: '好み', task: 'タスク' }
+
+// parkedMemos は `park list` の stdout を band と hint 行に出す形にする。at は最後に置かれた時刻。
+export function parkedMemos(stdout: string): ParkedMemo[] {
+  const items = JSON.parse(stdout) as { id: string; kind: ParkedMemo['kind']; title: string; sources: { at: string }[] }[]
+  return items.map(item => ({ id: item.id, kind: item.kind, title: item.title, at: item.sources.at(-1)?.at ?? '' }))
+}
 
 // Destination はメモを渡す先のセッション。
 export type Destination = { session_id: string; session: string }
@@ -31,9 +37,16 @@ function sourceLine(source: ParkingSource): string {
   return [source.session, stamp(source.at), source.detail].filter(Boolean).join(' ')
 }
 
-// stamp は RFC 3339 の時刻を「MM/DD HH:MM」にする。置いたときの offset のまま出す (mod の時刻帯に頼らない)。
-function stamp(at: string): string {
-  return `${at.slice(5, 7)}/${at.slice(8, 10)} ${at.slice(11, 16)}`
+const JST_OFFSET_MS = 9 * 60 * 60 * 1000
+
+// stamp は RFC 3339 の時刻を JST の「MM/DD HH:MM」にする。記録の offset にも mod の時刻帯にも頼らない
+// (architecture.md「時刻の書き方」)。
+export function stamp(at: string): string {
+  const ms = Date.parse(at)
+  if (Number.isNaN(ms)) return at
+  const jst = new Date(ms + JST_OFFSET_MS)
+  const two = (n: number) => String(n).padStart(2, '0')
+  return `${two(jst.getUTCMonth() + 1)}/${two(jst.getUTCDate())} ${two(jst.getUTCHours())}:${two(jst.getUTCMinutes())}`
 }
 
 // taskDestinations は「タスクにする」の宛先: cards (同じ repo のカード) のうち、生きている自分以外のセッション。

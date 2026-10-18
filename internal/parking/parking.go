@@ -196,6 +196,21 @@ func (s Store) Find(d domain.Domain, repo, status string) ([]Item, error) {
 	return matched, nil
 }
 
+// PlacedDuring は items のうち、sessionID のセッションが taskID のタスクの途中で置いた件を返す。
+// 別のセッションが置いた件にまとめたものも、足した source で引ける。該当なしは空の配列。
+func PlacedDuring(items []Item, sessionID, taskID string) []Item {
+	matched := []Item{}
+	for _, item := range items {
+		for _, src := range item.Sources {
+			if src.SessionID == sessionID && src.TaskID == taskID {
+				matched = append(matched, item)
+				break
+			}
+		}
+	}
+	return matched
+}
+
 // Request は `park add` の stdin。置く中身と、置いたセッションの ID。
 type Request struct {
 	Entry
@@ -264,6 +279,8 @@ func hasSource(sources []Source, src Source) bool {
 }
 
 // newID は置いた時刻と乱数で id を作る。時刻を先に置くので、名前の順が置いた順になる。
+// 時刻は UTC にする。端末の時刻帯に左右されず、ファイル名の並びが時刻の並びと一致する。人に見せるときは
+// id の時刻を出さず、sources の at を JST で出す (architecture.md「時刻の書き方」)。
 func newID(at time.Time) (string, error) {
 	b := make([]byte, 4)
 	if _, err := rand.Read(b); err != nil {

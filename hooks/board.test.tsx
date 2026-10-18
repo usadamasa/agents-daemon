@@ -59,7 +59,8 @@ const MEMO = {
   default_taken: 'やらない',
   sources: [
     { session_id: 'PEER', session: 'peer', live: true, detail: '別の定数も同じ', at: '2026-10-18T19:30:00+09:00' },
-    { session_id: 'GONE', session: 'gone', live: false, at: '2026-10-18T18:00:00+09:00' },
+    // UTC で書かれた時刻も JST で出す。
+    { session_id: 'GONE', session: 'gone', live: false, at: '2026-10-18T16:28:44Z' },
   ],
 }
 
@@ -192,7 +193,7 @@ test('パーキングの列にメモを描き、選ぶと詳細と置いたセ�
   expect(await ui.find({ type: 'Text', text: /internal\/parking\/parking\.go/ })).toBeDefined()
   // sources は新しい順に、セッションの名前、時刻、後から置いた側の detail。
   expect(await ui.find({ type: 'Text', text: /peer 10\/18 19:30 別の定数も同じ/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /gone 10\/18 18:00/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /gone 10\/19 01:28/ })).toBeDefined()
 
   await ui.press({ key: 'discard' })
   expect(ran).toEqual([['park', 'set', MEMO.id, '--status', 'discarded', ...SELF_ARGS]])

@@ -1,5 +1,6 @@
 import type { Register } from 'claude-code'
 
+import { registerBand, startBand } from './band'
 import { registerBoard, startBoard } from './board'
 import { registerPark, startPark } from './park'
 
@@ -9,9 +10,12 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     await startBoard($)
     await startPark($)
+    // band は startPark が読んだメモの一覧を使う。
+    await startBand($)
 
     return next(e)
   })
   registerBoard(on, options)
   registerPark(on, options)
+  registerBand(on, options)
 }

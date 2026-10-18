@@ -38,7 +38,7 @@ func Write(w io.Writer, p apppath.Paths, v Viewer) error {
 	}
 	// 設定が読めなくても既定 (すべて業務) で描く。業務のものが私用の側へ出ない向きに倒れる。
 	cfg, _ := config.Load(p.ConfigFile())
-	c := cfg.Classifier(v.UserHome)
+	c := domain.FromConfig(v.UserHome, cfg)
 	store := tasklog.New(p.StateDir())
 
 	d := store.SessionDomain(v.SessionID, c.Classify(v.CWD))

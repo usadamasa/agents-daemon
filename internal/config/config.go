@@ -10,8 +10,6 @@ import (
 	"os"
 	"regexp"
 	"strings"
-
-	"github.com/usadamasa/agents-daemon/internal/domain"
 )
 
 // defaultRetryMessage は上限解除後の再開で pane へ送る文面。上限の検知語 (limit / rate 等) を
@@ -110,12 +108,6 @@ type rawConfig struct {
 
 	HomePaths     *[]string `json:"homePaths"`
 	DefaultDomain *string   `json:"defaultDomain"`
-}
-
-// Classifier は HomePaths と DefaultDomain から cwd の domain を決める Classifier を作る。
-// HomePaths の ~ は userHome に展開する。
-func (c Config) Classifier(userHome string) domain.Classifier {
-	return domain.New(userHome, c.HomePaths, c.DefaultDomain)
 }
 
 // Load は path から設定を読み込む。

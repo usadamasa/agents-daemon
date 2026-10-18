@@ -467,7 +467,7 @@ func TestReportDomain(t *testing.T) {
 	home := t.TempDir()
 	p := apppath.New(home, "", "")
 	writeJSONFile(t, p.ConfigFile(), map[string]any{
-		"privatePaths": []string{"~/src/github.com/usadamasa", "src/relative"},
+		"homePaths": []string{"~/src/github.com/usadamasa", "src/relative"},
 	})
 	panes := []multiplexer.Pane{
 		{PaneID: "p1", Agent: "claude", CWD: filepath.Join(home, "src/github.com/usadamasa/agents-daemon")},
@@ -480,8 +480,8 @@ func TestReportDomain(t *testing.T) {
 	out := buf.String()
 
 	for _, want := range []string{
-		"privatePaths に当たらない cwd: work",
-		"pane=p1 private ",
+		"homePaths に当たらない cwd: work",
+		"pane=p1 home ",
 		"pane=p2 work ",
 		"1 件は絶対パスでも ~/ 始まりでもないため無視しています",
 	} {
@@ -494,17 +494,17 @@ func TestReportDomain(t *testing.T) {
 	}
 }
 
-// 私用の端末 (defaultDomain=private) では、私用のパスが無くても案内を出さない。
-func TestReportDomain_privateMachine(t *testing.T) {
+// 私用の端末 (defaultDomain=home) では、私用のパスが無くても案内を出さない。
+func TestReportDomain_homeMachine(t *testing.T) {
 	home := t.TempDir()
 	p := apppath.New(home, "", "")
-	writeJSONFile(t, p.ConfigFile(), map[string]any{"defaultDomain": "private"})
+	writeJSONFile(t, p.ConfigFile(), map[string]any{"defaultDomain": "home"})
 
 	var buf bytes.Buffer
 	reportDomain(&buf, p, nil, home)
 	out := buf.String()
-	if !strings.Contains(out, "privatePaths に当たらない cwd: private") {
-		t.Errorf("既定が private と出ていない:\n%s", out)
+	if !strings.Contains(out, "homePaths に当たらない cwd: home") {
+		t.Errorf("既定が home と出ていない:\n%s", out)
 	}
 	if strings.Contains(out, "私用と判定するパスはありません") {
 		t.Errorf("私用の端末に業務の端末向けの案内を出している:\n%s", out)

@@ -72,8 +72,8 @@ func TestLoad(t *testing.T) {
 			"customPatterns": ["foo.*bar"],
 			"idleShutdownMinutes": 15,
 			"deferToNativeAutoContinue": false,
-			"privatePaths": ["~/src/github.com/usadamasa"],
-			"defaultDomain": "private"
+			"homePaths": ["~/src/github.com/usadamasa"],
+			"defaultDomain": "home"
 		}`)
 		cfg, err := Load(path)
 		if err != nil {
@@ -100,8 +100,8 @@ func TestLoad(t *testing.T) {
 			IdleShutdownMinutes:     15,
 
 			DeferToNativeAutoContinue: false,
-			PrivatePaths:              []string{"~/src/github.com/usadamasa"},
-			DefaultDomain:             "private",
+			HomePaths:                 []string{"~/src/github.com/usadamasa"},
+			DefaultDomain:             "home",
 		}
 		if !reflect.DeepEqual(cfg, want) {
 			t.Errorf("got %+v, want %+v", cfg, want)
@@ -197,8 +197,8 @@ func TestLoad_domain(t *testing.T) {
 		wantDefault string
 	}{
 		{"書かなければ私用のパスは無く、既定は業務", `{}`, []string{}, "work"},
-		{"私用の端末は defaultDomain を private にする", `{"defaultDomain":"private"}`, []string{}, "private"},
-		{"privatePaths は書かれたとおり残す", `{"privatePaths":["~/src/github.com/usadamasa"]}`, []string{"~/src/github.com/usadamasa"}, "work"},
+		{"私用の端末は defaultDomain を home にする", `{"defaultDomain":"home"}`, []string{}, "home"},
+		{"homePaths は書かれたとおり残す", `{"homePaths":["~/src/github.com/usadamasa"]}`, []string{"~/src/github.com/usadamasa"}, "work"},
 		{"defaultDomain の typo は業務のまま (私用へ倒さない)", `{"defaultDomain":"personal"}`, []string{}, "work"},
 		{"defaultDomain の型違いも業務のまま", `{"defaultDomain":1}`, []string{}, "work"},
 	}
@@ -208,8 +208,8 @@ func TestLoad_domain(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if !reflect.DeepEqual(cfg.PrivatePaths, tc.wantPaths) || cfg.DefaultDomain != tc.wantDefault {
-				t.Errorf("PrivatePaths/DefaultDomain = %v/%q, want %v/%q", cfg.PrivatePaths, cfg.DefaultDomain, tc.wantPaths, tc.wantDefault)
+			if !reflect.DeepEqual(cfg.HomePaths, tc.wantPaths) || cfg.DefaultDomain != tc.wantDefault {
+				t.Errorf("HomePaths/DefaultDomain = %v/%q, want %v/%q", cfg.HomePaths, cfg.DefaultDomain, tc.wantPaths, tc.wantDefault)
 			}
 		})
 	}

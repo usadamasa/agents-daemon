@@ -177,25 +177,25 @@ rex の送信が未測定なのはこの教訓がまだ果たされていない�
 | `customPatterns` | `[]` | 上限として扱う追加の正規表現 |
 | `idleShutdownMinutes` | `30` | Claude pane が 0 のまま続いたら自己終了する |
 | `deferToNativeAutoContinue` | `true` | ネイティブの auto-continue が再開を予約している間は手を出さない |
-| `privatePaths` | `[]` | 私用と判定するパス (絶対パスか `~/` 始まり)。cwd がこの下なら私用 |
-| `defaultDomain` | `work` | `privatePaths` に当たらない cwd の区分 (`work` か `private`) |
+| `homePaths` | `[]` | 私用と判定するパス (絶対パスか `~/` 始まり)。cwd がこの下なら私用 |
+| `defaultDomain` | `work` | `homePaths` に当たらない cwd の区分 (`work` か `home`) |
 
 旧版の compact / cache のキー (`compactStall*` `compactAuto*` `compactResume*` `cacheIdleCompact*`) は
 読まない。config.json に残っていても他のキーには影響しないが、消してよい。
 
 ### 私用と業務の区分
 
-セッションの cwd から、私用 (`private`) と業務 (`work`) のどちらの作業かを決める (`internal/domain`)。
+セッションの cwd から、私用 (`home`) と業務 (`work`) のどちらの作業かを決める (`internal/domain`)。
 これから入るタスクの記録とパーキングロットは区分ごとに分けて置き、ボードも 1 つの区分しか描かない (#121)。
 業務のものをインターネットに出さず、私用と混ぜないための境界になる。
 
-私用と言えるのは `privatePaths` の下だけで、それ以外と判定できないもの (cwd が空、相対パス、
+私用と言えるのは `homePaths` の下だけで、それ以外と判定できないもの (cwd が空、相対パス、
 `defaultDomain` の typo) はすべて業務に倒す。判定を誤っても、業務のものが私用の側に漏れない向きにするため。
 
 | 端末 | 書くもの |
 | ---- | ---- |
-| 業務の端末 (業務と私用の両方を触る) | `"privatePaths": ["~/src/github.com/usadamasa"]` のように私用のリポジトリの置き場だけを書く |
-| 私用の端末 (私用だけを触る) | `"defaultDomain": "private"`。パスに関係なくすべて私用になる |
+| 業務の端末 (業務と私用の両方を触る) | `"homePaths": ["~/src/github.com/usadamasa"]` のように私用のリポジトリの置き場だけを書く |
+| 私用の端末 (私用だけを触る) | `"defaultDomain": "home"`。パスに関係なくすべて私用になる |
 
 書いたら `doctor` の「domain (私用と業務の境界)」で、Claude の pane ごとの判定を確かめる。
 

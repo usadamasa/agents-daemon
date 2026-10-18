@@ -10,7 +10,7 @@ require (
 require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
-	github.com/usadamasa/go-arch-metrics v0.0.0-20260919102547-63dc20488dac // indirect
+	github.com/usadamasa/go-arch-metrics v0.0.0-20261018064030-bae94cae339b // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 

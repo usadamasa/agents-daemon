@@ -1,0 +1,1232 @@
+{
+  "session_id": "session:01a14d5d-0dea-71ec-97b7-ece67015d584",
+  "block": {
+    "block_id": "block:01a14d5d-0dea-72fd-938b-169746065cb2",
+    "label": "shell",
+    "creator_name": "com.superlogical.terminal",
+    "flavor": "com.superlogical.terminal.shell",
+    "host_id": "dfd31eaf-0189-45ad-9a36-10c09f3cb111",
+    "placement": "placed",
+    "window_id": "window:01a14d5d-0dfc-7509-b1b3-e73fd9470fa2",
+    "owner": "client:01a14c9b-231e-7da8-aeac-da9cbfb13f15"
+  },
+  "api": {
+    "events": {
+      "bell": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "child_exited": {
+        "type": "object",
+        "properties": {
+          "exit_code": {
+            "type": "integer"
+          },
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "exit_code"
+        ],
+        "additionalProperties": false
+      },
+      "clipboard_written": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "bytes": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false
+      },
+      "desktop_notification": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "body"
+        ],
+        "additionalProperties": false
+      },
+      "process_changed": {
+        "type": "object",
+        "properties": {
+          "generation": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "foreground": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "properties": {
+              "pid": {
+                "type": "integer"
+              },
+              "user_id": {
+                "type": "integer"
+              },
+              "user": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "invoked_path": {
+                "type": "string"
+              },
+              "argv0": {
+                "type": "string"
+              },
+              "script": {
+                "type": "string"
+              },
+              "cwd": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "pid",
+              "user_id",
+              "name"
+            ],
+            "additionalProperties": false
+          },
+          "ancestors": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "object",
+              "properties": {
+                "pid": {
+                  "type": "integer"
+                },
+                "user_id": {
+                  "type": "integer"
+                },
+                "user": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "invoked_path": {
+                  "type": "string"
+                },
+                "argv0": {
+                  "type": "string"
+                },
+                "script": {
+                  "type": "string"
+                },
+                "cwd": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "pid",
+                "user_id",
+                "name"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "generation",
+          "foreground"
+        ],
+        "additionalProperties": false
+      },
+      "program_status_changed": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "record": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "progress": {
+                "type": [
+                  "null",
+                  "integer"
+                ],
+                "minimum": 0,
+                "maximum": 255
+              },
+              "app": {
+                "type": "string"
+              },
+              "effective_app": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "msg": {
+                "type": "string"
+              },
+              "updated_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "owner": {
+                "type": [
+                  "null",
+                  "object"
+                ],
+                "properties": {
+                  "pid": {
+                    "type": "integer"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "pid",
+                  "name"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "state",
+              "updated_at"
+            ],
+            "additionalProperties": false
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "record",
+          "reason"
+        ],
+        "additionalProperties": false
+      },
+      "program_status_removed": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ids",
+          "reason"
+        ],
+        "additionalProperties": false
+      },
+      "progress_report": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string"
+          },
+          "progress": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "minimum": 0,
+            "maximum": 255
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "additionalProperties": false
+      },
+      "pwd_changed": {
+        "type": "object",
+        "properties": {
+          "pwd": {
+            "type": "string"
+          },
+          "owner": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "properties": {
+              "pid": {
+                "type": "integer"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "pid",
+              "name"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "pwd"
+        ],
+        "additionalProperties": false
+      },
+      "selection_copied": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "size_changed": {
+        "type": "object",
+        "properties": {
+          "columns": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4294967295
+          },
+          "rows": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4294967295
+          },
+          "cell_width_px": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4294967295
+          },
+          "cell_height_px": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4294967295
+          },
+          "owner": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+          },
+          "principal": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string"
+              },
+              "transport": {
+                "type": "string"
+              },
+              "display": {
+                "type": "string"
+              },
+              "remote_addr": {
+                "type": "string"
+              },
+              "uid": {
+                "type": [
+                  "null",
+                  "integer"
+                ]
+              },
+              "gid": {
+                "type": [
+                  "null",
+                  "integer"
+                ]
+              },
+              "pid": {
+                "type": [
+                  "null",
+                  "integer"
+                ]
+              },
+              "sid": {
+                "type": "string"
+              },
+              "user_id": {
+                "type": "string"
+              },
+              "login_name": {
+                "type": "string"
+              },
+              "node": {
+                "type": "string"
+              },
+              "tags": {
+                "type": [
+                  "null",
+                  "array"
+                ],
+                "items": {
+                  "type": "string"
+                }
+              },
+              "path": {
+                "type": [
+                  "null",
+                  "array"
+                ],
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "kind",
+              "transport",
+              "display"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "columns",
+          "rows",
+          "cell_width_px",
+          "cell_height_px",
+          "owner"
+        ],
+        "additionalProperties": false
+      },
+      "title_changed": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "owner": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "properties": {
+              "pid": {
+                "type": "integer"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "pid",
+              "name"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "additionalProperties": false
+      },
+      "url_clicked": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "methods": {
+      "clear": {
+        "description": "Clear the screen and scrollback.",
+        "input_schema": {
+          "type": "object",
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "additionalProperties": false
+        },
+        "actions": [
+          {
+            "name": "clear",
+            "title": "Clear Terminal",
+            "description": "Clear the screen and scrollback.",
+            "category": "Pane",
+            "keywords": "terminal clear screen scrollback erase cmd+k ctrl+l"
+          }
+        ]
+      },
+      "clipboard_read": {
+        "description": "Read text that the child copied to the clipboard with OSC 52. The server keeps each copy for a short time.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "offset": {
+              "type": "integer"
+            },
+            "max_bytes": {
+              "type": "integer"
+            }
+          },
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "data": {
+              "type": "string"
+            },
+            "total": {
+              "type": "integer"
+            },
+            "eof": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "id",
+            "data",
+            "total",
+            "eof"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "format": {
+        "description": "Format the current terminal screen as text, HTML, or VT sequences.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "format": {
+              "type": "string"
+            },
+            "trim": {
+              "type": "boolean"
+            },
+            "unwrap": {
+              "type": "boolean"
+            },
+            "extra_charsets": {
+              "type": "boolean"
+            },
+            "extra_cursor": {
+              "type": "boolean"
+            },
+            "extra_hyperlink": {
+              "type": "boolean"
+            },
+            "extra_keyboard": {
+              "type": "boolean"
+            },
+            "extra_kitty_keyboard": {
+              "type": "boolean"
+            },
+            "extra_modes": {
+              "type": "boolean"
+            },
+            "extra_palette": {
+              "type": "boolean"
+            },
+            "extra_protection": {
+              "type": "boolean"
+            },
+            "extra_pwd": {
+              "type": "boolean"
+            },
+            "extra_scrolling_region": {
+              "type": "boolean"
+            },
+            "extra_style": {
+              "type": "boolean"
+            },
+            "extra_tabstops": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "content": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "content"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "list_dir": {
+        "description": "List the subdirectories of a path, and optionally its files, as the terminal's child would resolve it.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "prefix": {
+              "type": "string"
+            },
+            "limit": {
+              "type": "integer"
+            },
+            "files": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "home": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            },
+            "entries": {
+              "type": [
+                "null",
+                "array"
+              ],
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "symlink": {
+                    "type": "boolean"
+                  },
+                  "file": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "truncated": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "path",
+            "home",
+            "status",
+            "entries",
+            "truncated"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "process": {
+        "description": "Return information about the terminal's child and foreground processes, including the child's exit result when available.",
+        "input_schema": {
+          "type": "object",
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "last_exit": {
+              "type": [
+                "null",
+                "object"
+              ],
+              "properties": {
+                "exit_code": {
+                  "type": "integer"
+                },
+                "error": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "exit_code"
+              ],
+              "additionalProperties": false
+            },
+            "child": {
+              "type": [
+                "null",
+                "object"
+              ],
+              "properties": {
+                "pid": {
+                  "type": "integer"
+                },
+                "user_id": {
+                  "type": "integer"
+                },
+                "user": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "invoked_path": {
+                  "type": "string"
+                },
+                "argv0": {
+                  "type": "string"
+                },
+                "script": {
+                  "type": "string"
+                },
+                "cwd": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "pid",
+                "user_id",
+                "name"
+              ],
+              "additionalProperties": false
+            },
+            "foreground": {
+              "type": [
+                "null",
+                "object"
+              ],
+              "properties": {
+                "pid": {
+                  "type": "integer"
+                },
+                "user_id": {
+                  "type": "integer"
+                },
+                "user": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "invoked_path": {
+                  "type": "string"
+                },
+                "argv0": {
+                  "type": "string"
+                },
+                "script": {
+                  "type": "string"
+                },
+                "cwd": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "pid",
+                "user_id",
+                "name"
+              ],
+              "additionalProperties": false
+            },
+            "ancestors": {
+              "type": [
+                "null",
+                "array"
+              ],
+              "items": {
+                "type": "object",
+                "properties": {
+                  "pid": {
+                    "type": "integer"
+                  },
+                  "user_id": {
+                    "type": "integer"
+                  },
+                  "user": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "invoked_path": {
+                    "type": "string"
+                  },
+                  "argv0": {
+                    "type": "string"
+                  },
+                  "script": {
+                    "type": "string"
+                  },
+                  "cwd": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "pid",
+                  "user_id",
+                  "name"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "home": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "last_exit"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "program_status": {
+        "description": "Return every program status record the terminal holds, as reported through OSC 7501.",
+        "input_schema": {
+          "type": "object",
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "records": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "state": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string"
+                  },
+                  "progress": {
+                    "type": [
+                      "null",
+                      "integer"
+                    ],
+                    "minimum": 0,
+                    "maximum": 255
+                  },
+                  "app": {
+                    "type": "string"
+                  },
+                  "effective_app": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "msg": {
+                    "type": "string"
+                  },
+                  "updated_at": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "owner": {
+                    "type": [
+                      "null",
+                      "object"
+                    ],
+                    "properties": {
+                      "pid": {
+                        "type": "integer"
+                      },
+                      "name": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "pid",
+                      "name"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "state",
+                  "updated_at"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "records"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "pwd": {
+        "description": "Return the working directory the child last reported, and which process reported it.",
+        "input_schema": {
+          "type": "object",
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "pwd": {
+              "type": "string"
+            },
+            "owner": {
+              "type": [
+                "null",
+                "object"
+              ],
+              "properties": {
+                "pid": {
+                  "type": "integer"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "pid",
+                "name"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "reset": {
+        "description": "Reset the emulator with CAN then RIS. The request and successful response are {}. Acceptance is asynchronous: with data clients, the mux waits up to 250ms for a parser-ground boundary so the same bytes follow earlier output. Forced application still resets authoritative state and requires data clients to reconnect. Dimensions, configured defaults, block identity, size ownership, the child process, and the PTY are preserved.",
+        "input_schema": {
+          "type": "object",
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "additionalProperties": false
+        },
+        "actions": [
+          {
+            "name": "reset",
+            "title": "Reset Terminal",
+            "description": "Clear the screen and scrollback and return the emulator to its initial state.",
+            "category": "Pane",
+            "keywords": "terminal reset clear scrollback emulator can ris"
+          }
+        ]
+      },
+      "resize": {
+        "description": "Request a grid size. The size is applied if the caller owns the block or the block has no owner. Otherwise it is remembered and applied when the caller becomes the owner.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "columns": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4294967295
+            },
+            "rows": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4294967295
+            },
+            "cell_width_px": {
+              "type": [
+                "null",
+                "integer"
+              ],
+              "minimum": 0,
+              "maximum": 4294967295
+            },
+            "cell_height_px": {
+              "type": [
+                "null",
+                "integer"
+              ],
+              "minimum": 0,
+              "maximum": 4294967295
+            }
+          },
+          "required": [
+            "columns",
+            "rows"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "additionalProperties": false
+        }
+      },
+      "set_theme": {
+        "description": "Replace the terminal's default colors. Omitted fields reset to the built-in defaults. Like resize, the terminal remembers the last theme each client sent, and uses the owner's theme, or any client's while the block has no owner. A theme from another client is remembered and applied when that client becomes the owner, together with its size. A successful reply does not mean the colors changed.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "foreground": {
+              "type": "string"
+            },
+            "background": {
+              "type": "string"
+            },
+            "cursor": {
+              "type": "string"
+            },
+            "palette": {
+              "type": [
+                "null",
+                "array"
+              ],
+              "items": {
+                "type": "string"
+              }
+            },
+            "scheme": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "additionalProperties": false
+        }
+      },
+      "size": {
+        "description": "Return the grid size, cell dimensions in pixels, owner, and the last size each client requested.",
+        "input_schema": {
+          "type": "object",
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "columns": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4294967295
+            },
+            "rows": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4294967295
+            },
+            "cell_width_px": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4294967295
+            },
+            "cell_height_px": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4294967295
+            },
+            "owner": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "desired": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "client_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "columns": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 4294967295
+                  },
+                  "rows": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 4294967295
+                  },
+                  "updated_at": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                },
+                "required": [
+                  "client_id",
+                  "columns",
+                  "rows",
+                  "updated_at"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "columns",
+            "rows",
+            "cell_width_px",
+            "cell_height_px",
+            "owner",
+            "desired"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "title": {
+        "description": "Return the current terminal title.",
+        "input_schema": {
+          "type": "object",
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "owner": {
+              "type": [
+                "null",
+                "object"
+              ],
+              "properties": {
+                "pid": {
+                  "type": "integer"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "pid",
+                "name"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "title"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "tty_mode": {
+        "description": "Return information about the terminal's attributes.",
+        "input_schema": {
+          "type": "object",
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "echo": {
+              "type": "boolean"
+            },
+            "canonical": {
+              "type": "boolean"
+            },
+            "signals": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "echo",
+            "canonical",
+            "signals"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "write": {
+        "description": "Write bytes to the terminal's pty as if the user had typed them.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "data"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "bytes_written": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "bytes_written"
+          ],
+          "additionalProperties": false
+        }
+      }
+    }
+  }
+}

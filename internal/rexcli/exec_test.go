@@ -94,10 +94,12 @@ emit() {
 }
 case "$1" in
   ls) emit ls.json sessions ;;
+  version) emit version.json version ;;
   block)
     case "$2" in
       ls) emit "block-ls-$4.json" "$4" ;;
       call) emit "$5-$4.json" "$4" ;;
+      inspect) emit "inspect-$3.json" "$3" ;;
       *) echo "Error: unknown block subcommand $2" >&2; exit 2 ;;
     esac ;;
   capture) emit "capture-$3.txt" "$3" ;;

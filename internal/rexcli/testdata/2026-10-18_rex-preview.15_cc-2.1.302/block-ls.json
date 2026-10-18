@@ -1,0 +1,14 @@
+{
+  "blocks": [
+    {
+      "block_id": "block:01a14d5d-0dea-72fd-938b-169746065cb2",
+      "label": "shell",
+      "creator_name": "com.superlogical.terminal",
+      "flavor": "com.superlogical.terminal.shell",
+      "host_id": "dfd31eaf-0189-45ad-9a36-10c09f3cb111",
+      "placement": "placed",
+      "window_id": "window:01a14d5d-0dfc-7509-b1b3-e73fd9470fa2",
+      "owner": "client:01a14c9b-231e-7da8-aeac-da9cbfb13f15"
+    }
+  ]
+}

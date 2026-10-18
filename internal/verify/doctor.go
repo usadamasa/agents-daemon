@@ -27,7 +27,9 @@ type DoctorInput struct {
 	Kind   string // Client の多重化ツール (backend.Detect の結果)
 	Paths  apppath.Paths
 	Now    time.Time
-	Getenv func(string) string // peer messaging の判定に使う環境 (通常は os.Getenv)
+	Getenv func(string) string // peer messaging と rex CLI の前提 (REX_BLOCK / REX_SESSION) に使う環境 (通常は os.Getenv)
+	// Premises は rex CLI の前提の点検。Client がその口を持たなければ nil。
+	Premises multiplexer.PremiseChecker
 }
 
 // RunDoctor は各前提条件を順に確認し w へ報告する。
@@ -52,6 +54,9 @@ func RunDoctor(ctx context.Context, w io.Writer, in DoctorInput) error {
 		return fmt.Errorf("%s の pane 一覧の取得に失敗しました (%s には到達できるのに異常): %w", in.Kind, in.Kind, err)
 	}
 	reportPanes(w, panes)
+
+	_, _ = fmt.Fprintf(w, "\n-- %s CLI の前提 (自分の block への固定コマンドの応答の形) --\n", in.Kind)
+	reportPremises(ctx, w, in.Premises, in.Getenv)
 
 	_, _ = fmt.Fprintln(w, "\n-- statusline state (セッションごとの rate-limits) --")
 	reportRateLimitStates(w, in.Paths, panes, in.Now)
@@ -94,6 +99,28 @@ func reportPanes(w io.Writer, panes []multiplexer.Pane) {
 		_, _ = fmt.Fprintln(w, "  Claude agent の pane が見つかりません")
 	}
 	_, _ = fmt.Fprintf(w, "  pane 総数: %d 件 (うち Claude agent: %d 件)\n", len(panes), claudeCount)
+}
+
+// reportPremises は rex CLI の応答の形が internal/rexcli の読む形のままかを、自分の block (REX_BLOCK) に
+// 固定のコマンドを打って報告する。ずれは ⚠ で出すだけで doctor の exit code には響かない
+// (rex を上げた直後に全 pane が unknown になる原因を、changelog を読む前に名指しで見るため)。
+func reportPremises(ctx context.Context, w io.Writer, checker multiplexer.PremiseChecker, getenv func(string) string) {
+	if checker == nil {
+		_, _ = fmt.Fprintln(w, "  この backend には点検の口が無いため省きます")
+		return
+	}
+	blockID := getenv("REX_BLOCK")
+	if blockID == "" {
+		_, _ = fmt.Fprintln(w, "  REX_BLOCK が無いため点検しません (rex の block の中の Bash ツールから呼ぶと自分の block で点検します)")
+		return
+	}
+	for _, f := range checker.CheckPremises(ctx, blockID, getenv("REX_SESSION")) {
+		if f.OK {
+			_, _ = fmt.Fprintf(w, "  OK: %s\n", f.Text)
+		} else {
+			_, _ = fmt.Fprintf(w, "  ⚠ %s\n", f.Text)
+		}
+	}
 }
 
 // reportRateLimitStates は ingest-statusline が書き出す rate-limits.json の有無、鮮度、

@@ -1,5 +1,18 @@
 # Changelog
 
+## [2026.1018.11](https://github.com/usadamasa/agents-daemon/compare/2026.1018.10...2026.1018.11) - 2026-10-18
+
+- lint で gofmt のずれを拾い、housekeeping_test.go を整形する by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/149
+- domain から config への依存を外し、Classifier の組み立てを呼び出し側へ戻す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/150
+- リポジトリの外なら cwd を鍵にする規則を Place.Key の 1 箇所にまとめる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/151
+- パーキングのメモを入力欄の上の band に出し、時刻を JST で見せる (#121 段 7) by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/153
+- セッションをまたぐ辺を書く・消す・一覧する CLI (edge add|rm|list) を足す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/154
+- ボードのカードに branch ではなくセッション名を出す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/155
+- タスクの無いセッションのカードに今の作業を出す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/156
+- cmd/agents-daemon を root の登録だけにし、コマンドの組み立てを機能ごとの cli パッケージへ移す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/158
+- タスクのボードの経路の出来事を domain ごとのログに出す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/159
+- パーキングのものを docs と CLI で「件」から「メモ」と呼び直す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/160
+
 ## [2026.1018.10](https://github.com/usadamasa/agents-daemon/compare/2026.1018.9...2026.1018.10) - 2026-10-18
 
 - ボードにパーキングの列と操作を足す (#121 段 6) by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/147

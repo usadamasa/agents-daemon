@@ -179,6 +179,82 @@ func TestRunDoctor(t *testing.T) {
 
 }
 
+// fakePremises は PremiseChecker のテスト用実装。渡した finding をそのまま返し、受けた引数を覚える。
+type fakePremises struct {
+	findings []multiplexer.PremiseFinding
+	paneID   string
+	session  string
+	calls    int
+}
+
+func (f *fakePremises) CheckPremises(_ context.Context, paneID, sessionID string) []multiplexer.PremiseFinding {
+	f.calls++
+	f.paneID, f.session = paneID, sessionID
+	return f.findings
+}
+
+func TestReportPremises(t *testing.T) {
+	t.Run("REX_BLOCK があれば自分の block と session で点検し OK と ⚠ で出す", func(t *testing.T) {
+		checker := &fakePremises{findings: []multiplexer.PremiseFinding{
+			{OK: true, Text: "rex_version: 0.0.1 (built_at 2026-10-16T13:55:32Z)"},
+			{OK: false, Text: "program_status の root record に owner.pid が無い"},
+		}}
+		var buf bytes.Buffer
+		reportPremises(context.Background(), &buf, checker, envOf(map[string]string{
+			"REX_BLOCK": "block:self", "REX_SESSION": "session:self",
+		}))
+		out := buf.String()
+		for _, want := range []string{"OK: rex_version: 0.0.1", "⚠ program_status の root record に owner.pid が無い"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("出力に %q が無い:\n%s", want, out)
+			}
+		}
+		if checker.paneID != "block:self" || checker.session != "session:self" {
+			t.Errorf("CheckPremises(%q, %q), want (block:self, session:self)", checker.paneID, checker.session)
+		}
+	})
+
+	t.Run("REX_BLOCK が無ければ点検せず理由を出す", func(t *testing.T) {
+		checker := &fakePremises{}
+		var buf bytes.Buffer
+		reportPremises(context.Background(), &buf, checker, noEnv)
+		if checker.calls != 0 {
+			t.Errorf("REX_BLOCK 無しで CheckPremises が %d 回呼ばれた", checker.calls)
+		}
+		if !strings.Contains(buf.String(), "REX_BLOCK") {
+			t.Errorf("REX_BLOCK が無い理由が出ていない:\n%s", buf.String())
+		}
+	})
+
+	t.Run("checker が無ければ節の中身だけ省く", func(t *testing.T) {
+		var buf bytes.Buffer
+		reportPremises(context.Background(), &buf, nil, envOf(map[string]string{"REX_BLOCK": "block:self"}))
+		if !strings.Contains(buf.String(), "点検") {
+			t.Errorf("checker 無しの説明が出ていない:\n%s", buf.String())
+		}
+	})
+}
+
+func TestRunDoctor_PremisesSection(t *testing.T) {
+	client := &multiplexerfake.Client{
+		ReachableFunc: func(context.Context) error { return nil },
+		PaneListFunc:  func(context.Context) ([]multiplexer.Pane, error) { return nil, nil },
+	}
+	checker := &fakePremises{findings: []multiplexer.PremiseFinding{{OK: true, Text: "exit 3"}}}
+	in := DoctorInput{
+		Client: client, Kind: sessionstate.MultiplexerKindRex, Paths: apppath.New(t.TempDir(), "", ""),
+		Now: time.Now(), Getenv: envOf(map[string]string{"REX_BLOCK": "block:self", "REX_SESSION": "session:self"}),
+		Premises: checker,
+	}
+	var buf bytes.Buffer
+	if err := RunDoctor(context.Background(), &buf, in); err != nil {
+		t.Fatalf("RunDoctor() error = %v", err)
+	}
+	if !strings.Contains(buf.String(), "-- rex CLI の前提") || !strings.Contains(buf.String(), "OK: exit 3") {
+		t.Errorf("rex CLI の前提の節が無い:\n%s", buf.String())
+	}
+}
+
 func TestReportPeerMessaging(t *testing.T) {
 	// パスは全て t.TempDir() からの相対で書く。実パス (/tmp/claude-501 等) を書かないのは、
 	// sandbox 内の go test では t.TempDir() 自体が /tmp/claude-<uid> の下になり、fixture が環境と交差するため。

@@ -14,6 +14,7 @@ import (
 const (
 	measuredOct10 = "2026-10-10_rex-0.0.1791570264_cc-2.1.296"
 	measuredOct17 = "2026-10-17_rex-preview.15_cc-2.1.302"
+	measuredOct18 = "2026-10-18_rex-preview.15_cc-2.1.302"
 )
 
 // 実測の fixture の owner.pid。foreground の process の pid と突き合わせる。

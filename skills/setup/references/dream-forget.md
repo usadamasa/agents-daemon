@@ -9,21 +9,25 @@ sandbox の中では `operation not permitted` になる。`dream forget` だけ
 
 ## 足す行
 
-利用者の `~/.claude/settings.json`:
+利用者の `~/.claude/settings.json`。settings を生成している環境では、その原本 (agents-config なら
+`dotclaude/settings/base.yaml`) に足す。生成物に手で足しても次の生成で消える。
 
 ```json
 {
   "sandbox": {
-    "excludedCommands": ["*/agents-daemon/bin/agents-daemon dream forget *"]
+    "excludedCommands": ["~/.cache/agents-daemon/bin/agents-daemon dream forget *"]
   }
 }
 ```
 
+`XDG_CACHE_HOME` を設定している環境では、`~/.cache` をその値に読み替える (呼ぶ側のコマンドも同じ)。
+
 ## 照合の規則
 
 - 要素は `Bash(...)` の許可ルールと同じ構文で、`*` は任意の文字列に当たる。呼び出しの文字列そのものと照合するので、
-  basename だけの `agents-daemon dream forget *` は絶対パスで呼んだコマンドに当たらない。先頭の `*/` が
-  `~/.cache` と `/Users/x/.cache` と `XDG_CACHE_HOME` の実パスを吸収する
+  basename だけの `agents-daemon dream forget *` は絶対パスで呼んだコマンドに当たらない
+- 先頭は `~/.cache/` で固定し、`*` は末尾にだけ置く。`*/agents-daemon/bin/agents-daemon dream forget *` のように
+  先頭を `*` にすると、cwd の下に作った偽の `x/agents-daemon/bin/agents-daemon` にも当たり、sandbox の外で動く
 - 呼ぶ側は `~/.cache/agents-daemon/bin/agents-daemon dream forget <name>` と literal のパスで打つ。
   `"${XDG_CACHE_HOME:-$HOME/.cache}/..."` のように command name が変数から来る呼び出しは、要素に当たっても
   sandbox に残る。`cd` や `$(...)` や `>` を同じ呼び出しに混ぜても同じ

@@ -15,7 +15,6 @@ README の「役割」が持つ。機能を足す・外す判断はそこに照�
 | `hooks/dream-harvest.sh` | Stop で `dream harvest --detach` を exec する |
 | `hooks/lib/` | hook 共通の logger、バイナリの置き場 (`daemon-bin.sh`) |
 | `scripts/get-session-id.sh` | setup skill が呼ぶ session_id の取得 |
-| `scripts/migrate-cc-dream-state.sh` | 旧 cc-dream の state の一回きりの移行。済んだら消す |
 | `skills/agents-daemon/` | 運用と切り分けの手引き。配線・判定・設定キーの詳細は `references/` |
 | `skills/setup/` | install 後の前提確認。backend ごとの手順と配線の詳細は `references/` |
 | `skills/peer-sessions/` | 別セッション (peer) へ作業を渡す手順 (`ListAgents` / `SendMessage`)。rex の block 操作は `references/rex.md` |

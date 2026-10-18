@@ -1,5 +1,11 @@
 # Changelog
 
+## [2026.1018.8](https://github.com/usadamasa/agents-daemon/compare/2026.1018.7...2026.1018.8) - 2026-10-18
+
+- chore: Claude Code が生成する tsconfig.json を ignore する by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/131
+- パーキングの件を park add / set / list で保存する (#121 段 4) by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/135
+- cmd/agents-daemon の責務の置き場を見直す (#121) by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/136
+
 ## [2026.1018.7](https://github.com/usadamasa/agents-daemon/compare/2026.1018.6...2026.1018.7) - 2026-10-18
 
 - feat(board): タスクのボードを repo の行と状態の列で mod に描く by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/128

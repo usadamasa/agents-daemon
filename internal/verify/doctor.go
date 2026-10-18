@@ -17,6 +17,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/config"
 	"github.com/usadamasa/agents-daemon/internal/daemon"
+	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/ratelimit"
 )
@@ -63,6 +64,9 @@ func RunDoctor(ctx context.Context, w io.Writer, in DoctorInput) error {
 
 	_, _ = fmt.Fprintln(w, "\n-- 設定ファイル --")
 	reportConfigState(w, in.Paths)
+
+	_, _ = fmt.Fprintln(w, "\n-- domain (私用と業務の境界) --")
+	reportDomain(w, in.Paths, panes, in.Getenv("HOME"))
 
 	_, _ = fmt.Fprintln(w, "\n-- daemon --")
 	reportDaemonState(w, in.Paths, in.Now)
@@ -256,6 +260,8 @@ func configFields(cfg, def config.Config) []configFieldReport {
 		{"customPatterns", cfg.CustomPatterns, def.CustomPatterns},
 		{"idleShutdownMinutes", cfg.IdleShutdownMinutes, def.IdleShutdownMinutes},
 		{"deferToNativeAutoContinue", cfg.DeferToNativeAutoContinue, def.DeferToNativeAutoContinue},
+		{"homePaths", cfg.HomePaths, def.HomePaths},
+		{"defaultDomain", cfg.DefaultDomain, def.DefaultDomain},
 	}
 	out := make([]configFieldReport, 0, len(raw))
 	for _, r := range raw {
@@ -266,6 +272,32 @@ func configFields(cfg, def config.Config) []configFieldReport {
 		out = append(out, configFieldReport{name: r.name, value: r.value, diffMark: mark})
 	}
 	return out
+}
+
+// reportDomain は config の homePaths と defaultDomain から、Claude agent の pane の cwd を
+// 私用と業務のどちらに判定するかを報告する。判定を誤ると業務のものが私用の側に混ざるので、
+// 設定を書いたら pane ごとの結果をここで確かめる。
+func reportDomain(w io.Writer, p apppath.Paths, panes []multiplexer.Pane, home string) {
+	cfg, err := config.Load(p.ConfigFile())
+	if err != nil {
+		_, _ = fmt.Fprintf(w, "  設定の読み込みに失敗したため、既定 (すべて業務) で判定します: %v\n", err)
+	}
+	c := domain.New(home, cfg.HomePaths, cfg.DefaultDomain)
+	_, _ = fmt.Fprintf(w, "  homePaths に当たらない cwd: %s\n", c.Fallback())
+	if paths := c.HomePaths(); len(paths) > 0 {
+		_, _ = fmt.Fprintf(w, "  私用と判定するパス: %s\n", strings.Join(paths, ", "))
+	} else if c.Fallback() == domain.Work {
+		_, _ = fmt.Fprintln(w, "  私用と判定するパスはありません (私用の端末なら defaultDomain を home にする)")
+	}
+	if dropped := len(cfg.HomePaths) - len(c.HomePaths()); dropped > 0 {
+		_, _ = fmt.Fprintf(w, "  ⚠ homePaths のうち %d 件は絶対パスでも ~/ 始まりでもないため無視しています\n", dropped)
+	}
+	for _, pane := range panes {
+		if !multiplexer.IsClaudeAgent(pane) {
+			continue
+		}
+		_, _ = fmt.Fprintf(w, "  pane=%s %s cwd=%s\n", pane.PaneID, c.Classify(pane.CWD), pane.CWD)
+	}
 }
 
 // reportDaemonState は PID ファイルと status.json から daemon の稼働状況を報告する。

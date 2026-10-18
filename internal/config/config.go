@@ -46,6 +46,10 @@ type Config struct {
 	// (2.1.234 の autoContinueAtUsageLimit) がカウントダウン中の pane には手を出さない。
 	// この状態では Escape が取り消しキーなので、送信するとネイティブの継続を潰す。
 	DeferToNativeAutoContinue bool
+	// HomePaths と DefaultDomain は、セッションの cwd が私用と業務のどちらかを決める (internal/domain)。
+	// 私用と言えるのは HomePaths の下だけで、それ以外は DefaultDomain に倒す。
+	HomePaths     []string
+	DefaultDomain string
 }
 
 // Default は全項目デフォルト値の Config を返す。
@@ -71,6 +75,8 @@ func Default() Config {
 		IdleShutdownMinutes:     30,
 
 		DeferToNativeAutoContinue: true,
+		HomePaths:                 []string{},
+		DefaultDomain:             "work",
 	}
 }
 
@@ -99,6 +105,9 @@ type rawConfig struct {
 	IdleShutdownMinutes     *int      `json:"idleShutdownMinutes"`
 
 	DeferToNativeAutoContinue *bool `json:"deferToNativeAutoContinue"`
+
+	HomePaths     *[]string `json:"homePaths"`
+	DefaultDomain *string   `json:"defaultDomain"`
 }
 
 // Load は path から設定を読み込む。
@@ -136,6 +145,7 @@ func applyRaw(cfg *Config, raw *rawConfig) {
 	applyRawBasics(cfg, raw)
 	applyRawDetection(cfg, raw)
 	applyRawRecovery(cfg, raw)
+	applyRawDomain(cfg, raw)
 }
 
 // applyRawBasics は稼働そのものに関わる設定を反映する。
@@ -206,6 +216,18 @@ func applyRawRecovery(cfg *Config, raw *rawConfig) {
 	}
 	if v := raw.SubmitDelayMs; v != nil && *v >= 0 {
 		cfg.SubmitDelayMs = *v
+	}
+}
+
+// applyRawDomain は私用と業務の判定に関わる設定を反映する。defaultDomain は home と work だけを
+// 受け付け、それ以外 (typo を含む) は既定の work のまま残す。homePaths は書かれたとおり残し、
+// ~ の展開と相対パスの除外は internal/domain が行う。
+func applyRawDomain(cfg *Config, raw *rawConfig) {
+	if v := raw.HomePaths; v != nil {
+		cfg.HomePaths = *v
+	}
+	if v := raw.DefaultDomain; v != nil && (*v == "home" || *v == "work") {
+		cfg.DefaultDomain = *v
 	}
 }
 

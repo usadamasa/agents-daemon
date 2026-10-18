@@ -13,6 +13,7 @@ agents-daemon logs -n 80                       # 現行ログ (daemon.log) の�
 agents-daemon stop                             # SIGTERM を送って停止
 agents-daemon dream harvest --incremental      # 直近の transcript を集める (Stop hook が --detach 付きで呼ぶ)
 agents-daemon dream mine|stage|adopt|forget    # 記憶階層の consolidation の実行系 (agents-daemon:dream skill)
+agents-daemon prune-worktrees [--dry-run]      # 放置された Claude Code の worktree を回収する (SessionStart hook が --hook 付きで呼ぶ)
 ```
 
 ### `--dry-run`
@@ -42,6 +43,28 @@ plugin の版で `go build` し、cache のバイナリと stamp を差し替え
 差し替えを次の tick で検知して自分で入れ替わる ([architecture.md](architecture.md) の「バイナリの用意と差し替え」)。
 `status` の `started_at` が進んでいれば済んでいる。Claude Code の sandbox は `~/.cache/agents-daemon` に書けないので、
 利用者が `!` で打つ。
+
+### 放置された worktree を回収する
+
+普段は SessionStart hook が `prune-worktrees --hook` で、今開いたリポジトリの `.claude/worktrees/` 配下を回収する
+(回収したときだけ systemMessage が出る)。今すぐ回収したい、しきい値を変えたい、未コミットの変更ごと消したいときは
+リポジトリの中で直に叩く。
+
+```sh
+~/.cache/agents-daemon/bin/agents-daemon prune-worktrees --dry-run          # 対象を表示するだけ
+~/.cache/agents-daemon/bin/agents-daemon prune-worktrees                    # 7 日以上触っていないものを回収
+~/.cache/agents-daemon/bin/agents-daemon prune-worktrees --min-age-days 0   # 作りたてでも回収
+~/.cache/agents-daemon/bin/agents-daemon prune-worktrees --force            # 未コミットの変更があっても回収
+```
+
+回収するのは、lock が無いか foreground セッションの lock の PID が不在で、最終更新 (ルートの mtime・HEAD の
+コミット日時・管理 index の mtime の最大) が `--min-age-days` より古く、未コミットの変更が無いもの。ブランチは残す。
+自分が中にいる worktree、人手の lock、subagent の lock (`claude agent`。本体の sweep の担当) には触らない。
+
+Claude Code の sandbox の中で叩くと、`git worktree remove` は main worktree の `.git/worktrees/` と兄弟の worktree
+ディレクトリに書く。worktree の中から叩くと cwd の外への書き込みになるので、sandbox の書き込み許可
+(`sandbox.filesystem.allowWrite`) にリポジトリの親ディレクトリが入っていないリポジトリでは `operation not permitted`
+になる。その場合は利用者が `!` で打つか、main worktree を cwd にして叩く。
 
 ### 検証用コマンド
 

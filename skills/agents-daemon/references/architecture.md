@@ -127,6 +127,16 @@ backend は block から session_id をこの記録で逆引きする (`Store.Li
 こちらも detach して即座に戻り、子の stderr は `$STATE/logs/dream-harvest.log` に残る。
 `dream` の役目と state は `agents-daemon:dream` skill の `references/cli.md`。
 
+SessionStart には `hooks/prune-worktrees.sh` も並び、`prune-worktrees --hook` に hook 入力をそのまま渡す。
+今開いたリポジトリの `.claude/worktrees/` 配下で、foreground セッションが keep したまま 1 週間触っていない
+worktree を `git worktree remove` し、回収したときだけ `systemMessage` で知らせる。判定の条件は
+`internal/worktree` の package doc、手で叩く形と sandbox の制約は [operations.md](operations.md) の
+「放置された worktree を回収する」。state は書かない。
+<!-- cc-premise: 2.1.302 worktrees 本体の sweep は subagent / background session の worktree だけを消し、foreground の keep は残す -->
+subagent の worktree (`claude agent` の lock) は Claude Code 本体の periodic sweep (`cleanupPeriodDays`) が消すので
+触らない。daemon の housekeeping にしなかったのは、daemon が rex の外では起きず、対象リポジトリの一覧も cwd も
+持たないため (#97)。
+
 #### バイナリの用意と差し替え
 
 plugin には install 時の lifecycle hook が無いので、バイナリも SessionStart hook が用意する。

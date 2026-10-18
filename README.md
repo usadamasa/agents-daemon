@@ -14,7 +14,7 @@ Claude Code のセッションは自分が止まっている間は何もでき�
 | ---- | ---- |
 | 止まったセッションへの働きかけ | 5 時間ウィンドウの利用上限で止まったセッションを、解除時刻に再開させる (`internal/monitor`) |
 | セッションを跨いだ状態の集約 | statusline の stdin から利用上限・context・cost をセッション別の state file に落とし、daemon とコマンドが読む (`internal/sessionstate`、`internal/spend`)。Stop のたびに transcript の要約を集め、記憶の consolidation の材料にする (`internal/dream`) |
-| 時間で動く掃除 | ログと state file のうち、保持期間を過ぎたものを消す (`internal/daemon/housekeeping.go`) |
+| 時間で動く掃除 | ログと state file のうち、保持期間を過ぎたものを消す (`internal/daemon/housekeeping.go`)。foreground セッションが keep したまま 1 週間触っていない worktree を、SessionStart のたびに今開いたリポジトリの分だけ回収する (`internal/worktree`) |
 | 多重化ツールへの操作 | rex の block を列挙し、画面を読み、キーと文面を送る (`internal/rexcli`) |
 
 境界は 1 つ。**Claude Code 本体が自分でできることは本体に任せる**。auto-continue が再開を予約している間は
@@ -26,7 +26,7 @@ plugin が持つもの:
 
 | 部品 | 役目 |
 | ---- | ---- |
-| SessionStart hook | daemon のバイナリを用意し、`daemon --ensure` で起こす |
+| SessionStart hook | daemon のバイナリを用意し、`daemon --ensure` で起こす。続けて `prune-worktrees --hook` で放置 worktree を回収する |
 | Stop hook | `dream harvest` を起こす |
 | `agents-daemon:agents-daemon` skill | 運用と切り分けの手引き (症状から引く) |
 | `agents-daemon:setup` skill | 前提の確認と statusline の配線、peer messaging の切り分け |
@@ -35,6 +35,7 @@ plugin が持つもの:
 | `agents-daemon statusline` | `statusLine.command` に向ける statusline。描画と、daemon が読む state file の書き込みを同じプロセスで行う |
 | `agents-daemon ingest-statusline` | 自前の statusline から stdin を渡して state file だけを書かせるサブコマンド |
 | `agents-daemon dream` | consolidation の実行系 (`harvest` / `mine` / `stage` / `adopt` / `forget`) |
+| `agents-daemon prune-worktrees` | 誰も使っていない Claude Code の worktree の回収 (SessionStart hook が `--hook` 付きで呼ぶ。手で叩く形は `skills/agents-daemon/references/operations.md`) |
 
 ## 前提
 
@@ -98,6 +99,7 @@ agents-daemon dream harvest --incremental  # 直近の transcript を集める (
 agents-daemon dream mine --project <canonical>   # memory と skill を突き合わせて候補を出す
 agents-daemon dream stage --project <canonical>  # 候補の承認レポートを ./tmp/dream/ に書く
 agents-daemon dream forget <memory-name>...      # auto memory を消す (sandbox の外で動かす)
+agents-daemon prune-worktrees --dry-run          # 回収対象の worktree を表示する (SessionStart hook が --hook 付きで呼ぶ)
 ```
 
 ## 開発

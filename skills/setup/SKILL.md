@@ -2,7 +2,8 @@
 name: setup
 description: >-
   agents-daemon plugin を install した直後、または動いていない疑いがあるときに、前提 (rex、go と jq、
-  statusline の配線、バイナリ、peer messaging、`dream forget` の sandbox 除外) がそろっているかを確かめて足りない配線を足す。
+  statusline の配線、バイナリ、peer messaging、`dream forget` の sandbox 除外、タスクのツール) がそろっているかを確かめて
+  足りない配線を足す。
   `doctor` で `session_id=(なし)`、state file が無い、sandbox 内から rex の socket に繋がらない、
   `ListAgents` が無い、`dream forget` が `operation not permitted` で消せない、といった症状でも引く。
   「agents-daemon をセットアップして」「statusline を配線して」と言われたときにも使う。
@@ -171,6 +172,18 @@ rg -n 'agents-daemon dream forget' ~/.claude/settings.json
 行が無ければ NG。足す行、照合の規則、効いているかの確かめ方は [dream-forget.md](references/dream-forget.md) を
 `Read` で開いて従う。
 
+## 8. タスクのツール
+
+タスクのボード (`/board`) は TaskCreate / TaskUpdate / TaskList / TodoWrite の呼び出しを PostToolUse hook で記録して描く。
+このセッションのツールにそれらがあるかを見る。
+
+<!-- cc-premise: 2.1.302 tools Task 系ツールは env の CLAUDE_CODE_ENABLE_TODO_TOOLS=1 が無いと載らない (interactive と -p の両方で実測) -->
+
+| 結果 | 判定 |
+| ---- | ---- |
+| TaskCreate か TodoWrite がある | OK |
+| どちらも無い (`TaskStop` だけ) | 情報。ボードにはタスクが載らず、セッションごとの「タスクなし」のカードだけになる。使うなら settings の `env` に `"CLAUDE_CODE_ENABLE_TODO_TOOLS": "1"` を足し、Claude Code を起動し直す |
+
 ## 報告
 
 次の形でまとめる。
@@ -186,6 +199,7 @@ agents-daemon setup
 - doctor: <要点>
 - peer messaging: <OK | 無効 (切り分けの結果) | 判定できず (理由)>
 - dream forget の sandbox 除外: <OK | NG (足す行) | 情報 (dream を使わない)>
+- タスクのツール: <OK | 情報 (CLAUDE_CODE_ENABLE_TODO_TOOLS が無い)>
 - 直したこと: <書き換えたファイルと中身の要約 | なし>
 - 残っていること: <利用者の作業 | なし>
 ```

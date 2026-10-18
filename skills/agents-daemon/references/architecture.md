@@ -281,6 +281,25 @@ daemon が hook から継いだ PATH の項は指す先を失う。呼び出し�
 rex で Agent と AgentStatus を決めるのは Claude Code 自身が OSC 7501 で報告する `program_status` で、
 状態の対応と record を使う条件は [program-status.md](program-status.md)。
 
+## CLI の組み立て
+
+`cmd/agents-daemon` は `main` と root の登録だけを持つ。コマンドの組み立て (flag、説明文、環境を `internal/` の
+本体へ渡す配線) は機能ごとの `cmd/agents-daemon/internal/<family>cli` が持ち、公開するのは root に載せる
+`Commands() []*cobra.Command` の 1 つだけにする。判定や組み立ての規則は `internal/` の本体に置き、cli パッケージは
+引数を読んで呼ぶだけにする。
+
+| family | コマンド |
+| ---- | ---- |
+| `boardcli` | park、edge、ingest-task (ボードに載る記録を書く・読む) |
+| `daemoncli` | daemon、stop、status、logs、doctor、inspect、simulate (daemon のライフサイクルと読むだけの診断) |
+| `dreamcli` | dream |
+| `statuslinecli` | statusline、ingest-statusline |
+| `worktreecli` | prune-worktrees |
+
+cobra を import するのは `cmd/` の下だけで、`internal/` の本体は CLI を知らない。Go の internal 規則で
+`internal/` からは cli パッケージを import できず、`.go-arch-lint.yml` は cobra を `cmd_main` (`cmd/**`) にだけ許す。
+コマンドを足すときは、呼ぶ本体に合う family に置き、合うものが無ければ family を足して root に 1 行登録する。
+
 ## 毎 tick の判定
 
 pane ごとに次を評価する。上限側の詳細は [rate-limit.md](rate-limit.md)、

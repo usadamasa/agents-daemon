@@ -87,7 +87,7 @@ func TestHousekeep(t *testing.T) {
 			t.Errorf("8 日前のタスクの記録は消えるべき (err=%v)", err)
 		}
 		if _, err := os.Stat(parkFile); !os.IsNotExist(err) {
-			t.Errorf("91 日前のパーキングの件は消えるべき (err=%v)", err)
+			t.Errorf("91 日前のパーキングのメモは消えるべき (err=%v)", err)
 		}
 		if _, err := os.Stat(filepath.Join(contextDir, "old-session.json")); !os.IsNotExist(err) {
 			t.Errorf("8 日前の context は消えるべき (err=%v)", err)

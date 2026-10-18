@@ -1,11 +1,11 @@
-// Package parking は agent がタスクの途中で見つけた脇の件 (パーキングロット、#89) を XDG state 配下に
+// Package parking は agent がタスクの途中で見つけた脇のメモ (パーキングロット、#89) を XDG state 配下に
 // 置く (#121)。置くのは `agents-daemon park add`、取り出すのはタスクのボードと band。
 //
 //	parking/<domain>/<id>.json   1 件 1 ファイル
 //
-// domain (home / work) で置き場を分け、私用と業務の件を混ぜない (internal/domain)。domain、repo、
-// 正規化した title が同じ open の件があれば、新しい件を作らずに sources へ足す。同じ置き方が二重に
-// 走っても件は増えない (Idempotent Receiver)。
+// domain (home / work) で置き場を分け、私用と業務のメモを混ぜない (internal/domain)。domain、repo、
+// 正規化した title が同じ open のメモがあれば、新しいメモを作らずに sources へ足す。同じ置き方が二重に
+// 走ってもメモは増えない (Idempotent Receiver)。
 package parking
 
 import (
@@ -42,31 +42,31 @@ const (
 	StatusDiscarded = "discarded"
 )
 
-// 保持期間。消すのは daemon の housekeeping (Prune) で、mtime で判定する。同じ件が置き直されると
+// 保持期間。消すのは daemon の housekeeping (Prune) で、mtime で判定する。同じメモが置き直されると
 // sources への追記で mtime が進むので、open の期間はそこから数え直す。
 const (
-	// OpenRetention は open の件を残す期間。週次の棚卸しを 10 回逃しても残る長さ。それより古い
-	// 脇の件は文脈が失われている。
+	// OpenRetention は open のメモを残す期間。週次の棚卸しを 10 回逃しても残る長さ。それより古い
+	// 脇のメモは文脈が失われている。
 	OpenRetention = 90 * 24 * time.Hour
-	// ClosedRetention は handed / discarded の件を残す期間。「最近片付けたもの」として見えれば足りる。
+	// ClosedRetention は handed / discarded のメモを残す期間。「最近片付けたもの」として見えれば足りる。
 	ClosedRetention = 7 * 24 * time.Hour
 )
 
 // lockFile は domain のディレクトリで add と Set を直列にするロック。まとめる判定と書き込みの間に
-// 別の park add が割り込んで同じ件が 2 つできるのを防ぐ。
+// 別の park add が割り込んで同じメモが 2 つできるのを防ぐ。
 const lockFile = ".lock"
 
 // Entry は置く側が決める中身。
 type Entry struct {
 	Kind string `json:"kind"`
-	// Title は人が書いた形 (前後の空白だけ落とす)。同じ件かの判定は normalize した鍵で見る。
+	// Title は人が書いた形 (前後の空白だけ落とす)。同じメモかの判定は normalize した鍵で見る。
 	Title        string   `json:"title"`
 	Detail       string   `json:"detail,omitempty"`
 	Files        []string `json:"files,omitempty"`
 	DefaultTaken string   `json:"default_taken,omitempty"`
 }
 
-// Source は件を置いたときのセッションと、そのとき進行中だったタスク。
+// Source はメモを置いたときのセッションと、そのとき進行中だったタスク。
 type Source struct {
 	SessionID string `json:"session_id"`
 	TaskID    string `json:"task_id,omitempty"`
@@ -76,7 +76,7 @@ type Source struct {
 	At     time.Time `json:"at"`
 }
 
-// Item は置かれた件 1 つの記録。
+// Item は置かれたメモ 1 つの記録。
 type Item struct {
 	ID     string        `json:"id"`
 	Domain domain.Domain `json:"domain"`
@@ -103,8 +103,8 @@ type Added struct {
 	Item    Item `json:"item"`
 }
 
-// add は件を置く。同じ件が open であれば src を sources に足し (同じ session、task、detail の組は足さない)、
-// 無ければ新しい件を作る。書いた後の件を返す。
+// add はメモを置く。同じメモが open であれば src を sources に足し (同じ session、task、detail の組は足さない)、
+// 無ければ新しいメモを作る。書いた後のメモを返す。
 func (s Store) add(d domain.Domain, repo string, e Entry, src Source) (Added, error) {
 	if s.Dir == "" {
 		return Added{}, errors.New("parking の置き場所が無い")
@@ -144,7 +144,7 @@ func (s Store) add(d domain.Domain, repo string, e Entry, src Source) (Added, er
 	return added, err
 }
 
-// Set は domain の件 id の status を書き換え、書いた後の件と書き換える前の status を返す。
+// Set は domain のメモ id の status を書き換え、書いた後のメモと書き換える前の status を返す。
 func (s Store) Set(d domain.Domain, id, status string) (Item, string, error) {
 	if s.Dir == "" {
 		return Item{}, "", errors.New("parking の置き場所が無い")
@@ -161,7 +161,7 @@ func (s Store) Set(d domain.Domain, id, status string) (Item, string, error) {
 		var ok bool
 		item, ok = readItem(filepath.Join(dir, id+".json"))
 		if !ok {
-			return fmt.Errorf("%s の件 %s が無い", d, id)
+			return fmt.Errorf("%s のメモ %s が無い", d, id)
 		}
 		from, item.Status = item.Status, status
 		return write(dir, item)
@@ -169,7 +169,7 @@ func (s Store) Set(d domain.Domain, id, status string) (Item, string, error) {
 	return item, from, err
 }
 
-// List は domain の件を id の順 (置いた順) に返す。壊れたファイルは読み飛ばす。
+// List は domain のメモを id の順 (置いた順) に返す。壊れたファイルは読み飛ばす。
 func (s Store) List(d domain.Domain) ([]Item, error) {
 	if s.Dir == "" {
 		return nil, nil
@@ -177,7 +177,7 @@ func (s Store) List(d domain.Domain) ([]Item, error) {
 	return readDir(filepath.Join(s.Dir, string(d))), nil
 }
 
-// Find は domain の件のうち repo と status が一致するものを返す。空の条件は絞らない。該当なしは空の配列。
+// Find は domain のメモのうち repo と status が一致するものを返す。空の条件は絞らない。該当なしは空の配列。
 func (s Store) Find(d domain.Domain, repo, status string) ([]Item, error) {
 	if status != "" {
 		if err := validStatus(status); err != nil {
@@ -197,8 +197,8 @@ func (s Store) Find(d domain.Domain, repo, status string) ([]Item, error) {
 	return matched, nil
 }
 
-// PlacedDuring は items のうち、sessionID のセッションが taskID のタスクの途中で置いた件を返す。
-// 別のセッションが置いた件にまとめたものも、足した source で引ける。該当なしは空の配列。
+// PlacedDuring は items のうち、sessionID のセッションが taskID のタスクの途中で置いたメモを返す。
+// 別のセッションが置いたメモにまとめたものも、足した source で引ける。該当なしは空の配列。
 func PlacedDuring(items []Item, sessionID, taskID string) []Item {
 	matched := []Item{}
 	for _, item := range items {
@@ -262,8 +262,8 @@ func (s Store) locked(d domain.Domain, fn func(dir string) error) error {
 	return fn(dir)
 }
 
-// normalize は同じ件かを見るための title。空白 (全角を含む) をすべて落として小文字にする。
-// 日本語の title は語の区切りに空白を使わないので、空白の有無や数の揺れを同じ件とみなす。
+// normalize は同じメモかを見るための title。空白 (全角を含む) をすべて落として小文字にする。
+// 日本語の title は語の区切りに空白を使わないので、空白の有無や数の揺れを同じメモとみなす。
 func normalize(title string) string {
 	return strings.ToLower(strings.Join(strings.Fields(title), ""))
 }
@@ -294,7 +294,7 @@ func write(dir string, item Item) error {
 	return statefile.WriteJSONAtomic(filepath.Join(dir, item.ID+".json"), ".item.*", item)
 }
 
-// readDir は dir の件を id の順に返す。ロックと書きかけの一時ファイル (先頭が .) は読まない。
+// readDir は dir のメモを id の順に返す。ロックと書きかけの一時ファイル (先頭が .) は読まない。
 func readDir(dir string) []Item {
 	entries, err := os.ReadDir(dir)
 	if err != nil {

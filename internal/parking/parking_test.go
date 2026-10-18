@@ -31,7 +31,7 @@ func mustAdd(t *testing.T, s Store, d domain.Domain, repo string, e Entry, src S
 	return added.Item
 }
 
-// 置いた件は parking/<domain>/<id>.json に open で書かれ、List で読める。
+// 置いたメモは parking/<domain>/<id>.json に open で書かれ、List で読める。
 func TestAdd_writesOneFilePerItem(t *testing.T) {
 	s := New(t.TempDir())
 	item := mustAdd(t, s, domain.Home, testRepo, aside("保持期間の根拠が無い"), source("s1", "3"))
@@ -54,7 +54,7 @@ func TestAdd_writesOneFilePerItem(t *testing.T) {
 	}
 }
 
-// PlacedDuring は session と task の組が sources にある件だけを残す。まとめた件も、後から足した source で引ける。
+// PlacedDuring は session と task の組が sources にあるメモだけを残す。まとめたメモも、後から足した source で引ける。
 func TestPlacedDuring(t *testing.T) {
 	s := New(t.TempDir())
 	during := mustAdd(t, s, domain.Home, testRepo, aside("a"), source("s1", "3"))
@@ -65,7 +65,7 @@ func TestPlacedDuring(t *testing.T) {
 	mustAdd(t, s, domain.Home, testRepo, aside("e"), source("s1", ""))
 	items, _ := s.List(domain.Home)
 
-	// 同じ時刻に置いた件の id は乱数の部分で並ぶので、順は見ない。
+	// 同じ時刻に置いたメモの id は乱数の部分で並ぶので、順は見ない。
 	got := PlacedDuring(items, "s1", "3")
 	ids := map[string]bool{}
 	for _, item := range got {
@@ -79,13 +79,13 @@ func TestPlacedDuring(t *testing.T) {
 	}
 }
 
-// domain、repo、正規化した title が同じ open の件には sources を足し、新しい件を作らない。
+// domain、repo、正規化した title が同じ open のメモには sources を足し、新しいメモを作らない。
 func TestAdd_mergesSameItem(t *testing.T) {
 	s := New(t.TempDir())
 	first := mustAdd(t, s, domain.Home, testRepo, aside("保持期間の  根拠が無い"), source("s1", "3"))
 	second := mustAdd(t, s, domain.Home, testRepo, aside(" 保持期間の根拠が無い "), source("s2", "1"))
 	if second.ID != first.ID {
-		t.Fatalf("別の件になった: %s != %s", second.ID, first.ID)
+		t.Fatalf("別のメモになった: %s != %s", second.ID, first.ID)
 	}
 	// 同じ置き方 (同じ session と task) を二重に送っても sources は増えない。
 	third := mustAdd(t, s, domain.Home, testRepo, aside("保持期間の根拠が無い"), source("s2", "1"))
@@ -160,7 +160,7 @@ func TestAdd_keepsNewDetailFromSameSource(t *testing.T) {
 	}
 }
 
-// 正規化した title は同じ件かを見る鍵にだけ使い、保存する title は人が書いた形 (前後の空白だけ落とす) のまま。
+// 正規化した title は同じメモかを見る鍵にだけ使い、保存する title は人が書いた形 (前後の空白だけ落とす) のまま。
 // まとめたときは最初に置いた形を残す。
 func TestAdd_keepsTitleAsWritten(t *testing.T) {
 	s := New(t.TempDir())
@@ -177,17 +177,17 @@ func TestAdd_keepsTitleAsWritten(t *testing.T) {
 	}
 }
 
-// 大文字と小文字の違いも同じ件とみなす。
+// 大文字と小文字の違いも同じメモとみなす。
 func TestAdd_mergeIgnoresCase(t *testing.T) {
 	s := New(t.TempDir())
 	first := mustAdd(t, s, domain.Home, testRepo, aside("Fix README"), source("s1", ""))
 	second := mustAdd(t, s, domain.Home, testRepo, aside("fix readme"), source("s2", ""))
 	if first.ID != second.ID {
-		t.Errorf("別の件になった")
+		t.Errorf("別のメモになった")
 	}
 }
 
-// repo、domain が違う件、open でない件はまとめない。
+// repo、domain が違うメモ、open でないメモはまとめない。
 func TestAdd_doesNotMergeDifferentItems(t *testing.T) {
 	s := New(t.TempDir())
 	base := mustAdd(t, s, domain.Home, testRepo, aside("t"), source("s1", ""))
@@ -201,11 +201,11 @@ func TestAdd_doesNotMergeDifferentItems(t *testing.T) {
 		t.Fatal(err)
 	}
 	if again := mustAdd(t, s, domain.Home, testRepo, aside("t"), source("s1", "")); again.ID == base.ID {
-		t.Errorf("discarded の件にまとめた")
+		t.Errorf("discarded のメモにまとめた")
 	}
 }
 
-// 並行に同じ件を置いても 1 件にまとまる。
+// 並行に同じメモを置いても 1 件にまとまる。
 func TestAdd_concurrentSameItem(t *testing.T) {
 	s := New(t.TempDir())
 	var wg sync.WaitGroup
@@ -262,7 +262,7 @@ func TestSet(t *testing.T) {
 		t.Errorf("範囲外の status を通した")
 	}
 	if _, _, err := s.Set(domain.Work, item.ID, StatusOpen); err == nil {
-		t.Errorf("別の domain の件を書き換えた")
+		t.Errorf("別の domain のメモを書き換えた")
 	}
 	if _, _, err := s.Set(domain.Home, "../x", StatusOpen); err == nil {
 		t.Errorf("ファイル名に使えない id を通した")
@@ -297,11 +297,11 @@ func TestPrune(t *testing.T) {
 		t.Errorf("open が消えた")
 	}
 
-	// 同じ件がまた置かれたら mtime が進み、open の 90 日はそこから数え直す (まだ文脈が生きている)。
+	// 同じメモがまた置かれたら mtime が進み、open の 90 日はそこから数え直す (まだ文脈が生きている)。
 	setMtime(t, path(domain.Home, open.ID), now.Add(-91*24*time.Hour))
 	mustAdd(t, s, domain.Home, testRepo, aside("open"), source("s2", ""))
 	if removed, err := s.Prune(now); err != nil || removed != 0 {
-		t.Fatalf("Prune() = %d, %v, want 0 件 (置き直された件は残す)", removed, err)
+		t.Fatalf("Prune() = %d, %v, want 0 件 (置き直されたメモは残す)", removed, err)
 	}
 
 	setMtime(t, path(domain.Home, open.ID), now.Add(-91*24*time.Hour))

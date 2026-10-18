@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 )
@@ -88,6 +90,19 @@ func writeTaskRecord(t *testing.T, root, d, sessionID, body string) {
 	writeTestConfig(t, path, body)
 }
 
+// park の help はパーキングのものを「メモ」と呼ぶ (#141)。
+func TestParkHelpCallsItMemo(t *testing.T) {
+	park := newParkCmd()
+	for _, c := range append([]*cobra.Command{park}, park.Commands()...) {
+		if strings.Contains(c.Short, "件") {
+			t.Errorf("%s の Short が「件」と呼ぶ: %q", c.Name(), c.Short)
+		}
+		if usages := c.LocalFlags().FlagUsages() + c.PersistentFlags().FlagUsages(); strings.Contains(usages, "件") {
+			t.Errorf("%s の flag が「件」と呼ぶ:\n%s", c.Name(), usages)
+		}
+	}
+}
+
 const parkInput = `{"kind": "aside", "title": "保持期間の根拠が無い", "detail": "d", "files": ["a.go"], "default_taken": "やらない", "session_id": "s1"}`
 
 // domain は cwd の判定、repo は main worktree のパス (linked worktree からでも同じ)、task_id は
@@ -115,7 +130,7 @@ func TestParkAdd(t *testing.T) {
 		t.Errorf("sources = %+v", item.Sources)
 	}
 
-	// main worktree から同じ件を置くと同じ件にまとまる。
+	// main worktree から同じメモを置くと同じメモにまとまる。
 	stdout, _, err = runPark(t, strings.Replace(parkInput, `"s1"`, `"s2"`, 1), "add", "--cwd", repo)
 	if err != nil {
 		t.Fatal(err)
@@ -192,7 +207,7 @@ func TestParkAdd_invalidInput(t *testing.T) {
 	}
 }
 
-// list は cwd の domain の件だけを出し、--repo と --status で絞る。set は status を書き換える。
+// list は cwd の domain のメモだけを出し、--repo と --status で絞る。set は status を書き換える。
 func TestParkListAndSet(t *testing.T) {
 	root := parkTestEnv(t)
 	home := filepath.Join(root, "src", "home", "a")
@@ -228,7 +243,7 @@ func TestParkListAndSet(t *testing.T) {
 		return items
 	}
 	if got := list("--cwd", home); len(got) != 2 {
-		t.Errorf("home の件数 = %d, want 2 (work の件を出さない)", len(got))
+		t.Errorf("home の件数 = %d, want 2 (work のメモを出さない)", len(got))
 	}
 	if got := list("--cwd", home, "--repo", home); len(got) != 1 || got[0].ID != first.ID {
 		t.Errorf("--repo で絞れていない: %+v", got)

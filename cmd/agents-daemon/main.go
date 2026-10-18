@@ -14,7 +14,7 @@
 //	statusline         Claude Code の statusline を描画し、同じプロセスで state file と cost の記録を書く
 //	ingest-statusline  statusline の stdin から context/ と rate-limits/ の state file を書く (自前の statusline から呼ぶ)
 //	ingest-task  PostToolUse hook の stdin からタスクを tasks/ に記録する
-//	park      パーキングロットの件を parking/ に置く・書き換える・一覧する (add / set / list)
+//	park      パーキングロットのメモを parking/ に置く・書き換える・一覧する (add / set / list)
 //	dream     記憶階層の consolidation の実行系 (harvest / mine / stage / adopt / forget)。手順は agents-daemon:dream skill
 //	prune-worktrees  誰も使っていない Claude Code の worktree の回収 (SessionStart hook が --hook 付きで呼ぶ)
 package main

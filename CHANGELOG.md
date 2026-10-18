@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026.1018.1](https://github.com/usadamasa/agents-daemon/compare/2026.1018.0...2026.1018.1) - 2026-10-18
+
+- docs(setup): dream forget の excludedCommands の行を先頭固定の形にする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/100
+- chore: 旧 cc-dream の state の移行スクリプトと bats を消す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/102
+
 ## [2026.1018.0](https://github.com/usadamasa/agents-daemon/compare/2026.1017.0...2026.1018.0) - 2026-10-18
 
 - docs: daemon の役割を「セッションの中からはできないことを担う土台」に書き直す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/85

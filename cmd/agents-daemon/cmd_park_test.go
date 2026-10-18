@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/usadamasa/agents-daemon/internal/board"
+	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 )
 
@@ -94,8 +94,8 @@ func TestParkAdd(t *testing.T) {
 		t.Fatalf("park add: %v", err)
 	}
 	item := decodeItem(t, stdout)
-	if item.Domain != "home" || item.Repo != board.Locate(repo).Repo || item.Repo == "" {
-		t.Errorf("domain / repo = %q / %q, want home / %q", item.Domain, item.Repo, board.Locate(repo).Repo)
+	if item.Domain != "home" || item.Repo != gitrepo.Locate(repo).Repo || item.Repo == "" {
+		t.Errorf("domain / repo = %q / %q, want home / %q", item.Domain, item.Repo, gitrepo.Locate(repo).Repo)
 	}
 	if len(item.Sources) != 1 || item.Sources[0].TaskID != "2" || item.Sources[0].CWD != wt || item.Sources[0].SessionID != "s1" {
 		t.Errorf("sources = %+v", item.Sources)

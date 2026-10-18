@@ -8,6 +8,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/config"
 	"github.com/usadamasa/agents-daemon/internal/daemon"
 	"github.com/usadamasa/agents-daemon/internal/domain"
+	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
 
@@ -57,7 +58,7 @@ func Write(w io.Writer, p apppath.Paths, v Viewer) error {
 		Todos:     todos,
 		Classify:  c.Classify,
 		Elsewhere: func(id string) bool { return store.HasSession(other(d), id) },
-		Locate:    Locate,
+		Locate:    gitrepo.Locate,
 	})
 	return json.NewEncoder(w).Encode(b)
 }

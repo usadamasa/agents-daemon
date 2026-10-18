@@ -9,9 +9,9 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
-	"github.com/usadamasa/agents-daemon/internal/board"
 	"github.com/usadamasa/agents-daemon/internal/config"
 	"github.com/usadamasa/agents-daemon/internal/domain"
+	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
@@ -101,11 +101,7 @@ func (e parkEnv) add(stdin io.Reader) (parking.Item, error) {
 	}
 	// 業務に倒したセッションの件は、cwd が私用でも業務に置く (ボードと同じ規則)。
 	d := e.tasks.SessionDomain(in.SessionID, e.domain)
-	repo := board.Locate(e.cwd).Repo
-	if repo == "" {
-		// git の外はボードの行と同じく cwd を鍵にする。
-		repo = e.cwd
-	}
+	repo := gitrepo.RepoKey(e.cwd)
 	src := parking.Source{SessionID: in.SessionID, TaskID: e.tasks.ActiveTaskID(d, in.SessionID), CWD: e.cwd, At: time.Now()}
 	return e.store.Add(d, repo, in.Entry, src)
 }

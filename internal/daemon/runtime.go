@@ -22,6 +22,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/monitor"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
+	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
 
 // maxConsecutiveTickFailures は PaneList の取得にこの回数だけ連続で
@@ -46,8 +47,10 @@ type daemonRuntime struct {
 	backend string
 	log     *applog.Logger
 	// statusPath と store はプロセスの生存期間で固定なのでここに置く。
-	statusPath          string
-	store               sessionstate.Store
+	statusPath string
+	store      sessionstate.Store
+	// tasks は ingest-task が書くタスクの記録。daemon は読まず、housekeeping で消すだけ。ゼロ値は何も消さない。
+	tasks               tasklog.Store
 	sleep               func(time.Duration)
 	startedAt           time.Time
 	panes               map[string]*paneEntry
@@ -365,6 +368,7 @@ func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 	now := time.Now()
 	runtime := newDaemonRuntime(client, log, p.StatusFile(), store, time.Sleep, now)
 	runtime.backend = kind
+	runtime.tasks = tasklog.New(p.StateDir())
 	runtime.housekeep(p.LogFile(), now)
 
 	sigCh := make(chan os.Signal, 1)

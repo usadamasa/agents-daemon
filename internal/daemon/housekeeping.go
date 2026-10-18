@@ -8,7 +8,7 @@ import (
 
 // ランタイム状態は揮発物として扱い、daemon 自身が古いものを消す。sidecar file の
 // 保持期間は書式のパッケージ (ratelimit、sessioncontext) が持つ (どれだけ古い state が
-// 判定に効くかは、その state を読む側の知識のため)。ここに残すのはログの保持期間と、掃除の間隔だけ。
+// 判定に効くかは、その state を読む側の知識のため)。タスクの記録の保持期間は tasklog が持つ。ここに残すのはログの保持期間と、掃除の間隔だけ。
 const (
 	// logRetention は rotate 済みログ (daemon.log.YYYY-MM-DD) を残す期間。
 	// ログは出来事があったときだけ伸びるので、1 週間ぶんあれば振り返りに足りる。
@@ -22,7 +22,7 @@ func (r *daemonRuntime) housekeepDue(now time.Time) bool {
 	return r.lastHousekeepAt.IsZero() || !now.Before(r.lastHousekeepAt.Add(housekeepInterval))
 }
 
-// housekeep は保持期間を過ぎた rotated ログと sidecar file を消す。何かを
+// housekeep は保持期間を過ぎた rotated ログと sidecar file とタスクの記録を消す。何かを
 // 消したときと失敗したときだけログに書く (静かな tick と同じ扱い)。
 func (r *daemonRuntime) housekeep(logPath string, now time.Time) {
 	r.lastHousekeepAt = now
@@ -35,7 +35,11 @@ func (r *daemonRuntime) housekeep(logPath string, now time.Time) {
 	if err != nil {
 		r.log.Logf("sidecar file の削除でエラー: %v", err)
 	}
-	if logs > 0 || states > 0 || contexts > 0 {
-		r.log.Logf("保持期間を過ぎたファイルを削除しました: rotated ログ %d 件、利用上限 state %d 件、context state %d 件", logs, states, contexts)
+	tasks, err := r.tasks.Prune(now)
+	if err != nil {
+		r.log.Logf("タスクの記録の削除でエラー: %v", err)
+	}
+	if logs > 0 || states > 0 || contexts > 0 || tasks > 0 {
+		r.log.Logf("保持期間を過ぎたファイルを削除しました: rotated ログ %d 件、利用上限 state %d 件、context state %d 件、タスクの記録 %d 件", logs, states, contexts, tasks)
 	}
 }

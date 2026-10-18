@@ -10,6 +10,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/applog"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
+	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
 
 func touchAged(t *testing.T, path string, age time.Duration, now time.Time) {
@@ -36,18 +37,28 @@ func TestHousekeep(t *testing.T) {
 		contextDir := store.Context.Dir
 		touchAged(t, applog.RotatedPath(logPath, "2026-08-01"), 20*24*time.Hour, now)
 		touchAged(t, applog.RotatedPath(logPath, "2026-08-27"), 24*time.Hour, now)
-		touchAged(t, filepath.Join(store.RateLimits.Dir,"old.json"), 30*time.Hour, now)
-		touchAged(t, filepath.Join(store.RateLimits.Dir,"fresh.json"), time.Hour, now)
+		touchAged(t, filepath.Join(store.RateLimits.Dir, "old.json"), 30*time.Hour, now)
+		touchAged(t, filepath.Join(store.RateLimits.Dir, "fresh.json"), time.Hour, now)
 		// context の保持期間は rate-limits より長い (上限待ちを跨いで block と session の対応を残す)。
 		touchAged(t, filepath.Join(contextDir, "old-session.json"), 8*24*time.Hour, now)
 		touchAged(t, filepath.Join(contextDir, "fresh-session.json"), 30*time.Hour, now)
+		tasks := tasklog.New(dir)
+		touchAged(t, filepath.Join(tasks.Dir, "home", "old-session", "1.json"), tasklog.Retention, now)
+		touchAged(t, filepath.Join(tasks.Dir, "home", "fresh-session", "1.json"), time.Hour, now)
 
 		log := applog.NewLogger(logPath, func() time.Time { return now })
 		t.Cleanup(func() { _ = log.Close() })
 		r := newDaemonRuntime(&multiplexerfake.Client{}, log, filepath.Join(dir, "status.json"), store, func(time.Duration) {}, now)
 
+		r.tasks = tasks
 		r.housekeep(logPath, now)
 
+		if _, err := os.Stat(filepath.Join(tasks.Dir, "home", "old-session")); !os.IsNotExist(err) {
+			t.Errorf("保持期間を過ぎたタスクの記録は消えるべき (err=%v)", err)
+		}
+		if _, err := os.Stat(filepath.Join(tasks.Dir, "home", "fresh-session", "1.json")); err != nil {
+			t.Errorf("1 時間前のタスクの記録は残るべき: %v", err)
+		}
 		if _, err := os.Stat(filepath.Join(contextDir, "old-session.json")); !os.IsNotExist(err) {
 			t.Errorf("8 日前の context は消えるべき (err=%v)", err)
 		}
@@ -61,10 +72,10 @@ func TestHousekeep(t *testing.T) {
 		if _, err := os.Stat(applog.RotatedPath(logPath, "2026-08-27")); err != nil {
 			t.Errorf("1 日前の rotated ログは残るべき: %v", err)
 		}
-		if _, err := os.Stat(filepath.Join(store.RateLimits.Dir,"old.json")); !os.IsNotExist(err) {
+		if _, err := os.Stat(filepath.Join(store.RateLimits.Dir, "old.json")); !os.IsNotExist(err) {
 			t.Errorf("30 時間前の state は消えるべき (err=%v)", err)
 		}
-		if _, err := os.Stat(filepath.Join(store.RateLimits.Dir,"fresh.json")); err != nil {
+		if _, err := os.Stat(filepath.Join(store.RateLimits.Dir, "fresh.json")); err != nil {
 			t.Errorf("1 時間前の state は残るべき: %v", err)
 		}
 
@@ -75,7 +86,7 @@ func TestHousekeep(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ログが読めない: %v", err)
 		}
-		if !strings.Contains(string(data), "rotated ログ 1 件") || !strings.Contains(string(data), "利用上限 state 1 件") {
+		if !strings.Contains(string(data), "rotated ログ 1 件") || !strings.Contains(string(data), "利用上限 state 1 件") || !strings.Contains(string(data), "タスクの記録 1 件") {
 			t.Errorf("削除件数のログが無い: %q", data)
 		}
 	})

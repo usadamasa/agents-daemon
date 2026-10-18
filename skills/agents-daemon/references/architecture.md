@@ -140,6 +140,14 @@ subagent の worktree (`claude agent` の lock) は Claude Code 本体の period
 触らない。daemon の housekeeping にしなかったのは、daemon が rex の外では起きず、対象リポジトリの一覧も cwd も
 持たないため (#97)。
 
+PostToolUse には `hooks/ingest-task.sh` があり、Task 系ツール (`TaskCreate` / `TaskUpdate` / `TaskList`、
+無効なときは `TodoWrite`) のたびに `ingest-task` へ hook 入力をそのまま渡す。バイナリが
+`$STATE/tasks/<domain>/<session_id>/` にタスクを 1 つ 1 ファイルで書き、`TaskList` の結果で全件を同期し直す。
+domain は config の `homePaths` / `defaultDomain` で cwd から決め、1 つのセッションが業務の cwd を触ったら
+記録ごと業務に倒す。daemon のプロセスは経由しないので、daemon が落ちていても記録できる。読み手はタスクの
+ボード (#121) で、daemon は読まずに消すだけ。形と保持期間は `internal/tasklog` の package doc。
+<!-- cc-premise: 2.1.302 tasks PostToolUse の tool_input / tool_response の Task 系の形 (internal/tasklog/testdata が実測) -->
+
 #### バイナリの用意と差し替え
 
 plugin には install 時の lifecycle hook が無いので、バイナリも SessionStart hook が用意する。
@@ -254,6 +262,8 @@ pane ごとに次を評価する。上限側の詳細は [rate-limit.md](rate-li
 | `$STATE/rate-limits/<session_id>.json` | `agents-daemon statusline` または `ingest-statusline` (利用者の statusline が呼ぶ) | statusline の描画ごと (`rate_limits.five_hour.resets_at` があるときだけ) | そのセッションの 5 時間 / 7 日ウィンドウの使用率と reset 時刻、観測時刻、session_id | daemon が 24 時間で消す |
 | `$STATE/context/<session_id>.json` | `agents-daemon statusline` または `ingest-statusline` (利用者の statusline が呼ぶ) | statusline の描画ごと | そのセッションの context 使用率、観測時刻、session_id、多重化ツールの場所 | daemon が 7 日で消す |
 | `$STATE/cost/<YYYY-MM-DD>/<session_id>.json` | `agents-daemon statusline` (`CLAUDE_STATUSLINE_SPEND_CAP` があるとき) | statusline の描画ごと (累計が変わったときだけ書き直す) | そのセッションの累計 cost と前日までの繰り越し (`internal/spend`)。daemon は読まない | `statusline` がその日の最初の書き込みで 45 日より古い日を消す |
+| `$STATE/tasks/<domain>/<session_id>/<task_id>.json` | `agents-daemon ingest-task` (PostToolUse hook が呼ぶ) | Task 系ツールのたび | タスク 1 つの subject・状態・blockedBy・owner、session_id、agent_id、cwd、repo (main worktree のパス)。`TaskList` で全件を同期し直し、`deleted` と一覧から消えたものは消す (`internal/tasklog`) | daemon が完了したタスクは 1 日、それ以外は 7 日更新が無ければ消す |
+| `$STATE/tasks/<domain>/<session_id>/todos.json` | `agents-daemon ingest-task` | `TodoWrite` のたび | そのセッションの TodoWrite のリスト全体 | daemon が 7 日更新が無ければ消す |
 | `$STATE/daemon.pid` | daemon | 起動時に作成、終了時に削除 | 稼働中デーモンの PID | daemon |
 | `$STATE/status.json` | daemon | 毎 tick (既定 5 秒) | backend (rex)、監視中の pane 一覧と各 pane の自己申告 (`agent_status` と、あれば `agent_kind` / `agent_message`)・監視状態・試行回数・待機期限・直近の判定 | 上書き |
 | `$STATE/logs/daemon.log` | daemon | 報告に値する出来事があったときだけ | 上限検知と待ち時間、再開送信、ユーザーの自己再開、ゲート抑制、ネイティブへの譲り、エラー | rotate |

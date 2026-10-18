@@ -280,3 +280,25 @@ func withSession(t *testing.T, base []byte, sessionID string) []byte {
 	}
 	return out
 }
+
+func TestListTodosAndHasSession(t *testing.T) {
+	s := New(t.TempDir())
+	todos := []map[string]any{{"content": "a", "status": "in_progress", "activeForm": "doing a"}}
+	input := withTool(t, fixture(t, "task-list"), "TodoWrite", map[string]any{"todos": todos}, map[string]any{})
+	if err := s.Ingest(input, allWork, t0); err != nil {
+		t.Fatal(err)
+	}
+	lists, err := s.ListTodos(domain.Work)
+	if err != nil || len(lists) != 1 || lists[0].SessionID != fixtureSession || lists[0].Todos[0].Content != "a" {
+		t.Errorf("ListTodos(work) = %+v, %v", lists, err)
+	}
+	if lists, _ := s.ListTodos(domain.Home); len(lists) != 0 {
+		t.Errorf("ListTodos(home) = %+v, want 空", lists)
+	}
+	if !s.HasSession(domain.Work, fixtureSession) || s.HasSession(domain.Home, fixtureSession) {
+		t.Errorf("HasSession が記録の置き場と合わない")
+	}
+	if s.HasSession(domain.Work, "../x") || (Store{}).HasSession(domain.Work, fixtureSession) {
+		t.Errorf("不正な session ID かゼロ値の Store で true")
+	}
+}

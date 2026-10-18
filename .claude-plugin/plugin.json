@@ -12,5 +12,6 @@
     "./skills/setup",
     "./skills/peer-sessions",
     "./skills/dream"
-  ]
+  ],
+  "types": "./types/index.d.ts"
 }

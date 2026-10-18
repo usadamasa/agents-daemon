@@ -1,6 +1,10 @@
 package main
 
-import "github.com/spf13/cobra"
+import (
+	"github.com/spf13/cobra"
+
+	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/dreamcli"
+)
 
 // newRootCmd は agents-daemon の root cobra コマンドを組み立てる。
 // テストでも呼べるように関数化してある。
@@ -27,7 +31,7 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(newIngestTaskCmd())
 	root.AddCommand(newParkCmd())
 	root.AddCommand(newEdgeCmd())
-	root.AddCommand(newDreamCmd())
+	root.AddCommand(dreamcli.Commands()...)
 	root.AddCommand(newPruneWorktreesCmd())
 	return root
 }

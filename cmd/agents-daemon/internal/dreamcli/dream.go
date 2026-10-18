@@ -1,4 +1,5 @@
-package main
+// Package dreamcli は `agents-daemon dream` の組み立て (flag と、環境を internal/dream の各 phase へ渡す配線) を持つ。
+package dreamcli
 
 import (
 	"fmt"
@@ -17,6 +18,11 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/dream/mine"
 	"github.com/usadamasa/agents-daemon/internal/dream/stage"
 )
+
+// Commands は root に登録するコマンド。
+func Commands() []*cobra.Command {
+	return []*cobra.Command{newDreamCmd()}
+}
 
 // newDreamCmd は `agents-daemon dream` を組み立てる。
 //

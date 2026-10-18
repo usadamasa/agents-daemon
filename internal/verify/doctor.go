@@ -1,4 +1,4 @@
-// Package verify は `doctor` / `inspect` サブコマンドの実装を提供する。
+// Package verify は `doctor` / `inspect` / `status` サブコマンドの実装を提供する。
 // いずれも daemon (internal/daemon) と同じ検知・判定経路 (monitor パッケージ) を
 // 送信せずに覗き見る診断ツール。使い捨て pane へ実際に通す `simulate` は internal/simulate。
 package verify

@@ -1,0 +1,93 @@
+package statusline
+
+import (
+	"errors"
+	"fmt"
+	"io"
+	"strconv"
+	"time"
+
+	"github.com/usadamasa/agents-daemon/internal/apppath"
+	"github.com/usadamasa/agents-daemon/internal/sessionstate"
+	"github.com/usadamasa/agents-daemon/internal/spend"
+)
+
+// SpendCapEnv は月額上限 (USD) を渡す環境変数。設定したときだけ cost の合算を記録し、表示する。
+// rate_limits が届かない契約 (Enterprise の seat) 向けで、届くプロファイルでは設定しない。
+// 上限は人ごとに決まる固定値なので settings の env で渡す (claude-config の work profile)。
+const SpendCapEnv = "CLAUDE_STATUSLINE_SPEND_CAP"
+
+// Run は `agents-daemon statusline` の本体。stdin を読み切り、state file を書いてから描画を組む。
+// 描画が組めても state の書き込みが失敗していれば、描画と一緒にその理由を返す。
+// 環境 (COLUMNS、HOME、SpendCapEnv) は getenv から読む。
+func Run(stdin io.Reader, p apppath.Paths, getenv func(string) string, now time.Time) (string, error) {
+	input, err := io.ReadAll(stdin)
+	if err != nil {
+		return "", fmt.Errorf("stdin の読み込みに失敗: %w", err)
+	}
+	store := sessionstate.New(p.StateDir())
+	ledger := spend.New(p.StateDir())
+
+	// 表示と無関係な副作用は幅の判定より前に行う。hidden でも daemon の state は更新する。
+	var errs []error
+	if err := store.IngestStatusline(input, now); err != nil {
+		errs = append(errs, err)
+	}
+	in, err := ParseInput(input)
+	if err != nil {
+		return "", errors.Join(append(errs, err)...)
+	}
+	spendCap := parseSpendCap(getenv(SpendCapEnv))
+	if spendCap > 0 {
+		if err := ledger.Record(in.SessionID, in.Cost, now); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	mode := ModeFor(getenv("COLUMNS"))
+	if mode == ModeHidden {
+		return "", errors.Join(errs...)
+	}
+	view, err := buildView(ledger, in, mode, spendCap, getenv("HOME"), now)
+	if err != nil {
+		errs = append(errs, err)
+	}
+	return view.Render(now), errors.Join(errs...)
+}
+
+// buildView は settings・git・state から描画に要る値を引く。合算は full でだけ読む
+// (compact では出さないので、台帳の走査を省く)。
+// state が読めなくても描画は返し、理由をエラーに添える。
+func buildView(ledger spend.Ledger, in Input, mode Mode, spendCap int, home string, now time.Time) (View, error) {
+	view := View{
+		Input:  in,
+		Mode:   mode,
+		Home:   home,
+		Effort: ReadEffort(home),
+		Branch: GitBranch(in.CurrentDir),
+	}
+	if OutsideProject(in.CurrentDir, in.ProjectDir) {
+		view.ProjectBranch = ProjectBranch(in.ProjectDir)
+	}
+	if mode != ModeFull {
+		return view, nil
+	}
+
+	if spendCap > 0 {
+		sum, err := ledger.Sum(now)
+		if err != nil {
+			return view, err
+		}
+		view.Spend = &SpendView{Day: sum.Day, Month: sum.Month, Cap: spendCap}
+	}
+	return view, nil
+}
+
+// parseSpendCap は環境変数の月額上限を読む。整数でなければ未設定 (0) として扱う。
+func parseSpendCap(value string) int {
+	capUSD, err := strconv.Atoi(value)
+	if err != nil || capUSD <= 0 {
+		return 0
+	}
+	return capUSD
+}

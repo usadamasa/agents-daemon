@@ -259,6 +259,39 @@ func TestParkAdopt(t *testing.T) {
 	}
 }
 
+// --task はそのセッションがそのタスクの途中で置いたメモで絞る。--session が無ければ受け付けない。
+func TestParkList_task(t *testing.T) {
+	root := parkTestEnv(t)
+	cwd := filepath.Join(root, "src", "home", "a")
+	if err := os.MkdirAll(cwd, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	writeTaskRecord(t, root, "home", "s1", `{"id": "3", "subject": "a", "status": "in_progress", "session_id": "s1"}`)
+	out, _, err := runPark(t, parkInput, "add", "--cwd", cwd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	during := decodeAdded(t, out).Item
+	if _, _, err := runPark(t, strings.Replace(strings.Replace(parkInput, "保持期間", "別の件", 1), `"s1"`, `"s2"`, 1), "add", "--cwd", cwd); err != nil {
+		t.Fatal(err)
+	}
+
+	out, _, err = runPark(t, "", "list", "--status", "open", "--task", "3", "--session", "s1", "--cwd", cwd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var items []parking.Item
+	if err := json.Unmarshal([]byte(out), &items); err != nil {
+		t.Fatalf("list の JSON を読めない: %v\n%s", err, out)
+	}
+	if len(items) != 1 || items[0].ID != during.ID {
+		t.Errorf("--task = %+v, want %s だけ", items, during.ID)
+	}
+	if _, _, err := runPark(t, "", "list", "--task", "3", "--cwd", cwd); err == nil {
+		t.Errorf("--session の無い --task を受け付けた")
+	}
+}
+
 // --here は --cwd の repo (main worktree のパス) で絞る。linked worktree からでも main で置いたメモが出る。
 func TestParkList_here(t *testing.T) {
 	root := parkTestEnv(t)

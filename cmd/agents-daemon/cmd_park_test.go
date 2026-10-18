@@ -66,6 +66,16 @@ func decodeItem(t *testing.T, s string) parking.Item {
 	return item
 }
 
+// decodeAdded は park add の stdout ({"created": bool, "item": {...}}) を読む。
+func decodeAdded(t *testing.T, s string) parking.Added {
+	t.Helper()
+	var added parking.Added
+	if err := json.Unmarshal([]byte(s), &added); err != nil || added.Item.ID == "" {
+		t.Fatalf("add の JSON を読めない: %v\n%s", err, s)
+	}
+	return added
+}
+
 func writeTaskRecord(t *testing.T, root, d, sessionID, body string) {
 	t.Helper()
 	var task struct {
@@ -93,7 +103,11 @@ func TestParkAdd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("park add: %v", err)
 	}
-	item := decodeItem(t, stdout)
+	added := decodeAdded(t, stdout)
+	if !added.Created {
+		t.Errorf("新しい件なのに created = false")
+	}
+	item := added.Item
 	if item.Domain != "home" || item.Repo != gitrepo.Locate(repo).Repo || item.Repo == "" {
 		t.Errorf("domain / repo = %q / %q, want home / %q", item.Domain, item.Repo, gitrepo.Locate(repo).Repo)
 	}
@@ -106,7 +120,7 @@ func TestParkAdd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if again := decodeItem(t, stdout); again.ID != item.ID || len(again.Sources) != 2 || again.Sources[1].TaskID != "" {
+	if again := decodeAdded(t, stdout); again.Created || again.Item.ID != item.ID || len(again.Item.Sources) != 2 || again.Item.Sources[1].TaskID != "" {
 		t.Errorf("まとまっていない: %+v", again)
 	}
 }
@@ -123,7 +137,7 @@ func TestParkAdd_sessionTiltedToWork(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if item := decodeItem(t, stdout); item.Domain != "work" || item.Sources[0].TaskID != "1" {
+	if item := decodeAdded(t, stdout).Item; item.Domain != "work" || item.Sources[0].TaskID != "1" {
 		t.Errorf("item = %+v, want work に task 1 で置く", item)
 	}
 }
@@ -139,7 +153,7 @@ func TestParkAdd_outsideGitIsWork(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if item := decodeItem(t, stdout); item.Domain != "work" || item.Repo != cwd {
+	if item := decodeAdded(t, stdout).Item; item.Domain != "work" || item.Repo != cwd {
 		t.Errorf("item = %+v", item)
 	}
 }
@@ -173,7 +187,7 @@ func TestParkListAndSet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	first := decodeItem(t, out)
+	first := decodeAdded(t, out).Item
 	if _, _, err := runPark(t, strings.Replace(parkInput, "保持期間", "別の件", 1), "add", "--cwd", other); err != nil {
 		t.Fatal(err)
 	}
@@ -215,5 +229,38 @@ func TestParkListAndSet(t *testing.T) {
 	}
 	if _, _, err := runPark(t, "", "set", first.ID, "--status", "discarded", "--cwd", work); err == nil {
 		t.Errorf("別の domain から書き換えられた")
+	}
+}
+
+// --here は --cwd の repo (main worktree のパス) で絞る。linked worktree からでも main の件が出る。
+func TestParkList_here(t *testing.T) {
+	root := parkTestEnv(t)
+	repo, wt := parkTestRepo(t, filepath.Join(root, "src", "home", "app"))
+	other := filepath.Join(root, "src", "home", "other")
+	if err := os.MkdirAll(other, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	out, _, err := runPark(t, parkInput, "add", "--cwd", repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mine := decodeAdded(t, out).Item
+	if _, _, err := runPark(t, parkInput, "add", "--cwd", other); err != nil {
+		t.Fatal(err)
+	}
+
+	out, _, err = runPark(t, "", "list", "--here", "--status", "open", "--cwd", wt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var items []parking.Item
+	if err := json.Unmarshal([]byte(out), &items); err != nil {
+		t.Fatalf("list の JSON を読めない: %v\n%s", err, out)
+	}
+	if len(items) != 1 || items[0].ID != mine.ID {
+		t.Errorf("--here = %+v, want %s だけ", items, mine.ID)
+	}
+	if _, _, err := runPark(t, "", "list", "--here", "--repo", repo, "--cwd", wt); err == nil {
+		t.Errorf("--here と --repo を同時に受け付けた")
 	}
 }

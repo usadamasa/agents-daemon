@@ -9,6 +9,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/daemon"
 	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
+	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
 
@@ -50,12 +51,17 @@ func Write(w io.Writer, p apppath.Paths, v Viewer) error {
 	if err != nil {
 		return err
 	}
+	memos, err := parking.New(p.StateDir()).Find(d, "", parking.StatusOpen)
+	if err != nil {
+		return err
+	}
 	b := Build(Input{
 		Domain:    d,
 		PID:       pid,
 		Snapshot:  snap,
 		Tasks:     tasks,
 		Todos:     todos,
+		Parking:   memos,
 		Classify:  c.Classify,
 		Elsewhere: func(id string) bool { return store.HasSession(other(d), id) },
 		Locate:    gitrepo.Locate,

@@ -19,10 +19,29 @@ export type BoardCard = {
   updated_at: string
 }
 
+export type ParkingSource = {
+  session_id: string
+  session: string
+  live: boolean
+  detail?: string
+  at: string
+}
+
+export type ParkingCard = {
+  id: string
+  kind: 'aside' | 'scope' | 'preference' | 'task'
+  title: string
+  detail?: string
+  files?: string[]
+  default_taken?: string
+  sources: ParkingSource[]
+}
+
 export type BoardRow = {
   repo: string
   title: string
   cards: BoardCard[]
+  parking: ParkingCard[]
 }
 
 export type BoardData = {

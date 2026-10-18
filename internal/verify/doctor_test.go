@@ -461,3 +461,52 @@ func writeFixtureSnapshot(t *testing.T, path string, snap daemon.StatusSnapshot)
 		t.Fatalf("status snapshot の作成に失敗: %v", err)
 	}
 }
+
+// pane ごとの判定を出し、私用の範囲を広げうる書き方 (相対パス) は無視したと明言する。
+func TestReportDomain(t *testing.T) {
+	home := t.TempDir()
+	p := apppath.New(home, "", "")
+	writeJSONFile(t, p.ConfigFile(), map[string]any{
+		"privatePaths": []string{"~/src/github.com/usadamasa", "src/relative"},
+	})
+	panes := []multiplexer.Pane{
+		{PaneID: "p1", Agent: "claude", CWD: filepath.Join(home, "src/github.com/usadamasa/agents-daemon")},
+		{PaneID: "p2", Agent: "claude", CWD: filepath.Join(home, "src/github.example.com/team/app")},
+		{PaneID: "p3", Agent: "", CWD: filepath.Join(home, "src/github.com/usadamasa/dotfile")},
+	}
+
+	var buf bytes.Buffer
+	reportDomain(&buf, p, panes, home)
+	out := buf.String()
+
+	for _, want := range []string{
+		"privatePaths に当たらない cwd: work",
+		"pane=p1 private ",
+		"pane=p2 work ",
+		"1 件は絶対パスでも ~/ 始まりでもないため無視しています",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("出力に %q が無い:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "pane=p3") {
+		t.Errorf("Claude agent でない pane まで出している:\n%s", out)
+	}
+}
+
+// 私用の端末 (defaultDomain=private) では、私用のパスが無くても案内を出さない。
+func TestReportDomain_privateMachine(t *testing.T) {
+	home := t.TempDir()
+	p := apppath.New(home, "", "")
+	writeJSONFile(t, p.ConfigFile(), map[string]any{"defaultDomain": "private"})
+
+	var buf bytes.Buffer
+	reportDomain(&buf, p, nil, home)
+	out := buf.String()
+	if !strings.Contains(out, "privatePaths に当たらない cwd: private") {
+		t.Errorf("既定が private と出ていない:\n%s", out)
+	}
+	if strings.Contains(out, "私用と判定するパスはありません") {
+		t.Errorf("私用の端末に業務の端末向けの案内を出している:\n%s", out)
+	}
+}

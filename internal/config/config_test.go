@@ -71,7 +71,9 @@ func TestLoad(t *testing.T) {
 			"submitDelayMs": 200,
 			"customPatterns": ["foo.*bar"],
 			"idleShutdownMinutes": 15,
-			"deferToNativeAutoContinue": false
+			"deferToNativeAutoContinue": false,
+			"privatePaths": ["~/src/github.com/usadamasa"],
+			"defaultDomain": "private"
 		}`)
 		cfg, err := Load(path)
 		if err != nil {
@@ -98,6 +100,8 @@ func TestLoad(t *testing.T) {
 			IdleShutdownMinutes:     15,
 
 			DeferToNativeAutoContinue: false,
+			PrivatePaths:              []string{"~/src/github.com/usadamasa"},
+			DefaultDomain:             "private",
 		}
 		if !reflect.DeepEqual(cfg, want) {
 			t.Errorf("got %+v, want %+v", cfg, want)
@@ -183,4 +187,30 @@ func TestLoad(t *testing.T) {
 			t.Errorf("readLines: got %d, want default %d", cfg.ReadLines, Default().ReadLines)
 		}
 	})
+}
+
+func TestLoad_domain(t *testing.T) {
+	cases := []struct {
+		name        string
+		content     string
+		wantPaths   []string
+		wantDefault string
+	}{
+		{"書かなければ私用のパスは無く、既定は業務", `{}`, []string{}, "work"},
+		{"私用の端末は defaultDomain を private にする", `{"defaultDomain":"private"}`, []string{}, "private"},
+		{"privatePaths は書かれたとおり残す", `{"privatePaths":["~/src/github.com/usadamasa"]}`, []string{"~/src/github.com/usadamasa"}, "work"},
+		{"defaultDomain の typo は業務のまま (私用へ倒さない)", `{"defaultDomain":"personal"}`, []string{}, "work"},
+		{"defaultDomain の型違いも業務のまま", `{"defaultDomain":1}`, []string{}, "work"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg, err := Load(writeTestFile(t, tc.content))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !reflect.DeepEqual(cfg.PrivatePaths, tc.wantPaths) || cfg.DefaultDomain != tc.wantDefault {
+				t.Errorf("PrivatePaths/DefaultDomain = %v/%q, want %v/%q", cfg.PrivatePaths, cfg.DefaultDomain, tc.wantPaths, tc.wantDefault)
+			}
+		})
+	}
 }

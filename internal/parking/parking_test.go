@@ -113,6 +113,28 @@ func TestAdd_keepsLaterDetailInSource(t *testing.T) {
 	}
 }
 
+// 同じ session と task から置き直しても、detail が既にあるどれとも違えば、その detail と時刻を source に残す。
+// メモの detail か既にある source の detail と同じなら足さない (二重送信で増えない)。
+func TestAdd_keepsNewDetailFromSameSource(t *testing.T) {
+	s := New(t.TempDir())
+	mustAdd(t, s, domain.Home, testRepo, aside("t"), source("s1", "3"))
+	later := aside("t")
+	later.Detail = "後から分かった補足"
+	src := source("s1", "3")
+	src.At = testNow.Add(time.Hour)
+	merged := mustAdd(t, s, domain.Home, testRepo, later, src)
+	if len(merged.Sources) != 2 || merged.Sources[1].Detail != "後から分かった補足" || !merged.Sources[1].At.Equal(src.At) {
+		t.Fatalf("sources = %+v", merged.Sources)
+	}
+	again := mustAdd(t, s, domain.Home, testRepo, later, src)
+	if len(again.Sources) != 2 {
+		t.Errorf("同じ detail の二重送信で増えた: %+v", again.Sources)
+	}
+	if first := mustAdd(t, s, domain.Home, testRepo, aside("t"), source("s1", "3")); len(first.Sources) != 2 {
+		t.Errorf("メモと同じ detail で増えた: %+v", first.Sources)
+	}
+}
+
 // 正規化した title は同じ件かを見る鍵にだけ使い、保存する title は人が書いた形 (前後の空白だけ落とす) のまま。
 // まとめたときは最初に置いた形を残す。
 func TestAdd_keepsTitleAsWritten(t *testing.T) {

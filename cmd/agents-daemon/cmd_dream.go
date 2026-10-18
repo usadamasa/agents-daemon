@@ -78,13 +78,13 @@ func newDreamHarvestCmd() *cobra.Command {
 			"logs/dream-harvest.log に残り、成功すれば何も書かない。",
 		Args: cobra.NoArgs,
 		// 失敗の行には時刻を付ける。stderr が hook 経由でログに流れたとき、いつの失敗か分かるようにするため。
+		// cobra の "Error: " は出さず、main が返り値を 1 行だけ印字する。
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			err := runDreamHarvest(opts, detach)
-			if err != nil {
-				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "%s dream harvest: %v\n", time.Now().Format(time.RFC3339), err)
+			if err := runDreamHarvest(opts, detach); err != nil {
+				return fmt.Errorf("%s dream harvest: %w", time.Now().Format(time.RFC3339), err)
 			}
-			return err
+			return nil
 		},
 	}
 	f := cmd.Flags()

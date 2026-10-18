@@ -51,19 +51,21 @@ func TestDreamHarvestCmd_FailureLineIsTimestamped(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", filepath.Join(blocker, "state"))
 	t.Setenv("HOME", t.TempDir())
 
+	// main は Execute の返り値を 1 行印字する。cobra 自身は何も出さない (二重に出さない) ことも見る。
 	var stderr bytes.Buffer
 	root := newRootCmd()
 	root.SetErr(&stderr)
 	root.SetArgs([]string{"dream", "harvest", "--projects-dir", t.TempDir()})
-	if err := root.Execute(); err == nil {
+	err := root.Execute()
+	if err == nil {
 		t.Fatal("state を書けないのに成功した")
 	}
-	line := stderr.String()
+	if stderr.Len() != 0 {
+		t.Errorf("cobra が stderr に出している (main と二重になる): %q", stderr.String())
+	}
+	line := err.Error()
 	if !strings.Contains(line, " dream harvest: ") {
 		t.Errorf("失敗の行に時刻と名前が無い: %q", line)
-	}
-	if strings.HasPrefix(line, "Error:") {
-		t.Errorf("cobra の既定の Error: が出ている: %q", line)
 	}
 	if _, err := time.Parse(time.RFC3339, strings.SplitN(line, " ", 2)[0]); err != nil {
 		t.Errorf("先頭が RFC3339 の時刻でない: %q", line)

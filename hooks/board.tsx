@@ -1,8 +1,20 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import type { BoardCard, BoardData } from '../types'
+import type { BoardCard, BoardData, BoardRow, ParkingCard } from '../types'
 import { daemonBin } from './daemon-bin'
+import {
+  adopt,
+  canAdopt,
+  discard,
+  handOff,
+  issueDestinations,
+  issueText,
+  memoLabel,
+  memoLines,
+  taskDestinations,
+  taskText,
+} from './parking'
 
 // タスクのボード (#121) を pane に描き、選んだタスクのセッションへ指示を送る mod。
 // 行は repo、列はタスクの状態で、ボードの中身は `agents-daemon status --board` (internal/board) が組む。
@@ -65,10 +77,17 @@ export const registerBoard: Register = on => {
     const cards = data?.rows.flatMap(row => row.cards) ?? []
     const chosenCard = cards.find(card => card.key === chosen)
     const sendable = chosenCard !== undefined && canSend(chosenCard, self)
+    const chosenMemo = data === null ? undefined : findMemo(data.rows, chosen)
 
-    const choose = (card: BoardCard) => {
-      void update($, target, () => card.key)
+    const choose = (key: string) => {
+      void update($, target, () => key)
       void update($, notice, () => '')
+    }
+    // act はメモとタスクの操作を走らせ、結果を notice に出してボードを読み直す。
+    const act = async (run: () => Promise<string>) => {
+      const message = await run()
+      await update($, notice, () => message)
+      await refresh($)
     }
     const send = async (text: string) => {
       if (!chosenCard || !canSend(chosenCard, self) || text.trim() === '') return
@@ -110,14 +129,56 @@ export const registerBoard: Register = on => {
                         label={cardLabel(card, self)}
                         variant={card.key === chosen ? 'primary' : 'secondary'}
                         dimColor={!canSend(card, self)}
-                        onPress={() => choose(card)}
+                        onPress={() => choose(card.key)}
                       />
                     ))}
                   </Box>
                 )
               })}
+              {row.parking.length > 0 && (
+                <Box key={`${row.repo}:parking`} flexDirection="column">
+                  <Text dimColor>パーキング ({row.parking.length})</Text>
+                  {row.parking.map(memo => (
+                    <Button
+                      key={memoKey(memo)}
+                      label={memoLabel(memo)}
+                      variant={memoKey(memo) === chosen ? 'primary' : 'secondary'}
+                      onPress={() => choose(memoKey(memo))}
+                    />
+                  ))}
+                </Box>
+              )}
             </Box>
           ))}
+        {data !== null && chosenMemo !== undefined && (
+          <Box key="memo" flexDirection="column">
+            {memoLines(chosenMemo.memo).map((line, i) => (
+              <Text key={`memo-line-${i}`} dimColor>
+                {line}
+              </Text>
+            ))}
+            <Button key="discard" label="捨てる" variant="secondary" onPress={() => void act(() => discard($, chosenMemo.memo))} />
+            {taskDestinations(chosenMemo.row.cards, self).map(to => (
+              <Button
+                key={`task:${to.session_id}`}
+                label={`タスクにする → ${to.session}`}
+                variant="secondary"
+                onPress={() => void act(() => handOff($, chosenMemo.memo, to, taskText(chosenMemo.memo)))}
+              />
+            ))}
+            {issueDestinations(data, chosenMemo.row.cards, self).map(to => (
+              <Button
+                key={`issue:${to.session_id}`}
+                label={`issue にするよう頼む → ${to.session}`}
+                variant="secondary"
+                onPress={() => void act(() => handOff($, chosenMemo.memo, to, issueText(chosenMemo.memo, chosenMemo.row.title)))}
+              />
+            ))}
+          </Box>
+        )}
+        {chosenCard !== undefined && canAdopt(chosenCard, self) && (
+          <Button key="adopt" label="パーキングへ移す" variant="secondary" onPress={() => void act(() => adopt($, chosenCard))} />
+        )}
         {chosenCard !== undefined && !sendable && <Text dimColor>{whyNot(chosenCard, self)}</Text>}
         {sendable && Input === undefined && <Text dimColor>この画面では指示を入力できません</Text>}
         {sendable && Input !== undefined && (
@@ -151,6 +212,19 @@ async function refresh($: EngineInterface) {
   } catch (err) {
     await update($, error, () => String(err))
   }
+}
+
+// memoKey はメモのカードの key。タスクのカードの key (<session_id>/<task_id>) と重ならないよう前置きを付ける。
+function memoKey(memo: ParkingCard): string {
+  return `park:${memo.id}`
+}
+
+function findMemo(rows: BoardRow[], key: string): { memo: ParkingCard; row: BoardRow } | undefined {
+  for (const row of rows) {
+    const memo = row.parking.find(m => memoKey(m) === key)
+    if (memo) return { memo, row }
+  }
+  return undefined
 }
 
 // canSend はカードのセッションへ指示を送れるか。終了したセッションと自分自身には送らない。

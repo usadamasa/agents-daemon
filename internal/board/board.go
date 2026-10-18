@@ -65,8 +65,10 @@ type Column struct {
 // Card はカード 1 枚。
 type Card struct {
 	// Key はボード全体で一意な識別子 (<session_id>/<task_id> など)。mod が描画の key と選択に使う。
-	Key     string `json:"key"`
-	Kind    string `json:"kind"`
+	Key  string `json:"key"`
+	Kind string `json:"kind"`
+	// TaskID は kind task のカードのタスクの ID (park adopt に渡す)。
+	TaskID  string `json:"task_id,omitempty"`
 	Column  string `json:"column"`
 	Subject string `json:"subject"`
 	// SessionID はタスクのセッション。Live なら mod はここへ指示を送れる。
@@ -282,7 +284,7 @@ func livePaneInDomain(in Input, p *daemon.PaneStatus) bool {
 }
 
 func taskCard(t tasklog.Task, all []tasklog.Task, p *daemon.PaneStatus) Card {
-	c := Card{Key: t.SessionID + "/" + t.ID, Kind: KindTask, Subject: t.Subject, SessionID: t.SessionID, Live: p != nil, UpdatedAt: t.UpdatedAt}
+	c := Card{Key: t.SessionID + "/" + t.ID, Kind: KindTask, TaskID: t.ID, Subject: t.Subject, SessionID: t.SessionID, Live: p != nil, UpdatedAt: t.UpdatedAt}
 	c.Blockers = openBlockers(t, all)
 	c.Column = column(t.Status, c.Blockers)
 	if c.Column == ColumnInProgress {

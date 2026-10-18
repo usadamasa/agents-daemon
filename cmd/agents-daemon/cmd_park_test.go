@@ -164,7 +164,7 @@ func TestParkAdd_invalidInput(t *testing.T) {
 	for name, in := range map[string]string{
 		"壊れた JSON":      `{"kind": `,
 		"kind が範囲外":     `{"kind": "decision", "title": "t", "session_id": "s1"}`,
-		"kind が task":    `{"kind": "task", "title": "t", "session_id": "s1"}`,
+		"kind が task":   `{"kind": "task", "title": "t", "session_id": "s1"}`,
 		"session_id 無し": `{"kind": "aside", "title": "t"}`,
 	} {
 		if _, _, err := runPark(t, in, "add", "--cwd", cwd); err == nil {

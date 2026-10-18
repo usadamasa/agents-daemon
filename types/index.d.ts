@@ -8,6 +8,7 @@ export type BoardColumn = {
 export type BoardCard = {
   key: string
   kind: 'task' | 'todo' | 'session'
+  task_id?: string
   column: BoardColumn['id']
   subject: string
   session_id: string

@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026.1018.3](https://github.com/usadamasa/agents-daemon/compare/2026.1018.2...2026.1018.3) - 2026-10-18
+
+- docs(skills): agents-daemon skill の SKILL.md を症状表と references の表に絞る by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/105
+- fix(hooks): prune-worktrees.sh に実行ビットを付ける by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/109
+
 ## [2026.1018.2](https://github.com/usadamasa/agents-daemon/compare/2026.1018.1...2026.1018.2) - 2026-10-18
 
 - feat: 放置された Claude Code の worktree の回収を plugin へ移す (prune-worktrees) by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/103

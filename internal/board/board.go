@@ -23,6 +23,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
+	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
 
@@ -64,8 +65,10 @@ type Column struct {
 // Card はカード 1 枚。
 type Card struct {
 	// Key はボード全体で一意な識別子 (<session_id>/<task_id> など)。mod が描画の key と選択に使う。
-	Key     string `json:"key"`
-	Kind    string `json:"kind"`
+	Key  string `json:"key"`
+	Kind string `json:"kind"`
+	// TaskID は kind task のカードのタスクの ID (park adopt に渡す)。
+	TaskID  string `json:"task_id,omitempty"`
 	Column  string `json:"column"`
 	Subject string `json:"subject"`
 	// SessionID はタスクのセッション。Live なら mod はここへ指示を送れる。
@@ -82,12 +85,37 @@ type Card struct {
 	UpdatedAt  time.Time `json:"updated_at"`
 }
 
+// ParkingCard はパーキングの列のメモ 1 つ (internal/parking の open の Item)。
+type ParkingCard struct {
+	ID           string   `json:"id"`
+	Kind         string   `json:"kind"`
+	Title        string   `json:"title"`
+	Detail       string   `json:"detail,omitempty"`
+	Files        []string `json:"files,omitempty"`
+	DefaultTaken string   `json:"default_taken,omitempty"`
+	// Sources は置いたセッションの新しい順。
+	Sources []ParkingSource `json:"sources"`
+}
+
+// ParkingSource はメモを置いたセッション 1 つ。
+type ParkingSource struct {
+	SessionID string `json:"session_id"`
+	// Session はカードと同じ規則で付けたセッションの短い名前。
+	Session string `json:"session"`
+	Live    bool   `json:"live"`
+	// Detail はまとめたときに後から置いた側が書いた detail。
+	Detail string    `json:"detail,omitempty"`
+	At     time.Time `json:"at"`
+}
+
 // Row は repo 1 つの行。
 type Row struct {
 	// Repo は行の鍵 (main worktree のパス、git の外なら cwd)。
 	Repo  string `json:"repo"`
 	Title string `json:"title"`
 	Cards []Card `json:"cards"`
+	// Parking はこの repo で置かれた open のメモ (置いた順)。タスクの列とは別の欄にし、mod が列の右に置く。
+	Parking []ParkingCard `json:"parking"`
 }
 
 // Board は `agents-daemon status --board` が出す JSON の全体。
@@ -108,6 +136,8 @@ type Input struct {
 	Snapshot *daemon.StatusSnapshot
 	Tasks    []tasklog.Task
 	Todos    []tasklog.TodoList
+	// Parking は domain の open のメモ。
+	Parking []parking.Item
 	// Classify は pane の cwd の domain を決める。
 	Classify func(cwd string) domain.Domain
 	// Elsewhere はセッションの記録がほかの domain の側にあるか。業務に倒したセッションを、cwd だけで
@@ -122,7 +152,7 @@ func Build(in Input) Board {
 	b := Board{Domain: in.Domain, Columns: columns, Rows: []Row{}}
 	var panes map[string]*daemon.PaneStatus
 	b.DaemonRunning, b.UpdatedAt, panes = livePanes(in)
-	b.Rows = arrange(collect(in, panes), panes, locator{locate: in.Locate, cache: map[string]gitrepo.Place{}})
+	b.Rows = arrange(collect(in, panes), in.Parking, panes, locator{locate: in.Locate, cache: map[string]gitrepo.Place{}})
 	return b
 }
 
@@ -171,30 +201,45 @@ func collect(in Input, panes map[string]*daemon.PaneStatus) []placed {
 	return cards
 }
 
-// arrange はカードにセッションの名前を付け、repo の行へ分けて並べる。
-func arrange(cards []placed, panes map[string]*daemon.PaneStatus, l locator) []Row {
-	// セッションの名前は、そのセッションの今の cwd (生きていれば pane、終わっていれば最後のカード) の branch。
+// arrange はカードとメモの source にセッションの名前を付け、repo の行へ分けて並べる。
+func arrange(cards []placed, memos []parking.Item, panes map[string]*daemon.PaneStatus, l locator) []Row {
+	// セッションの名前は、そのセッションの今の cwd (生きていれば pane、終わっていれば最後のカードか
+	// メモを置いたときの cwd) の branch。
 	cwds := map[string]string{}
 	for _, c := range cards {
-		id := c.card.SessionID
+		cwds[c.card.SessionID] = c.cwd
+	}
+	for _, m := range memos {
+		for _, s := range m.Sources {
+			if _, ok := cwds[s.SessionID]; !ok {
+				cwds[s.SessionID] = s.CWD
+			}
+		}
+	}
+	for id := range cwds {
 		if p := panes[id]; p != nil {
 			cwds[id] = p.CWD
-		} else {
-			cwds[id] = c.cwd
 		}
 	}
 	names := sessionNames(cwds, l)
 
 	byRepo := map[string]*Row{}
-	for _, c := range cards {
-		c.card.Session = names[c.card.SessionID]
-		key, title := l.row(c.cwd)
+	rowOf := func(key, title string) *Row {
 		r, ok := byRepo[key]
 		if !ok {
-			r = &Row{Repo: key, Title: title, Cards: []Card{}}
+			r = &Row{Repo: key, Title: title, Cards: []Card{}, Parking: []ParkingCard{}}
 			byRepo[key] = r
 		}
+		return r
+	}
+	for _, c := range cards {
+		c.card.Session = names[c.card.SessionID]
+		r := rowOf(l.row(c.cwd))
 		r.Cards = append(r.Cards, c.card)
+	}
+	for _, m := range memos {
+		r := rowOf(m.Repo, filepath.Base(m.Repo))
+		r.Parking = append(r.Parking, parkingCard(m, names, panes))
 	}
 	rows := make([]Row, 0, len(byRepo))
 	for _, r := range byRepo {
@@ -208,6 +253,16 @@ func arrange(cards []placed, panes map[string]*daemon.PaneStatus, l locator) []R
 		return rows[i].Repo < rows[j].Repo
 	})
 	return rows
+}
+
+// parkingCard はメモをパーキングの列のカードにする。sources は新しい順に並べる。
+func parkingCard(m parking.Item, names map[string]string, panes map[string]*daemon.PaneStatus) ParkingCard {
+	c := ParkingCard{ID: m.ID, Kind: m.Kind, Title: m.Title, Detail: m.Detail, Files: m.Files, DefaultTaken: m.DefaultTaken, Sources: []ParkingSource{}}
+	for _, s := range m.Sources {
+		c.Sources = append(c.Sources, ParkingSource{SessionID: s.SessionID, Session: names[s.SessionID], Live: panes[s.SessionID] != nil, Detail: s.Detail, At: s.At})
+	}
+	sort.SliceStable(c.Sources, func(i, j int) bool { return c.Sources[i].At.After(c.Sources[j].At) })
+	return c
 }
 
 // placed はカードと、そのカードの行を決める cwd。
@@ -229,7 +284,7 @@ func livePaneInDomain(in Input, p *daemon.PaneStatus) bool {
 }
 
 func taskCard(t tasklog.Task, all []tasklog.Task, p *daemon.PaneStatus) Card {
-	c := Card{Key: t.SessionID + "/" + t.ID, Kind: KindTask, Subject: t.Subject, SessionID: t.SessionID, Live: p != nil, UpdatedAt: t.UpdatedAt}
+	c := Card{Key: t.SessionID + "/" + t.ID, Kind: KindTask, TaskID: t.ID, Subject: t.Subject, SessionID: t.SessionID, Live: p != nil, UpdatedAt: t.UpdatedAt}
 	c.Blockers = openBlockers(t, all)
 	c.Column = column(t.Status, c.Blockers)
 	if c.Column == ColumnInProgress {

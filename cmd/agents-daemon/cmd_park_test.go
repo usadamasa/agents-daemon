@@ -164,6 +164,7 @@ func TestParkAdd_invalidInput(t *testing.T) {
 	for name, in := range map[string]string{
 		"壊れた JSON":      `{"kind": `,
 		"kind が範囲外":     `{"kind": "decision", "title": "t", "session_id": "s1"}`,
+		"kind が task":   `{"kind": "task", "title": "t", "session_id": "s1"}`,
 		"session_id 無し": `{"kind": "aside", "title": "t"}`,
 	} {
 		if _, _, err := runPark(t, in, "add", "--cwd", cwd); err == nil {
@@ -229,6 +230,32 @@ func TestParkListAndSet(t *testing.T) {
 	}
 	if _, _, err := runPark(t, "", "set", first.ID, "--status", "discarded", "--cwd", work); err == nil {
 		t.Errorf("別の domain から書き換えられた")
+	}
+}
+
+// adopt は開いたセッションの domain の側にあるタスクを kind task のメモにし、タスクの記録を消す。
+// 別の domain のタスクは移さない。
+func TestParkAdopt(t *testing.T) {
+	root := parkTestEnv(t)
+	cwd := filepath.Join(root, "src", "home", "a")
+	if err := os.MkdirAll(cwd, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	writeTaskRecord(t, root, "home", "dead", `{"id": "4", "subject": "README を直す", "status": "pending", "session_id": "dead", "cwd": "`+cwd+`"}`)
+	writeTaskRecord(t, root, "work", "busy", `{"id": "1", "subject": "業務", "status": "pending", "session_id": "busy", "cwd": "`+cwd+`"}`)
+
+	out, _, err := runPark(t, "", "adopt", "dead", "4", "--session", "viewer", "--cwd", cwd)
+	if err != nil {
+		t.Fatalf("park adopt: %v", err)
+	}
+	if item := decodeAdded(t, out).Item; item.Kind != parking.KindTask || item.Domain != "home" || item.Title != "README を直す" {
+		t.Errorf("item = %+v", item)
+	}
+	if _, err := os.Stat(filepath.Join(root, "state", "agents-daemon", "tasks", "home", "dead", "4.json")); !os.IsNotExist(err) {
+		t.Errorf("タスクの記録が残った: %v", err)
+	}
+	if _, _, err := runPark(t, "", "adopt", "busy", "1", "--session", "viewer", "--cwd", cwd); err == nil {
+		t.Errorf("別の domain のタスクを移した")
 	}
 }
 

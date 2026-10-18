@@ -68,6 +68,34 @@ func (s Store) ActiveTaskID(d domain.Domain, sessionID string) string {
 	return active.ID
 }
 
+// Get は domain の側にあるセッションのタスク 1 つを返す。記録が無い、または ID がファイル名に使えなければ false。
+func (s Store) Get(d domain.Domain, sessionID, taskID string) (Task, bool) {
+	path, ok := s.taskPath(d, sessionID, taskID)
+	if !ok {
+		return Task{}, false
+	}
+	return readTask(path)
+}
+
+// Remove は domain の側にあるセッションのタスク 1 つの記録を消す。無ければ何もしない。
+func (s Store) Remove(d domain.Domain, sessionID, taskID string) error {
+	path, ok := s.taskPath(d, sessionID, taskID)
+	if !ok {
+		return fmt.Errorf("タスク %s/%s はファイル名に使えない", sessionID, taskID)
+	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("タスクの記録を消せない: %w", err)
+	}
+	return nil
+}
+
+func (s Store) taskPath(d domain.Domain, sessionID, taskID string) (string, bool) {
+	if s.Dir == "" || !statefile.ValidSessionID(sessionID) || !statefile.ValidSessionID(taskID) {
+		return "", false
+	}
+	return filepath.Join(s.Dir, string(d), sessionID, taskID+".json"), true
+}
+
 // HasSession は domain の側にそのセッションの記録 (ディレクトリ) があるかを返す。ボードが、業務に倒した
 // セッションを cwd だけで私用の側に描かないために使う。
 func (s Store) HasSession(d domain.Domain, sessionID string) bool {

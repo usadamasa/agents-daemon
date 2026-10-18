@@ -31,6 +31,9 @@ const (
 	KindAside      = "aside"
 	KindScope      = "scope"
 	KindPreference = "preference"
+	// KindTask は終了したセッションに残った未完了のタスク。ボードの操作 (park adopt) だけが置き、
+	// model の tool には出さない。
+	KindTask = "task"
 )
 
 const (
@@ -49,7 +52,7 @@ const (
 	ClosedRetention = 7 * 24 * time.Hour
 )
 
-// lockFile は domain のディレクトリで Add と Set を直列にするロック。まとめる判定と書き込みの間に
+// lockFile は domain のディレクトリで add と Set を直列にするロック。まとめる判定と書き込みの間に
 // 別の park add が割り込んで同じ件が 2 つできるのを防ぐ。
 const lockFile = ".lock"
 
@@ -94,15 +97,15 @@ func New(stateDir string) Store {
 	return Store{Dir: filepath.Join(stateDir, "parking")}
 }
 
-// Added は Add の結果。置いた側が「既に置かれていたメモ」と伝えられるよう、新しく作ったかを持つ。
+// Added は Park と Adopt の結果。置いた側が「既に置かれていたメモ」と伝えられるよう、新しく作ったかを持つ。
 type Added struct {
 	Created bool `json:"created"`
 	Item    Item `json:"item"`
 }
 
-// Add は件を置く。同じ件が open であれば src を sources に足し (同じ session と task の組は足さない)、
+// add は件を置く。同じ件が open であれば src を sources に足し (同じ session、task、detail の組は足さない)、
 // 無ければ新しい件を作る。書いた後の件を返す。
-func (s Store) Add(d domain.Domain, repo string, e Entry, src Source) (Added, error) {
+func (s Store) add(d domain.Domain, repo string, e Entry, src Source) (Added, error) {
 	if s.Dir == "" {
 		return Added{}, errors.New("parking の置き場所が無い")
 	}
@@ -121,10 +124,10 @@ func (s Store) Add(d domain.Domain, repo string, e Entry, src Source) (Added, er
 		key := normalize(e.Title)
 		for _, existing := range readDir(dir) {
 			if existing.Status == StatusOpen && existing.Repo == repo && normalize(existing.Title) == key {
+				if e.Detail != existing.Detail {
+					src.Detail = e.Detail
+				}
 				if !hasSource(existing.Sources, src) {
-					if e.Detail != existing.Detail {
-						src.Detail = e.Detail
-					}
 					existing.Sources = append(existing.Sources, src)
 				}
 				added = Added{Item: existing}
@@ -219,10 +222,10 @@ func validStatus(status string) error {
 
 func validKind(kind string) error {
 	switch kind {
-	case KindAside, KindScope, KindPreference:
+	case KindAside, KindScope, KindPreference, KindTask:
 		return nil
 	}
-	return fmt.Errorf("kind %q は aside / scope / preference のどれでもない", kind)
+	return fmt.Errorf("kind %q は aside / scope / preference / task のどれでもない", kind)
 }
 
 // locked は domain のディレクトリを作り、ロックを取って fn を呼ぶ。
@@ -249,9 +252,11 @@ func normalize(title string) string {
 	return strings.ToLower(strings.Join(strings.Fields(title), ""))
 }
 
+// hasSource は同じ置き方 (session、task、detail の組) が既にあるか。同じ source でも detail が新しければ
+// 後から分かった補足として残す。
 func hasSource(sources []Source, src Source) bool {
 	for _, s := range sources {
-		if s.SessionID == src.SessionID && s.TaskID == src.TaskID {
+		if s.SessionID == src.SessionID && s.TaskID == src.TaskID && s.Detail == src.Detail {
 			return true
 		}
 	}

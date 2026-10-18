@@ -149,13 +149,26 @@ pane に開き、`agents-daemon status --board --session <id> --cwd <cwd>` の J
 描くのは開いたセッションの domain だけで、指示を送れるのはボードに載った生きているセッションだけ。
 <!-- cc-premise: 2.1.302 hooks mods の pane / session.send / session.cwd と、PostToolUse の Task 系の形 -->
 
+ボードの JSON は行ごとに open のメモ (`$STATE/parking/`) をタスクの列とは別の欄 `parking` に持ち、メモだけの repo も
+行にする。メモの見せ方と操作は `hooks/parking.ts` が持ち、行と列の描き方には依存しない。操作はどれも
+`agents-daemon park ... --session <id> --cwd <cwd>` を呼び、開いたセッションの domain のメモとタスクだけを触る。
+
+- 捨てる: `park set <id> --status discarded`
+- タスクにする: 同じ repo の生きているセッションへ TaskCreate を頼む文面を送る
+- issue にするよう頼む: 私用のボードだけ。ボードに載っている生きているセッションへ頼む
+- タスクにする・issue にするよう頼むは、`$.session.send` が届いたときだけ `park set <id> --status handed` にする
+- パーキングへ移す: 終了したセッションの未完了のタスク (`kind: task` のカード) を `park adopt <session_id> <task_id>` で
+  `kind: task` のメモにし、タスクの記録を消す。`kind: task` は model の tool からは置けない
+
 `hooks/park.tsx` は model が呼べる tool `mcp__agents-daemon__park` を登録する (パーキングロットの置く側)。
 呼ばれたら `agents-daemon park add --cwd <cwd>` に、model が書いた欄とこのセッションの `session_id` を JSON で
 stdin に渡す。`session_id` と cwd は inputSchema に無く、model は書けないので、domain の判定は `status --board` と
 同じ入力で決まる。結果の `created` で「メモを置きました」と「既に置かれていたメモにまとめました」を分けて返す。
-status 行には `park list --here --status open` の数 (このセッションの repo の open のメモ) を出し、session.start、
-park の後、main loop の turn.complete で読み直す。全セッションで常に動くため、clock での定期の読み直しはしない。
-<!-- cc-premise: 2.1.302 hooks mods の tool.register / tool.call / ui.status / turn.complete -->
+prompt の hint 行の末尾 (`PromptHint` の `tail`) に `park list --here --status open` の数 (このセッションの repo の
+open のメモ) を出し、session.start、park の後、main loop の turn.complete で読み直す。全セッションで常に動くため、
+clock での定期の読み直しはしない。`$.ui.status` はエンジンが警告の印付きで描くので使わない。`tail` を描くのは terminal だけ。
+<!-- cc-premise: 2.1.302 hooks mods の tool.register / tool.call / turn.complete / ui.render PromptHint の tail -->
+<!-- cc-premise: 2.1.302 hooks $.ui.status は「⚠ <plugin>: <text>」と警告の印付きで描かれる -->
 <!-- cc-premise: 2.1.302 hooks modules は 1 つ、matcher の無い hook は event ごとに 1 つ -->
 <!-- cc-premise: 2.1.302 hooks tool.register は local の port を開く (sandbox の中の claude -p では落ちる) -->
 
@@ -273,8 +286,8 @@ pane ごとに次を評価する。上限側の詳細は [rate-limit.md](rate-li
 | `$STATE/rate-limits/<session_id>.json` | `agents-daemon statusline` または `ingest-statusline` (利用者の statusline が呼ぶ) | statusline の描画ごと (`rate_limits.five_hour.resets_at` があるときだけ) | そのセッションの 5 時間 / 7 日ウィンドウの使用率と reset 時刻、観測時刻、session_id | daemon が 24 時間で消す |
 | `$STATE/context/<session_id>.json` | `agents-daemon statusline` または `ingest-statusline` (利用者の statusline が呼ぶ) | statusline の描画ごと | そのセッションの context 使用率、観測時刻、session_id、多重化ツールの場所 | daemon が 7 日で消す |
 | `$STATE/cost/<YYYY-MM-DD>/<session_id>.json` | `agents-daemon statusline` (`CLAUDE_STATUSLINE_SPEND_CAP` があるとき) | statusline の描画ごと (累計が変わったときだけ書き直す) | そのセッションの累計 cost と前日までの繰り越し (`internal/spend`)。daemon は読まない | `statusline` がその日の最初の書き込みで 45 日より古い日を消す |
-| `$STATE/tasks/<domain>/<session_id>/<task_id>.json` と `…/todos.json` | `agents-daemon ingest-task` (PostToolUse hook `hooks/ingest-task.sh` が呼ぶ) | TaskCreate / TaskUpdate / TaskList / TodoWrite の呼び出しごと | タスク 1 つ (subject、status、blockedBy、session_id、cwd) と TodoWrite のリスト全体 (`internal/tasklog`)。`<domain>` は `home` か `work` (config の `homePaths` / `defaultDomain`)。読み手はタスクのボード (`status --board`、`internal/board`) | daemon が完了したタスクを 1 日、それ以外を 7 日 (更新が無ければ) で消す |
-| `$STATE/parking/<domain>/<id>.json` | `agents-daemon park add` / `park set` | 件を置いたとき、status を書き換えたとき | パーキングの件 1 つ (kind、title、detail、files、default_taken、repo、sources (session_id、置いたときの進行中の task_id、cwd、まとめたときに後から置いた側の detail、時刻)、status) (`internal/parking`)。repo はボードの行と同じ main worktree のパス。domain、repo、正規化した title が同じ open の件には sources を足す。`.lock` は書き込みを直列にするロック | daemon が open を 90 日、handed / discarded を 7 日 (更新が無ければ) で消す。同じ件が置き直されると数え直す。`.lock` は消さない |
+| `$STATE/tasks/<domain>/<session_id>/<task_id>.json` と `…/todos.json` | `agents-daemon ingest-task` (PostToolUse hook `hooks/ingest-task.sh` が呼ぶ) | TaskCreate / TaskUpdate / TaskList / TodoWrite の呼び出しごと | タスク 1 つ (subject、status、blockedBy、session_id、cwd) と TodoWrite のリスト全体 (`internal/tasklog`)。`<domain>` は `home` か `work` (config の `homePaths` / `defaultDomain`)。読み手はタスクのボード (`status --board`、`internal/board`) | daemon が完了したタスクを 1 日、それ以外を 7 日 (更新が無ければ) で消す。`park adopt` (ボードの「パーキングへ移す」) がメモへ移したタスクを消す |
+| `$STATE/parking/<domain>/<id>.json` | `agents-daemon park add` / `park set` / `park adopt` | 件を置いたとき、status を書き換えたとき、終了したセッションのタスクをメモへ移したとき (kind `task`) | パーキングの件 1 つ (kind、title、detail、files、default_taken、repo、sources (session_id、置いたときの進行中の task_id、cwd、まとめたときに後から置いた側の detail、時刻)、status) (`internal/parking`)。repo はボードの行と同じ main worktree のパス。domain、repo、正規化した title が同じ open の件には sources を足す。`.lock` は書き込みを直列にするロック | daemon が open を 90 日、handed / discarded を 7 日 (更新が無ければ) で消す。同じ件が置き直されると数え直す。`.lock` は消さない |
 | `$STATE/daemon.pid` | daemon | 起動時に作成、終了時に削除 | 稼働中デーモンの PID | daemon |
 | `$STATE/status.json` | daemon | 毎 tick (既定 5 秒) | backend (rex)、監視中の pane 一覧と各 pane の自己申告 (`agent_status` と、あれば `agent_kind` / `agent_message`)・監視状態・試行回数・待機期限・直近の判定 | 上書き |
 | `$STATE/logs/daemon.log` | daemon | 報告に値する出来事があったときだけ | 上限検知と待ち時間、再開送信、ユーザーの自己再開、ゲート抑制、ネイティブへの譲り、エラー | rotate |

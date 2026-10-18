@@ -68,10 +68,20 @@ func newParkCmd() *cobra.Command {
 	list.Flags().BoolVar(&here, "here", false, "--cwd の repo で絞る (mod は repo の鍵を持たないため)")
 	list.MarkFlagsMutuallyExclusive("repo", "here")
 	list.Flags().StringVar(&listStatus, "status", "", "status で絞る")
-	for _, c := range []*cobra.Command{set, list} {
+	adopt := &cobra.Command{
+		Use:   "adopt <session_id> <task_id>",
+		Short: "終了したセッションの未完了のタスクを kind task のメモにし、タスクの記録を消して {created, item} を出す",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return withPark(cmd, cwd, func(s parking.Store, p parking.Placer, cwd string) (any, error) {
+				return s.Adopt(session, cwd, args[0], args[1], p, time.Now())
+			})
+		},
+	}
+	for _, c := range []*cobra.Command{set, list, adopt} {
 		c.Flags().StringVar(&session, "session", "", "開いたセッションの ID。記録が業務の側にあれば業務の件を扱う (status --board と同じ)")
 	}
-	cmd.AddCommand(add, set, list)
+	cmd.AddCommand(add, set, list, adopt)
 	return cmd
 }
 

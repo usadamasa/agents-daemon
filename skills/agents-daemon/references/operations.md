@@ -11,6 +11,8 @@ agents-daemon daemon --foreground [--dry-run]  # このプロセスで回す (�
 agents-daemon status                           # 稼働状況、監視中の pane、ログの末尾
 agents-daemon logs -n 80                       # 現行ログ (daemon.log) の末尾
 agents-daemon stop                             # SIGTERM を送って停止
+agents-daemon dream harvest --incremental      # 直近の transcript を集める (Stop hook が --detach 付きで呼ぶ)
+agents-daemon dream mine|stage|adopt|forget    # 記憶階層の consolidation の実行系 (agents-daemon:dream skill)
 ```
 
 ### `--dry-run`

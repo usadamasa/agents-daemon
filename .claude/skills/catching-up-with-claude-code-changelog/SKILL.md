@@ -151,6 +151,7 @@ rg -n -o 'cc-premise: [0-9.]+ [a-z0-9-]+.*' --glob '!tmp/**' . | sort -t' ' -k3,
 | `hooks` | hook の配線 | UserPromptSubmit, Stop hook, SessionStart, onFailure, hook timeout |
 | `osc7501` | 多重化ツールへの状態の報告 | OSC 7501, Program Status, terminal, title |
 | `peer-messaging` | 別セッションへの送受信 | ListAgents, SendMessage, messaging socket, cross-session |
+| `sandbox` | `dream forget` を sandbox の外で動かす設定 (setup skill) | excludedCommands, sandbox, excluded command, allowUnsandboxedCommands, Strict sandbox |
 
 ## やらないこと
 

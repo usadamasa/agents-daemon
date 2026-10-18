@@ -2,9 +2,10 @@
 name: setup
 description: >-
   agents-daemon plugin を install した直後、または動いていない疑いがあるときに、前提 (rex、go と jq、
-  statusline の配線、バイナリ、peer messaging) がそろっているかを確かめて足りない配線を足す。
+  statusline の配線、バイナリ、peer messaging、`dream forget` の sandbox 除外) がそろっているかを確かめて足りない配線を足す。
   `doctor` で `session_id=(なし)`、state file が無い、sandbox 内から rex の socket に繋がらない、
-  `ListAgents` が無い、といった症状でも引く。「agents-daemon をセットアップして」「statusline を配線して」と言われたときにも使う。
+  `ListAgents` が無い、`dream forget` が `operation not permitted` で消せない、といった症状でも引く。
+  「agents-daemon をセットアップして」「statusline を配線して」と言われたときにも使う。
 ---
 
 # setup
@@ -158,6 +159,18 @@ socket ファイルの有無 (`ls -l "$CLAUDE_CODE_MESSAGING_SOCKET"`) だけで
 `CLAUDE_CODE_TMPDIR` 自体は親セッションの Bash ツールにも来る (sandbox が渡す) ので、
 変数があるだけでは入れ子と判断しない。
 
+## 7. dream forget の sandbox 除外
+
+`agents-daemon:dream` の `dream forget` は auto memory を消す。`~/.claude/projects/**` は sandbox の保護下にあるので、
+この 1 コマンドだけを sandbox の外に出す行を settings に足す。dream を使わないなら不要で、情報に留める。
+
+```sh
+rg -n 'agents-daemon dream forget' ~/.claude/settings.json
+```
+
+行が無ければ NG。足す行、照合の規則、効いているかの確かめ方は [dream-forget.md](references/dream-forget.md) を
+`Read` で開いて従う。
+
 ## 報告
 
 次の形でまとめる。
@@ -172,6 +185,7 @@ agents-daemon setup
 - バイナリ: <version | NG (build.log の要点)>
 - doctor: <要点>
 - peer messaging: <OK | 無効 (切り分けの結果) | 判定できず (理由)>
+- dream forget の sandbox 除外: <OK | NG (足す行) | 情報 (dream を使わない)>
 - 直したこと: <書き換えたファイルと中身の要約 | なし>
 - 残っていること: <利用者の作業 | なし>
 ```

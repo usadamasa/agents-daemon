@@ -1,5 +1,9 @@
 # Changelog
 
+## [2026.1018.2](https://github.com/usadamasa/agents-daemon/compare/2026.1018.1...2026.1018.2) - 2026-10-18
+
+- feat: 放置された Claude Code の worktree の回収を plugin へ移す (prune-worktrees) by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/103
+
 ## [2026.1018.1](https://github.com/usadamasa/agents-daemon/compare/2026.1018.0...2026.1018.1) - 2026-10-18
 
 - docs(setup): dream forget の excludedCommands の行を先頭固定の形にする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/100

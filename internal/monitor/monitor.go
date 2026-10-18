@@ -29,7 +29,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/config"
 	"github.com/usadamasa/agents-daemon/internal/detect"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
-	"github.com/usadamasa/agents-daemon/internal/sessionstate"
+	"github.com/usadamasa/agents-daemon/internal/ratelimit"
 )
 
 // Status は pane 1 枚の状態機械が取りうる状態。
@@ -150,10 +150,10 @@ type Deps struct {
 	Sleep func(time.Duration)
 	// 以下は tick ごとに daemon が読み直して全 pane で共有する state。
 	// Account はアカウント全体で最も新しい 5 時間ウィンドウの state
-	// (sessionstate.Store.LatestWindow)。resets_at はアカウント共通なので、自分の state を
+	// (ratelimit.Store.LatestWindow)。resets_at はアカウント共通なので、自分の state を
 	// 持たない pane の起床時刻をここから引く。Config と同じく tick ごとに daemon が
 	// 読み直して全 pane で共有する。無ければ nil。
-	Account *sessionstate.RateLimit
+	Account *ratelimit.State
 }
 
 // Tick は pane 1 枚ぶんの 1 tick を処理し、ps を必要に応じて書き換える。
@@ -164,7 +164,7 @@ type Deps struct {
 //
 // multiplexer.Client の呼び出しがエラーを返しても panic や状態破壊はしない。エラーは
 // Outcome と共に返すので、呼び出し元は連続失敗のカウント等に使うこと。
-func Tick(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *PaneState, rateState *sessionstate.RateLimit, now time.Time) (Outcome, error) {
+func Tick(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *PaneState, rateState *ratelimit.State, now time.Time) (Outcome, error) {
 	if ps.Status == StatusWaiting && now.Before(ps.WaitUntil) {
 		return OutcomeStillWaiting, nil
 	}
@@ -317,7 +317,7 @@ func (g Gate) String() string {
 // 抑制するのは fresh な観測が使用率閾値未満のときだけで、state が無い、
 // five_hour が null で書かれている、または古い場合は判断材料が無いので
 // 画面テキストだけによる検知をそのまま通す。
-func LimitGate(cfg config.Config, rateState *sessionstate.RateLimit, now time.Time) Gate {
+func LimitGate(cfg config.Config, rateState *ratelimit.State, now time.Time) Gate {
 	if rateState == nil {
 		return GateNoState
 	}
@@ -388,7 +388,7 @@ func tickWaiting(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *Pane
 }
 
 // tickMonitoring は監視状態での 1 tick を処理する。上限でも一時エラーでもない画面には何もしない。
-func tickMonitoring(deps Deps, ps *PaneState, kind detect.Kind, limited bool, gateSuppressed bool, rateState *sessionstate.RateLimit, screen string, now time.Time) (Outcome, error) {
+func tickMonitoring(deps Deps, ps *PaneState, kind detect.Kind, limited bool, gateSuppressed bool, rateState *ratelimit.State, screen string, now time.Time) (Outcome, error) {
 	if gateSuppressed {
 		return OutcomeGateSuppressed, nil
 	}
@@ -442,13 +442,13 @@ func tickMonitoring(deps Deps, ps *PaneState, kind detect.Kind, limited bool, ga
 //
 // 見ているのは 5 時間ウィンドウだけ。週次上限で止まっている pane はこの計算では
 // 正しく扱えず、送信 → 再度上限 → 再試行を maxRetries まで繰り返してクールダウンに入る。
-func ComputeLimitWake(cfg config.Config, rateState, account *sessionstate.RateLimit, screen string, now time.Time) (time.Time, WakeSource) {
+func ComputeLimitWake(cfg config.Config, rateState, account *ratelimit.State, screen string, now time.Time) (time.Time, WakeSource) {
 	return computeLimitWakeIn(cfg, rateState, account, screen, now, time.Local)
 }
 
 // computeLimitWakeIn は ComputeLimitWake の本体。画面の絶対時刻に tz 表記が無いときの
 // 解釈に使う local を差し替えられるようにしてある (テスト用)。
-func computeLimitWakeIn(cfg config.Config, rateState, account *sessionstate.RateLimit, screen string, now time.Time, local *time.Location) (time.Time, WakeSource) {
+func computeLimitWakeIn(cfg config.Config, rateState, account *ratelimit.State, screen string, now time.Time, local *time.Location) (time.Time, WakeSource) {
 	margin := time.Duration(cfg.MarginSeconds) * time.Second
 
 	ownHas := rateState != nil && rateState.HasFiveHour()

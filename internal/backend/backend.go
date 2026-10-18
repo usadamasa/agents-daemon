@@ -6,7 +6,7 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/rexcli"
-	"github.com/usadamasa/agents-daemon/internal/sessionstate"
+	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
 )
 
 // ErrNoRexSession は rex の外で起動され、監視する block が無いことを表す。
@@ -16,18 +16,18 @@ var ErrNoRexSession = errors.New("REX_SESSION が無いため rex の block を�
 // Detect は使う backend の種類を返す。REX_SESSION があれば rex、無ければ ErrNoRexSession。
 func Detect(getenv func(string) string) (string, error) {
 	if getenv("REX_SESSION") != "" {
-		return sessionstate.MultiplexerKindRex, nil
+		return sessioncontext.MultiplexerKindRex, nil
 	}
 	return "", ErrNoRexSession
 }
 
 // Connect は Detect で backend を確かめ、その Client を作る。block から session_id を引く対応は、
-// statusline が `context/<sid>.json` に書いた記録 (store) から取る。
-func Connect(getenv func(string) string, store sessionstate.Store) (string, multiplexer.Client, error) {
+// statusline が `context/<sid>.json` に書いた記録 (contexts) から取る。
+func Connect(getenv func(string) string, contexts sessioncontext.Store) (string, multiplexer.Client, error) {
 	kind, err := Detect(getenv)
 	if err != nil {
 		return "", nil, err
 	}
-	resolve := func() (map[string]string, error) { return store.ListMultiplexerBlocks(kind) }
+	resolve := func() (map[string]string, error) { return contexts.ListMultiplexerBlocks(kind) }
 	return kind, rexcli.NewExecClient(resolve), nil
 }

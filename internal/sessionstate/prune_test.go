@@ -15,9 +15,9 @@ func TestPrune(t *testing.T) {
 
 		// 利用上限 state は 24 時間。mktemp の残骸 (statusline が mv の前に殺されると残る)
 		// も同じ規則で消える。
-		fresh := filepath.Join(s.RateLimits, "fresh.json")
-		stale := filepath.Join(s.RateLimits, "stale.json")
-		leftover := filepath.Join(s.RateLimits, ".rate-limits.XXXX")
+		fresh := filepath.Join(s.RateLimits.Dir, "fresh.json")
+		stale := filepath.Join(s.RateLimits.Dir, "stale.json")
+		leftover := filepath.Join(s.RateLimits.Dir, ".rate-limits.XXXX")
 		writeFile(t, fresh, "{}")
 		writeFile(t, stale, "{}")
 		writeFile(t, leftover, "{}")
@@ -25,8 +25,8 @@ func TestPrune(t *testing.T) {
 		ageFile(t, leftover, 25*time.Hour, now)
 
 		// context は 7 日。24 時間では消えないことが利用上限との差になる。
-		keep := filepath.Join(s.Context, "recent.json")
-		drop := filepath.Join(s.Context, "old.json")
+		keep := filepath.Join(s.Context.Dir, "recent.json")
+		drop := filepath.Join(s.Context.Dir, "old.json")
 		writeFile(t, keep, "{}")
 		writeFile(t, drop, "{}")
 		ageFile(t, keep, 48*time.Hour, now)
@@ -56,7 +56,7 @@ func TestPrune(t *testing.T) {
 
 	t.Run("サブディレクトリは触らない", func(t *testing.T) {
 		s := New(t.TempDir())
-		sub := filepath.Join(s.RateLimits, "sub")
+		sub := filepath.Join(s.RateLimits.Dir, "sub")
 		if err := os.MkdirAll(sub, 0o750); err != nil {
 			t.Fatalf("MkdirAll() error = %v", err)
 		}

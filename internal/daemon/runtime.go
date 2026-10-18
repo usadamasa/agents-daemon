@@ -96,7 +96,7 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 
 	// アカウント全体で最新のウィンドウは tick ごとに 1 回だけ読み、全 pane で共有する。
 	// 自分の state を持たない pane (上限中に開いた新規セッション) の起床時刻はここから引く。
-	account, accountErr := r.store.LatestWindow(now)
+	account, accountErr := r.store.RateLimits.LatestWindow(now)
 	if accountErr != nil {
 		r.log.Logf("アカウント全体の利用上限 state の走査に失敗、無しとして継続します: %v", accountErr)
 		account = nil
@@ -130,7 +130,7 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 		r.logUnknownReason(pane, entry)
 
 		// state はセッションごとに別ファイル。pane に対応するものだけを読む。
-		rateState, stateErr := r.store.LoadRateLimit(pane.SessionID)
+		rateState, stateErr := r.store.RateLimits.Load(pane.SessionID)
 		if stateErr != nil {
 			r.log.Logf("pane %s の利用上限 state の読み込みに失敗、state 無しとして継続します: %v", pane.PaneID, stateErr)
 			rateState = nil
@@ -331,7 +331,7 @@ func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 	}
 
 	store := sessionstate.New(p.StateDir())
-	kind, client, err := backend.Connect(os.Getenv, store)
+	kind, client, err := backend.Connect(os.Getenv, store.Context)
 	if err != nil {
 		return err
 	}

@@ -27,7 +27,7 @@ func newTestRuntime(t *testing.T, client multiplexer.Client, startedAt time.Time
 	statusPath := filepath.Join(dir, "status.json")
 	// sidecar file のディレクトリは一時ディレクトリ配下を指すだけで作らない。
 	// 存在しないディレクトリは「state 無し」として扱われる。
-	// 利用上限 state が要るテストは r.store.RateLimits へ書く。
+	// 利用上限 state が要るテストは r.store.RateLimits.Dir へ書く。
 	return newDaemonRuntime(client, log, statusPath, sessionstate.New(dir), func(time.Duration) {}, startedAt), statusPath
 }
 
@@ -198,7 +198,7 @@ func TestDaemonRuntimeTick_MissingSessionStateDoesNotLeakToOtherPanes(t *testing
 
 	r, _ := newTestRuntime(t, client, now)
 	// session-a の state だけ書く。session-b には対応するファイルが無い。
-	writeSessionRateState(t, r.store.RateLimits, "session-a", 10, now, now.Add(time.Hour))
+	writeSessionRateState(t, r.store.RateLimits.Dir, "session-a", 10, now, now.Add(time.Hour))
 
 	if _, _, err := r.tick(context.Background(), missingConfigPath(t), now); err != nil {
 		t.Fatalf("tick() error = %v", err)
@@ -411,7 +411,7 @@ func writeSessionRateState(t *testing.T, dir, sessionID string, usedPercentage f
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("state ディレクトリの作成に失敗: %v", err)
 	}
-	// statusline.sh が書く生の形をそのまま組む (sessionstate が読む側の唯一の実装なので、
+	// statusline.sh が書く生の形をそのまま組む (ratelimit が読む側の唯一の実装なので、
 	// テストの入力を Go の型から作ると wire format のずれを検出できなくなる)。
 	data, err := json.Marshal(map[string]any{
 		"five_hour":   map[string]any{"used_percentage": usedPercentage, "resets_at": resetsAt.Unix()},
@@ -452,8 +452,8 @@ func TestDaemonRuntimeTick_RateStateIsMatchedPerSession(t *testing.T) {
 
 	r, _ := newTestRuntime(t, client, now)
 	// session-a は使い切っている。session-b はまだ余裕がある。
-	writeSessionRateState(t, r.store.RateLimits, "session-a", 100, now, resetsAt)
-	writeSessionRateState(t, r.store.RateLimits, "session-b", 10, now, resetsAt)
+	writeSessionRateState(t, r.store.RateLimits.Dir, "session-a", 100, now, resetsAt)
+	writeSessionRateState(t, r.store.RateLimits.Dir, "session-b", 10, now, resetsAt)
 
 	if _, _, err := r.tick(context.Background(), missingConfigPath(t), now); err != nil {
 		t.Fatalf("tick() error = %v", err)

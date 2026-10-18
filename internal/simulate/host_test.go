@@ -11,20 +11,20 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
-	"github.com/usadamasa/agents-daemon/internal/sessionstate"
+	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
 )
 
 func TestNewSimulateHost_前提チェック(t *testing.T) {
 	t.Run("rex は REX_BLOCK が要る", func(t *testing.T) {
 		env := map[string]string{"REX_SESSION": "session:01a1"}
-		_, err := newSimulateHost(sessionstate.MultiplexerKindRex, func(k string) string { return env[k] })
+		_, err := newSimulateHost(sessioncontext.MultiplexerKindRex, func(k string) string { return env[k] })
 		if err == nil || !strings.Contains(err.Error(), "REX_BLOCK") {
 			t.Fatalf("newSimulateHost(rex) error = %v, want REX_BLOCK に触れるエラー", err)
 		}
 	})
 	t.Run("rex は REX_BLOCK を anchor に持つ", func(t *testing.T) {
 		env := map[string]string{"REX_SESSION": "session:01a1", "REX_BLOCK": "block:mine"}
-		host, err := newSimulateHost(sessionstate.MultiplexerKindRex, func(k string) string { return env[k] })
+		host, err := newSimulateHost(sessioncontext.MultiplexerKindRex, func(k string) string { return env[k] })
 		if err != nil {
 			t.Fatalf("newSimulateHost(rex) error = %v", err)
 		}

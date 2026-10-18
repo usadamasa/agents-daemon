@@ -13,7 +13,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/detect"
 	"github.com/usadamasa/agents-daemon/internal/monitor"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
-	"github.com/usadamasa/agents-daemon/internal/sessionstate"
+	"github.com/usadamasa/agents-daemon/internal/ratelimit"
 )
 
 // RunInspect は screen の分類と待機時刻の算出根拠を w へ表示する。--pane / --file の
@@ -56,8 +56,8 @@ func RunInspect(ctx context.Context, w io.Writer, client multiplexer.Client, p a
 		_, _ = fmt.Fprintln(w, "\n対象セッションが決まらないため、利用上限 state によるゲート判定は行いません")
 		_, _ = fmt.Fprintln(w, "  (--file を使うときは --session <id> でセッションを指定してください)")
 	}
-	store := sessionstate.New(p.StateDir())
-	rateState, stateErr := store.LoadRateLimit(sessionID)
+	store := ratelimit.New(p.StateDir())
+	rateState, stateErr := store.Load(sessionID)
 	if stateErr != nil {
 		_, _ = fmt.Fprintf(w, "利用上限 state の読み込みに失敗、state 無しとして扱います: %v\n", stateErr)
 		rateState = nil
@@ -135,7 +135,7 @@ func reportScannedLines(w io.Writer, screen string, tailN int) {
 // monitor.ComputeLimitWake を呼ぶのと同じ理由 — ここで判定を書き直すと、診断の
 // 説明が実際の挙動とずれて嘘をつくようになる)。ここが持つのは、判定の内訳を
 // どの順で見せるかという表示の都合だけ。
-func reportGate(w io.Writer, cfg config.Config, rateState *sessionstate.RateLimit, now time.Time) {
+func reportGate(w io.Writer, cfg config.Config, rateState *ratelimit.State, now time.Time) {
 	gate := monitor.LimitGate(cfg, rateState, now)
 	if gate == monitor.GateNoState || gate == monitor.GateNoFiveHour {
 		_, _ = fmt.Fprintf(w, "  %s\n", gate)
@@ -155,7 +155,7 @@ func reportGate(w io.Writer, cfg config.Config, rateState *sessionstate.RateLimi
 
 // reportWake は monitor.computeLimitWake と同じ優先順位を表示用に再現する。
 // (reportGate と同じ理由で、書き込みを伴わない独立した再現に留まる。)
-func reportWake(w io.Writer, cfg config.Config, rateState, account *sessionstate.RateLimit, screen string, now time.Time) {
+func reportWake(w io.Writer, cfg config.Config, rateState, account *ratelimit.State, screen string, now time.Time) {
 	// 計算そのものは daemon と同じ monitor.ComputeLimitWake に任せる。ここで
 	// 計算を書き直すと、診断の説明が実際の挙動とずれて嘘をつくようになる
 	// (実際、以前は inspect 側だけ鮮度チェックが残っていて別の結果を出していた)。

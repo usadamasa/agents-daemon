@@ -7,8 +7,8 @@ import (
 )
 
 // ランタイム状態は揮発物として扱い、daemon 自身が古いものを消す。sidecar file の
-// 保持期間は sessionstate が持つ (どれだけ古い state が判定に効くかは、その state を
-// 読む側の知識のため)。ここに残すのはログの保持期間と、掃除の間隔だけ。
+// 保持期間は書式のパッケージ (ratelimit、sessioncontext) が持つ (どれだけ古い state が
+// 判定に効くかは、その state を読む側の知識のため)。ここに残すのはログの保持期間と、掃除の間隔だけ。
 const (
 	// logRetention は rotate 済みログ (daemon.log.YYYY-MM-DD) を残す期間。
 	// ログは出来事があったときだけ伸びるので、1 週間ぶんあれば振り返りに足りる。

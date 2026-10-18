@@ -10,7 +10,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/detect"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
-	"github.com/usadamasa/agents-daemon/internal/sessionstate"
+	"github.com/usadamasa/agents-daemon/internal/ratelimit"
 )
 
 // 画面テキストのテストフィクスチャ。
@@ -133,7 +133,7 @@ func TestTick_StillWaiting_NoRead(t *testing.T) {
 func TestTick_LimitDetected_ResetsAtWinsOverFallback(t *testing.T) {
 	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
 	resetsAt := now.Add(2 * time.Hour)
-	rateState := &sessionstate.RateLimit{
+	rateState := &ratelimit.State{
 		FiveHourUsed:     95,
 		FiveHourResetsAt: resetsAt,
 		ObservedAt:       now.Add(-time.Minute),
@@ -169,7 +169,7 @@ func TestTick_StaleState_StillUsesResetsAt(t *testing.T) {
 	// resets_at は絶対時刻なので古くても正しい。ここで捨てると、正確な解除時刻を
 	// 持っているのに画面スクレイプへ後退してしまう。
 	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
-	rateState := &sessionstate.RateLimit{
+	rateState := &ratelimit.State{
 		FiveHourUsed:     95,
 		FiveHourResetsAt: now.Add(2 * time.Hour),
 		ObservedAt:       now.Add(-2 * time.Hour), // StateMaxAgeSeconds (既定 900s) を超え陳腐化
@@ -247,7 +247,7 @@ func TestTick_Gate_FreshStateThreshold(t *testing.T) {
 			if !tt.fresh {
 				observedAt = now.Add(-2 * time.Hour)
 			}
-			rateState := &sessionstate.RateLimit{
+			rateState := &ratelimit.State{
 				FiveHourUsed:     tt.usedPercent,
 				FiveHourResetsAt: now.Add(2 * time.Hour),
 				ObservedAt:       observedAt,
@@ -284,7 +284,7 @@ func TestTick_Gate_FreshStateThreshold(t *testing.T) {
 // 画面判定をそのまま通す。
 func TestTick_Gate_NullFiveHour_DoesNotSuppress(t *testing.T) {
 	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
-	rateState := &sessionstate.RateLimit{
+	rateState := &ratelimit.State{
 		// five_hour が null で書かれた state。FiveHourResetsAt がゼロ値のままになる。
 		ObservedAt: now.Add(-time.Minute), // fresh
 	}
@@ -315,7 +315,7 @@ func TestTick_Gate_NullFiveHour_DoesNotSuppress(t *testing.T) {
 // ゲートは待機に入るときの誤検知よけであって、待機明けの送信を止めるものではない。
 func TestTick_WakeWithLimitScreen_SendsDespiteFreshGate(t *testing.T) {
 	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
-	rateState := &sessionstate.RateLimit{
+	rateState := &ratelimit.State{
 		FiveHourUsed:     5,
 		FiveHourResetsAt: now.Add(5 * time.Hour),
 		ObservedAt:       now.Add(-time.Minute), // fresh かつ閾値未満
@@ -684,7 +684,7 @@ func TestFixtures_ClassifyAsExpected(t *testing.T) {
 // (2026-08-19 の pane が実際にこの状態だった)。
 func TestTick_PastResetsAt_WakesImmediately(t *testing.T) {
 	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
-	rateState := &sessionstate.RateLimit{
+	rateState := &ratelimit.State{
 		FiveHourUsed:     100,
 		FiveHourResetsAt: now.Add(-time.Hour),
 		ObservedAt:       now.Add(-3 * time.Hour), // 上限で描画が止まったので state も古い
@@ -717,7 +717,7 @@ func TestTick_PastResetsAt_WakesImmediately(t *testing.T) {
 // epoch 0 を「過去の解除時刻」と読み違えて即起床させないための境界。
 func TestTick_StateWithoutResetsAt_FallsBackToRelativeParse(t *testing.T) {
 	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
-	rateState := &sessionstate.RateLimit{
+	rateState := &ratelimit.State{
 		FiveHourUsed: 100,
 		ObservedAt:   now,
 	}

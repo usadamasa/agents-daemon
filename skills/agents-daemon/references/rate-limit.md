@@ -161,7 +161,7 @@ Claude Code 自身がリトライしている間のカウントダウン行に�
 `resets_at` はアカウント全体で共通の値である。`rate-limits/` 配下の state ファイルを
 observed_at 順に並べると、同じウィンドウ内に観測された全セッションが同じ `resets_at` を
 持つ (例: あるウィンドウを 8 セッションが共有)。そのため他セッションの state から現在の
-ウィンドウの解除時刻を引ける (3)。`sessionstate.Store.LatestWindow` が `resets_at` 最大のものを
+ウィンドウの解除時刻を引ける (3)。`ratelimit.Store.LatestWindow` が `resets_at` 最大のものを
 選ぶ。now+6 時間より先の値はゴミとして無視する (5 時間ウィンドウの解除が 5 時間より
 先になることは無く、1 ファイルの不良で全 pane の起床時刻を汚さないため)。
 

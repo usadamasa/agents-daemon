@@ -106,8 +106,8 @@ hook・skill・daemon は別プロセスで、ファイル越しに繋がる。�
 | hook / skill 側 | daemon 側 | 中身 |
 | ---- | ---- | ---- |
 | `hooks/lib/daemon-bin.sh` | `Taskfile.yml` の `install` | `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon` |
-| 利用者の `statusLine.command`、または自前の statusline に足す 1 行 (`skills/setup/references/statusline.md`) | `hooks/lib/daemon-bin.sh` と `Taskfile.yml` の `install` | `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon statusline` (または `ingest-statusline`)。`context/` `rate-limits/` の書式は `internal/sessionstate` が読み書き両方で持つ |
-| `statusline` / `ingest-statusline` が `context/<sid>.json` の `multiplexer` に書く場所 (環境変数 `REX_SESSION` / `REX_BLOCK` から) | `internal/sessionstate` の `ListMultiplexerBlocks` を `internal/rexcli` が引く (`internal/backend` が配線) | rex の block から session_id への対応。書式と読み方は `internal/sessionstate/multiplexer.go` が両方持つ |
+| 利用者の `statusLine.command`、または自前の statusline に足す 1 行 (`skills/setup/references/statusline.md`) | `hooks/lib/daemon-bin.sh` と `Taskfile.yml` の `install` | `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon statusline` (または `ingest-statusline`)。`rate-limits/` の書式は `internal/ratelimit`、`context/` の書式は `internal/sessioncontext` が読み書き両方で持つ |
+| `statusline` / `ingest-statusline` が `context/<sid>.json` の `multiplexer` に書く場所 (環境変数 `REX_SESSION` / `REX_BLOCK` から) | `internal/sessioncontext` の `ListMultiplexerBlocks` を `internal/rexcli` が引く (`internal/backend` が配線) | rex の block から session_id への対応。書式と読み方は `internal/sessioncontext` が両方持つ |
 | 利用者の settings の `env` の `CLAUDE_STATUSLINE_SPEND_CAP` | `cmd/agents-daemon/cmd_statusline.go` の `spendCapEnv` | 月額上限 (USD)。あるときだけ `statusline` が `cost/` の台帳 (`internal/spend`) を書き、📅 / 🧾 を出す |
 
 ## リリース

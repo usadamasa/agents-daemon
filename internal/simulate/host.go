@@ -9,7 +9,7 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/usadamasa/agents-daemon/internal/sessionstate"
+	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
 )
 
 // simulateHost は使い捨て pane の一生 (作成・Claude agent に見せる・後始末) を行う。
@@ -52,7 +52,7 @@ const rawCommandTimeout = 10 * time.Second
 // 環境から分かることを確かめる。
 func newSimulateHost(kind string, getenv func(string) string) (simulateHost, error) {
 	switch kind {
-	case sessionstate.MultiplexerKindRex:
+	case sessioncontext.MultiplexerKindRex:
 		own := getenv("REX_BLOCK")
 		if own == "" {
 			return nil, errors.New("REX_BLOCK のある rex の block 内で実行してください (使い捨て block を割り出す anchor になる自分の block が要ります)")

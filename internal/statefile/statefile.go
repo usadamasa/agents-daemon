@@ -1,6 +1,6 @@
 // Package statefile は XDG state 配下に別プロセスが読み書きするファイルの共通の作法を持つ。
 // セッション ID をファイル名に使うときの検証と、書きかけを読ませないための原子的な書き込み。
-// sessionstate (daemon が読む sidecar) と spend (statusline の cost の記録) が使う。
+// ratelimit と sessioncontext (daemon が読む sidecar) と spend (statusline の cost の記録) が使う。
 package statefile
 
 import (
@@ -20,6 +20,19 @@ var sessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 // ValidSessionID は id をファイル名に使ってよいかを返す。空は不可。
 func ValidSessionID(id string) bool {
 	return sessionIDPattern.MatchString(id)
+}
+
+// SessionPath は dir 配下で sessionID に対応するファイルのパスを返す。
+// 読み書き両側の規則がずれないよう、sidecar file のパスの組み立てはここだけに置く。
+// sessionID が空なら ("", nil)、不正な文字を含む場合はエラーを返す。
+func SessionPath(dir, sessionID, ext string) (string, error) {
+	if sessionID == "" {
+		return "", nil
+	}
+	if !ValidSessionID(sessionID) {
+		return "", fmt.Errorf("session ID %q はファイル名に使えない文字を含む", sessionID)
+	}
+	return filepath.Join(dir, sessionID+ext), nil
 }
 
 // WriteJSONAtomic は v を JSON 1 行 (末尾に改行) にして path へ原子的に書く。

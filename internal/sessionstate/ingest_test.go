@@ -3,9 +3,12 @@ package sessionstate
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
 )
 
 // statusline の stdin を模した入力。実機の形 (rate_limits は初回 API レスポンス後に
@@ -113,9 +116,9 @@ func TestIngestStatusline_rateLimits(t *testing.T) {
 			t.Errorf("rate-limits file = %q, want %q", raw, want)
 		}
 
-		state, err := s.LoadRateLimit("sess-1")
+		state, err := s.RateLimits.Load("sess-1")
 		if err != nil {
-			t.Fatalf("LoadRateLimit() error = %v", err)
+			t.Fatalf("RateLimits.Load() error = %v", err)
 		}
 		if !state.HasFiveHour() {
 			t.Fatal("HasFiveHour() = false")
@@ -213,7 +216,7 @@ func TestIngestStatusline_guards(t *testing.T) {
 		if err := s.IngestStatusline([]byte(inputFull), ingestNow); err != nil {
 			t.Fatalf("IngestStatusline() error = %v", err)
 		}
-		for _, dir := range []string{s.Context, s.RateLimits} {
+		for _, dir := range []string{s.Context.Dir, s.RateLimits.Dir} {
 			entries, err := os.ReadDir(dir)
 			if err != nil {
 				t.Fatalf("ReadDir(%s) error = %v", dir, err)
@@ -229,11 +232,59 @@ func TestIngestStatusline_guards(t *testing.T) {
 	})
 }
 
+func TestIngestStatuslineWithEnv_multiplexer(t *testing.T) {
+	observed := itoa(ingestNow.Unix())
+	for _, tt := range []struct {
+		name string
+		env  map[string]string
+		want string
+	}{
+		{
+			name: "rex の block と session を書く",
+			env:  map[string]string{"REX_SESSION": "session:01a1", "REX_BLOCK": "block:01a1"},
+			want: `{"session_id":"sess-1","used_percentage":12,"observed_at":` + observed +
+				`,"multiplexer":{"kind":"rex","session":"session:01a1","block":"block:01a1"}}` + "\n",
+		},
+		{
+			name: "多重化ツールの外なら multiplexer を書かない",
+			env:  map[string]string{},
+			want: `{"session_id":"sess-1","used_percentage":12,"observed_at":` + observed + `}` + "\n",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			s := New(t.TempDir())
+			if err := s.IngestStatuslineWithEnv([]byte(inputNoRateLimits), envOf(tt.env), ingestNow); err != nil {
+				t.Fatalf("IngestStatuslineWithEnv() error = %v", err)
+			}
+			if got := readContextRaw(t, s, "sess-1"); got != tt.want {
+				t.Errorf("context file = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIngestStatusline_環境変数からmultiplexerを読む(t *testing.T) {
+	clearMultiplexerEnv(t)
+	t.Setenv("REX_SESSION", "session:01a1")
+	t.Setenv("REX_BLOCK", "block:01a1")
+	s := New(t.TempDir())
+	if err := s.IngestStatusline([]byte(inputNoRateLimits), ingestNow); err != nil {
+		t.Fatalf("IngestStatusline() error = %v", err)
+	}
+	got, err := s.Context.ListMultiplexerBlocks(sessioncontext.MultiplexerKindRex)
+	if err != nil {
+		t.Fatalf("ListMultiplexerBlocks() error = %v", err)
+	}
+	if want := map[string]string{"block:01a1": "sess-1"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("ListMultiplexerBlocks() = %v, want %v", got, want)
+	}
+}
+
 func readContextRaw(t *testing.T, s Store, sessionID string) string {
 	t.Helper()
-	path, err := sessionPath(s.Context, sessionID, ".json")
+	path, err := s.Context.File(sessionID)
 	if err != nil {
-		t.Fatalf("sessionPath() error = %v", err)
+		t.Fatalf("Context.File() error = %v", err)
 	}
 	return readFileString(t, path)
 }

@@ -3,12 +3,13 @@ package sessionstate
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 )
 
-// TestNew_ディレクトリ名が固定されている は protocol の固定。書き手 (IngestStatusline) も
-// このパッケージにあるが、setup skill の確認手順と architecture.md がパスを直に書くので固定する。
+// TestNew_ディレクトリ名が固定されている は protocol の固定。setup skill の確認手順と
+// architecture.md がパスを直に書くので固定する。
 func TestNew_ディレクトリ名が固定されている(t *testing.T) {
 	s := New("/state")
 
@@ -17,8 +18,8 @@ func TestNew_ディレクトリ名が固定されている(t *testing.T) {
 		got  string
 		want string
 	}{
-		{"RateLimits", s.RateLimits, "/state/rate-limits"},
-		{"Context", s.Context, "/state/context"},
+		{"RateLimits", s.RateLimits.Dir, "/state/rate-limits"},
+		{"Context", s.Context.Dir, "/state/context"},
 	} {
 		if tt.got != tt.want {
 			t.Errorf("%s = %q, want %q", tt.name, tt.got, tt.want)
@@ -26,43 +27,31 @@ func TestNew_ディレクトリ名が固定されている(t *testing.T) {
 	}
 }
 
-func TestRateLimitFile_不正なsessionIDを拒否する(t *testing.T) {
-	s := New("/state")
-
-	t.Run("パス区切りを含む session ID は拒否する", func(t *testing.T) {
-		if _, err := s.RateLimitFile("../../etc/passwd"); err == nil {
-			t.Error("パス区切りを含む session ID が通ってしまった")
-		}
-	})
-
-	t.Run("空の session ID は空パスとして返す (判断材料無し)", func(t *testing.T) {
-		path, err := s.RateLimitFile("")
-		if err != nil || path != "" {
-			t.Errorf("RateLimitFile(\"\") = %q, %v, want \"\", nil", path, err)
-		}
-	})
+// envOf は map を getenv の形へ写す。無いキーは空文字列になる (os.Getenv と同じ)。
+func envOf(m map[string]string) func(string) string {
+	return func(key string) string { return m[key] }
 }
 
-// fresh は IsFresh の本体。未来の観測を拒むことが要点で、
-// 拒まないとクロックスキューのある state で送信が起きる。
-func Test_fresh(t *testing.T) {
-	now := time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)
-	maxAge := 5 * time.Minute
-
-	for _, tt := range []struct {
-		name       string
-		observedAt time.Time
-		want       bool
-	}{
-		{"maxAge 以内は fresh", now.Add(-time.Minute), true},
-		{"境界ちょうどは fresh", now.Add(-maxAge), true},
-		{"maxAge を超えたら古い", now.Add(-maxAge - time.Second), false},
-		{"未来の観測は信用しない", now.Add(time.Second), false},
-	} {
-		if got := fresh(tt.observedAt, now, maxAge); got != tt.want {
-			t.Errorf("%s: fresh() = %v, want %v", tt.name, got, tt.want)
-		}
+// clearMultiplexerEnv はテストを走らせる端末の多重化ツールの環境変数を空にする。
+// rex の中で go test を打つと継承した値が context file に混ざるため。
+func clearMultiplexerEnv(t *testing.T) {
+	t.Helper()
+	for _, key := range []string{"REX_SESSION", "REX_BLOCK"} {
+		t.Setenv(key, "")
 	}
+}
+
+func mustPath(t *testing.T, s Store, sessionID string) string {
+	t.Helper()
+	path, err := s.RateLimits.File(sessionID)
+	if err != nil {
+		t.Fatalf("RateLimits.File(%q) error = %v", sessionID, err)
+	}
+	return path
+}
+
+func itoa(n int64) string {
+	return strconv.FormatInt(n, 10)
 }
 
 func writeFile(t *testing.T, path, content string) {

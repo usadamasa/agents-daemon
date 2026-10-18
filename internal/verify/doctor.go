@@ -18,7 +18,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/config"
 	"github.com/usadamasa/agents-daemon/internal/daemon"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
-	"github.com/usadamasa/agents-daemon/internal/sessionstate"
+	"github.com/usadamasa/agents-daemon/internal/ratelimit"
 )
 
 // DoctorInput は RunDoctor が診断に使う環境。
@@ -158,7 +158,7 @@ func defaultString(s, fallback string) string {
 
 // reportSessionRateLimitState は 1 セッションぶんの state を報告する。
 func reportSessionRateLimitState(w io.Writer, cfg config.Config, p apppath.Paths, sessionID string, now time.Time) {
-	state, err := sessionstate.New(p.StateDir()).LoadRateLimit(sessionID)
+	state, err := ratelimit.New(p.StateDir()).Load(sessionID)
 	if err != nil {
 		_, _ = fmt.Fprintf(w, "  state ファイルの読み込みに失敗: %v\n", err)
 		return
@@ -336,7 +336,7 @@ func isUnder(path, dir string) bool {
 func reportPaths(w io.Writer, p apppath.Paths) {
 	_, _ = fmt.Fprintf(w, "  config:      %s\n", p.ConfigFile())
 	_, _ = fmt.Fprintf(w, "  state dir:   %s\n", p.StateDir())
-	_, _ = fmt.Fprintf(w, "  rate limits: %s/<session_id>.json\n", sessionstate.New(p.StateDir()).RateLimits)
+	_, _ = fmt.Fprintf(w, "  rate limits: %s/<session_id>.json\n", ratelimit.New(p.StateDir()).Dir)
 	_, _ = fmt.Fprintf(w, "  pid file:    %s\n", p.PIDFile())
 	_, _ = fmt.Fprintf(w, "  status file: %s\n", p.StatusFile())
 	_, _ = fmt.Fprintf(w, "  log file:    %s\n", p.LogFile())

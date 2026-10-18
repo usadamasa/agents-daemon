@@ -98,6 +98,35 @@ func TestEdgeAddListRm(t *testing.T) {
 	}
 }
 
+// list の domain は --session の記録が業務の側にあれば、--cwd が私用でも業務になる (status --board と同じ)。
+func TestEdgeList_sessionTiltedToWork(t *testing.T) {
+	root := parkTestEnv(t)
+	home := filepath.Join(root, "src", "home", "a")
+	work := filepath.Join(root, "work", "b")
+	mkdirs(t, home, work)
+	if _, err := runEdge(t, "add", "--before", "session:a", "--before-cwd", work, "--after", "session:b", "--after-cwd", work); err != nil {
+		t.Fatal(err)
+	}
+	writeTaskRecord(t, root, "work", "s1", `{"id": "1", "subject": "a", "status": "in_progress", "session_id": "s1"}`)
+
+	for name, tc := range map[string]struct {
+		args []string
+		want int
+	}{
+		"私用の cwd":     {[]string{"--cwd", home}, 0},
+		"業務に倒したセッション": {[]string{"--cwd", home, "--session", "s1"}, 1},
+	} {
+		out, err := runEdge(t, append([]string{"list"}, tc.args...)...)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		var edges []edge.Edge
+		if err := json.Unmarshal([]byte(out), &edges); err != nil || len(edges) != tc.want {
+			t.Errorf("%s: edges = %+v, want %d 件 (%v)", name, edges, tc.want, err)
+		}
+	}
+}
+
 // 私用と業務をまたぐ辺は書かない。端点の cwd は両方要る。
 func TestEdgeAdd_refused(t *testing.T) {
 	root := parkTestEnv(t)

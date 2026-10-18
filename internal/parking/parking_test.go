@@ -24,9 +24,9 @@ func source(sessionID, taskID string) Source {
 
 func mustAdd(t *testing.T, s Store, d domain.Domain, repo string, e Entry, src Source) Item {
 	t.Helper()
-	added, err := s.Add(d, repo, e, src)
+	added, err := s.add(d, repo, e, src)
 	if err != nil {
-		t.Fatalf("Add() error = %v", err)
+		t.Fatalf("add() error = %v", err)
 	}
 	return added.Item
 }
@@ -72,7 +72,7 @@ func TestAdd_mergesSameItem(t *testing.T) {
 	}
 }
 
-// Add は新しいメモを作ったか、既存のメモにまとめたかを返す。同じ置き方の二重送信もまとめた側になる。
+// add は新しいメモを作ったか、既存のメモにまとめたかを返す。同じ置き方の二重送信もまとめた側になる。
 func TestAdd_reportsCreated(t *testing.T) {
 	s := New(t.TempDir())
 	cases := []struct {
@@ -84,7 +84,7 @@ func TestAdd_reportsCreated(t *testing.T) {
 		{source("s2", "1"), false},
 	}
 	for i, c := range cases {
-		added, err := s.Add(domain.Home, testRepo, aside("t"), c.src)
+		added, err := s.add(domain.Home, testRepo, aside("t"), c.src)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -186,7 +186,7 @@ func TestAdd_concurrentSameItem(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := range 8 {
 		wg.Go(func() {
-			if _, err := s.Add(domain.Home, testRepo, aside("t"), source("s"+string(rune('a'+i)), "")); err != nil {
+			if _, err := s.add(domain.Home, testRepo, aside("t"), source("s"+string(rune('a'+i)), "")); err != nil {
 				t.Error(err)
 			}
 		})
@@ -206,14 +206,14 @@ func TestAdd_rejectsInvalidEntry(t *testing.T) {
 		"title が空":  {Kind: KindScope, Title: "  "},
 	}
 	for name, e := range cases {
-		if _, err := s.Add(domain.Home, testRepo, e, source("s1", "")); err == nil {
-			t.Errorf("%s: Add() error = nil", name)
+		if _, err := s.add(domain.Home, testRepo, e, source("s1", "")); err == nil {
+			t.Errorf("%s: add() error = nil", name)
 		}
 	}
-	if _, err := s.Add(domain.Home, testRepo, aside("t"), source("../x", "")); err == nil {
+	if _, err := s.add(domain.Home, testRepo, aside("t"), source("../x", "")); err == nil {
 		t.Errorf("ファイル名に使えない session ID を通した")
 	}
-	if _, err := (Store{}).Add(domain.Home, testRepo, aside("t"), source("s1", "")); err == nil {
+	if _, err := (Store{}).add(domain.Home, testRepo, aside("t"), source("s1", "")); err == nil {
 		t.Errorf("置き場所が無いのに通した")
 	}
 }

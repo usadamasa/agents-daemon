@@ -52,7 +52,7 @@ const (
 	ClosedRetention = 7 * 24 * time.Hour
 )
 
-// lockFile は domain のディレクトリで Add と Set を直列にするロック。まとめる判定と書き込みの間に
+// lockFile は domain のディレクトリで add と Set を直列にするロック。まとめる判定と書き込みの間に
 // 別の park add が割り込んで同じ件が 2 つできるのを防ぐ。
 const lockFile = ".lock"
 
@@ -97,15 +97,15 @@ func New(stateDir string) Store {
 	return Store{Dir: filepath.Join(stateDir, "parking")}
 }
 
-// Added は Add の結果。置いた側が「既に置かれていたメモ」と伝えられるよう、新しく作ったかを持つ。
+// Added は Park と Adopt の結果。置いた側が「既に置かれていたメモ」と伝えられるよう、新しく作ったかを持つ。
 type Added struct {
 	Created bool `json:"created"`
 	Item    Item `json:"item"`
 }
 
-// Add は件を置く。同じ件が open であれば src を sources に足し (同じ session、task、detail の組は足さない)、
+// add は件を置く。同じ件が open であれば src を sources に足し (同じ session、task、detail の組は足さない)、
 // 無ければ新しい件を作る。書いた後の件を返す。
-func (s Store) Add(d domain.Domain, repo string, e Entry, src Source) (Added, error) {
+func (s Store) add(d domain.Domain, repo string, e Entry, src Source) (Added, error) {
 	if s.Dir == "" {
 		return Added{}, errors.New("parking の置き場所が無い")
 	}

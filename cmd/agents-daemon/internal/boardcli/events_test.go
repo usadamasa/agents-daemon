@@ -96,7 +96,7 @@ func TestParkEvents(t *testing.T) {
 		"park.add session=s2 memo=" + id + " kind=aside created=false",
 		`park.failed op=add reason="stdin の JSON を読めない: unexpected EOF"`,
 		"park.set session=viewer memo=" + id + " from=open to=discarded",
-		`park.failed op=set session=viewer memo=missing reason="home の件 missing が無い"`,
+		`park.failed op=set session=viewer memo=missing reason="home のメモ missing が無い"`,
 		"park.adopt session=viewer from_session=dead task=4 memo=" + adopted.Item.ID + " created=true",
 	})
 	if strings.Contains(strings.Join(got, "\n"), "秘密") {

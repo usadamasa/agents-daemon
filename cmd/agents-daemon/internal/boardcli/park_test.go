@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 )
@@ -86,6 +88,19 @@ func writeTaskRecord(t *testing.T, root, d, sessionID, body string) {
 	}
 	path := filepath.Join(root, "state", "agents-daemon", "tasks", d, sessionID, task.ID+".json")
 	writeTestConfig(t, path, body)
+}
+
+// park の help はパーキングのものを「メモ」と呼ぶ (#141)。
+func TestParkHelpCallsItMemo(t *testing.T) {
+	park := newParkCmd()
+	for _, c := range append([]*cobra.Command{park}, park.Commands()...) {
+		if strings.Contains(c.Short, "件") {
+			t.Errorf("%s の Short が「件」と呼ぶ: %q", c.Name(), c.Short)
+		}
+		if usages := c.LocalFlags().FlagUsages() + c.PersistentFlags().FlagUsages(); strings.Contains(usages, "件") {
+			t.Errorf("%s の flag が「件」と呼ぶ:\n%s", c.Name(), usages)
+		}
+	}
 }
 
 const parkInput = `{"kind": "aside", "title": "保持期間の根拠が無い", "detail": "d", "files": ["a.go"], "default_taken": "やらない", "session_id": "s1"}`

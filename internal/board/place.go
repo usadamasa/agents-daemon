@@ -25,12 +25,9 @@ func (l locator) place(cwd string) gitrepo.Place {
 	return p
 }
 
-// row は cwd の行の鍵と見出し。git の外なら cwd そのものを鍵にする。
+// row は cwd の行の鍵と見出し。鍵はパーキングの件の repo と同じ規則 (gitrepo.Place.Key) で決める。
 func (l locator) row(cwd string) (key, title string) {
-	key = l.place(cwd).Repo
-	if key == "" {
-		key = cwd
-	}
+	key = l.place(cwd).Key(cwd)
 	if key == "" {
 		return "", "(cwd 不明)"
 	}

@@ -45,5 +45,5 @@ func ingestTask(stdin io.Reader, now time.Time) error {
 	}
 	// 設定が読めなくても Load は既定値 (すべて業務) を返すので、そのまま記録する。
 	cfg, _ := config.Load(p.ConfigFile())
-	return tasklog.New(p.StateDir()).Ingest(input, domain.FromConfig(os.Getenv("HOME"), cfg).Classify, now)
+	return tasklog.New(p.StateDir()).Ingest(input, domain.New(os.Getenv("HOME"), cfg.HomePaths, cfg.DefaultDomain).Classify, now)
 }

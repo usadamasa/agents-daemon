@@ -117,6 +117,10 @@ backend は block から session_id をこの記録で逆引きする (`Store.Li
 `context/` は 7 日で消えるだけなので、5 時間の上限待ちを跨いでも対応は残る。制約 (初回描画までの
 数秒) は [operations.md](operations.md) の「既知の制約」。
 
+skill がセッションの中から自分の session_id を引くときは `CLAUDE_CODE_SESSION_ID` を唯一の情報源にする
+(`scripts/get-session-id.sh`)。プロジェクトの JSONL の mtime から推測すると、同一プロジェクトで複数セッションが
+動いているときに他セッションの state file を読む。
+
 ### [2] SessionStart hook がデーモンを起こす
 
 `hooks/ensure-daemon.sh` が `agents-daemon daemon --ensure` を叩く。生きているデーモンが既にあれば
@@ -140,6 +144,8 @@ subagent の worktree (`claude agent` の lock) は Claude Code 本体の period
 #### バイナリの用意と差し替え
 
 plugin には install 時の lifecycle hook が無いので、バイナリも SessionStart hook が用意する。
+置き場は `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon`。plugin の install 先はバージョンごとに
+変わるため、その外の固定パスにする。
 
 | 状態 | `ensure-daemon.sh` の動き |
 | ---- | ---- |

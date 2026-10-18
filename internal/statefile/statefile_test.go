@@ -19,6 +19,28 @@ func TestValidSessionID(t *testing.T) {
 	}
 }
 
+func TestSessionPath(t *testing.T) {
+	t.Run("dir 配下に session ID と拡張子で組み立てる", func(t *testing.T) {
+		path, err := SessionPath("/state/rate-limits", "sess-1", ".json")
+		if err != nil || path != "/state/rate-limits/sess-1.json" {
+			t.Errorf("SessionPath() = %q, %v, want /state/rate-limits/sess-1.json, nil", path, err)
+		}
+	})
+
+	t.Run("パス区切りを含む session ID は拒否する", func(t *testing.T) {
+		if _, err := SessionPath("/state", "../../etc/passwd", ".json"); err == nil {
+			t.Error("パス区切りを含む session ID が通ってしまった")
+		}
+	})
+
+	t.Run("空の session ID は空パスとして返す (判断材料無し)", func(t *testing.T) {
+		path, err := SessionPath("/state", "", ".json")
+		if err != nil || path != "" {
+			t.Errorf("SessionPath(\"\") = %q, %v, want \"\", nil", path, err)
+		}
+	})
+}
+
 func TestWriteJSONAtomic(t *testing.T) {
 	t.Run("親ディレクトリを作り、JSON 1 行と改行を書く。一時ファイルは残らない", func(t *testing.T) {
 		dir := filepath.Join(t.TempDir(), "sub")

@@ -20,7 +20,8 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/detect"
 	"github.com/usadamasa/agents-daemon/internal/monitor"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
-	"github.com/usadamasa/agents-daemon/internal/sessionstate"
+	"github.com/usadamasa/agents-daemon/internal/ratelimit"
+	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
 )
 
 // simulateMetadataSource は simulate が使い捨て block に付ける label。利用者が付けた label と
@@ -51,7 +52,7 @@ type Options struct {
 // Run は simulate の本体。使い捨て pane の作成から後始末まで一貫して行う。
 // backend は daemon と同じ規則 (REX_SESSION があること) で選ぶ。
 func Run(ctx context.Context, w io.Writer, p apppath.Paths, opts Options) error {
-	kind, execClient, err := backend.Connect(os.Getenv, sessionstate.New(p.StateDir()))
+	kind, execClient, err := backend.Connect(os.Getenv, sessioncontext.New(p.StateDir()))
 	if err != nil {
 		return err
 	}
@@ -237,8 +238,8 @@ func runSimulateTicks(ctx context.Context, w io.Writer, p apppath.Paths, ownedPa
 	if err != nil {
 		return fmt.Errorf("分類器の構築に失敗: %w", err)
 	}
-	store := sessionstate.New(p.StateDir())
-	rateState, stateErr := store.LoadRateLimit(sessionIDOf(ctx, execClient, ownedPaneID))
+	store := ratelimit.New(p.StateDir())
+	rateState, stateErr := store.Load(sessionIDOf(ctx, execClient, ownedPaneID))
 	if stateErr != nil {
 		_, _ = fmt.Fprintf(w, "利用上限 state の読み込みに失敗、state 無しとして扱います: %v\n", stateErr)
 		rateState = nil

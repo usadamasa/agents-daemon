@@ -1,14 +1,90 @@
-package sessionstate
+package ratelimit
 
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
 )
 
-func TestLoadRateLimit(t *testing.T) {
+// TestNew_ディレクトリ名が固定されている は protocol の固定。setup skill の確認手順と
+// architecture.md がパスを直に書くので固定する。
+func TestNew_ディレクトリ名が固定されている(t *testing.T) {
+	if got, want := New("/state").Dir, "/state/rate-limits"; got != want {
+		t.Errorf("Dir = %q, want %q", got, want)
+	}
+}
+
+// fresh は IsFresh の本体。未来の観測を拒むことが要点で、
+// 拒まないとクロックスキューのある state で送信が起きる。
+func Test_fresh(t *testing.T) {
+	now := time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)
+	maxAge := 5 * time.Minute
+
+	for _, tt := range []struct {
+		name       string
+		observedAt time.Time
+		want       bool
+	}{
+		{"maxAge 以内は fresh", now.Add(-time.Minute), true},
+		{"境界ちょうどは fresh", now.Add(-maxAge), true},
+		{"maxAge を超えたら古い", now.Add(-maxAge - time.Second), false},
+		{"未来の観測は信用しない", now.Add(time.Second), false},
+	} {
+		if got := fresh(tt.observedAt, now, maxAge); got != tt.want {
+			t.Errorf("%s: fresh() = %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}
+
+func TestWrite(t *testing.T) {
+	observedAt := time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC)
+
+	t.Run("seven_day があれば付け、ファイルの並びは five_hour、seven_day、observed_at、session_id", func(t *testing.T) {
+		s := New(t.TempDir())
+		err := s.Write("sess-1", observedAt,
+			Window{UsedPercentage: 15, ResetsAt: time.Unix(1786851000, 0)},
+			&Window{UsedPercentage: 10, ResetsAt: time.Unix(1787025600, 0)})
+		if err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
+		want := `{"five_hour":{"used_percentage":15,"resets_at":1786851000},` +
+			`"seven_day":{"used_percentage":10,"resets_at":1787025600},` +
+			`"observed_at":` + itoa(observedAt.Unix()) + `,"session_id":"sess-1"}` + "\n"
+		if got := readFileString(t, mustPath(t, s, "sess-1")); got != want {
+			t.Errorf("rate-limits file = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("seven_day が nil なら付けない", func(t *testing.T) {
+		s := New(t.TempDir())
+		if err := s.Write("sess-1", observedAt, Window{ResetsAt: time.Unix(1786851000, 0)}, nil); err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
+		want := `{"five_hour":{"used_percentage":0,"resets_at":1786851000},` +
+			`"observed_at":` + itoa(observedAt.Unix()) + `,"session_id":"sess-1"}` + "\n"
+		if got := readFileString(t, mustPath(t, s, "sess-1")); got != want {
+			t.Errorf("rate-limits file = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("session ID が空か不正ならエラーで何も書かない", func(t *testing.T) {
+		root := t.TempDir()
+		s := New(root)
+		for _, id := range []string{"", "../../etc/passwd"} {
+			if err := s.Write(id, observedAt, Window{ResetsAt: time.Unix(1786851000, 0)}, nil); err == nil {
+				t.Errorf("Write(%q) がエラーを返さなかった", id)
+			}
+		}
+		if _, err := os.Stat(s.Dir); !os.IsNotExist(err) {
+			t.Errorf("rate-limits/ が作られている: %v", err)
+		}
+	})
+}
+
+func TestLoad(t *testing.T) {
 	t.Run("正常系: five_hour と observed_at を domain の型へ読む", func(t *testing.T) {
 		s := New(t.TempDir())
 		writeFile(t, mustPath(t, s, "sess-1"), `{
@@ -18,12 +94,12 @@ func TestLoadRateLimit(t *testing.T) {
 			"session_id": "sess-1"
 		}`)
 
-		state, err := s.LoadRateLimit("sess-1")
+		state, err := s.Load("sess-1")
 		if err != nil {
-			t.Fatalf("LoadRateLimit() error = %v", err)
+			t.Fatalf("Load() error = %v", err)
 		}
 		if state == nil {
-			t.Fatal("LoadRateLimit() = nil")
+			t.Fatal("Load() = nil")
 		}
 		if got, want := state.FiveHourUsed, 14.000000000000002; got != want {
 			t.Errorf("FiveHourUsed = %v, want %v", got, want)
@@ -51,9 +127,9 @@ func TestLoadRateLimit(t *testing.T) {
 			"session_id": "sess-1"
 		}`)
 
-		state, err := s.LoadRateLimit("sess-1")
+		state, err := s.Load("sess-1")
 		if err != nil {
-			t.Fatalf("LoadRateLimit() error = %v", err)
+			t.Fatalf("Load() error = %v", err)
 		}
 		if state.HasFiveHour() {
 			t.Error("HasFiveHour() = true, want false (five_hour が null)")
@@ -67,9 +143,9 @@ func TestLoadRateLimit(t *testing.T) {
 			"observed_at": 1786834771
 		}`)
 
-		state, err := s.LoadRateLimit("sess-1")
+		state, err := s.Load("sess-1")
 		if err != nil {
-			t.Fatalf("LoadRateLimit() error = %v", err)
+			t.Fatalf("Load() error = %v", err)
 		}
 		if !state.HasFiveHour() {
 			t.Error("HasFiveHour() = false, want true")
@@ -78,20 +154,20 @@ func TestLoadRateLimit(t *testing.T) {
 
 	t.Run("ファイルが無いのは正常系 (nil, nil)", func(t *testing.T) {
 		s := New(t.TempDir())
-		state, err := s.LoadRateLimit("missing")
+		state, err := s.Load("missing")
 		if err != nil {
-			t.Fatalf("LoadRateLimit() error = %v, want nil", err)
+			t.Fatalf("Load() error = %v, want nil", err)
 		}
 		if state != nil {
-			t.Errorf("LoadRateLimit() = %+v, want nil", state)
+			t.Errorf("Load() = %+v, want nil", state)
 		}
 	})
 
 	t.Run("session ID が空なら判断材料無しとして (nil, nil)", func(t *testing.T) {
 		s := New(t.TempDir())
-		state, err := s.LoadRateLimit("")
+		state, err := s.Load("")
 		if err != nil || state != nil {
-			t.Errorf("LoadRateLimit(\"\") = %+v, %v, want nil, nil", state, err)
+			t.Errorf("Load(\"\") = %+v, %v, want nil, nil", state, err)
 		}
 	})
 
@@ -99,7 +175,7 @@ func TestLoadRateLimit(t *testing.T) {
 		s := New(t.TempDir())
 		writeFile(t, mustPath(t, s, "sess-1"), `{"five_hour": {`)
 
-		state, err := s.LoadRateLimit("sess-1")
+		state, err := s.Load("sess-1")
 		if err == nil {
 			t.Fatal("エラーが返らなかった (壊れた JSON のはず)")
 		}
@@ -112,13 +188,13 @@ func TestLoadRateLimit(t *testing.T) {
 	})
 }
 
-func TestRateLimitJudgements(t *testing.T) {
+func TestStateJudgements(t *testing.T) {
 	now := time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)
 
-	t.Run("nil の RateLimit はどの判定も false", func(t *testing.T) {
-		var r *RateLimit
+	t.Run("nil の State はどの判定も false", func(t *testing.T) {
+		var r *State
 		if r.IsFresh(now, time.Minute) || r.HasFiveHour() || r.FiveHourExhausted(0) {
-			t.Error("nil の RateLimit が true を返した")
+			t.Error("nil の State が true を返した")
 		}
 	})
 
@@ -131,7 +207,7 @@ func TestRateLimitJudgements(t *testing.T) {
 			{90, 90, true},
 			{89.9, 90, false},
 		} {
-			r := &RateLimit{FiveHourUsed: tt.used}
+			r := &State{FiveHourUsed: tt.used}
 			if got := r.FiveHourExhausted(tt.threshold); got != tt.want {
 				t.Errorf("FiveHourExhausted(%v) with used %v = %v, want %v", tt.threshold, tt.used, got, tt.want)
 			}
@@ -232,11 +308,30 @@ func TestLatestWindow(t *testing.T) {
 
 func mustPath(t *testing.T, s Store, sessionID string) string {
 	t.Helper()
-	path, err := s.RateLimitFile(sessionID)
+	path, err := s.file(sessionID)
 	if err != nil {
-		t.Fatalf("RateLimitFile(%q) error = %v", sessionID, err)
+		t.Fatalf("file(%q) error = %v", sessionID, err)
 	}
 	return path
+}
+
+func writeFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+}
+
+func readFileString(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", path, err)
+	}
+	return string(data)
 }
 
 func itoa(n int64) string {

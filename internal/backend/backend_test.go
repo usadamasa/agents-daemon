@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/usadamasa/agents-daemon/internal/sessionstate"
+	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
 )
 
 func TestDetect(t *testing.T) {
@@ -14,7 +14,7 @@ func TestDetect(t *testing.T) {
 		want    string
 		wantErr error
 	}{
-		{"REX_SESSION があれば rex", map[string]string{"REX_SESSION": "session:01a1"}, sessionstate.MultiplexerKindRex, nil},
+		{"REX_SESSION があれば rex", map[string]string{"REX_SESSION": "session:01a1"}, sessioncontext.MultiplexerKindRex, nil},
 		{"REX_SESSION が空なら rex の外", map[string]string{"REX_SESSION": ""}, "", ErrNoRexSession},
 		{"何も無ければ rex の外", nil, "", ErrNoRexSession},
 	}
@@ -29,15 +29,15 @@ func TestDetect(t *testing.T) {
 }
 
 func TestConnect(t *testing.T) {
-	store := sessionstate.New(t.TempDir())
+	contexts := sessioncontext.New(t.TempDir())
 	t.Run("rex の中なら rex の client", func(t *testing.T) {
-		kind, c, err := Connect(func(string) string { return "session:01a1" }, store)
-		if err != nil || c == nil || kind != sessionstate.MultiplexerKindRex {
+		kind, c, err := Connect(func(string) string { return "session:01a1" }, contexts)
+		if err != nil || c == nil || kind != sessioncontext.MultiplexerKindRex {
 			t.Errorf("Connect() = %q, %v, %v; want rex, client, nil", kind, c, err)
 		}
 	})
 	t.Run("rex の外なら ErrNoRexSession", func(t *testing.T) {
-		_, c, err := Connect(func(string) string { return "" }, store)
+		_, c, err := Connect(func(string) string { return "" }, contexts)
 		if !errors.Is(err, ErrNoRexSession) || c != nil {
 			t.Errorf("Connect() = %v, %v; want nil, ErrNoRexSession", c, err)
 		}

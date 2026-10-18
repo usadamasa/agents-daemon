@@ -6,27 +6,19 @@ import (
 	"os"
 	"path/filepath"
 	"time"
-)
 
-// sidecar file は揮発物として扱い、daemon が古いものを消す。保持期間を設定キーに
-// せず定数に置くのは、config.json のキーを増やすほどの調整余地が無いため。
-// 「この state がいつまで意味を持つか」は書き出し側の protocol の知識なので、
-// 消す側 (daemon) ではなく読む側のここに置く。
-const (
-	// rateLimitRetention は利用上限 state を残す期間。resets_at は観測から高々
-	// 5 時間先で、LatestWindow は未来の resets_at しか使わないため、24 時間より
-	// 古い state が判定に効くことは無い。
-	rateLimitRetention = 24 * time.Hour
-	// contextRetention は context state を残す期間。block から session を逆引きする記録で、
-	// 5 時間の上限待ちを跨いでも対応が残るよう利用上限より長く取る。
-	contextRetention = 7 * 24 * time.Hour
+	"github.com/usadamasa/agents-daemon/internal/ratelimit"
+	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
 )
 
 // Prune は保持期間を過ぎた sidecar file を削除し、消した数を利用上限 state と context に
 // 分けて返す。ディレクトリが空文字列 (ゼロ値の Store) または存在しない場合は何もしない。
+//
+// sidecar file は揮発物として扱い、daemon が古いものを消す。保持期間は書式の知識なので
+// 各書式のパッケージの定数 (ratelimit.Retention、sessioncontext.Retention) を使う。
 func (s Store) Prune(now time.Time) (rateLimits, contexts int, err error) {
-	rateLimits, rateErr := pruneDir(s.RateLimits, now, rateLimitRetention)
-	contexts, contextErr := pruneDir(s.Context, now, contextRetention)
+	rateLimits, rateErr := pruneDir(s.RateLimits.Dir, now, ratelimit.Retention)
+	contexts, contextErr := pruneDir(s.Context.Dir, now, sessioncontext.Retention)
 	return rateLimits, contexts, errors.Join(rateErr, contextErr)
 }
 

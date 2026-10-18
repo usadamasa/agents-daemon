@@ -8,7 +8,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/config"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
-	"github.com/usadamasa/agents-daemon/internal/sessionstate"
+	"github.com/usadamasa/agents-daemon/internal/ratelimit"
 )
 
 // 起床時刻の情報源は 3 つある: その pane のセッションの state (own)、画面の絶対時刻、
@@ -24,8 +24,8 @@ func jst(hh, mm int) time.Time {
 	return time.Date(2026, 8, 28, hh, mm, 0, 0, tokyo)
 }
 
-func stateAt(resetsAt time.Time, used float64) *sessionstate.RateLimit {
-	return &sessionstate.RateLimit{
+func stateAt(resetsAt time.Time, used float64) *ratelimit.State {
+	return &ratelimit.State{
 		FiveHourUsed:     used,
 		FiveHourResetsAt: resetsAt,
 		ObservedAt:       resetsAt.Add(-4 * time.Hour),
@@ -41,8 +41,8 @@ func TestComputeLimitWake_Priority(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		own        *sessionstate.RateLimit
-		account    *sessionstate.RateLimit
+		own        *ratelimit.State
+		account    *ratelimit.State
 		screen     string
 		wantWake   time.Time
 		wantSource WakeSource
@@ -122,7 +122,7 @@ func TestComputeLimitWake_Priority(t *testing.T) {
 		{
 			name:       "five_hour が null の account は無いものとして扱う",
 			own:        nil,
-			account:    &sessionstate.RateLimit{ObservedAt: now},
+			account:    &ratelimit.State{ObservedAt: now},
 			screen:     limitAndRelativeScreen,
 			wantWake:   now.Add(5 * time.Minute).Add(margin),
 			wantSource: WakeFromRelative,

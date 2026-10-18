@@ -25,10 +25,10 @@ func TestDaemonRuntimeTick_StaleCompactedMarkerSendsNothing(t *testing.T) {
 		},
 	}
 	r, statusPath := newTestRuntime(t, client, now)
-	writeContextSidecar(t, r.store.Context, "session-a", map[string]any{
+	writeContextSidecar(t, r.store.Context.Dir, "session-a", map[string]any{
 		"used_percentage": 25, "observed_at": now.Add(-time.Hour).Unix(),
 	})
-	compactedDir := filepath.Join(filepath.Dir(r.store.Context), "compacted")
+	compactedDir := filepath.Join(filepath.Dir(r.store.Context.Dir), "compacted")
 	marker := filepath.Join(compactedDir, "session-a")
 	if err := os.MkdirAll(compactedDir, 0o755); err != nil {
 		t.Fatalf("compacted ディレクトリの作成に失敗: %v", err)

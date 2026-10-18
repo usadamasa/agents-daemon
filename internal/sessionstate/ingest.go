@@ -7,6 +7,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/usadamasa/agents-daemon/internal/ratelimit"
+	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
 	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
 
@@ -33,17 +35,6 @@ type statuslineWindow struct {
 	ResetsAt       *float64 `json:"resets_at"`
 }
 
-// contextFile は context/<session_id>.json の生の形。読むのは ListMultiplexerBlocks
-// (block から session への逆引き) だけで、observed_at は同じ block の記録が複数あるときに
-// 最新を選ぶのに使う。
-type contextFile struct {
-	SessionID      string  `json:"session_id"`
-	UsedPercentage float64 `json:"used_percentage"`
-	ObservedAt     int64   `json:"observed_at"`
-	// Multiplexer は ListMultiplexerBlocks が block から session を逆引きするのに使う。
-	Multiplexer *multiplexerFile `json:"multiplexer,omitempty"`
-}
-
 // IngestStatusline は statusline の stdin (input) から context/ と rate-limits/ の
 // sidecar file を書く。`agents-daemon ingest-statusline` の本体で、statusline の描画
 // ごとに呼ばれる。
@@ -55,7 +46,6 @@ type contextFile struct {
 //     ときだけ書く。無い (初回 API レスポンス前、rate_limits が届かない契約、ウィンドウの
 //     切り替わり) ときは既存ファイルを残す
 //
-// 書き込みは同一ディレクトリの一時ファイル経由の rename で原子的に行う (statefile)。
 // 端末多重化ツールの場所はプロセスの環境変数から読む (IngestStatuslineWithEnv)。
 func (s Store) IngestStatusline(input []byte, now time.Time) error {
 	return s.IngestStatuslineWithEnv(input, os.Getenv, now)
@@ -63,64 +53,61 @@ func (s Store) IngestStatusline(input []byte, now time.Time) error {
 
 // IngestStatuslineWithEnv は IngestStatusline の本体で、環境変数を getenv から読む。
 // statusline の command は Claude Code の子プロセスなので REX_BLOCK を
-// 継承しており、その場所を context/<session_id>.json の multiplexer に書く (MultiplexerRefFromEnv)。
+// 継承しており、その場所を context/<session_id>.json の multiplexer に書く
+// (sessioncontext.MultiplexerRefFromEnv)。
 func (s Store) IngestStatuslineWithEnv(input []byte, getenv func(string) string, now time.Time) error {
 	var in statuslineInput
 	if err := json.Unmarshal(input, &in); err != nil {
 		return fmt.Errorf("statusline の入力のパースに失敗: %w", err)
 	}
-	contextPath, err := sessionPath(s.Context, in.SessionID, ".json")
-	if err != nil || contextPath == "" {
-		return err
+	if in.SessionID == "" {
+		return nil
 	}
-	rateLimitPath, err := sessionPath(s.RateLimits, in.SessionID, ".json")
-	if err != nil {
-		return err
+	// 片方だけ書いて止まらないよう、どちらかを書く前に検証する
+	if !statefile.ValidSessionID(in.SessionID) {
+		return fmt.Errorf("session ID %q はファイル名に使えない文字を含む", in.SessionID)
 	}
 
-	observedAt := now.Unix()
-	ctx := contextFile{
+	rec := sessioncontext.Record{
 		SessionID:      in.SessionID,
 		UsedPercentage: roundPercent(in.ContextWindow.UsedPercentage),
-		ObservedAt:     observedAt,
-		Multiplexer:    newMultiplexerFile(MultiplexerRefFromEnv(getenv)),
+		ObservedAt:     now,
 	}
-	if err := statefile.WriteJSONAtomic(contextPath, ".context.*", ctx); err != nil {
+	if ref, ok := sessioncontext.MultiplexerRefFromEnv(getenv); ok {
+		rec.Multiplexer = &ref
+	}
+	if err := s.Context.Write(rec); err != nil {
 		return err
 	}
 
-	rl, ok := in.rateLimitFile(observedAt)
+	fiveHour, sevenDay, ok := in.rateLimitWindows()
 	if !ok {
 		return nil
 	}
-	return statefile.WriteJSONAtomic(rateLimitPath, ".rate-limits.*", rl)
+	return s.RateLimits.Write(in.SessionID, now, fiveHour, sevenDay)
 }
 
-// rateLimitFile は stdin の rate_limits を書き出す形へ写す。five_hour.resets_at が
+// rateLimitWindows は stdin の rate_limits を書き出すウィンドウへ写す。five_hour.resets_at が
 // 無ければ (false) で、呼び出し元は書かない。seven_day も resets_at があるときだけ付ける。
-func (in *statuslineInput) rateLimitFile(observedAt int64) (rateLimitFile, bool) {
+func (in *statuslineInput) rateLimitWindows() (fiveHour ratelimit.Window, sevenDay *ratelimit.Window, ok bool) {
 	if in.RateLimits == nil || in.RateLimits.FiveHour == nil || in.RateLimits.FiveHour.ResetsAt == nil {
-		return rateLimitFile{}, false
+		return ratelimit.Window{}, nil, false
 	}
-	out := rateLimitFile{
-		FiveHour:   in.RateLimits.FiveHour.windowFile(),
-		ObservedAt: observedAt,
-		SessionID:  in.SessionID,
-	}
+	fiveHour = in.RateLimits.FiveHour.window()
 	if sd := in.RateLimits.SevenDay; sd != nil && sd.ResetsAt != nil {
-		w := sd.windowFile()
-		out.SevenDay = &w
+		w := sd.window()
+		sevenDay = &w
 	}
-	return out, true
+	return fiveHour, sevenDay, true
 }
 
-// windowFile は stdin 側のウィンドウを書き出す形へ写す。呼び出し元が ResetsAt の非 nil を
-// 保証する。used_percentage だけが null の描画は実機で見ていないが、読み手 (readRateLimit)
+// window は stdin 側のウィンドウを書き出す形へ写す。呼び出し元が ResetsAt の非 nil を
+// 保証する。used_percentage だけが null の描画は実機で見ていないが、読み手 (ratelimit.Store.Load)
 // は null も 0 に読むので 0 で書く。
-func (w *statuslineWindow) windowFile() windowFile {
-	return windowFile{
+func (w *statuslineWindow) window() ratelimit.Window {
+	return ratelimit.Window{
 		UsedPercentage: roundPercent(w.UsedPercentage),
-		ResetsAt:       int64(*w.ResetsAt),
+		ResetsAt:       time.Unix(int64(*w.ResetsAt), 0),
 	}
 }
 

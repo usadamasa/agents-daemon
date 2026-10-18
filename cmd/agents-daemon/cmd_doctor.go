@@ -9,7 +9,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/backend"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
-	"github.com/usadamasa/agents-daemon/internal/sessionstate"
+	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
 	"github.com/usadamasa/agents-daemon/internal/verify"
 )
 
@@ -29,7 +29,7 @@ func newDoctorCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			kind, client, err := backend.Connect(os.Getenv, sessionstate.New(p.StateDir()))
+			kind, client, err := backend.Connect(os.Getenv, sessioncontext.New(p.StateDir()))
 			if err != nil {
 				return err
 			}

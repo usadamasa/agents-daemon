@@ -80,7 +80,7 @@ type PaneReadOptions struct {
 }
 
 // SessionResolver は pane (rex は block) の ID から Claude Code の session_id への対応を返す。
-// 実体は statusline が `context/<sid>.json` の multiplexer に書いた記録 (sessionstate.Store.ListMultiplexerBlocks)。
+// 実体は statusline が `context/<sid>.json` の multiplexer に書いた記録 (sessioncontext.Store.ListMultiplexerBlocks)。
 // backend は PaneList / PaneGet の呼び出しごとに 1 回だけ呼ぶ。
 type SessionResolver func() (map[string]string, error)
 

@@ -16,7 +16,9 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/daemon"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
-	"github.com/usadamasa/agents-daemon/internal/sessionstate"
+	"github.com/usadamasa/agents-daemon/internal/ratelimit"
+	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
+	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
 
 var errFakeUnreachable = errors.New("fake: rex unreachable")
@@ -42,7 +44,7 @@ func TestRunDoctor(t *testing.T) {
 			ReachableFunc: func(context.Context) error { return errFakeUnreachable },
 		}
 		var buf bytes.Buffer
-		err := RunDoctor(context.Background(), &buf, doctorInput(client, sessionstate.MultiplexerKindRex, apppath.New(t.TempDir(), "", ""), fixedNow))
+		err := RunDoctor(context.Background(), &buf, doctorInput(client, sessioncontext.MultiplexerKindRex, apppath.New(t.TempDir(), "", ""), fixedNow))
 		if err == nil {
 			t.Fatal("rex 到達不可のとき error を期待したが nil だった")
 		}
@@ -65,7 +67,7 @@ func TestRunDoctor(t *testing.T) {
 		}
 
 		var buf bytes.Buffer
-		if err := RunDoctor(context.Background(), &buf, doctorInput(client, sessionstate.MultiplexerKindRex, apppath.New(home, "", ""), fixedNow)); err != nil {
+		if err := RunDoctor(context.Background(), &buf, doctorInput(client, sessioncontext.MultiplexerKindRex, apppath.New(home, "", ""), fixedNow)); err != nil {
 			t.Fatalf("RunDoctor() error = %v", err)
 		}
 		out := buf.String()
@@ -111,7 +113,7 @@ func TestRunDoctor(t *testing.T) {
 		}
 
 		var buf bytes.Buffer
-		if err := RunDoctor(context.Background(), &buf, doctorInput(client, sessionstate.MultiplexerKindRex, p, fixedNow)); err != nil {
+		if err := RunDoctor(context.Background(), &buf, doctorInput(client, sessioncontext.MultiplexerKindRex, p, fixedNow)); err != nil {
 			t.Fatalf("RunDoctor() error = %v", err)
 		}
 		out := buf.String()
@@ -138,7 +140,7 @@ func TestRunDoctor(t *testing.T) {
 		}
 
 		var buf bytes.Buffer
-		if err := RunDoctor(context.Background(), &buf, doctorInput(client, sessionstate.MultiplexerKindRex, p, fixedNow)); err != nil {
+		if err := RunDoctor(context.Background(), &buf, doctorInput(client, sessioncontext.MultiplexerKindRex, p, fixedNow)); err != nil {
 			t.Fatalf("RunDoctor() error = %v", err)
 		}
 		out := buf.String()
@@ -156,7 +158,7 @@ func TestRunDoctor(t *testing.T) {
 			PaneListFunc:  func(context.Context) ([]multiplexer.Pane, error) { return nil, nil },
 		}
 		var buf bytes.Buffer
-		if err := RunDoctor(context.Background(), &buf, doctorInput(client, sessionstate.MultiplexerKindRex, apppath.New(t.TempDir(), "", ""), fixedNow)); err != nil {
+		if err := RunDoctor(context.Background(), &buf, doctorInput(client, sessioncontext.MultiplexerKindRex, apppath.New(t.TempDir(), "", ""), fixedNow)); err != nil {
 			t.Fatalf("RunDoctor() error = %v", err)
 		}
 		for _, want := range []string{"backend: rex (REX_SESSION あり)", "OK: rex server は稼働しています"} {
@@ -171,7 +173,7 @@ func TestRunDoctor(t *testing.T) {
 			ReachableFunc: func(context.Context) error { return errFakeUnreachable },
 		}
 		var buf bytes.Buffer
-		err := RunDoctor(context.Background(), &buf, doctorInput(client, sessionstate.MultiplexerKindRex, apppath.New(t.TempDir(), "", ""), fixedNow))
+		err := RunDoctor(context.Background(), &buf, doctorInput(client, sessioncontext.MultiplexerKindRex, apppath.New(t.TempDir(), "", ""), fixedNow))
 		if err == nil || !strings.Contains(err.Error(), "rex に到達できない") {
 			t.Fatalf("RunDoctor() error = %v, want rex に到達できない", err)
 		}
@@ -242,7 +244,7 @@ func TestRunDoctor_PremisesSection(t *testing.T) {
 	}
 	checker := &fakePremises{findings: []multiplexer.PremiseFinding{{OK: true, Text: "exit 3"}}}
 	in := DoctorInput{
-		Client: client, Kind: sessionstate.MultiplexerKindRex, Paths: apppath.New(t.TempDir(), "", ""),
+		Client: client, Kind: sessioncontext.MultiplexerKindRex, Paths: apppath.New(t.TempDir(), "", ""),
 		Now: time.Now(), Getenv: envOf(map[string]string{"REX_BLOCK": "block:self", "REX_SESSION": "session:self"}),
 		Premises: checker,
 	}
@@ -405,12 +407,12 @@ func findLineContaining(out, substr string) (string, bool) {
 }
 
 // mustRateLimitFile は sessionID に対応する利用上限 state のパスを返す。
-// ファイル名の組み立ては sessionstate が唯一の実装元なので、テストもそこを通す。
+// ファイル名の組み立ては statefile.SessionPath が唯一の実装元なので、テストもそこを通す。
 func mustRateLimitFile(t *testing.T, p apppath.Paths, sessionID string) string {
 	t.Helper()
-	path, err := sessionstate.New(p.StateDir()).RateLimitFile(sessionID)
+	path, err := statefile.SessionPath(ratelimit.New(p.StateDir()).Dir, sessionID, ".json")
 	if err != nil {
-		t.Fatalf("RateLimitFile(%q) error = %v", sessionID, err)
+		t.Fatalf("SessionPath(%q) error = %v", sessionID, err)
 	}
 	return path
 }

@@ -36,7 +36,7 @@ context の compact と prompt cache の失効には関わらない。Claude Cod
 Claude Code は statusline コマンドの stdin に JSON を渡す。その中に
 `rate_limits.five_hour.{used_percentage, resets_at}` が入る (`resets_at` は Unix epoch 秒)。
 この値は statusline の stdin にしか来ないので、statusline を経由するのは避けられない。
-配線は 2 通りで、取り出しと書式はどちらもバイナリ (`internal/sessionstate.Store.IngestStatusline`) が持つ
+配線は 2 通りで、取り出しはどちらもバイナリ (`internal/sessionstate.Store.IngestStatusline`) が持つ
 (`agents-daemon:setup` skill の `references/statusline.md`)。
 
 - `statusLine.command` をバイナリの `statusline` に向ける (推奨)。描画 (`internal/statusline`) と state file の
@@ -54,7 +54,7 @@ state file の出し分けは次のとおり。
   上書きすると Go 側は 0 に読むため、待機明けのゲートが「fresh な 0%」で送信を抑制し、
   15 分後に state が古くなって改めて検知しても `resets_at` が無くフォールバック
   (5 時間待ち) に落ちる。2026-08-28 の取りこぼしはこれが原因だった。daemon 側も
-  `resets_at` が 0 の state は「値が無い」として扱う (`sessionstate.RateLimit.HasFiveHour`)。
+  `resets_at` が 0 の state は「値が無い」として扱う (`ratelimit.State.HasFiveHour`)。
   信号にするのは `resets_at` だけ。観測されたのは両方 null の形で、`used_percentage`
   だけが null の描画は見ていない。
 - **セッションごとに別ファイルへ書く**。`resets_at` はアカウント全体で共通だが、
@@ -80,8 +80,8 @@ daemon が使うのは `multiplexer` (block から session_id への対応) で�
 
 `$STATE` は下の「出力されるファイル」と同じ `${XDG_STATE_HOME:-~/.local/state}/agents-daemon/`。
 どちらも同一ディレクトリの一時ファイルへ書いてから rename で置き換える。
-読み手 (daemon) と書き手 (`statusline` / `ingest-statusline`) は `internal/sessionstate` の同じ型を使うので、
-書式はここに転記した参考で、実体はそのパッケージにある。
+読み手 (daemon) と書き手 (`statusline` / `ingest-statusline`) は書式ごとのパッケージの同じ型を使うので、
+書式はここに転記した参考で、実体は `rate-limits/` が `internal/ratelimit`、`context/` が `internal/sessioncontext` にある。
 
 `$STATE/rate-limits/<session_id>.json` (`rate_limits.five_hour.resets_at` があるときだけ):
 
@@ -105,14 +105,14 @@ daemon が使うのは `multiplexer` (block から session_id への対応) で�
 `observed_at` はどちらも書いた時点の Unix epoch 秒。
 
 `multiplexer` は Claude Code が動いている多重化ツールの場所。statusline のコマンドは Claude Code の環境を
-継承するので、バイナリが環境変数から読んで書く (`sessionstate.MultiplexerRefFromEnv`)。
+継承するので、バイナリが環境変数から読んで書く (`sessioncontext.MultiplexerRefFromEnv`)。
 
 | 環境変数 | 書く値 |
 | ---- | ---- |
 | `REX_BLOCK` がある | `{"kind": "rex", "session": $REX_SESSION, "block": $REX_BLOCK}` |
 | 無い | フィールドを付けない |
 
-backend は block から session_id をこの記録で逆引きする (`Store.ListMultiplexerBlocks`)。同じ ID の
+backend は block から session_id をこの記録で逆引きする (`sessioncontext.Store.ListMultiplexerBlocks`)。同じ ID の
 記録が複数あれば `observed_at` が最新のものを採る (同じ block で Claude Code を起動し直すと古い記録が残る)。
 `context/` は 7 日で消えるだけなので、5 時間の上限待ちを跨いでも対応は残る。制約 (初回描画までの
 数秒) は [operations.md](operations.md) の「既知の制約」。
@@ -288,7 +288,7 @@ daemon の再起動を跨いで日付が変わっていた場合も、mtime か�
 rotate 済みログ (7 日)、`rate-limits/` 配下の state (24 時間。ingest-statusline が rename 前に
 死んで残った `.rate-limits.*` も同じ扱い)、`context/` 配下 (7 日) を削除する。何かを消したときだけログに残す。
 
-保持期間は設定キーにせず定数 (`internal/daemon/housekeeping.go`、`internal/sessionstate/prune.go`) に置く。
+保持期間は設定キーにせず定数 (`internal/daemon/housekeeping.go`、`internal/ratelimit` と `internal/sessioncontext` の `Retention`) に置く。
 state の 24 時間は判定に影響しない値として選んである: `resets_at` は観測から高々 5 時間先で、
 起床時刻の算出 (`LatestWindow`) は未来の `resets_at` しか使わない。`context/` を 7 日と長く取るのは、
 block から session への対応を 5 時間の上限待ちを跨いで残すため。

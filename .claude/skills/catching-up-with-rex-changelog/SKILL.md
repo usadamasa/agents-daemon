@@ -16,7 +16,7 @@ preview が出るので、上げたら changelog と実機の応答をこの rep
 | 資料 | 何が分かるか | 読み方 |
 | ---- | ---- | ---- |
 | changelog (superlogical MCP) | 版ごとの変更。「rex CLI」「Rex Server」の節に CLI と program_status の変更が載る | `read_changelog` で範囲の版を 1 版ずつ全文読む。`search_changelog` は検索語の裏取りに使う |
-| 実機の CLI (自分の block) | 応答の JSON の欄、exit code、flag の有無 | [references/cli-checks.md](references/cli-checks.md) の固定コマンドを打ち、コードが読む欄と突き合わせる |
+| 実機の CLI (自分の block) | 応答の JSON の欄、exit code、flag の有無 | `doctor` の「rex CLI の前提」の節が固定コマンドを打って欄を名指しで出す。streaming と一覧の増減だけ人が打つ ([references/cli-checks.md](references/cli-checks.md)) |
 | rex docs | OSC 7501 の仕様 (何が仕様で何が rex 独自か) | [program-status](https://www.superlogical.com/rex/docs/build/program-status) |
 
 前提: superlogical MCP (`list_changelog` / `read_changelog`) が繋がっていること、rex の block の中で動いていること
@@ -30,10 +30,11 @@ preview が出るので、上げたら changelog と実機の応答をこの rep
 ### 1. 範囲を決める
 
 ```sh
-rex version --json
+go run ./cmd/agents-daemon doctor
 ```
 
-`rex_version` と `built_at` を控える。rex の CLI は changelog の版 (`preview.N` の形) を出さない
+「rex CLI の前提」の節の `rex_version` と `built_at` を控える (手順 4 の実機の点検もこの節が兼ねる)。
+rex の CLI は changelog の版 (`preview.N` の形) を出さない
 (`api call server.version` も同じ)。changelog の版は `list_changelog` の一覧から、`built_at` の日付と同じ日かその直後の
 post を取る。post は build より後に出る。
 
@@ -66,19 +67,17 @@ changelog に該当が無くても行う。欄の追加や名前の変更は cha
 worktree 隔離セッション (EnterWorktree の後) では、`$REX_BLOCK` と `$REX_SESSION` の展開を含む Bash コマンドを
 guard が拒否する。先に `printenv REX_BLOCK REX_SESSION` で値を取り、下のコマンドの変数をその値に置き換えて打つ。
 
-まず今のコードの `doctor` で自分の pane を見る。
+手順 1 で回した `doctor` の出力を 2 つの節で読む。
 
-```sh
-go run ./cmd/agents-daemon doctor
-```
+- 「pane 一覧」: 自分の block (`REX_BLOCK` の値) の `pane=` 行が `agent_status=working` で、`unknown の理由` の行が
+  付いていなければ、record の `owner.pid` と前景の pid の突き合わせは通っている。Bash ツールの実行中は working になる。
+  理由の行が出たら、その文面が欄の有無を言っている (`record に owner.pid が無い`)。
+- 「rex CLI の前提」: コードが読む欄と exit code を自分の block に打って名指しで出す。`⚠` の行がずれ。
+  全部 `OK:` なら判断の要らない点検は済んでいる。
 
-自分の block (`REX_BLOCK` の値) の `pane=` 行が `agent_status=working` で、`unknown の理由` の行が
-付いていなければ、record の `owner.pid` と前景の pid の突き合わせは通っている。Bash ツールの実行中は working になる。
-理由の行が出たら、その文面が欄の有無を言っている (`record に owner.pid が無い`)。
-
-次に固定のコマンドを打ち、コードが読む欄だけを突き合わせる。コマンドの一覧と、読む欄・突き合わせる先・コマンドごとの
-注意は [references/cli-checks.md](references/cli-checks.md) を Read で読む。実機の JSON には fixture に無い欄がある
-(`block ls` の `owner` など)。それはずれではない。
+残りは人が打つ。streaming の `events` と、`block inspect` の method / event の一覧の増減は判断が要るので doctor に
+入れていない。コマンドと見る欄は [references/cli-checks.md](references/cli-checks.md) の「人が見る行」を Read で読む。
+実機の JSON には fixture に無い欄がある (`block ls` の `owner` など)。それはずれではない。
 ずれとして扱うのは、コードが読む欄の欠落・名前の違い・型の違い・exit code の違い。
 
 ### 5. レポートを書いて issue にする

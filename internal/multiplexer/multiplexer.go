@@ -77,6 +77,21 @@ type PaneReadOptions struct {
 // backend は PaneList / PaneGet の呼び出しごとに 1 回だけ呼ぶ。
 type SessionResolver func() (map[string]string, error)
 
+// PremiseFinding は PremiseChecker の点検 1 件。OK が false なら前提が崩れている (doctor が ⚠ で出す)。
+type PremiseFinding struct {
+	OK   bool
+	Text string
+}
+
+// PremiseChecker は多重化ツールの CLI に置いている前提 (応答の欄、exit code、flag) を、自分の pane に固定の
+// コマンドを打って点検する口。doctor だけが使い、daemon の判定には関わらない。Client とは別にしてあるのは、
+// 判定の経路 (daemon / monitor) とそのテスト (multiplexerfake) に点検の口を見せないため。実装は rexcli。
+type PremiseChecker interface {
+	// CheckPremises は paneID (自分の pane) と sessionID (その pane の session) を使って点検し、
+	// 1 点検 1 件で返す。点検の失敗は error でなく OK=false の finding にする。
+	CheckPremises(ctx context.Context, paneID, sessionID string) []PremiseFinding
+}
+
 // Client は多重化ツールが提供する pane 操作。実装は rexcli.NewExecClient と multiplexerfake.Client の
 // 2 つで、daemon はこの interface にのみ依存し、exec.Command を直接呼ばない。
 type Client interface {

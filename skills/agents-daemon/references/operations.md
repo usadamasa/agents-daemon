@@ -107,7 +107,9 @@ rex の `capture` は可視領域しか返さないので、使い捨て block �
 OSC 7501 の書式と判定の条件は [program-status.md](program-status.md)。
 
 `doctor` は rex の server への到達性、Claude pane の一覧 (`session_id` が引けなければ `(なし)`) を出す。
-rex の外 (`REX_SESSION` なし) では exit 1 で止まる。末尾の「peer messaging」は
+rex の外 (`REX_SESSION` なし) では exit 1 で止まる。「rex CLI の前提」は自分の block (`REX_BLOCK`) に固定の
+コマンドを打ち、コードが読む欄と exit code が rex の版で変わっていないかを `⚠` で名指しする (rex を上げた直後に
+全 pane が unknown になったときの最初の手がかり)。末尾の「peer messaging」は
 `CLAUDE_CODE_MESSAGING_SOCKET` と socket の有無で、Claude Code のセッション内 (Bash ツール) から呼んだときだけ
 意味を持つ (切り分けは `agents-daemon:setup` skill の `references/peer-messaging.md`)。
 `inspect --pane` の pane ID は block ID。

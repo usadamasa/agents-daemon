@@ -25,5 +25,6 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(newStatuslineCmd())
 	root.AddCommand(newIngestStatuslineCmd())
 	root.AddCommand(newDreamCmd())
+	root.AddCommand(newPruneWorktreesCmd())
 	return root
 }

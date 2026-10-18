@@ -37,7 +37,8 @@ idle compaction (2.1.299) と失効後の footer の案内に任せる。以前�
 - statusline が書き出すのは Claude Code が statusline の stdin で渡す `rate_limits.five_hour` と
   `context_window.used_percentage`、環境変数 `REX_SESSION` / `REX_BLOCK`。`resets_at` は Unix epoch 秒で、
   これがあるので画面の時刻表記をパースしなくて済む。
-- hook の配線元は plugin の `hooks/hooks.json` (SessionStart で daemon を起こし、Stop で `dream harvest` を起こす)。
+- hook の配線元は plugin の `hooks/hooks.json` (SessionStart で daemon を起こして放置 worktree を回収し、Stop で
+  `dream harvest` を起こす)。
 - session_id の解決は `CLAUDE_CODE_SESSION_ID` を唯一の情報源にする
   (`scripts/get-session-id.sh`)。プロジェクトの JSONL の mtime から推測すると、
   同一プロジェクトで複数セッションが動いているときに他セッションの state file を読む。

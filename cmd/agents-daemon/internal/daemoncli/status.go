@@ -1,4 +1,4 @@
-package main
+package daemoncli
 
 import (
 	"os"
@@ -8,14 +8,12 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/board"
-	"github.com/usadamasa/agents-daemon/internal/tasklog"
 	"github.com/usadamasa/agents-daemon/internal/verify"
 )
 
 // newStatusCmd は `agents-daemon status` を組み立てる。
 //
 // --board はタスクのボードの JSON (internal/board) を出す。plugin の mod (hooks/board.tsx) が数秒ごとに読む。
-// 独立のサブコマンドにしないのは、cmd パッケージが analyze-modularity の行数の上限に近いため。
 func newStatusCmd() *cobra.Command {
 	var (
 		asBoard bool
@@ -37,7 +35,10 @@ func newStatusCmd() *cobra.Command {
 					return err
 				}
 			}
-			return board.Write(cmd.OutOrStdout(), p, tasklog.LoadPlacer(p, os.Getenv("HOME")), viewer)
+			if viewer.UserHome, err = os.UserHomeDir(); err != nil {
+				return err
+			}
+			return board.Write(cmd.OutOrStdout(), p, viewer)
 		},
 	}
 	f := cmd.Flags()

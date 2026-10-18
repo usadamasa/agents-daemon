@@ -1,4 +1,6 @@
-package main
+// Package boardcli はボードに載る記録 (タスク、パーキングロット、セッションをまたぐ辺) を書く・読むコマンド
+// (park、edge、ingest-task) の組み立てを持つ。
+package boardcli
 
 import (
 	"encoding/json"
@@ -13,6 +15,11 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
+
+// Commands は root に登録するコマンド。
+func Commands() []*cobra.Command {
+	return []*cobra.Command{newIngestTaskCmd(), newParkCmd(), newEdgeCmd()}
+}
 
 // newParkCmd は `agents-daemon park add|set|list` を組み立てる (internal/parking)。
 // domain と repo は --cwd (既定は今の cwd) から決め、結果は JSON で stdout に出す。

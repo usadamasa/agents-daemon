@@ -3,7 +3,11 @@ package main
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/boardcli"
+	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/daemoncli"
 	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/dreamcli"
+	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/statuslinecli"
+	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/worktreecli"
 )
 
 // newRootCmd は agents-daemon の root cobra コマンドを組み立てる。
@@ -19,19 +23,11 @@ func newRootCmd() *cobra.Command {
 			"解除後に再開させること。",
 		SilenceUsage: true,
 	}
-	root.AddCommand(newDaemonCmd())
-	root.AddCommand(newStatusCmd())
-	root.AddCommand(newLogsCmd())
-	root.AddCommand(newStopCmd())
-	root.AddCommand(newDoctorCmd())
-	root.AddCommand(newInspectCmd())
-	root.AddCommand(newSimulateCmd())
-	root.AddCommand(newStatuslineCmd())
-	root.AddCommand(newIngestStatuslineCmd())
-	root.AddCommand(newIngestTaskCmd())
-	root.AddCommand(newParkCmd())
-	root.AddCommand(newEdgeCmd())
-	root.AddCommand(dreamcli.Commands()...)
-	root.AddCommand(newPruneWorktreesCmd())
+	// コマンドの組み立ては機能ごとの internal/<family>cli が持ち、ここは登録だけにする。
+	for _, family := range [][]*cobra.Command{
+		daemoncli.Commands(), statuslinecli.Commands(), boardcli.Commands(), dreamcli.Commands(), worktreecli.Commands(),
+	} {
+		root.AddCommand(family...)
+	}
 	return root
 }

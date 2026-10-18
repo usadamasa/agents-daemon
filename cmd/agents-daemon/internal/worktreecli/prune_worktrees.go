@@ -1,4 +1,5 @@
-package main
+// Package worktreecli は `agents-daemon prune-worktrees` の組み立てを持つ。
+package worktreecli
 
 import (
 	"errors"
@@ -9,6 +10,11 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/worktree"
 )
+
+// Commands は root に登録するコマンド。
+func Commands() []*cobra.Command {
+	return []*cobra.Command{newPruneWorktreesCmd()}
+}
 
 // newPruneWorktreesCmd は `agents-daemon prune-worktrees` を組み立てる。
 //

@@ -1,4 +1,5 @@
-package main
+// Package statuslinecli は statusline の stdin を受けるコマンド (statusline、ingest-statusline) の組み立てを持つ。
+package statuslinecli
 
 import (
 	"fmt"
@@ -10,6 +11,11 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/statusline"
 )
+
+// Commands は root に登録するコマンド。
+func Commands() []*cobra.Command {
+	return []*cobra.Command{newStatuslineCmd(), newIngestStatuslineCmd()}
+}
 
 // newStatuslineCmd は `agents-daemon statusline` を組み立てる。
 //

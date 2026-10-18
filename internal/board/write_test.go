@@ -9,7 +9,6 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/domain"
-	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
 
 func paths(t *testing.T) apppath.Paths {
@@ -38,7 +37,8 @@ func writeFile(t *testing.T, path, data string) {
 func writeBoard(t *testing.T, p apppath.Paths, v Viewer) Board {
 	t.Helper()
 	var buf bytes.Buffer
-	if err := Write(&buf, p, tasklog.LoadPlacer(p, "/u"), v); err != nil {
+	v.UserHome = "/u"
+	if err := Write(&buf, p, v); err != nil {
 		t.Fatalf("Write() error = %v", err)
 	}
 	var b Board

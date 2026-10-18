@@ -1,4 +1,6 @@
-package main
+// Package daemoncli は daemon のライフサイクル (daemon、stop) と、読むだけの診断 (status、logs、doctor、inspect、
+// simulate) のコマンドの組み立てを持つ。
+package daemoncli
 
 import (
 	"errors"
@@ -11,6 +13,13 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/backend"
 	"github.com/usadamasa/agents-daemon/internal/daemon"
 )
+
+// Commands は root に登録するコマンド。
+func Commands() []*cobra.Command {
+	return []*cobra.Command{
+		newDaemonCmd(), newStatusCmd(), newLogsCmd(), newStopCmd(), newDoctorCmd(), newInspectCmd(), newSimulateCmd(),
+	}
+}
 
 // newDaemonCmd は `agents-daemon daemon` を組み立てる。
 func newDaemonCmd() *cobra.Command {

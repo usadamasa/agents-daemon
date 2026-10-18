@@ -17,11 +17,13 @@ import (
 type Viewer struct {
 	SessionID string
 	CWD       string
+	// UserHome は config の homePaths の ~ を展開する先。
+	UserHome string
 }
 
 // Write はボードを組み、JSON で w へ書く。daemon が動いていなくてもタスクの記録は描く
 // (daemon_running が false で、カードはすべて Live でない)。
-func Write(w io.Writer, p apppath.Paths, placer tasklog.Placer, v Viewer) error {
+func Write(w io.Writer, p apppath.Paths, v Viewer) error {
 	pid, err := daemon.ReadPIDFile(p.PIDFile())
 	if err != nil {
 		return err
@@ -35,6 +37,7 @@ func Write(w io.Writer, p apppath.Paths, placer tasklog.Placer, v Viewer) error 
 			return err
 		}
 	}
+	placer := tasklog.LoadPlacer(p, v.UserHome)
 	store := placer.Tasks
 	d := placer.Domain(v.SessionID, v.CWD)
 	tasks, err := store.List(d)

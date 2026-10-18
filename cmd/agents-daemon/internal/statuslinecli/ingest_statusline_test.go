@@ -1,4 +1,4 @@
-package main
+package statuslinecli
 
 import (
 	"bytes"

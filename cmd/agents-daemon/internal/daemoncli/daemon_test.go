@@ -1,4 +1,4 @@
-package main
+package daemoncli
 
 import (
 	"bytes"
@@ -6,7 +6,16 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/spf13/cobra"
 )
+
+// testRoot は main の root と同じく SilenceUsage を立てた親にコマンドを載せる。
+func testRoot() *cobra.Command {
+	root := &cobra.Command{Use: "agents-daemon", SilenceUsage: true}
+	root.AddCommand(Commands()...)
+	return root
+}
 
 // rex の外 (REX_SESSION なし) の SessionStart は素の端末でも走る。--ensure はそこで
 // daemon を起こさず、hook を失敗させない (exit 0) ことを確かめる。
@@ -18,7 +27,7 @@ func TestDaemonCmd_rexの外では起動しない(t *testing.T) {
 	t.Setenv("REX_SESSION", "")
 
 	t.Run("--ensure は stderr に 1 行出して exit 0", func(t *testing.T) {
-		root := newRootCmd()
+		root := testRoot()
 		var stderr bytes.Buffer
 		root.SetErr(&stderr)
 		root.SetArgs([]string{"daemon", "--ensure"})
@@ -34,7 +43,7 @@ func TestDaemonCmd_rexの外では起動しない(t *testing.T) {
 	})
 
 	t.Run("--foreground は error", func(t *testing.T) {
-		root := newRootCmd()
+		root := testRoot()
 		root.SetErr(&bytes.Buffer{})
 		root.SetArgs([]string{"daemon", "--foreground"})
 		err := root.Execute()

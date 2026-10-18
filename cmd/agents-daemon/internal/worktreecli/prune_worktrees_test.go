@@ -1,4 +1,4 @@
-package main
+package worktreecli
 
 import (
 	"bytes"
@@ -9,7 +9,16 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/spf13/cobra"
 )
+
+// testRoot は main の root と同じく SilenceUsage を立てた親にコマンドを載せる。
+func testRoot() *cobra.Command {
+	root := &cobra.Command{Use: "agents-daemon", SilenceUsage: true}
+	root.AddCommand(Commands()...)
+	return root
+}
 
 // pruneTestRepo は main と、過去に戻した放置 worktree 1 つ (`.claude/worktrees/stale`) を持つリポジトリを作る。
 // 判定の網羅は internal/worktree のテストが持ち、ここでは flag の配線だけを見る。
@@ -48,7 +57,7 @@ func pruneTestRepo(t *testing.T) (repo, stale string) {
 func execPrune(t *testing.T, stdin string, args ...string) (stdout string, err error) {
 	t.Helper()
 	var out bytes.Buffer
-	root := newRootCmd()
+	root := testRoot()
 	root.SetOut(&out)
 	root.SetIn(strings.NewReader(stdin))
 	root.SetArgs(append([]string{"prune-worktrees"}, args...))
@@ -56,8 +65,8 @@ func execPrune(t *testing.T, stdin string, args ...string) (stdout string, err e
 	return out.String(), err
 }
 
-func TestPruneWorktreesCmd_IsRegisteredOnRoot(t *testing.T) {
-	sub, _, err := newRootCmd().Find([]string{"prune-worktrees"})
+func TestPruneWorktreesCmd_HasFlags(t *testing.T) {
+	sub, _, err := testRoot().Find([]string{"prune-worktrees"})
 	if err != nil || sub.Name() != "prune-worktrees" {
 		t.Fatalf("Find(prune-worktrees) = %v, %v", sub, err)
 	}

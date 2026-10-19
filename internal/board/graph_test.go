@@ -216,6 +216,37 @@ func TestGraph_refEndpoints(t *testing.T) {
 	}
 }
 
+// 名前に当たるセッションがほかの domain の側にしか無ければ、まだ起きていないものとして扱い、その session ID を
+// 載せない (私用と業務を混ぜない)。セッションのタスクがすべて輪になっていて根も末端も無ければ、タスク全部につなぐ。
+func TestGraph_refEndpointsEdgeCases(t *testing.T) {
+	const cwd = "/w/a"
+	e := func(id, before, after string) edge.Edge {
+		return edge.Edge{ID: id, Before: edge.Endpoint{Ref: before, CWD: cwd}, After: edge.Endpoint{Ref: after, CWD: cwd}}
+	}
+	b := Build(Input{
+		Domain: domain.Work,
+		Tasks: []tasklog.Task{
+			task("C", "1", "x", "pending", cwd, "2"),
+			task("C", "2", "y", "pending", cwd, "1"),
+			task("D", "1", "後", "pending", cwd),
+		},
+		Edges: []edge.Edge{
+			e("e1", "session:home-only", "task:D/1"),
+			e("e2", "session:loop", "task:D/1"),
+		},
+		Elsewhere:    func(id string) bool { return id == "H" },
+		SessionNames: map[string]string{"H": "home-only", "C": "loop", "D": "after"},
+	})
+	got := nodes(b.Graph)
+	if n := got["ref:session:home-only"]; n.State != StatePending || n.SessionID != "" || n.Session != "" {
+		t.Errorf("ほかの domain のセッション = %+v, want session ID の無い pending", n)
+	}
+	want := []string{"C/1>C/2", "C/1>D/1", "C/2>C/1", "C/2>D/1", "ref:session:home-only>D/1"}
+	if !reflect.DeepEqual(links(b.Graph), want) {
+		t.Errorf("links = %v, want %v", links(b.Graph), want)
+	}
+}
+
 // 止まっているノードから下流の最長の鎖 (longest chain) と、ノードごとに上流をたどった原因の鎖 (blocked by)。
 // 原因の鎖は完了していない上流だけをたどり、止まっているもの、進行中のものの順に選ぶ。
 func TestGraph_chains(t *testing.T) {

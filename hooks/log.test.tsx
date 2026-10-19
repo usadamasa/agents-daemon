@@ -138,7 +138,7 @@ test('メモを渡せなかった理由をログに残す', async ($, on) => {
 
 test('hint 行と band のメモを読めなかったら理由をログに残す。JSON の中身は理由に載せない', async ($, on) => {
   let list = output('', 1, 'parking の走査に失敗')
-  const logged = world(on, argv => (argv[2] === 'list' ? list : output('{}')))
+  const logged = world(on, argv => (argv[2] === 'list' ? list : output(JSON.stringify(board([])))))
   on('tool.call', { tool: 'TaskUpdate' }, async () => ({ result: { success: true, taskId: '3', updatedFields: ['status'], statusChange: { from: 'in_progress', to: 'completed' } } }) as never)
 
   await $.session.start(START)

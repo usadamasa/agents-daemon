@@ -1,55 +1,108 @@
 import type { On, ProcessRunResult } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
-// world は plugin の下にいる engine の代わりを立てる。board の呼び出しは run が答える。
-function world(on: On, run: (argv: readonly string[]) => ProcessRunResult) {
+const BIN = '/home/u/.cache/agents-daemon/bin/agents-daemon'
+const CWD = '/src/home/agents-daemon'
+
+// world は plugin の下にいる engine の代わりを立てる。process.run は run が答え、呼ばれた argv (バイナリの後) を
+// ran に残す。ボードの経路のログ (hooks/log.ts) は log.test.tsx が見るので残さない。
+function world(on: On, run: (argv: readonly string[]) => ProcessRunResult = () => output('{}')) {
+  const ran: string[][] = []
+  const opened: string[] = []
+  const closed: string[] = []
+  const sent: { to: unknown; text: string }[] = []
   mock.env(on, { HOME: '/home/u' })
   mock.clock(on)
-  on('ui.open', async () => ({ value: { isPlaced: true } }))
+  on('ui.open', async (_$, e) => {
+    opened.push(e.id)
+    return { value: { isPlaced: true } }
+  })
+  on('ui.close', async (_$, e) => {
+    closed.push(e.id)
+  })
   on('session.id', async () => ({ value: 'SELF' }))
-  on('session.cwd', async () => ({ value: '/src/home/agents-daemon' }))
-  on('process.run', async (_$, e) => ({ value: run(e.argv) }))
+  on('session.cwd', async () => ({ value: CWD }))
+  on('process.run', async (_$, e) => {
+    if (e.argv[1] !== 'board-log') ran.push([...e.argv])
+    return { value: run(e.argv) }
+  })
+  on('session.send', async (_$, e) => {
+    sent.push({ to: e.to, text: e.text })
+    return { isDelivered: true as const }
+  })
+  return { ran, opened, closed, sent }
 }
 
 function output(stdout: string, exitCode = 0, stderr = ''): ProcessRunResult {
   return { exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false }
 }
 
-const COLUMNS = [
-  { id: 'pending', title: '未着手' },
-  { id: 'in_progress', title: '進行中' },
-  { id: 'blocked', title: 'ブロック' },
-  { id: 'completed', title: '完了 (直近)' },
+// boardWorld は status --board に data を返し、それ以外 (park、edge) は成功を返す。
+function boardWorld(on: On, data: unknown = BOARD) {
+  return world(on, argv => (argv[1] === 'status' ? output(JSON.stringify(data)) : output('{"created":true}')))
+}
+
+function node(key: string, state: string, title: string, extra: Record<string, unknown> = {}) {
+  const [sid, tid] = key.split('/')
+  return {
+    key,
+    kind: 'task',
+    state,
+    title,
+    ref: `task:${sid}/${tid}`,
+    cwd: CWD,
+    session_id: sid,
+    session: sid.toLowerCase(),
+    live: state !== 'exited',
+    depth: 0,
+    downstream: 0,
+    parked: 0,
+    blocked_by: [] as string[],
+    deadlock: false,
+    ...extra,
+  }
+}
+
+const ep = (ref: string) => ({ ref, cwd: CWD, repo: CWD })
+
+// 依存の DAG (internal/board の graph)。Q/1 が質問で止まり、その下流に 3 つ。X/1 と X/2 は待ちの輪。
+// W/1 は進行中で、途中で置いたメモが 1 つ。D/1 はターンを終えた。issue:o/r#9 は置き場のノードで、その下流に P/1。
+const NODES = [
+  node('Q/1', 'question', '論点を決める', { session: 'design', downstream: 3 }),
+  node('X/1', 'pending', 'x を待つ', { session: 'loop', downstream: 1, blocked_by: ['X/2'], deadlock: true }),
+  node('X/2', 'pending', 'y を待つ', { session: 'loop', downstream: 1, blocked_by: ['X/1'], deadlock: true }),
+  node('Q/2', 'pending', '段5', { session: 'design', downstream: 2, blocked_by: ['Q/1'] }),
+  node('W/1', 'working', 'edge の CLI', { session: 'edge-cli', downstream: 1, parked: 1 }),
+  {
+    ...node('I/0', 'pending', 'issue:o/r#9', { downstream: 1 }),
+    key: 'ref:issue:o/r#9',
+    kind: 'ref',
+    ref: 'issue:o/r#9',
+    session_id: undefined,
+    session: undefined,
+    live: false,
+  },
+  node('R/1', 'pending', 'リリース', { session: 'release', downstream: 1, blocked_by: ['Q/2', 'Q/1'] }),
+  node('D/1', 'done', '要約を書いた', { session: 'doner' }),
+  node('W/2', 'pending', 'skill から辺を書く', { session: 'edge-cli', blocked_by: ['W/1'] }),
+  node('P/1', 'pending', '後続', { session: 'peer', blocked_by: ['ref:issue:o/r#9'] }),
+  node('V/1', 'pending', '確認', { session: 'verify', blocked_by: ['R/1', 'Q/2', 'Q/1'] }),
+  node('G/1', 'exited', '残った作業', { session: 'gone' }),
+  node('C/1', 'completed', '済んだ'),
+  node('SELF/1', 'working', 'このセッションの作業', { session: 'self' }),
 ]
 
-function card(key: string, column: string, subject: string, session_id: string, extra: Record<string, unknown> = {}) {
-  return { key, kind: 'task', column, subject, session_id, session: session_id.toLowerCase(), live: true, updated_at: '2026-10-18T09:00:00Z', ...extra }
-}
+const LINKS = [
+  { before: 'Q/1', after: 'Q/2', kind: 'task' },
+  { before: 'Q/2', after: 'R/1', kind: 'edge', edge: { id: 'e1', before: ep('session:design'), after: ep('task:R/1') } },
+  { before: 'R/1', after: 'V/1', kind: 'edge', edge: { id: 'e2', before: ep('task:R/1'), after: ep('task:V/1') } },
+  { before: 'W/1', after: 'W/2', kind: 'task' },
+  { before: 'X/1', after: 'X/2', kind: 'task' },
+  { before: 'X/2', after: 'X/1', kind: 'task' },
+  { before: 'ref:issue:o/r#9', after: 'P/1', kind: 'edge', edge: { id: 'e3', before: ep('issue:o/r#9'), after: ep('task:P/1') } },
+]
 
-// board の JSON は internal/board の形。agents-daemon の行に 4 枚: 送れるもの (入力待ちの印付き)、ブロック、
-// 自分自身、終了したセッション。dotfile の行に 1 枚。
-const BOARD = {
-  domain: 'home',
-  daemon_running: true,
-  updated_at: '2026-10-18T09:00:00Z',
-  columns: COLUMNS,
-  rows: [
-    {
-      repo: '/src/home/agents-daemon',
-      title: 'agents-daemon',
-      parking: [] as unknown[],
-      cards: [
-        card('PEER/2', 'in_progress', 'ingest-task を書く', 'PEER', { mark: 'input', mark_detail: 'permission' }),
-        card('PEER/3', 'blocked', 'PR を出す', 'PEER', { blockers: 1 }),
-        card('SELF/1', 'in_progress', 'ボードを書く', 'SELF'),
-        card('GONE/1', 'pending', '残った作業', 'GONE', { live: false }),
-      ],
-    },
-    { repo: '/src/home/dotfile', title: 'dotfile', cards: [card('C/1', 'pending', 'alias を整理', 'C')], parking: [] },
-  ],
-}
-
-// メモ 1 つ (PEER と GONE が置いた) を agents-daemon の行に足したボード。GONE/1 は adopt できるタスク。
+// メモは W/1 の途中と、終了した G が置いた。
 const MEMO = {
   id: '20261018T090000-aaaa',
   kind: 'aside',
@@ -58,21 +111,35 @@ const MEMO = {
   files: ['internal/parking/parking.go'],
   default_taken: 'やらない',
   sources: [
-    { session_id: 'PEER', session: 'peer', live: true, detail: '別の定数も同じ', at: '2026-10-18T19:30:00+09:00' },
-    // UTC で書かれた時刻も JST で出す。
-    { session_id: 'GONE', session: 'gone', live: false, at: '2026-10-18T16:28:44Z' },
+    { session_id: 'W', task_id: '1', session: 'edge-cli', live: true, detail: '別の定数も同じ', at: '2026-10-18T19:30:00+09:00' },
+    { session_id: 'G', session: 'gone', live: false, at: '2026-10-18T16:28:44Z' },
   ],
 }
 
-function withParking(domain: 'home' | 'work') {
-  return {
-    ...BOARD,
-    domain,
-    rows: [
-      { ...BOARD.rows[0], cards: BOARD.rows[0].cards.map(c => (c.key === 'GONE/1' ? { ...c, task_id: '1' } : c)), parking: [MEMO] },
-      BOARD.rows[1],
-    ],
-  }
+function card(key: string, column: string, subject: string, session_id: string, extra: Record<string, unknown> = {}) {
+  return { key, kind: 'task', column, subject, session_id, session: session_id.toLowerCase(), live: true, updated_at: '2026-10-18T09:00:00Z', ...extra }
+}
+
+// rows はメモの送り先 (同じ repo の生きているセッション) を決めるのに使う。
+const BOARD = {
+  domain: 'home',
+  daemon_running: true,
+  updated_at: '2026-10-18T09:00:00Z',
+  columns: [],
+  rows: [
+    {
+      repo: CWD,
+      title: 'agents-daemon',
+      cards: [
+        card('W/1', 'in_progress', 'edge の CLI', 'W', { session: 'edge-cli', task_id: '1' }),
+        card('SELF/1', 'in_progress', 'このセッションの作業', 'SELF', { task_id: '1' }),
+        card('G/1', 'pending', '残った作業', 'G', { session: 'gone', live: false, task_id: '1' }),
+      ],
+      parking: [MEMO],
+    },
+    { repo: '/src/home/dotfile', title: 'dotfile', cards: [card('P/1', 'pending', '後続', 'P', { session: 'peer', task_id: '1' })], parking: [] },
+  ],
+  graph: { nodes: NODES, links: LINKS, longest_chain: ['Q/1', 'Q/2', 'R/1', 'V/1'] },
 }
 
 // 利用者が composer で /board を打ったときの command.run。
@@ -92,212 +159,208 @@ const PANE_PROPS = {
   view: {},
 } as const
 
-const mount = ($: Parameters<Parameters<typeof test>[1]>[0], surface: 'terminal' | 'desktop' = 'terminal') =>
-  $.ui.mount({ plugin: 'agents-daemon', surface, component: 'Pane', props: PANE_PROPS, requestId: 'agents-daemon-board' })
+type T = Parameters<Parameters<typeof test>[1]>[0]
 
-test('repo の行と状態の列でタスクを描き、選んだタスクのセッションへ subject を添えて送る', async ($, on) => {
-  const ran: string[][] = []
-  world(on, argv => {
-    ran.push([...argv])
-    return output(JSON.stringify(BOARD))
-  })
-  const sent: { to: unknown; text: string }[] = []
-  on('session.send', async (_$, e) => {
-    sent.push({ to: e.to, text: e.text })
-    return { isDelivered: true as const }
-  })
+const mount = ($: T, surface: 'terminal' | 'desktop' = 'terminal', props: object = PANE_PROPS) =>
+  $.ui.mount({ plugin: 'agents-daemon', surface, component: 'Pane', props: props as typeof PANE_PROPS, requestId: 'agents-daemon-board' })
 
+const SELF_ARGS = ['--session', 'SELF', '--cwd', CWD]
+
+test('fullscreen でなければ /board は開かず、その旨を返す', async ($, on) => {
+  const w = boardWorld(on)
+  const result = await $.command.run({ ...OPEN_BOARD, presentation: { isFullscreen: false, columns: 160 } })
+  expect(result.text).toMatch(/fullscreen/)
+  expect(w.opened).toEqual([])
+  expect(w.ran).toEqual([])
+})
+
+test('/board は開いたセッションの ID と cwd で status --board を読み、dock に開く', async ($, on) => {
+  const w = boardWorld(on)
   await $.command.run(OPEN_BOARD)
-  // バイナリは hooks/lib/daemon-bin.sh と同じ置き場 (XDG_CACHE_HOME が無ければ ~/.cache) を呼び、
-  // 開いたセッションの ID と cwd を渡して、その domain だけを描かせる。
-  expect(ran[0]).toEqual([
-    '/home/u/.cache/agents-daemon/bin/agents-daemon',
-    'status',
-    '--board',
-    '--session',
-    'SELF',
-    '--cwd',
-    '/src/home/agents-daemon',
-  ])
+  expect(w.ran[0]).toEqual([BIN, 'status', '--board', ...SELF_ARGS])
+  expect(w.opened).toEqual(['agents-daemon-board'])
+})
+
+test('入力欄の上 (inline) に描かれたら pane を閉じる', async ($, on) => {
+  const w = boardWorld(on)
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($, 'terminal', { ...PANE_PROPS, placement: 'inline' })
+  expect(w.closed).toEqual(['agents-daemon-board'])
+  expect(await ui.find({ key: 'row:Q/1:Q/1' })).toBeUndefined()
+})
+
+test('止まっているノードを根にした木を節ごとに描き、深い段は畳んで押すと開く', async ($, on) => {
+  boardWorld(on)
+  await $.command.run(OPEN_BOARD)
 
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await mount($, surface)
     expect(await ui.find({ type: 'Text', text: /私用のボード/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^agents-daemon$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /進行中 \(2\)/ })).toBeDefined()
-    expect(await ui.find({ key: 'PEER/2', text: /⚠入力待ち \(permission\)/ })).toBeDefined()
-    expect(await ui.find({ key: 'PEER/3', text: /←1/ })).toBeDefined()
-    expect(await ui.find({ key: 'SELF/1', text: /このセッション/ })).toBeDefined()
-    expect(await ui.find({ key: 'GONE/1', text: /\(終了\)/ })).toBeDefined()
+    // 数: 止まっている根、その下流、進行中、完了、メモ。
+    expect(await ui.find({ type: 'Text', text: /■ 2 {2}○ 4 {2}▸ 3 {2}✓ 1 {2}◇ 1/ })).toBeDefined()
+    // 節は ■ → ▸ → ○ → ⊘ → ◇ の順で、見出しに根の数。
+    for (const head of [/■ blocked 2/, /▸ working 3/, /○ pending 1/, /⊘ exited 1/, /◇ parking 1/]) {
+      expect(await ui.find({ type: 'Text', text: head })).toBeDefined()
+    }
+    // 根には下流の数、途中で置いたメモの数、待ちの輪の印。
+    expect(await ui.find({ key: 'row:Q/1:Q/1', text: /\? 論点を決める ↓3/ })).toBeDefined()
+    expect(await ui.find({ key: 'row:Q/1:Q/2', text: /○ 段5/ })).toBeDefined()
+    expect(await ui.find({ key: 'row:X/1:X/1', text: /○ x を待つ.*⟳/ })).toBeDefined()
+    expect(await ui.find({ key: 'row:X/1:X/2', text: /⟳/ })).toBeDefined()
+    // 輪の 2 つ目は根にしない。
+    expect(await ui.find({ key: 'row:X/2:X/2' })).toBeUndefined()
+    expect(await ui.find({ key: 'row:W/1:W/1', text: /▸ edge の CLI ↓1 ◇1/ })).toBeDefined()
+    expect(await ui.find({ key: 'row:D/1:D/1', text: /↵ 要約を書いた/ })).toBeDefined()
+    expect(await ui.find({ key: 'row:ref:issue:o/r#9:ref:issue:o/r#9', text: /○ issue:o\/r#9 ↓1/ })).toBeDefined()
+    expect(await ui.find({ key: 'row:ref:issue:o/r#9:P/1', text: /○ 後続/ })).toBeDefined()
+    expect(await ui.find({ key: 'row:G/1:G/1', text: /⊘ 残った作業/ })).toBeDefined()
+    // 上流のある pending と completed は根にしない。
+    expect(await ui.find({ key: 'row:Q/2:Q/2' })).toBeUndefined()
+    expect(await ui.find({ key: 'row:C/1:C/1' })).toBeUndefined()
 
-    // 自分自身と終了したセッションを選んでも入力欄は出ない。
-    await ui.press({ key: 'SELF/1' })
-    expect(await ui.find({ key: 'instruction' })).toBeUndefined()
-    await ui.press({ key: 'GONE/1' })
-    expect(await ui.find({ key: 'instruction' })).toBeUndefined()
-    expect(await ui.find({ type: 'Text', text: /終了しています/ })).toBeDefined()
-
-    await ui.press({ key: 'PEER/2' })
-    await ui.input({ key: 'instruction', text: '先にテストを足して' })
-    expect(await ui.find({ type: 'Text', text: /peer へ送りました/ })).toBeDefined()
+    // 2 段目より深い段は畳む。押すと開く。
+    expect(await ui.find({ key: 'row:Q/1:R/1' })).toBeUndefined()
+    expect(await ui.find({ key: 'more:Q/1:R/1', text: /\+2 more/ })).toBeDefined()
+    await ui.press({ key: 'more:Q/1:R/1' })
+    expect(await ui.find({ key: 'row:Q/1:R/1', text: /○ リリース/ })).toBeDefined()
+    expect(await ui.find({ key: 'row:Q/1:V/1', text: /○ 確認/ })).toBeDefined()
     await ui.unmount()
   }
-
-  // { sessionId } で送った宛先は、engine が session.send の hook へ渡すときに ID の文字列へ直す。
-  const text = 'タスク「ingest-task を書く」について: 先にテストを足して'
-  expect(sent).toEqual([
-    { to: 'PEER', text },
-    { to: 'PEER', text },
-  ])
 })
 
-test('タスクの無いボードと、daemon が動いていないことを描く', async ($, on) => {
-  world(on, () => output(JSON.stringify({ domain: 'work', daemon_running: false, columns: COLUMNS, rows: [] })))
+test('選んだノードの詳細に参照とセッション、上流をたどった原因の鎖を出す', async ($, on) => {
+  boardWorld(on)
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($)
+  await ui.press({ key: 'row:Q/1:Q/2' })
+  expect(await ui.find({ type: 'Text', text: /task:Q\/2 · design/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /blocked by: \? 論点を決める/ })).toBeDefined()
+  // 選んだノードを含む枝は畳まない。
+  await ui.press({ key: 'row:Q/1:Q/1' })
+  expect(await ui.find({ type: 'Text', text: /blocked by: none/ })).toBeDefined()
+})
 
+test('edge の辺は Unlink で edge rm に元の参照を渡す', async ($, on) => {
+  const w = boardWorld(on)
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($)
+  await ui.press({ key: 'more:Q/1:R/1' })
+  await ui.press({ key: 'row:Q/1:R/1' })
+  w.ran.length = 0
+  await ui.press({ key: 'unlink:Q/2' })
+  expect(w.ran[0]).toEqual([BIN, 'edge', 'rm', '--before', 'session:design', '--before-cwd', CWD, '--after', 'task:R/1', '--after-cwd', CWD])
+})
+
+test('同じセッションの blockedBy は外せないので、そのセッションへ解消を頼む', async ($, on) => {
+  const w = boardWorld(on)
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($)
+  await ui.press({ key: 'row:Q/1:Q/2' })
+  expect(await ui.find({ key: 'unlink:Q/1' })).toBeUndefined()
+  await ui.press({ key: 'ask:Q/1' })
+  expect(w.sent).toHaveLength(1)
+  expect(w.sent[0].to).toBe('Q')
+  expect(w.sent[0].text).toMatch(/タスク #2「段5」が #1「論点を決める」の完了待ち \(blockedBy\)/)
+  expect(w.sent[0].text).toMatch(/#1 を completed か deleted にするか、#2 を blockedBy なしで作り直して/)
+})
+
+test('Add blocker は循環にならない候補だけを出し、edge add に参照を渡す', async ($, on) => {
+  const w = boardWorld(on)
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($)
+  await ui.press({ key: 'more:Q/1:R/1' })
+  await ui.press({ key: 'row:Q/1:R/1' })
+  await ui.press({ key: 'add-blocker' })
+  // 自分、既にある上流、下流 (循環になる)、完了、終了したものは出さない。
+  for (const key of ['R/1', 'Q/2', 'V/1', 'C/1', 'G/1']) {
+    expect(await ui.find({ key: `blocker:${key}` })).toBeUndefined()
+  }
+  expect(await ui.find({ key: 'blocker:Q/1' })).toBeDefined()
+  expect(await ui.find({ key: 'blocker:ref:issue:o/r#9' })).toBeDefined()
+  w.ran.length = 0
+  await ui.press({ key: 'blocker:W/1' })
+  expect(w.ran[0]).toEqual([BIN, 'edge', 'add', '--before', 'task:W/1', '--before-cwd', CWD, '--after', 'task:R/1', '--after-cwd', CWD])
+})
+
+test('生きているほかのセッションのノードへ指示を送る。自分と終了したセッションには送らない', async ($, on) => {
+  const w = boardWorld(on)
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($)
+
+  await ui.press({ key: 'row:SELF/1:SELF/1' })
+  expect(await ui.find({ key: 'instruction' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /このセッションのタスクです/ })).toBeDefined()
+  await ui.press({ key: 'row:G/1:G/1' })
+  expect(await ui.find({ key: 'instruction' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /このセッションは終了しています/ })).toBeDefined()
+
+  await ui.press({ key: 'row:W/1:W/1' })
+  await ui.input({ key: 'instruction', text: '先にテストを足して' })
+  expect(w.sent).toEqual([{ to: 'W', text: 'タスク「edge の CLI」について: 先にテストを足して' }])
+  expect(await ui.find({ type: 'Text', text: /edge-cli へ送りました/ })).toBeDefined()
+})
+
+test('終了したセッションの未完了のタスクは To parking でメモへ移せる', async ($, on) => {
+  const w = boardWorld(on)
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($)
+  await ui.press({ key: 'row:W/1:W/1' })
+  expect(await ui.find({ key: 'adopt' })).toBeUndefined()
+  await ui.press({ key: 'row:G/1:G/1' })
+  w.ran.length = 0
+  await ui.press({ key: 'adopt' })
+  expect(w.ran).toEqual([[BIN, 'park', 'adopt', 'G', '1', ...SELF_ARGS]])
+})
+
+test('メモを選ぶと詳細を出し、Discard / To task / Ask for issue で渡す', async ($, on) => {
+  const w = boardWorld(on)
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($)
+  // 置いたときに進めていたタスクを添える。
+  expect(await ui.find({ key: `park:${MEMO.id}`, text: /\[脇\] 保持期間の根拠が無い ×2 ← edge の CLI/ })).toBeDefined()
+  await ui.press({ key: `park:${MEMO.id}` })
+  expect(await ui.find({ type: 'Text', text: /定数にコメントが無い/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /edge-cli 10\/18 19:30 別の定数も同じ/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /gone 10\/19 01:28/ })).toBeDefined()
+
+  // 宛先は同じ repo の生きているほかのセッション。issue は私用のボードでボード全体のセッション。
+  expect(await ui.find({ key: 'task:SELF' })).toBeUndefined()
+  expect(await ui.find({ key: 'task:G' })).toBeUndefined()
+  expect(await ui.find({ key: 'task:P' })).toBeUndefined()
+  expect(await ui.find({ key: 'task:W', text: /To task → edge-cli/ })).toBeDefined()
+  expect(await ui.find({ key: 'issue:P', text: /Ask for issue → peer/ })).toBeDefined()
+
+  w.ran.length = 0
+  await ui.press({ key: 'task:W' })
+  expect(w.sent[0].to).toBe('W')
+  expect(w.sent[0].text).toMatch(/^パーキングロットのメモ「保持期間の根拠が無い」\(種類: 脇\) をタスクにしてください。/)
+  expect(w.ran).toEqual([[BIN, 'park', 'set', MEMO.id, '--status', 'handed', ...SELF_ARGS]])
+
+  w.ran.length = 0
+  await ui.press({ key: `park:${MEMO.id}` })
+  await ui.press({ key: 'discard' })
+  expect(w.ran).toEqual([[BIN, 'park', 'set', MEMO.id, '--status', 'discarded', ...SELF_ARGS]])
+})
+
+test('業務のボードには Ask for issue を出さない', async ($, on) => {
+  boardWorld(on, { ...BOARD, domain: 'work' })
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($)
+  await ui.press({ key: `park:${MEMO.id}` })
+  expect(await ui.find({ key: 'task:W' })).toBeDefined()
+  expect(await ui.find({ key: 'issue:P' })).toBeUndefined()
+})
+
+test('ノードの無いボードと、daemon が動いていないことを描く', async ($, on) => {
+  boardWorld(on, { domain: 'work', daemon_running: false, columns: [], rows: [], graph: { nodes: [], links: [], longest_chain: [] } })
   await $.command.run(OPEN_BOARD)
   const ui = await mount($)
   expect(await ui.find({ type: 'Text', text: /業務のボード \(agents-daemon が動いていない/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /タスクはまだありません/ })).toBeDefined()
 })
 
-// parkWorld は status --board に data を返し、park の呼び出しを ran に残して成功を返す。
-function parkWorld(on: On, data: unknown, ran: string[][], delivered = true) {
-  world(on, argv => {
-    if (argv[1] === 'status') return output(JSON.stringify(data))
-    // ボードの経路のログ (hooks/log.ts) は log.test.tsx が見る。
-    if (argv[1] === 'board-log') return output('')
-    ran.push([...argv.slice(1)])
-    return output(JSON.stringify({ created: true, item: { id: 'x' } }))
-  })
-  const sent: { to: unknown; text: string }[] = []
-  on('session.send', async (_$, e) => {
-    sent.push({ to: e.to, text: e.text })
-    return delivered ? { isDelivered: true as const } : { isDelivered: false as const, reason: 'not_found' as const }
-  })
-  return sent
-}
-
-const SELF_ARGS = ['--session', 'SELF', '--cwd', '/src/home/agents-daemon']
-
-test('パーキングの列にメモを描き、選ぶと詳細と置いたセッションを出し、捨てられる', async ($, on) => {
-  const ran: string[][] = []
-  parkWorld(on, withParking('home'), ran)
-
-  await $.command.run(OPEN_BOARD)
-  const ui = await mount($)
-  expect(await ui.find({ type: 'Text', text: /パーキング \(1\)/ })).toBeDefined()
-  expect(await ui.find({ key: `park:${MEMO.id}`, text: /\[脇\] 保持期間の根拠が無い ×2/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /定数にコメントが無い/ })).toBeUndefined()
-
-  await ui.press({ key: `park:${MEMO.id}` })
-  expect(await ui.find({ type: 'Text', text: /定数にコメントが無い/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /既定: やらない/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /internal\/parking\/parking\.go/ })).toBeDefined()
-  // sources は新しい順に、セッションの名前、時刻、後から置いた側の detail。
-  expect(await ui.find({ type: 'Text', text: /peer 10\/18 19:30 別の定数も同じ/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /gone 10\/19 01:28/ })).toBeDefined()
-
-  await ui.press({ key: 'discard' })
-  expect(ran).toEqual([['park', 'set', MEMO.id, '--status', 'discarded', ...SELF_ARGS]])
-  expect(await ui.find({ type: 'Text', text: /捨てました/ })).toBeDefined()
-})
-
-test('タスクにするは同じ行の生きているセッションへ送り、届いたときだけ handed にする', async ($, on) => {
-  const ran: string[][] = []
-  const sent = parkWorld(on, withParking('home'), ran)
-
-  await $.command.run(OPEN_BOARD)
-  const ui = await mount($)
-  await ui.press({ key: `park:${MEMO.id}` })
-  // 宛先は同じ行の生きているセッション (自分と終了したセッションは出さない)。
-  expect(await ui.find({ key: 'task:SELF' })).toBeUndefined()
-  expect(await ui.find({ key: 'task:GONE' })).toBeUndefined()
-  expect(await ui.find({ key: 'task:C' })).toBeUndefined()
-  await ui.press({ key: 'task:PEER' })
-
-  expect(sent).toHaveLength(1)
-  expect(sent[0].to).toBe('PEER')
-  expect(sent[0].text).toMatch(/^パーキングロットのメモ「保持期間の根拠が無い」\(種類: 脇\) をタスクにしてください。TaskCreate で作り/)
-  expect(sent[0].text).toMatch(/詳細: 定数にコメントが無い/)
-  expect(sent[0].text).toMatch(/関係するファイル: internal\/parking\/parking\.go/)
-  expect(sent[0].text).toMatch(/置いたときの既定: やらない/)
-  expect(sent[0].text).toMatch(/\(メモ 20261018T090000-aaaa\)/)
-  expect(ran).toEqual([['park', 'set', MEMO.id, '--status', 'handed', ...SELF_ARGS]])
-})
-
-test('届かなければ handed にしない', async ($, on) => {
-  const ran: string[][] = []
-  parkWorld(on, withParking('home'), ran, false)
-
-  await $.command.run(OPEN_BOARD)
-  const ui = await mount($)
-  await ui.press({ key: `park:${MEMO.id}` })
-  await ui.press({ key: 'task:PEER' })
-  expect(ran).toEqual([])
-  expect(await ui.find({ type: 'Text', text: /送れませんでした/ })).toBeDefined()
-})
-
-test('issue にするよう頼むのは私用のボードだけで、届いたら handed にする', async ($, on) => {
-  const ran: string[][] = []
-  const sent = parkWorld(on, withParking('home'), ran)
-
-  await $.command.run(OPEN_BOARD)
-  const ui = await mount($)
-  await ui.press({ key: `park:${MEMO.id}` })
-  // 同じ domain のボードに載っている生きているセッションなら、別の行のセッションにも頼める。
-  expect(await ui.find({ key: 'issue:C' })).toBeDefined()
-  await ui.press({ key: 'issue:PEER' })
-  expect(sent[0].text).toMatch(/^パーキングロットのメモ「保持期間の根拠が無い」を GitHub の issue にしてください。repo: agents-daemon。/)
-  expect(sent[0].text).toMatch(/起票したら URL を返してください。/)
-  expect(ran).toEqual([['park', 'set', MEMO.id, '--status', 'handed', ...SELF_ARGS]])
-})
-
-test('同じ行に送り先が無ければ、そう出してメモは open のまま', async ($, on) => {
-  const ran: string[][] = []
-  const data = withParking('work')
-  // dotfile の行の C は終了したセッション。メモをそこへ移す。
-  const lone = { ...BOARD.rows[1], cards: [card('C/1', 'pending', 'alias を整理', 'C', { live: false })], parking: [MEMO] }
-  parkWorld(on, { ...data, rows: [BOARD.rows[0], lone] }, ran)
-
-  await $.command.run(OPEN_BOARD)
-  const ui = await mount($)
-  await ui.press({ key: `park:${MEMO.id}` })
-  expect(await ui.find({ type: 'Text', text: /送り先のセッションがありません/ })).toBeDefined()
-  // 別の行の生きているセッション (PEER) へはタスクにさせない。
-  expect(await ui.find({ key: 'task:PEER' })).toBeUndefined()
-  expect(await ui.find({ key: 'task:C' })).toBeUndefined()
-  expect(ran).toEqual([])
-})
-
-test('業務のボードには issue の操作を出さない', async ($, on) => {
-  parkWorld(on, withParking('work'), [])
-
-  await $.command.run(OPEN_BOARD)
-  const ui = await mount($)
-  await ui.press({ key: `park:${MEMO.id}` })
-  expect(await ui.find({ key: 'task:PEER' })).toBeDefined()
-  expect(await ui.find({ key: 'issue:PEER' })).toBeUndefined()
-  expect(await ui.find({ key: 'issue:C' })).toBeUndefined()
-})
-
-test('終了したセッションの未完了のタスクはパーキングへ移せる', async ($, on) => {
-  const ran: string[][] = []
-  parkWorld(on, withParking('home'), ran)
-
-  await $.command.run(OPEN_BOARD)
-  const ui = await mount($)
-  // 生きているセッションのタスクには出さない。
-  await ui.press({ key: 'PEER/3' })
-  expect(await ui.find({ key: 'adopt' })).toBeUndefined()
-  await ui.press({ key: 'GONE/1' })
-  await ui.press({ key: 'adopt' })
-  expect(ran).toEqual([['park', 'adopt', 'GONE', '1', ...SELF_ARGS]])
-  expect(await ui.find({ type: 'Text', text: /パーキングへ移しました/ })).toBeDefined()
-})
-
 test('board が失敗したら理由を描く', async ($, on) => {
   world(on, () => output('', 1, 'status snapshot のパースに失敗'))
-
   await $.command.run(OPEN_BOARD)
   const ui = await mount($)
   expect(await ui.find({ type: 'Text', text: /status snapshot のパースに失敗/ })).toBeDefined()

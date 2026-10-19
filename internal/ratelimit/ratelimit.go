@@ -98,10 +98,10 @@ func (r *State) FiveHourExhausted(threshold float64) bool {
 const futureTolerance = 5 * time.Second
 
 // fresh は観測時刻 observedAt が now から maxAge 以内かを返す。
-// observedAt が now より未来 (クロックスキュー等) の場合は信用せず false を返す。
+// observedAt が now より futureTolerance を超えて未来 (クロックスキュー等) の場合は信用せず false を返す。
 func fresh(observedAt, now time.Time, maxAge time.Duration) bool {
 	age := now.Sub(observedAt)
-	return age >= 0 && age <= maxAge
+	return age >= -futureTolerance && age <= maxAge
 }
 
 // file は sessionID に対応する利用上限 state のパスを返す。

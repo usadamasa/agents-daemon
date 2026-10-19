@@ -69,16 +69,42 @@ export class Graph {
 
   // reach は key から下流へたどれるノードの Key (key 自身は含めない)。
   reach(key: string): Set<string> {
+    return this.walk(key, k => this.after(k).map(n => n.key))
+  }
+
+  // upstream は key から上流へたどれるノードの Key (key 自身は含めない)。
+  upstream(key: string): Set<string> {
+    return this.walk(key, k => this.blockers(k).map(l => l.before))
+  }
+
+  private walk(key: string, next: (k: string) => string[]): Set<string> {
     const seen = new Set<string>()
-    const stack = this.after(key).map(n => n.key)
+    const stack = next(key)
     while (stack.length > 0) {
       const k = stack.pop() as string
       if (k === key || seen.has(k)) continue
       seen.add(k)
-      stack.push(...this.after(k).map(n => n.key))
+      stack.push(...next(k))
     }
     return seen
   }
+}
+
+// layers は A の band の列: 段 (前提の深さ) ごとのノード。完了を畳むときは完了を除き、残ったノードの段だけで詰める。
+// 列の中は受け取った順 (下流の多い順)。
+export function layers(g: Graph, showCompleted: boolean): GraphNode[][] {
+  const shown = g.nodes.filter(n => showCompleted || n.state !== 'completed')
+  const depths = [...new Set(shown.map(n => n.depth))].sort((a, b) => a - b)
+  return depths.map(d => shown.filter(n => n.depth === d))
+}
+
+// longest は longest chain を記号と title でつないだもの。止まっているノードが無ければ none。
+export function longest(g: Graph, keys: string[]): string {
+  const parts = keys.flatMap(k => {
+    const n = g.node(k)
+    return n === undefined ? [] : [`${ICON[n.state]} ${n.title}`]
+  })
+  return parts.length === 0 ? 'none' : parts.join(' → ')
 }
 
 export type Section = {
@@ -194,10 +220,11 @@ export function candidates(g: Graph, selected: GraphNode): GraphNode[] {
   )
 }
 
-// tags は行の末尾の印: 根の下流の数、途中で置いたメモの数、待ちの輪。
-export function tags(node: GraphNode, isRoot: boolean): string {
+// tags は行の末尾の印: 下流の数 (showDown のとき)、途中で置いたメモの数、待ちの輪。B は根に、A は止まっている
+// ノードに下流の数を出す。
+export function tags(node: GraphNode, showDown: boolean): string {
   const parts: string[] = []
-  if (isRoot && node.downstream > 0) parts.push(`↓${node.downstream}`)
+  if (showDown && node.downstream > 0) parts.push(`↓${node.downstream}`)
   if (node.parked > 0) parts.push(`${MEMO}${node.parked}`)
   if (node.deadlock) parts.push(CYCLE)
   return parts.length === 0 ? '' : ` ${parts.join(' ')}`

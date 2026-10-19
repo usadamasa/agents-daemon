@@ -2,10 +2,11 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { BoardData, BoardRow, GraphLink, GraphNode, ParkingCard } from '../types'
+import { loadBoard } from './board-data'
 import { daemonBin } from './daemon-bin'
 import { COLOR, Graph, ICON, MEMO, candidates, chain, sections, summary, tags, treeRows } from './graph'
 import type { TreeRow } from './graph'
-import { logChange, logEvent, reason, settle } from './log'
+import { logChange, logEvent, settle } from './log'
 import type { Fields } from './log'
 import {
   adopt,
@@ -306,28 +307,16 @@ export const registerBoard: Register = on => {
   })
 }
 
-// refresh は `agents-daemon status --board` を走らせてボードを読み直す。失敗は error に置き、前のボードは残す。
-// 開いたセッションの ID と cwd を渡し、そのセッションの domain だけを描かせる (私用と業務を混ぜない)。
-// 開いたとき (opened) は数をログに書き、それからは数か失敗の理由が変わったときだけ書く。
+// refresh はボードを読み直す (hooks/board-data.ts)。開いたとき (opened) は数をログに書き、それからは数か失敗の理由が
+// 変わったときだけ書く。
 async function refresh($: EngineInterface, opened = false) {
-  try {
-    const argv = [await daemonBin($), 'status', '--board', '--session', await $.session.id(), '--cwd', await $.session.cwd()]
-    const { exitCode, stdout, stderr } = await $.process.run(argv, { timeoutMs: 10000 })
-    if (exitCode !== 0) {
-      const failure = stderr.trim() || `exit ${exitCode}`
-      await update($, error, () => failure)
-      await logChange($, 'board', 'mod.board.failed', { reason: failure })
-      return
-    }
-    const data = JSON.parse(stdout) as BoardData
-    await update($, board, () => data)
-    await update($, error, () => '')
-    if (opened) await settle($, 'board')
-    await logChange($, 'board', opened ? 'mod.board.open' : 'mod.board.changed', counts(data))
-  } catch (err) {
-    await update($, error, () => String(err))
-    await logChange($, 'board', 'mod.board.failed', { reason: reason(err, 'status --board') })
+  const loaded = await loadBoard($)
+  if ('failure' in loaded) {
+    await logChange($, 'board', 'mod.board.failed', { reason: loaded.failure })
+    return
   }
+  if (opened) await settle($, 'board')
+  await logChange($, 'board', opened ? 'mod.board.open' : 'mod.board.changed', counts(loaded.data))
 }
 
 // counts はボードの大きさ。カードの subject とメモの title は書かない。

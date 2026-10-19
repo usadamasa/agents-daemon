@@ -119,7 +119,7 @@ export type Section = {
 // - ■: 止まっているノードと待ちの輪のノード。輪は既に根にしたノードの下流にいるものを根にしない
 // - ▸: working と done
 // - ○: 止まっているノードの下流にいない pending のうち、上流の無いもの (置き場のノード、辺の無い未着手)
-// - ⊘: exited
+// - ⊘: exited。先の根の木に出たものは根にしない
 // completed は根にしない。
 export function sections(g: Graph): Section[] {
   const blocked: GraphNode[] = []
@@ -132,6 +132,14 @@ export function sections(g: Graph): Section[] {
     for (const k of g.reach(n.key)) covered.add(k)
   }
   const pick = (test: (n: GraphNode) => boolean) => g.nodes.filter(n => !blocked.includes(n) && test(n))
+  // exited は下流も木で出すので、先の根の木に出たノードを根にしない。
+  const exited: GraphNode[] = []
+  const shown = new Set<string>()
+  for (const n of pick(n => n.state === 'exited')) {
+    if (shown.has(n.key)) continue
+    exited.push(n)
+    for (const k of g.reach(n.key)) shown.add(k)
+  }
   return [
     { id: 'blocked' as const, icon: STOP, label: 'blocked', color: 'warning', roots: blocked },
     { id: 'working' as const, icon: ICON.working, label: 'working', color: COLOR.working, roots: pick(n => n.state === 'working' || n.state === 'done') },
@@ -141,7 +149,7 @@ export function sections(g: Graph): Section[] {
       label: 'pending',
       roots: pick(n => n.state === 'pending' && !n.deadlock && n.blocked_by.length === 0 && !covered.has(n.key)),
     },
-    { id: 'exited' as const, icon: ICON.exited, label: 'exited', roots: pick(n => n.state === 'exited') },
+    { id: 'exited' as const, icon: ICON.exited, label: 'exited', roots: exited },
   ].filter(s => s.roots.length > 0)
 }
 
@@ -228,6 +236,41 @@ export function tags(node: GraphNode, showDown: boolean): string {
   if (node.parked > 0) parts.push(`${MEMO}${node.parked}`)
   if (node.deadlock) parts.push(CYCLE)
   return parts.length === 0 ? '' : ` ${parts.join(' ')}`
+}
+
+// cells は端末に描いたときの桁数。全角 (CJK、ハングル、全角形) は 2 桁、それ以外は 1 桁と数える。記号 (○ ▸ ⊘) は
+// 1 桁に収まるものを選んでいる。
+export function cells(text: string): number {
+  let n = 0
+  for (const ch of text) n += wide(ch.codePointAt(0) ?? 0) ? 2 : 1
+  return n
+}
+
+function wide(cp: number): boolean {
+  return (
+    (cp >= 0x1100 && cp <= 0x115f) ||
+    (cp >= 0x2e80 && cp <= 0xa4cf) ||
+    (cp >= 0xac00 && cp <= 0xd7a3) ||
+    (cp >= 0xf900 && cp <= 0xfaff) ||
+    (cp >= 0xfe30 && cp <= 0xfe4f) ||
+    (cp >= 0xff00 && cp <= 0xff60) ||
+    (cp >= 0xffe0 && cp <= 0xffe6)
+  )
+}
+
+// fit は text を max 桁に収める。はみ出すときは末尾を「…」にする。折り返すと木の字下げと段の列が崩れるため、
+// 行は 1 行に切り詰める。
+export function fit(text: string, max: number): string {
+  if (cells(text) <= max) return text
+  let out = ''
+  let n = 0
+  for (const ch of text) {
+    const w = wide(ch.codePointAt(0) ?? 0) ? 2 : 1
+    if (n + w > max - 1) break
+    out += ch
+    n += w
+  }
+  return `${out}…`
 }
 
 // chain は原因の鎖 (blocked_by) を記号と title でつないだもの。

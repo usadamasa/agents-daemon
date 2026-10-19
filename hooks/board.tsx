@@ -4,7 +4,7 @@ import type { EngineInterface, Register, Timer } from 'claude-code'
 import type { BoardData, BoardRow, GraphLink, GraphNode, ParkingCard } from '../types'
 import { loadBoard } from './board-data'
 import { daemonBin } from './daemon-bin'
-import { COLOR, Graph, ICON, MEMO, candidates, chain, sections, summary, tags, treeRows } from './graph'
+import { COLOR, Graph, ICON, MEMO, candidates, cells, chain, fit, sections, summary, tags, treeRows } from './graph'
 import type { TreeRow } from './graph'
 import { logChange, logEvent, settle } from './log'
 import type { Fields } from './log'
@@ -45,6 +45,8 @@ const picking = atom({ plugin: 'agents-daemon', key: 'picking' } as const, false
 
 // timer はボードの読み直し。pane を開いている間だけ動かす。
 let timer: Timer | undefined
+// closing は inline に描かれて閉じにかかったか。閉じるまでに描画がもう一度走っても、知らせを重ねない。
+let closing = false
 
 // startBoard は session.start で /board を登録する (session.start の hook は hooks/register.ts が持つ)。
 export async function startBoard($: EngineInterface) {
@@ -59,6 +61,7 @@ export const registerBoard: Register = on => {
     if (!e.presentation.isFullscreen) {
       return { text: '依存のボードは fullscreen のレイアウトで、会話の横 (dock) にだけ開きます。この画面では開きません。' }
     }
+    closing = false
     await refresh($, true)
     timer?.cancel()
     timer = $.clock.every(POLL_MS, () => void refresh($))
@@ -81,9 +84,12 @@ export const registerBoard: Register = on => {
     const { Box, Text, Button } = elements
     // 端末を狭めて入力欄の上に置かれたら閉じる。入力欄の上は A の band が受け持つ。
     if (e.props.placement === 'inline') {
-      await $.ui.close({ id: PANE })
-      // 閉じた pane の中の文面は誰にも見えないので、toast で知らせる。
-      await $.ui.toast('会話の横に置けないため、依存のボードを閉じました (端末を 110 桁以上にすると開けます)')
+      if (!closing) {
+        closing = true
+        await $.ui.close({ id: PANE })
+        // 閉じた pane の中の文面は誰にも見えないので、toast で知らせる。
+        await $.ui.toast('会話の横に置けないため、依存のボードを閉じました (端末を 110 桁以上にすると開けます)')
+      }
       return <Text dimColor>会話の横に置けないため、ボードを閉じました。</Text>
     }
     // mobile には入力欄が無い。ボードは見せて、送信だけ出さない。
@@ -140,13 +146,16 @@ export const registerBoard: Register = on => {
       }
       const n = r.node
       const isSel = n.key === chosen
+      const tag = tags(n, r.isRoot)
+      // 枠の「[ 」「 ]」の 4 桁と、記号と空白の 2 桁を除いた幅に title を収める。
+      const room = Math.max(4, e.props.bodyColumns - cells(r.prefix) - 6 - cells(tag))
       return (
         <Box key={`box:${r.key}`} flexDirection="column">
           <Box flexDirection="row">
             <Text dimColor>{r.prefix}</Text>
             <Button key={r.key} variant={isSel ? 'primary' : 'secondary'} onPress={() => choose(isSel ? '' : n.key)}>
               <Text color={COLOR[n.state]}>{ICON[n.state]}</Text>
-              {` ${n.title}${tags(n, r.isRoot)}`}
+              {` ${fit(n.title, room)}${tag}`}
             </Button>
           </Box>
         </Box>

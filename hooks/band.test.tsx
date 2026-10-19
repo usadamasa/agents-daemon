@@ -212,6 +212,34 @@ test('TaskUpdate で completed になったタスクの途中で置いたメモ�
   expect(await ui.find({ key: 'park:m2' })).toBeUndefined()
 })
 
+// cells は全角を 2 桁と数えた幅。
+function cells(text: string): number {
+  return [...text].reduce((n, ch) => n + ((ch.codePointAt(0) ?? 0) >= 0x3000 ? 2 : 1), 0)
+}
+
+test('ノードは段の列の幅に合わせて 1 行に切り詰める', async ($, on) => {
+  const long = node('L/1', 'working', 'とても長いタイトル'.repeat(5), { depth: 1 })
+  world(on, { [STATUS.join(' ')]: { ...board(), graph: { ...board().graph, nodes: [...NODES, long] } } })
+  await $.session.start(START)
+  // 段は 3 列。列の間に 1 桁ずつ空けて、1 列は (60 - 2) / 3 = 19 桁。枠の「[ 」「 ]」を除いて 15 桁に収める。
+  const ui = await mount($, 'terminal', { ...BAND_PROPS, bodyColumns: 60 })
+  const button = await ui.find({ key: 'node:L/1' })
+  expect(button?.text).toMatch(/…$/)
+  expect(cells(button?.text ?? '')).toBeLessThanOrEqual(15)
+})
+
+test('列のノードが band の高さに収まらなければ、残りを +n にまとめる', async ($, on) => {
+  const extra = ['E/1', 'E/2', 'E/3'].map(k => node(k, 'pending', k))
+  world(on, { [STATUS.join(' ')]: { ...board(), graph: { ...board().graph, nodes: [...NODES, ...extra] } } })
+  await $.session.start(START)
+  // 高さ 5 行から 1 行目と軸の 2 行を除いた 3 行。段 0 の 5 つのうち 2 つを出し、残りの 3 つを +3 にする。
+  const ui = await mount($, 'terminal', { ...BAND_PROPS, maxRows: 5 })
+  expect(await ui.find({ key: 'node:A/1' })).toBeDefined()
+  expect(await ui.find({ key: 'node:W/1' })).toBeDefined()
+  expect(await ui.find({ key: 'node:E/1' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /^\+3$/ })).toBeDefined()
+})
+
 test('10 秒ごとにボードを読み直す', async ($, on) => {
   const w = world(on, { [STATUS.join(' ')]: board() })
   await $.session.start(START)

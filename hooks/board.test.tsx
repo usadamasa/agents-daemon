@@ -411,16 +411,15 @@ test('ノードの無いボードと、daemon が動いていないことを描�
   expect(await ui.find({ type: 'Text', text: /タスクはまだありません/ })).toBeDefined()
 })
 
-test('要約の無いセッションは名前を title にし、作業中のものには「要約なし」を添える', async ($, on) => {
-  const session = (key: string, state: string, title: string) => ({ ...node(key, state, title), kind: 'session', ref: undefined, untitled: true })
-  const nodes = [...NODES, session('U/session', 'working', 'dotfiles'), session('I/session', 'done', 'waiter')]
+test('状態を分類できないノードは · で idle の節に出し、working には数えない', async ($, on) => {
+  const session = (key: string, state: string, title: string) => ({ ...node(key, state, title), kind: 'session', ref: undefined })
+  const nodes = [...NODES, session('U/session', 'unknown', 'dotfiles')]
   boardWorld(on, { ...BOARD, graph: { ...BOARD.graph, nodes } })
   await $.command.run(OPEN_BOARD)
   const ui = await mount($)
-  expect(await ui.find({ key: 'row:U/session:U/session', text: /▸ dotfiles \(要約なし\)/ })).toBeDefined()
-  const idle = await ui.find({ key: 'row:I/session:I/session' })
-  expect(idle?.text).toMatch(/↵ waiter/)
-  expect(idle?.text).not.toMatch(/要約なし/)
+  expect(await ui.find({ type: 'Text', text: /▸ 2 {2}↵ 2 {2}✓ 1/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /↵ idle 2/ })).toBeDefined()
+  expect(await ui.find({ key: 'row:U/session:U/session', text: /^· dotfiles$/ })).toBeDefined()
 })
 
 test('board が失敗したら理由を描く', async ($, on) => {

@@ -329,6 +329,10 @@ func TestGraph_deadlock(t *testing.T) {
 	if !got["A/1"].Deadlock || !got["A/2"].Deadlock || got["A/3"].Deadlock || got["A/4"].Deadlock {
 		t.Errorf("deadlock = %v / %v / %v / %v, want true / true / false / false", got["A/1"].Deadlock, got["A/2"].Deadlock, got["A/3"].Deadlock, got["A/4"].Deadlock)
 	}
+	// 待ちの輪も止まっているノードとして longest chain の起点にする (B と A は輪を ■ に数える)。
+	if want := []string{"A/1", "A/2"}; !reflect.DeepEqual(b.Graph.LongestChain, want) {
+		t.Errorf("longest chain = %v, want %v", b.Graph.LongestChain, want)
+	}
 }
 
 // ノードの parked は、そのタスクの途中で置かれた open のメモの数。タスクの無いセッションのノードには、

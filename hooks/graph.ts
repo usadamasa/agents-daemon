@@ -8,6 +8,7 @@ import type { BoardGraph, GraphLink, GraphNode } from '../types'
 export const ICON: Record<GraphNode['state'], string> = {
   working: '▸',
   done: '↵',
+  unknown: '·',
   question: '?',
   permission: '!',
   error: '✗',
@@ -107,17 +108,23 @@ export function longest(g: Graph, keys: string[]): string {
   return parts.length === 0 ? 'none' : parts.join(' → ')
 }
 
+// isIdle はターンを終えて待っているか、状態を分類できない (作業中とは限らない) ノードか。
+function isIdle(node: GraphNode): boolean {
+  return node.state === 'done' || node.state === 'unknown'
+}
+
 export type Section = {
-  id: 'blocked' | 'working' | 'pending' | 'exited'
+  id: 'blocked' | 'working' | 'idle' | 'pending' | 'exited'
   icon: string
   label: string
   color?: string
   roots: GraphNode[]
 }
 
-// sections は木の節と根。順は ■ blocked → ▸ working → ○ pending → ⊘ exited で、根は受け取った順 (下流の多い順)。
+// sections は木の節と根。順は ■ blocked → ▸ working → ↵ idle → ○ pending → ⊘ exited で、根は受け取った順 (下流の多い順)。
 // - ■: 止まっているノードと待ちの輪のノード。輪は既に根にしたノードの下流にいるものを根にしない
-// - ▸: working と done
+// - ▸: working
+// - ↵: done と unknown
 // - ○: 止まっているノードの下流にいない pending のうち、上流の無いもの (置き場のノード、辺の無い未着手)
 // - ⊘: exited。先の根の木に出たものは根にしない
 // completed は根にしない。
@@ -142,7 +149,8 @@ export function sections(g: Graph): Section[] {
   }
   return [
     { id: 'blocked' as const, icon: STOP, label: 'blocked', color: 'warning', roots: blocked },
-    { id: 'working' as const, icon: ICON.working, label: 'working', color: COLOR.working, roots: pick(n => n.state === 'working' || n.state === 'done') },
+    { id: 'working' as const, icon: ICON.working, label: 'working', color: COLOR.working, roots: pick(n => n.state === 'working') },
+    { id: 'idle' as const, icon: ICON.done, label: 'idle', roots: pick(isIdle) },
     {
       id: 'pending' as const,
       icon: ICON.pending,
@@ -161,14 +169,15 @@ export function behind(g: Graph, blocked: GraphNode[]): number {
   return seen.size
 }
 
-// summary は数の 1 行: 止まっている根、その下流、進行中、完了、メモ。
+// summary は数の 1 行: 止まっている根、その下流、進行中、待っている (分類できないものを含む)、完了、メモ。
 export function summary(g: Graph, memos: number): string {
   const blocked = sections(g).find(s => s.id === 'blocked')?.roots ?? []
   const count = (test: (n: GraphNode) => boolean) => g.nodes.filter(test).length
   return [
     `${STOP} ${blocked.length}`,
     `${ICON.pending} ${behind(g, blocked)}`,
-    `${ICON.working} ${count(n => n.state === 'working' || n.state === 'done')}`,
+    `${ICON.working} ${count(n => n.state === 'working')}`,
+    `${ICON.done} ${count(isIdle)}`,
     `${ICON.completed} ${count(n => n.state === 'completed')}`,
     `${MEMO} ${memos}`,
   ].join('  ')

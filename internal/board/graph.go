@@ -24,6 +24,9 @@ const (
 	StatePending    = "pending"
 	StateCompleted  = "completed"
 	StateExited     = "exited" // セッションが終了していて、未完了のまま残った
+	// StateUnknown はセッションは生きているが状態を分類できない (申告の前、古い record)。作業中とは限らないので
+	// working に倒さない。
+	StateUnknown = "unknown"
 )
 
 // KindRef は辺の端点の参照だけがあるノード (まだ起きていないセッション、issue / PR、タスクを作らずに終了したセッション)。
@@ -160,8 +163,10 @@ func nodeState(status string, p *daemon.PaneStatus) (state, detail string) {
 		return StateError, ""
 	case multiplexer.AgentStatusDone, multiplexer.AgentStatusIdle:
 		return StateDone, ""
-	default:
+	case multiplexer.AgentStatusWorking:
 		return StateWorking, ""
+	default:
+		return StateUnknown, ""
 	}
 }
 

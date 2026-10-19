@@ -161,8 +161,8 @@ plugin は mod も持つ。`hooks/hooks.json` の `modules` に書ける module 
 
 B は fullscreen のレイアウトで dock に置かれるときだけ出す。`/board` は `presentation.isFullscreen` が false なら開かず、
 開いた後に `placement: inline` で描かれたら (端末を 110 桁より狭めたときなど) mod が閉じる。中身は下の `graph` を
-止まっているノードを根にした木にしたもので、節は `■` blocked (止まっているノードと待ちの輪)、`▸` working (done を含む)、
-`○` pending (止まっているノードの下流にいない、上流の無い pending)、`⊘` exited、`◇` parking の順。木の組み方と記号は
+止まっているノードを根にした木にしたもので、節は `■` blocked (止まっているノードと待ちの輪)、`▸` working、
+`↵` idle (done と、状態を分類できない `·` unknown)、`○` pending (止まっているノードの下流にいない、上流の無い pending)、`⊘` exited、`◇` parking の順。木の組み方と記号は
 `hooks/graph.ts` が持つ。選んだノードの詳細で辺を操作する。
 
 - `kind: edge` の辺は `Unlink` で `edge rm` に元の記録の参照を渡す

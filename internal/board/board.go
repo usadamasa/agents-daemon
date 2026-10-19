@@ -4,7 +4,7 @@
 // worktree のタスクは main worktree と同じ行に入る。セッションの状態 (入力待ち・上限待ち) は、そのセッションの
 // 進行中のカードの印にする。どのタスクが人の手を待っているかを 1 枚で見せるため。タスクを作っていない
 // 生きているセッションはカード 1 枚で出し、行から消えないようにする。見出しは今の作業 (program_status の msg)、
-// 無ければ「タスクなし」。
+// 無ければセッション名 (名前も無ければ cwd の末尾)。
 //
 // ボードは 1 つの domain しか描かない。開いたセッション自身の domain で、ほかの domain のタスクとセッションは
 // 載せない (私用と業務を混ぜない)。
@@ -49,7 +49,7 @@ var columns = []Column{
 const (
 	KindTask    = "task"    // TaskCreate で作られたタスク
 	KindTodo    = "todo"    // TodoWrite のリストの 1 項目
-	KindSession = "session" // タスクを作っていない生きているセッション (subject は今の作業か「タスクなし」)
+	KindSession = "session" // タスクを作っていない生きているセッション (subject は今の作業か、セッションの名前)
 )
 
 // カードの印。セッションが人の手か時間を待っているときに、その進行中のカードに付く。
@@ -223,7 +223,7 @@ func collect(in Input, panes map[string]*daemon.PaneStatus) []placed {
 		if withTasks[id] {
 			continue
 		}
-		c := Card{Key: id + "/session", Kind: KindSession, Column: ColumnInProgress, Subject: sessionSubject(p), SessionID: id, Live: true, UpdatedAt: p.LastTickAt}
+		c := Card{Key: id + "/session", Kind: KindSession, Column: ColumnInProgress, Subject: sessionSubject(p, in.SessionNames[id]), SessionID: id, Live: true, UpdatedAt: p.LastTickAt}
 		mark(&c, p)
 		cards = append(cards, placed{cwd: p.CWD, card: c, status: "in_progress", pane: p})
 	}
@@ -231,15 +231,19 @@ func collect(in Input, panes map[string]*daemon.PaneStatus) []placed {
 }
 
 // sessionSubject はタスクの無いセッションのカードの見出し。Claude Code が申告した今の作業 (作業中ならその作業、
-// ターンを終えたら要約、permission 待ちなら approve <tool>: ...) を出し、申告が無ければ (rex の外、起動直後)
-// 「タスクなし」にする。msg はタスクの subject と同じく漏れてはいけない情報で、ボードに載るのは自分の domain の
-// pane だけ (livePaneInDomain)。
+// ターンを終えたら要約、permission 待ちなら approve <tool>: ...) を出し、申告が無ければ (起動直後、古い record)
+// どのセッションかが分かるよう、セッション名 (name) か cwd の末尾にする。msg はタスクの subject と同じく漏れては
+// いけない情報で、ボードに載るのは自分の domain の pane だけ (livePaneInDomain)。
 // cc-premise: 2.1.302 osc7501 msg は作業中の作業、ターン後の要約、permission 待ちの approve <tool>: <command>
-func sessionSubject(p *daemon.PaneStatus) string {
-	if p.AgentMessage != "" {
+func sessionSubject(p *daemon.PaneStatus, name string) string {
+	switch {
+	case p.AgentMessage != "":
 		return p.AgentMessage
+	case name != "":
+		return name
+	default:
+		return filepath.Base(p.CWD)
 	}
-	return "タスクなし"
 }
 
 // arrange はカードとメモの source にセッションの名前 (names) を付け、repo の行へ分けて並べる。

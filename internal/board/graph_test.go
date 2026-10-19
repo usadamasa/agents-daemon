@@ -76,7 +76,7 @@ func TestGraph_nodeStates(t *testing.T) {
 		"S/session": StateWorking, "U/session": StateDone,
 		// 状態を分類できないセッション (申告の前、古い record) は working に倒さない。
 		"V/session": StateUnknown, "N/1": StateUnknown,
-		"T/todo-0":  StateCompleted, "T/todo-1": StateWorking,
+		"T/todo-0": StateCompleted, "T/todo-1": StateWorking,
 	}
 	if len(got) != len(want) {
 		t.Errorf("nodes = %d, want %d: %+v", len(got), len(want), got)

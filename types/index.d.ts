@@ -58,7 +58,7 @@ export type BoardRow = {
 export type GraphNode = {
   key: string
   kind: 'task' | 'todo' | 'session' | 'ref'
-  state: 'working' | 'done' | 'question' | 'permission' | 'error' | 'limit' | 'pending' | 'completed' | 'exited'
+  state: 'working' | 'done' | 'unknown' | 'question' | 'permission' | 'error' | 'limit' | 'pending' | 'completed' | 'exited'
   title: string
   detail?: string
   ref?: string

@@ -39,18 +39,12 @@ export type ParkingCard = {
   sources: ParkingSource[]
 }
 
-// ParkedMemo は `park list` の 1 件を band と hint 行に出す分だけにしたもの。at は最後に置かれた時刻。
+// ParkedMemo は `park list` の 1 件を band のメモの行と hint 行に出す分だけにしたもの。at は最後に置かれた時刻。
 export type ParkedMemo = {
   id: string
   kind: ParkingCard['kind']
   title: string
   at: string
-}
-
-// Band は入力欄の上の band に出すメモ。heading はどのメモか (この repo、完了したタスクの途中)。
-export type Band = {
-  heading: string
-  memos: ParkedMemo[]
 }
 
 export type BoardRow = {
@@ -125,8 +119,10 @@ declare module 'claude-code' {
       notice: string
       // parked はこのセッションの repo の open のメモ (hooks/park.tsx が数を prompt の hint 行に出す)。
       parked: ParkedMemo[]
-      // band は入力欄の上に出すメモ (hooks/band.tsx)。出さないときは null。
-      band: Band | null
+      // front は band のメモの行の先頭に寄せるメモ (completed になったタスクの途中で置いたもの、hooks/band.tsx)。
+      front: ParkedMemo[]
+      // showCompleted は band で完了したノードを出すか。既定は畳む。
+      showCompleted: boolean
       // logged はボードの経路のログに slot ごとに最後に書いた中身 (hooks/log.ts)。同じものを書き直さないため。
       logged: Record<string, string>
     }

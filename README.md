@@ -43,7 +43,7 @@ plugin が持つもの:
 | `agents-daemon park add\|set\|list\|adopt` | パーキングロット (タスクの途中で見つけた脇のメモ) を `parking/<domain>/` に置く・status を書き換える・一覧する・終了したセッションのタスクをメモへ移す。同じメモは 1 つにまとめる (#121) |
 | `agents-daemon edge add\|rm\|list` | 作業を渡す側が、セッションをまたぐ作業の依存 (辺) を `edges/<domain>/` に書く・消す・一覧する (#134。使い方は `skills/agents-daemon/references/operations.md`) |
 | `park` tool (mod、`hooks/park.tsx`) | model が聞かずに脇のことをメモとしてパーキングロットへ置く tool と、repo の open のメモの数を出す prompt の hint 行 (#121) |
-| パーキングの band (mod、`hooks/band.tsx`) | セッションの開始時とタスクの完了時に、その repo のメモとそのタスクの途中で置いたメモを入力欄の上に出す (#121) |
+| 依存の band (mod、`hooks/band.tsx`) | 入力欄の上に、依存を earlier → later の向きに段ごとに並べた低い図と、その repo のパーキングのメモ (完了したタスクの途中で置いたものを先頭) を出す (#134) |
 
 ## 前提
 

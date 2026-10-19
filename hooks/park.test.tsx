@@ -87,7 +87,8 @@ test('session.start で park の tool を登録し、その repo の open のメ
   expect(tool.description).toMatch(/進めるのに要る判断/)
   expect(tool.description).toMatch(/危ない操作の確認/)
 
-  expect(w.ran.map(r => r.argv)).toEqual([LIST])
+  // band (hooks/band.tsx) が読む status --board は band.test.tsx が見る。
+  expect(w.ran.map(r => r.argv).filter(argv => argv[1] === 'park')).toEqual([LIST])
   // status 行はエンジンが警告の印付きで描くので使わない。hint 行は置き換えず、末尾に足す。
   expect(await hint($, w)).toBe('パーキングのメモ 2')
   expect(w.statuses).toEqual([])

@@ -26,6 +26,7 @@ import {
 // pane は会話の横 (dock) に置かれるときだけ出す。入力欄の上 (inline) は A の band が受け持つ。
 // cc-premise: 2.1.303 mods pane の placement (dock / inline)、command.run の presentation.isFullscreen、ui.close
 // cc-premise: 2.1.302 mods pane / clock.every / process.run / session.send / session.cwd の API で書いた
+// cc-premise: 2.1.303 mods Button の plain は端末で [ ] を描かず、variant より優先される。行は plain、操作は枠付き
 
 const PANE = 'agents-daemon-board'
 const TITLE = 'Tasks'
@@ -34,6 +35,8 @@ const TITLE = 'Tasks'
 const POLL_MS = 3000
 // 根から何段目までを開いて描くか。それより深い段は「+n more」に畳む。
 const MAX_DEPTH = 2
+// 行頭の印。選んだ行だけに › を出し、ほかの行は同じ幅の空白で揃える。
+const GUTTER = 2
 
 const board = atom({ plugin: 'agents-daemon', key: 'board' } as const, null)
 const error = atom({ plugin: 'agents-daemon', key: 'error' } as const, '')
@@ -133,12 +136,14 @@ export const registerBoard: Register = on => {
       await act(() => deliver($, node, instruction(node, text), 'instruction'))
     }
 
+    // 行は枠なし (plain) の Button にして、枠付きの Button は操作だけに使う。
     const row = (r: TreeRow) => {
       if (r.type === 'more') {
         return (
           <Box key={`box:${r.key}`} flexDirection="row">
+            <Text>{' '.repeat(GUTTER)}</Text>
             <Text dimColor>{r.prefix}</Text>
-            <Button key={r.key} dimColor onPress={() => void update($, unfolded, keys => [...keys, ...r.unfold])}>
+            <Button key={r.key} plain dimColor onPress={() => void update($, unfolded, keys => [...keys, ...r.unfold])}>
               … +{String(r.hidden)} more
             </Button>
           </Box>
@@ -147,41 +152,55 @@ export const registerBoard: Register = on => {
       const n = r.node
       const isSel = n.key === chosen
       const tag = tags(n, r.isRoot)
-      // 枠の「[ 」「 ]」の 4 桁と、記号と空白の 2 桁を除いた幅に title を収める。
-      const room = Math.max(4, e.props.bodyColumns - cells(r.prefix) - 6 - cells(tag))
+      // 行頭の印と、記号と空白の 2 桁を除いた幅に title を収める。
+      const room = Math.max(4, e.props.bodyColumns - GUTTER - cells(r.prefix) - 2 - cells(tag))
       return (
-        <Box key={`box:${r.key}`} flexDirection="column">
-          <Box flexDirection="row">
-            <Text dimColor>{r.prefix}</Text>
-            <Button key={r.key} variant={isSel ? 'primary' : 'secondary'} onPress={() => choose(isSel ? '' : n.key)}>
-              <Text color={COLOR[n.state]}>{ICON[n.state]}</Text>
-              {` ${fit(n.title, room)}${tag}`}
-            </Button>
-          </Box>
+        <Box key={`box:${r.key}`} flexDirection="row">
+          <Text>{isSel ? '› ' : ' '.repeat(GUTTER)}</Text>
+          <Text dimColor>{r.prefix}</Text>
+          <Button key={r.key} plain onPress={() => choose(isSel ? '' : n.key)}>
+            <Text color={COLOR[n.state]}>{ICON[n.state]}</Text>
+            <Text bold={isSel ? true : undefined}>{` ${fit(n.title, room)}${tag}`}</Text>
+          </Button>
         </Box>
       )
     }
 
-    // 選んだノードの詳細は、そのノードが最初に出た行の下にだけ出す。
+    // 選んだノードの詳細は、そのノードが最初に出た行の下にだけ、行の字下げに合わせた枠で出す。
+    // 操作のボタンは枠の最後の行にまとめ、どのノードでも同じ位置に出す。
     let detailShown = false
-    const detail = (n: GraphNode) => {
+    const detail = (n: GraphNode, prefix: string) => {
       const links = g.blockers(n.key)
+      const canLink = n.ref !== undefined && n.cwd !== undefined
+      const actions = [
+        canLink && !isPicking && (
+          <Button key="add-blocker" onPress={() => void update($, picking, () => true)}>
+            + Add blocker
+          </Button>
+        ),
+        isPicking && (
+          <Button key="cancel" dimColor onPress={() => void update($, picking, () => false)}>
+            Cancel
+          </Button>
+        ),
+        canAdopt(n, self) && (
+          <Button key="adopt" onPress={() => void act(() => adopt($, n))}>
+            To parking
+          </Button>
+        ),
+      ].filter(Boolean)
       return (
-        <Box key={`detail:${n.key}`} flexDirection="column">
+        <Box key={`detail:${n.key}`} flexDirection="column" borderStyle="round" borderDimColor paddingX={1} marginLeft={GUTTER + cells(prefix)}>
           <Text dimColor>
             {n.ref ?? n.key} · {n.session ?? '-'}
             {n.state === 'limit' && n.detail ? ` (再開 ${n.detail})` : ''}
           </Text>
           <Text>blocked by: {chain(g, n)}</Text>
           {links.map(link => blockerRow(n, link))}
-          {n.ref !== undefined && n.cwd !== undefined && !isPicking && (
-            <Button key="add-blocker" onPress={() => void update($, picking, () => true)}>
-              + Add blocker
-            </Button>
-          )}
-          {(n.ref === undefined || n.cwd === undefined) && (
-            <Text dimColor>辺の端点にできないタスクです (TodoWrite の項目、名前の無いセッション)</Text>
-          )}
+          {!canLink && <Text dimColor>辺の端点にできないタスクです (TodoWrite の項目、名前の無いセッション)</Text>}
+          {!canSend(n, self) && <Text dimColor>{whyNot(n, self)}</Text>}
+          {canSend(n, self) && Input === undefined && <Text dimColor>この画面では指示を入力できません</Text>}
+          {isPicking && <Text dimColor>先に済ませるタスクを選ぶ:</Text>}
           {isPicking &&
             candidates(g, n).map(c => (
               <Button key={`blocker:${c.key}`} onPress={() => void act(() => addBlocker($, c, n))}>
@@ -189,18 +208,6 @@ export const registerBoard: Register = on => {
                 {` ${c.title}`}
               </Button>
             ))}
-          {isPicking && (
-            <Button key="cancel" dimColor onPress={() => void update($, picking, () => false)}>
-              Cancel
-            </Button>
-          )}
-          {canAdopt(n, self) && (
-            <Button key="adopt" onPress={() => void act(() => adopt($, n))}>
-              To parking
-            </Button>
-          )}
-          {!canSend(n, self) && <Text dimColor>{whyNot(n, self)}</Text>}
-          {canSend(n, self) && Input === undefined && <Text dimColor>この画面では指示を入力できません</Text>}
           {canSend(n, self) && Input !== undefined && (
             <Input
               key="instruction"
@@ -209,6 +216,11 @@ export const registerBoard: Register = on => {
               submitLabel="Send"
               onSubmit={(text: string) => void send(n, text)}
             />
+          )}
+          {actions.length > 0 && (
+            <Box key={`actions:${n.key}`} flexDirection="row" flexWrap="wrap" gap={1}>
+              {actions}
+            </Box>
           )}
         </Box>
       )
@@ -241,38 +253,46 @@ export const registerBoard: Register = on => {
     const memoRow = (memo: ParkingCard) => {
       const key = memoKey(memo)
       const during = memo.sources.flatMap(s => (s.task_id ? (g.node(`${s.session_id}/${s.task_id}`) ?? []) : []))[0]
+      const isSel = key === chosen
       return (
-        <Button key={key} variant={key === chosen ? 'primary' : 'secondary'} onPress={() => choose(key === chosen ? '' : key)}>
-          {`${memoLabel(memo)}${during ? ` ← ${during.title}` : ''}`}
-        </Button>
+        <Box key={`box:${key}`} flexDirection="row">
+          <Text>{isSel ? '› ' : ' '.repeat(GUTTER)}</Text>
+          <Button key={key} plain onPress={() => choose(isSel ? '' : key)}>
+            <Text bold={isSel ? true : undefined}>{`${memoLabel(memo)}${during ? ` ← ${during.title}` : ''}`}</Text>
+          </Button>
+        </Box>
       )
     }
 
-    const memoDetail = ({ memo, row: memoRowData }: { memo: ParkingCard; row: BoardRow }) => (
-      <Box key="memo" flexDirection="column">
-        {memoLines(memo).map((line, i) => (
-          <Text key={`memo-line-${i}`} dimColor>
-            {line}
-          </Text>
-        ))}
-        <Button key="discard" onPress={() => void act(() => discard($, memo))}>
-          Discard
-        </Button>
-        {taskDestinations(memoRowData.cards, self).length === 0 && (
-          <Text dimColor>この repo に送り先のセッションがありません (タスクにするには同じ repo のセッションが要ります)</Text>
-        )}
-        {taskDestinations(memoRowData.cards, self).map(to => (
-          <Button key={`task:${to.session_id}`} onPress={() => void act(() => handOff($, memo, to, taskText(memo)))}>
-            To task → {to.session}
-          </Button>
-        ))}
-        {issueDestinations(data, memoRowData.cards, self).map(to => (
-          <Button key={`issue:${to.session_id}`} onPress={() => void act(() => handOff($, memo, to, issueText(memo, memoRowData.title)))}>
-            Ask for issue → {to.session}
-          </Button>
-        ))}
-      </Box>
-    )
+    // メモの詳細もノードと同じ枠で出し、操作のボタンを枠の最後の行にまとめる。
+    const memoDetail = ({ memo, row: memoRowData }: { memo: ParkingCard; row: BoardRow }) => {
+      const tasks = taskDestinations(memoRowData.cards, self)
+      return (
+        <Box key="memo" flexDirection="column" borderStyle="round" borderDimColor paddingX={1} marginLeft={GUTTER}>
+          {memoLines(memo).map((line, i) => (
+            <Text key={`memo-line-${i}`} dimColor>
+              {line}
+            </Text>
+          ))}
+          {tasks.length === 0 && <Text dimColor>この repo に送り先のセッションがありません (タスクにするには同じ repo のセッションが要ります)</Text>}
+          <Box key="actions:memo" flexDirection="row" flexWrap="wrap" gap={1}>
+            <Button key="discard" onPress={() => void act(() => discard($, memo))}>
+              Discard
+            </Button>
+            {tasks.map(to => (
+              <Button key={`task:${to.session_id}`} onPress={() => void act(() => handOff($, memo, to, taskText(memo)))}>
+                To task → {to.session}
+              </Button>
+            ))}
+            {issueDestinations(data, memoRowData.cards, self).map(to => (
+              <Button key={`issue:${to.session_id}`} onPress={() => void act(() => handOff($, memo, to, issueText(memo, memoRowData.title)))}>
+                Ask for issue → {to.session}
+              </Button>
+            ))}
+          </Box>
+        </Box>
+      )
+    }
 
     return (
       <Box flexDirection="column">
@@ -293,7 +313,7 @@ export const registerBoard: Register = on => {
                 const out = [row(r)]
                 if (r.type === 'node' && r.node.key === chosen && selected !== undefined && !detailShown) {
                   detailShown = true
-                  out.push(detail(selected))
+                  out.push(detail(selected, r.prefix))
                 }
                 return out
               }),

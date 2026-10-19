@@ -224,9 +224,52 @@ test('長い title は pane の幅に合わせて 1 行に切り詰める', asyn
   const ui = await mount($, 'terminal', { ...PANE_PROPS, bodyColumns: 40 })
   const row = await ui.find({ key: 'row:L/1:L/1' })
   expect(row?.text).toMatch(/^▸ (とても長いタイトル)+.*…$/)
-  // [ と ] の 4 桁を除いた幅に収める (全角は 2 桁)。
+  // 行頭の印の 2 桁を除いた幅に収める (全角は 2 桁)。行は枠を描かないので、その分も title に使う。
   const cells = [...(row?.text ?? '')].reduce((n, ch) => n + ((ch.codePointAt(0) ?? 0) >= 0x3000 ? 2 : 1), 0)
-  expect(cells).toBeLessThanOrEqual(36)
+  expect(cells).toBeLessThanOrEqual(38)
+  expect(cells).toBeGreaterThan(36)
+})
+
+test('行は枠なしで描き、選んだ行は行頭の › と太字で示す', async ($, on) => {
+  boardWorld(on)
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($)
+  for (const key of ['row:G/1:G/1', 'more:Q/1:R/1', `park:${MEMO.id}`]) {
+    expect((await ui.find({ key }))?.props.plain).toBe(true)
+  }
+  expect((await ui.find({ key: 'box:row:G/1:G/1' }))?.text).toMatch(/^ {2}⊘/)
+  await ui.press({ key: 'row:G/1:G/1' })
+  expect((await ui.find({ key: 'box:row:G/1:G/1' }))?.text).toMatch(/^› ⊘/)
+  // Text は key を持てないので、行の Button の子に太字の Text があるかで見る。
+  const hasBold = async (key: string) =>
+    ((await ui.find({ key }))?.children ?? []).some(c => typeof c === 'object' && c !== null && (c as { props?: { bold?: boolean } }).props?.bold === true)
+  expect(await hasBold('row:G/1:G/1')).toBe(true)
+  expect(await hasBold('row:W/1:W/1')).toBe(false)
+})
+
+test('選んだノードの詳細は枠で囲み、操作ボタンは枠の最後の行に枠付きで並べる', async ($, on) => {
+  boardWorld(on)
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($)
+  await ui.press({ key: 'row:G/1:G/1' })
+  expect((await ui.find({ key: 'detail:G/1' }))?.props.borderStyle).toBe('round')
+  const actions = await ui.find({ key: 'actions:G/1' })
+  expect(actions?.props.flexDirection).toBe('row')
+  expect(actions?.text).toMatch(/\+ Add blocker.*To parking/)
+  for (const key of ['add-blocker', 'adopt']) {
+    expect((await ui.find({ key }))?.props.plain).toBeUndefined()
+  }
+})
+
+test('選んだメモの詳細も枠で囲み、操作ボタンを枠の最後の行に並べる', async ($, on) => {
+  boardWorld(on)
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($)
+  await ui.press({ key: `park:${MEMO.id}` })
+  expect((await ui.find({ key: 'memo' }))?.props.borderStyle).toBe('round')
+  const actions = await ui.find({ key: 'actions:memo' })
+  expect(actions?.props.flexDirection).toBe('row')
+  expect(actions?.text).toMatch(/Discard.*To task → edge-cli.*Ask for issue → peer/)
 })
 
 test('辺の端点にできないノード (参照の無いもの) には Add blocker の代わりに理由を出す', async ($, on) => {

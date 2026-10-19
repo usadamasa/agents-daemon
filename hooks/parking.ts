@@ -1,6 +1,6 @@
 import type { EngineInterface } from 'claude-code'
 
-import type { BoardCard, BoardData, ParkedMemo, ParkingCard, ParkingSource } from '../types'
+import type { BoardCard, BoardData, GraphNode, ParkedMemo, ParkingCard, ParkingSource } from '../types'
 import { daemonBin } from './daemon-bin'
 import { logEvent } from './log'
 
@@ -73,9 +73,9 @@ function uniqueLive(cards: BoardCard[], self: string): Destination[] {
   return out
 }
 
-// canAdopt はタスクのカードをパーキングへ移せるか。終了したセッションの未完了のタスクだけ。
-export function canAdopt(card: BoardCard, self: string): boolean {
-  return card.kind === 'task' && !card.live && card.column !== 'completed' && !!card.task_id && card.session_id !== self
+// canAdopt はタスクのノードをパーキングへ移せるか。終了したセッションの未完了のタスクだけ。
+export function canAdopt(node: GraphNode, self: string): boolean {
+  return node.kind === 'task' && node.state === 'exited' && node.session_id !== undefined && node.session_id !== self
 }
 
 // taskText は「タスクにする」で送る文面。
@@ -130,10 +130,11 @@ export async function handOff($: EngineInterface, memo: ParkingCard, to: Destina
   return failure === '' ? `${to.session} へ送り、メモを渡しました` : `${to.session} へ送りましたが、メモを handed にできませんでした: ${failure}`
 }
 
-// adopt は終了したセッションのタスクをパーキングへ移す。
-export async function adopt($: EngineInterface, card: BoardCard): Promise<string> {
-  const failure = await park($, ['adopt', card.session_id, card.task_id ?? ''])
-  return failure === '' ? `タスク「${card.subject}」をパーキングへ移しました` : `パーキングへ移せませんでした: ${failure}`
+// adopt は終了したセッションのタスクをパーキングへ移す。タスクの ID はノードの Key (<session_id>/<task_id>) から取る。
+export async function adopt($: EngineInterface, node: GraphNode): Promise<string> {
+  const taskId = node.key.slice(node.key.indexOf('/') + 1)
+  const failure = await park($, ['adopt', node.session_id ?? '', taskId])
+  return failure === '' ? `タスク「${node.title}」をパーキングへ移しました` : `パーキングへ移せませんでした: ${failure}`
 }
 
 // park は開いたセッションの ID と cwd を添えて `agents-daemon park` を走らせ、失敗の理由を返す (成功なら空)。

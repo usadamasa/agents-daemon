@@ -240,8 +240,11 @@ test('行は枠なしで描き、選んだ行は行頭の › と太字で示す
   expect((await ui.find({ key: 'box:row:G/1:G/1' }))?.text).toMatch(/^ {2}⊘/)
   await ui.press({ key: 'row:G/1:G/1' })
   expect((await ui.find({ key: 'box:row:G/1:G/1' }))?.text).toMatch(/^› ⊘/)
-  expect(await ui.find({ key: 'title:row:G/1:G/1', text: /残った作業/ })).toMatchObject({ props: { bold: true } })
-  expect((await ui.find({ key: 'title:row:W/1:W/1' }))?.props.bold).toBeUndefined()
+  // Text は key を持てないので、行の Button の子に太字の Text があるかで見る。
+  const hasBold = async (key: string) =>
+    ((await ui.find({ key }))?.children ?? []).some(c => typeof c === 'object' && c !== null && (c as { props?: { bold?: boolean } }).props?.bold === true)
+  expect(await hasBold('row:G/1:G/1')).toBe(true)
+  expect(await hasBold('row:W/1:W/1')).toBe(false)
 })
 
 test('選んだノードの詳細は枠で囲み、操作ボタンは枠の最後の行に枠付きで並べる', async ($, on) => {

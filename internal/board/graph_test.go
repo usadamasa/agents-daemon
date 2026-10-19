@@ -292,9 +292,16 @@ func TestGraph_chains(t *testing.T) {
 	}
 }
 
-// 止まっているノードが無ければ longest chain は空。循環した辺があっても止まらずに組む。
+// 止まっているノードも待ちの輪も無ければ longest chain は空。循環した辺があっても止まらずに組む。
 func TestGraph_noBlockedAndCycle(t *testing.T) {
 	const cwd = "/w/a"
+	calm := Build(Input{
+		Domain: domain.Work,
+		Tasks:  []tasklog.Task{task("A", "1", "x", "pending", cwd), task("A", "2", "y", "pending", cwd, "1")},
+	})
+	if len(calm.Graph.LongestChain) != 0 {
+		t.Errorf("longest chain = %v, want 空", calm.Graph.LongestChain)
+	}
 	b := Build(Input{
 		Domain: domain.Work,
 		Tasks: []tasklog.Task{
@@ -302,9 +309,6 @@ func TestGraph_noBlockedAndCycle(t *testing.T) {
 			task("A", "2", "y", "pending", cwd, "1"),
 		},
 	})
-	if len(b.Graph.LongestChain) != 0 {
-		t.Errorf("longest chain = %v, want 空", b.Graph.LongestChain)
-	}
 	if len(b.Graph.Nodes) != 2 || len(b.Graph.Links) != 2 {
 		t.Errorf("graph = %+v", b.Graph)
 	}

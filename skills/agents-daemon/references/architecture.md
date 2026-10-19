@@ -150,13 +150,26 @@ subagent の worktree (`claude agent` の lock) は Claude Code 本体の period
 持たないため (#97)。
 
 plugin は mod も持つ。`hooks/hooks.json` の `modules` に書ける module は 1 つなので、`hooks/register.ts` が
-`hooks/board.tsx`、`hooks/park.tsx`、`hooks/band.tsx` の hook を束ね、皆が使う `session.start` を持つ。`board` コマンドでタスクのボードを
-pane に開き、`agents-daemon status --board --session <id> --cwd <cwd>` の JSON を数秒ごとに読み直して描く。
-ボードは `internal/board` が `$STATE/tasks/` (PostToolUse hook の `ingest-task` が書く) と `status.json` から組む。
-行は repo (`git rev-parse --git-common-dir` の main worktree)、列はタスクの状態で、`blockedBy` に完了していない
-タスクがあればブロックの列に置く。セッションの pane が入力待ちか上限待ちなら、その進行中のカードに印を付ける。
-描くのは開いたセッションの domain だけで、指示を送れるのはボードに載った生きているセッションだけ。
+`hooks/board.tsx`、`hooks/park.tsx`、`hooks/band.tsx` の hook を束ね、皆が使う `session.start` を持つ。`board` コマンドで
+依存のボード (B) を会話の横 (dock) の pane に開き、`agents-daemon status --board --session <id> --cwd <cwd>` の JSON を
+数秒ごとに読み直して描く。ボードは `internal/board` が `$STATE/tasks/` (PostToolUse hook の `ingest-task` が書く) と
+`status.json` から組む。行は repo (`git rev-parse --git-common-dir` の main worktree)、列はタスクの状態で、
+`blockedBy` に完了していないタスクがあればブロックの列に置く。セッションの pane が入力待ちか上限待ちなら、
+その進行中のカードに印を付ける。描くのは開いたセッションの domain だけで、指示を送れるのはボードに載った生きている
+セッションだけ。
 <!-- cc-premise: 2.1.302 hooks mods の pane / session.send / session.cwd と、PostToolUse の Task 系の形 -->
+
+B は fullscreen のレイアウトで dock に置かれるときだけ出す。`/board` は `presentation.isFullscreen` が false なら開かず、
+開いた後に `placement: inline` で描かれたら (端末を 110 桁より狭めたときなど) mod が閉じる。中身は下の `graph` を
+止まっているノードを根にした木にしたもので、節は `■` blocked (止まっているノードと待ちの輪)、`▸` working (done を含む)、
+`○` pending (止まっているノードの下流にいない、上流の無い pending)、`⊘` exited、`◇` parking の順。木の組み方と記号は
+`hooks/graph.ts` が持つ。選んだノードの詳細で辺を操作する。
+
+- `kind: edge` の辺は `Unlink` で `edge rm` に元の記録の参照を渡す
+- `kind: task` の辺 (同じセッションの `blockedBy`) は daemon から外せず、TaskUpdate にも外す引数が無い。
+  `Ask to unlink → <session>` でそのセッションへ、待たれている側を片付けるか待っている側を作り直すよう頼む
+- `+ Add blocker` は足すと輪になる候補 (下流) を出さず、`edge add` に両端の参照と cwd を渡す
+<!-- cc-premise: 2.1.303 mods pane の placement (dock / inline) と command.run の presentation.isFullscreen -->
 
 パーキングロットに置くもの 1 つを、docs と CLI の文言では「メモ」と呼ぶ。コードでは `parking.Item` で、
 `park add` の結果の `item` と `park list` の配列の要素がこれに当たる。識別子と JSON のキーは `item` のまま。
@@ -169,7 +182,7 @@ pane に開き、`agents-daemon status --board --session <id> --cwd <cwd>` の J
 - タスクにする: 同じ repo の生きているセッションへ TaskCreate を頼む文面を送る
 - issue にするよう頼む: 私用のボードだけ。ボードに載っている生きているセッションへ頼む
 - タスクにする・issue にするよう頼むは、`$.session.send` が届いたときだけ `park set <id> --status handed` にする
-- パーキングへ移す: 終了したセッションの未完了のタスク (`kind: task` のカード) を `park adopt <session_id> <task_id>` で
+- パーキングへ移す (`To parking`): 終了したセッションの未完了のタスクのノードを `park adopt <session_id> <task_id>` で
   `kind: task` のメモにし、タスクの記録を消す。`kind: task` は model の tool からは置けない
 
 ボードの JSON の `graph` はセッションをまたぐタスクの依存の DAG (#134)。ノードはタスク 1 つ (カードと同じ Key) で、

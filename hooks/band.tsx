@@ -4,7 +4,7 @@ import type { EngineInterface, Register, Timer } from 'claude-code'
 import type { GraphNode, ParkedMemo } from '../types'
 import { loadBoard } from './board-data'
 import { daemonBin } from './daemon-bin'
-import { COLOR, Graph, ICON, MEMO, isStuck, layers, longest, summary, tags } from './graph'
+import { COLOR, Graph, ICON, MEMO, cells, fit, isStuck, layers, longest, summary, tags } from './graph'
 import { logChange, reason, settle } from './log'
 import { KIND_LABEL, parkedMemos } from './parking'
 
@@ -63,42 +63,61 @@ export const registerBand: Register = on => {
     const choose = (key: string) => void update($, target, prev => (prev === key ? '' : key))
     const related = chosen === '' ? undefined : new Set([chosen, ...g.reach(chosen), ...g.upstream(chosen)])
     const columns = layers(g, !folded)
-    const width = Math.max(10, Math.floor(e.props.bodyColumns / Math.max(1, columns.length)))
+    // 列の間に 1 桁空ける。ノードは 1 行に切り詰め、band が伸びて最後の行のメモが見えなくならないようにする。
+    const width = Math.max(10, Math.floor((e.props.bodyColumns - (columns.length - 1)) / Math.max(1, columns.length)))
+    // 1 行目と軸、メモの行を除いた高さに列のノードを収める。収まらない分は +n にまとめる。
+    const perColumn = Math.max(1, e.props.maxRows - 2 - (memos.length > 0 ? 1 : 0))
     const rest = memos.length - SHOWN
+    // メモは 1 行に SHOWN 件並べる。先頭の「◇ n」と、1 件ごとの枠と種類の分を除いた幅に title を収める。
+    const memoRoom = Math.max(6, Math.floor((e.props.bodyColumns - 8) / SHOWN) - 9)
 
-    const nodeButton = (n: GraphNode) => (
-      <Button
-        key={`node:${n.key}`}
-        variant={n.key === chosen ? 'primary' : 'secondary'}
-        dimColor={related !== undefined && !related.has(n.key)}
-        onPress={() => choose(n.key)}
-      >
-        <Text color={COLOR[n.state]}>{ICON[n.state]}</Text>
-        {` ${n.title}${tags(n, isStuck(n))}`}
-      </Button>
-    )
+    const nodeButton = (n: GraphNode) => {
+      const tag = tags(n, isStuck(n))
+      return (
+        <Button
+          key={`node:${n.key}`}
+          variant={n.key === chosen ? 'primary' : 'secondary'}
+          dimColor={related !== undefined && !related.has(n.key)}
+          onPress={() => choose(n.key)}
+        >
+          <Text color={COLOR[n.state]}>{ICON[n.state]}</Text>
+          {` ${fit(n.title, Math.max(2, width - 6 - cells(tag)))}${tag}`}
+        </Button>
+      )
+    }
+    const column = (nodes: GraphNode[], i: number) => {
+      const shown = nodes.length > perColumn ? nodes.slice(0, perColumn - 1) : nodes
+      return (
+        <Box key={`layer:${i}`} flexDirection="column" width={width} overflow="hidden">
+          {shown.map(nodeButton)}
+          {shown.length < nodes.length && <Text dimColor>+{String(nodes.length - shown.length)}</Text>}
+        </Box>
+      )
+    }
 
     return (
       <Box flexDirection="column">
         {links.length > 0 && (
           <Box flexDirection="row" gap={2}>
-            <Text>{summary(g, memos.length)}</Text>
-            <Text color="warning" wrap="truncate-end">
-              longest chain: {longest(g, data?.graph.longest_chain ?? [])}
-            </Text>
-            <Button key="fold" onPress={() => void update($, showCompleted, () => folded)}>
-              {folded ? 'Show completed' : 'Hide completed'}
-            </Button>
+            <Box flexShrink={0}>
+              <Text>{summary(g, memos.length)}</Text>
+            </Box>
+            <Box flexGrow={1} flexShrink={1} overflow="hidden">
+              <Text color="warning" wrap="truncate-end">
+                longest chain: {longest(g, data?.graph.longest_chain ?? [])}
+              </Text>
+            </Box>
+            <Box flexShrink={0}>
+              <Button key="fold" onPress={() => void update($, showCompleted, () => folded)}>
+                {folded ? 'Show completed' : 'Hide completed'}
+              </Button>
+            </Box>
           </Box>
         )}
         {links.length > 0 && <Text dimColor>{`earlier ${'─'.repeat(Math.max(4, e.props.bodyColumns - 16))}► later`}</Text>}
         {links.length > 0 && (
-          <Box flexDirection="row">
-            {columns.map((column, i) => (
-              <Box key={`layer:${i}`} flexDirection="column" width={width} overflow="hidden">
-                {column.map(nodeButton)}
-              </Box>
-            ))}
+          <Box flexDirection="row" gap={1}>
+            {columns.map(column)}
           </Box>
         )}
         {memos.length > 0 && (
@@ -109,7 +128,7 @@ export const registerBand: Register = on => {
             {memos.slice(0, SHOWN).map(memo => (
               <Button key={`park:${memo.id}`} variant={`park:${memo.id}` === chosen ? 'primary' : 'secondary'} onPress={() => choose(`park:${memo.id}`)}>
                 <Text dimColor>[{KIND_LABEL[memo.kind]}]</Text>
-                {` ${memo.title}`}
+                {` ${fit(memo.title, memoRoom)}`}
               </Button>
             ))}
             {rest > 0 && <Text dimColor>+{String(rest)}</Text>}

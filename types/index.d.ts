@@ -115,8 +115,12 @@ declare module 'claude-code' {
       board: BoardData | null
       // error は直近の読み込みの失敗理由。読めたら空にする。
       error: string
-      // target は指示を送るカードの key。未選択なら空。
+      // target は選んだノードの key かメモの key (park:<id>)。B の pane と A の band が共有する。未選択なら空。
       target: string
+      // unfolded は B の木で畳まずに開くノードの key。
+      unfolded: string[]
+      // picking は B の詳細で Add blocker の候補を出しているか。
+      picking: boolean
       // notice は送信とメモの操作の結果。
       notice: string
       // parked はこのセッションの repo の open のメモ (hooks/park.tsx が数を prompt の hint 行に出す)。

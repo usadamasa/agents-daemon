@@ -68,8 +68,31 @@ const COLUMNS = [{ id: 'pending', title: '未着手' }]
 const MEMO = { id: 'm1', kind: 'aside', title: '秘密の題', detail: '秘密の詳細', sources: [{ session_id: 'PEER', session: 'peer', live: true, at: '2026-10-18T10:00:00Z' }] }
 const CARD = { key: 'PEER/1', kind: 'task', column: 'pending', subject: '秘密のタスク', session_id: 'PEER', session: 'peer', live: true, updated_at: '2026-10-18T10:00:00Z' }
 
+const NODE = {
+  key: 'PEER/1',
+  kind: 'task',
+  state: 'working',
+  title: '秘密のタスク',
+  ref: 'task:PEER/1',
+  cwd: CWD,
+  session_id: 'PEER',
+  session: 'peer',
+  live: true,
+  depth: 0,
+  downstream: 0,
+  parked: 0,
+  blocked_by: [],
+  deadlock: false,
+}
+
 function board(memos: unknown[]) {
-  return { domain: 'home', daemon_running: true, columns: COLUMNS, rows: [{ repo: CWD, title: 'agents-daemon', cards: [CARD], parking: memos }] }
+  return {
+    domain: 'home',
+    daemon_running: true,
+    columns: COLUMNS,
+    rows: [{ repo: CWD, title: 'agents-daemon', cards: [CARD], parking: memos }],
+    graph: { nodes: [NODE], links: [], longest_chain: [] },
+  }
 }
 
 test('ボードを開いたときの数と、変わったとき、status --board の失敗をログに残す。同じ失敗は繰り返さない', async ($, on) => {
@@ -92,7 +115,7 @@ test('ボードを開いたときの数と、変わったとき、status --board
   await ui.press({ key: 'discard' })
   expect(logged.at(-1)).toEqual(['mod.board.changed', 'rows=1', 'cards=1', 'memos=0', 'daemon_running=true'])
   const count = logged.length
-  await ui.press({ key: 'PEER/1' })
+  await ui.press({ key: 'row:PEER/1:PEER/1' })
   await ui.input({ key: 'instruction', text: '秘密の指示' })
   await ui.unmount()
 

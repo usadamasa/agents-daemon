@@ -79,7 +79,7 @@ test('session.start で、この repo の open のメモの数と新しいもの
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await mount($, surface)
     expect(await ui.find({ type: 'Text', text: /この repo のパーキングのメモ 4 件/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /\[脇\] 置き直したメモ 10\/19 01:28/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /\[aside\] 置き直したメモ 10\/19 01:28/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /三つ目 10\/18 11:00/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /二つ目/ })).toBeDefined()
     // 主なものは新しい 3 件まで。残りは数だけ。

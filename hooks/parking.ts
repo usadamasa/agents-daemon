@@ -1,13 +1,11 @@
 import type { EngineInterface } from 'claude-code'
 
-import type { BoardCard, BoardData, ParkedMemo, ParkingCard, ParkingSource } from '../types'
+import type { BoardCard, BoardData, GraphNode, ParkedMemo, ParkingCard, ParkingSource } from '../types'
 import { daemonBin } from './daemon-bin'
 import { logEvent } from './log'
 
 // パーキングのメモの見せ方と、ボード (#121 の段 6) からの操作。行と列の描き方には依存させず、ボードの形が
 // 変わっても (#134) そのまま使えるようにする。描くのは hooks/board.tsx と hooks/band.tsx。
-
-export const KIND_LABEL: Record<ParkingCard['kind'], string> = { aside: '脇', scope: '範囲', preference: '好み', task: 'タスク' }
 
 // parkedMemos は `park list` の stdout を band と hint 行に出す形にする。at は最後に置かれた時刻。
 export function parkedMemos(stdout: string): ParkedMemo[] {
@@ -18,10 +16,10 @@ export function parkedMemos(stdout: string): ParkedMemo[] {
 // Destination はメモを渡す先のセッション。
 export type Destination = { session_id: string; session: string }
 
-// memoLabel はメモのカード 1 行: 種類、title、置かれた回数 (2 回以上のとき)。
+// memoLabel はメモのカード 1 行: 種類 (park tool の kind の語のまま)、title、置かれた回数 (2 回以上のとき)。
 export function memoLabel(memo: ParkingCard): string {
   const count = memo.sources.length > 1 ? ` ×${memo.sources.length}` : ''
-  return `[${KIND_LABEL[memo.kind]}] ${memo.title}${count}`
+  return `[${memo.kind}] ${memo.title}${count}`
 }
 
 // memoLines は選んだメモの詳細の行。sources は受け取った順 (新しい順) に出す。
@@ -73,15 +71,15 @@ function uniqueLive(cards: BoardCard[], self: string): Destination[] {
   return out
 }
 
-// canAdopt はタスクのカードをパーキングへ移せるか。終了したセッションの未完了のタスクだけ。
-export function canAdopt(card: BoardCard, self: string): boolean {
-  return card.kind === 'task' && !card.live && card.column !== 'completed' && !!card.task_id && card.session_id !== self
+// canAdopt はタスクのノードをパーキングへ移せるか。終了したセッションの未完了のタスクだけ。
+export function canAdopt(node: GraphNode, self: string): boolean {
+  return node.kind === 'task' && node.state === 'exited' && node.session_id !== undefined && node.session_id !== self
 }
 
 // taskText は「タスクにする」で送る文面。
 export function taskText(memo: ParkingCard): string {
   return [
-    `パーキングロットのメモ「${memo.title}」(種類: ${KIND_LABEL[memo.kind]}) をタスクにしてください。TaskCreate で作り、今の作業の区切りで進めてください。`,
+    `パーキングロットのメモ「${memo.title}」(種類: ${memo.kind}) をタスクにしてください。TaskCreate で作り、今の作業の区切りで進めてください。`,
     ...context(memo),
   ].join('\n')
 }
@@ -130,10 +128,11 @@ export async function handOff($: EngineInterface, memo: ParkingCard, to: Destina
   return failure === '' ? `${to.session} へ送り、メモを渡しました` : `${to.session} へ送りましたが、メモを handed にできませんでした: ${failure}`
 }
 
-// adopt は終了したセッションのタスクをパーキングへ移す。
-export async function adopt($: EngineInterface, card: BoardCard): Promise<string> {
-  const failure = await park($, ['adopt', card.session_id, card.task_id ?? ''])
-  return failure === '' ? `タスク「${card.subject}」をパーキングへ移しました` : `パーキングへ移せませんでした: ${failure}`
+// adopt は終了したセッションのタスクをパーキングへ移す。タスクの ID はノードの Key (<session_id>/<task_id>) から取る。
+export async function adopt($: EngineInterface, node: GraphNode): Promise<string> {
+  const taskId = node.key.slice(node.key.indexOf('/') + 1)
+  const failure = await park($, ['adopt', node.session_id ?? '', taskId])
+  return failure === '' ? `タスク「${node.title}」をパーキングへ移しました` : `パーキングへ移せませんでした: ${failure}`
 }
 
 // park は開いたセッションの ID と cwd を添えて `agents-daemon park` を走らせ、失敗の理由を返す (成功なら空)。

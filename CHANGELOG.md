@@ -1,5 +1,11 @@
 # Changelog
 
+## [2026.1019.0](https://github.com/usadamasa/agents-daemon/compare/2026.1018.11...2026.1019.0) - 2026-10-19
+
+- feat(board): status --board の JSON に依存の DAG を載せる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/163
+- feat(board): 止まっているノードを根にした依存の木を dock の pane に描く by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/164
+- feat(band): 入力欄の上の band に依存の DAG とパーキングのメモの 1 行を出す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/165
+
 ## [2026.1018.11](https://github.com/usadamasa/agents-daemon/compare/2026.1018.10...2026.1018.11) - 2026-10-18
 
 - lint で gofmt のずれを拾い、housekeeping_test.go を整形する by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/149

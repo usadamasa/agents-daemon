@@ -11,11 +11,12 @@ type Graph struct {
 	preds  map[string][]string
 	succs  map[string][]string
 	depths map[string]int
+	chains map[string][]string
 }
 
 // New は辺 (before, after) から表を組む。前後のノードは less の順に並べ、鎖を選ぶときの順にする。
 func New(links [][2]string, less func(a, b string) bool) *Graph {
-	g := &Graph{preds: map[string][]string{}, succs: map[string][]string{}, depths: map[string]int{}}
+	g := &Graph{preds: map[string][]string{}, succs: map[string][]string{}, depths: map[string]int{}, chains: map[string][]string{}}
 	for _, l := range links {
 		g.succs[l[0]] = append(g.succs[l[0]], l[1])
 		g.preds[l[1]] = append(g.preds[l[1]], l[0])
@@ -101,20 +102,34 @@ func (g *Graph) Cause(key string, open func(string) bool, rank func(string) int)
 
 // Longest は key から下流をたどった最長の鎖 (key を含む)。長さが同じなら less の順で先のものを選ぶ。
 func (g *Graph) Longest(key string) []string {
-	return g.longestFrom(key, map[string]bool{})
+	chain, _ := g.longestFrom(key, map[string]bool{})
+	return chain
 }
 
-func (g *Graph) longestFrom(key string, onPath map[string]bool) []string {
+// longestFrom は depthFrom と同じく、輪で辺を切らずに数えられた鎖だけを覚える。覚えないと菱形が重なった DAG で
+// 経路の数だけたどり直す。
+func (g *Graph) longestFrom(key string, onPath map[string]bool) ([]string, bool) {
+	if chain, ok := g.chains[key]; ok {
+		return chain, true
+	}
 	onPath[key] = true
 	var best []string
+	clean := true
 	for _, s := range g.succs[key] {
 		if onPath[s] {
+			clean = false
 			continue
 		}
-		if tail := g.longestFrom(s, onPath); len(tail) > len(best) {
+		tail, tc := g.longestFrom(s, onPath)
+		clean = clean && tc
+		if len(tail) > len(best) {
 			best = tail
 		}
 	}
 	delete(onPath, key)
-	return append([]string{key}, best...)
+	chain := append([]string{key}, best...)
+	if clean {
+		g.chains[key] = chain
+	}
+	return chain, clean
 }

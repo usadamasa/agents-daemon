@@ -199,6 +199,34 @@ test('入力欄の上 (inline) に描かれたら pane を閉じ、閉じたこ�
   expect(w.closed).toEqual(['agents-daemon-board'])
   expect(toasts[0]).toMatch(/110 桁/)
   expect(await ui.find({ key: 'row:Q/1:Q/1' })).toBeUndefined()
+  await ui.unmount()
+  // 閉じるまでに inline の描画がもう一度走っても、知らせは 1 回だけ。
+  const again = await mount($, 'terminal', { ...PANE_PROPS, placement: 'inline' })
+  await again.unmount()
+  expect(toasts).toHaveLength(1)
+})
+
+test('⊘ の節は、先の根の木に出た exited のノードを根にしない', async ($, on) => {
+  const gone2 = node('G/2', 'exited', '残った作業の続き', { session: 'gone', blocked_by: ['G/1'] })
+  const nodes = NODES.map(n => (n.key === 'G/1' ? { ...n, downstream: 1 } : n))
+  boardWorld(on, { ...BOARD, graph: { ...BOARD.graph, nodes: [...nodes, gone2], links: [...LINKS, { before: 'G/1', after: 'G/2', kind: 'task' }] } })
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($)
+  expect(await ui.find({ type: 'Text', text: /⊘ exited 1/ })).toBeDefined()
+  expect(await ui.find({ key: 'row:G/1:G/2' })).toBeDefined()
+  expect(await ui.find({ key: 'row:G/2:G/2' })).toBeUndefined()
+})
+
+test('長い title は pane の幅に合わせて 1 行に切り詰める', async ($, on) => {
+  const long = node('L/1', 'working', 'とても長いタイトル'.repeat(10), { session: 'long' })
+  boardWorld(on, { ...BOARD, graph: { ...BOARD.graph, nodes: [...NODES, long] } })
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($, 'terminal', { ...PANE_PROPS, bodyColumns: 40 })
+  const row = await ui.find({ key: 'row:L/1:L/1' })
+  expect(row?.text).toMatch(/^▸ (とても長いタイトル)+.*…$/)
+  // [ と ] の 4 桁を除いた幅に収める (全角は 2 桁)。
+  const cells = [...(row?.text ?? '')].reduce((n, ch) => n + ((ch.codePointAt(0) ?? 0) >= 0x3000 ? 2 : 1), 0)
+  expect(cells).toBeLessThanOrEqual(36)
 })
 
 test('辺の端点にできないノード (参照の無いもの) には Add blocker の代わりに理由を出す', async ($, on) => {

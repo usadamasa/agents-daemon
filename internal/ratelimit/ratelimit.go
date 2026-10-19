@@ -91,6 +91,12 @@ func (r *State) FiveHourExhausted(threshold float64) bool {
 	return r != nil && r.FiveHourUsed >= threshold
 }
 
+// futureTolerance は fresh が受け付ける未来の observed_at の幅。読み手が now を取った後に
+// statusline が state を書き直すと age が負になる (doctor を Bash から回すと、そのセッションの
+// statusline が再描画される)。その競合は 1 回の読み込みのあいだに収まるので数秒で足り、
+// これを超える未来はクロックスキューとして信用しない。
+const futureTolerance = 5 * time.Second
+
 // fresh は観測時刻 observedAt が now から maxAge 以内かを返す。
 // observedAt が now より未来 (クロックスキュー等) の場合は信用せず false を返す。
 func fresh(observedAt, now time.Time, maxAge time.Duration) bool {

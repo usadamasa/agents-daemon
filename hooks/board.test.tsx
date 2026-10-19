@@ -19,6 +19,7 @@ function world(on: On, run: (argv: readonly string[]) => ProcessRunResult = () =
   })
   on('ui.close', async (_$, e) => {
     closed.push(e.id)
+    return { value: undefined }
   })
   on('session.id', async () => ({ value: 'SELF' }))
   on('session.cwd', async () => ({ value: CWD }))
@@ -35,6 +36,11 @@ function world(on: On, run: (argv: readonly string[]) => ProcessRunResult = () =
 
 function output(stdout: string, exitCode = 0, stderr = ''): ProcessRunResult {
   return { exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false }
+}
+
+// operations は ran のうち、操作の後の読み直し (status --board) を除いたもの。
+function operations(ran: string[][]): string[][] {
+  return ran.filter(argv => argv[1] !== 'status')
 }
 
 // boardWorld は status --board に data を返し、それ以外 (park、edge) は成功を返す。
@@ -217,15 +223,16 @@ test('止まっているノードを根にした木を節ごとに描き、深�
     // 上流のある pending と completed は根にしない。
     expect(await ui.find({ key: 'row:Q/2:Q/2' })).toBeUndefined()
     expect(await ui.find({ key: 'row:C/1:C/1' })).toBeUndefined()
-
-    // 2 段目より深い段は畳む。押すと開く。
-    expect(await ui.find({ key: 'row:Q/1:R/1' })).toBeUndefined()
-    expect(await ui.find({ key: 'more:Q/1:R/1', text: /\+2 more/ })).toBeDefined()
-    await ui.press({ key: 'more:Q/1:R/1' })
-    expect(await ui.find({ key: 'row:Q/1:R/1', text: /○ リリース/ })).toBeDefined()
-    expect(await ui.find({ key: 'row:Q/1:V/1', text: /○ 確認/ })).toBeDefined()
     await ui.unmount()
   }
+
+  // 2 段目より深い段は畳む。押すと開く。
+  const ui = await mount($)
+  expect(await ui.find({ key: 'row:Q/1:R/1' })).toBeUndefined()
+  expect(await ui.find({ key: 'more:Q/1:R/1', text: /\+2 more/ })).toBeDefined()
+  await ui.press({ key: 'more:Q/1:R/1' })
+  expect(await ui.find({ key: 'row:Q/1:R/1', text: /○ リリース/ })).toBeDefined()
+  expect(await ui.find({ key: 'row:Q/1:V/1', text: /○ 確認/ })).toBeDefined()
 })
 
 test('選んだノードの詳細に参照とセッション、上流をたどった原因の鎖を出す', async ($, on) => {
@@ -309,7 +316,7 @@ test('終了したセッションの未完了のタスクは To parking でメ�
   await ui.press({ key: 'row:G/1:G/1' })
   w.ran.length = 0
   await ui.press({ key: 'adopt' })
-  expect(w.ran).toEqual([[BIN, 'park', 'adopt', 'G', '1', ...SELF_ARGS]])
+  expect(operations(w.ran)).toEqual([[BIN, 'park', 'adopt', 'G', '1', ...SELF_ARGS]])
 })
 
 test('メモを選ぶと詳細を出し、Discard / To task / Ask for issue で渡す', async ($, on) => {
@@ -334,12 +341,12 @@ test('メモを選ぶと詳細を出し、Discard / To task / Ask for issue で�
   await ui.press({ key: 'task:W' })
   expect(w.sent[0].to).toBe('W')
   expect(w.sent[0].text).toMatch(/^パーキングロットのメモ「保持期間の根拠が無い」\(種類: 脇\) をタスクにしてください。/)
-  expect(w.ran).toEqual([[BIN, 'park', 'set', MEMO.id, '--status', 'handed', ...SELF_ARGS]])
+  expect(operations(w.ran)).toEqual([[BIN, 'park', 'set', MEMO.id, '--status', 'handed', ...SELF_ARGS]])
 
+  // 選んだメモは操作の後も開いたまま (同じ行をもう一度押すと閉じる)。
   w.ran.length = 0
-  await ui.press({ key: `park:${MEMO.id}` })
   await ui.press({ key: 'discard' })
-  expect(w.ran).toEqual([[BIN, 'park', 'set', MEMO.id, '--status', 'discarded', ...SELF_ARGS]])
+  expect(operations(w.ran)).toEqual([[BIN, 'park', 'set', MEMO.id, '--status', 'discarded', ...SELF_ARGS]])
 })
 
 test('業務のボードには Ask for issue を出さない', async ($, on) => {

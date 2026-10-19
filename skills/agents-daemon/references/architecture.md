@@ -213,17 +213,23 @@ clock での定期の読み直しはしない。`$.ui.status` はエンジンが
 <!-- cc-premise: 2.1.302 hooks modules は 1 つ、matcher の無い hook は event ごとに 1 つ -->
 <!-- cc-premise: 2.1.302 hooks tool.register は local の port を開く (sandbox の中の claude -p では落ちる) -->
 
-`hooks/band.tsx` は入力欄の上の band (`ui.render` の `AbovePrompt`) にメモを出す (パーキングロットの取り出す側)。
-session.start では `hooks/park.tsx` が読んだ一覧 (この repo の open のメモ) を、TaskUpdate の結果が `completed` に
-なったときは `park list --status open --task <task_id> --session <id> --cwd <cwd>` (そのタスクの途中でこのセッションが
-置いたメモ) を出す。どちらも `--session` で開いたセッションの domain のメモだけを引く。新しい 3 件を種類と title と
-最後に置かれた時刻で出し、残りは数だけにする。完了したタスクの途中のメモが無ければ今の band を残す。
-「閉じる」で消え、survey があるときは譲る。
-<!-- cc-premise: 2.1.302 hooks mods の ui.render AbovePrompt (hasSurvey) と、TaskUpdate の結果の statusChange -->
+`hooks/band.tsx` は入力欄の上の band (`ui.render` の `AbovePrompt`) に、依存の DAG (A) とパーキングのメモの 1 行を
+出す。band は 1 枚で、両方が分け合う。辺もメモも無ければ出さず、survey があるときは譲る。
+
+- 1 行目: `■ ○ ▸ ✓ ◇` の数と `longest chain` (止まっているノードから下流の最長の鎖)、`Show completed` / `Hide completed`
+- `earlier ────► later` の軸の下に、段 (前提の深さ) ごとの列でノードを並べる。完了は既定で畳み、残ったノードの段で詰める
+- 最後の行: メモを 3 件まで (種類と title)。残りは `+n`
+- ボードは `hooks/board-data.ts` で session.start、TaskUpdate の後、10 秒ごとに読み直す。B の pane を開いている間は
+  B が 3 秒ごとに読み直し、band は同じ board を描く
+- メモは `hooks/park.tsx` が読んだ一覧 (この repo の open のメモ) を新しく置かれた順に並べる。TaskUpdate の結果が
+  `completed` になったら、`park list --status open --task <task_id> --session <id> --cwd <cwd>` (そのタスクの途中で
+  このセッションが置いたメモ) を先頭に寄せる。どちらも `--session` で開いたセッションの domain のメモだけを引く
+- band で選んだノードとメモ (`target`) は B の pane と共有し、B でも同じものを開く
+<!-- cc-premise: 2.1.303 hooks mods の ui.render AbovePrompt (hasSurvey、bodyColumns) と、TaskUpdate の結果の statusChange -->
 
 #### 時刻の書き方
 
-人が読む表示 (band、ボードのパーキングの列) は、メモの時刻を JST の `MM/DD HH:MM` で出す。変換は
+人が読む表示 (ボードのメモの詳細) は、メモの時刻を JST の `MM/DD HH:MM` で出す。変換は
 `hooks/parking.ts` の `stamp` が 1 箇所で持ち、記録の offset にも mod の時刻帯にも頼らない。
 
 メモの id (`20261018T162844-53de0c9a`) の時刻は UTC にする。id はファイル名と `park set <id>` の鍵なので、端末の

@@ -212,6 +212,10 @@ func (g *graphBuilder) resolve(ep edge.Endpoint, pick func(sessionID string) []s
 		if keys := pick(id); len(keys) > 0 {
 			return keys
 		}
+		// タスクがすべて輪になっていて根も末端も無い。
+		if keys := g.bySession[id]; len(keys) > 0 {
+			return keys
+		}
 		// タスクを作らずに終了したセッション。辺は残し、下流が止まっていることを見せる。
 		return []string{g.placeholder(ep, rest, id, StateExited)}
 	default:
@@ -233,14 +237,15 @@ func (g *graphBuilder) placeholder(ep edge.Endpoint, title, sessionID, state str
 }
 
 // latestSession は名前のセッションのうち最後に動いたもの (pane があればそれ、無ければタスクの更新が新しいもの)。
-// その名前のセッションが無ければ空。
+// その名前のセッションが無ければ空。記録がほかの domain の側にあるセッションは選ばない (名前の記録は domain を
+// またいで 1 つなので)。
 func (g *graphBuilder) latestSession(name string) string {
 	var best string
 	var bestAt time.Time
 	bestLive := false
 	ids := make([]string, 0)
 	for id, n := range g.in.SessionNames {
-		if n == name {
+		if n == name && (g.in.Elsewhere == nil || !g.in.Elsewhere(id)) {
 			ids = append(ids, id)
 		}
 	}
@@ -303,14 +308,14 @@ func (g *graphBuilder) finish() Graph {
 	}
 	a := dag.New(pairs, keyLess)
 	open := func(key string) bool { return g.nodes[key].State != StateCompleted }
-	rank := func(key string) int { return rank(g.nodes[key].State) }
+	rankOf := func(key string) int { return rank(g.nodes[key].State) }
 	out := Graph{Nodes: make([]Node, 0, len(g.nodes)), Links: g.links, LongestChain: []string{}}
 	for key, n := range g.nodes {
 		down, cyclic := a.Reach(key)
 		n.Depth = a.Depth(key)
 		n.Downstream = len(down)
 		n.Deadlock = cyclic
-		n.BlockedBy = a.Cause(key, open, rank)
+		n.BlockedBy = a.Cause(key, open, rankOf)
 		n.Parked = parked(*n, g.in.Parking)
 		out.Nodes = append(out.Nodes, *n)
 	}

@@ -46,6 +46,7 @@ func TestGraph_nodeStates(t *testing.T) {
 			daemon.PaneStatus{PaneID: "p6", SessionID: "L", CWD: "/w/a", AgentStatus: "error", MonitorStatus: "waiting", WaitUntil: &until},
 			daemon.PaneStatus{PaneID: "p7", SessionID: "S", CWD: "/w/s", AgentStatus: "working", AgentMessage: "調べている"},
 			daemon.PaneStatus{PaneID: "p8", SessionID: "T", CWD: "/w/t", AgentStatus: "working"},
+			daemon.PaneStatus{PaneID: "p9", SessionID: "U", CWD: "/w/u", AgentStatus: "done"},
 		),
 		Tasks: []tasklog.Task{
 			task("W", "1", "書く", "in_progress", "/w/a"),
@@ -62,14 +63,14 @@ func TestGraph_nodeStates(t *testing.T) {
 		Todos: []tasklog.TodoList{{SessionID: "T", CWD: "/w/t", UpdatedAt: t0, Todos: []tasklog.Todo{
 			{Content: "a", Status: "completed"}, {Content: "b", Status: "in_progress"},
 		}}},
-		SessionNames: map[string]string{"W": "writer"},
+		SessionNames: map[string]string{"W": "writer", "U": "waiter"},
 	})
 	got := nodes(b.Graph)
 	want := map[string]string{
 		"W/1": StateWorking, "W/2": StatePending, "W/3": StateCompleted,
 		"D/1": StateDone, "Q/1": StateQuestion, "P/1": StatePermission, "E/1": StateError, "L/1": StateLimit,
 		"X/1": StateExited, "X/2": StateExited,
-		"S/session": StateWorking,
+		"S/session": StateWorking, "U/session": StateDone,
 		"T/todo-0":  StateCompleted, "T/todo-1": StateWorking,
 	}
 	if len(got) != len(want) {
@@ -87,8 +88,15 @@ func TestGraph_nodeStates(t *testing.T) {
 	if got["L/1"].Detail != "14:30" || got["Q/1"].Detail != "" {
 		t.Errorf("detail = %q / %q, want 上限の解除時刻だけ", got["L/1"].Detail, got["Q/1"].Detail)
 	}
-	if s := got["S/session"]; s.Kind != KindSession || s.Title != "調べている" || s.Ref != "" {
+	if s := got["S/session"]; s.Kind != KindSession || s.Title != "調べている" || s.Ref != "" || s.Untitled {
 		t.Errorf("S/session = %+v, want 名前の無いセッションは参照を持たない", s)
+	}
+	// msg の無いセッションは名前を title にし、要約が無いことを Untitled で mod へ渡す。
+	if u := got["U/session"]; u.Title != "waiter" || !u.Untitled {
+		t.Errorf("U/session = %+v, want 名前の title と Untitled", u)
+	}
+	if got["W/1"].Untitled {
+		t.Errorf("タスクのノードは Untitled にしない")
 	}
 	if got["T/todo-1"].Ref != "" {
 		t.Errorf("todo の参照 = %q, want 空 (辺の端点にできない)", got["T/todo-1"].Ref)

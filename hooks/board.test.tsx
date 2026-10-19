@@ -247,9 +247,9 @@ test('止まっているノードを根にした木を節ごとに描き、深�
     const ui = await mount($, surface)
     expect(await ui.find({ type: 'Text', text: /私用のボード/ })).toBeDefined()
     // 数: 止まっている根、その下流、進行中、完了、メモ。
-    expect(await ui.find({ type: 'Text', text: /■ 2 {2}○ 4 {2}▸ 3 {2}✓ 1 {2}◇ 1/ })).toBeDefined()
-    // 節は ■ → ▸ → ○ → ⊘ → ◇ の順で、見出しに根の数。
-    for (const head of [/■ blocked 2/, /▸ working 3/, /○ pending 1/, /⊘ exited 1/, /◇ parking 1/]) {
+    expect(await ui.find({ type: 'Text', text: /■ 2 {2}○ 4 {2}▸ 2 {2}↵ 1 {2}✓ 1 {2}◇ 1/ })).toBeDefined()
+    // 節は ■ → ▸ → ↵ → ○ → ⊘ → ◇ の順で、見出しに根の数。ターンを終えて待っているノードは ↵ idle に分ける。
+    for (const head of [/■ blocked 2/, /▸ working 2/, /↵ idle 1/, /○ pending 1/, /⊘ exited 1/, /◇ parking 1/]) {
       expect(await ui.find({ type: 'Text', text: head })).toBeDefined()
     }
     // 根には下流の数、途中で置いたメモの数、待ちの輪の印。
@@ -409,6 +409,18 @@ test('ノードの無いボードと、daemon が動いていないことを描�
   const ui = await mount($)
   expect(await ui.find({ type: 'Text', text: /業務のボード \(agents-daemon が動いていない/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /タスクはまだありません/ })).toBeDefined()
+})
+
+test('要約の無いセッションは名前を title にし、作業中のものには「要約なし」を添える', async ($, on) => {
+  const session = (key: string, state: string, title: string) => ({ ...node(key, state, title), kind: 'session', ref: undefined, untitled: true })
+  const nodes = [...NODES, session('U/session', 'working', 'dotfiles'), session('I/session', 'done', 'waiter')]
+  boardWorld(on, { ...BOARD, graph: { ...BOARD.graph, nodes } })
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($)
+  expect(await ui.find({ key: 'row:U/session:U/session', text: /▸ dotfiles \(要約なし\)/ })).toBeDefined()
+  const idle = await ui.find({ key: 'row:I/session:I/session' })
+  expect(idle?.text).toMatch(/↵ waiter/)
+  expect(idle?.text).not.toMatch(/要約なし/)
 })
 
 test('board が失敗したら理由を描く', async ($, on) => {

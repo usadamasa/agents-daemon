@@ -368,7 +368,8 @@ test('メモを選ぶと詳細を出し、Discard / To task / Ask for issue で�
   await $.command.run(OPEN_BOARD)
   const ui = await mount($)
   // 置いたときに進めていたタスクを添える。
-  expect(await ui.find({ key: `park:${MEMO.id}`, text: /\[脇\] 保持期間の根拠が無い ×2 ← edge の CLI/ })).toBeDefined()
+  // 種類は park tool の kind の語のまま出す。
+  expect(await ui.find({ key: `park:${MEMO.id}`, text: /\[aside\] 保持期間の根拠が無い ×2 ← edge の CLI/ })).toBeDefined()
   await ui.press({ key: `park:${MEMO.id}` })
   expect(await ui.find({ type: 'Text', text: /定数にコメントが無い/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /edge-cli 10\/18 19:30 別の定数も同じ/ })).toBeDefined()
@@ -384,7 +385,7 @@ test('メモを選ぶと詳細を出し、Discard / To task / Ask for issue で�
   w.ran.length = 0
   await ui.press({ key: 'task:W' })
   expect(w.sent[0].to).toBe('W')
-  expect(w.sent[0].text).toMatch(/^パーキングロットのメモ「保持期間の根拠が無い」\(種類: 脇\) をタスクにしてください。/)
+  expect(w.sent[0].text).toMatch(/^パーキングロットのメモ「保持期間の根拠が無い」\(種類: aside\) をタスクにしてください。/)
   expect(operations(w.ran)).toEqual([[BIN, 'park', 'set', MEMO.id, '--status', 'handed', ...SELF_ARGS]])
 
   // 選んだメモは操作の後も開いたまま (同じ行をもう一度押すと閉じる)。

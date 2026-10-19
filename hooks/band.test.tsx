@@ -134,7 +134,8 @@ test('session.start で依存の数と longest chain、earlier → later の段�
     expect(await ui.find({ key: 'node:W/1', text: /▸ edge CLI ◇1/ })).toBeDefined()
     expect(await ui.find({ key: 'node:B/1', text: /○ リリース/ })).toBeDefined()
     // メモは新しいものを 3 件まで。残りは数だけ。
-    expect(await ui.find({ key: 'park:m4', text: /新しいメモ/ })).toBeDefined()
+    // 種類は park tool の kind の語のまま出す。
+    expect(await ui.find({ key: 'park:m4', text: /\[aside\] 新しいメモ/ })).toBeDefined()
     expect(await ui.find({ key: 'park:m2' })).toBeDefined()
     expect(await ui.find({ key: 'park:m1' })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: /\+1/ })).toBeDefined()

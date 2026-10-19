@@ -6,7 +6,7 @@ import { loadBoard } from './board-data'
 import { daemonBin } from './daemon-bin'
 import { COLOR, Graph, ICON, MEMO, cells, fit, isStuck, layers, longest, summary, tags } from './graph'
 import { logChange, reason, settle } from './log'
-import { KIND_LABEL, parkedMemos } from './parking'
+import { parkedMemos } from './parking'
 
 // 依存の DAG (#134) の A: 入力欄の上の band に、依存を earlier → later の向きに並べた低い図と、パーキングのメモの
 // 1 行を出す。band は 1 枚で、DAG の図とメモ (#89 の取り出す側) が分け合う。
@@ -127,7 +127,7 @@ export const registerBand: Register = on => {
             </Text>
             {memos.slice(0, SHOWN).map(memo => (
               <Button key={`park:${memo.id}`} variant={`park:${memo.id}` === chosen ? 'primary' : 'secondary'} onPress={() => choose(`park:${memo.id}`)}>
-                <Text dimColor>[{KIND_LABEL[memo.kind]}]</Text>
+                <Text dimColor>[{memo.kind}]</Text>
                 {` ${fit(memo.title, memoRoom)}`}
               </Button>
             ))}

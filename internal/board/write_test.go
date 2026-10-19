@@ -87,3 +87,21 @@ func TestWrite_parking(t *testing.T) {
 		t.Errorf("home = %+v", home.Rows)
 	}
 }
+
+// グラフの辺には、開いたセッションの domain の辺 (edges/<domain>/) だけを使う。
+func TestWrite_edges(t *testing.T) {
+	p := paths(t)
+	writeFile(t, p.ConfigFile(), `{"homePaths": ["/src/home"]}`)
+	tasks := filepath.Join(p.StateDir(), "tasks")
+	writeFile(t, filepath.Join(tasks, "home", "H", "1.json"), `{"id":"1","subject":"前","status":"pending","session_id":"H","cwd":"/src/home/a"}`)
+	writeFile(t, filepath.Join(tasks, "home", "H", "2.json"), `{"id":"2","subject":"後","status":"pending","session_id":"H","cwd":"/src/home/a"}`)
+	ep := func(ref, cwd string) string { return `{"ref":"` + ref + `","cwd":"` + cwd + `","repo":"` + cwd + `"}` }
+	dir := filepath.Join(p.StateDir(), "edges")
+	writeFile(t, filepath.Join(dir, "home", "e1.json"), `{"id":"e1","domain":"home","before":`+ep("task:H/1", "/src/home/a")+`,"after":`+ep("task:H/2", "/src/home/a")+`,"created_at":"2026-10-18T09:00:00Z"}`)
+	writeFile(t, filepath.Join(dir, "work", "e2.json"), `{"id":"e2","domain":"work","before":`+ep("issue:o/r#1", "/work/b")+`,"after":`+ep("task:H/1", "/work/b")+`,"created_at":"2026-10-18T09:00:00Z"}`)
+
+	home := writeBoard(t, p, Viewer{CWD: "/src/home/a"})
+	if len(home.Graph.Links) != 1 || home.Graph.Links[0].Before != "H/1" || home.Graph.Links[0].After != "H/2" || len(home.Graph.Nodes) != 2 {
+		t.Errorf("graph = %+v", home.Graph)
+	}
+}

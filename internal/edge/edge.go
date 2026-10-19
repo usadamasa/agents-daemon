@@ -1,5 +1,5 @@
 // Package edge はセッションをまたぐ作業の依存 (DAG の辺、#134) を XDG state 配下に置く。辺の正は作業を渡す側
-// (workspace) が `agents-daemon edge add` で書いたもの。読むのは `edge list` で、ボードへの描画はまだ無い。
+// (workspace) が `agents-daemon edge add` で書いたもの。読むのは `edge list` と、ボードの DAG を組む internal/board。
 //
 //	edges/<domain>/<id>.json   1 本 1 ファイル
 //

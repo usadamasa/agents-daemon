@@ -17,8 +17,9 @@ func TestNew_ディレクトリ名が固定されている(t *testing.T) {
 	}
 }
 
-// fresh は IsFresh の本体。未来の観測を拒むことが要点で、
-// 拒まないとクロックスキューのある state で送信が起きる。
+// fresh は IsFresh の本体。許容幅を超える未来の観測を拒むことが要点で、
+// 拒まないとクロックスキューのある state で送信が起きる。許容幅以内の未来は
+// now を取った後に statusline が書き直した state なので fresh に数える。
 func Test_fresh(t *testing.T) {
 	now := time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)
 	maxAge := 5 * time.Minute
@@ -31,7 +32,10 @@ func Test_fresh(t *testing.T) {
 		{"maxAge 以内は fresh", now.Add(-time.Minute), true},
 		{"境界ちょうどは fresh", now.Add(-maxAge), true},
 		{"maxAge を超えたら古い", now.Add(-maxAge - time.Second), false},
-		{"未来の観測は信用しない", now.Add(time.Second), false},
+		{"now と同時刻は fresh", now, true},
+		{"書き込みとの競合で生じる数秒先の観測は fresh", now.Add(time.Second), true},
+		{"許容幅ちょうどの未来は fresh", now.Add(futureTolerance), true},
+		{"許容幅を超える未来の観測は信用しない", now.Add(futureTolerance + time.Second), false},
 	} {
 		if got := fresh(tt.observedAt, now, maxAge); got != tt.want {
 			t.Errorf("%s: fresh() = %v, want %v", tt.name, got, tt.want)

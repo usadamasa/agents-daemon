@@ -7,6 +7,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/daemon"
 	"github.com/usadamasa/agents-daemon/internal/domain"
+	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
@@ -52,6 +53,10 @@ func Write(w io.Writer, p apppath.Paths, v Viewer) error {
 	if err != nil {
 		return err
 	}
+	edges, err := edge.New(p.StateDir()).Find(d, "", "")
+	if err != nil {
+		return err
+	}
 	names, err := sessioncontext.New(p.StateDir()).ListSessionNames()
 	if err != nil {
 		return err
@@ -63,6 +68,7 @@ func Write(w io.Writer, p apppath.Paths, v Viewer) error {
 		Tasks:        tasks,
 		Todos:        todos,
 		Parking:      memos,
+		Edges:        edges,
 		Classify:     placer.Classify,
 		Elsewhere:    func(id string) bool { return store.HasSession(other(d), id) },
 		Locate:       gitrepo.Locate,

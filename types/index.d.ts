@@ -22,6 +22,7 @@ export type BoardCard = {
 
 export type ParkingSource = {
   session_id: string
+  task_id?: string
   session: string
   live: boolean
   detail?: string
@@ -59,12 +60,52 @@ export type BoardRow = {
   parking: ParkingCard[]
 }
 
+// GraphNode は依存の DAG のノード 1 つ (タスク 1 つ、タスクの無いセッション、端点の参照だけの置き場)。
+export type GraphNode = {
+  key: string
+  kind: 'task' | 'todo' | 'session' | 'ref'
+  state: 'working' | 'done' | 'question' | 'permission' | 'error' | 'limit' | 'pending' | 'completed' | 'exited'
+  title: string
+  detail?: string
+  ref?: string
+  cwd?: string
+  session_id?: string
+  session?: string
+  live: boolean
+  depth: number
+  downstream: number
+  parked: number
+  blocked_by: string[]
+  deadlock: boolean
+}
+
+export type EdgeEndpoint = {
+  ref: string
+  cwd: string
+  repo: string
+}
+
+// GraphLink は辺 1 本。kind task は同じセッションの blockedBy、kind edge は `edge add` で書かれた辺で edge に元の記録を持つ。
+export type GraphLink = {
+  before: string
+  after: string
+  kind: 'task' | 'edge'
+  edge?: { id: string; before: EdgeEndpoint; after: EdgeEndpoint; note?: string }
+}
+
+export type BoardGraph = {
+  nodes: GraphNode[]
+  links: GraphLink[]
+  longest_chain: string[]
+}
+
 export type BoardData = {
   domain: 'home' | 'work'
   daemon_running: boolean
   updated_at?: string
   columns: BoardColumn[]
   rows: BoardRow[]
+  graph: BoardGraph
 }
 
 declare module 'claude-code' {

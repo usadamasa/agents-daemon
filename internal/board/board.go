@@ -22,6 +22,7 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/daemon"
 	"github.com/usadamasa/agents-daemon/internal/domain"
+	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/parking"
@@ -101,6 +102,8 @@ type ParkingCard struct {
 // ParkingSource はメモを置いたセッション 1 つ。
 type ParkingSource struct {
 	SessionID string `json:"session_id"`
+	// TaskID は置いたときに進めていたタスク (無ければ省く)。
+	TaskID string `json:"task_id,omitempty"`
 	// Session はカードと同じ規則で付けたセッションの短い名前。
 	Session string `json:"session"`
 	Live    bool   `json:"live"`
@@ -127,6 +130,8 @@ type Board struct {
 	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 	Columns   []Column   `json:"columns"`
 	Rows      []Row      `json:"rows"`
+	// Graph はタスクの依存の DAG (#134)。rows と同じカードとメモから組む。
+	Graph Graph `json:"graph"`
 }
 
 // Input はボードを組む材料。
@@ -139,6 +144,8 @@ type Input struct {
 	Todos    []tasklog.TodoList
 	// Parking は domain の open のメモ。
 	Parking []parking.Item
+	// Edges は domain のセッションをまたぐ辺 (internal/edge)。
+	Edges []edge.Edge
 	// Classify は pane の cwd の domain を決める。
 	Classify func(cwd string) domain.Domain
 	// Elsewhere はセッションの記録がほかの domain の側にあるか。業務に倒したセッションを、cwd だけで
@@ -155,8 +162,25 @@ func Build(in Input) Board {
 	b := Board{Domain: in.Domain, Columns: columns, Rows: []Row{}}
 	var panes map[string]*daemon.PaneStatus
 	b.DaemonRunning, b.UpdatedAt, panes = livePanes(in)
-	b.Rows = arrange(collect(in, panes), in.Parking, panes, in.SessionNames, locator{locate: in.Locate, cache: map[string]gitrepo.Place{}})
+	cards := collect(in, panes)
+	names := sessionNames(sessionIDs(cards, in.Parking), in.SessionNames)
+	b.Rows = arrange(cards, in.Parking, panes, names, locator{locate: in.Locate, cache: map[string]gitrepo.Place{}})
+	b.Graph = buildGraph(in, cards, panes, names)
 	return b
+}
+
+// sessionIDs はカードとメモの source に出てくるセッション。
+func sessionIDs(cards []placed, memos []parking.Item) map[string]bool {
+	ids := map[string]bool{}
+	for _, c := range cards {
+		ids[c.card.SessionID] = true
+	}
+	for _, m := range memos {
+		for _, s := range m.Sources {
+			ids[s.SessionID] = true
+		}
+	}
+	return ids
 }
 
 // livePanes は daemon が動いているか、status.json の更新時刻、このボードに載せる生きているセッションの
@@ -185,12 +209,14 @@ func collect(in Input, panes map[string]*daemon.PaneStatus) []placed {
 	withTasks := map[string]bool{}
 	for _, t := range in.Tasks {
 		withTasks[t.SessionID] = true
-		cards = append(cards, placed{cwd: t.CWD, card: taskCard(t, in.Tasks, panes[t.SessionID])})
+		p := panes[t.SessionID]
+		cards = append(cards, placed{cwd: t.CWD, card: taskCard(t, in.Tasks, p), status: t.Status, pane: p})
 	}
 	for _, list := range in.Todos {
 		withTasks[list.SessionID] = true
+		p := panes[list.SessionID]
 		for i, todo := range list.Todos {
-			cards = append(cards, placed{cwd: list.CWD, card: todoCard(list, i, todo, panes[list.SessionID])})
+			cards = append(cards, placed{cwd: list.CWD, card: todoCard(list, i, todo, p), status: todo.Status, pane: p})
 		}
 	}
 	for id, p := range panes {
@@ -199,7 +225,7 @@ func collect(in Input, panes map[string]*daemon.PaneStatus) []placed {
 		}
 		c := Card{Key: id + "/session", Kind: KindSession, Column: ColumnInProgress, Subject: sessionSubject(p), SessionID: id, Live: true, UpdatedAt: p.LastTickAt}
 		mark(&c, p)
-		cards = append(cards, placed{cwd: p.CWD, card: c})
+		cards = append(cards, placed{cwd: p.CWD, card: c, status: "in_progress", pane: p})
 	}
 	return cards
 }
@@ -216,19 +242,8 @@ func sessionSubject(p *daemon.PaneStatus) string {
 	return "タスクなし"
 }
 
-// arrange はカードとメモの source にセッションの名前を付け、repo の行へ分けて並べる。
-func arrange(cards []placed, memos []parking.Item, panes map[string]*daemon.PaneStatus, sessions map[string]string, l locator) []Row {
-	ids := map[string]bool{}
-	for _, c := range cards {
-		ids[c.card.SessionID] = true
-	}
-	for _, m := range memos {
-		for _, s := range m.Sources {
-			ids[s.SessionID] = true
-		}
-	}
-	names := sessionNames(ids, sessions)
-
+// arrange はカードとメモの source にセッションの名前 (names) を付け、repo の行へ分けて並べる。
+func arrange(cards []placed, memos []parking.Item, panes map[string]*daemon.PaneStatus, names map[string]string, l locator) []Row {
 	byRepo := map[string]*Row{}
 	rowOf := func(key, title string) *Row {
 		r, ok := byRepo[key]
@@ -265,16 +280,19 @@ func arrange(cards []placed, memos []parking.Item, panes map[string]*daemon.Pane
 func parkingCard(m parking.Item, names map[string]string, panes map[string]*daemon.PaneStatus) ParkingCard {
 	c := ParkingCard{ID: m.ID, Kind: m.Kind, Title: m.Title, Detail: m.Detail, Files: m.Files, DefaultTaken: m.DefaultTaken, Sources: []ParkingSource{}}
 	for _, s := range m.Sources {
-		c.Sources = append(c.Sources, ParkingSource{SessionID: s.SessionID, Session: names[s.SessionID], Live: panes[s.SessionID] != nil, Detail: s.Detail, At: s.At})
+		c.Sources = append(c.Sources, ParkingSource{SessionID: s.SessionID, TaskID: s.TaskID, Session: names[s.SessionID], Live: panes[s.SessionID] != nil, Detail: s.Detail, At: s.At})
 	}
 	sort.SliceStable(c.Sources, func(i, j int) bool { return c.Sources[i].At.After(c.Sources[j].At) })
 	return c
 }
 
-// placed はカードと、そのカードの行を決める cwd。
+// placed はカードと、そのカードの行を決める cwd。status はタスクの status (タスクの無いセッションは
+// in_progress)、pane はセッションの pane (無ければ nil) で、グラフのノードの状態に使う。
 type placed struct {
-	cwd  string
-	card Card
+	cwd    string
+	card   Card
+	status string
+	pane   *daemon.PaneStatus
 }
 
 // livePaneInDomain は pane のセッションをこのボードに載せるかを返す。記録がほかの domain の側にあれば

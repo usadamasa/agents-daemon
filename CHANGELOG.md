@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026.1019.1](https://github.com/usadamasa/agents-daemon/compare/2026.1019.0...2026.1019.1) - 2026-10-19
+
+- /board の行を枠なしにし、選んだ項目の詳細と操作を枠で囲む by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/168
+- 待っているノードを idle の節に分け、要約の無いセッションに名前を出す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/170
+
 ## [2026.1019.0](https://github.com/usadamasa/agents-daemon/compare/2026.1018.11...2026.1019.0) - 2026-10-19
 
 - feat(board): status --board の JSON に依存の DAG を載せる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/163

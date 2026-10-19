@@ -7,8 +7,6 @@ import { logEvent } from './log'
 // パーキングのメモの見せ方と、ボード (#121 の段 6) からの操作。行と列の描き方には依存させず、ボードの形が
 // 変わっても (#134) そのまま使えるようにする。描くのは hooks/board.tsx と hooks/band.tsx。
 
-export const KIND_LABEL: Record<ParkingCard['kind'], string> = { aside: '脇', scope: '範囲', preference: '好み', task: 'タスク' }
-
 // parkedMemos は `park list` の stdout を band と hint 行に出す形にする。at は最後に置かれた時刻。
 export function parkedMemos(stdout: string): ParkedMemo[] {
   const items = JSON.parse(stdout) as { id: string; kind: ParkedMemo['kind']; title: string; sources: { at: string }[] }[]
@@ -18,10 +16,10 @@ export function parkedMemos(stdout: string): ParkedMemo[] {
 // Destination はメモを渡す先のセッション。
 export type Destination = { session_id: string; session: string }
 
-// memoLabel はメモのカード 1 行: 種類、title、置かれた回数 (2 回以上のとき)。
+// memoLabel はメモのカード 1 行: 種類 (park tool の kind の語のまま)、title、置かれた回数 (2 回以上のとき)。
 export function memoLabel(memo: ParkingCard): string {
   const count = memo.sources.length > 1 ? ` ×${memo.sources.length}` : ''
-  return `[${KIND_LABEL[memo.kind]}] ${memo.title}${count}`
+  return `[${memo.kind}] ${memo.title}${count}`
 }
 
 // memoLines は選んだメモの詳細の行。sources は受け取った順 (新しい順) に出す。
@@ -81,7 +79,7 @@ export function canAdopt(node: GraphNode, self: string): boolean {
 // taskText は「タスクにする」で送る文面。
 export function taskText(memo: ParkingCard): string {
   return [
-    `パーキングロットのメモ「${memo.title}」(種類: ${KIND_LABEL[memo.kind]}) をタスクにしてください。TaskCreate で作り、今の作業の区切りで進めてください。`,
+    `パーキングロットのメモ「${memo.title}」(種類: ${memo.kind}) をタスクにしてください。TaskCreate で作り、今の作業の区切りで進めてください。`,
     ...context(memo),
   ].join('\n')
 }

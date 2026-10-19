@@ -4,7 +4,7 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { Band, ParkedMemo } from '../types'
 import { daemonBin } from './daemon-bin'
 import { logChange, reason, settle } from './log'
-import { KIND_LABEL, parkedMemos, stamp } from './parking'
+import { parkedMemos, stamp } from './parking'
 
 // パーキングロット (#89) の取り出す側 (#121 の段 7)。入力欄の上の band にメモを出す。
 // - session.start: このセッションの repo の open のメモ (hooks/park.tsx が読んだ一覧)
@@ -62,7 +62,7 @@ export const registerBand: Register = on => {
 }
 
 function line(memo: ParkedMemo): string {
-  return `・[${KIND_LABEL[memo.kind]}] ${memo.title} ${stamp(memo.at)}`
+  return `・[${memo.kind}] ${memo.title} ${stamp(memo.at)}`
 }
 
 // showCompleted は完了したタスクの途中でこのセッションが置いた open のメモを band に出す。無ければ今の band を残す。

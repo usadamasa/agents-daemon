@@ -187,12 +187,28 @@ test('/board は開いたセッションの ID と cwd で status --board を読
   expect(w.opened).toEqual(['agents-daemon-board'])
 })
 
-test('入力欄の上 (inline) に描かれたら pane を閉じる', async ($, on) => {
+test('入力欄の上 (inline) に描かれたら pane を閉じ、閉じたことを toast で知らせる', async ($, on) => {
   const w = boardWorld(on)
+  const toasts: string[] = []
+  on('ui.toast', async (_$, e) => {
+    toasts.push(e.text)
+    return { value: undefined }
+  })
   await $.command.run(OPEN_BOARD)
   const ui = await mount($, 'terminal', { ...PANE_PROPS, placement: 'inline' })
   expect(w.closed).toEqual(['agents-daemon-board'])
+  expect(toasts[0]).toMatch(/110 桁/)
   expect(await ui.find({ key: 'row:Q/1:Q/1' })).toBeUndefined()
+})
+
+test('辺の端点にできないノード (参照の無いもの) には Add blocker の代わりに理由を出す', async ($, on) => {
+  const todo = { ...node('T/todo-0', 'working', 'todo の項目', { session: 'todo' }), kind: 'todo', ref: undefined }
+  boardWorld(on, { ...BOARD, graph: { ...BOARD.graph, nodes: [...NODES, todo] } })
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($)
+  await ui.press({ key: 'row:T/todo-0:T/todo-0' })
+  expect(await ui.find({ key: 'add-blocker' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /辺の端点にできないタスク/ })).toBeDefined()
 })
 
 test('止まっているノードを根にした木を節ごとに描き、深い段は畳んで押すと開く', async ($, on) => {

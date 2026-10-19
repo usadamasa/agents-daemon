@@ -15,6 +15,7 @@ import { parkedMemos } from './parking'
 //   そのタスクの途中でこのセッションが置いたメモ (`park list --task`) を先頭に寄せる
 // 選んだノードとメモ (target) は B の pane と共有する。辺もメモも無ければ出さない。
 // cc-premise: 2.1.303 mods ui.render AbovePrompt の props (hasSurvey、bodyColumns) と、TaskUpdate の結果の statusChange で書いた
+// cc-premise: 2.1.303 mods Button の plain は端末で [ ] を描かず、variant より優先される。ノードとメモは plain、操作は枠付き
 
 const board = atom({ plugin: 'agents-daemon', key: 'board' } as const, null)
 // parked は hooks/park.tsx が書く。atom は読む module ごとに書く (state の scan が import を辿らない)。
@@ -27,6 +28,8 @@ const showCompleted = atom({ plugin: 'agents-daemon', key: 'showCompleted' } as 
 const SHOWN = 3
 // band は全セッションで常に動くので、B の pane (3 秒) より間を空ける。
 const POLL_MS = 10000
+// 行頭の印。選んだものだけに › を出し、ほかは同じ幅の空白で揃える。
+const GUTTER = 2
 
 let timer: Timer | undefined
 
@@ -68,21 +71,23 @@ export const registerBand: Register = on => {
     // 1 行目と軸、メモの行を除いた高さに列のノードを収める。収まらない分は +n にまとめる。
     const perColumn = Math.max(1, e.props.maxRows - 2 - (memos.length > 0 ? 1 : 0))
     const rest = memos.length - SHOWN
-    // メモは 1 行に SHOWN 件並べる。先頭の「◇ n」と、1 件ごとの枠と種類の分を除いた幅に title を収める。
-    const memoRoom = Math.max(6, Math.floor((e.props.bodyColumns - 8) / SHOWN) - 9)
+    // メモは 1 行に SHOWN 件並べる。先頭の「◇ n」と、1 件ごとの行頭の印と種類の分を除いた幅に title を収める。
+    const memoRoom = Math.max(6, Math.floor((e.props.bodyColumns - 8) / SHOWN) - GUTTER - 7)
 
+    // ノードとメモは枠なし (plain) の Button にして、枠付きの Button は操作 (fold) だけに使う。plain は variant より
+    // 優先されるので、選んだものは行頭の › と太字で示す。
     const nodeButton = (n: GraphNode) => {
       const tag = tags(n, isStuck(n))
+      const isSel = n.key === chosen
       return (
-        <Button
-          key={`node:${n.key}`}
-          variant={n.key === chosen ? 'primary' : 'secondary'}
-          dimColor={related !== undefined && !related.has(n.key)}
-          onPress={() => choose(n.key)}
-        >
-          <Text color={COLOR[n.state]}>{ICON[n.state]}</Text>
-          {` ${fit(n.title, Math.max(2, width - 6 - cells(tag)))}${tag}`}
-        </Button>
+        <Box key={`box:node:${n.key}`} flexDirection="row">
+          <Text>{isSel ? '› ' : ' '.repeat(GUTTER)}</Text>
+          <Button key={`node:${n.key}`} plain dimColor={related !== undefined && !related.has(n.key)} onPress={() => choose(n.key)}>
+            <Text color={COLOR[n.state]}>{ICON[n.state]}</Text>
+            {/* 行頭の印と、記号と空白の 2 桁を除いた幅に title を収める。 */}
+            <Text bold={isSel ? true : undefined}>{` ${fit(n.title, Math.max(2, width - GUTTER - 2 - cells(tag)))}${tag}`}</Text>
+          </Button>
+        </Box>
       )
     }
     const column = (nodes: GraphNode[], i: number) => {
@@ -125,12 +130,18 @@ export const registerBand: Register = on => {
             <Text color="success">
               {MEMO} {String(memos.length)}
             </Text>
-            {memos.slice(0, SHOWN).map(memo => (
-              <Button key={`park:${memo.id}`} variant={`park:${memo.id}` === chosen ? 'primary' : 'secondary'} onPress={() => choose(`park:${memo.id}`)}>
-                <Text dimColor>[{memo.kind}]</Text>
-                {` ${fit(memo.title, memoRoom)}`}
-              </Button>
-            ))}
+            {memos.slice(0, SHOWN).map(memo => {
+              const isSel = `park:${memo.id}` === chosen
+              return (
+                <Box key={`box:park:${memo.id}`} flexDirection="row">
+                  <Text>{isSel ? '› ' : ' '.repeat(GUTTER)}</Text>
+                  <Button key={`park:${memo.id}`} plain onPress={() => choose(`park:${memo.id}`)}>
+                    <Text dimColor>[{memo.kind}]</Text>
+                    <Text bold={isSel ? true : undefined}>{` ${fit(memo.title, memoRoom)}`}</Text>
+                  </Button>
+                </Box>
+              )
+            })}
             {rest > 0 && <Text dimColor>+{String(rest)}</Text>}
           </Box>
         )}

@@ -206,7 +206,8 @@ func TestBuild_marks(t *testing.T) {
 	}
 }
 
-// タスクを作っていない生きているセッションは「タスクなし」のカードで出す。TodoWrite のリストもカードになる。
+// タスクを作っていない生きているセッションもカードで出す。msg も名前も無ければ見出しは cwd の末尾。
+// TodoWrite のリストもカードになる。
 func TestBuild_sessionsWithoutTasksAndTodos(t *testing.T) {
 	b := Build(Input{
 		Domain: domain.Work,
@@ -224,7 +225,7 @@ func TestBuild_sessionsWithoutTasksAndTodos(t *testing.T) {
 	if len(got) != 3 {
 		t.Fatalf("cards = %+v", got)
 	}
-	if c := got["A/session"]; c.Kind != KindSession || c.Subject != "タスクなし" || c.Column != ColumnInProgress || c.Mark != MarkInput || !c.Live {
+	if c := got["A/session"]; c.Kind != KindSession || c.Subject != "a" || c.Column != ColumnInProgress || c.Mark != MarkInput || !c.Live {
 		t.Errorf("A/session = %+v", c.Card)
 	}
 	if got["T/todo-0"].Column != ColumnCompleted || got["T/todo-1"].Column != ColumnInProgress || got["T/todo-1"].Kind != KindTodo {
@@ -233,7 +234,8 @@ func TestBuild_sessionsWithoutTasksAndTodos(t *testing.T) {
 }
 
 // タスクの無いセッションのカードには、Claude Code が申告した今の作業 (program_status の msg) を出す。
-// msg が無ければ (rex の外、申告の前) 「タスクなし」のまま。タスクのあるセッションのカードは msg で変えない。
+// msg が無ければ (rex の外、申告の前) セッション名、名前も無ければ cwd の末尾にして、どのセッションかを見せる。
+// タスクのあるセッションのカードは msg で変えない。
 func TestBuild_sessionCardShowsAgentMessage(t *testing.T) {
 	b := Build(Input{
 		Domain: domain.Work,
@@ -242,15 +244,20 @@ func TestBuild_sessionCardShowsAgentMessage(t *testing.T) {
 			daemon.PaneStatus{PaneID: "p1", SessionID: "A", CWD: "/w/a", AgentStatus: "working", AgentMessage: "Checking the running daemon's version"},
 			daemon.PaneStatus{PaneID: "p2", SessionID: "B", CWD: "/w/b", AgentStatus: "working"},
 			daemon.PaneStatus{PaneID: "p3", SessionID: "C", CWD: "/w/c", AgentStatus: "working", AgentMessage: "別の作業"},
+			daemon.PaneStatus{PaneID: "p4", SessionID: "D", CWD: "/w/dotfiles", AgentStatus: "done"},
 		),
-		Tasks: []tasklog.Task{task("C", "1", "書く", "in_progress", "/w/c")},
+		Tasks:        []tasklog.Task{task("C", "1", "書く", "in_progress", "/w/c")},
+		SessionNames: map[string]string{"B": "fix-b"},
 	})
 	got := byKey(b)
 	if c := got["A/session"]; c.Subject != "Checking the running daemon's version" || c.Kind != KindSession {
 		t.Errorf("A/session = %+v, want msg を subject に", c.Card)
 	}
-	if c := got["B/session"]; c.Subject != "タスクなし" {
-		t.Errorf("B/session = %+v, want タスクなし", c.Card)
+	if c := got["B/session"]; c.Subject != "fix-b" {
+		t.Errorf("B/session = %+v, want セッション名", c.Card)
+	}
+	if c := got["D/session"]; c.Subject != "dotfiles" {
+		t.Errorf("D/session = %+v, want cwd の末尾", c.Card)
 	}
 	if c := got["C/1"]; c.Subject != "書く" {
 		t.Errorf("C/1 = %+v, want タスクの subject のまま", c.Card)

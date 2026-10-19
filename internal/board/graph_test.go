@@ -46,6 +46,9 @@ func TestGraph_nodeStates(t *testing.T) {
 			daemon.PaneStatus{PaneID: "p6", SessionID: "L", CWD: "/w/a", AgentStatus: "error", MonitorStatus: "waiting", WaitUntil: &until},
 			daemon.PaneStatus{PaneID: "p7", SessionID: "S", CWD: "/w/s", AgentStatus: "working", AgentMessage: "調べている"},
 			daemon.PaneStatus{PaneID: "p8", SessionID: "T", CWD: "/w/t", AgentStatus: "working"},
+			daemon.PaneStatus{PaneID: "p9", SessionID: "U", CWD: "/w/u", AgentStatus: "done"},
+			daemon.PaneStatus{PaneID: "p10", SessionID: "V", CWD: "/w/dotfiles", AgentStatus: "unknown"},
+			daemon.PaneStatus{PaneID: "p11", SessionID: "N", CWD: "/w/a", AgentStatus: "unknown"},
 		),
 		Tasks: []tasklog.Task{
 			task("W", "1", "書く", "in_progress", "/w/a"),
@@ -56,21 +59,24 @@ func TestGraph_nodeStates(t *testing.T) {
 			task("P", "1", "p", "in_progress", "/w/a"),
 			task("E", "1", "e", "in_progress", "/w/a"),
 			task("L", "1", "l", "in_progress", "/w/a"),
+			task("N", "1", "n", "in_progress", "/w/a"),
 			task("X", "1", "残った作業", "pending", "/w/x"),
 			task("X", "2", "残った進行中", "in_progress", "/w/x"),
 		},
 		Todos: []tasklog.TodoList{{SessionID: "T", CWD: "/w/t", UpdatedAt: t0, Todos: []tasklog.Todo{
 			{Content: "a", Status: "completed"}, {Content: "b", Status: "in_progress"},
 		}}},
-		SessionNames: map[string]string{"W": "writer"},
+		SessionNames: map[string]string{"W": "writer", "U": "waiter"},
 	})
 	got := nodes(b.Graph)
 	want := map[string]string{
 		"W/1": StateWorking, "W/2": StatePending, "W/3": StateCompleted,
 		"D/1": StateDone, "Q/1": StateQuestion, "P/1": StatePermission, "E/1": StateError, "L/1": StateLimit,
 		"X/1": StateExited, "X/2": StateExited,
-		"S/session": StateWorking,
-		"T/todo-0":  StateCompleted, "T/todo-1": StateWorking,
+		"S/session": StateWorking, "U/session": StateDone,
+		// 状態を分類できないセッション (申告の前、古い record) は working に倒さない。
+		"V/session": StateUnknown, "N/1": StateUnknown,
+		"T/todo-0": StateCompleted, "T/todo-1": StateWorking,
 	}
 	if len(got) != len(want) {
 		t.Errorf("nodes = %d, want %d: %+v", len(got), len(want), got)
@@ -89,6 +95,13 @@ func TestGraph_nodeStates(t *testing.T) {
 	}
 	if s := got["S/session"]; s.Kind != KindSession || s.Title != "調べている" || s.Ref != "" {
 		t.Errorf("S/session = %+v, want 名前の無いセッションは参照を持たない", s)
+	}
+	// msg の無いセッションはセッション名、名前も無ければ cwd の末尾を title にする。
+	if u := got["U/session"]; u.Title != "waiter" {
+		t.Errorf("U/session title = %q, want waiter", u.Title)
+	}
+	if v := got["V/session"]; v.Title != "dotfiles" {
+		t.Errorf("V/session title = %q, want dotfiles", v.Title)
 	}
 	if got["T/todo-1"].Ref != "" {
 		t.Errorf("todo の参照 = %q, want 空 (辺の端点にできない)", got["T/todo-1"].Ref)

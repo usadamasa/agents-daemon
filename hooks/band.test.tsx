@@ -125,7 +125,7 @@ test('session.start で依存の数と longest chain、earlier → later の段�
 
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await mount($, surface)
-    expect(await ui.find({ type: 'Text', text: /■ 1 {2}○ 2 {2}▸ 1 {2}✓ 1 {2}◇ 4/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /■ 1 {2}○ 2 {2}▸ 1 {2}↵ 0 {2}✓ 1 {2}◇ 4/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /longest chain: \? 論点 → ○ 段5 → ○ リリース/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /earlier/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /later/ })).toBeDefined()
@@ -222,11 +222,31 @@ test('ノードは段の列の幅に合わせて 1 行に切り詰める', async
   const long = node('L/1', 'working', 'とても長いタイトル'.repeat(5), { depth: 1 })
   world(on, { [STATUS.join(' ')]: { ...board(), graph: { ...board().graph, nodes: [...NODES, long] } } })
   await $.session.start(START)
-  // 段は 3 列。列の間に 1 桁ずつ空けて、1 列は (60 - 2) / 3 = 19 桁。枠の「[ 」「 ]」を除いて 15 桁に収める。
+  // 段は 3 列。列の間に 1 桁ずつ空けて、1 列は (60 - 2) / 3 = 19 桁。行頭の印の 2 桁を除いて 17 桁に収める。
   const ui = await mount($, 'terminal', { ...BAND_PROPS, bodyColumns: 60 })
   const button = await ui.find({ key: 'node:L/1' })
   expect(button?.text).toMatch(/…$/)
-  expect(cells(button?.text ?? '')).toBeLessThanOrEqual(15)
+  expect(cells(button?.text ?? '')).toBeLessThanOrEqual(17)
+  expect(cells(button?.text ?? '')).toBeGreaterThan(15)
+})
+
+test('ノードとメモは枠なしで描き、選んだものは行頭の › と太字で示す', async ($, on) => {
+  world(on, { [HERE.join(' ')]: MEMOS, [STATUS.join(' ')]: board() })
+  await $.session.start(START)
+  const ui = await mount($)
+  for (const key of ['node:A/1', 'park:m4']) {
+    expect((await ui.find({ key }))?.props.plain).toBe(true)
+  }
+  // 操作のボタンは枠付きのまま。
+  expect((await ui.find({ key: 'fold' }))?.props.plain).toBeUndefined()
+  expect((await ui.find({ key: 'box:node:A/1' }))?.text).toMatch(/^ {2}\?/)
+  await ui.press({ key: 'node:A/1' })
+  expect((await ui.find({ key: 'box:node:A/1' }))?.text).toMatch(/^› \?/)
+  // Text は key を持てないので、Button の子に太字の Text があるかで見る。
+  const hasBold = async (key: string) =>
+    ((await ui.find({ key }))?.children ?? []).some(c => typeof c === 'object' && c !== null && (c as { props?: { bold?: boolean } }).props?.bold === true)
+  expect(await hasBold('node:A/1')).toBe(true)
+  expect(await hasBold('node:W/1')).toBe(false)
 })
 
 test('列のノードが band の高さに収まらなければ、残りを +n にまとめる', async ($, on) => {

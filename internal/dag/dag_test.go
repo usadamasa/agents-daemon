@@ -1,6 +1,7 @@
 package dag
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 )
@@ -26,6 +27,24 @@ func TestDepthAndReach(t *testing.T) {
 	}
 	if down, cyclic := g.Reach("x"); len(down) != 1 || !cyclic {
 		t.Errorf("Reach(x) = %v / %v, want 輪の中", down, cyclic)
+	}
+}
+
+// 菱形を 60 段重ねた DAG (経路は 2^60 本) でも、段と最長の鎖をすぐに数え終える。
+func TestLongestDiamonds(t *testing.T) {
+	var links [][2]string
+	key := func(i int, side string) string { return fmt.Sprintf("%03d%s", i, side) }
+	for i := range 60 {
+		for _, side := range []string{"a", "b"} {
+			links = append(links, [2]string{key(i, ""), key(i, side)}, [2]string{key(i, side), key(i+1, "")})
+		}
+	}
+	g := New(links, less)
+	if got := len(g.Longest(key(0, ""))); got != 121 {
+		t.Errorf("len(Longest) = %d, want 121", got)
+	}
+	if got := g.Depth(key(60, "")); got != 120 {
+		t.Errorf("Depth = %d, want 120", got)
 	}
 }
 

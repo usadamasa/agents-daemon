@@ -279,6 +279,27 @@ func TestGraph_noBlockedAndCycle(t *testing.T) {
 	}
 }
 
+// 待ちが輪になったノード (デッドロック) には印を付ける。輪の下流にいるだけのノードには付けない。
+func TestGraph_deadlock(t *testing.T) {
+	const cwd = "/w/a"
+	b := Build(Input{
+		Domain: domain.Work,
+		Tasks: []tasklog.Task{
+			task("A", "1", "x", "pending", cwd, "2"),
+			task("A", "2", "y", "pending", cwd),
+			task("A", "3", "下流", "pending", cwd, "1"),
+			task("A", "4", "無関係", "pending", cwd),
+		},
+		Edges: []edge.Edge{
+			{ID: "e1", Before: edge.Endpoint{Ref: "task:A/1", CWD: cwd}, After: edge.Endpoint{Ref: "task:A/2", CWD: cwd}},
+		},
+	})
+	got := nodes(b.Graph)
+	if !got["A/1"].Deadlock || !got["A/2"].Deadlock || got["A/3"].Deadlock || got["A/4"].Deadlock {
+		t.Errorf("deadlock = %v / %v / %v / %v, want true / true / false / false", got["A/1"].Deadlock, got["A/2"].Deadlock, got["A/3"].Deadlock, got["A/4"].Deadlock)
+	}
+}
+
 // ノードの parked は、そのタスクの途中で置かれた open のメモの数。タスクの無いセッションのノードには、
 // タスクを指さずにそのセッションが置いたメモを数える。メモの source は task_id を JSON に出す。
 func TestGraph_parked(t *testing.T) {

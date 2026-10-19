@@ -81,6 +81,8 @@ export const registerBoard: Register = on => {
     // 端末を狭めて入力欄の上に置かれたら閉じる。入力欄の上は A の band が受け持つ。
     if (e.props.placement === 'inline') {
       await $.ui.close({ id: PANE })
+      // 閉じた pane の中の文面は誰にも見えないので、toast で知らせる。
+      await $.ui.toast('会話の横に置けないため、依存のボードを閉じました (端末を 110 桁以上にすると開けます)')
       return <Text dimColor>会話の横に置けないため、ボードを閉じました。</Text>
     }
     // mobile には入力欄が無い。ボードは見せて、送信だけ出さない。
@@ -166,6 +168,9 @@ export const registerBoard: Register = on => {
             <Button key="add-blocker" onPress={() => void update($, picking, () => true)}>
               + Add blocker
             </Button>
+          )}
+          {(n.ref === undefined || n.cwd === undefined) && (
+            <Text dimColor>辺の端点にできないタスクです (TodoWrite の項目、名前の無いセッション)</Text>
           )}
           {isPicking &&
             candidates(g, n).map(c => (

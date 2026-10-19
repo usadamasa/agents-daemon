@@ -1,6 +1,6 @@
 {
   "name": "agents-daemon",
-  "version": "2026.1018.11",
+  "version": "2026.1019.0",
   "description": "Resident daemon beside Claude Code sessions that does what a session cannot do from inside: resume stopped sessions, aggregate state across sessions, clean up on a clock, operate rex blocks",
   "author": {
     "name": "usadamasa"

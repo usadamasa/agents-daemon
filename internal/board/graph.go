@@ -45,7 +45,8 @@ type Graph struct {
 	Nodes []Node `json:"nodes"`
 	// Links は before、after の Key の順。
 	Links []Link `json:"links"`
-	// LongestChain は下流の最も多い止まっているノードから、下流をたどった最長の鎖の Key。止まっているノードが無ければ空。
+	// LongestChain は下流の最も多い止まっているノード (待ちの輪を含む) から、下流をたどった最長の鎖の Key。
+	// 止まっているノードが無ければ空。
 	LongestChain []string `json:"longest_chain"`
 }
 
@@ -334,8 +335,9 @@ func (g *graphBuilder) finish() Graph {
 		}
 		return keyLess(out.Links[i].After, out.Links[j].After)
 	})
+	// 待ちの輪も、人が解かないと進まないので止まっているノードとして数える。
 	for _, n := range out.Nodes {
-		if stuck[n.State] {
+		if stuck[n.State] || (n.Deadlock && n.State != StateCompleted) {
 			out.LongestChain = a.Longest(n.Key)
 			break
 		}

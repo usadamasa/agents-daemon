@@ -23,8 +23,7 @@
 //	mod.board.changed         ボードの行・カード・メモの数か daemon の稼働が変わった (同上)
 //	mod.board.failed          status --board が失敗した (reason)
 //	mod.send                  ボードから指示やメモを送った (via、to、delivered、reason)
-//	mod.hint.failed           prompt の hint 行のメモの数を読めなかった (reason)
-//	mod.band.failed           band のメモを読めなかった (reason)
+//	mod.band.failed           band (と hint 行) のボードか、完了したタスクの途中のメモを読めなかった (reason)
 //
 // mod の出来事は同じ理由が続く間は書き直さない (hooks/log.ts)。
 package boardlog

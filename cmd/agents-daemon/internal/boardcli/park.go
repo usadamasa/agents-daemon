@@ -75,7 +75,7 @@ func newParkCmd() *cobra.Command {
 	var days int
 	discard := &cobra.Command{
 		Use:   "discard",
-		Short: "最後に置かれてから --days 日以上経った open のメモを discarded にし、捨てたメモを JSON の配列で出す",
+		Short: "最後に置かれてから --days 日より経った open のメモを discarded にし、捨てたメモを JSON の配列で出す",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return withPlacer(cmd, cwd, func(paths apppath.Paths, p tasklog.Placer, cwd string) (any, error) {

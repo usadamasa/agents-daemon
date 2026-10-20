@@ -326,7 +326,7 @@ func TestParkList_task(t *testing.T) {
 	}
 }
 
-// discard は開いたセッションの domain の open のメモのうち、最後に置かれてから --days 日以上経ったものを
+// discard は開いたセッションの domain の open のメモのうち、最後に置かれてから --days 日より経ったものを
 // discarded にし、捨てたメモを出す。--days は必須で 1 以上。
 func TestParkDiscard(t *testing.T) {
 	root := parkTestEnv(t)

@@ -15,6 +15,7 @@
 //	ingest-task.failed        記録できなかった (tool、reason)
 //	park.add                  メモを置いた (memo、kind、created、task)
 //	park.set                  メモの status を書き換えた (memo、from、to)
+//	park.discard              古い open のメモをまとめて捨てた (days、memos、ids)
 //	park.adopt                終了したセッションのタスクをメモにした (from_session、task、memo、created)
 //	park.failed               park の操作が失敗した (op、reason)
 //	mod.tool-register.failed  session.start で park の tool を登録できなかった (reason)

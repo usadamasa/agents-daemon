@@ -129,7 +129,10 @@ type Board struct {
 	// UpdatedAt は status.json の更新時刻。daemon が動いていないか、まだ書いていなければ無い。
 	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 	Columns   []Column   `json:"columns"`
-	Rows      []Row      `json:"rows"`
+	// Here は開いたセッションの cwd の行の鍵 (Row.Repo と同じ規則)。mod が自分の repo のメモ (hint 行と band) を
+	// rows から引くのに使う。その repo の行が無ければ rows に無い鍵になる。
+	Here string `json:"here"`
+	Rows []Row  `json:"rows"`
 	// Graph はタスクの依存の DAG (#134)。rows と同じカードとメモから組む。
 	Graph Graph `json:"graph"`
 }
@@ -137,6 +140,8 @@ type Board struct {
 // Input はボードを組む材料。
 type Input struct {
 	Domain domain.Domain
+	// CWD は開いたセッションの cwd (Board.Here の元)。
+	CWD string
 	// PID は動いている daemon の pid。0 なら動いていない。
 	PID      int
 	Snapshot *daemon.StatusSnapshot
@@ -164,7 +169,9 @@ func Build(in Input) Board {
 	b.DaemonRunning, b.UpdatedAt, panes = livePanes(in)
 	cards := collect(in, panes)
 	names := sessionNames(sessionIDs(cards, in.Parking), in.SessionNames)
-	b.Rows = arrange(cards, in.Parking, panes, names, locator{locate: in.Locate, cache: map[string]gitrepo.Place{}})
+	l := locator{locate: in.Locate, cache: map[string]gitrepo.Place{}}
+	b.Here, _ = l.row(in.CWD)
+	b.Rows = arrange(cards, in.Parking, panes, names, l)
 	b.Graph = buildGraph(in, cards, panes, names)
 	return b
 }

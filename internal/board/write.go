@@ -63,6 +63,7 @@ func Write(w io.Writer, p apppath.Paths, v Viewer) error {
 	}
 	b := Build(Input{
 		Domain:       d,
+		CWD:          v.CWD,
 		PID:          pid,
 		Snapshot:     snap,
 		Tasks:        tasks,

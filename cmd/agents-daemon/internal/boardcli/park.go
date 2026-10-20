@@ -12,7 +12,6 @@ import (
 
 	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/jsonflag"
 	"github.com/usadamasa/agents-daemon/internal/apppath"
-	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
@@ -22,7 +21,7 @@ func Commands() []*cobra.Command {
 	return []*cobra.Command{newIngestTaskCmd(), newParkCmd(), newBoardLogCmd(), newEdgeCmd()}
 }
 
-// newParkCmd は `agents-daemon park add|set|list` を組み立てる (internal/parking)。
+// newParkCmd は `agents-daemon park add|set|list|discard|adopt` を組み立てる (internal/parking)。
 // domain と repo は --cwd (既定は今の cwd) から決め、結果は JSON で stdout に出す。
 func newParkCmd() *cobra.Command {
 	var cwd string
@@ -53,7 +52,6 @@ func newParkCmd() *cobra.Command {
 	set.Flags().StringVar(&status, "status", "", "open / handed / discarded")
 	_ = set.MarkFlagRequired("status")
 	var repo, listStatus, task string
-	var here bool
 	list := &cobra.Command{
 		Use:   "list",
 		Short: "cwd の domain のメモを JSON の配列で出す",
@@ -63,9 +61,6 @@ func newParkCmd() *cobra.Command {
 				return errors.New("--task には --session が要る")
 			}
 			return withPark(cmd, cwd, func(s parking.Store, p tasklog.Placer, cwd string) (any, error) {
-				if here {
-					repo = gitrepo.RepoKey(cwd)
-				}
 				items, err := s.Find(p.Domain(session, cwd), repo, listStatus)
 				if err != nil || task == "" {
 					return items, err
@@ -75,10 +70,21 @@ func newParkCmd() *cobra.Command {
 		},
 	}
 	list.Flags().StringVar(&repo, "repo", "", "repo (main worktree のパス) で絞る")
-	list.Flags().BoolVar(&here, "here", false, "--cwd の repo で絞る (mod は repo の鍵を持たないため)")
-	list.MarkFlagsMutuallyExclusive("repo", "here")
 	list.Flags().StringVar(&listStatus, "status", "", "status で絞る")
 	list.Flags().StringVar(&task, "task", "", "--session のセッションがこのタスクの途中で置いたメモで絞る")
+	var days int
+	discard := &cobra.Command{
+		Use:   "discard",
+		Short: "最後に置かれてから --days 日以上経った open のメモを discarded にし、捨てたメモを JSON の配列で出す",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return withPlacer(cmd, cwd, func(paths apppath.Paths, p tasklog.Placer, cwd string) (any, error) {
+				return parkDiscard(paths.StateDir(), parking.New(paths.StateDir()), p, session, cwd, days, time.Now())
+			})
+		},
+	}
+	discard.Flags().IntVar(&days, "days", 0, "この日数より前に最後に置かれたメモを捨てる (1 以上)")
+	_ = discard.MarkFlagRequired("days")
 	adopt := &cobra.Command{
 		Use:   "adopt <session_id> <task_id>",
 		Short: "終了したセッションの未完了のタスクを kind task のメモにし、タスクの記録を消して {created, item} を出す",
@@ -89,10 +95,10 @@ func newParkCmd() *cobra.Command {
 			})
 		},
 	}
-	for _, c := range []*cobra.Command{set, list, adopt} {
+	for _, c := range []*cobra.Command{set, list, discard, adopt} {
 		c.Flags().StringVar(&session, "session", "", "開いたセッションの ID。記録が業務の側にあれば業務のメモを扱う (status --board と同じ)")
 	}
-	cmd.AddCommand(add, set, list, adopt)
+	cmd.AddCommand(add, set, list, discard, adopt)
 	return cmd
 }
 

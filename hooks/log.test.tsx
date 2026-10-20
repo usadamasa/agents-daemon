@@ -12,10 +12,11 @@ function output(stdout: string, exitCode = 0, stderr = ''): ProcessRunResult {
 }
 
 // world は engine の代わりを立てる。board-log の呼び出しは logged に event 以降の引数で残し、ほかは run が答える。
+// clock は band の読み直し (10 秒ごと) を進めるのに使う。
 function world(on: On, run: (argv: readonly string[]) => ProcessRunResult, register?: () => never) {
   const logged: string[][] = []
   mock.env(on, { HOME: '/home/u' })
-  mock.clock(on)
+  const clock = mock.clock(on)
   on('session.id', async () => ({ value: 'SELF' }))
   on('session.cwd', async () => ({ value: CWD }))
   on('process.run', async (_$, e) => {
@@ -35,8 +36,7 @@ function world(on: On, run: (argv: readonly string[]) => ProcessRunResult, regis
   })
   on('command.register', async (_$, e) => ({ value: { command: e.name } }))
   on('session.start', async (_$, e) => ({ cwd: e.cwd }))
-  on('turn.complete', async () => ({ text: '' }))
-  return logged
+  return { logged, clock }
 }
 
 const START = { cwd: CWD, surface: 'terminal', isInteractive: true } as const
@@ -50,7 +50,7 @@ const mount = ($: Parameters<Parameters<typeof test>[1]>[0]) =>
 // 画面に一度出すだけにする。理由をログに残し、hook を飛ばす扱いは変えない (登録の後の band は出ない)。
 // cc-premise: 2.1.302 mods tool.register が失敗すると engine が session.start の hook を skipped にする (claude plugin test で確認)
 test('session.start で park の tool を登録できなかったら、理由をログに残す', async ($, on) => {
-  const logged = world(
+  const { logged } = world(
     on,
     () => output('[]'),
     () => {
@@ -97,7 +97,7 @@ function board(memos: unknown[]) {
 
 test('ボードを開いたときの数と、変わったとき、status --board の失敗をログに残す。同じ失敗は繰り返さない', async ($, on) => {
   let answer = output('', 1, 'status snapshot のパースに失敗')
-  const logged = world(on, argv => (argv[1] === 'status' ? answer : output('{}')))
+  const { logged } = world(on, argv => (argv[1] === 'status' ? answer : output('{}')))
   on('session.send', async () => ({ isDelivered: true as const }))
 
   await $.command.run(OPEN_BOARD)
@@ -125,7 +125,7 @@ test('ボードを開いたときの数と、変わったとき、status --board
 })
 
 test('メモを渡せなかった理由をログに残す', async ($, on) => {
-  const logged = world(on, argv => (argv[1] === 'status' ? output(JSON.stringify(board([MEMO]))) : output('{}')))
+  const { logged } = world(on, argv => (argv[1] === 'status' ? output(JSON.stringify(board([MEMO]))) : output('{}')))
   on('session.send', async () => ({ isDelivered: false as const, reason: 'not_found' as const }))
 
   await $.command.run(OPEN_BOARD)
@@ -139,12 +139,12 @@ test('メモを渡せなかった理由をログに残す', async ($, on) => {
 test('band のボードとメモを読めなかったら理由をログに残す。JSON の中身は理由に載せない', async ($, on) => {
   let status = output('', 1, 'status snapshot のパースに失敗')
   let list = output('[]')
-  const logged = world(on, argv => (argv[1] === 'status' ? status : list))
+  const { logged, clock } = world(on, argv => (argv[1] === 'status' ? status : list))
   on('tool.call', { tool: 'TaskUpdate' }, async () => ({ result: { success: true, taskId: '3', updatedFields: ['status'], statusChange: { from: 'in_progress', to: 'completed' } } }) as never)
 
   await $.session.start(START)
   // 同じ理由が続く間は書き直さない (10 秒ごとの読み直しと、park add の後の読み直し)。
-  await $.clock.sleep(10000)
+  await clock.advance(10000)
   await $.tool.call({ tool: 'mcp__agents-daemon__park', kind: 'aside', title: '秘密の題' } as never)
   expect(logged).toEqual([['mod.band.failed', 'reason=status snapshot のパースに失敗']])
 

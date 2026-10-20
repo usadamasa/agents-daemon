@@ -2,15 +2,28 @@ import type { EngineInterface } from 'claude-code'
 
 import type { BoardCard, BoardData, GraphNode, ParkedMemo, ParkingCard, ParkingSource } from '../types'
 import { daemonBin } from './daemon-bin'
-import { logEvent } from './log'
+import { logEvent, reason } from './log'
 
 // パーキングのメモの見せ方と、ボード (#121 の段 6) からの操作。行と列の描き方には依存させず、ボードの形が
 // 変わっても (#134) そのまま使えるようにする。描くのは hooks/board.tsx と hooks/band.tsx。
 
-// parkedMemos は `park list` の stdout を band と hint 行に出す形にする。at は最後に置かれた時刻。
+// parkedMemos は `park list` の stdout を band に出す形にする。at は最後に置かれた時刻 (sources は置いた順)。
 export function parkedMemos(stdout: string): ParkedMemo[] {
   const items = JSON.parse(stdout) as { id: string; kind: ParkedMemo['kind']; title: string; sources: { at: string }[] }[]
   return items.map(item => ({ id: item.id, kind: item.kind, title: item.title, at: item.sources.at(-1)?.at ?? '' }))
+}
+
+// lastPlacedAt はボードのメモが最後に置かれた時刻 (ボードの sources は新しい順)。
+export function lastPlacedAt(memo: ParkingCard): string {
+  return memo.sources[0]?.at ?? ''
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+// isStale はメモが最後に置かれてから days 日より経ったか (now はミリ秒)。`park discard --days` と同じ境界。
+export function isStale(memo: ParkingCard, now: number, days: number): boolean {
+  const ms = Date.parse(lastPlacedAt(memo))
+  return !Number.isNaN(ms) && now - ms > days * DAY_MS
 }
 
 // Destination はメモを渡す先のセッション。
@@ -110,6 +123,20 @@ export async function discard($: EngineInterface, memo: ParkingCard): Promise<st
   return failure === '' ? `メモ「${memo.title}」を捨てました` : `メモを捨てられませんでした: ${failure}`
 }
 
+// discardStale は最後に置かれてから days 日より経った open のメモをまとめて捨て、結果の文面を返す。捨てたメモは
+// 7 日残り (internal/parking の ClosedRetention)、id (`logs --board` の park.discard に残る) で戻せる。
+export async function discardStale($: EngineInterface, days: number): Promise<string> {
+  const ran = await run($, ['discard', '--days', String(days)])
+  if ('failure' in ran) return `古いメモを捨てられませんでした: ${ran.failure}`
+  let count: number
+  try {
+    count = (JSON.parse(ran.stdout) as unknown[]).length
+  } catch (err) {
+    return `古いメモを捨てましたが、結果を読めませんでした: ${reason(err, 'park discard')}`
+  }
+  return `${days} 日より前のメモ ${count} つを捨てました (戻すには park set <id> --status open、id は logs --board に残る)`
+}
+
 // handOff は text を to へ送り、届いたときだけメモを handed にする。届かなかったメモは open のまま残す。
 export async function handOff($: EngineInterface, memo: ParkingCard, to: Destination, text: string): Promise<string> {
   const sent = { via: 'memo', memo: memo.id, to: to.session_id }
@@ -138,11 +165,17 @@ export async function adopt($: EngineInterface, node: GraphNode): Promise<string
 // park は開いたセッションの ID と cwd を添えて `agents-daemon park` を走らせ、失敗の理由を返す (成功なら空)。
 // domain はバイナリがこのセッションから決める (ボードと同じ domain のメモとタスクだけを触る)。
 async function park($: EngineInterface, args: string[]): Promise<string> {
+  const ran = await run($, args)
+  return 'failure' in ran ? ran.failure : ''
+}
+
+// run は park と同じ走らせ方で、成功なら stdout を返す。
+async function run($: EngineInterface, args: string[]): Promise<{ stdout: string } | { failure: string }> {
   try {
     const argv = [await daemonBin($), 'park', ...args, '--session', await $.session.id(), '--cwd', await $.session.cwd()]
-    const { exitCode, stderr } = await $.process.run(argv, { timeoutMs: 10000 })
-    return exitCode === 0 ? '' : stderr.trim() || `exit ${exitCode}`
+    const { exitCode, stdout, stderr } = await $.process.run(argv, { timeoutMs: 10000 })
+    return exitCode === 0 ? { stdout } : { failure: stderr.trim() || `exit ${exitCode}` }
   } catch (err) {
-    return String(err)
+    return { failure: String(err) }
   }
 }

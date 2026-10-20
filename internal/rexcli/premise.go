@@ -44,8 +44,12 @@ func (c *execClient) CheckPremises(ctx context.Context, blockID, sessionID strin
 	return out
 }
 
-// checkVersion は rex の版を出す。changelog との突き合わせの起点 (last-checked.md の rex_version と built_at)。
-// rex-premise: preview.16 cli version --json は rex_version と built_at を返す
+// checkVersion は rex の版を出す。changelog との突き合わせの起点 (last-checked.md の rex_version と built_at と
+// api_revision)。api_revision は CLI が対応する API の版で、あるときだけ出して server が動かしている版
+// (api call server.status の api_revision) と比べる。CLI と server は別々に更新されるので、食い違いは
+// daemon が古い CLI で新しい server を叩いている (またはその逆) 状態。
+// rex-premise: preview.16 cli version --json は rex_version と built_at と api_revision を返す
+// rex-premise: preview.16 cli api call server.status は api_revision を返す (CLI と同じ 4)
 func (c *execClient) checkVersion(ctx context.Context, add addFinding) {
 	m, err := c.runMap(ctx, "version", "--json")
 	if err != nil {
@@ -56,7 +60,31 @@ func (c *execClient) checkVersion(ctx context.Context, add addFinding) {
 		add(false, "version --json に %s が無い", strings.Join(missing, " / "))
 		return
 	}
-	add(true, "rex_version: %v (built_at %v)", m["rex_version"], m["built_at"])
+	cliRevision, has := m["api_revision"]
+	if !has {
+		add(true, "rex_version: %v (built_at %v)", m["rex_version"], m["built_at"])
+		return
+	}
+	add(true, "rex_version: %v (built_at %v, api_revision %v)", m["rex_version"], m["built_at"], cliRevision)
+	c.checkServerAPIRevision(ctx, cliRevision, add)
+}
+
+// checkServerAPIRevision は server の api_revision が CLI の cliRevision と同じかを見る。
+func (c *execClient) checkServerAPIRevision(ctx context.Context, cliRevision any, add addFinding) {
+	st, err := c.runMap(ctx, "api", "call", "server.status")
+	if err != nil {
+		add(false, "api call server.status が失敗 (server の api_revision を比べられない): %v", err)
+		return
+	}
+	serverRevision, has := st["api_revision"]
+	switch {
+	case !has:
+		add(false, "server status に api_revision が無い (CLI は %v。server が CLI より古い版で動いている)", cliRevision)
+	case serverRevision != cliRevision:
+		add(false, "api_revision が CLI (%v) と server (%v) で食い違う (片方だけ更新された。daemon は CLI の版で server を叩く)", cliRevision, serverRevision)
+	default:
+		add(true, "api_revision は CLI と server で同じ (%v)", cliRevision)
+	}
 }
 
 // checkMissingTarget は存在しない block への block call が exit 3 で、stderr に not found を含むことを見る。

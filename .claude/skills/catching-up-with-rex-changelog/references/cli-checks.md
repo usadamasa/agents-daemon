@@ -9,11 +9,12 @@
 
 `go run ./cmd/agents-daemon doctor` の「rex CLI の前提」の節が、自分の block (`REX_BLOCK`) に打って
 欄の有無と exit code を名指しで出す (`internal/rexcli/premise.go`)。人が打ち直す必要は無い。
-節の `⚠` の行がずれで、`rex_version` と `built_at` の行が `last-checked.md` に書く値。
+節の `⚠` の行がずれで、`rex_version` と `built_at` と `api_revision` の行が `last-checked.md` に書く値。
 
 | doctor が打つコマンド | 見る欄 | 突き合わせる先 |
 | ---- | ---- | ---- |
-| `version --json` | `rex_version` / `built_at` | `last-checked.md` の記録 |
+| `version --json` | `rex_version` / `built_at`、あれば `api_revision` (CLI が対応する API の版) | `last-checked.md` の記録 |
+| `api call server.status` (CLI に `api_revision` があるときだけ) | `api_revision` (server が動かしている API の版) が CLI と同じ | `exec.go` の `serverStatusResult` (`pid` は `Reachable` が読む)、`testdata/2026-10-20_…/server_status.json` |
 | `block call -b block:01a12599-0000-7000-8000-000000000001 program_status` | stderr が `block target "…" not found`、exit 3 | `exec.go` の `exitTargetNotFound`、`exec_test.go` の `newFakeRex` |
 | `block call -b "$REX_BLOCK" program_status` | root record (`id` が無いか空) の `state` / `app` / `owner.pid` | `pane.go` の `programStatusRecord`、`testdata/` の `program_status-*.json` |
 | `block call -b "$REX_BLOCK" process` | `foreground.pid` / `argv0` / `cwd` | `pane.go` の `processResult`、`pane_test.go` の `processJSON` |

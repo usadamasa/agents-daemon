@@ -1,5 +1,9 @@
 # Changelog
 
+## [2026.1020.2](https://github.com/usadamasa/agents-daemon/compare/2026.1020.1...2026.1020.2) - 2026-10-20
+
+- ボードの pane の底に記号の凡例を置く by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/197
+
 ## [2026.1020.1](https://github.com/usadamasa/agents-daemon/compare/2026.1020.0...2026.1020.1) - 2026-10-20
 
 - go-arch-lint の走査から .claude/ を外し、別セッションの worktree があっても task lint が通るようにする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/188

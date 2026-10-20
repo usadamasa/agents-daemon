@@ -21,11 +21,11 @@ import (
 const defaultTimeout = 10 * time.Second
 
 // shellFlavor は terminal の block の flavor。これ以外の block は program_status を持たない。
-// rex-premise: preview.15 cli block ls の flavor の値
+// rex-premise: preview.16 cli block ls の flavor の値
 const shellFlavor = "com.superlogical.terminal.shell"
 
 // exitTargetNotFound は rex が block や session を解決できなかったときの exit code (実測)。
-// rex-premise: preview.15 cli 存在しない block への block call は exit 3
+// rex-premise: preview.16 cli 存在しない block への block call は exit 3
 const exitTargetNotFound = 3
 
 // execClient は rex CLI を subprocess として呼び出す multiplexer.Client 実装。
@@ -103,7 +103,7 @@ func (c *execClient) runWith(ctx context.Context, bin string, args ...string) ([
 	}
 
 	// server が落ちているときに CLI が起こさないよう、全呼び出しで autostart を切る。
-	// rex-premise: preview.15 cli --autostart は global option で既定 true
+	// rex-premise: preview.16 cli --autostart は global option で既定 true
 	full := append([]string{"--autostart=false"}, args...)
 	// #nosec G204 -- bin は PATH か REX_BIN_PATH から引いた rex (利用者自身の環境)、args はこの
 	// パッケージ内で組み立てた固定のサブコマンドと block ID のみ。
@@ -170,7 +170,7 @@ func (c *execClient) PaneList(ctx context.Context) ([]multiplexer.Pane, error) {
 	var panes []multiplexer.Pane
 	for _, s := range ls.Sessions {
 		// block ls だけは -s が必須 (無いと exit 2)。
-		// rex-premise: preview.15 cli block ls は -s 必須
+		// rex-premise: preview.16 cli block ls は -s 必須
 		var blocks blockLsResult
 		if err := c.runJSON(ctx, &blocks, "block", "ls", "-s", s.SessionID, "--json"); err != nil {
 			return nil, err
@@ -218,7 +218,7 @@ func (c *execClient) blockPane(ctx context.Context, blockID string, sessions map
 // PaneRead は block の画面を返す。Claude Code は alternate screen で描くので、Claude の block では
 // 可視の行数で頭打ちになる (alternate screen でない block では scrollback も返る)。
 // opts.Lines > 0 なら末尾 Lines 行に絞る。
-// rex-premise: preview.15 cli capture は alternate screen では可視の行だけ、通常の画面では scrollback も返す。--trim と --unwrap がある
+// rex-premise: preview.16 cli capture は alternate screen では可視の行だけ、通常の画面では scrollback も返す。--trim と --unwrap がある
 func (c *execClient) PaneRead(ctx context.Context, paneID string, opts multiplexer.PaneReadOptions) (string, error) {
 	out, err := c.run(ctx, "capture", "-b", paneID, "--trim", "--unwrap")
 	if err != nil {

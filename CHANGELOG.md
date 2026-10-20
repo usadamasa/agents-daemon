@@ -1,5 +1,13 @@
 # Changelog
 
+## [2026.1020.0](https://github.com/usadamasa/agents-daemon/compare/2026.1019.1...2026.1020.0) - 2026-10-20
+
+- ratelimit の fresh で書き込みとの競合による数秒の負の age を許容する by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/174
+- chore(rexcli): rex preview.16 に追従し marker を確かめ直す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/178
+- doctor に rex の api_revision を取り込み、--json のグローバルオプションを足す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/183
+- 上限の出来事を limit-events/ に残し、modes / size で block の高さと screen を doctor に出す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/185
+- パーキングのメモを見せる面に溜まったものを刈り込めるようにする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/186
+
 ## [2026.1019.1](https://github.com/usadamasa/agents-daemon/compare/2026.1019.0...2026.1019.1) - 2026-10-19
 
 - /board の行を枠なしにし、選んだ項目の詳細と操作を枠で囲む by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/168

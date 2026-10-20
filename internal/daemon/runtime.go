@@ -21,9 +21,11 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/config"
 	"github.com/usadamasa/agents-daemon/internal/detect"
 	"github.com/usadamasa/agents-daemon/internal/edge"
+	"github.com/usadamasa/agents-daemon/internal/limitlog"
 	"github.com/usadamasa/agents-daemon/internal/monitor"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/parking"
+	"github.com/usadamasa/agents-daemon/internal/ratelimit"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
@@ -63,7 +65,9 @@ type daemonRuntime struct {
 	parking parking.Store
 	// boardLogs は CLI と mod が書くボードの経路のログ (internal/boardlog)。daemon は housekeeping で rotate 済みの
 	// ものを消すだけ。ゼロ値は何も消さない。
-	boardLogs           []string
+	boardLogs []string
+	// limits は上限の出来事の記録 (internal/limitlog)。daemon が書き、housekeeping で消す。ゼロ値は書かない。
+	limits              limitlog.Store
 	sleep               func(time.Duration)
 	startedAt           time.Time
 	panes               map[string]*paneEntry
@@ -118,12 +122,18 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 		account = nil
 	}
 
+	// Tick が分類した画面は pane ごとに 1 つ。pane は順に処理するので、直前の pane の観測を持ち越さないよう
+	// pane ごとに捨てる。
+	var observed *observation
 	deps := monitor.Deps{
 		Client:     r.client,
 		Classifier: classifier,
 		Config:     cfg,
 		Sleep:      r.sleep,
 		Account:    account,
+		Observe: func(_ multiplexer.Pane, kind detect.Kind, screen string) {
+			observed = &observation{kind: kind, screen: screen}
+		},
 	}
 
 	seen := make(map[string]bool, len(panes))
@@ -152,8 +162,11 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 			rateState = nil
 		}
 
+		observed = nil
 		outcome, tickErr := monitor.Tick(ctx, deps, pane, entry.state, rateState, now)
-		r.logOutcome(pane, outcome, tickErr)
+		if r.logOutcome(pane, outcome, tickErr) && observed != nil && isLimitEvent(outcome) {
+			r.recordLimitEvent(ctx, pane, entry, outcome, observed, rateState, account, cfg, now)
+		}
 		statusPanes = append(statusPanes, paneStatus(pane, entry, outcome, now))
 	}
 
@@ -219,7 +232,8 @@ func paneStatus(pane multiplexer.Pane, entry *paneEntry, outcome monitor.Outcome
 // logOutcome は tick 1 回の結果をログへ書く。「静かな tick」(監視中で異常無し、
 // 対象外、待機継続中) はログしない。次の朝に読んで意味が分かる粒度に絞る:
 // 上限検知と待ち時間、送信の実施、ユーザーの自己復帰、ゲート抑制、エラー。
-func (r *daemonRuntime) logOutcome(pane multiplexer.Pane, outcome monitor.Outcome, err error) {
+// 返り値は「状態が切り替わった (同じ出来事の繰り返しではない)」で、上限の出来事の記録も同じ遷移で書く。
+func (r *daemonRuntime) logOutcome(pane multiplexer.Pane, outcome monitor.Outcome, err error) bool {
 	// 同じ状態が続く間は書かない。tick は既定 5 秒ごとなので、待機や抑制が
 	// 続くだけで日に数千行に膨れ、後から読めるログでなくなる。状態が切り替わった
 	// ときだけ書き、静かな結果も key は更新して「戻ってきた」を検出できるようにする。
@@ -229,20 +243,21 @@ func (r *daemonRuntime) logOutcome(pane multiplexer.Pane, outcome monitor.Outcom
 		repeated := entry.lastLogKey == key
 		entry.lastLogKey = key
 		if repeated {
-			return
+			return false
 		}
 	}
 
 	if err != nil {
 		r.log.Logf("pane %s (%s): %s でエラー: %v", pane.PaneID, pane.CWD, outcome, err)
-		return
+		return true
 	}
 	// 上限の検知と送信の行には Claude Code の自己申告 (record) を添える。上限到達時に record が何になるかは
-	// 未実測で (#77)、ここが実測の記録になる。logKey には混ぜない (msg が変わるだけで同じ出来事を書き直さない)。
+	// 未実測で (#77)、ここと limit-events/ が実測の記録になる。logKey には混ぜない (msg が変わるだけで同じ出来事を
+	// 書き直さない)。
 	record := multiplexer.RecordLabel(pane)
 	switch outcome {
 	case monitor.OutcomeMonitoring, monitor.OutcomeStillWaiting:
-		return
+		return false
 	case monitor.OutcomeWaiting:
 		r.log.Logf("pane %s (%s): 利用上限/一時エラーを検知し待機に入りました (%s)", pane.PaneID, pane.CWD, record)
 	case monitor.OutcomeRetried:
@@ -265,6 +280,68 @@ func (r *daemonRuntime) logOutcome(pane multiplexer.Pane, outcome monitor.Outcom
 		r.log.Logf("pane %s (%s): Claude Code が利用者の答えを待つ prompt を開いているため送信を見送り待機を延長します (%s)", pane.PaneID, pane.CWD, record)
 	default:
 		r.log.Logf("pane %s (%s): %s", pane.PaneID, pane.CWD, outcome)
+	}
+	return true
+}
+
+// observation は Tick が分類した画面と kind (monitor.Deps.Observe が渡す)。
+type observation struct {
+	kind   detect.Kind
+	screen string
+}
+
+// isLimitEvent は outcome が上限の出来事 (後から検証する材料を残す価値があるもの) かを返す。
+// 静かな結果、読めなかった tick、Claude でなくなった pane は対象外。
+func isLimitEvent(outcome monitor.Outcome) bool {
+	switch outcome {
+	case monitor.OutcomeWaiting, monitor.OutcomeRetried, monitor.OutcomeRecoveredByUser, monitor.OutcomeMaxRetries,
+		monitor.OutcomeGateSuppressed, monitor.OutcomeNativeAutoContinue, monitor.OutcomeResumeEnter,
+		monitor.OutcomeHardCap, monitor.OutcomeBlockedByPrompt, monitor.OutcomeSendError:
+		return true
+	default:
+		return false
+	}
+}
+
+// recordLimitEvent は上限の出来事 1 件を limit-events/ へ残す。block の高さと screen はこのときだけ打つ
+// (毎 tick に 2 fork 足さない)。取れなくても出来事は残す。書けなくても tick は止めない。
+func (r *daemonRuntime) recordLimitEvent(ctx context.Context, pane multiplexer.Pane, entry *paneEntry, outcome monitor.Outcome,
+	observed *observation, rateState, account *ratelimit.State, cfg config.Config, now time.Time) {
+	ev := limitlog.Event{
+		At:        now,
+		PaneID:    pane.PaneID,
+		SessionID: pane.SessionID,
+		CWD:       pane.CWD,
+		Outcome:   outcome.String(),
+		Kind:      observed.kind.String(),
+		Attempts:  entry.state.Attempts,
+		WaitUntil: zeroableTime(entry.state.WaitUntil),
+		Record:    limitlog.Record{AgentStatus: string(pane.AgentStatus), Kind: pane.AgentKind, Msg: pane.AgentMessage},
+		RateLimit: limitWindow(rateState),
+		Account:   limitWindow(account),
+		Settings:  limitlog.Settings{ReadLines: cfg.ReadLines, DetectionTailLines: cfg.DetectionTailLines},
+		Screen:    observed.screen,
+	}
+	if geom, err := r.client.PaneGeometry(ctx, pane.PaneID); err != nil {
+		ev.GeometryError = err.Error()
+	} else {
+		ev.Geometry = &geom
+	}
+	if err := r.limits.Append(ev); err != nil {
+		r.log.Logf("pane %s: 上限の出来事の記録に失敗: %v", pane.PaneID, err)
+	}
+}
+
+// limitWindow は利用上限 state を記録の形に写す。無ければ nil (欄ごと出さない)。
+func limitWindow(state *ratelimit.State) *limitlog.Window {
+	if state == nil {
+		return nil
+	}
+	return &limitlog.Window{
+		UsedPercentage: state.FiveHourUsed,
+		ResetsAt:       state.FiveHourResetsAt,
+		ObservedAt:     state.ObservedAt,
+		SessionID:      state.SessionID,
 	}
 }
 
@@ -386,6 +463,7 @@ func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 	runtime.parking = parking.New(p.StateDir())
 	runtime.edges = edge.New(p.StateDir())
 	runtime.boardLogs = boardlog.Paths(p.StateDir())
+	runtime.limits = limitlog.New(p.StateDir())
 	runtime.housekeep(p.LogFile(), now)
 
 	sigCh := make(chan os.Signal, 1)

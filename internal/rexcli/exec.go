@@ -230,6 +230,35 @@ func (c *execClient) PaneRead(ctx context.Context, paneID string, opts multiplex
 	return string(out), nil
 }
 
+type sizeResult struct {
+	Rows    int `json:"rows"`
+	Columns int `json:"columns"`
+}
+
+type modesResult struct {
+	Screen string `json:"screen"`
+}
+
+// PaneGeometry は size と modes の 2 回で block の高さと screen を返す。modes は idle の terminal を起こさない
+// (changelog)。screen の未知の値は primary と見る (modes の output_schema の指示)。
+// rex-premise: preview.16 cli block call size は rows と columns を返す
+// rex-premise: preview.16 cli block call modes は screen (primary / alternate) を返す
+func (c *execClient) PaneGeometry(ctx context.Context, paneID string) (multiplexer.Geometry, error) {
+	var size sizeResult
+	if err := c.runJSON(ctx, &size, "block", "call", "-b", paneID, "size"); err != nil {
+		return multiplexer.Geometry{}, err
+	}
+	var modes modesResult
+	if err := c.runJSON(ctx, &modes, "block", "call", "-b", paneID, "modes"); err != nil {
+		return multiplexer.Geometry{}, err
+	}
+	geom := multiplexer.Geometry{Rows: size.Rows, Columns: size.Columns, Screen: multiplexer.ScreenPrimary}
+	if modes.Screen == string(multiplexer.ScreenAlternate) {
+		geom.Screen = multiplexer.ScreenAlternate
+	}
+	return geom, nil
+}
+
 // tailLines は s の末尾 n 行を返す。末尾の改行は行に数えず、あればそのまま残す。
 func tailLines(s string, n int) string {
 	body, hasNL := strings.CutSuffix(s, "\n")

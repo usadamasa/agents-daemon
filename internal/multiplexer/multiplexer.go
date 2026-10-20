@@ -79,6 +79,23 @@ type PaneReadOptions struct {
 	Lines int // 0 以下なら行数を指定しない
 }
 
+// Screen は端末が見せている画面。alternate は全画面のプログラム (Claude Code を含む) が切り替えた画面で、
+// scrollback を持たない。
+type Screen string
+
+const (
+	ScreenPrimary   Screen = "primary"
+	ScreenAlternate Screen = "alternate"
+)
+
+// Geometry は pane の端末の大きさと、見せている画面。alternate screen では PaneRead が返せるのは
+// Rows 行までで、上限の文言が画面から押し出されると検知は効かない (pane-io.md「読み取り元」)。
+type Geometry struct {
+	Rows    int    `json:"rows"`
+	Columns int    `json:"columns"`
+	Screen  Screen `json:"screen"`
+}
+
 // SessionResolver は pane (rex は block) の ID から Claude Code の session_id への対応を返す。
 // 実体は statusline が `context/<sid>.json` の multiplexer に書いた記録 (sessioncontext.Store.ListMultiplexerBlocks)。
 // backend は PaneList / PaneGet の呼び出しごとに 1 回だけ呼ぶ。
@@ -108,6 +125,8 @@ type Client interface {
 	PaneGet(ctx context.Context, paneID string) (Pane, error)
 	// PaneRead は pane の画面テキストを返す。
 	PaneRead(ctx context.Context, paneID string, opts PaneReadOptions) (string, error)
+	// PaneGeometry は pane の端末の大きさと画面を返す。毎 tick ではなく、上限の出来事の記録と doctor だけが呼ぶ。
+	PaneGeometry(ctx context.Context, paneID string) (Geometry, error)
 	// SendText は pane へリテラルテキストを送る (Enter は押さない)。
 	SendText(ctx context.Context, paneID, text string) error
 	// SendKeys は pane へキー入力を送る (例: "esc", "enter")。

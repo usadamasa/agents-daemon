@@ -17,7 +17,10 @@ type Client struct {
 	PaneListFunc  func(ctx context.Context) ([]multiplexer.Pane, error)
 	PaneGetFunc   func(ctx context.Context, paneID string) (multiplexer.Pane, error)
 	PaneReadFunc  func(ctx context.Context, paneID string, opts multiplexer.PaneReadOptions) (string, error)
-	SendTextFunc  func(ctx context.Context, paneID, text string) error
+	// PaneGeometryFunc が nil なら PaneGeometry は「取れない」として error を返す (daemon と doctor は
+	// 取れなくても本処理を止めないので、fake の既定を error にして、その経路がテストに現れるようにする)。
+	PaneGeometryFunc func(ctx context.Context, paneID string) (multiplexer.Geometry, error)
+	SendTextFunc     func(ctx context.Context, paneID, text string) error
 	SendKeysFunc  func(ctx context.Context, paneID string, keys ...string) error
 	ReachableFunc func(ctx context.Context) error
 
@@ -52,6 +55,14 @@ func (f *Client) PaneRead(ctx context.Context, paneID string, opts multiplexer.P
 		return f.PaneReadFunc(ctx, paneID, opts)
 	}
 	return "", nil
+}
+
+func (f *Client) PaneGeometry(ctx context.Context, paneID string) (multiplexer.Geometry, error) {
+	f.Calls = append(f.Calls, "PaneGeometry:"+paneID)
+	if f.PaneGeometryFunc != nil {
+		return f.PaneGeometryFunc(ctx, paneID)
+	}
+	return multiplexer.Geometry{}, fmt.Errorf("multiplexerfake.Client: PaneGeometryFunc が未設定")
 }
 
 func (f *Client) SendText(ctx context.Context, paneID, text string) error {

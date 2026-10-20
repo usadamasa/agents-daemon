@@ -379,6 +379,46 @@ func TestExecClient_PaneRead(t *testing.T) {
 	}
 }
 
+// PaneGeometry は size と modes の 2 回で block の高さと screen を返す。screen の未知の値は primary と見る
+// (modes の output_schema: Treat any other value as 'primary')。
+func TestExecClient_PaneGeometry(t *testing.T) {
+	tests := []struct {
+		name  string
+		modes string
+		want  multiplexer.Geometry
+	}{
+		{"実測の alternate", measured(t, measuredOct20, "modes.json"), multiplexer.Geometry{Rows: 52, Columns: 139, Screen: multiplexer.ScreenAlternate}},
+		{"primary", `{"screen":"primary","modes":[]}`, multiplexer.Geometry{Rows: 52, Columns: 139, Screen: multiplexer.ScreenPrimary}},
+		{"未知の値は primary", `{"screen":"weird","modes":null}`, multiplexer.Geometry{Rows: 52, Columns: 139, Screen: multiplexer.ScreenPrimary}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newFakeRex(t)
+			f.put(t, "size-"+blockClaudeWorking+".json", measured(t, measuredOct20, "size.json"))
+			f.put(t, "modes-"+blockClaudeWorking+".json", tt.modes)
+			got, err := f.client(staticResolver(nil)).PaneGeometry(context.Background(), blockClaudeWorking)
+			if err != nil {
+				t.Fatalf("PaneGeometry() error = %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("PaneGeometry() = %+v, want %+v", got, tt.want)
+			}
+			f.assertCalls(t,
+				"--autostart=false block call -b "+blockClaudeWorking+" size",
+				"--autostart=false block call -b "+blockClaudeWorking+" modes",
+			)
+		})
+	}
+
+	t.Run("閉じた block は exit 3 の error", func(t *testing.T) {
+		f := newFakeRex(t)
+		_, err := f.client(staticResolver(nil)).PaneGeometry(context.Background(), blockClosed)
+		if !isTargetNotFound(err) {
+			t.Fatalf("PaneGeometry() error = %v, want exit 3", err)
+		}
+	})
+}
+
 func TestExecClient_SendTextAndKeys(t *testing.T) {
 	f := newFakeRex(t)
 	f.put(t, "target-"+blockClaudeDone, "")

@@ -6,6 +6,7 @@ import (
 	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/boardcli"
 	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/daemoncli"
 	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/dreamcli"
+	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/jsonflag"
 	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/statuslinecli"
 	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/worktreecli"
 )
@@ -23,6 +24,8 @@ func newRootCmd() *cobra.Command {
 			"解除後に再開させること。",
 		SilenceUsage: true,
 	}
+	// グローバルオプションは --json だけ。対応はコマンドが Annotations で宣言する (internal/jsonflag)。
+	jsonflag.Add(root)
 	// コマンドの組み立ては機能ごとの internal/<family>cli が持ち、ここは登録だけにする。
 	for _, family := range [][]*cobra.Command{
 		daemoncli.Commands(), statuslinecli.Commands(), boardcli.Commands(), dreamcli.Commands(), worktreecli.Commands(),

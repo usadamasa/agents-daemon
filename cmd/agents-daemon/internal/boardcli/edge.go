@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/jsonflag"
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/edge"
@@ -15,7 +16,11 @@ import (
 // newEdgeCmd は `agents-daemon edge add|rm|list` を組み立てる (internal/edge)。結果は JSON で stdout に出す。
 // add と rm は両端の cwd から domain を決め、書く側のセッションの domain は見ない (記録に入るのは両端の情報だけ)。
 func newEdgeCmd() *cobra.Command {
-	cmd := &cobra.Command{Use: "edge", Short: "セッションをまたぐ作業の依存 (before が済まないと after を始められない) を書く・消す・一覧する"}
+	cmd := &cobra.Command{
+		Use:         "edge",
+		Short:       "セッションをまたぐ作業の依存 (before が済まないと after を始められない) を書く・消す・一覧する",
+		Annotations: jsonflag.Supported(),
+	}
 
 	var before, after edge.Endpoint
 	// endpointCmd は両端を flag で受け、run に置き場と cwd の domain の決め方を渡す add / rm を作る。

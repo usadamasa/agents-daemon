@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/jsonflag"
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/board"
 	"github.com/usadamasa/agents-daemon/internal/verify"
@@ -14,21 +15,30 @@ import (
 // newStatusCmd は `agents-daemon status` を組み立てる。
 //
 // --board はタスクのボードの JSON (internal/board) を出す。plugin の mod (hooks/board.tsx) が数秒ごとに読む。
+// --json は verify.StatusReport を出す (--board は元から JSON なので付けても変わらない)。
 func newStatusCmd() *cobra.Command {
 	var (
 		asBoard bool
 		viewer  board.Viewer
 	)
 	cmd := &cobra.Command{
-		Use:   "status",
-		Short: "daemon の稼働状況と監視中の pane 一覧を表示する",
+		Use:         "status",
+		Short:       "daemon の稼働状況と監視中の pane 一覧を表示する",
+		Annotations: jsonflag.Supported(),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			p, err := apppath.FromEnv()
 			if err != nil {
 				return err
 			}
 			if !asBoard {
-				return verify.RunStatus(cmd.OutOrStdout(), p, time.Now())
+				if !jsonflag.Enabled(cmd) {
+					return verify.RunStatus(cmd.OutOrStdout(), p, time.Now())
+				}
+				rep, err := verify.CollectStatus(p)
+				if err != nil {
+					return err
+				}
+				return jsonflag.Write(cmd.OutOrStdout(), rep)
 			}
 			if viewer.CWD == "" {
 				if viewer.CWD, err = os.Getwd(); err != nil {

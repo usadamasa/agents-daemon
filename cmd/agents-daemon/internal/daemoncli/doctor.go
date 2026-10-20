@@ -6,18 +6,20 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/jsonflag"
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/backend"
+	"github.com/usadamasa/agents-daemon/internal/doctor"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
-	"github.com/usadamasa/agents-daemon/internal/verify"
 )
 
-// newDoctorCmd は `agents-daemon doctor` を組み立てる。
+// newDoctorCmd は `agents-daemon doctor` を組み立てる。--json は doctor.Report をそのまま出す。
 func newDoctorCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "doctor",
-		Short: "daemon が動作するための前提条件を診断する",
+		Use:         "doctor",
+		Short:       "daemon が動作するための前提条件を診断する",
+		Annotations: jsonflag.Supported(),
 		Long: "多重化ツール (rex) の到達性、Claude pane の見え方、rex CLI の応答の形 (自分の block に固定の\n" +
 			"コマンドを打ち、コードが読む欄と exit code が変わっていないか)、statusline state の鮮度、\n" +
 			"設定ファイルの状態、daemon の稼働状況、peer messaging の socket (CLAUDE_CODE_MESSAGING_SOCKET)、\n" +
@@ -35,9 +37,16 @@ func newDoctorCmd() *cobra.Command {
 			}
 			// 点検の口は Client とは別の interface。持たない実装 (fake) では nil になり、節の中身を省く。
 			premises, _ := client.(multiplexer.PremiseChecker)
-			return verify.RunDoctor(cmd.Context(), cmd.OutOrStdout(), verify.DoctorInput{
-				Client: client, Kind: kind, Paths: p, Now: time.Now(), Getenv: os.Getenv, Premises: premises,
-			})
+			in := doctor.Input{Client: client, Kind: kind, Paths: p, Now: time.Now(), Getenv: os.Getenv, Premises: premises}
+			if !jsonflag.Enabled(cmd) {
+				return doctor.Run(cmd.Context(), cmd.OutOrStdout(), in)
+			}
+			// 到達できないときも集めた分は出し、exit code は文字のときと同じにする。
+			rep, err := doctor.Collect(cmd.Context(), in)
+			if writeErr := jsonflag.Write(cmd.OutOrStdout(), rep); writeErr != nil {
+				return writeErr
+			}
+			return err
 		},
 	}
 }

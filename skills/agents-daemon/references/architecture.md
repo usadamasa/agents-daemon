@@ -333,6 +333,7 @@ rex で Agent と AgentStatus を決めるのは Claude Code 自身が OSC 7501 
 | `dreamcli` | dream |
 | `statuslinecli` | statusline、ingest-statusline |
 | `worktreecli` | prune-worktrees |
+| `jsonflag` | family ではなく root のグローバルオプション `--json` の配線。対応はコマンドが `Annotations` で宣言し、宣言の無いコマンドに付いたら RunE の前に error にする |
 
 cobra を import するのは `cmd/` の下だけで、`internal/` の本体は CLI を知らない。Go の internal 規則で
 `internal/` からは cli パッケージを import できず、`.go-arch-lint.yml` は cobra を `cmd_main` (`cmd/**`) にだけ許す。

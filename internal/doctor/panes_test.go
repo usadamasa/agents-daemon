@@ -1,4 +1,4 @@
-package verify
+package doctor
 
 import (
 	"bytes"
@@ -13,10 +13,10 @@ import (
 func TestReportPanes_UnknownReason(t *testing.T) {
 	const reason = "record に owner.pid が無い (テスト)"
 	var buf bytes.Buffer
-	reportPanes(&buf, []multiplexer.Pane{
+	writePanes(&buf, *collectPanes([]multiplexer.Pane{
 		{PaneID: "b1", CWD: "/w", Agent: "claude", AgentStatus: multiplexer.AgentStatusUnknown, UnknownReason: reason},
 		{PaneID: "b2", CWD: "/w", Agent: "claude", AgentStatus: multiplexer.AgentStatusIdle},
-	})
+	}))
 	out := buf.String()
 	if !strings.Contains(out, reason) {
 		t.Errorf("理由が出ていない:\n%s", out)
@@ -29,10 +29,10 @@ func TestReportPanes_UnknownReason(t *testing.T) {
 // record の kind と msg はあるときだけ pane の行に添える。
 func TestReportPanes_RecordKindAndMessage(t *testing.T) {
 	var buf bytes.Buffer
-	reportPanes(&buf, []multiplexer.Pane{
+	writePanes(&buf, *collectPanes([]multiplexer.Pane{
 		{PaneID: "b1", CWD: "/w", Agent: "claude", AgentStatus: multiplexer.AgentStatusBlocked, AgentKind: "permission", AgentMessage: "approve Bash: rm"},
 		{PaneID: "b2", CWD: "/w", Agent: "claude", AgentStatus: multiplexer.AgentStatusWorking},
-	})
+	}))
 	out := buf.String()
 	for _, want := range []string{"kind=permission", `msg="approve Bash: rm"`} {
 		if !strings.Contains(out, want) {

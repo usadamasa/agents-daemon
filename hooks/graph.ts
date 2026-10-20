@@ -31,6 +31,35 @@ export const STOP = '■'
 export const MEMO = '◇'
 export const CYCLE = '⟳'
 
+// LEGEND は B の pane の底に置く凡例。数の行の記号、行だけに出る状態、行の末尾の印の 3 群に分ける。語は記号と同じく
+// OSC 7501 の state と Task 系ツールの status、それ以外は graph の JSON の欄の名前 (blocked_by、parked、downstream、
+// deadlock)。
+const LEGEND: readonly (readonly string[])[] = [
+  [`${STOP} blocked`, `${ICON.pending} pending`, `${ICON.working} working`, `${ICON.done} done`, `${ICON.completed} completed`, `${MEMO} parked`],
+  [`${ICON.question} question`, `${ICON.permission} permission`, `${ICON.limit} limit`, `${ICON.error} error`, `${ICON.exited} exited`, `${ICON.unknown} unknown`],
+  ['↓n downstream', `${CYCLE} deadlock`],
+]
+
+// LEGEND_GAP は凡例の列の間の桁数。
+const LEGEND_GAP = 2
+
+// legendRows は凡例を width 桁に収まる行にしたもの。群ごとに項目を格子で並べ、群の間は width 桁の罫線で分ける。
+// 列の幅は全部の群で一番長い項目に揃え、列の数は幅から決める。折り返しに任せると項目の途中や行ごとに見た目が
+// 変わるので、行は自分で組む。
+export function legendRows(width: number): string[] {
+  const cell = Math.max(...LEGEND.flatMap(g => g.map(cells)))
+  const columns = Math.max(1, Math.floor((width + LEGEND_GAP) / (cell + LEGEND_GAP)))
+  const pad = (text: string) => text + ' '.repeat(cell + LEGEND_GAP - cells(text))
+  return LEGEND.flatMap((g, k) => {
+    const rows: string[] = k === 0 ? [] : ['─'.repeat(Math.max(0, width))]
+    for (let i = 0; i < g.length; i += columns) {
+      const line = g.slice(i, i + columns)
+      rows.push(line.map((item, j) => (j === line.length - 1 ? item : pad(item))).join(''))
+    }
+    return rows
+  })
+}
+
 const STUCK = new Set<GraphNode['state']>(['question', 'permission', 'limit', 'error'])
 
 // isStuck は人の手か時間を待っている、または失敗したノードか。

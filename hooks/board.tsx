@@ -4,7 +4,7 @@ import type { EngineInterface, Register, Timer } from 'claude-code'
 import type { BoardData, BoardRow, GraphLink, GraphNode, GraphRow, ParkingCard } from '../types'
 import { loadBoard } from './board-data'
 import { daemonBin } from './daemon-bin'
-import { COLOR, Graph, ICON, MEMO, candidates, cells, chain, fit, isBlocked, splitLanes, summary, tags } from './graph'
+import { COLOR, Graph, ICON, MEMO, candidates, cells, chain, fit, isBlocked, legendRows, splitLanes, summary, tags } from './graph'
 import { logChange, logEvent, settle } from './log'
 import type { Fields } from './log'
 import {
@@ -303,46 +303,57 @@ export const registerBoard: Register = on => {
       )
     }
 
+    // root は中身と凡例の 2 つだけを持つ。pane の高さに満たないときは凡例を底に寄せ、はみ出すときは中身の後に続く。
     return (
-      <Box flexDirection="column">
-        {failure !== '' && <Text color="red">ボードを読めません: {failure}</Text>}
-        <Text dimColor>
-          {data.domain === 'home' ? '私用' : '業務'}のボード
-          {data.daemon_running ? '' : ' (agents-daemon が動いていないため、セッションの状態は出ません)'}
-        </Text>
-        <Box flexDirection="row" gap={2}>
-          <Text>{summary(g, memos.length)}</Text>
-          {g.nodes.some(n => n.state === 'completed') && (
-            <Button key="fold" onPress={() => void update($, showCompleted, () => !withCompleted)}>
-              {withCompleted ? 'Hide completed' : 'Show completed'}
-            </Button>
-          )}
-        </Box>
-        {g.nodes.length === 0 && memos.length === 0 && <Text dimColor>タスクはまだありません</Text>}
-        {rows.flatMap((r, i) => {
-          const out = [row(r, i)]
-          if (r.node === chosen && selected !== undefined) out.push(detail(selected, splitLanes(r.lanes).left))
-          return out
-        })}
-        {memos.length > 0 && (
-          <Box key="section:parking" flexDirection="column">
-            <Box flexDirection="row" gap={1}>
-              <Text bold color="success">
-                {MEMO} parking {String(memos.length)}
-              </Text>
-              {/* 古いメモをまとめて捨てる。該当があるときだけ出し、日数はこの mod が決める (park discard --days)。 */}
-              {stale > 0 && (
-                <Button key="discard-stale" onPress={() => void act(() => discardStale($, STALE_DAYS))}>
-                  Discard {String(stale)} older than {String(STALE_DAYS)}d
-                </Button>
-              )}
-            </Box>
-            {memos.map(memo => memoRow(memo))}
-            {chosenMemo !== undefined && memoDetail(chosenMemo)}
+      <Box key="root" flexDirection="column" minHeight={e.props.scroll.bodyRows} justifyContent="space-between">
+        <Box key="content" flexDirection="column">
+          {failure !== '' && <Text color="red">ボードを読めません: {failure}</Text>}
+          <Text dimColor>
+            {data.domain === 'home' ? '私用' : '業務'}のボード
+            {data.daemon_running ? '' : ' (agents-daemon が動いていないため、セッションの状態は出ません)'}
+          </Text>
+          <Box flexDirection="row" gap={2}>
+            <Text>{summary(g, memos.length)}</Text>
+            {g.nodes.some(n => n.state === 'completed') && (
+              <Button key="fold" onPress={() => void update($, showCompleted, () => !withCompleted)}>
+                {withCompleted ? 'Hide completed' : 'Show completed'}
+              </Button>
+            )}
           </Box>
-        )}
-        {selected !== undefined && !rows.some(r => r.node === chosen) && <Text dimColor>選んだタスクは今の図に出ていません (完了を畳んでいる)</Text>}
-        {sent !== '' && <Text dimColor>{sent}</Text>}
+          {g.nodes.length === 0 && memos.length === 0 && <Text dimColor>タスクはまだありません</Text>}
+          {rows.flatMap((r, i) => {
+            const out = [row(r, i)]
+            if (r.node === chosen && selected !== undefined) out.push(detail(selected, splitLanes(r.lanes).left))
+            return out
+          })}
+          {memos.length > 0 && (
+            <Box key="section:parking" flexDirection="column">
+              <Box flexDirection="row" gap={1}>
+                <Text bold color="success">
+                  {MEMO} parking {String(memos.length)}
+                </Text>
+                {/* 古いメモをまとめて捨てる。該当があるときだけ出し、日数はこの mod が決める (park discard --days)。 */}
+                {stale > 0 && (
+                  <Button key="discard-stale" onPress={() => void act(() => discardStale($, STALE_DAYS))}>
+                    Discard {String(stale)} older than {String(STALE_DAYS)}d
+                  </Button>
+                )}
+              </Box>
+              {memos.map(memo => memoRow(memo))}
+              {chosenMemo !== undefined && memoDetail(chosenMemo)}
+            </Box>
+          )}
+          {selected !== undefined && !rows.some(r => r.node === chosen) && <Text dimColor>選んだタスクは今の図に出ていません (完了を畳んでいる)</Text>}
+          {sent !== '' && <Text dimColor>{sent}</Text>}
+        </Box>
+        {/* 凡例は詳細と同じ枠で囲む。枠と詰めの分 (左右 2 桁ずつ) を引いた幅で行を組む。 */}
+        <Box key="legend" flexDirection="column" borderStyle="round" borderDimColor paddingX={1} marginTop={1}>
+          {legendRows(e.props.bodyColumns - 4).map((line, i) => (
+            <Box key={`legend:${i}`}>
+              <Text dimColor>{line}</Text>
+            </Box>
+          ))}
+        </Box>
       </Box>
     )
   })

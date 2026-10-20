@@ -19,7 +19,7 @@ var (
 	programStatusFields = []string{"state", "app", "owner.pid"}
 	processFields       = []string{"pid", "argv0", "cwd"}
 	// inspect の api.methods / api.events のうち、コードが打つ method と #78 で購読を検討している event。
-	// rex-premise: preview.15 cli block inspect --json は api.methods と api.events を method 名 / event 名を key にした object で返す
+	// rex-premise: preview.16 cli block inspect --json は api.methods と api.events を method 名 / event 名を key にした object で返す
 	inspectMethods = []string{"program_status", "process"}
 	inspectEvents  = []string{"program_status_changed"}
 )
@@ -45,7 +45,7 @@ func (c *execClient) CheckPremises(ctx context.Context, blockID, sessionID strin
 }
 
 // checkVersion は rex の版を出す。changelog との突き合わせの起点 (last-checked.md の rex_version と built_at)。
-// rex-premise: preview.15 cli version --json は rex_version と built_at を返す
+// rex-premise: preview.16 cli version --json は rex_version と built_at を返す
 func (c *execClient) checkVersion(ctx context.Context, add addFinding) {
 	m, err := c.runMap(ctx, "version", "--json")
 	if err != nil {

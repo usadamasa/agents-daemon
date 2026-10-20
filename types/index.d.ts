@@ -87,10 +87,20 @@ export type GraphLink = {
   edge?: { id: string; before: EdgeEndpoint; after: EdgeEndpoint; note?: string }
 }
 
+// GraphRow はレーンの行 1 つ。lanes は行頭の罫線で、ノードの行は `*` がそのノードのレーンの位置。node が無ければ
+// 辺をつなぐだけの行。
+export type GraphRow = {
+  lanes: string
+  node?: string
+}
+
 export type BoardGraph = {
   nodes: GraphNode[]
   links: GraphLink[]
   longest_chain: string[]
+  // rows は完了したノードを落として組んだレーンの行、rows_with_completed は全部を含めて組んだ行。
+  rows: GraphRow[]
+  rows_with_completed: GraphRow[]
 }
 
 export type BoardData = {

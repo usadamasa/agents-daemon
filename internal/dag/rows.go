@@ -19,7 +19,7 @@ type Row struct {
 // 上流が出揃ったもののうち order で先のもの。出せるものが無ければ (待ちの輪) 残りのうち Depth が最も小さく
 // order で先のものを出し、そのとき出ていない上流からの辺は描かない。
 func (g *Graph) Rows(order []string, dashed func(before, after string) bool) []Row {
-	l := &layout{g: g, dashed: dashed, index: map[string]int{}, emitted: map[string]bool{}, indeg: map[string]int{}}
+	l := &layout{g: g, dashed: dashed, index: map[string]int{}, emitted: map[string]bool{}, indeg: map[string]int{}, rows: []Row{}}
 	for i, k := range order {
 		l.index[k] = i
 	}

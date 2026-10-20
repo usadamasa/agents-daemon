@@ -51,6 +51,11 @@ type Graph struct {
 	// LongestChain は下流の最も多い止まっているノード (待ちの輪を含む) から、下流をたどった最長の鎖の Key。
 	// 止まっているノードが無ければ空。
 	LongestChain []string `json:"longest_chain"`
+	// Rows は B の pane に描くレーンの行 (internal/dag の Rows)。完了したノードとその辺を落として組む。
+	// 行の並びは Nodes の順を優先の順にした位相順。edge の辺 (セッションをまたぐ) は破線。
+	Rows []dag.Row `json:"rows"`
+	// RowsWithCompleted は完了したノードも含めて組んだ行 (Show completed)。
+	RowsWithCompleted []dag.Row `json:"rows_with_completed"`
 }
 
 // Node はノード 1 つ。
@@ -347,7 +352,33 @@ func (g *graphBuilder) finish() Graph {
 			break
 		}
 	}
+	out.Rows, out.RowsWithCompleted = g.rows(a, out.Nodes, pairs, open)
 	return out
+}
+
+// rows はレーンの行を 2 組組む: 完了したノードとその辺を落としたものと、全部を含むもの。落とした方は辺を絞って
+// 組み直す (Depth で輪を切る位置が辺の集合で変わるので、全部の表を使い回さない)。
+func (g *graphBuilder) rows(all *dag.Graph, nodes []Node, pairs [][2]string, open func(string) bool) (opened, every []dag.Row) {
+	kinds := map[[2]string]string{}
+	for _, l := range g.links {
+		kinds[[2]string{l.Before, l.After}] = l.Kind
+	}
+	dashed := func(before, after string) bool { return kinds[[2]string{before, after}] == LinkEdge }
+	order := make([]string, 0, len(nodes))
+	openOrder := make([]string, 0, len(nodes))
+	for _, n := range nodes {
+		order = append(order, n.Key)
+		if open(n.Key) {
+			openOrder = append(openOrder, n.Key)
+		}
+	}
+	openPairs := make([][2]string, 0, len(pairs))
+	for _, p := range pairs {
+		if open(p[0]) && open(p[1]) {
+			openPairs = append(openPairs, p)
+		}
+	}
+	return dag.New(openPairs, keyLess).Rows(openOrder, dashed), all.Rows(order, dashed)
 }
 
 // rank は原因の鎖で先に選ぶ上流の順。止まっているもの、進行中のもの、それ以外。

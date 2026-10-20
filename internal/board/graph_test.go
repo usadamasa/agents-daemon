@@ -2,10 +2,12 @@ package board
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/daemon"
+	"github.com/usadamasa/agents-daemon/internal/dag"
 	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/parking"
@@ -302,6 +304,57 @@ func TestGraph_chains(t *testing.T) {
 	}
 	if want := []string{"A/0", "A/1", "B/1", "A/2", "A/3", "A/4", "C/1"}; !reflect.DeepEqual(order, want) {
 		t.Errorf("order = %v, want %v", order, want)
+	}
+}
+
+// drawRows は rows を目で読める形にする (internal/dag のテストと同じ形)。
+func drawRows(rows []dag.Row) string {
+	lines := make([]string, 0, len(rows))
+	for _, r := range rows {
+		if r.Node == "" {
+			lines = append(lines, r.Lanes)
+			continue
+		}
+		lines = append(lines, r.Lanes+" "+r.Node)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// rows は Nodes の順を order にしたレーンの行。完了したノードとその辺を落としたものと、全部を含むものの 2 組。
+// edge の辺 (セッションをまたぐ) は破線。
+func TestGraph_rows(t *testing.T) {
+	const cwd = "/w/a"
+	b := Build(Input{
+		Domain: domain.Work,
+		PID:    42,
+		Snapshot: snapshot(
+			daemon.PaneStatus{PaneID: "p1", SessionID: "A", CWD: cwd, AgentStatus: "blocked", AgentKind: "question"},
+			daemon.PaneStatus{PaneID: "p2", SessionID: "B", CWD: cwd, AgentStatus: "working"},
+			daemon.PaneStatus{PaneID: "p3", SessionID: "C", CWD: cwd, AgentStatus: "blocked", AgentKind: "permission"},
+		),
+		Tasks: []tasklog.Task{
+			task("A", "1", "論点を決める", "in_progress", cwd),
+			task("A", "2", "段5", "pending", cwd, "1", "0"),
+			task("A", "0", "済んだ前提", "completed", cwd),
+			task("A", "3", "リリース", "pending", cwd, "2"),
+			task("A", "4", "確認", "pending", cwd, "3"),
+			task("B", "1", "別の作業", "in_progress", cwd),
+			task("C", "1", "止まった小さな作業", "in_progress", cwd),
+		},
+		Edges: []edge.Edge{
+			{ID: "e1", Before: edge.Endpoint{Ref: "task:B/1", CWD: cwd}, After: edge.Endpoint{Ref: "task:A/2", CWD: cwd}},
+		},
+	})
+	if got, want := drawRows(b.Graph.Rows), "* A/1\n│ * B/1\n├┄┘\n* A/2\n* A/3\n* A/4\n* C/1"; got != want {
+		t.Errorf("rows =\n%s\nwant\n%s", got, want)
+	}
+	if got, want := drawRows(b.Graph.RowsWithCompleted), "* A/0\n│ * A/1\n│ │ * B/1\n├─┴┄┘\n* A/2\n* A/3\n* A/4\n* C/1"; got != want {
+		t.Errorf("rows_with_completed =\n%s\nwant\n%s", got, want)
+	}
+	// ノードが無ければ空の配列 (JSON で null にしない)。
+	empty := Build(Input{Domain: domain.Work})
+	if empty.Graph.Rows == nil || empty.Graph.RowsWithCompleted == nil {
+		t.Errorf("rows = %v / %v, want 空の配列", empty.Graph.Rows, empty.Graph.RowsWithCompleted)
 	}
 }
 

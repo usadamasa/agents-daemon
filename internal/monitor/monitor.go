@@ -154,6 +154,10 @@ type Deps struct {
 	// 持たない pane の起床時刻をここから引く。Config と同じく tick ごとに daemon が
 	// 読み直して全 pane で共有する。無ければ nil。
 	Account *ratelimit.State
+	// Observe は画面を読んで分類するたびに、分類した画面そのものと kind を受け取る (nil なら呼ばない)。
+	// daemon が上限の出来事の記録 (internal/limitlog) に「判定した画面」を添えるための口で、判定には関わらない。
+	// 後から読み直すとき、数秒後に読み直した画面は同じ証拠にならないのでここで渡す。
+	Observe func(pane multiplexer.Pane, kind detect.Kind, screen string)
 }
 
 // Tick は pane 1 枚ぶんの 1 tick を処理し、ps を必要に応じて書き換える。
@@ -187,6 +191,9 @@ func Tick(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *PaneState, 
 	if kind == detect.KindAutoContinueArmed && !deps.Config.DeferToNativeAutoContinue {
 		// ネイティブへ譲る設定を切ったときは、同じ画面を通常の上限として扱う。
 		kind = detect.KindLimit
+	}
+	if deps.Observe != nil {
+		deps.Observe(pane, kind, screen)
 	}
 
 	if outcome, handled, err := tickNative(ps, kind); handled {

@@ -136,21 +136,20 @@ test('メモを渡せなかった理由をログに残す', async ($, on) => {
   expect(logged.at(-1)).toEqual(['mod.send', 'via=memo', 'memo=m1', 'to=PEER', 'delivered=false', 'reason=not_found'])
 })
 
-test('hint 行と band のメモを読めなかったら理由をログに残す。JSON の中身は理由に載せない', async ($, on) => {
-  let list = output('', 1, 'parking の走査に失敗')
-  const logged = world(on, argv => (argv[2] === 'list' ? list : output(JSON.stringify(board([])))))
+test('band のボードとメモを読めなかったら理由をログに残す。JSON の中身は理由に載せない', async ($, on) => {
+  let status = output('', 1, 'status snapshot のパースに失敗')
+  let list = output('[]')
+  const logged = world(on, argv => (argv[1] === 'status' ? status : list))
   on('tool.call', { tool: 'TaskUpdate' }, async () => ({ result: { success: true, taskId: '3', updatedFields: ['status'], statusChange: { from: 'in_progress', to: 'completed' } } }) as never)
 
   await $.session.start(START)
-  // 同じ理由が続く間は書き直さない。
-  await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-  expect(logged).toEqual([['mod.hint.failed', 'reason=parking の走査に失敗']])
+  // 同じ理由が続く間は書き直さない (10 秒ごとの読み直しと、park add の後の読み直し)。
+  await $.clock.sleep(10000)
+  await $.tool.call({ tool: 'mcp__agents-daemon__park', kind: 'aside', title: '秘密の題' } as never)
+  expect(logged).toEqual([['mod.band.failed', 'reason=status snapshot のパースに失敗']])
 
+  status = output(JSON.stringify(board([])))
   list = output('[{"title": "秘密の題"')
-  await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' })
   await $.tool.call({ tool: 'TaskUpdate', taskId: '3', status: 'completed' } as never)
-  expect(logged.slice(1)).toEqual([
-    ['mod.hint.failed', 'reason=park list の JSON を読めない'],
-    ['mod.band.failed', 'reason=park list の JSON を読めない'],
-  ])
+  expect(logged.slice(1)).toEqual([['mod.band.failed', 'reason=park list の JSON を読めない']])
 })

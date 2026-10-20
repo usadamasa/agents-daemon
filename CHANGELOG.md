@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026.1020.1](https://github.com/usadamasa/agents-daemon/compare/2026.1020.0...2026.1020.1) - 2026-10-20
+
+- go-arch-lint の走査から .claude/ を外し、別セッションの worktree があっても task lint が通るようにする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/188
+- 依存の DAG を pane にレーンで描き、band から図を外す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/192
+
 ## [2026.1020.0](https://github.com/usadamasa/agents-daemon/compare/2026.1019.1...2026.1020.0) - 2026-10-20
 
 - ratelimit の fresh で書き込みとの競合による数秒の負の age を許容する by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/174

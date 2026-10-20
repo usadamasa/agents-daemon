@@ -91,7 +91,7 @@ function board(memos: unknown[]) {
     daemon_running: true,
     columns: COLUMNS,
     rows: [{ repo: CWD, title: 'agents-daemon', cards: [CARD], parking: memos }],
-    graph: { nodes: [NODE], links: [], longest_chain: [] },
+    graph: { nodes: [NODE], links: [], longest_chain: [], rows: [{ lanes: '*', node: NODE.key }], rows_with_completed: [{ lanes: '*', node: NODE.key }] },
   }
 }
 
@@ -115,7 +115,7 @@ test('ボードを開いたときの数と、変わったとき、status --board
   await ui.press({ key: 'discard' })
   expect(logged.at(-1)).toEqual(['mod.board.changed', 'rows=1', 'cards=1', 'memos=0', 'daemon_running=true'])
   const count = logged.length
-  await ui.press({ key: 'row:PEER/1:PEER/1' })
+  await ui.press({ key: 'row:PEER/1' })
   await ui.input({ key: 'instruction', text: '秘密の指示' })
   await ui.unmount()
 

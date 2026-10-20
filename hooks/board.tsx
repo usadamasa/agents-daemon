@@ -1,11 +1,10 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import type { BoardData, BoardRow, GraphLink, GraphNode, ParkingCard } from '../types'
+import type { BoardData, BoardRow, GraphLink, GraphNode, GraphRow, ParkingCard } from '../types'
 import { loadBoard } from './board-data'
 import { daemonBin } from './daemon-bin'
-import { COLOR, Graph, ICON, MEMO, candidates, cells, chain, fit, sections, summary, tags, treeRows } from './graph'
-import type { TreeRow } from './graph'
+import { COLOR, Graph, ICON, MEMO, candidates, cells, chain, fit, isBlocked, splitLanes, summary, tags } from './graph'
 import { logChange, logEvent, settle } from './log'
 import type { Fields } from './log'
 import {
@@ -25,8 +24,9 @@ import {
   taskText,
 } from './parking'
 
-// 依存の DAG (#134) の B: 止まっているノードを根にした木を dock の pane に描き、選んだノードの詳細と操作を出す mod。
-// 中身は `agents-daemon status --board` (internal/board) の graph と rows (メモの送り先)。ここは描くことと送ることだけを持つ。
+// 依存の DAG (#134) の B: 辺をレーンで描いた行 (graph.rows、上流が上) を dock の pane に描き、選んだノードの詳細と
+// 操作を出す mod。中身は `agents-daemon status --board` (internal/board) の graph と rows (メモの送り先)。ここは描くことと
+// 送ることだけを持つ。
 // pane は会話の横 (dock) に置かれるときだけ出す。入力欄の上 (inline) は A の band が受け持つ。
 // cc-premise: 2.1.303 mods pane の placement (dock / inline)、command.run の presentation.isFullscreen、ui.close
 // cc-premise: 2.1.302 mods pane / clock.every / process.run / session.send / session.cwd の API で書いた
@@ -37,8 +37,6 @@ const TITLE = 'Tasks'
 // daemon は tick ごとに status.json を書き直し、タスクの記録は Task 系ツールのたびに変わる。
 // それより細かく読んでも変わらないので数秒おきにする。
 const POLL_MS = 3000
-// 根から何段目までを開いて描くか。それより深い段は「+n more」に畳む。
-const MAX_DEPTH = 2
 // 行頭の印。選んだ行だけに › を出し、ほかの行は同じ幅の空白で揃える。
 const GUTTER = 2
 // STALE_DAYS は「古い」メモの日数。週次の棚卸しを 4 回越したメモは文脈が薄れている。daemon の housekeeping は open を
@@ -50,7 +48,7 @@ const error = atom({ plugin: 'agents-daemon', key: 'error' } as const, '')
 // target は選んだノードの Key かメモの Key (park:<id>)。A の band と共有する。
 const target = atom({ plugin: 'agents-daemon', key: 'target' } as const, '')
 const notice = atom({ plugin: 'agents-daemon', key: 'notice' } as const, '')
-const unfolded = atom({ plugin: 'agents-daemon', key: 'unfolded' } as const, [])
+const showCompleted = atom({ plugin: 'agents-daemon', key: 'showCompleted' } as const, false)
 const picking = atom({ plugin: 'agents-daemon', key: 'picking' } as const, false)
 
 // timer はボードの読み直し。pane を開いている間だけ動かす。
@@ -108,7 +106,7 @@ export const registerBoard: Register = on => {
     const failure = await read($, error)
     const chosen = await read($, target)
     const sent = await read($, notice)
-    const open = new Set<string>(await read($, unfolded))
+    const withCompleted = await read($, showCompleted)
     const isPicking = await read($, picking)
     const self = await $.session.id()
 
@@ -127,6 +125,7 @@ export const registerBoard: Register = on => {
     const stale = memos.filter(memo => isStale(memo, now, STALE_DAYS)).length
     const selected = g.node(chosen)
     const chosenMemo = findMemo(data.rows, chosen)
+    const rows = withCompleted ? data.graph.rows_with_completed : data.graph.rows
 
     const choose = (key: string) => {
       void update($, target, () => key)
@@ -145,39 +144,38 @@ export const registerBoard: Register = on => {
       await act(() => deliver($, node, instruction(node, text), 'instruction'))
     }
 
-    // 行は枠なし (plain) の Button にして、枠付きの Button は操作だけに使う。
-    const row = (r: TreeRow) => {
-      if (r.type === 'more') {
+    // 行は枠なし (plain) の Button にして、枠付きの Button は操作だけに使う。レーンの罫線は薄く描き、ノードの記号の
+    // 左右に分けて置く。辺をつなぐだけの行は罫線だけ。
+    const row = (r: GraphRow, i: number) => {
+      const { left, right } = splitLanes(r.lanes)
+      const n = r.node === undefined ? undefined : g.node(r.node)
+      if (n === undefined) {
         return (
-          <Box key={`box:${r.key}`} flexDirection="row">
+          <Box key={`box:lane:${i}`} flexDirection="row">
             <Text>{' '.repeat(GUTTER)}</Text>
-            <Text dimColor>{r.prefix}</Text>
-            <Button key={r.key} plain dimColor onPress={() => void update($, unfolded, keys => [...keys, ...r.unfold])}>
-              … +{String(r.hidden)} more
-            </Button>
+            <Text dimColor>{left}</Text>
           </Box>
         )
       }
-      const n = r.node
       const isSel = n.key === chosen
-      const tag = tags(n, r.isRoot)
-      // 行頭の印と、記号と空白の 2 桁を除いた幅に title を収める。
-      const room = Math.max(4, e.props.bodyColumns - GUTTER - cells(r.prefix) - 2 - cells(tag))
+      const tag = tags(n, isBlocked(n))
+      // 行頭の印、レーン、記号と空白を除いた幅に title を収める。
+      const room = Math.max(4, e.props.bodyColumns - GUTTER - cells(left) - 1 - cells(right) - 1 - cells(tag))
       return (
-        <Box key={`box:${r.key}`} flexDirection="row">
+        <Box key={`box:row:${n.key}`} flexDirection="row">
           <Text>{isSel ? '› ' : ' '.repeat(GUTTER)}</Text>
-          <Text dimColor>{r.prefix}</Text>
-          <Button key={r.key} plain onPress={() => choose(isSel ? '' : n.key)}>
+          <Text dimColor>{left}</Text>
+          <Button key={`row:${n.key}`} plain onPress={() => choose(isSel ? '' : n.key)}>
             <Text color={COLOR[n.state]}>{ICON[n.state]}</Text>
+            <Text dimColor>{right}</Text>
             <Text bold={isSel ? true : undefined}>{` ${fit(n.title, room)}${tag}`}</Text>
           </Button>
         </Box>
       )
     }
 
-    // 選んだノードの詳細は、そのノードが最初に出た行の下にだけ、行の字下げに合わせた枠で出す。
+    // 選んだノードの詳細は、その行の下に、行のレーンの字下げに合わせた枠で出す。
     // 操作のボタンは枠の最後の行にまとめ、どのノードでも同じ位置に出す。
-    let detailShown = false
     const detail = (n: GraphNode, prefix: string) => {
       const links = g.blockers(n.key)
       const canLink = n.ref !== undefined && n.cwd !== undefined
@@ -312,25 +310,20 @@ export const registerBoard: Register = on => {
           {data.domain === 'home' ? '私用' : '業務'}のボード
           {data.daemon_running ? '' : ' (agents-daemon が動いていないため、セッションの状態は出ません)'}
         </Text>
-        <Text>{summary(g, memos.length)}</Text>
+        <Box flexDirection="row" gap={2}>
+          <Text>{summary(g, memos.length)}</Text>
+          {g.nodes.some(n => n.state === 'completed') && (
+            <Button key="fold" onPress={() => void update($, showCompleted, () => !withCompleted)}>
+              {withCompleted ? 'Hide completed' : 'Show completed'}
+            </Button>
+          )}
+        </Box>
         {g.nodes.length === 0 && memos.length === 0 && <Text dimColor>タスクはまだありません</Text>}
-        {sections(g).map(sec => (
-          <Box key={`section:${sec.id}`} flexDirection="column">
-            <Text bold color={sec.color}>
-              {sec.icon} {sec.label} {String(sec.roots.length)}
-            </Text>
-            {sec.roots.flatMap(root =>
-              treeRows(g, root, MAX_DEPTH, open, chosen).flatMap(r => {
-                const out = [row(r)]
-                if (r.type === 'node' && r.node.key === chosen && selected !== undefined && !detailShown) {
-                  detailShown = true
-                  out.push(detail(selected, r.prefix))
-                }
-                return out
-              }),
-            )}
-          </Box>
-        ))}
+        {rows.flatMap((r, i) => {
+          const out = [row(r, i)]
+          if (r.node === chosen && selected !== undefined) out.push(detail(selected, splitLanes(r.lanes).left))
+          return out
+        })}
         {memos.length > 0 && (
           <Box key="section:parking" flexDirection="column">
             <Box flexDirection="row" gap={1}>
@@ -348,7 +341,7 @@ export const registerBoard: Register = on => {
             {chosenMemo !== undefined && memoDetail(chosenMemo)}
           </Box>
         )}
-        {selected !== undefined && !detailShown && <Text dimColor>選んだタスクは今の木に出ていません (完了したか、どの根の下からも外れた)</Text>}
+        {selected !== undefined && !rows.some(r => r.node === chosen) && <Text dimColor>選んだタスクは今の図に出ていません (完了を畳んでいる)</Text>}
         {sent !== '' && <Text dimColor>{sent}</Text>}
       </Box>
     )

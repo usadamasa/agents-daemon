@@ -160,10 +160,12 @@ plugin は mod も持つ。`hooks/hooks.json` の `modules` に書ける module 
 <!-- cc-premise: 2.1.302 hooks mods の pane / session.send / session.cwd と、PostToolUse の Task 系の形 -->
 
 B は fullscreen のレイアウトで dock に置かれるときだけ出す。`/board` は `presentation.isFullscreen` が false なら開かず、
-開いた後に `placement: inline` で描かれたら (端末を 110 桁より狭めたときなど) mod が閉じる。中身は下の `graph` を
-止まっているノードを根にした木にしたもので、節は `■` blocked (止まっているノードと待ちの輪)、`▸` working、
-`↵` idle (done と、状態を分類できない `·` unknown)、`○` pending (止まっているノードの下流にいない、上流の無い pending)、`⊘` exited、`◇` parking の順。木の組み方と記号は
-`hooks/graph.ts` が持つ。選んだノードの詳細で辺を操作する。
+開いた後に `placement: inline` で描かれたら (端末を 110 桁より狭めたときなど) mod が閉じる。中身は下の `graph` の
+`rows`: 1 行 1 ノードで上流を上に並べ、行頭に辺のレーンを罫線で描いたもの (`git log --graph` の形)。合流は
+`├─┘`、分岐は `├─┐` の行を挟み、セッションをまたぐ辺 (`kind: edge`) は `┆ ┄` の破線。同じノードは 1 回しか出ず、
+先頭の数の行 (`■ ○ ▸ ↵ ✓ ◇`) の下に全部の行を描く (pane はスクロールする)。完了したノードは既定で出さず、
+`Show completed` で `rows_with_completed` に切り替える。記号と数の行は `hooks/graph.ts`、レーンの割り当ては
+`internal/dag` が持つ。選んだノードの詳細で辺を操作する。
 
 - `kind: edge` の辺は `Unlink` で `edge rm` に元の記録の参照を渡す
 - `kind: task` の辺 (同じセッションの `blockedBy`) は daemon から外せず、TaskUpdate にも外す引数が無い。
@@ -203,8 +205,9 @@ B は fullscreen のレイアウトで dock に置かれるときだけ出す。
   タスクを作らずに終了したセッションも置き場のノードにし、`exited` で下流が止まっていることを見せる
 
 ノードの状態は、完了なら `completed`、pane の無いセッションの未完了は `exited`、生きている pane の未着手は `pending`、
-進行中は pane の状態 (上限待ちを agent の申告より先に見る)。段・下流の数・待ちの輪・原因の鎖・最長の鎖の数え方は
-`internal/dag` が持つ。
+進行中は pane の状態 (上限待ちを agent の申告より先に見る)。段・下流の数・待ちの輪・原因の鎖・最長の鎖の数え方と、
+`rows` / `rows_with_completed` (位相順の行とレーンの割り当て。行の並びは `Nodes` の順を優先の順にし、直前のノードの
+下流で上流が出揃ったものを先に出す) は `internal/dag` が持つ。
 <!-- cc-premise: 2.1.302 osc7501 agent_status と blocked の kind (permission / question / auth) からノードの状態を決める -->
 
 `hooks/park.tsx` は model が呼べる tool `mcp__agents-daemon__park` を登録する (パーキングロットの置く側)。
@@ -220,11 +223,12 @@ park add の後) ので、hint 行は自前の読み直しを持たない。`$.u
 <!-- cc-premise: 2.1.302 hooks modules は 1 つ、matcher の無い hook は event ごとに 1 つ -->
 <!-- cc-premise: 2.1.302 hooks tool.register は local の port を開く (sandbox の中の claude -p では落ちる) -->
 
-`hooks/band.tsx` は入力欄の上の band (`ui.render` の `AbovePrompt`) に、依存の DAG (A) とパーキングのメモの 1 行を
-出す。band は 1 枚で、両方が分け合う。辺もメモも無ければ出さず、survey があるときは譲る。
+`hooks/band.tsx` は入力欄の上の band (`ui.render` の `AbovePrompt`) に、依存の数の 1 行 (A) とパーキングのメモの 1 行を
+出す。band は 1 枚で、両方が分け合う。辺もメモも無ければ出さず、survey があるときは譲る。図は描かない (辺を読んで
+操作する面は B の pane に 1 つ)。
 
-- 1 行目: `■ ○ ▸ ✓ ◇` の数と `longest chain` (止まっているノードから下流の最長の鎖)、`Show completed` / `Hide completed`
-- `earlier ────► later` の軸の下に、段 (前提の深さ) ごとの列でノードを並べる。完了は既定で畳み、残ったノードの段で詰める
+- 1 行目: `■ ○ ▸ ↵ ✓ ◇` の数と `longest chain` (止まっているノードから下流の最長の鎖)。選べるものは置かず、
+  止まっているものがあると分かれば `/board` を開く合図にする
 - 最後の行: メモを 3 件まで (種類と title)。残りは `+n`
 - ボードは `hooks/board-data.ts` で session.start、TaskUpdate の後、10 秒ごとに読み直す。B の pane を開いている間は
   B が 3 秒ごとに読み直し、band は同じ board を描く
@@ -232,7 +236,7 @@ park add の後) ので、hint 行は自前の読み直しを持たない。`$.u
   `completed` になったら、`park list --status open --task <task_id> --session <id> --cwd <cwd>` (そのタスクの途中で
   このセッションが置いたメモ) を先頭に寄せる。寄せるのは並びだけで、open でなくなったメモは次の読み直しで消え、
   辺もメモも無くなれば band ごと消える。どちらも `--session` で開いたセッションの domain のメモだけを引く
-- band で選んだノードとメモ (`target`) は B の pane と共有し、B でも同じものを開く
+- band で選んだメモ (`target`) は B の pane と共有し、B でも同じものを開く
 <!-- cc-premise: 2.1.303 hooks mods の ui.render AbovePrompt (hasSurvey、bodyColumns) と、TaskUpdate の結果の statusChange -->
 
 #### 時刻の書き方

@@ -25,8 +25,30 @@ Claude Code は alternate screen で描くので、Claude の block の capture 
 | 10 | none | `/upgrade` の行。上限の文が画面の外へ出る |
 
 statusline が 1 行少なければ下限も 1 行下がる。`/rate-limit-options` のメニューが出た状態と Claude Code 自身の
-再描画 (縮めた後の描き直し) は測っておらず、メニューの分だけ下限は上がりうる (#39)。
+再描画 (縮めた後の描き直し) は測っておらず、メニューの分だけ下限は上がりうる (#39)。測るのは次に上限を踏んだときで、
+daemon が踏んだ瞬間の画面と block の高さを `limit-events/` に残す ([operations.md](operations.md)「次に上限を踏んだとき」)。
+下限は `detect.MinDetectableRows` (11) にあり、`doctor` の pane 一覧が block の高さ (`size` の `rows`) と比べて ⚠ を出す。
 `--unwrap` で端末の折り返しは 1 行に戻るが、Claude Code が自分で改行した行は戻らない。
+
+### block が alternate screen にいるかは `modes` で見える
+
+<!-- rex-premise: preview.16 cli block call modes の screen は primary か alternate。idle の terminal を起こさない (changelog。idle の定義は docs に無い) -->
+<!-- cc-premise: 2.1.304 limit-screen 起動直後の trust dialog は primary screen、本体の画面は alternate (?1049)。/exit で primary に戻す -->
+
+rex preview.16 の `block call modes` は `screen` (`primary` / `alternate`) を返す。`doctor` の「rex CLI の前提」が
+自分の block で `alternate` を点検し、pane 一覧に pane ごとの値を出す。使い捨ての block で Claude Code を起こして
+測った値は次のとおり (2026-10-20、rex preview.16、Claude Code 2.1.304)。
+
+| Claude Code の状況 | `screen` | 非既定の mode | `program_status` の record | `process` の foreground |
+| ---- | ---- | ---- | ---- | ---- |
+| 起動直後 (trust dialog) | `primary` | 無し | 無し | claude |
+| 本体の画面 | `alternate` | 1049、2004、mouse 系 | `idle` | claude |
+| `/exit` の直後 | `primary` | 無し (全部戻る) | 無し (`clear` で消える) | null |
+| SIGKILL の直後 | `alternate` のまま | 残ったまま | `idle` が残る | null |
+
+SIGKILL では画面も record も残るので、`screen` で Claude Code の終了は見分けられない。終了の判定は
+`process` の foreground の pid と record の owner の突き合わせのまま ([program-status.md](program-status.md))。
+`screen` は「capture が可視の行だけを返す前提に乗っているか」を見るためだけに使う。
 
 ## 送信
 

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/applog"
+	"github.com/usadamasa/agents-daemon/internal/limitlog"
 	"github.com/usadamasa/agents-daemon/internal/monitor"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
@@ -28,7 +29,9 @@ func newTestRuntime(t *testing.T, client multiplexer.Client, startedAt time.Time
 	// sidecar file のディレクトリは一時ディレクトリ配下を指すだけで作らない。
 	// 存在しないディレクトリは「state 無し」として扱われる。
 	// 利用上限 state が要るテストは r.store.RateLimits.Dir へ書く。
-	return newDaemonRuntime(client, log, statusPath, sessionstate.New(dir), func(time.Duration) {}, startedAt), statusPath
+	r := newDaemonRuntime(client, log, statusPath, sessionstate.New(dir), func(time.Duration) {}, startedAt)
+	r.limits = limitlog.New(dir)
+	return r, statusPath
 }
 
 // writeContextSidecar は statusline が書く生の形で context/<sid>.json を置く。

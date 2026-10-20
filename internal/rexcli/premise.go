@@ -20,7 +20,7 @@ var (
 	processFields       = []string{"pid", "argv0", "cwd"}
 	// inspect の api.methods / api.events のうち、コードが打つ method と #78 で購読を検討している event。
 	// rex-premise: preview.16 cli block inspect --json は api.methods と api.events を method 名 / event 名を key にした object で返す
-	inspectMethods = []string{"program_status", "process"}
+	inspectMethods = []string{"program_status", "process", "size", "modes"}
 	inspectEvents  = []string{"program_status_changed"}
 )
 
@@ -41,7 +41,25 @@ func (c *execClient) CheckPremises(ctx context.Context, blockID, sessionID strin
 	c.checkProcess(ctx, blockID, add)
 	c.checkBlockLs(ctx, blockID, sessionID, add)
 	c.checkInspect(ctx, blockID, add)
+	c.checkModes(ctx, blockID, add)
 	return out
+}
+
+// checkModes は自分の block (doctor を Bash ツールから呼んだ Claude Code の block) が alternate screen にいることを見る。
+// capture が可視の行しか返さず、block の高さで検知が頭打ちになる前提 (pane-io.md) は、この screen で描いて
+// いることに乗っている。primary なら Claude Code の画面でない (起動直後の dialog、/exit の後の shell)。
+func (c *execClient) checkModes(ctx context.Context, blockID string, add addFinding) {
+	m, err := c.runMap(ctx, "block", "call", "-b", blockID, "modes")
+	if err != nil {
+		add(false, "modes が失敗 (block の screen を見られず、doctor の pane 一覧に高さと screen が出ない): %v", err)
+		return
+	}
+	screen, _ := m["screen"].(string)
+	if screen != screenAlternate {
+		add(false, "自分の block の screen が %q (Claude Code は alternate screen で描く前提。起動直後の dialog か、Claude Code の画面でない)", screen)
+		return
+	}
+	add(true, "自分の block の screen は alternate (capture は可視の行だけを返す)")
 }
 
 // checkVersion は rex の版を出す。changelog との突き合わせの起点 (last-checked.md の rex_version と built_at と

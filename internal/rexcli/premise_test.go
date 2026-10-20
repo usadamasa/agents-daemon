@@ -23,7 +23,9 @@ func selfFixtures(t *testing.T) *fakeRex {
 	f.put(t, "version.json", measured(t, measuredOct18, "version.json"))
 	f.put(t, "block-ls-"+sessionSelfOct18+".json", measured(t, measuredOct18, "block-ls.json"))
 	f.putBlock(t, blockSelfOct18, measured(t, measuredOct18, "program_status.json"), measured(t, measuredOct18, "process.json"))
-	f.put(t, "inspect-"+blockSelfOct18+".json", measured(t, measuredOct18, "block-inspect.json"))
+	// inspect と modes は preview.16 (10-20) の実測。modes はそこで増えた method で、10-18 の inspect には無い。
+	f.put(t, "inspect-"+blockSelfOct18+".json", measured(t, measuredOct20, "block-inspect.json"))
+	f.put(t, "modes-"+blockSelfOct18+".json", measured(t, measuredOct20, "modes.json"))
 	return f
 }
 
@@ -58,6 +60,7 @@ func TestCheckPremises_AllOK(t *testing.T) {
 		"argv0",
 		"com.superlogical.terminal.shell",
 		"program_status_changed",
+		"alternate",
 	} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("finding に %q が無い:\n%s", want, joined)
@@ -70,6 +73,7 @@ func TestCheckPremises_AllOK(t *testing.T) {
 		"--autostart=false block call -b "+blockSelfOct18+" process",
 		"--autostart=false block ls -s "+sessionSelfOct18+" --json",
 		"--autostart=false block inspect "+blockSelfOct18+" --json",
+		"--autostart=false block call -b "+blockSelfOct18+" modes",
 	)
 }
 
@@ -98,8 +102,15 @@ func TestCheckPremises_NamesMissingField(t *testing.T) {
 			f.put(t, "inspect-"+blockSelfOct18+".json", `{"api":{"methods":{"program_status":{},"process":{}},"events":{"process_changed":{}}}}`)
 		}, "program_status_changed"},
 		{"inspect に process の method が無い", func(t *testing.T, f *fakeRex) {
-			f.put(t, "inspect-"+blockSelfOct18+".json", `{"api":{"methods":{"program_status":{}},"events":{"program_status_changed":{}}}}`)
+			f.put(t, "inspect-"+blockSelfOct18+".json", `{"api":{"methods":{"program_status":{},"size":{},"modes":{}},"events":{"program_status_changed":{}}}}`)
 		}, "process"},
+		{"inspect に size と modes の method が無い", func(t *testing.T, f *fakeRex) {
+			f.put(t, "inspect-"+blockSelfOct18+".json", measured(t, measuredOct18, "block-inspect.json"))
+		}, "modes"},
+		{"modes が失敗", func(t *testing.T, f *fakeRex) { f.put(t, "fail-modes-"+blockSelfOct18+".json", "") }, "modes"},
+		{"自分の block の screen が primary", func(t *testing.T, f *fakeRex) {
+			f.put(t, "modes-"+blockSelfOct18+".json", `{"screen":"primary","modes":[]}`)
+		}, "primary"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

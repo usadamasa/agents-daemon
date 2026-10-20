@@ -28,22 +28,27 @@ const shellFlavor = "com.superlogical.terminal.shell"
 // rex-premise: preview.16 cli 存在しない block への block call は exit 3
 const exitTargetNotFound = 3
 
+// SessionResolver は block の ID から Claude Code の session_id への対応を返す。
+// 実体は statusline が `context/<sid>.json` の multiplexer に書いた記録 (sessioncontext.Store.ListMultiplexerBlocks)。
+// PaneList / PaneGet の呼び出しごとに 1 回だけ呼ぶ。
+type SessionResolver func() (map[string]string, error)
+
 // execClient は rex CLI を subprocess として呼び出す multiplexer.Client 実装。
 type execClient struct {
 	// binPath は解決済みの rex の絶対パス。空なら次の呼び出しで locateBinary が埋める。
 	binPath string
 	timeout time.Duration
 	// resolve は block_id から session_id を引く (statusline が書いた sidecar)。
-	resolve multiplexer.SessionResolver
+	resolve SessionResolver
 }
 
 // NewExecClient は実 rex バイナリを叩く Client を返す。
 // バイナリは最初の呼び出しで PATH から引く。環境変数 REX_BIN_PATH があればそれで固定する。
-func NewExecClient(resolve multiplexer.SessionResolver) multiplexer.Client {
+func NewExecClient(resolve SessionResolver) multiplexer.Client {
 	return newExecClientWithTimeout(resolve, defaultTimeout)
 }
 
-func newExecClientWithTimeout(resolve multiplexer.SessionResolver, timeout time.Duration) *execClient {
+func newExecClientWithTimeout(resolve SessionResolver, timeout time.Duration) *execClient {
 	return &execClient{binPath: os.Getenv("REX_BIN_PATH"), timeout: timeout, resolve: resolve}
 }
 
@@ -228,6 +233,34 @@ func (c *execClient) PaneRead(ctx context.Context, paneID string, opts multiplex
 		return tailLines(string(out), opts.Lines), nil
 	}
 	return string(out), nil
+}
+
+type sizeResult struct {
+	Rows    int `json:"rows"`
+	Columns int `json:"columns"`
+}
+
+type modesResult struct {
+	Screen string `json:"screen"`
+}
+
+// screenAlternate は modes の screen が alternate screen を指す値。これ以外は primary と見る (output_schema の指示)。
+const screenAlternate = "alternate"
+
+// PaneGeometry は size と modes の 2 回で block の高さと screen を返す。modes は idle の terminal を起こさない
+// (changelog)。
+// rex-premise: preview.16 cli block call size は rows と columns を返す
+// rex-premise: preview.16 cli block call modes は screen (primary / alternate) を返す
+func (c *execClient) PaneGeometry(ctx context.Context, paneID string) (multiplexer.Geometry, error) {
+	var size sizeResult
+	if err := c.runJSON(ctx, &size, "block", "call", "-b", paneID, "size"); err != nil {
+		return multiplexer.Geometry{}, err
+	}
+	var modes modesResult
+	if err := c.runJSON(ctx, &modes, "block", "call", "-b", paneID, "modes"); err != nil {
+		return multiplexer.Geometry{}, err
+	}
+	return multiplexer.Geometry{Rows: size.Rows, Columns: size.Columns, AlternateScreen: modes.Screen == screenAlternate}, nil
 }
 
 // tailLines は s の末尾 n 行を返す。末尾の改行は行に数えず、あればそのまま残す。

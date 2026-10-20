@@ -36,6 +36,10 @@ func (c dryRunClient) PaneRead(ctx context.Context, paneID string, opts multiple
 	return c.inner.PaneRead(ctx, paneID, opts)
 }
 
+func (c dryRunClient) PaneGeometry(ctx context.Context, paneID string) (multiplexer.Geometry, error) {
+	return c.inner.PaneGeometry(ctx, paneID)
+}
+
 func (c dryRunClient) Reachable(ctx context.Context) error {
 	return c.inner.Reachable(ctx)
 }

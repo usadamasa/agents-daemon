@@ -19,7 +19,8 @@
 | `block call -b "$REX_BLOCK" program_status` | root record (`id` が無いか空) の `state` / `app` / `owner.pid` | `pane.go` の `programStatusRecord`、`testdata/` の `program_status-*.json` |
 | `block call -b "$REX_BLOCK" process` | `foreground.pid` / `argv0` / `cwd` | `pane.go` の `processResult`、`pane_test.go` の `processJSON` |
 | `block ls -s "$REX_SESSION" --json` | `blocks[]` に自分の block があり `flavor` が `com.superlogical.terminal.shell` | `exec.go` の `blockLsResult` と `shellFlavor` |
-| `block inspect "$REX_BLOCK" --json` | `api.methods` に `program_status` と `process`、`api.events` に `program_status_changed` | `premise.go` の `inspectMethods` / `inspectEvents`。一覧に新しい method や event が増えていないかは人が見る (下) |
+| `block inspect "$REX_BLOCK" --json` | `api.methods` に `program_status` / `process` / `size` / `modes`、`api.events` に `program_status_changed` | `premise.go` の `inspectMethods` / `inspectEvents`。一覧に新しい method や event が増えていないかは人が見る (下) |
+| `block call -b "$REX_BLOCK" modes` | `screen` が `alternate` (Claude Code の画面で呼んだとき) | `exec.go` の `modesResult`、`testdata/2026-10-20_…/modes.json`。pane 一覧の `rows` / `screen` は `size` (`exec.go` の `sizeResult`、`testdata/2026-10-20_…/size.json`) と合わせて `PaneGeometry` が打つ |
 
 `--autostart=false` は全呼び出しに付くので、flag が消えると節の先頭 (`version --json`) から落ちる。
 `doctor` の exit code は変わらない (rex に到達できないときだけ 1)。

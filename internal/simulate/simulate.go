@@ -330,6 +330,13 @@ func (c *scopedClient) PaneRead(ctx context.Context, paneID string, opts multipl
 	return c.inner.PaneRead(ctx, paneID, opts)
 }
 
+func (c *scopedClient) PaneGeometry(ctx context.Context, paneID string) (multiplexer.Geometry, error) {
+	if err := c.guard(paneID); err != nil {
+		return multiplexer.Geometry{}, err
+	}
+	return c.inner.PaneGeometry(ctx, paneID)
+}
+
 func (c *scopedClient) SendText(ctx context.Context, paneID, text string) error {
 	if err := c.guard(paneID); err != nil {
 		return err
@@ -367,6 +374,10 @@ func (c simulateDryRunClient) PaneGet(ctx context.Context, paneID string) (multi
 
 func (c simulateDryRunClient) PaneRead(ctx context.Context, paneID string, opts multiplexer.PaneReadOptions) (string, error) {
 	return c.inner.PaneRead(ctx, paneID, opts)
+}
+
+func (c simulateDryRunClient) PaneGeometry(ctx context.Context, paneID string) (multiplexer.Geometry, error) {
+	return c.inner.PaneGeometry(ctx, paneID)
 }
 
 func (c simulateDryRunClient) Reachable(ctx context.Context) error {

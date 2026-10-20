@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/usadamasa/agents-daemon/internal/detect"
 	"github.com/usadamasa/agents-daemon/internal/domain"
 )
 
@@ -65,11 +66,29 @@ func writePanes(w io.Writer, rep PanesReport) {
 		if pane.UnknownReason != "" {
 			_, _ = fmt.Fprintf(w, "    unknown の理由: %s\n", pane.UnknownReason)
 		}
+		writePaneGeometry(w, pane)
 	}
 	if len(rep.Claude) == 0 {
 		_, _ = fmt.Fprintln(w, "  Claude agent の pane が見つかりません")
 	}
 	_, _ = fmt.Fprintf(w, "  pane 総数: %d 件 (うち Claude agent: %d 件)\n", rep.Total, len(rep.Claude))
+}
+
+// writePaneGeometry は block の高さと screen を出し、高さが下限に満たなければ ⚠ を出す。
+func writePaneGeometry(w io.Writer, pane PaneReport) {
+	if pane.GeometryError != "" {
+		_, _ = fmt.Fprintf(w, "    高さと screen を取れない: %s\n", pane.GeometryError)
+		return
+	}
+	g := pane.Geometry
+	screen := "primary"
+	if g.AlternateScreen {
+		screen = "alternate"
+	}
+	_, _ = fmt.Fprintf(w, "    rows=%d columns=%d screen=%s\n", g.Rows, g.Columns, screen)
+	if pane.tooShort() {
+		_, _ = fmt.Fprintf(w, "    ⚠ 高さが %d 行未満。上限の文が画面の外へ出て検知できないことがある (pane-io.md「読み取り元」)\n", detect.MinDetectableRows)
+	}
 }
 
 // writePremises はずれを ⚠ で出す。

@@ -342,6 +342,44 @@ test('数の行の下にレーンの行を全部描き、完了は Show complete
   expect(await ui.find({ key: 'row:C/1' })).toBeUndefined()
 })
 
+test('記号の凡例を pane の一番下に薄く置き、ボードが短くても底に寄せる', async ($, on) => {
+  boardWorld(on)
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($)
+  // root は中身と凡例の 2 つだけを持ち、pane の高さに満たないときは凡例を底へ寄せる。
+  const root = await ui.find({ key: 'root' })
+  expect(root?.props.minHeight).toBe(40)
+  expect(root?.props.justifyContent).toBe('space-between')
+  expect(root?.children).toHaveLength(2)
+  const legend = await ui.find({ key: 'legend' })
+  // 数の行の記号、行の状態の記号、行の末尾の印を全部載せる。語は OSC 7501 の state と graph の欄の名前。
+  for (const icon of ['■', '○', '▸', '↵', '✓', '◇', '?', '!', '⧗', '✗', '⊘', '·', '↓', '⟳']) {
+    expect(legend?.text).toContain(icon)
+  }
+  expect(legend?.text).toMatch(/■ blocked/)
+  expect(legend?.text).toMatch(/⧗ limit/)
+  // 凡例は詳細と同じ丸い薄い枠で囲む。
+  expect(legend?.props.borderStyle).toBe('round')
+  expect(legend?.props.borderDimColor).toBe(true)
+  // 数の行の記号、行だけに出る状態、行の末尾の印の 3 群を枠の内側いっぱいの罫線で分け、折り返しに任せず幅から
+  // 列の数を決めた格子で組む。80 桁から枠と詰めの 4 桁を引いた 76 桁なら 5 列 (一番長い項目 13 桁 + 間 2 桁)。
+  expect(legend?.props.flexWrap).toBeUndefined()
+  expect((await ui.find({ key: 'legend:0' }))?.text).toBe('■ blocked      ○ pending      ▸ working      ↵ done         ✓ completed')
+  expect((await ui.find({ key: 'legend:1' }))?.text).toBe('◇ parked')
+  expect((await ui.find({ key: 'legend:2' }))?.text).toBe('─'.repeat(76))
+  expect((await ui.find({ key: 'legend:3' }))?.text).toBe('? question     ! permission   ⧗ limit        ✗ error        ⊘ exited')
+  expect((await ui.find({ key: 'legend:4' }))?.text).toBe('· unknown')
+  expect((await ui.find({ key: 'legend:5' }))?.text).toBe('─'.repeat(76))
+  expect((await ui.find({ key: 'legend:6' }))?.text).toBe('↓n downstream  ⟳ deadlock')
+  expect(await ui.find({ key: 'legend:7' })).toBeUndefined()
+  // 送った結果の知らせは凡例より上 (中身の側) に出す。
+  await ui.press({ key: 'row:W/1' })
+  await ui.input({ key: 'instruction', text: '先にテストを足して' })
+  const content = await ui.find({ key: 'content' })
+  expect(content?.text).toMatch(/edge-cli へ送りました/)
+  expect(legend?.text).not.toMatch(/送りました/)
+})
+
 test('選んだノードの詳細に参照とセッション、上流をたどった原因の鎖を出す', async ($, on) => {
   boardWorld(on)
   await $.command.run(OPEN_BOARD)

@@ -164,8 +164,9 @@ B は fullscreen のレイアウトで dock に置かれるときだけ出す。
 `rows`: 1 行 1 ノードで上流を上に並べ、行頭に辺のレーンを罫線で描いたもの (`git log --graph` の形)。合流は
 `├─┘`、分岐は `├─┐` の行を挟み、セッションをまたぐ辺 (`kind: edge`) は `┆ ┄` の破線。同じノードは 1 回しか出ず、
 先頭の数の行 (`■ ○ ▸ ↵ ✓ ◇`) の下に全部の行を描く (pane はスクロールする)。完了したノードは既定で出さず、
-`Show completed` で `rows_with_completed` に切り替える。記号と数の行は `hooks/graph.ts`、レーンの割り当ては
-`internal/dag` が持つ。選んだノードの詳細で辺を操作する。
+`Show completed` で `rows_with_completed` に切り替える。pane の底には記号の凡例を薄く置き、中身が pane の高さに
+満たないときも底に寄せる。記号と数の行と凡例は `hooks/graph.ts`、レーンの割り当ては `internal/dag` が持つ。
+選んだノードの詳細で辺を操作する。
 
 - `kind: edge` の辺は `Unlink` で `edge rm` に元の記録の参照を渡す
 - `kind: task` の辺 (同じセッションの `blockedBy`) は daemon から外せず、TaskUpdate にも外す引数が無い。

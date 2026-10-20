@@ -14,15 +14,15 @@ import (
 // Client は multiplexer.Client のテスト用実装。各メソッドの挙動を *Func フィールドで
 // 差し替えられる。
 type Client struct {
-	PaneListFunc  func(ctx context.Context) ([]multiplexer.Pane, error)
-	PaneGetFunc   func(ctx context.Context, paneID string) (multiplexer.Pane, error)
-	PaneReadFunc  func(ctx context.Context, paneID string, opts multiplexer.PaneReadOptions) (string, error)
+	PaneListFunc func(ctx context.Context) ([]multiplexer.Pane, error)
+	PaneGetFunc  func(ctx context.Context, paneID string) (multiplexer.Pane, error)
+	PaneReadFunc func(ctx context.Context, paneID string, opts multiplexer.PaneReadOptions) (string, error)
 	// PaneGeometryFunc が nil なら PaneGeometry は「取れない」として error を返す (daemon と doctor は
 	// 取れなくても本処理を止めないので、fake の既定を error にして、その経路がテストに現れるようにする)。
 	PaneGeometryFunc func(ctx context.Context, paneID string) (multiplexer.Geometry, error)
 	SendTextFunc     func(ctx context.Context, paneID, text string) error
-	SendKeysFunc  func(ctx context.Context, paneID string, keys ...string) error
-	ReachableFunc func(ctx context.Context) error
+	SendKeysFunc     func(ctx context.Context, paneID string, keys ...string) error
+	ReachableFunc    func(ctx context.Context) error
 
 	// Calls は呼ばれた操作の履歴。テストの assertion に使う。
 	Calls []string

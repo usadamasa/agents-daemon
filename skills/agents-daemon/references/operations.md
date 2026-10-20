@@ -142,13 +142,36 @@ shell を受け手にすると ESC の直後の文字を Meta として食う (z
 rex の `capture` は可視領域しか返さないので、使い捨て block は自分の block の 40% の高さで割る。
 OSC 7501 の書式と判定の条件は [program-status.md](program-status.md)。
 
-`doctor` は rex の server への到達性、Claude pane の一覧 (`session_id` が引けなければ `(なし)`) を出す。
+`doctor` は rex の server への到達性、Claude pane の一覧 (`session_id` が引けなければ `(なし)`、block の高さと screen、
+高さが `detect.MinDetectableRows` 未満なら ⚠) を出す。
 rex の外 (`REX_SESSION` なし) では exit 1 で止まる。「rex CLI の前提」は自分の block (`REX_BLOCK`) に固定の
 コマンドを打ち、コードが読む欄と exit code が rex の版で変わっていないかを `⚠` で名指しする (rex を上げた直後に
 全 pane が unknown になったときの最初の手がかり)。末尾の「peer messaging」は
 `CLAUDE_CODE_MESSAGING_SOCKET` と socket の有無で、Claude Code のセッション内 (Bash ツール) から呼んだときだけ
 意味を持つ (切り分けは `agents-daemon:setup` skill の `references/peer-messaging.md`)。
 `inspect --pane` の pane ID は block ID。
+
+### 次に上限を踏んだとき
+
+上限は起こさないと測れない。daemon は上限の出来事 (daemon.log に行を書くのと同じ遷移) のたびに、踏んだ瞬間の
+材料を `$STATE/limit-events/<YYYY-MM-DD>.jsonl` へ 1 行の JSON で残す (`internal/limitlog`、欄は package doc)。
+上限を踏んだあとにこれを読んで、未測定のまま残っている次の問いに答える。
+
+| 問い | 見る欄 |
+| ---- | ---- |
+| 上限到達時に Claude Code は record を何と申告するか (#77) | `record` (`agent_status` / `kind` / `msg`)。`working` のままか、`error` に msg が付くか |
+| 小さい block で上限の文と `❯` の行が同時に見えるか、`/rate-limit-options` のメニューが出た状態の下限 (#39) | `geometry.rows` / `geometry.alternate_screen` と `screen` (判定した画面そのもの。上限の文が下から何行目か、メニューと入力行が入っているか) |
+| ゲートと起床時刻の判断は正しかったか | `rate_limit` (own)、`account`、`wait_until`、`outcome` |
+| 設定を変えたら判定が変わるか | `screen` を `inspect --file` に渡す (下) |
+
+```sh
+jq -c '{at, pane_id, outcome, kind, record, geometry}' "$STATE"/limit-events/*.jsonl   # 出来事の一覧
+jq -r 'select(.outcome == "waiting") | .screen' "$STATE"/limit-events/2026-10-21.jsonl > ./tmp/limit-screen.txt
+agents-daemon inspect --file ./tmp/limit-screen.txt --session <session_id>             # 同じ画面を判定し直す
+```
+
+`screen` には上限の文言と reset 時刻がそのまま入っている。監視中の pane に `cat` すると daemon がそれを
+limit と判定するので、`jq` で欄を選んで読み、画面に出すなら別のファイルへ落として `inspect --file` に渡す。
 
 ### 実機での検証順序
 

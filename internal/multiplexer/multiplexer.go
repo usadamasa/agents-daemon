@@ -79,27 +79,14 @@ type PaneReadOptions struct {
 	Lines int // 0 以下なら行数を指定しない
 }
 
-// Screen は端末が見せている画面。alternate は全画面のプログラム (Claude Code を含む) が切り替えた画面で、
-// scrollback を持たない。
-type Screen string
-
-const (
-	ScreenPrimary   Screen = "primary"
-	ScreenAlternate Screen = "alternate"
-)
-
-// Geometry は pane の端末の大きさと、見せている画面。alternate screen では PaneRead が返せるのは
-// Rows 行までで、上限の文言が画面から押し出されると検知は効かない (pane-io.md「読み取り元」)。
+// Geometry は pane の端末の大きさと、alternate screen (全画面のプログラムが切り替える、scrollback の無い画面) に
+// いるか。alternate screen では PaneRead が返せるのは Rows 行までで、上限の文言が画面から押し出されると
+// 検知は効かない (pane-io.md「読み取り元」)。
 type Geometry struct {
-	Rows    int    `json:"rows"`
-	Columns int    `json:"columns"`
-	Screen  Screen `json:"screen"`
+	Rows            int  `json:"rows"`
+	Columns         int  `json:"columns"`
+	AlternateScreen bool `json:"alternate_screen"`
 }
-
-// SessionResolver は pane (rex は block) の ID から Claude Code の session_id への対応を返す。
-// 実体は statusline が `context/<sid>.json` の multiplexer に書いた記録 (sessioncontext.Store.ListMultiplexerBlocks)。
-// backend は PaneList / PaneGet の呼び出しごとに 1 回だけ呼ぶ。
-type SessionResolver func() (map[string]string, error)
 
 // PremiseFinding は PremiseChecker の点検 1 件。OK が false なら前提が崩れている (doctor が ⚠ で出す)。
 type PremiseFinding struct {

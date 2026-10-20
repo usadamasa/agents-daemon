@@ -54,7 +54,7 @@ func TestDaemonRuntimeTick_LimitEventRecorded(t *testing.T) {
 		PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) { return []multiplexer.Pane{pane}, nil },
 		PaneReadFunc: func(context.Context, string, multiplexer.PaneReadOptions) (string, error) { return screen, nil },
 		PaneGeometryFunc: func(context.Context, string) (multiplexer.Geometry, error) {
-			return multiplexer.Geometry{Rows: 11, Columns: 139, Screen: multiplexer.ScreenAlternate}, nil
+			return multiplexer.Geometry{Rows: 11, Columns: 139, AlternateScreen: true}, nil
 		},
 	}
 	r, _ := newTestRuntime(t, client, now)
@@ -76,7 +76,7 @@ func TestDaemonRuntimeTick_LimitEventRecorded(t *testing.T) {
 	if ev.Record.AgentStatus != "working" || ev.Record.Msg != "長い作業" {
 		t.Errorf("record = %+v", ev.Record)
 	}
-	if ev.Geometry == nil || ev.Geometry.Rows != 11 || ev.Geometry.Screen != multiplexer.ScreenAlternate {
+	if ev.Geometry == nil || ev.Geometry.Rows != 11 || !ev.Geometry.AlternateScreen {
 		t.Errorf("geometry = %+v", ev.Geometry)
 	}
 	if ev.WaitUntil == nil || !ev.WaitUntil.After(now) {

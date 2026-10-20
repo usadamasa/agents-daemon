@@ -23,7 +23,7 @@ func TestAppend(t *testing.T) {
 		Kind:      "limit",
 		Attempts:  0,
 		Record:    Record{AgentStatus: "working", Msg: "長い作業"},
-		Geometry:  &multiplexer.Geometry{Rows: 11, Columns: 139, Screen: multiplexer.ScreenAlternate},
+		Geometry:  &multiplexer.Geometry{Rows: 11, Columns: 139, AlternateScreen: true},
 		RateLimit: &Window{UsedPercentage: 100, ResetsAt: at.Add(time.Hour), ObservedAt: at.Add(-time.Minute), SessionID: "sid-1"},
 		Settings:  Settings{ReadLines: 25, DetectionTailLines: 15},
 		Screen:    "line 1\nline 2\n",

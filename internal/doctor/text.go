@@ -81,7 +81,11 @@ func writePaneGeometry(w io.Writer, pane PaneReport) {
 		return
 	}
 	g := pane.Geometry
-	_, _ = fmt.Fprintf(w, "    rows=%d columns=%d screen=%s\n", g.Rows, g.Columns, g.Screen)
+	screen := "primary"
+	if g.AlternateScreen {
+		screen = "alternate"
+	}
+	_, _ = fmt.Fprintf(w, "    rows=%d columns=%d screen=%s\n", g.Rows, g.Columns, screen)
 	if pane.tooShort() {
 		_, _ = fmt.Fprintf(w, "    ⚠ 高さが %d 行未満。上限の文が画面の外へ出て検知できないことがある (pane-io.md「読み取り元」)\n", detect.MinDetectableRows)
 	}

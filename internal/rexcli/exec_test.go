@@ -153,7 +153,7 @@ func splitArgs(t *testing.T, lines []string) [][]string {
 	return out
 }
 
-func (f *fakeRex) client(resolve multiplexer.SessionResolver) *execClient {
+func (f *fakeRex) client(resolve SessionResolver) *execClient {
 	return &execClient{binPath: f.bin, timeout: noCommandTimeout, resolve: resolve}
 }
 
@@ -180,7 +180,7 @@ func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-func staticResolver(m map[string]string) multiplexer.SessionResolver {
+func staticResolver(m map[string]string) SessionResolver {
 	return func() (map[string]string, error) { return m, nil }
 }
 
@@ -387,9 +387,9 @@ func TestExecClient_PaneGeometry(t *testing.T) {
 		modes string
 		want  multiplexer.Geometry
 	}{
-		{"実測の alternate", measured(t, measuredOct20, "modes.json"), multiplexer.Geometry{Rows: 52, Columns: 139, Screen: multiplexer.ScreenAlternate}},
-		{"primary", `{"screen":"primary","modes":[]}`, multiplexer.Geometry{Rows: 52, Columns: 139, Screen: multiplexer.ScreenPrimary}},
-		{"未知の値は primary", `{"screen":"weird","modes":null}`, multiplexer.Geometry{Rows: 52, Columns: 139, Screen: multiplexer.ScreenPrimary}},
+		{"実測の alternate", measured(t, measuredOct20, "modes.json"), multiplexer.Geometry{Rows: 52, Columns: 139, AlternateScreen: true}},
+		{"primary", `{"screen":"primary","modes":[]}`, multiplexer.Geometry{Rows: 52, Columns: 139}},
+		{"未知の値は primary", `{"screen":"weird","modes":null}`, multiplexer.Geometry{Rows: 52, Columns: 139}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

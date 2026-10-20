@@ -55,7 +55,7 @@ func (c *execClient) checkModes(ctx context.Context, blockID string, add addFind
 		return
 	}
 	screen, _ := m["screen"].(string)
-	if screen != string(multiplexer.ScreenAlternate) {
+	if screen != screenAlternate {
 		add(false, "自分の block の screen が %q (Claude Code は alternate screen で描く前提。起動直後の dialog か、Claude Code の画面でない)", screen)
 		return
 	}

@@ -30,8 +30,8 @@ func geometryOf(m map[string]multiplexer.Geometry) *multiplexerfake.Client {
 // 未満なら「検知できないことがある」と ⚠ を出す。取れなければ理由を出して pane の行は残す。
 func TestReportPanes_Geometry(t *testing.T) {
 	client := geometryOf(map[string]multiplexer.Geometry{
-		"tall":  {Rows: 52, Columns: 139, Screen: multiplexer.ScreenAlternate},
-		"short": {Rows: detect.MinDetectableRows - 1, Columns: 139, Screen: multiplexer.ScreenAlternate},
+		"tall":  {Rows: 52, Columns: 139, AlternateScreen: true},
+		"short": {Rows: detect.MinDetectableRows - 1, Columns: 139, AlternateScreen: true},
 	})
 	rep := collectPanes(context.Background(), client, []multiplexer.Pane{
 		{PaneID: "tall", CWD: "/w", Agent: "claude", AgentStatus: multiplexer.AgentStatusIdle},

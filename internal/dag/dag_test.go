@@ -98,16 +98,16 @@ func TestRows(t *testing.T) {
 		},
 		{
 			name:  "合流の間を通り抜けるレーンとは ┼ で交差する",
-			links: [][2]string{{"a", "d"}, {"b", "e"}, {"c", "d"}},
-			order: []string{"a", "b", "c", "d", "e"},
-			want:  "* a\n│ * b\n│ │ * c\n├─┼─┘\n* │ d\n  * e",
+			links: [][2]string{{"a", "d"}, {"b", "e"}, {"c", "d"}, {"f", "e"}},
+			order: []string{"a", "b", "c", "d", "f", "e"},
+			want:  "* a\n│ * b\n│ │ * c\n├─┼─┘\n* │ d\n* │ f\n├─┘\n* e",
 		},
 		{
 			name:   "dashed の辺は縦を ┆、横を ┄ で描く。辺の無いノードは空きのレーンに出る",
 			links:  [][2]string{{"a", "b"}, {"c", "b"}},
-			order:  []string{"a", "c", "x", "b"},
-			dashed: func(before, _ string) bool { return before == "c" },
-			want:   "* a\n│ * c\n│ ┆ * x\n├┄┘\n* b",
+			order:  []string{"a", "x", "c", "b"},
+			dashed: func(_, after string) bool { return after == "b" },
+			want:   "* a\n┆ * x\n┆ * c\n├┄┘\n* b",
 		},
 		{
 			name:  "直前のノードの下流で上流が出揃ったものを、order より先に出す",

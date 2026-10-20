@@ -86,6 +86,10 @@ func TestWrite_parking(t *testing.T) {
 	if len(home.Rows) != 1 || len(home.Rows[0].Parking) != 1 || home.Rows[0].Parking[0].Title != "開いている" {
 		t.Errorf("home = %+v", home.Rows)
 	}
+	// here は開いたセッションの行の鍵 (mod が自分の repo のメモを引く)。行の鍵と同じ規則で決める。
+	if home.Here != home.Rows[0].Repo {
+		t.Errorf("here = %q, want %q", home.Here, home.Rows[0].Repo)
+	}
 }
 
 // グラフの辺には、開いたセッションの domain の辺 (edges/<domain>/) だけを使う。

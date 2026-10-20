@@ -18,6 +18,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/config"
 	"github.com/usadamasa/agents-daemon/internal/daemon"
+	"github.com/usadamasa/agents-daemon/internal/detect"
 	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/ratelimit"
@@ -72,6 +73,14 @@ type PaneReport struct {
 	SessionID    string                  `json:"session_id,omitempty"`
 	// UnknownReason は record があるのに使えず agent_status が unknown になった理由。
 	UnknownReason string `json:"unknown_reason,omitempty"`
+	// Geometry は block の高さと screen (size と modes)。取れなければ GeometryError に理由。
+	Geometry      *multiplexer.Geometry `json:"geometry,omitempty"`
+	GeometryError string                `json:"geometry_error,omitempty"`
+}
+
+// tooShort は block の高さが上限の画面を検知できる下限に満たないかを返す。
+func (p PaneReport) tooShort() bool {
+	return p.Geometry != nil && p.Geometry.Rows < detect.MinDetectableRows
 }
 
 // PremisesReport は rex CLI の前提の点検。点検しなかったときは Skipped に理由が入り Findings は空。
@@ -204,7 +213,7 @@ func Collect(ctx context.Context, in Input) (Report, error) {
 		rep.Panes = &PanesReport{Error: err.Error()}
 		return rep, fmt.Errorf("%s の pane 一覧の取得に失敗しました (%s には到達できるのに異常): %w", in.Kind, in.Kind, err)
 	}
-	rep.Panes = collectPanes(panes)
+	rep.Panes = collectPanes(ctx, in.Client, panes)
 	rep.Premises = collectPremises(ctx, in.Premises, in.Getenv)
 	rep.RateLimits = collectRateLimitStates(in.Paths, panes, in.Now)
 	rep.Config = collectConfigState(in.Paths)
@@ -215,17 +224,24 @@ func Collect(ctx context.Context, in Input) (Report, error) {
 	return rep, nil
 }
 
-// collectPanes は pane 一覧のうち Claude agent と判定されたものを写す。
-func collectPanes(panes []multiplexer.Pane) *PanesReport {
+// collectPanes は pane 一覧のうち Claude agent と判定されたものを写し、その block の高さと screen を添える
+// (小さく分割した block で検知が黙って効かなくなるのを、上限を踏む前に見るため)。
+func collectPanes(ctx context.Context, client multiplexer.Client, panes []multiplexer.Pane) *PanesReport {
 	rep := &PanesReport{Claude: []PaneReport{}, Total: len(panes)}
 	for _, pane := range panes {
 		if !multiplexer.IsClaudeAgent(pane) {
 			continue
 		}
-		rep.Claude = append(rep.Claude, PaneReport{
+		p := PaneReport{
 			PaneID: pane.PaneID, CWD: pane.CWD, AgentStatus: pane.AgentStatus, AgentKind: pane.AgentKind,
 			AgentMessage: pane.AgentMessage, SessionID: pane.SessionID, UnknownReason: pane.UnknownReason,
-		})
+		}
+		if geom, err := client.PaneGeometry(ctx, pane.PaneID); err != nil {
+			p.GeometryError = err.Error()
+		} else {
+			p.Geometry = &geom
+		}
+		rep.Claude = append(rep.Claude, p)
 	}
 	return rep
 }

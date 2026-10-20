@@ -56,6 +56,13 @@ func (k Kind) String() string {
 // 「上限に達した」と判定するかの範囲。参考実装 (patterns.js) の WINDOW に合わせる。
 const nearbyWindow = 6
 
+// MinDetectableRows は上限の画面を limit と判定できる block の高さの下限 (行)。Claude Code は alternate screen で
+// 描き、多重化ツールの capture は可視の行しか返さないので、上限の文 (画面の下から 10 行目) がこれより低い block では
+// 画面の外へ出て検知が黙って効かなくなる。実測は pane-io.md「読み取り元」(statusline 3 行。1 行少なければ下限も
+// 1 行下がる)。doctor が pane の高さと比べる。
+// cc-premise: 2.1.302 limit-screen 上限の文は画面の下から 10 行目に出る (statusline 3 行)
+const MinDetectableRows = 11
+
 var (
 	// ANSI エスケープシーケンス除去用。参考実装 (patterns.js stripAnsi) を移植。
 	oscEscapeRe   = regexp.MustCompile(`\x1b\][\s\S]*?(?:\x07|\x1b\\)`)

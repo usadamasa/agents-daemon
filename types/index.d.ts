@@ -121,10 +121,8 @@ declare module 'claude-code' {
       board: BoardData | null
       // error は直近の読み込みの失敗理由。読めたら空にする。
       error: string
-      // target は選んだノードの key かメモの key (park:<id>)。B の pane と A の band が共有する。未選択なら空。
+      // target は選んだノードの key かメモの key (park:<id>)。B の pane と A の band (メモ) が共有する。未選択なら空。
       target: string
-      // unfolded は B の木で畳まずに開くノードの key。
-      unfolded: string[]
       // picking は B の詳細で Add blocker の候補を出しているか。
       picking: boolean
       // notice は送信とメモの操作の結果。
@@ -135,7 +133,7 @@ declare module 'claude-code' {
       // front は band のメモの行の先頭に寄せるメモの id (completed になったタスクの途中で置いたもの、hooks/band.tsx)。
       // 並びの指示だけで、中身は parked から取る。
       front: string[]
-      // showCompleted は band で完了したノードを出すか。既定は畳む。
+      // showCompleted は B の pane で完了したノードを出すか (graph.rows_with_completed を描く)。既定は畳む。
       showCompleted: boolean
       // logged はボードの経路のログに slot ごとに最後に書いた中身 (hooks/log.ts)。同じものを書き直さないため。
       logged: Record<string, string>

@@ -109,6 +109,10 @@ const LINKS = [
   { before: 'ref:issue:o/r#9', after: 'P/1', kind: 'edge', edge: { id: 'e3', before: ep('issue:o/r#9'), after: ep('task:P/1') } },
 ]
 
+// レーンの行 (internal/dag の Rows を Nodes の順で組んだもの)。鎖は Q → R → V と W、ref → P。輪の X は最後。
+const ROWS = ['Q/1', 'Q/2', 'R/1', 'V/1', 'W/1', 'W/2', 'ref:issue:o/r#9', 'P/1', 'D/1', 'G/1', 'SELF/1', 'X/1', 'X/2'].map(node => ({ lanes: '*', node }))
+const ROWS_WITH_COMPLETED = [...ROWS.slice(0, 10), { lanes: '*', node: 'C/1' }, ...ROWS.slice(10)]
+
 // メモは W/1 の途中と、終了した G が置いた。
 const MEMO = {
   id: '20261018T090000-aaaa',
@@ -147,7 +151,16 @@ const BOARD = {
     },
     { repo: '/src/home/dotfile', title: 'dotfile', cards: [card('P/1', 'pending', '後続', 'P', { session: 'peer', task_id: '1' })], parking: [] },
   ],
-  graph: { nodes: NODES, links: LINKS, longest_chain: ['Q/1', 'Q/2', 'R/1', 'V/1'] },
+  graph: { nodes: NODES, links: LINKS, longest_chain: ['Q/1', 'Q/2', 'R/1', 'V/1'], rows: ROWS, rows_with_completed: ROWS_WITH_COMPLETED },
+}
+
+// withNodes はボードにノードを足し、レーンの行の末尾に 1 本ずつ並べる。
+function withNodes(...extra: Record<string, unknown>[]) {
+  const rows = extra.map(n => ({ lanes: '*', node: n.key as string }))
+  return {
+    ...BOARD,
+    graph: { ...BOARD.graph, nodes: [...NODES, ...extra], rows: [...ROWS, ...rows], rows_with_completed: [...ROWS_WITH_COMPLETED, ...rows] },
+  }
 }
 
 // 利用者が composer で /board を打ったときの command.run。
@@ -200,7 +213,7 @@ test('入力欄の上 (inline) に描かれたら pane を閉じ、閉じたこ�
   const ui = await mount($, 'terminal', { ...PANE_PROPS, placement: 'inline' })
   expect(w.closed).toEqual(['agents-daemon-board'])
   expect(toasts[0]).toMatch(/110 桁/)
-  expect(await ui.find({ key: 'row:Q/1:Q/1' })).toBeUndefined()
+  expect(await ui.find({ key: 'row:Q/1' })).toBeUndefined()
   await ui.unmount()
   // 閉じるまでに inline の描画がもう一度走っても、知らせは 1 回だけ。
   const again = await mount($, 'terminal', { ...PANE_PROPS, placement: 'inline' })
@@ -208,52 +221,65 @@ test('入力欄の上 (inline) に描かれたら pane を閉じ、閉じたこ�
   expect(toasts).toHaveLength(1)
 })
 
-test('⊘ の節は、先の根の木に出た exited のノードを根にしない', async ($, on) => {
-  const gone2 = node('G/2', 'exited', '残った作業の続き', { session: 'gone', blocked_by: ['G/1'] })
-  const nodes = NODES.map(n => (n.key === 'G/1' ? { ...n, downstream: 1 } : n))
-  boardWorld(on, { ...BOARD, graph: { ...BOARD.graph, nodes: [...nodes, gone2], links: [...LINKS, { before: 'G/1', after: 'G/2', kind: 'task' }] } })
+test('レーンの行を上から描く: 罫線は薄く、ノードは記号と title、つなぐだけの行は罫線だけ', async ($, on) => {
+  // W/1 → R/1 の辺 (セッションをまたぐ、破線) が Q/1 → R/1 に合流し、R/1 の右を別のレーンが通る見本。
+  const rows = [
+    { lanes: '*', node: 'Q/1' },
+    { lanes: '│ *', node: 'W/1' },
+    { lanes: '├┄┘' },
+    { lanes: '* │', node: 'R/1' },
+  ]
+  boardWorld(on, { ...BOARD, graph: { ...BOARD.graph, rows, rows_with_completed: rows } })
   await $.command.run(OPEN_BOARD)
-  const ui = await mount($)
-  expect(await ui.find({ type: 'Text', text: /⊘ exited 1/ })).toBeDefined()
-  expect(await ui.find({ key: 'row:G/1:G/2' })).toBeDefined()
-  expect(await ui.find({ key: 'row:G/2:G/2' })).toBeUndefined()
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await mount($, surface)
+    expect((await ui.find({ key: 'box:row:Q/1' }))?.text).toMatch(/^ {2}\? 論点を決める ↓3$/)
+    expect((await ui.find({ key: 'box:row:W/1' }))?.text).toMatch(/^ {2}│ ▸ edge の CLI ◇1$/)
+    expect((await ui.find({ key: 'box:lane:2' }))?.text).toMatch(/^ {2}├┄┘$/)
+    expect((await ui.find({ key: 'box:row:R/1' }))?.text).toMatch(/^ {2}○ │ リリース$/)
+    // 行に無いノードは描かない。節の見出しも無い。
+    expect(await ui.find({ key: 'row:V/1' })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: /blocked \d/ })).toBeUndefined()
+    await ui.unmount()
+  }
 })
 
-test('長い title は pane の幅に合わせて 1 行に切り詰める', async ($, on) => {
+test('長い title は pane の幅からレーンの分を除いて 1 行に切り詰める', async ($, on) => {
   const long = node('L/1', 'working', 'とても長いタイトル'.repeat(10), { session: 'long' })
-  boardWorld(on, { ...BOARD, graph: { ...BOARD.graph, nodes: [...NODES, long] } })
+  const rows = [...ROWS, { lanes: '│ *', node: 'L/1' }]
+  boardWorld(on, { ...withNodes(long), graph: { ...withNodes(long).graph, rows, rows_with_completed: rows } })
   await $.command.run(OPEN_BOARD)
   const ui = await mount($, 'terminal', { ...PANE_PROPS, bodyColumns: 40 })
-  const row = await ui.find({ key: 'row:L/1:L/1' })
-  expect(row?.text).toMatch(/^▸ (とても長いタイトル)+.*…$/)
-  // 行頭の印の 2 桁を除いた幅に収める (全角は 2 桁)。行は枠を描かないので、その分も title に使う。
+  const row = await ui.find({ key: 'box:row:L/1' })
+  expect(row?.text).toMatch(/^ {2}│ ▸ (とても長いタイトル)+.*…$/)
+  // 行頭の印とレーンを含めて pane の幅に収める (全角は 2 桁)。行は枠を描かないので、その分も title に使う。
   const cells = [...(row?.text ?? '')].reduce((n, ch) => n + ((ch.codePointAt(0) ?? 0) >= 0x3000 ? 2 : 1), 0)
-  expect(cells).toBeLessThanOrEqual(38)
-  expect(cells).toBeGreaterThan(36)
+  expect(cells).toBeLessThanOrEqual(40)
+  expect(cells).toBeGreaterThan(38)
 })
 
 test('行は枠なしで描き、選んだ行は行頭の › と太字で示す', async ($, on) => {
   boardWorld(on)
   await $.command.run(OPEN_BOARD)
   const ui = await mount($)
-  for (const key of ['row:G/1:G/1', 'more:Q/1:R/1', `park:${MEMO.id}`]) {
+  for (const key of ['row:G/1', `park:${MEMO.id}`]) {
     expect((await ui.find({ key }))?.props.plain).toBe(true)
   }
-  expect((await ui.find({ key: 'box:row:G/1:G/1' }))?.text).toMatch(/^ {2}⊘/)
-  await ui.press({ key: 'row:G/1:G/1' })
-  expect((await ui.find({ key: 'box:row:G/1:G/1' }))?.text).toMatch(/^› ⊘/)
+  expect((await ui.find({ key: 'box:row:G/1' }))?.text).toMatch(/^ {2}⊘/)
+  await ui.press({ key: 'row:G/1' })
+  expect((await ui.find({ key: 'box:row:G/1' }))?.text).toMatch(/^› ⊘/)
   // Text は key を持てないので、行の Button の子に太字の Text があるかで見る。
   const hasBold = async (key: string) =>
     ((await ui.find({ key }))?.children ?? []).some(c => typeof c === 'object' && c !== null && (c as { props?: { bold?: boolean } }).props?.bold === true)
-  expect(await hasBold('row:G/1:G/1')).toBe(true)
-  expect(await hasBold('row:W/1:W/1')).toBe(false)
+  expect(await hasBold('row:G/1')).toBe(true)
+  expect(await hasBold('row:W/1')).toBe(false)
 })
 
 test('選んだノードの詳細は枠で囲み、操作ボタンは枠の最後の行に枠付きで並べる', async ($, on) => {
   boardWorld(on)
   await $.command.run(OPEN_BOARD)
   const ui = await mount($)
-  await ui.press({ key: 'row:G/1:G/1' })
+  await ui.press({ key: 'row:G/1' })
   expect((await ui.find({ key: 'detail:G/1' }))?.props.borderStyle).toBe('round')
   const actions = await ui.find({ key: 'actions:G/1' })
   expect(actions?.props.flexDirection).toBe('row')
@@ -276,72 +302,68 @@ test('選んだメモの詳細も枠で囲み、操作ボタンを枠の最後�
 
 test('辺の端点にできないノード (参照の無いもの) には Add blocker の代わりに理由を出す', async ($, on) => {
   const todo = { ...node('T/todo-0', 'working', 'todo の項目', { session: 'todo' }), kind: 'todo', ref: undefined }
-  boardWorld(on, { ...BOARD, graph: { ...BOARD.graph, nodes: [...NODES, todo] } })
+  boardWorld(on, withNodes(todo))
   await $.command.run(OPEN_BOARD)
   const ui = await mount($)
-  await ui.press({ key: 'row:T/todo-0:T/todo-0' })
+  await ui.press({ key: 'row:T/todo-0' })
   expect(await ui.find({ key: 'add-blocker' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /辺の端点にできないタスク/ })).toBeDefined()
 })
 
-test('止まっているノードを根にした木を節ごとに描き、深い段は畳んで押すと開く', async ($, on) => {
+test('数の行の下にレーンの行を全部描き、完了は Show completed で出す', async ($, on) => {
   boardWorld(on)
   await $.command.run(OPEN_BOARD)
 
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await mount($, surface)
     expect(await ui.find({ type: 'Text', text: /私用のボード/ })).toBeDefined()
-    // 数: 止まっている根、その下流、進行中、完了、メモ。
+    // 数: 止まっているノード、その下流、進行中、待っている、完了、メモ。
     expect(await ui.find({ type: 'Text', text: /■ 2 {2}○ 4 {2}▸ 2 {2}↵ 1 {2}✓ 1 {2}◇ 1/ })).toBeDefined()
-    // 節は ■ → ▸ → ↵ → ○ → ⊘ → ◇ の順で、見出しに根の数。ターンを終えて待っているノードは ↵ idle に分ける。
-    for (const head of [/■ blocked 2/, /▸ working 2/, /↵ idle 1/, /○ pending 1/, /⊘ exited 1/, /◇ parking 1/]) {
-      expect(await ui.find({ type: 'Text', text: head })).toBeDefined()
-    }
-    // 根には下流の数、途中で置いたメモの数、待ちの輪の印。
-    expect(await ui.find({ key: 'row:Q/1:Q/1', text: /\? 論点を決める ↓3/ })).toBeDefined()
-    expect(await ui.find({ key: 'row:Q/1:Q/2', text: /○ 段5/ })).toBeDefined()
-    expect(await ui.find({ key: 'row:X/1:X/1', text: /○ x を待つ.*⟳/ })).toBeDefined()
-    expect(await ui.find({ key: 'row:X/1:X/2', text: /⟳/ })).toBeDefined()
-    // 輪の 2 つ目は根にしない。
-    expect(await ui.find({ key: 'row:X/2:X/2' })).toBeUndefined()
-    expect(await ui.find({ key: 'row:W/1:W/1', text: /▸ edge の CLI ↓1 ◇1/ })).toBeDefined()
-    expect(await ui.find({ key: 'row:D/1:D/1', text: /↵ 要約を書いた/ })).toBeDefined()
-    expect(await ui.find({ key: 'row:ref:issue:o/r#9:ref:issue:o/r#9', text: /○ issue:o\/r#9 ↓1/ })).toBeDefined()
-    expect(await ui.find({ key: 'row:ref:issue:o/r#9:P/1', text: /○ 後続/ })).toBeDefined()
-    expect(await ui.find({ key: 'row:G/1:G/1', text: /⊘ 残った作業/ })).toBeDefined()
-    // 上流のある pending と completed は根にしない。
-    expect(await ui.find({ key: 'row:Q/2:Q/2' })).toBeUndefined()
-    expect(await ui.find({ key: 'row:C/1:C/1' })).toBeUndefined()
+    // 止まっているノードには下流の数、途中で置いたメモの数、待ちの輪の印。
+    expect(await ui.find({ key: 'row:Q/1', text: /\? 論点を決める ↓3/ })).toBeDefined()
+    expect(await ui.find({ key: 'row:Q/2', text: /^○ 段5$/ })).toBeDefined()
+    expect(await ui.find({ key: 'row:X/1', text: /○ x を待つ ↓1 ⟳/ })).toBeDefined()
+    expect(await ui.find({ key: 'row:X/2', text: /⟳/ })).toBeDefined()
+    expect(await ui.find({ key: 'row:W/1', text: /^▸ edge の CLI ◇1$/ })).toBeDefined()
+    expect(await ui.find({ key: 'row:D/1', text: /↵ 要約を書いた/ })).toBeDefined()
+    expect(await ui.find({ key: 'row:ref:issue:o/r#9', text: /^○ issue:o\/r#9$/ })).toBeDefined()
+    expect(await ui.find({ key: 'row:P/1', text: /○ 後続/ })).toBeDefined()
+    expect(await ui.find({ key: 'row:G/1', text: /⊘ 残った作業/ })).toBeDefined()
+    expect(await ui.find({ key: 'row:V/1', text: /○ 確認/ })).toBeDefined()
+    // 完了は既定で出さない。
+    expect(await ui.find({ key: 'row:C/1' })).toBeUndefined()
     await ui.unmount()
   }
 
-  // 2 段目より深い段は畳む。押すと開く。
   const ui = await mount($)
-  expect(await ui.find({ key: 'row:Q/1:R/1' })).toBeUndefined()
-  expect(await ui.find({ key: 'more:Q/1:R/1', text: /\+2 more/ })).toBeDefined()
-  await ui.press({ key: 'more:Q/1:R/1' })
-  expect(await ui.find({ key: 'row:Q/1:R/1', text: /○ リリース/ })).toBeDefined()
-  expect(await ui.find({ key: 'row:Q/1:V/1', text: /○ 確認/ })).toBeDefined()
+  await ui.press({ key: 'fold', text: /Show completed/ })
+  expect(await ui.find({ key: 'row:C/1', text: /✓ 済んだ/ })).toBeDefined()
+  await ui.press({ key: 'fold', text: /Hide completed/ })
+  expect(await ui.find({ key: 'row:C/1' })).toBeUndefined()
 })
 
 test('選んだノードの詳細に参照とセッション、上流をたどった原因の鎖を出す', async ($, on) => {
   boardWorld(on)
   await $.command.run(OPEN_BOARD)
   const ui = await mount($)
-  await ui.press({ key: 'row:Q/1:Q/2' })
+  await ui.press({ key: 'row:Q/2' })
   expect(await ui.find({ type: 'Text', text: /task:Q\/2 · design/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /blocked by: \? 論点を決める/ })).toBeDefined()
-  // 選んだノードを含む枝は畳まない。
-  await ui.press({ key: 'row:Q/1:Q/1' })
+  await ui.press({ key: 'row:Q/1' })
   expect(await ui.find({ type: 'Text', text: /blocked by: none/ })).toBeDefined()
+  // 完了を畳んでいる間に完了したノードを選んでいたら、その旨を出す。
+  await ui.press({ key: 'fold' })
+  await ui.press({ key: 'row:C/1' })
+  await ui.press({ key: 'fold' })
+  expect(await ui.find({ key: 'detail:C/1' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /選んだタスクは今の図に出ていません/ })).toBeDefined()
 })
 
 test('edge の辺は Unlink で edge rm に元の参照を渡す', async ($, on) => {
   const w = boardWorld(on)
   await $.command.run(OPEN_BOARD)
   const ui = await mount($)
-  await ui.press({ key: 'more:Q/1:R/1' })
-  await ui.press({ key: 'row:Q/1:R/1' })
+  await ui.press({ key: 'row:R/1' })
   w.ran.length = 0
   await ui.press({ key: 'unlink:Q/2' })
   expect(w.ran[0]).toEqual([BIN, 'edge', 'rm', '--before', 'session:design', '--before-cwd', CWD, '--after', 'task:R/1', '--after-cwd', CWD])
@@ -351,7 +373,7 @@ test('同じセッションの blockedBy は外せないので、そのセッシ
   const w = boardWorld(on)
   await $.command.run(OPEN_BOARD)
   const ui = await mount($)
-  await ui.press({ key: 'row:Q/1:Q/2' })
+  await ui.press({ key: 'row:Q/2' })
   expect(await ui.find({ key: 'unlink:Q/1' })).toBeUndefined()
   await ui.press({ key: 'ask:Q/1' })
   expect(w.sent).toHaveLength(1)
@@ -364,8 +386,7 @@ test('Add blocker は循環にならない候補だけを出し、edge add に�
   const w = boardWorld(on)
   await $.command.run(OPEN_BOARD)
   const ui = await mount($)
-  await ui.press({ key: 'more:Q/1:R/1' })
-  await ui.press({ key: 'row:Q/1:R/1' })
+  await ui.press({ key: 'row:R/1' })
   await ui.press({ key: 'add-blocker' })
   // 自分、既にある上流、下流 (循環になる)、完了、終了したものは出さない。
   for (const key of ['R/1', 'Q/2', 'V/1', 'C/1', 'G/1']) {
@@ -383,14 +404,14 @@ test('生きているほかのセッションのノードへ指示を送る。�
   await $.command.run(OPEN_BOARD)
   const ui = await mount($)
 
-  await ui.press({ key: 'row:SELF/1:SELF/1' })
+  await ui.press({ key: 'row:SELF/1' })
   expect(await ui.find({ key: 'instruction' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /このセッションのタスクです/ })).toBeDefined()
-  await ui.press({ key: 'row:G/1:G/1' })
+  await ui.press({ key: 'row:G/1' })
   expect(await ui.find({ key: 'instruction' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /このセッションは終了しています/ })).toBeDefined()
 
-  await ui.press({ key: 'row:W/1:W/1' })
+  await ui.press({ key: 'row:W/1' })
   await ui.input({ key: 'instruction', text: '先にテストを足して' })
   expect(w.sent).toEqual([{ to: 'W', text: 'タスク「edge の CLI」について: 先にテストを足して' }])
   expect(await ui.find({ type: 'Text', text: /edge-cli へ送りました/ })).toBeDefined()
@@ -400,9 +421,9 @@ test('終了したセッションの未完了のタスクは To parking でメ�
   const w = boardWorld(on)
   await $.command.run(OPEN_BOARD)
   const ui = await mount($)
-  await ui.press({ key: 'row:W/1:W/1' })
+  await ui.press({ key: 'row:W/1' })
   expect(await ui.find({ key: 'adopt' })).toBeUndefined()
-  await ui.press({ key: 'row:G/1:G/1' })
+  await ui.press({ key: 'row:G/1' })
   w.ran.length = 0
   await ui.press({ key: 'adopt' })
   expect(operations(w.ran)).toEqual([[BIN, 'park', 'adopt', 'G', '1', ...SELF_ARGS]])
@@ -473,22 +494,20 @@ test('業務のボードには Ask for issue を出さない', async ($, on) => 
 })
 
 test('ノードの無いボードと、daemon が動いていないことを描く', async ($, on) => {
-  boardWorld(on, { domain: 'work', daemon_running: false, columns: [], rows: [], graph: { nodes: [], links: [], longest_chain: [] } })
+  boardWorld(on, { domain: 'work', daemon_running: false, columns: [], rows: [], graph: { nodes: [], links: [], longest_chain: [], rows: [], rows_with_completed: [] } })
   await $.command.run(OPEN_BOARD)
   const ui = await mount($)
   expect(await ui.find({ type: 'Text', text: /業務のボード \(agents-daemon が動いていない/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /タスクはまだありません/ })).toBeDefined()
 })
 
-test('状態を分類できないノードは · で idle の節に出し、working には数えない', async ($, on) => {
+test('状態を分類できないノードは · で出し、待っているものに数えて working には数えない', async ($, on) => {
   const session = (key: string, state: string, title: string) => ({ ...node(key, state, title), kind: 'session', ref: undefined })
-  const nodes = [...NODES, session('U/session', 'unknown', 'dotfiles')]
-  boardWorld(on, { ...BOARD, graph: { ...BOARD.graph, nodes } })
+  boardWorld(on, withNodes(session('U/session', 'unknown', 'dotfiles')))
   await $.command.run(OPEN_BOARD)
   const ui = await mount($)
   expect(await ui.find({ type: 'Text', text: /▸ 2 {2}↵ 2 {2}✓ 1/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /↵ idle 2/ })).toBeDefined()
-  expect(await ui.find({ key: 'row:U/session:U/session', text: /^· dotfiles$/ })).toBeDefined()
+  expect(await ui.find({ key: 'row:U/session', text: /^· dotfiles$/ })).toBeDefined()
 })
 
 test('board が失敗したら理由を描く', async ($, on) => {

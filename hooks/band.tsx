@@ -1,29 +1,28 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import type { GraphNode, ParkedMemo } from '../types'
+import type { ParkedMemo } from '../types'
 import { reloadForBand } from './board-data'
 import { daemonBin } from './daemon-bin'
-import { COLOR, Graph, ICON, MEMO, cells, fit, isStuck, layers, longest, summary, tags } from './graph'
+import { Graph, MEMO, fit, longest, summary } from './graph'
 import { logChange, reason, settle } from './log'
 import { parkedMemos } from './parking'
 
-// 依存の DAG (#134) の A: 入力欄の上の band に、依存を earlier → later の向きに並べた低い図と、パーキングのメモの
-// 1 行を出す。band は 1 枚で、DAG の図とメモ (#89 の取り出す側) が分け合う。
-// - 図: `status --board` の graph。session.start、TaskUpdate、10 秒ごとに読み直す (B の pane を開いている間は B が 3 秒ごと)
+// 依存の DAG (#134) の A: 入力欄の上の band に、依存の数と longest chain の 1 行 (B の pane を開く合図) と、
+// パーキングのメモの 1 行を出す。図は描かない (辺を読んで操作する面は B の pane に 1 つ)。
+// - 数: `status --board` の graph。session.start、TaskUpdate、10 秒ごとに読み直す (B の pane を開いている間は B が 3 秒ごと)
 // - メモ: このセッションの repo の open のメモ (同じボードの here の行、hooks/board-data.ts の parked)。TaskUpdate で
 //   completed になったら、そのタスクの途中でこのセッションが置いたメモ (`park list --task`) を先頭に寄せる。
 //   寄せるのは並びだけで、open でなくなったメモは次の読み直しで消える
-// 選んだノードとメモ (target) は B の pane と共有する。辺もメモも無ければ出さない。
+// 選んだメモ (target) は B の pane と共有する。辺もメモも無ければ出さない。
 // cc-premise: 2.1.303 mods ui.render AbovePrompt の props (hasSurvey、bodyColumns) と、TaskUpdate の結果の statusChange で書いた
-// cc-premise: 2.1.303 mods Button の plain は端末で [ ] を描かず、variant より優先される。ノードとメモは plain、操作は枠付き
+// cc-premise: 2.1.303 mods Button の plain は端末で [ ] を描かず、variant より優先される。メモは plain
 
 const board = atom({ plugin: 'agents-daemon', key: 'board' } as const, null)
 // parked は hooks/park.tsx が書く。atom は読む module ごとに書く (state の scan が import を辿らない)。
 const parked = atom({ plugin: 'agents-daemon', key: 'parked' } as const, [])
 const front = atom({ plugin: 'agents-daemon', key: 'front' } as const, [])
 const target = atom({ plugin: 'agents-daemon', key: 'target' } as const, '')
-const showCompleted = atom({ plugin: 'agents-daemon', key: 'showCompleted' } as const, false)
 
 // メモの行に出すメモの数。残りは数だけ出す。
 const SHOWN = 3
@@ -61,46 +60,14 @@ export const registerBand: Register = on => {
     if (links.length === 0 && memos.length === 0) return next(e)
 
     const { Box, Button, Text } = $.ui.resolve(e)
-    const g = new Graph(data?.graph ?? { nodes: [], links: [], longest_chain: [] })
+    const g = new Graph(data?.graph ?? { nodes: [], links: [], longest_chain: [], rows: [], rows_with_completed: [] })
     const chosen = await read($, target)
-    const folded = !(await read($, showCompleted))
     const choose = (key: string) => void update($, target, prev => (prev === key ? '' : key))
-    const related = chosen === '' ? undefined : new Set([chosen, ...g.reach(chosen), ...g.upstream(chosen)])
-    const columns = layers(g, !folded)
-    // 列の間に 1 桁空ける。ノードは 1 行に切り詰め、band が伸びて最後の行のメモが見えなくならないようにする。
-    const width = Math.max(10, Math.floor((e.props.bodyColumns - (columns.length - 1)) / Math.max(1, columns.length)))
-    // 1 行目と軸、メモの行を除いた高さに列のノードを収める。収まらない分は +n にまとめる。
-    const perColumn = Math.max(1, e.props.maxRows - 2 - (memos.length > 0 ? 1 : 0))
     const rest = memos.length - SHOWN
     // メモは 1 行に SHOWN 件並べる。先頭の「◇ n」と、1 件ごとの行頭の印と種類の分を除いた幅に title を収める。
     const memoRoom = Math.max(6, Math.floor((e.props.bodyColumns - 8) / SHOWN) - GUTTER - 7)
 
-    // ノードとメモは枠なし (plain) の Button にして、枠付きの Button は操作 (fold) だけに使う。plain は variant より
-    // 優先されるので、選んだものは行頭の › と太字で示す。
-    const nodeButton = (n: GraphNode) => {
-      const tag = tags(n, isStuck(n))
-      const isSel = n.key === chosen
-      return (
-        <Box key={`box:node:${n.key}`} flexDirection="row">
-          <Text>{isSel ? '› ' : ' '.repeat(GUTTER)}</Text>
-          <Button key={`node:${n.key}`} plain dimColor={related !== undefined && !related.has(n.key)} onPress={() => choose(n.key)}>
-            <Text color={COLOR[n.state]}>{ICON[n.state]}</Text>
-            {/* 行頭の印と、記号と空白の 2 桁を除いた幅に title を収める。 */}
-            <Text bold={isSel ? true : undefined}>{` ${fit(n.title, Math.max(2, width - GUTTER - 2 - cells(tag)))}${tag}`}</Text>
-          </Button>
-        </Box>
-      )
-    }
-    const column = (nodes: GraphNode[], i: number) => {
-      const shown = nodes.length > perColumn ? nodes.slice(0, perColumn - 1) : nodes
-      return (
-        <Box key={`layer:${i}`} flexDirection="column" width={width} overflow="hidden">
-          {shown.map(nodeButton)}
-          {shown.length < nodes.length && <Text dimColor>+{String(nodes.length - shown.length)}</Text>}
-        </Box>
-      )
-    }
-
+    // メモは枠なし (plain) の Button。plain は variant より優先されるので、選んだものは行頭の › と太字で示す。
     return (
       <Box flexDirection="column">
         {links.length > 0 && (
@@ -113,17 +80,6 @@ export const registerBand: Register = on => {
                 longest chain: {longest(g, data?.graph.longest_chain ?? [])}
               </Text>
             </Box>
-            <Box flexShrink={0}>
-              <Button key="fold" onPress={() => void update($, showCompleted, () => folded)}>
-                {folded ? 'Show completed' : 'Hide completed'}
-              </Button>
-            </Box>
-          </Box>
-        )}
-        {links.length > 0 && <Text dimColor>{`earlier ${'─'.repeat(Math.max(4, e.props.bodyColumns - 16))}► later`}</Text>}
-        {links.length > 0 && (
-          <Box flexDirection="row" gap={1}>
-            {columns.map(column)}
           </Box>
         )}
         {memos.length > 0 && (

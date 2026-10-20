@@ -66,7 +66,7 @@ function board(links: unknown[] = LINKS, parking: unknown[] = MEMOS) {
     columns: [],
     here: CWD,
     rows: [{ repo: CWD, title: 'agents-daemon', cards: [], parking }],
-    graph: { nodes: NODES, links, longest_chain: ['A/1', 'A/2', 'B/1'] },
+    graph: { nodes: NODES, links, longest_chain: ['A/1', 'A/2', 'B/1'], rows: [], rows_with_completed: [] },
   }
 }
 
@@ -119,7 +119,7 @@ const mount = ($: T, surface: 'terminal' | 'desktop' = 'terminal', props: object
 
 const PANE_PROPS = { title: 'Tasks', isFocused: true, bodyColumns: 80, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} } as const
 
-test('session.start で依存の数と longest chain、earlier → later の段、メモの行を band に出す', async ($, on) => {
+test('session.start で依存の数と longest chain の 1 行と、メモの行を band に出す。図は描かない', async ($, on) => {
   const w = world(on, { [STATUS.join(' ')]: board() })
   await $.session.start(START)
   // hint 行の数と band のメモは同じボードから取り、park list は呼ばない。
@@ -129,12 +129,10 @@ test('session.start で依存の数と longest chain、earlier → later の段�
     const ui = await mount($, surface)
     expect(await ui.find({ type: 'Text', text: /■ 1 {2}○ 2 {2}▸ 1 {2}↵ 0 {2}✓ 1 {2}◇ 4/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /longest chain: \? 論点 → ○ 段5 → ○ リリース/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /earlier/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /later/ })).toBeDefined()
-    // 止まっているノードには下流の数、途中で置いたメモの数。
-    expect(await ui.find({ key: 'node:A/1', text: /\? 論点 ↓2/ })).toBeDefined()
-    expect(await ui.find({ key: 'node:W/1', text: /▸ edge CLI ◇1/ })).toBeDefined()
-    expect(await ui.find({ key: 'node:B/1', text: /○ リリース/ })).toBeDefined()
+    // 段の列も軸も、ノードの Button も無い。
+    expect(await ui.find({ type: 'Text', text: /earlier/ })).toBeUndefined()
+    expect(await ui.find({ key: 'node:A/1' })).toBeUndefined()
+    expect(await ui.find({ key: 'fold' })).toBeUndefined()
     // メモは新しいものを 3 件まで。残りは数だけ。
     // 種類は park tool の kind の語のまま出す。
     expect(await ui.find({ key: 'park:m4', text: /\[aside\] 新しいメモ/ })).toBeDefined()
@@ -148,23 +146,12 @@ test('session.start で依存の数と longest chain、earlier → later の段�
   }
 })
 
-test('完了は既定で畳み、Show completed で出して Hide completed で畳む', async ($, on) => {
-  world(on, { [STATUS.join(' ')]: board(LINKS, []) })
-  await $.session.start(START)
-  const ui = await mount($)
-  expect(await ui.find({ key: 'node:C/1' })).toBeUndefined()
-  await ui.press({ key: 'fold', text: /Show completed/ })
-  expect(await ui.find({ key: 'node:C/1', text: /✓ 済んだ/ })).toBeDefined()
-  await ui.press({ key: 'fold', text: /Hide completed/ })
-  expect(await ui.find({ key: 'node:C/1' })).toBeUndefined()
-})
-
 test('辺もメモも無ければ band を出さない。メモだけあればメモの行を出す', async ($, on) => {
   const answers: Record<string, unknown> = { [STATUS.join(' ')]: board([], []) }
   const w = world(on, answers)
   await $.session.start(START)
   const empty = await mount($)
-  expect(await empty.find({ key: 'fold' })).toBeUndefined()
+  expect(await empty.find({ type: 'Text', text: /■/ })).toBeUndefined()
   await empty.unmount()
 
   // 別のセッションが置いたメモも、10 秒の読み直しで出る。
@@ -203,21 +190,16 @@ test('survey が band を持っている間は譲る', async ($, on) => {
   world(on, { [STATUS.join(' ')]: board() })
   await $.session.start(START)
   const ui = await mount($, 'terminal', { ...BAND_PROPS, hasSurvey: true })
-  expect(await ui.find({ key: 'fold' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /■/ })).toBeUndefined()
 })
 
-test('band で選んだノードとメモを、B の pane でも開く', async ($, on) => {
+test('band で選んだメモを、B の pane でも開く', async ($, on) => {
   world(on, { [STATUS.join(' ')]: board() })
   await $.session.start(START)
   const band = await mount($)
-  await band.press({ key: 'node:A/2' })
-  const pane = await $.ui.mount({ plugin: 'agents-daemon', surface: 'terminal', component: 'Pane', props: PANE_PROPS, requestId: 'agents-daemon-board' })
-  expect(await pane.find({ type: 'Text', text: /task:A\/2 · a/ })).toBeDefined()
-  await pane.unmount()
-
   await band.press({ key: 'park:m4' })
-  const again = await $.ui.mount({ plugin: 'agents-daemon', surface: 'terminal', component: 'Pane', props: PANE_PROPS, requestId: 'agents-daemon-board' })
-  expect(await again.find({ key: 'discard' })).toBeDefined()
+  const pane = await $.ui.mount({ plugin: 'agents-daemon', surface: 'terminal', component: 'Pane', props: PANE_PROPS, requestId: 'agents-daemon-board' })
+  expect(await pane.find({ key: 'discard' })).toBeDefined()
 })
 
 test('TaskUpdate で completed になったタスクの途中で置いたメモを先頭に寄せ、ボードを読み直す', async ($, on) => {
@@ -240,52 +222,19 @@ test('TaskUpdate で completed になったタスクの途中で置いたメモ�
   expect(await ui.find({ key: 'park:m2' })).toBeUndefined()
 })
 
-// cells は全角を 2 桁と数えた幅。
-function cells(text: string): number {
-  return [...text].reduce((n, ch) => n + ((ch.codePointAt(0) ?? 0) >= 0x3000 ? 2 : 1), 0)
-}
-
-test('ノードは段の列の幅に合わせて 1 行に切り詰める', async ($, on) => {
-  const long = node('L/1', 'working', 'とても長いタイトル'.repeat(5), { depth: 1 })
-  world(on, { [STATUS.join(' ')]: { ...board(), graph: { ...board().graph, nodes: [...NODES, long] } } })
-  await $.session.start(START)
-  // 段は 3 列。列の間に 1 桁ずつ空けて、1 列は (60 - 2) / 3 = 19 桁。行頭の印の 2 桁を除いて 17 桁に収める。
-  const ui = await mount($, 'terminal', { ...BAND_PROPS, bodyColumns: 60 })
-  const button = await ui.find({ key: 'node:L/1' })
-  expect(button?.text).toMatch(/…$/)
-  expect(cells(button?.text ?? '')).toBeLessThanOrEqual(17)
-  expect(cells(button?.text ?? '')).toBeGreaterThan(15)
-})
-
-test('ノードとメモは枠なしで描き、選んだものは行頭の › と太字で示す', async ($, on) => {
+test('メモは枠なしで描き、選んだものは行頭の › と太字で示す', async ($, on) => {
   world(on, { [STATUS.join(' ')]: board() })
   await $.session.start(START)
   const ui = await mount($)
-  for (const key of ['node:A/1', 'park:m4']) {
-    expect((await ui.find({ key }))?.props.plain).toBe(true)
-  }
-  // 操作のボタンは枠付きのまま。
-  expect((await ui.find({ key: 'fold' }))?.props.plain).toBeUndefined()
-  expect((await ui.find({ key: 'box:node:A/1' }))?.text).toMatch(/^ {2}\?/)
-  await ui.press({ key: 'node:A/1' })
-  expect((await ui.find({ key: 'box:node:A/1' }))?.text).toMatch(/^› \?/)
+  expect((await ui.find({ key: 'park:m4' }))?.props.plain).toBe(true)
+  expect((await ui.find({ key: 'box:park:m4' }))?.text).toMatch(/^ {2}\[aside\]/)
+  await ui.press({ key: 'park:m4' })
+  expect((await ui.find({ key: 'box:park:m4' }))?.text).toMatch(/^› \[aside\]/)
   // Text は key を持てないので、Button の子に太字の Text があるかで見る。
   const hasBold = async (key: string) =>
     ((await ui.find({ key }))?.children ?? []).some(c => typeof c === 'object' && c !== null && (c as { props?: { bold?: boolean } }).props?.bold === true)
-  expect(await hasBold('node:A/1')).toBe(true)
-  expect(await hasBold('node:W/1')).toBe(false)
-})
-
-test('列のノードが band の高さに収まらなければ、残りを +n にまとめる', async ($, on) => {
-  const extra = ['E/1', 'E/2', 'E/3'].map(k => node(k, 'pending', k))
-  world(on, { [STATUS.join(' ')]: { ...board(LINKS, []), graph: { ...board().graph, nodes: [...NODES, ...extra] } } })
-  await $.session.start(START)
-  // 高さ 5 行から 1 行目と軸の 2 行を除いた 3 行。段 0 の 5 つのうち 2 つを出し、残りの 3 つを +3 にする。
-  const ui = await mount($, 'terminal', { ...BAND_PROPS, maxRows: 5 })
-  expect(await ui.find({ key: 'node:A/1' })).toBeDefined()
-  expect(await ui.find({ key: 'node:W/1' })).toBeDefined()
-  expect(await ui.find({ key: 'node:E/1' })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: /^\+3$/ })).toBeDefined()
+  expect(await hasBold('park:m4')).toBe(true)
+  expect(await hasBold('park:m3')).toBe(false)
 })
 
 test('10 秒ごとにボードを読み直す', async ($, on) => {

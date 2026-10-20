@@ -35,9 +35,10 @@ streaming の `events` と、一覧の増減 (新しい method や event) は判
 ## コマンドごとの注意
 
 - `events` は流れ続けるので coreutils の `timeout` で切る。exit 124 と stderr の `Error: interrupted` が正常。
-  `program_status_changed` は record が変わったときだけ流れるので、5 秒では `client_connected` しか来ないことがある。
-  来なければ `timeout 30` に伸ばして次のターンで打ち直す。それでも来なければ、外形 (`session_event` →
-  `block_event` → `name`) が #78 の形のままかだけ見て、record の中身は `program_status` の応答 (同じ record) で
-  代用する。
+  `program_status_changed` は record が変わったときだけ流れる。自分の block の Bash から流すと、そのコマンド自体が
+  Bash ツールの実行なので自分の record は終わるまで `working` のまま動かず、timeout を伸ばしても
+  `client_connected` / `client_disconnected` (daemon が tick ごとに繋ぐ分) しか来ない。外形 (`session_event` →
+  `event.type`) が #78 の形のままかだけ見て、record の中身は `program_status` の応答 (同じ record) で代用する。
+  record の変化を観測したいときは、別の block で動く Claude の session を `-s` に指定する。
 - 存在しない block の ID は `premise.go` の `probeMissingBlock` (`exec_test.go` の `blockClosed` と同じ値)。fake の rex が
   返す形 (stderr と exit 3) と実機を同じ入力で比べる。

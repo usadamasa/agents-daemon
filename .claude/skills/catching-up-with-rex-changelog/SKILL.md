@@ -91,14 +91,17 @@ guard が拒否する。先に `printenv REX_BLOCK REX_SESSION` で値を取り�
 4. 確認して変更不要と判断したもの: 1 行ずつ根拠つき
 5. 手順上の落とし穴: 次回の自分へ
 
-レポートの要点を利用者へ伝え、1 と 2 を issue にするか決めてもらう。issue の本文は `./tmp` に Write し
-`gh issue create --body-file`。背景 (changelog の引用、実機の応答)、marker のある行、検証項目、レポートのパスを入れる。
-既存の issue と重ならないか `gh issue list` で見てから立てる。
+1 と 2 は項目ごとに issue にする。利用者に起票するか聞かない (この skill を呼んだことが起票の指示で、レポートは
+`./tmp` に残るだけなので issue にしないと消える)。issue の本文は `./tmp` に Write し `gh issue create --body-file`。
+背景 (changelog の引用、実機の応答)、marker のある行、検証項目、レポートのパスを入れる。既存の issue と重ならないか
+`gh issue list` で見てから立て、重なるものは新しい issue にせずその issue へ `gh issue comment --body-file` で足す。
+レポートの要点と issue の番号を利用者へ伝える。
 
 最後に 2 つを同じ PR に入れる。
 
-- 確かめ直して変更不要だった marker の `<version>` を今の版へ上げる。この差分が点検の証跡
-- [references/last-checked.md](references/last-checked.md) に 1 行足す (日付、`rex_version`、changelog の版、結果)
+- 確かめ直して変更不要だった marker の `<version>` を今の版へ上げる。この差分が点検の証跡。ずれた marker は
+  上げずに残し、issue の番号を結果の列に書く
+- [references/last-checked.md](references/last-checked.md) に 1 行足す (日付、`rex_version`、changelog の版、結果と issue の番号)
 
 ## 前提の洗い出し
 

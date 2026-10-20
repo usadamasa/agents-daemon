@@ -5,14 +5,15 @@ const BIN = '/home/u/.cache/agents-daemon/bin/agents-daemon'
 const CWD = '/src/home/agents-daemon'
 
 // world は plugin の下にいる engine の代わりを立てる。process.run は run が答え、呼ばれた argv (バイナリの後) を
-// ran に残す。ボードの経路のログ (hooks/log.ts) は log.test.tsx が見るので残さない。
-function world(on: On, run: (argv: readonly string[]) => ProcessRunResult = () => output('{}')) {
+// ran に残す。ボードの経路のログ (hooks/log.ts) は log.test.tsx が見るので残さない。now は mod の時計の始点
+// (古いメモの判定に使う)。
+function world(on: On, run: (argv: readonly string[]) => ProcessRunResult = () => output('{}'), now = Date.parse('2026-10-19T00:00:00Z')) {
   const ran: string[][] = []
   const opened: string[] = []
   const closed: string[] = []
   const sent: { to: unknown; text: string }[] = []
   mock.env(on, { HOME: '/home/u' })
-  mock.clock(on)
+  mock.clock(on, { now })
   on('ui.open', async (_$, e) => {
     opened.push(e.id)
     return { value: { isPlaced: true } }
@@ -44,8 +45,8 @@ function operations(ran: string[][]): string[][] {
 }
 
 // boardWorld は status --board に data を返し、それ以外 (park、edge) は成功を返す。
-function boardWorld(on: On, data: unknown = BOARD) {
-  return world(on, argv => (argv[1] === 'status' ? output(JSON.stringify(data)) : output('{"created":true}')))
+function boardWorld(on: On, data: unknown = BOARD, now?: number) {
+  return world(on, argv => (argv[1] === 'status' ? output(JSON.stringify(data)) : output('{"created":true}')), now)
 }
 
 function node(key: string, state: string, title: string, extra: Record<string, unknown> = {}) {
@@ -132,6 +133,7 @@ const BOARD = {
   daemon_running: true,
   updated_at: '2026-10-18T09:00:00Z',
   columns: [],
+  here: CWD,
   rows: [
     {
       repo: CWD,
@@ -410,9 +412,9 @@ test('メモを選ぶと詳細を出し、Discard / To task / Ask for issue で�
   const w = boardWorld(on)
   await $.command.run(OPEN_BOARD)
   const ui = await mount($)
-  // 置いたときに進めていたタスクを添える。
+  // 最後に置かれた時刻 (JST) を先頭に、置いたときに進めていたタスクを末尾に添える。
   // 種類は park tool の kind の語のまま出す。
-  expect(await ui.find({ key: `park:${MEMO.id}`, text: /\[aside\] 保持期間の根拠が無い ×2 ← edge の CLI/ })).toBeDefined()
+  expect(await ui.find({ key: `park:${MEMO.id}`, text: /^10\/18 19:30 \[aside\] 保持期間の根拠が無い ×2 ← edge の CLI/ })).toBeDefined()
   await ui.press({ key: `park:${MEMO.id}` })
   expect(await ui.find({ type: 'Text', text: /定数にコメントが無い/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /edge-cli 10\/18 19:30 別の定数も同じ/ })).toBeDefined()
@@ -435,6 +437,30 @@ test('メモを選ぶと詳細を出し、Discard / To task / Ask for issue で�
   w.ran.length = 0
   await ui.press({ key: 'discard' })
   expect(operations(w.ran)).toEqual([[BIN, 'park', 'set', MEMO.id, '--status', 'discarded', ...SELF_ARGS]])
+})
+
+test('最後に置かれてから 30 日より経ったメモがあれば、パーキングの見出しからまとめて捨てる', async ($, on) => {
+  // MEMO は 10/18 に置かれた。時計を 12/01 にすると 30 日より古い。
+  const w = world(
+    on,
+    argv => (argv[1] === 'status' ? output(JSON.stringify(BOARD)) : argv[2] === 'discard' ? output(JSON.stringify([{ id: MEMO.id }])) : output('{}')),
+    Date.parse('2026-12-01T00:00:00Z'),
+  )
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($)
+  expect(await ui.find({ key: 'discard-stale', text: /Discard 1 older than 30d/ })).toBeDefined()
+  w.ran.length = 0
+  await ui.press({ key: 'discard-stale' })
+  expect(operations(w.ran)).toEqual([[BIN, 'park', 'discard', '--days', '30', ...SELF_ARGS]])
+  // 戻し方を添える (id はボードの経路のログに残る)。
+  expect(await ui.find({ type: 'Text', text: /30 日より前のメモ 1 つを捨てました.*park set <id> --status open/ })).toBeDefined()
+})
+
+test('30 日以内のメモだけなら、まとめて捨てるボタンを出さない', async ($, on) => {
+  boardWorld(on)
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($)
+  expect(await ui.find({ key: 'discard-stale' })).toBeUndefined()
 })
 
 test('業務のボードには Ask for issue を出さない', async ($, on) => {

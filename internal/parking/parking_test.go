@@ -269,6 +269,46 @@ func TestSet(t *testing.T) {
 	}
 }
 
+// DiscardBefore は最後に置かれた時刻が before より前の open のメモを discarded にし、捨てたメモを返す。
+// 置き直されたメモは最後の source の時刻で見る。open でないメモと別の domain のメモは触らない。
+func TestDiscardBefore(t *testing.T) {
+	s := New(t.TempDir())
+	placed := func(session string, ago time.Duration) Source {
+		return Source{SessionID: session, CWD: testRepo, At: testNow.Add(-ago)}
+	}
+	old := mustAdd(t, s, domain.Home, testRepo, aside("old"), placed("s1", 40*24*time.Hour))
+	fresh := mustAdd(t, s, domain.Home, testRepo, aside("fresh"), placed("s1", time.Hour))
+	renewed := mustAdd(t, s, domain.Home, testRepo, aside("renewed"), placed("s1", 40*24*time.Hour))
+	mustAdd(t, s, domain.Home, testRepo, aside("renewed"), placed("s2", time.Hour))
+	handed := mustAdd(t, s, domain.Home, testRepo, aside("handed"), placed("s1", 40*24*time.Hour))
+	if _, _, err := s.Set(domain.Home, handed.ID, StatusHanded); err != nil {
+		t.Fatal(err)
+	}
+	work := mustAdd(t, s, domain.Work, testRepo, aside("work"), placed("s1", 40*24*time.Hour))
+
+	cutoff := testNow.Add(-30 * 24 * time.Hour)
+	got, err := s.DiscardBefore(domain.Home, cutoff)
+	if err != nil || len(got) != 1 || got[0].ID != old.ID || got[0].Status != StatusDiscarded {
+		t.Fatalf("DiscardBefore() = %+v, %v, want %s だけ discarded", got, err, old.ID)
+	}
+	open, _ := s.Find(domain.Home, "", StatusOpen)
+	if len(open) != 2 || open[0].ID != fresh.ID && open[1].ID != fresh.ID || open[0].ID != renewed.ID && open[1].ID != renewed.ID {
+		t.Errorf("open = %+v, want fresh と renewed", open)
+	}
+	if list, _ := s.Find(domain.Home, "", StatusHanded); len(list) != 1 || list[0].ID != handed.ID {
+		t.Errorf("handed が変わった: %+v", list)
+	}
+	if list, _ := s.Find(domain.Work, "", StatusOpen); len(list) != 1 || list[0].ID != work.ID {
+		t.Errorf("別の domain のメモが変わった: %+v", list)
+	}
+	if again, err := s.DiscardBefore(domain.Home, cutoff); err != nil || again == nil || len(again) != 0 {
+		t.Errorf("該当なしは空の配列: %+v, %v", again, err)
+	}
+	if _, err := (Store{}).DiscardBefore(domain.Home, cutoff); err == nil {
+		t.Errorf("置き場所が無いのに通した")
+	}
+}
+
 func setMtime(t *testing.T, path string, mtime time.Time) {
 	t.Helper()
 	if err := os.Chtimes(path, mtime, mtime); err != nil {

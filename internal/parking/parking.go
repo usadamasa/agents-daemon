@@ -169,6 +169,41 @@ func (s Store) Set(d domain.Domain, id, status string) (Item, string, error) {
 	return item, from, err
 }
 
+// DiscardBefore は domain の open のメモのうち、最後に置かれた時刻 (sources の最大の at) が before より前の
+// ものを discarded にし、捨てたメモを id の順に返す。該当なしは空の配列。ボードの「古いメモをまとめて捨てる」が
+// 呼び、「古い」の日数は呼び出し側 (mod) が持つ。
+func (s Store) DiscardBefore(d domain.Domain, before time.Time) ([]Item, error) {
+	if s.Dir == "" {
+		return nil, errors.New("parking の置き場所が無い")
+	}
+	discarded := []Item{}
+	err := s.locked(d, func(dir string) error {
+		for _, item := range readDir(dir) {
+			if item.Status != StatusOpen || !lastPlacedAt(item).Before(before) {
+				continue
+			}
+			item.Status = StatusDiscarded
+			if err := write(dir, item); err != nil {
+				return err
+			}
+			discarded = append(discarded, item)
+		}
+		return nil
+	})
+	return discarded, err
+}
+
+// lastPlacedAt はメモが最後に置かれた時刻。置き直されたメモは足した source の時刻で見る。
+func lastPlacedAt(item Item) time.Time {
+	var last time.Time
+	for _, src := range item.Sources {
+		if src.At.After(last) {
+			last = src.At
+		}
+	}
+	return last
+}
+
 // List は domain のメモを id の順 (置いた順) に返す。壊れたファイルは読み飛ばす。
 func (s Store) List(d domain.Domain) ([]Item, error) {
 	if s.Dir == "" {

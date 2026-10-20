@@ -5,13 +5,13 @@ const BIN = '/home/u/.cache/agents-daemon/bin/agents-daemon'
 const CWD = '/src/home/agents-daemon'
 
 const SELF_ARGS = ['--session', 'SELF', '--cwd', CWD]
-const HERE = [BIN, 'park', 'list', '--here', '--status', 'open', ...SELF_ARGS]
 const DURING = (task: string) => [BIN, 'park', 'list', '--status', 'open', '--task', task, ...SELF_ARGS]
 const STATUS = [BIN, 'status', '--board', ...SELF_ARGS]
 
-// memo は park list が出すメモ 1 つ。at は sources の最後 (いちばん新しく置かれたとき)。
+// memo はメモ 1 つ。ボードの parking (sources は新しい順) にも park list の答え (sources は置いた順) にも使えるよう、
+// source は 1 つにする。
 function memo(id: string, title: string, at: string) {
-  return { id, domain: 'home', repo: CWD, kind: 'aside', title, sources: [{ session_id: 'SELF', cwd: CWD, at }], status: 'open' }
+  return { id, domain: 'home', repo: CWD, kind: 'aside', title, sources: [{ session_id: 'SELF', session: 'self', live: true, cwd: CWD, at }], status: 'open' }
 }
 
 function node(key: string, state: string, title: string, extra: Record<string, unknown> = {}) {
@@ -50,16 +50,6 @@ const LINKS = [
   { before: 'W/1', after: 'W/2', kind: 'task' },
 ]
 
-function board(links: unknown[] = LINKS, parking: unknown[] = []) {
-  return {
-    domain: 'home',
-    daemon_running: true,
-    columns: [],
-    rows: [{ repo: CWD, title: 'agents-daemon', cards: [], parking }],
-    graph: { nodes: NODES, links, longest_chain: ['A/1', 'A/2', 'B/1'] },
-  }
-}
-
 // 置いた順に古いものから。band には新しいものを先に 3 件まで出す。
 const MEMOS = [
   memo('m1', '古いメモ', '2026-10-17T09:00:00+09:00'),
@@ -67,6 +57,18 @@ const MEMOS = [
   memo('m3', '三つ目', '2026-10-18T11:00:00+09:00'),
   memo('m4', '新しいメモ', '2026-10-18T12:00:00+09:00'),
 ]
+
+// board は status --board の答え。here がこのセッションの行を指し、その行の parking が band と hint 行のメモになる。
+function board(links: unknown[] = LINKS, parking: unknown[] = MEMOS) {
+  return {
+    domain: 'home',
+    daemon_running: true,
+    columns: [],
+    here: CWD,
+    rows: [{ repo: CWD, title: 'agents-daemon', cards: [], parking }],
+    graph: { nodes: NODES, links, longest_chain: ['A/1', 'A/2', 'B/1'] },
+  }
+}
 
 function output(stdout: string, exitCode = 0): ProcessRunResult {
   return { exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false }
@@ -118,10 +120,10 @@ const mount = ($: T, surface: 'terminal' | 'desktop' = 'terminal', props: object
 const PANE_PROPS = { title: 'Tasks', isFocused: true, bodyColumns: 80, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} } as const
 
 test('session.start で依存の数と longest chain、earlier → later の段、メモの行を band に出す', async ($, on) => {
-  const w = world(on, { [HERE.join(' ')]: MEMOS, [STATUS.join(' ')]: board() })
+  const w = world(on, { [STATUS.join(' ')]: board() })
   await $.session.start(START)
-  // hint 行の数と band で同じメモの一覧を使い、list を 2 度呼ばない。
-  expect(w.ran).toEqual([HERE, STATUS])
+  // hint 行の数と band のメモは同じボードから取り、park list は呼ばない。
+  expect(w.ran).toEqual([STATUS])
 
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await mount($, surface)
@@ -147,7 +149,7 @@ test('session.start で依存の数と longest chain、earlier → later の段�
 })
 
 test('完了は既定で畳み、Show completed で出して Hide completed で畳む', async ($, on) => {
-  world(on, { [STATUS.join(' ')]: board() })
+  world(on, { [STATUS.join(' ')]: board(LINKS, []) })
   await $.session.start(START)
   const ui = await mount($)
   expect(await ui.find({ key: 'node:C/1' })).toBeUndefined()
@@ -158,18 +160,43 @@ test('完了は既定で畳み、Show completed で出して Hide completed で�
 })
 
 test('辺もメモも無ければ band を出さない。メモだけあればメモの行を出す', async ($, on) => {
-  const answers: Record<string, unknown> = { [STATUS.join(' ')]: board([]) }
+  const answers: Record<string, unknown> = { [STATUS.join(' ')]: board([], []) }
   const w = world(on, answers)
   await $.session.start(START)
   const empty = await mount($)
   expect(await empty.find({ key: 'fold' })).toBeUndefined()
   await empty.unmount()
 
-  answers[HERE.join(' ')] = [MEMOS[3]]
-  await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+  // 別のセッションが置いたメモも、10 秒の読み直しで出る。
+  answers[STATUS.join(' ')] = board([], [MEMOS[3]])
   await w.clock.advance(10000)
   const memoOnly = await mount($)
   expect(await memoOnly.find({ key: 'park:m4' })).toBeDefined()
+})
+
+test('open でなくなったメモは、完了したタスクの途中で置いたものでも band から消え、全部片付いたら band ごと消える', async ($, on) => {
+  const answers: Record<string, unknown> = { [STATUS.join(' ')]: board([], MEMOS), [DURING('3').join(' ')]: [MEMOS[0]] }
+  const w = world(on, answers)
+  await $.session.start(START)
+  await $.tool.call({ tool: 'TaskUpdate', taskId: '3', status: 'completed' } as never)
+  const before = await mount($)
+  expect(await before.find({ key: 'park:m1' })).toBeDefined()
+  await before.unmount()
+
+  // m1 をボードから捨てた (open でなくなった)。先頭に寄せたメモでも、次の読み直しで消える。
+  answers[STATUS.join(' ')] = board([], MEMOS.slice(1))
+  await w.clock.advance(10000)
+  const after = await mount($)
+  expect(await after.find({ key: 'park:m1' })).toBeUndefined()
+  expect(await after.find({ key: 'park:m4' })).toBeDefined()
+  await after.unmount()
+
+  // 全部片付いたら band ごと消える。
+  answers[STATUS.join(' ')] = board([], [])
+  await w.clock.advance(10000)
+  const gone = await mount($)
+  expect(await gone.find({ key: 'park:m4' })).toBeUndefined()
+  expect(await gone.find({ type: 'Text', text: /◇/ })).toBeUndefined()
 })
 
 test('survey が band を持っている間は譲る', async ($, on) => {
@@ -180,7 +207,7 @@ test('survey が band を持っている間は譲る', async ($, on) => {
 })
 
 test('band で選んだノードとメモを、B の pane でも開く', async ($, on) => {
-  world(on, { [HERE.join(' ')]: MEMOS, [STATUS.join(' ')]: board([...LINKS], [{ ...MEMOS[3], sources: [{ session_id: 'SELF', session: 'self', live: true, at: MEMOS[3]?.sources[0]?.at }] }]) })
+  world(on, { [STATUS.join(' ')]: board() })
   await $.session.start(START)
   const band = await mount($)
   await band.press({ key: 'node:A/2' })
@@ -194,7 +221,7 @@ test('band で選んだノードとメモを、B の pane でも開く', async (
 })
 
 test('TaskUpdate で completed になったタスクの途中で置いたメモを先頭に寄せ、ボードを読み直す', async ($, on) => {
-  const w = world(on, { [HERE.join(' ')]: MEMOS, [STATUS.join(' ')]: board(), [DURING('3').join(' ')]: [MEMOS[0]] })
+  const w = world(on, { [STATUS.join(' ')]: board(), [DURING('3').join(' ')]: [MEMOS[0]] })
   await $.session.start(START)
   w.ran.length = 0
 
@@ -231,7 +258,7 @@ test('ノードは段の列の幅に合わせて 1 行に切り詰める', async
 })
 
 test('ノードとメモは枠なしで描き、選んだものは行頭の › と太字で示す', async ($, on) => {
-  world(on, { [HERE.join(' ')]: MEMOS, [STATUS.join(' ')]: board() })
+  world(on, { [STATUS.join(' ')]: board() })
   await $.session.start(START)
   const ui = await mount($)
   for (const key of ['node:A/1', 'park:m4']) {
@@ -251,7 +278,7 @@ test('ノードとメモは枠なしで描き、選んだものは行頭の › 
 
 test('列のノードが band の高さに収まらなければ、残りを +n にまとめる', async ($, on) => {
   const extra = ['E/1', 'E/2', 'E/3'].map(k => node(k, 'pending', k))
-  world(on, { [STATUS.join(' ')]: { ...board(), graph: { ...board().graph, nodes: [...NODES, ...extra] } } })
+  world(on, { [STATUS.join(' ')]: { ...board(LINKS, []), graph: { ...board().graph, nodes: [...NODES, ...extra] } } })
   await $.session.start(START)
   // 高さ 5 行から 1 行目と軸の 2 行を除いた 3 行。段 0 の 5 つのうち 2 つを出し、残りの 3 つを +3 にする。
   const ui = await mount($, 'terminal', { ...BAND_PROPS, maxRows: 5 })

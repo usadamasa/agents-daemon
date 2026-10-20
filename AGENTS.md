@@ -121,7 +121,7 @@ hook・skill・daemon は別プロセスで、ファイル越しに繋がる。�
 | `hooks/daemon-bin.ts` の `daemonBin` (mod が `agents-daemon status --board` と `park` を呼ぶ) | `hooks/lib/daemon-bin.sh` と `Taskfile.yml` の `install` | `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon`。mod は `$.env.get` で `XDG_CACHE_HOME` と `HOME` を読む |
 | `hooks/board.tsx` の `BoardData` (`types/index.d.ts`) | `internal/board` の `Board` | `status --board` の JSON の形。片方の欄を変えたらもう片方も変える |
 | `hooks/park.tsx` の `FIELDS` と `Added` | `internal/parking` の `Request` と `Added` | `park add` の stdin と stdout の JSON の形 |
-| `hooks/parking.ts` の `park` が組む引数 | `cmd/agents-daemon/internal/boardcli/park.go` の `set` と `adopt` | `park set <id> --status <status>`、`park adopt <session_id> <task_id>` に `--session` と `--cwd` を添える |
+| `hooks/parking.ts` の `park` と `run` が組む引数 | `cmd/agents-daemon/internal/boardcli/park.go` の `set`、`discard`、`adopt` | `park set <id> --status <status>`、`park discard --days <N>`、`park adopt <session_id> <task_id>` に `--session` と `--cwd` を添える |
 | `hooks/board.tsx` の `unlink` と `addBlocker` が組む引数 | `cmd/agents-daemon/internal/boardcli/edge.go` の `rm` と `add` | `edge rm\|add --before <ref> --before-cwd <cwd> --after <ref> --after-cwd <cwd>` |
 | `hooks/band.tsx` の `bringForward` が組む引数 | `cmd/agents-daemon/internal/boardcli/park.go` の `list` の `--task` | `park list --status open --task <task_id> --session <id> --cwd <cwd>` |
 | `hooks/log.ts` の `logEvent` が組む引数 | `cmd/agents-daemon/internal/boardcli/board_log.go` の `board-log` と `internal/boardlog` の `Record` | `board-log --session <id> --cwd <cwd> -- <event> key=value…`。出来事の名前は `internal/boardlog` の package doc |

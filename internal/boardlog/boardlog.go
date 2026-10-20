@@ -15,6 +15,7 @@
 //	ingest-task.failed        記録できなかった (tool、reason)
 //	park.add                  メモを置いた (memo、kind、created、task)
 //	park.set                  メモの status を書き換えた (memo、from、to)
+//	park.discard              古い open のメモをまとめて捨てた (days、memos、ids)
 //	park.adopt                終了したセッションのタスクをメモにした (from_session、task、memo、created)
 //	park.failed               park の操作が失敗した (op、reason)
 //	mod.tool-register.failed  session.start で park の tool を登録できなかった (reason)
@@ -22,8 +23,7 @@
 //	mod.board.changed         ボードの行・カード・メモの数か daemon の稼働が変わった (同上)
 //	mod.board.failed          status --board が失敗した (reason)
 //	mod.send                  ボードから指示やメモを送った (via、to、delivered、reason)
-//	mod.hint.failed           prompt の hint 行のメモの数を読めなかった (reason)
-//	mod.band.failed           band のメモを読めなかった (reason)
+//	mod.band.failed           band (と hint 行) のボードか、完了したタスクの途中のメモを読めなかった (reason)
 //
 // mod の出来事は同じ理由が続く間は書き直さない (hooks/log.ts)。
 package boardlog

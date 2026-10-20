@@ -1,19 +1,20 @@
-import { atom, read, update } from 'claude-code'
+import { atom, read } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
+import { reloadForBand } from './board-data'
 import { daemonBin } from './daemon-bin'
-import { logChange, logEvent, reason, settle } from './log'
-import { parkedMemos } from './parking'
+import { logEvent } from './log'
 
 // パーキングロット (#89) の置く側 (#121 の段 5)。model が呼べる park の tool を登録し、呼ばれたら
 // `agents-daemon park add` に JSON を stdin で渡す。domain と repo はバイナリが --cwd と session_id から決める。
-// あわせて、その repo の open のメモの数を prompt の hint 行の末尾に出す。
+// あわせて、その repo の open のメモの数を prompt の hint 行の末尾に出す。数はボード (hooks/board-data.ts の parked) から
+// 取り、band の 10 秒ごとの読み直しと park add の後に変わる。
 // $.ui.status はエンジンが警告の印 (⚠) 付きで描き、メモがあることが異常に見えるので使わない。
-// cc-premise: 2.1.302 mods tool.register / tool.call / turn.complete / ui.render PromptHint の tail の API で書いた
+// cc-premise: 2.1.302 mods tool.register / tool.call / ui.render PromptHint の tail の API で書いた
 
 const TOOL = 'park'
 
-// parked は hooks/band.tsx も session.start の band に読む。
+// parked は hooks/board-data.ts が置く。atom は読む module ごとに書く (state の scan が import を辿らない)。
 const parked = atom({ plugin: 'agents-daemon', key: 'parked' } as const, [])
 
 const DESCRIPTION = `作業の途中で見つけた脇のことを、ユーザーに聞かずにメモとしてパーキングロットへ置き、今の作業を続けるための tool。
@@ -47,7 +48,8 @@ const FIELDS = ['kind', 'title', 'detail', 'files', 'default_taken'] as const
 
 type Added = { created: boolean; item: { id: string } }
 
-// startPark は session.start で park の tool を登録し、メモの数を読む (session.start の hook は hooks/register.ts が持つ)。
+// startPark は session.start で park の tool を登録する (session.start の hook は hooks/register.ts が持つ)。メモの一覧は
+// 続けて走る hooks/band.tsx の startBand が読む。
 // 登録の失敗は engine が画面に一度出すだけなので、理由をログに残してから投げ直す (hook を飛ばす扱いは engine に任せる)。
 export async function startPark($: EngineInterface) {
   try {
@@ -56,7 +58,6 @@ export async function startPark($: EngineInterface) {
     await logEvent($, 'mod.tool-register.failed', { reason: String(err) })
     throw err
   }
-  await refreshStatus($)
 }
 
 export const registerPark: Register = on => {
@@ -64,13 +65,6 @@ export const registerPark: Register = on => {
   on('tool.call', { tool: 'mcp__agents-daemon__park' }, ($, e) =>
     place($, e as unknown as Record<string, unknown>).catch(err => ({ deny: `メモを置けませんでした: ${String(err)}` })),
   )
-
-  // 別のセッションが同じ repo に置いたメモも数えるため、main loop のターンの終わりに読み直す。
-  on('turn.complete', async ($, e, next) => {
-    if (e.agentId === undefined) await refreshStatus($)
-
-    return next(e)
-  })
 
   // エンジンの hint の文面は置き換えず、tail で末尾に足す (terminal だけが描く)。区切りの「·」はエンジンが付ける。
   // cc-premise: 2.1.302 hooks PromptHint の tail の前にエンジンが「 · 」を挟む (実機で確認)
@@ -83,6 +77,7 @@ export const registerPark: Register = on => {
 }
 
 // place は model が書いた欄にこのセッションの ID を足して park add に渡し、置いた結果を model への文面にする。
+// 置いた後はボードを読み直し、hint 行と band の数をすぐ変える。読めなかったときは前の一覧が残る (band の読み直しと同じ)。
 async function place($: EngineInterface, args: Record<string, unknown>): Promise<{ result: string } | { deny: string }> {
   const req: Record<string, unknown> = {}
   for (const field of FIELDS) {
@@ -92,30 +87,11 @@ async function place($: EngineInterface, args: Record<string, unknown>): Promise
 
   const argv = [await daemonBin($), 'park', 'add', '--cwd', await $.session.cwd()]
   const { exitCode, stdout, stderr } = await $.process.run(argv, { stdin: JSON.stringify(req), timeoutMs: 10000 })
-  await refreshStatus($)
+  await reloadForBand($)
   if (exitCode !== 0) return { deny: `メモを置けませんでした: ${stderr.trim() || `exit ${exitCode}`}` }
 
   const added = JSON.parse(stdout) as Added
   const proceed = typeof req.default_taken === 'string' && req.default_taken !== '' ? `既定 (${req.default_taken}) で進めてください。` : '既定で進めてください。'
   if (added.created) return { result: `メモを置きました (${added.item.id})。${proceed}` }
   return { result: `既に置かれていたメモ (${added.item.id}) にまとめました。${proceed}` }
-}
-
-// refreshStatus はこのセッションの repo の open のメモを読み直す。hint 行は数が変わると描き直される。
-// 読めなかったときは前の一覧を残す。数の表示は補助なので、失敗で session.start や tool の結果を止めない。
-async function refreshStatus($: EngineInterface) {
-  try {
-    const argv = [await daemonBin($), 'park', 'list', '--here', '--status', 'open', '--session', await $.session.id(), '--cwd', await $.session.cwd()]
-    const { exitCode, stdout, stderr } = await $.process.run(argv, { timeoutMs: 10000 })
-    if (exitCode !== 0) {
-      await logChange($, 'hint', 'mod.hint.failed', { reason: stderr.trim() || `exit ${exitCode}` })
-      return
-    }
-    const memos = parkedMemos(stdout)
-    await update($, parked, () => memos)
-    await settle($, 'hint')
-  } catch (err) {
-    // バイナリがまだ build されていない間 (SessionStart の detach build) もここに来る。
-    await logChange($, 'hint', 'mod.hint.failed', { reason: reason(err, 'park list') })
-  }
 }

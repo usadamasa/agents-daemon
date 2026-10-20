@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { GraphNode, ParkedMemo } from '../types'
-import { loadBoard } from './board-data'
+import { reloadForBand } from './board-data'
 import { daemonBin } from './daemon-bin'
 import { COLOR, Graph, ICON, MEMO, cells, fit, isStuck, layers, longest, summary, tags } from './graph'
 import { logChange, reason, settle } from './log'
@@ -11,8 +11,9 @@ import { parkedMemos } from './parking'
 // 依存の DAG (#134) の A: 入力欄の上の band に、依存を earlier → later の向きに並べた低い図と、パーキングのメモの
 // 1 行を出す。band は 1 枚で、DAG の図とメモ (#89 の取り出す側) が分け合う。
 // - 図: `status --board` の graph。session.start、TaskUpdate、10 秒ごとに読み直す (B の pane を開いている間は B が 3 秒ごと)
-// - メモ: このセッションの repo の open のメモ (hooks/park.tsx が読んだ一覧)。TaskUpdate で completed になったら、
-//   そのタスクの途中でこのセッションが置いたメモ (`park list --task`) を先頭に寄せる
+// - メモ: このセッションの repo の open のメモ (同じボードの here の行、hooks/board-data.ts の parked)。TaskUpdate で
+//   completed になったら、そのタスクの途中でこのセッションが置いたメモ (`park list --task`) を先頭に寄せる。
+//   寄せるのは並びだけで、open でなくなったメモは次の読み直しで消える
 // 選んだノードとメモ (target) は B の pane と共有する。辺もメモも無ければ出さない。
 // cc-premise: 2.1.303 mods ui.render AbovePrompt の props (hasSurvey、bodyColumns) と、TaskUpdate の結果の statusChange で書いた
 // cc-premise: 2.1.303 mods Button の plain は端末で [ ] を描かず、variant より優先される。ノードとメモは plain、操作は枠付き
@@ -33,12 +34,12 @@ const GUTTER = 2
 
 let timer: Timer | undefined
 
-// startBand は session.start でボードを読み、読み直しの timer を始める。hooks/park.tsx の startPark がメモの一覧を
-// 読んだ後に呼ぶ (session.start の hook は hooks/register.ts が持つ)。
+// startBand は session.start でボードを読み、読み直しの timer を始める (session.start の hook は hooks/register.ts が持つ)。
+// 読んだボードの here の行のメモが hint 行 (hooks/park.tsx) の数にもなる。
 export async function startBand($: EngineInterface) {
-  await refresh($)
+  await reloadForBand($)
   timer?.cancel()
-  timer = $.clock.every(POLL_MS, () => void refresh($))
+  timer = $.clock.every(POLL_MS, () => void reloadForBand($))
 }
 
 export const registerBand: Register = on => {
@@ -46,7 +47,7 @@ export const registerBand: Register = on => {
     const ran = await next(e)
     if (ran.deny === undefined && !ran.isError && ran.result.statusChange?.to === 'completed') {
       await bringForward($, e.taskId)
-      await refresh($)
+      await reloadForBand($)
     }
 
     return ran
@@ -150,21 +151,14 @@ export const registerBand: Register = on => {
   })
 }
 
-// bandMemos はメモの行の並び: 完了したタスクの途中で置いたメモを先に、残りを新しく置かれた順に。
-function bandMemos(first: ParkedMemo[], all: ParkedMemo[]): ParkedMemo[] {
-  const ids = new Set(first.map(m => m.id))
-  const rest = all.filter(m => !ids.has(m.id)).sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
-  return [...first, ...rest]
-}
-
-// refresh はボードを読み直す。band は補助なので、失敗は理由をログに残すだけにする。
-async function refresh($: EngineInterface) {
-  const loaded = await loadBoard($)
-  if ('failure' in loaded) {
-    await logChange($, 'band-board', 'mod.band.failed', { reason: loaded.failure })
-    return
-  }
-  await settle($, 'band-board')
+// bandMemos はメモの行の並び: 完了したタスクの途中で置いたメモ (first、id の順) のうち open のものを先に、残りを
+// 新しく置かれた順に。出すのは open (open の一覧) にあるものだけで、first に残った id でも open でなければ出さない。
+function bandMemos(first: string[], open: ParkedMemo[]): ParkedMemo[] {
+  const byId = new Map(open.map(m => [m.id, m]))
+  const front = first.flatMap(id => byId.get(id) ?? [])
+  const ids = new Set(first)
+  const rest = open.filter(m => !ids.has(m.id)).sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
+  return [...front, ...rest]
 }
 
 // bringForward は完了したタスクの途中でこのセッションが置いた open のメモを、メモの行の先頭に寄せる。無ければ今の並びを
@@ -192,7 +186,7 @@ async function bringForward($: EngineInterface, taskId: string) {
     const memos = parkedMemos(stdout)
     await settle($, 'band')
     if (memos.length === 0) return
-    await update($, front, () => memos)
+    await update($, front, () => memos.map(m => m.id))
   } catch (err) {
     // バイナリがまだ build されていない間もここに来る。
     await logChange($, 'band', 'mod.band.failed', { reason: reason(err, 'park list') })

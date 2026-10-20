@@ -3,6 +3,7 @@ package boardcli
 import (
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/boardlog"
@@ -69,6 +70,28 @@ func parkSet(stateDir string, s parking.Store, p tasklog.Placer, session, cwd, i
 	}
 	_ = boardlog.Record(stateDir, d, session, "park.set", []string{kv("memo", id), kv("from", from), kv("to", status)}, now)
 	return item, nil
+}
+
+// parkDiscard は開いたセッション (session、cwd) の domain で s.DiscardBefore を走らせ、捨てたメモの id を書く
+// (park discard)。id を書くのは、まとめて捨てたものを `park set <id> --status open` で戻せるようにするため。
+func parkDiscard(stateDir string, s parking.Store, p tasklog.Placer, session, cwd string, days int, now time.Time) ([]parking.Item, error) {
+	d := p.Domain(session, cwd)
+	if days < 1 {
+		err := fmt.Errorf("--days は 1 以上 (%d)", days)
+		parkFailed(stateDir, d, now, "discard", session, err, kv("days", days))
+		return nil, err
+	}
+	items, err := s.DiscardBefore(d, now.Add(-time.Duration(days)*24*time.Hour))
+	if err != nil {
+		parkFailed(stateDir, d, now, "discard", session, err, kv("days", days))
+		return nil, err
+	}
+	ids := make([]string, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, item.ID)
+	}
+	_ = boardlog.Record(stateDir, d, session, "park.discard", []string{kv("days", days), kv("memos", len(items)), kv("ids", strings.Join(ids, ","))}, now)
+	return items, nil
 }
 
 // parkAdopt は s.Adopt を走らせ、移したタスクとメモを書く (park adopt)。

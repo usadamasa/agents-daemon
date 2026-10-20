@@ -12,11 +12,15 @@ import {
   adopt,
   canAdopt,
   discard,
+  discardStale,
   handOff,
+  isStale,
   issueDestinations,
   issueText,
+  lastPlacedAt,
   memoLabel,
   memoLines,
+  stamp,
   taskDestinations,
   taskText,
 } from './parking'
@@ -37,6 +41,9 @@ const POLL_MS = 3000
 const MAX_DEPTH = 2
 // 行頭の印。選んだ行だけに › を出し、ほかの行は同じ幅の空白で揃える。
 const GUTTER = 2
+// STALE_DAYS は「古い」メモの日数。週次の棚卸しを 4 回越したメモは文脈が薄れている。daemon の housekeeping は open を
+// 90 日で黙って消す (internal/parking の OpenRetention) が、その前に人が見て捨てる区切りをここに置く。
+const STALE_DAYS = 30
 
 const board = atom({ plugin: 'agents-daemon', key: 'board' } as const, null)
 const error = atom({ plugin: 'agents-daemon', key: 'error' } as const, '')
@@ -116,6 +123,8 @@ export const registerBoard: Register = on => {
 
     const g = new Graph(data.graph)
     const memos = data.rows.flatMap(row => row.parking)
+    const now = await $.clock.now()
+    const stale = memos.filter(memo => isStale(memo, now, STALE_DAYS)).length
     const selected = g.node(chosen)
     const chosenMemo = findMemo(data.rows, chosen)
 
@@ -250,6 +259,7 @@ export const registerBoard: Register = on => {
       )
     }
 
+    // メモの行は最後に置かれた時刻 (JST) を先頭に置き、どのメモが古いかを列で見比べられるようにする。
     const memoRow = (memo: ParkingCard) => {
       const key = memoKey(memo)
       const during = memo.sources.flatMap(s => (s.task_id ? (g.node(`${s.session_id}/${s.task_id}`) ?? []) : []))[0]
@@ -258,6 +268,7 @@ export const registerBoard: Register = on => {
         <Box key={`box:${key}`} flexDirection="row">
           <Text>{isSel ? '› ' : ' '.repeat(GUTTER)}</Text>
           <Button key={key} plain onPress={() => choose(isSel ? '' : key)}>
+            <Text dimColor>{`${stamp(lastPlacedAt(memo))} `}</Text>
             <Text bold={isSel ? true : undefined}>{`${memoLabel(memo)}${during ? ` ← ${during.title}` : ''}`}</Text>
           </Button>
         </Box>
@@ -322,9 +333,17 @@ export const registerBoard: Register = on => {
         ))}
         {memos.length > 0 && (
           <Box key="section:parking" flexDirection="column">
-            <Text bold color="success">
-              {MEMO} parking {String(memos.length)}
-            </Text>
+            <Box flexDirection="row" gap={1}>
+              <Text bold color="success">
+                {MEMO} parking {String(memos.length)}
+              </Text>
+              {/* 古いメモをまとめて捨てる。該当があるときだけ出し、日数はこの mod が決める (park discard --days)。 */}
+              {stale > 0 && (
+                <Button key="discard-stale" onPress={() => void act(() => discardStale($, STALE_DAYS))}>
+                  Discard {String(stale)} older than {String(STALE_DAYS)}d
+                </Button>
+              )}
+            </Box>
             {memos.map(memo => memoRow(memo))}
             {chosenMemo !== undefined && memoDetail(chosenMemo)}
           </Box>

@@ -326,35 +326,50 @@ func TestParkList_task(t *testing.T) {
 	}
 }
 
-// --here は --cwd の repo (main worktree のパス) で絞る。linked worktree からでも main で置いたメモが出る。
-func TestParkList_here(t *testing.T) {
+// discard は開いたセッションの domain の open のメモのうち、最後に置かれてから --days 日より経ったものを
+// discarded にし、捨てたメモを出す。--days は必須で 1 以上。
+func TestParkDiscard(t *testing.T) {
 	root := parkTestEnv(t)
-	repo, wt := parkTestRepo(t, filepath.Join(root, "src", "home", "app"))
-	other := filepath.Join(root, "src", "home", "other")
-	if err := os.MkdirAll(other, 0o750); err != nil {
+	cwd := filepath.Join(root, "src", "home", "a")
+	if err := os.MkdirAll(cwd, 0o750); err != nil {
 		t.Fatal(err)
 	}
-	out, _, err := runPark(t, parkInput, "add", "--cwd", repo)
+	// add は今の時刻で置くので、古いメモは記録を直接置く。
+	const old = "20260901T000000-0ld0ld00"
+	writeTestConfig(t, filepath.Join(root, "state", "agents-daemon", "parking", "home", old+".json"),
+		`{"id":"`+old+`","domain":"home","repo":"`+cwd+`","kind":"aside","title":"古い","status":"open","sources":[{"session_id":"s1","cwd":"`+cwd+`","at":"2026-09-01T00:00:00Z"}]}`)
+	out, _, err := runPark(t, parkInput, "add", "--cwd", cwd)
 	if err != nil {
 		t.Fatal(err)
 	}
-	mine := decodeAdded(t, out).Item
-	if _, _, err := runPark(t, parkInput, "add", "--cwd", other); err != nil {
-		t.Fatal(err)
-	}
+	fresh := decodeAdded(t, out).Item
 
-	out, _, err = runPark(t, "", "list", "--here", "--status", "open", "--cwd", wt)
+	out, _, err = runPark(t, "", "discard", "--days", "30", "--session", "viewer", "--cwd", cwd)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("park discard: %v", err)
 	}
 	var items []parking.Item
 	if err := json.Unmarshal([]byte(out), &items); err != nil {
+		t.Fatalf("discard の JSON を読めない: %v\n%s", err, out)
+	}
+	if len(items) != 1 || items[0].ID != old || items[0].Status != parking.StatusDiscarded {
+		t.Errorf("discard = %+v, want %s だけ", items, old)
+	}
+	out, _, err = runPark(t, "", "list", "--status", "open", "--cwd", cwd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var open []parking.Item
+	if err := json.Unmarshal([]byte(out), &open); err != nil {
 		t.Fatalf("list の JSON を読めない: %v\n%s", err, out)
 	}
-	if len(items) != 1 || items[0].ID != mine.ID {
-		t.Errorf("--here = %+v, want %s だけ", items, mine.ID)
+	if len(open) != 1 || open[0].ID != fresh.ID {
+		t.Errorf("open = %+v, want %s だけ", open, fresh.ID)
 	}
-	if _, _, err := runPark(t, "", "list", "--here", "--repo", repo, "--cwd", wt); err == nil {
-		t.Errorf("--here と --repo を同時に受け付けた")
+	if _, _, err := runPark(t, "", "discard", "--cwd", cwd); err == nil {
+		t.Errorf("--days の無い discard を受け付けた")
+	}
+	if _, _, err := runPark(t, "", "discard", "--days", "0", "--cwd", cwd); err == nil {
+		t.Errorf("--days 0 を受け付けた")
 	}
 }

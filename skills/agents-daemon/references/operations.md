@@ -9,6 +9,7 @@
 agents-daemon daemon --ensure [--dry-run]      # 居なければ detach 起動 (hook 用)
 agents-daemon daemon --foreground [--dry-run]  # このプロセスで回す (デバッグ用)
 agents-daemon status                           # 稼働状況、監視中の pane、ログの末尾
+agents-daemon --json status                    # 同じものを JSON で出す (下の「--json」)
 agents-daemon logs -n 80                       # 現行ログ (daemon.log) の末尾
 agents-daemon logs --board [--session <id>]    # ボードの経路 (タスクの記録、パーキング、mod) のログの末尾。cwd の domain の分だけ
 agents-daemon stop                             # SIGTERM を送って停止
@@ -88,6 +89,18 @@ agents-daemon edge list --cwd <dir> [--here | --repo <main worktree>] [--ref <�
   ここから決め、違えば書かずに失敗する。書く側のセッション自身の cwd は見ない
 - 同じ参照の組 (向きを含む) は同じ辺になる。登録し直すと note と repo を書き直し、保持期間 (7 日) を数え直す
 - `list` は `--cwd` (と `--session`) の domain の辺だけを出す。`--repo` / `--here` / `--ref` はどちらかの端点で絞る
+
+### `--json`
+
+root のグローバルオプション。`doctor` と `status` は人が読む形の代わりに JSON を出す (形は `internal/doctor` の
+`Report` と `internal/verify` の `StatusReport` の json tag)。元から JSON を出す `status --board`、`park`、`edge` は付けても
+変わらない。それ以外のコマンドに付けると、文字の出力を JSON と思い込んで読む事故を避けるため error で止まる
+(残りのコマンドへの対応は #182)。
+
+```sh
+agents-daemon --json doctor | jq '.premises.findings'   # rex CLI の前提の点検だけを取り出す
+agents-daemon --json status | jq '.snapshot.panes'      # 監視中の pane
+```
 
 ### 検証用コマンド
 

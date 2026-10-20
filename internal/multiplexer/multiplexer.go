@@ -86,8 +86,8 @@ type SessionResolver func() (map[string]string, error)
 
 // PremiseFinding は PremiseChecker の点検 1 件。OK が false なら前提が崩れている (doctor が ⚠ で出す)。
 type PremiseFinding struct {
-	OK   bool
-	Text string
+	OK   bool   `json:"ok"`
+	Text string `json:"text"`
 }
 
 // PremiseChecker は多重化ツールの CLI に置いている前提 (応答の欄、exit code、flag) を、自分の pane に固定の

@@ -2,6 +2,8 @@ package rexcli
 
 import (
 	"context"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -120,6 +122,75 @@ func TestCheckPremises_NamesMissingField(t *testing.T) {
 			}
 		})
 	}
+}
+
+// preview.16 で version --json に増えた api_revision は、あるときだけ出して server (api call server.status) の
+// api_revision と比べる。無い版 (Oct18) では出さず、server にも打たない。
+func TestCheckPremises_APIRevision(t *testing.T) {
+	t.Run("CLI と server が同じ版なら OK に api_revision を出す", func(t *testing.T) {
+		f := selfFixtures(t)
+		f.put(t, "version.json", measured(t, measuredOct20, "version.json"))
+		f.put(t, "server-status.json", measured(t, measuredOct20, "server_status.json"))
+		findings := f.client(staticResolver(nil)).CheckPremises(context.Background(), blockSelfOct18, sessionSelfOct18)
+
+		joined := strings.Join(findingTexts(findings), "\n")
+		if !strings.Contains(joined, "api_revision 4") || strings.Contains(joined, "NG: ") {
+			t.Errorf("api_revision 4 の OK が無いか NG がある:\n%s", joined)
+		}
+		calls := readLines(t, filepath.Join(f.dir, "calls.log"))
+		if !slices.Contains(calls, "'--autostart=false' 'api' 'call' 'server.status' ") {
+			t.Errorf("api call server.status を打っていない:\n%s", strings.Join(calls, "\n"))
+		}
+	})
+
+	t.Run("CLI と server の api_revision が食い違えば NG 1 件", func(t *testing.T) {
+		f := selfFixtures(t)
+		f.put(t, "version.json", measured(t, measuredOct20, "version.json"))
+		f.put(t, "server-status.json", `{"pid":31416,"api_revision":3}`)
+		findings := f.client(staticResolver(nil)).CheckPremises(context.Background(), blockSelfOct18, sessionSelfOct18)
+
+		var ng []string
+		for _, fd := range findings {
+			if !fd.OK {
+				ng = append(ng, fd.Text)
+			}
+		}
+		if len(ng) != 1 || !strings.Contains(ng[0], "api_revision") || !strings.Contains(ng[0], "4") || !strings.Contains(ng[0], "3") {
+			t.Errorf("NG = %q, want api_revision の 4 と 3 を名指しした 1 件", ng)
+		}
+	})
+
+	t.Run("server status に api_revision が無ければ NG 1 件", func(t *testing.T) {
+		f := selfFixtures(t)
+		f.put(t, "version.json", measured(t, measuredOct20, "version.json"))
+		f.put(t, "server-status.json", measured(t, measuredOct10, "server_status.json"))
+		findings := f.client(staticResolver(nil)).CheckPremises(context.Background(), blockSelfOct18, sessionSelfOct18)
+
+		var ng []string
+		for _, fd := range findings {
+			if !fd.OK {
+				ng = append(ng, fd.Text)
+			}
+		}
+		if len(ng) != 1 || !strings.Contains(ng[0], "api_revision") {
+			t.Errorf("NG = %q, want api_revision を名指しした 1 件", ng)
+		}
+	})
+
+	t.Run("CLI に api_revision が無い版では出さず server にも打たない", func(t *testing.T) {
+		f := selfFixtures(t)
+		findings := f.client(staticResolver(nil)).CheckPremises(context.Background(), blockSelfOct18, sessionSelfOct18)
+
+		joined := strings.Join(findingTexts(findings), "\n")
+		if strings.Contains(joined, "api_revision") {
+			t.Errorf("api_revision の無い版で api_revision に触れている:\n%s", joined)
+		}
+		for _, line := range readLines(t, filepath.Join(f.dir, "calls.log")) {
+			if strings.Contains(line, "server.status") {
+				t.Errorf("api_revision の無い版で server に打っている: %s", line)
+			}
+		}
+	})
 }
 
 // session が分からなければ block ls の点検だけを飛ばし、理由を NG で残す。

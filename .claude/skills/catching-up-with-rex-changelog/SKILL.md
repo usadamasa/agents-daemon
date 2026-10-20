@@ -33,8 +33,10 @@ preview が出るので、上げたら changelog と実機の応答をこの rep
 go run ./cmd/agents-daemon doctor
 ```
 
-「rex CLI の前提」の節の `rex_version` と `built_at` を控える (手順 4 の実機の点検もこの節が兼ねる)。
-rex の CLI は changelog の版 (`preview.N` の形) を出さない
+「rex CLI の前提」の節の `rex_version` と `built_at` と `api_revision` を控える (手順 4 の実機の点検もこの節が兼ねる)。
+機械で読むなら `--json doctor | jq '.premises.findings'` で同じ節だけを取り出せる。
+`api_revision` は CLI が対応する API の版で、機械で読める唯一の版。同じ節が server の版と比べ、食い違えば `⚠` に
+なる (CLI と server が別々に更新された状態)。rex の CLI は changelog の版 (`preview.N` の形) を出さない
 (`api call server.version` も同じ)。changelog の版は `list_changelog` の一覧から、`built_at` の日付と同じ日かその直後の
 post を取る。post は build より後に出る。
 

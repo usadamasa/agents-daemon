@@ -1,4 +1,4 @@
-package verify
+package doctor
 
 import (
 	"bytes"
@@ -14,6 +14,7 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/daemon"
+	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
 	"github.com/usadamasa/agents-daemon/internal/ratelimit"
@@ -26,9 +27,9 @@ var errFakeUnreachable = errors.New("fake: rex unreachable")
 // noEnv は環境変数が 1 つも無い getenv。doctor の既存の項目は環境に依らない。
 func noEnv(string) string { return "" }
 
-// doctorInput は fixedNow と noEnv を固定した DoctorInput を組む。
-func doctorInput(client multiplexer.Client, kind string, p apppath.Paths, now time.Time) DoctorInput {
-	return DoctorInput{Client: client, Kind: kind, Paths: p, Now: now, Getenv: noEnv}
+// doctorInput は fixedNow と noEnv を固定した Input を組む。
+func doctorInput(client multiplexer.Client, kind string, p apppath.Paths, now time.Time) Input {
+	return Input{Client: client, Kind: kind, Paths: p, Now: now, Getenv: noEnv}
 }
 
 // envOf は m だけを持つ getenv を返す。
@@ -36,7 +37,7 @@ func envOf(m map[string]string) func(string) string {
 	return func(k string) string { return m[k] }
 }
 
-func TestRunDoctor(t *testing.T) {
+func TestRun(t *testing.T) {
 	fixedNow := time.Date(2026, 8, 16, 13, 0, 0, 0, time.UTC)
 
 	t.Run("rex に到達できないと error を返し、以降の項目は診断しない", func(t *testing.T) {
@@ -44,7 +45,7 @@ func TestRunDoctor(t *testing.T) {
 			ReachableFunc: func(context.Context) error { return errFakeUnreachable },
 		}
 		var buf bytes.Buffer
-		err := RunDoctor(context.Background(), &buf, doctorInput(client, sessioncontext.MultiplexerKindRex, apppath.New(t.TempDir(), "", ""), fixedNow))
+		err := Run(context.Background(), &buf, doctorInput(client, sessioncontext.MultiplexerKindRex, apppath.New(t.TempDir(), "", ""), fixedNow))
 		if err == nil {
 			t.Fatal("rex 到達不可のとき error を期待したが nil だった")
 		}
@@ -67,8 +68,8 @@ func TestRunDoctor(t *testing.T) {
 		}
 
 		var buf bytes.Buffer
-		if err := RunDoctor(context.Background(), &buf, doctorInput(client, sessioncontext.MultiplexerKindRex, apppath.New(home, "", ""), fixedNow)); err != nil {
-			t.Fatalf("RunDoctor() error = %v", err)
+		if err := Run(context.Background(), &buf, doctorInput(client, sessioncontext.MultiplexerKindRex, apppath.New(home, "", ""), fixedNow)); err != nil {
+			t.Fatalf("Run() error = %v", err)
 		}
 		out := buf.String()
 
@@ -113,8 +114,8 @@ func TestRunDoctor(t *testing.T) {
 		}
 
 		var buf bytes.Buffer
-		if err := RunDoctor(context.Background(), &buf, doctorInput(client, sessioncontext.MultiplexerKindRex, p, fixedNow)); err != nil {
-			t.Fatalf("RunDoctor() error = %v", err)
+		if err := Run(context.Background(), &buf, doctorInput(client, sessioncontext.MultiplexerKindRex, p, fixedNow)); err != nil {
+			t.Fatalf("Run() error = %v", err)
 		}
 		out := buf.String()
 		if !strings.Contains(out, "鮮度: OK") {
@@ -140,8 +141,8 @@ func TestRunDoctor(t *testing.T) {
 		}
 
 		var buf bytes.Buffer
-		if err := RunDoctor(context.Background(), &buf, doctorInput(client, sessioncontext.MultiplexerKindRex, p, fixedNow)); err != nil {
-			t.Fatalf("RunDoctor() error = %v", err)
+		if err := Run(context.Background(), &buf, doctorInput(client, sessioncontext.MultiplexerKindRex, p, fixedNow)); err != nil {
+			t.Fatalf("Run() error = %v", err)
 		}
 		out := buf.String()
 		if !strings.Contains(out, "daemon 起動中") {
@@ -158,8 +159,8 @@ func TestRunDoctor(t *testing.T) {
 			PaneListFunc:  func(context.Context) ([]multiplexer.Pane, error) { return nil, nil },
 		}
 		var buf bytes.Buffer
-		if err := RunDoctor(context.Background(), &buf, doctorInput(client, sessioncontext.MultiplexerKindRex, apppath.New(t.TempDir(), "", ""), fixedNow)); err != nil {
-			t.Fatalf("RunDoctor() error = %v", err)
+		if err := Run(context.Background(), &buf, doctorInput(client, sessioncontext.MultiplexerKindRex, apppath.New(t.TempDir(), "", ""), fixedNow)); err != nil {
+			t.Fatalf("Run() error = %v", err)
 		}
 		for _, want := range []string{"backend: rex (REX_SESSION あり)", "OK: rex server は稼働しています"} {
 			if !strings.Contains(buf.String(), want) {
@@ -173,9 +174,9 @@ func TestRunDoctor(t *testing.T) {
 			ReachableFunc: func(context.Context) error { return errFakeUnreachable },
 		}
 		var buf bytes.Buffer
-		err := RunDoctor(context.Background(), &buf, doctorInput(client, sessioncontext.MultiplexerKindRex, apppath.New(t.TempDir(), "", ""), fixedNow))
+		err := Run(context.Background(), &buf, doctorInput(client, sessioncontext.MultiplexerKindRex, apppath.New(t.TempDir(), "", ""), fixedNow))
 		if err == nil || !strings.Contains(err.Error(), "rex に到達できない") {
-			t.Fatalf("RunDoctor() error = %v, want rex に到達できない", err)
+			t.Fatalf("Run() error = %v, want rex に到達できない", err)
 		}
 	})
 
@@ -202,9 +203,9 @@ func TestReportPremises(t *testing.T) {
 			{OK: false, Text: "program_status の root record に owner.pid が無い"},
 		}}
 		var buf bytes.Buffer
-		reportPremises(context.Background(), &buf, checker, envOf(map[string]string{
+		writePremises(&buf, *collectPremises(context.Background(), checker, envOf(map[string]string{
 			"REX_BLOCK": "block:self", "REX_SESSION": "session:self",
-		}))
+		})))
 		out := buf.String()
 		for _, want := range []string{"OK: rex_version: 0.0.1", "⚠ program_status の root record に owner.pid が無い"} {
 			if !strings.Contains(out, want) {
@@ -219,7 +220,7 @@ func TestReportPremises(t *testing.T) {
 	t.Run("REX_BLOCK が無ければ点検せず理由を出す", func(t *testing.T) {
 		checker := &fakePremises{}
 		var buf bytes.Buffer
-		reportPremises(context.Background(), &buf, checker, noEnv)
+		writePremises(&buf, *collectPremises(context.Background(), checker, noEnv))
 		if checker.calls != 0 {
 			t.Errorf("REX_BLOCK 無しで CheckPremises が %d 回呼ばれた", checker.calls)
 		}
@@ -230,7 +231,7 @@ func TestReportPremises(t *testing.T) {
 
 	t.Run("checker が無ければ節の中身だけ省く", func(t *testing.T) {
 		var buf bytes.Buffer
-		reportPremises(context.Background(), &buf, nil, envOf(map[string]string{"REX_BLOCK": "block:self"}))
+		writePremises(&buf, *collectPremises(context.Background(), nil, envOf(map[string]string{"REX_BLOCK": "block:self"})))
 		if !strings.Contains(buf.String(), "点検") {
 			t.Errorf("checker 無しの説明が出ていない:\n%s", buf.String())
 		}
@@ -243,18 +244,95 @@ func TestRunDoctor_PremisesSection(t *testing.T) {
 		PaneListFunc:  func(context.Context) ([]multiplexer.Pane, error) { return nil, nil },
 	}
 	checker := &fakePremises{findings: []multiplexer.PremiseFinding{{OK: true, Text: "exit 3"}}}
-	in := DoctorInput{
+	in := Input{
 		Client: client, Kind: sessioncontext.MultiplexerKindRex, Paths: apppath.New(t.TempDir(), "", ""),
 		Now: time.Now(), Getenv: envOf(map[string]string{"REX_BLOCK": "block:self", "REX_SESSION": "session:self"}),
 		Premises: checker,
 	}
 	var buf bytes.Buffer
-	if err := RunDoctor(context.Background(), &buf, in); err != nil {
-		t.Fatalf("RunDoctor() error = %v", err)
+	if err := Run(context.Background(), &buf, in); err != nil {
+		t.Fatalf("Run() error = %v", err)
 	}
 	if !strings.Contains(buf.String(), "-- rex CLI の前提") || !strings.Contains(buf.String(), "OK: exit 3") {
 		t.Errorf("rex CLI の前提の節が無い:\n%s", buf.String())
 	}
+}
+
+// CollectDoctor の結果は `doctor --json` がそのまま出す。到達できないときは backend だけ、到達できれば全節が
+// 埋まり、節の key は json tag の名前で読める。
+func TestCollectDoctor_JSON(t *testing.T) {
+	fixedNow := time.Date(2026, 8, 16, 13, 0, 0, 0, time.UTC)
+	home := t.TempDir()
+	p := apppath.New(home, "", "")
+
+	t.Run("到達できなければ backend だけで error", func(t *testing.T) {
+		client := &multiplexerfake.Client{ReachableFunc: func(context.Context) error { return errFakeUnreachable }}
+		rep, err := Collect(context.Background(), doctorInput(client, sessioncontext.MultiplexerKindRex, p, fixedNow))
+		if err == nil {
+			t.Fatal("error を期待したが nil だった")
+		}
+		if rep.Backend.Reachable || rep.Backend.Error == "" || rep.Panes != nil || rep.Paths != nil {
+			t.Errorf("rep = %+v, want backend の error だけ", rep)
+		}
+	})
+
+	t.Run("到達できれば全節が埋まり JSON の key で読める", func(t *testing.T) {
+		writeJSONFile(t, mustRateLimitFile(t, p, "sess-1"), map[string]any{
+			"five_hour":   map[string]any{"used_percentage": 95, "resets_at": fixedNow.Add(time.Hour).Unix()},
+			"observed_at": fixedNow.Add(-90 * time.Second).Unix(),
+			"session_id":  "sess-1",
+		})
+		client := &multiplexerfake.Client{
+			ReachableFunc: func(context.Context) error { return nil },
+			PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) {
+				return []multiplexer.Pane{
+					{PaneID: "p1", Agent: "claude", AgentStatus: multiplexer.AgentStatusBlocked, AgentKind: "permission", CWD: "/repo", SessionID: "sess-1"},
+					{PaneID: "p2", Agent: "", CWD: "/other"},
+				}, nil
+			},
+		}
+		in := doctorInput(client, sessioncontext.MultiplexerKindRex, p, fixedNow)
+		in.Getenv = envOf(map[string]string{"REX_BLOCK": "block:self", "HOME": home})
+		in.Premises = &fakePremises{findings: []multiplexer.PremiseFinding{{OK: true, Text: "rex_version: 0.0.1 (built_at x, api_revision 4)"}}}
+		rep, err := Collect(context.Background(), in)
+		if err != nil {
+			t.Fatalf("Collect() error = %v", err)
+		}
+		body, err := json.Marshal(rep)
+		if err != nil {
+			t.Fatalf("json.Marshal() error = %v", err)
+		}
+		var got map[string]any
+		if err := json.Unmarshal(body, &got); err != nil {
+			t.Fatalf("json.Unmarshal() error = %v", err)
+		}
+		for _, key := range []string{"backend", "panes", "premises", "rate_limits", "config", "domain", "daemon", "peer_messaging", "paths"} {
+			if _, ok := got[key]; !ok {
+				t.Errorf("JSON に %q が無い:\n%s", key, body)
+			}
+		}
+		if rep.Panes.Total != 2 || len(rep.Panes.Claude) != 1 || rep.Panes.Claude[0].AgentKind != "permission" {
+			t.Errorf("panes = %+v, want 総数 2 のうち Claude 1 (kind=permission)", rep.Panes)
+		}
+		if len(rep.Premises.Findings) != 1 || rep.Premises.Skipped != "" {
+			t.Errorf("premises = %+v, want finding 1 件", rep.Premises)
+		}
+		st := rep.RateLimits.Sessions[0].State
+		if st == nil || st.AgeSeconds != 90 || !st.Fresh || !st.Exhausted {
+			t.Errorf("rate_limits の state = %+v, want 90 秒前で fresh かつ閾値以上", st)
+		}
+		if rep.Config.Exists || rep.Daemon.Running || rep.Domain.Fallback != domain.Work {
+			t.Errorf("config/daemon/domain = %+v / %+v / %+v, want 設定なし・未起動・業務", rep.Config, rep.Daemon, rep.Domain)
+		}
+		// 文字の出力は同じ struct から書く (値の食い違いが無いことの確認)。
+		var buf bytes.Buffer
+		Write(&buf, rep)
+		for _, want := range []string{"(1m30s 前)", "OK: rex_version: 0.0.1", "pane=p1 cwd=/repo agent_status=blocked kind=permission"} {
+			if !strings.Contains(buf.String(), want) {
+				t.Errorf("出力に %q が無い:\n%s", want, buf.String())
+			}
+		}
+	})
 }
 
 func TestReportPeerMessaging(t *testing.T) {
@@ -324,7 +402,7 @@ func TestReportPeerMessaging(t *testing.T) {
 				touchFile(t, env["CLAUDE_CODE_MESSAGING_SOCKET"])
 			}
 			var buf bytes.Buffer
-			reportPeerMessaging(&buf, envOf(env))
+			writePeerMessaging(&buf, *collectPeerMessaging(envOf(env)))
 			out := buf.String()
 			for _, want := range tc.want {
 				if !strings.Contains(out, want) {
@@ -351,7 +429,7 @@ func TestReportConfigState_不正なJSONはフォールバックを明言する(
 	}
 
 	var buf bytes.Buffer
-	reportConfigState(&buf, p)
+	writeConfigState(&buf, *collectConfigState(p))
 	out := buf.String()
 	if !strings.Contains(out, "JSON として不正です") {
 		t.Errorf("不正 JSON の警告が無い: %s", out)
@@ -366,7 +444,7 @@ func TestReportConfigState_カスタム値はデフォルトと異なる印が�
 	})
 
 	var buf bytes.Buffer
-	reportConfigState(&buf, p)
+	writeConfigState(&buf, *collectConfigState(p))
 
 	customLine, ok := findLineContaining(buf.String(), "pollIntervalSeconds")
 	if !ok {
@@ -476,7 +554,7 @@ func TestReportDomain(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	reportDomain(&buf, p, panes, home)
+	writeDomain(&buf, *collectDomain(p, panes, home))
 	out := buf.String()
 
 	for _, want := range []string{
@@ -501,7 +579,7 @@ func TestReportDomain_homeMachine(t *testing.T) {
 	writeJSONFile(t, p.ConfigFile(), map[string]any{"defaultDomain": "home"})
 
 	var buf bytes.Buffer
-	reportDomain(&buf, p, nil, home)
+	writeDomain(&buf, *collectDomain(p, nil, home))
 	out := buf.String()
 	if !strings.Contains(out, "homePaths に当たらない cwd: home") {
 		t.Errorf("既定が home と出ていない:\n%s", out)

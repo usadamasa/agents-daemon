@@ -1,3 +1,10 @@
+// Package verify は `inspect` / `status` / `logs` サブコマンドの実装を提供する。
+// いずれも daemon (internal/daemon) と同じ検知・判定経路 (monitor パッケージ) を
+// 送信せずに覗き見る診断ツール。前提条件の診断 `doctor` は internal/doctor、
+// 使い捨て pane へ実際に通す `simulate` は internal/simulate。
+//
+// status は結果を StatusReport に集めてから書く。文字の出力と `--json` の出力が同じ判定を見るためで、
+// JSON の形はその struct の json tag が決める。
 package verify
 
 import (

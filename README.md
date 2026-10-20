@@ -99,6 +99,7 @@ agents-daemon status                     # 稼働状況、監視中の pane、�
 agents-daemon logs -n 80                 # daemon.log の末尾
 agents-daemon logs --board               # ボードの経路のログの末尾 (cwd の domain の分)
 agents-daemon doctor                     # 前提条件の診断
+agents-daemon --json doctor              # 同じ診断を JSON で出す (--json は doctor と status に効く)
 agents-daemon inspect --pane <block id>  # 生きた block の画面を分類する
 agents-daemon daemon --foreground --dry-run  # 送信せずに判定だけ回す
 agents-daemon stop                       # 停止

@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -21,5 +23,26 @@ func TestRootCmd_registersAllCommands(t *testing.T) {
 	}
 	if sub, _, err := newRootCmd().Find([]string{"dream", "harvest"}); err != nil || sub.Name() != "harvest" {
 		t.Errorf("Find(dream harvest) = %v, %v", sub, err)
+	}
+}
+
+// --json は root のグローバルオプション。対応するのは読むだけの診断の doctor と status と、元から JSON を出す
+// park / edge。それ以外に付けると RunE の前に error で止まる (#182 で残りに広げる)。
+func TestRootCmd_jsonFlag(t *testing.T) {
+	root := newRootCmd()
+	root.SetOut(&bytes.Buffer{})
+	root.SetErr(&bytes.Buffer{})
+	root.SetArgs([]string{"--json", "stop"})
+	if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "--json") {
+		t.Errorf("--json stop: error = %v, want --json に対応していない error", err)
+	}
+	for _, name := range []string{"doctor", "status", "park", "edge"} {
+		sub, _, err := newRootCmd().Find([]string{name})
+		if err != nil {
+			t.Fatalf("Find(%s): %v", name, err)
+		}
+		if sub.Annotations["jsonflag.supported"] != "true" {
+			t.Errorf("%s が --json の対応を宣言していない", name)
+		}
 	}
 }

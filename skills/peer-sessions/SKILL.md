@@ -48,7 +48,27 @@ printenv REX_SESSION
    cwd をそのパスにする。自分の worktree は渡さない
 2. そこで `claude --name <name> --model "${CLAUDE_CODE_SUBAGENT_MODEL:?}"` を起動する
 3. `ListAgents` に `<name>` が並ぶのを確かめる
-4. `SendMessage` で引き継ぎ内容を本文に入れて送る。完了を知りたければ `notify_when_idle: true` を付ける
+4. 渡す作業に「これが済まないと始められない」相手 (別の peer の作業、マージ待ちの PR) があれば、
+   送る前に辺を書く (下の「依存の辺を書く」)
+5. `SendMessage` で引き継ぎ内容を本文に入れて送る。完了を知りたければ `notify_when_idle: true` を付ける
+
+### 依存の辺を書く
+
+セッションをまたぐ依存は Task 系ツールの `blockedBy` では張れないので、渡す側が agents-daemon の
+辺として書く。辺は依存のボード (`/board`) と入力欄の上の band に出る。
+
+```sh
+"${XDG_CACHE_HOME:-$HOME/.cache}/agents-daemon/bin/agents-daemon" edge add \
+  --before session:<待つ相手の name> --before-cwd <その window に渡した cwd> \
+  --after session:<name> --after-cwd <この window に渡した cwd> \
+  --note "<何の後か>"
+```
+
+`--before` は `pr:<owner>/<repo>#<番号>` や `issue:` でもよい。参照の形と `rm` / `list` は
+`agents-daemon:agents-daemon` skill の `references/operations.md`「セッションをまたぐ辺を書く」。
+
+辺を書かずに送ると、band に `no edge: <name>` が出て、辺を書くかその peer が済むまで残る。
+返事や報告のように依存の無い送信なら、ユーザーが名前を押して消す。
 
 ### やらないこと
 

@@ -116,6 +116,18 @@ func TestWriteRecords_MultipleDates(t *testing.T) {
 	}
 }
 
+// records が無い run (incremental で新しいセッションが無いとき) は harvest/ を作らない。
+// 読み手 (mine の WalkDir、dreamstate の Prune) は無いディレクトリを空として扱う。
+func TestWriteRecords_NoRecordsLeavesNoDirectory(t *testing.T) {
+	outDir := t.TempDir()
+	if _, err := writeRecords(outDir, nil); err != nil {
+		t.Fatalf("writeRecords(nil): %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(outDir, "harvest")); !os.IsNotExist(err) {
+		t.Errorf("harvest/ の Stat = %v, want not exist", err)
+	}
+}
+
 func TestWriteRecords_SkipsCorruptedExistingLines(t *testing.T) {
 	outDir := t.TempDir()
 	harvestDir := filepath.Join(outDir, "harvest")

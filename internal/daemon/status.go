@@ -2,9 +2,7 @@ package daemon
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/monitor"
@@ -72,16 +70,10 @@ func writeStatusSnapshot(path string, pid int, backend string, startedAt, now ti
 // ReadStatusSnapshot は path から status.json を読む。ファイルが存在しない場合は
 // (daemon が一度も tick していない、または起動していない) (nil, nil) を返す。
 func ReadStatusSnapshot(path string) (*StatusSnapshot, error) {
-	data, err := os.ReadFile(path) // #nosec G304 -- 呼び出し元が固定パスを渡す
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("status snapshot の読み込みに失敗: %w", err)
-	}
 	var snap StatusSnapshot
-	if err := json.Unmarshal(data, &snap); err != nil {
-		return nil, fmt.Errorf("status snapshot のパースに失敗: %w", err)
+	found, err := statefile.ReadJSON(path, &snap)
+	if err != nil || !found {
+		return nil, err
 	}
 	return &snap, nil
 }

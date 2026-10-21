@@ -2,8 +2,6 @@ package harvest
 
 import (
 	"encoding/json"
-	"errors"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -20,16 +18,8 @@ const stateFileName = "harvest-state.json"
 // loadState は out ディレクトリの harvest-state.json を読む。
 // ファイルが無い場合は空 state を返す (エラーではない)。
 func loadState(outDir string) (*HarvestState, error) {
-	path := filepath.Join(outDir, stateFileName)
-	data, err := os.ReadFile(path) // #nosec G304 -- CLI: パスは out ディレクトリ固定
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return &HarvestState{}, nil
-		}
-		return nil, err
-	}
 	var s HarvestState
-	if err := json.Unmarshal(data, &s); err != nil {
+	if _, err := statefile.ReadJSON(filepath.Join(outDir, stateFileName), &s); err != nil {
 		return nil, err
 	}
 	return &s, nil

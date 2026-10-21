@@ -110,6 +110,7 @@ agents-daemon dream mine --project <canonical>   # memory と skill を突き合
 agents-daemon dream stage --project <canonical>  # 候補の承認レポートを ./tmp/dream/ に書く
 agents-daemon dream forget <memory-name>...      # auto memory を消す (sandbox の外で動かす)
 agents-daemon prune-worktrees --dry-run          # 回収対象の worktree を表示する (SessionStart hook が --hook 付きで呼ぶ)
+agents-daemon spawn --repo /path/to/repo < prompt.txt  # stdin を最初のターンにした Claude Code を repo の rex window に起こす (ボードが呼ぶ)
 ```
 
 ## 開発

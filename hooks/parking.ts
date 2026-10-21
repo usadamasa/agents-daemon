@@ -26,12 +26,29 @@ export function isStale(memo: ParkingCard, now: number, days: number): boolean {
   return !Number.isNaN(ms) && now - ms > days * DAY_MS
 }
 
-// Destination はメモを渡す先のセッション。self は開いたセッション自身で、peer メッセージではなく自分の入力へ渡す (#190)。
-export type Destination = { session_id: string; session: string; self?: true }
+// Destination はメモを渡す先。peer は生きているほかのセッション (`$.session.send`)、self は開いたセッション自身
+// (peer メッセージではなく自分の入力へ渡す。#190)、spawn は repo で新しく起こすセッション (`agents-daemon spawn`。#162)。
+export type Destination =
+  | { route: 'peer'; session_id: string; session: string }
+  | { route: 'self'; session_id: string; session: string }
+  | { route: 'spawn'; repo: string; title: string }
+
+// destinationKey は宛先の描画の key。セッションは ID、起こす先は repo のパス。
+export function destinationKey(to: Destination): string {
+  return to.route === 'spawn' ? to.repo : to.session_id
+}
+
+// destinationLabel は宛先の名前。
+export function destinationLabel(to: Destination): string {
+  return to.route === 'spawn' ? to.title : to.session
+}
 
 // SELF_LABEL は自セッションの宛先の名前。セッション名はカードに頼らず固定にする (自分が生きているのは自明で、
 // カードが無くても宛先に出す)。
 const SELF_LABEL = 'このセッション'
+
+// Intent はメモを渡した先に頼むこと。
+export type Intent = 'task' | 'issue'
 
 // memoLabel はメモのカード 1 行: 種類 (park tool の kind の語のまま)、title、置かれた回数 (2 回以上のとき)。
 export function memoLabel(memo: ParkingCard): string {
@@ -80,7 +97,7 @@ export function issueDestinations(data: BoardData, cards: BoardCard[], self: str
 }
 
 function selfDestination(self: string): Destination {
-  return { session_id: self, session: SELF_LABEL, self: true }
+  return { route: 'self', session_id: self, session: SELF_LABEL }
 }
 
 function uniqueLive(cards: BoardCard[], self: string): Destination[] {
@@ -89,9 +106,37 @@ function uniqueLive(cards: BoardCard[], self: string): Destination[] {
   for (const card of cards) {
     if (!card.live || card.session_id === '' || card.session_id === self || seen.has(card.session_id)) continue
     seen.add(card.session_id)
-    out.push({ session_id: card.session_id, session: card.session })
+    out.push({ route: 'peer', session_id: card.session_id, session: card.session })
   }
   return out
+}
+
+// spawnDestinations は「新しいセッションを起こして渡す」の repo の候補: メモの行の repo、開いたセッションの repo (here)、
+// ボードのほかの行の repo の順 (重複は除く)。候補に無い repo は pathDestination で指定する。
+export function spawnDestinations(data: BoardData, row: BoardRow): Destination[] {
+  const seen = new Set<string>()
+  const out: Destination[] = []
+  const add = (repo: string, title: string) => {
+    if (repo === '' || seen.has(repo)) return
+    seen.add(repo)
+    out.push({ route: 'spawn', repo, title })
+  }
+  add(row.repo, row.title)
+  add(data.here, data.rows.find(r => r.repo === data.here)?.title ?? basename(data.here))
+  for (const r of data.rows) add(r.repo, r.title)
+  return out
+}
+
+// pathDestination は入力されたパスを起こす先にする。絶対パスでなければ理由を返す (バイナリも同じ検査をするが、
+// 起こす前に手元で弾いて知らせる)。
+export function pathDestination(path: string): Destination | { failure: string } {
+  const repo = path.trim()
+  if (!repo.startsWith('/')) return { failure: `repo は絶対パスで指定してください: ${repo}` }
+  return { route: 'spawn', repo, title: basename(repo) }
+}
+
+function basename(path: string): string {
+  return path.replace(/\/+$/, '').split('/').pop() ?? path
 }
 
 // canAdopt はタスクのノードをパーキングへ移せるか。終了したセッションの未完了のタスクだけ。
@@ -113,6 +158,13 @@ export function issueText(memo: ParkingCard, repo: string): string {
     `パーキングロットのメモ「${memo.title}」を GitHub の issue にしてください。repo: ${repo}。起票したら URL を返してください。`,
     ...context(memo),
   ].join('\n')
+}
+
+// spawnText は新しく起こすセッションの最初のターンの文面。起こした経緯を 1 行置き、続けて peer へ送るものと同じ文面。
+// issue はメモの repo ではなく起こした repo を起票先にする (生きているセッションの無い repo へ渡すための経路なので)。
+export function spawnText(memo: ParkingCard, to: { repo: string; title: string }, intent: Intent): string {
+  const body = intent === 'task' ? taskText(memo) : issueText(memo, to.title)
+  return `このメモを渡すため、${to.title} (${to.repo}) で新しいセッションとして起こしました。\n${body}`
 }
 
 function context(memo: ParkingCard): string[] {
@@ -147,33 +199,63 @@ export async function discardStale($: EngineInterface, days: number): Promise<st
   return `${days} 日より前のメモ ${count} つを捨てました (戻すには park set <id> --status open、id は logs --board に残る)`
 }
 
-// handOff は text を to へ送り、届いたときだけメモを handed にする。届かなかったメモは open のまま残す。
+// handOff は text を to へ渡し、届いたときだけメモを handed にする。届かなかったメモは open のまま残す。
 export async function handOff($: EngineInterface, memo: ParkingCard, to: Destination, text: string): Promise<string> {
-  const sent = { via: 'memo', memo: memo.id, to: to.session_id }
-  const failed = await deliver($, to, text)
-  if (failed !== '') {
-    await logEvent($, 'mod.send', { ...sent, delivered: false, reason: failed })
-    return `${to.session} へ送れませんでした: ${failed}`
+  const delivered = await deliver($, to, text)
+  const sent = { via: 'memo', memo: memo.id, to: 'to' in delivered ? delivered.to : '', ...(to.route === 'spawn' ? { repo: to.repo } : {}) }
+  if ('failure' in delivered) {
+    await logEvent($, 'mod.send', { ...sent, delivered: false, reason: delivered.failure })
+    return `${said(to, false)}: ${delivered.failure}`
   }
   await logEvent($, 'mod.send', { ...sent, delivered: true })
   const failure = await park($, ['set', memo.id, '--status', 'handed'])
-  return failure === '' ? `${to.session} へ送り、メモを渡しました` : `${to.session} へ送りましたが、メモを handed にできませんでした: ${failure}`
+  return failure === '' ? `${said(to, true)}、メモを渡しました` : `${said(to, true)}ましたが、メモを handed にできませんでした: ${failure}`
 }
 
-// deliver は text を to へ届け、届かなかった理由を返す (届いたら空)。自セッションへは peer メッセージを送れないので、
-// 自分の入力に渡す (`$.prompt.submit`)。入力はセッションが idle になってから 1 ターンとして入り、drop されたら
-// 入っていない (`isDelivered` の false と同じ扱い)。
+// said は結果の文面の前半。起こす先は「起こし (た)」、セッションは「送り (送った)」。
+function said(to: Destination, ok: boolean): string {
+  const name = destinationLabel(to)
+  if (to.route === 'spawn') return ok ? `${name} で新しいセッションを起こし` : `${name} で新しいセッションを起こせませんでした`
+  return ok ? `${name} へ送り` : `${name} へ送れませんでした`
+}
+
+// Delivered は届いた先のセッション ID か、届かなかった理由。
+type Delivered = { to: string } | { to: string; failure: string }
+
+// deliver は text を to へ届ける。
+// - self: 自分へは peer メッセージを送れないので、自分の入力に渡す (`$.prompt.submit`)。入力はセッションが idle に
+//   なってから 1 ターンとして入り、drop されたら入っていない (`isDelivered` の false と同じ扱い)
+// - spawn: `agents-daemon spawn` に本文を stdin で渡し、repo を cwd にした新しいセッションの最初のターンにする
 // cc-premise: 2.1.306 mods $.prompt.submit は idle になってから自分のターンとして入り、drop で入らなかったことが分かる
-async function deliver($: EngineInterface, to: Destination, text: string): Promise<string> {
+async function deliver($: EngineInterface, to: Destination, text: string): Promise<Delivered> {
   try {
-    if (to.self) {
-      const result = await $.prompt.submit({ text })
-      return result.drop === undefined ? '' : result.drop
+    switch (to.route) {
+      case 'self': {
+        const result = await $.prompt.submit({ text })
+        return result.drop === undefined ? { to: to.session_id } : { to: to.session_id, failure: result.drop }
+      }
+      case 'peer': {
+        const result = await $.session.send({ to: { sessionId: to.session_id }, text })
+        return result.isDelivered ? { to: to.session_id } : { to: to.session_id, failure: result.reason }
+      }
+      case 'spawn':
+        return spawnSession($, to.repo, text)
     }
-    const result = await $.session.send({ to: { sessionId: to.session_id }, text })
-    return result.isDelivered ? '' : result.reason
   } catch (err) {
-    return String(err)
+    return { to: '', failure: String(err) }
+  }
+}
+
+// spawnSession は repo で新しいセッションを起こし、本文を最初のターンにする。claude が前景になるまでバイナリが待つので、
+// park より長い timeout にする。
+async function spawnSession($: EngineInterface, repo: string, text: string): Promise<Delivered> {
+  const argv = [await daemonBin($), 'spawn', '--repo', repo, '--session', await $.session.id(), '--cwd', await $.session.cwd()]
+  const { exitCode, stdout, stderr } = await $.process.run(argv, { stdin: text, timeoutMs: 30000 })
+  if (exitCode !== 0) return { to: '', failure: stderr.trim() || `exit ${exitCode}` }
+  try {
+    return { to: (JSON.parse(stdout) as { session_id: string }).session_id }
+  } catch (err) {
+    return { to: '', failure: reason(err, 'spawn') }
   }
 }
 

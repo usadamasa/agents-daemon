@@ -10,6 +10,8 @@ import type { Fields } from './log'
 import {
   adopt,
   canAdopt,
+  destinationKey,
+  destinationLabel,
   discard,
   discardStale,
   handOff,
@@ -19,10 +21,14 @@ import {
   lastPlacedAt,
   memoLabel,
   memoLines,
+  pathDestination,
+  spawnDestinations,
+  spawnText,
   stamp,
   taskDestinations,
   taskText,
 } from './parking'
+import type { Destination, Intent } from './parking'
 
 // 依存の DAG (#134) の B: 辺をレーンで描いた行 (graph.rows、上流が上) を dock の pane に描き、選んだノードの詳細と
 // 操作を出す mod。中身は `agents-daemon status --board` (internal/board) の graph と rows (メモの送り先)。ここは描くことと
@@ -50,6 +56,7 @@ const target = atom({ plugin: 'agents-daemon', key: 'target' } as const, '')
 const notice = atom({ plugin: 'agents-daemon', key: 'notice' } as const, '')
 const showCompleted = atom({ plugin: 'agents-daemon', key: 'showCompleted' } as const, false)
 const picking = atom({ plugin: 'agents-daemon', key: 'picking' } as const, false)
+const spawning = atom({ plugin: 'agents-daemon', key: 'spawning' } as const, '' as '' | Intent)
 
 // timer はボードの読み直し。pane を開いている間だけ動かす。
 let timer: Timer | undefined
@@ -108,6 +115,7 @@ export const registerBoard: Register = on => {
     const sent = await read($, notice)
     const withCompleted = await read($, showCompleted)
     const isPicking = await read($, picking)
+    const isSpawning = await read($, spawning)
     const self = await $.session.id()
 
     if (data === null) {
@@ -131,6 +139,7 @@ export const registerBoard: Register = on => {
       void update($, target, () => key)
       void update($, notice, () => '')
       void update($, picking, () => false)
+      void update($, spawning, () => '')
     }
     // act は操作を走らせ、結果を notice に出してボードを読み直す。
     const act = async (run: () => Promise<string>) => {
@@ -273,9 +282,22 @@ export const registerBoard: Register = on => {
       )
     }
 
-    // メモの詳細もノードと同じ枠で出し、操作のボタンを枠の最後の行にまとめる。
+    // メモの詳細もノードと同じ枠で出し、操作のボタンを枠の最後の行にまとめる。生きているセッションの無い repo へは
+    // 「new session…」で repo の候補を開き、新しいセッションを起こして渡す (#162)。
     const memoDetail = ({ memo, row: memoRowData }: { memo: ParkingCard; row: BoardRow }) => {
       const tasks = taskDestinations(data, memoRowData, self)
+      const canIssue = data.domain === 'home'
+      // spawn は候補の repo で新しいセッションを起こし、渡したら候補を畳む。
+      const spawn = async (to: Destination, intent: Intent) => {
+        if (to.route !== 'spawn') return
+        await act(() => handOff($, memo, to, spawnText(memo, to, intent)))
+        await update($, spawning, () => '')
+      }
+      const spawnAt = (path: string, intent: Intent) => {
+        const to = pathDestination(path)
+        if ('failure' in to) return void update($, notice, () => to.failure)
+        void spawn(to, intent)
+      }
       return (
         <Box key="memo" flexDirection="column" borderStyle="round" borderDimColor paddingX={1} marginLeft={GUTTER}>
           {memoLines(memo).map((line, i) => (
@@ -289,16 +311,42 @@ export const registerBoard: Register = on => {
               Discard
             </Button>
             {tasks.map(to => (
-              <Button key={`task:${to.session_id}`} onPress={() => void act(() => handOff($, memo, to, taskText(memo)))}>
-                To task → {to.session}
+              <Button key={`task:${destinationKey(to)}`} onPress={() => void act(() => handOff($, memo, to, taskText(memo)))}>
+                To task → {destinationLabel(to)}
               </Button>
             ))}
+            <Button key="spawn-task" onPress={() => void update($, spawning, () => 'task')}>
+              To task → new session…
+            </Button>
             {issueDestinations(data, memoRowData.cards, self).map(to => (
-              <Button key={`issue:${to.session_id}`} onPress={() => void act(() => handOff($, memo, to, issueText(memo, memoRowData.title)))}>
-                Ask for issue → {to.session}
+              <Button key={`issue:${destinationKey(to)}`} onPress={() => void act(() => handOff($, memo, to, issueText(memo, memoRowData.title)))}>
+                Ask for issue → {destinationLabel(to)}
               </Button>
             ))}
+            {canIssue && (
+              <Button key="spawn-issue" onPress={() => void update($, spawning, () => 'issue')}>
+                Ask for issue → new session…
+              </Button>
+            )}
           </Box>
+          {isSpawning !== '' && (
+            <Box key="spawn" flexDirection="column">
+              <Text dimColor>{isSpawning === 'task' ? 'タスクにする' : 'issue にするよう頼む'}新しいセッションを起こす repo を選ぶ:</Text>
+              <Box flexDirection="row" flexWrap="wrap" gap={1}>
+                {spawnDestinations(data, memoRowData).map(to => (
+                  <Button key={`spawn:${destinationKey(to)}`} onPress={() => void spawn(to, isSpawning)}>
+                    {destinationLabel(to)}
+                  </Button>
+                ))}
+                <Button key="spawn-cancel" dimColor onPress={() => void update($, spawning, () => '')}>
+                  Cancel
+                </Button>
+              </Box>
+              {Input !== undefined && (
+                <Input key="spawn-path" label="別の repo の絶対パス" placeholder="/path/to/repo" submitLabel="Spawn" onSubmit={(text: string) => spawnAt(text, isSpawning)} />
+              )}
+            </Box>
+          )}
         </Box>
       )
     }

@@ -125,6 +125,9 @@ declare module 'claude-code' {
       target: string
       // picking は B の詳細で Add blocker の候補を出しているか。
       picking: boolean
+      // spawning はメモの詳細で「新しいセッションを起こして渡す」の repo の候補を出しているか。出しているなら頼むこと
+      // (task / issue)、出していなければ空。
+      spawning: '' | 'task' | 'issue'
       // notice は送信とメモの操作の結果。
       notice: string
       // parked はこのセッションの repo の open のメモ。board の here の行から hooks/board-data.ts が置き、

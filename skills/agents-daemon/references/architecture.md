@@ -188,9 +188,14 @@ B は fullscreen のレイアウトで dock に置かれるときだけ出す。
   パーキングの見出しに出し、`park discard --days 30` でその domain のメモをまとめて discarded にする。30 日は mod
   (`hooks/board.tsx` の `STALE_DAYS`) が持ち、CLI に既定は無い。housekeeping が open を 90 日で黙って消す前に、人が見て
   捨てる区切り。捨てたメモは 7 日残り、`logs --board` の `park.discard` に残る id を `park set <id> --status open` で戻せる
-- タスクにする: 同じ repo の生きているセッションへ TaskCreate を頼む文面を送る
-- issue にするよう頼む: 私用のボードだけ。ボードに載っている生きているセッションへ頼む
-- タスクにする・issue にするよう頼むは、`$.session.send` が届いたときだけ `park set <id> --status handed` にする
+- タスクにする: メモの行が開いたセッションの repo (`here`) なら自セッション (`このセッション`) を先に、続けて同じ repo の
+  生きているほかのセッションへ TaskCreate を頼む文面を送る
+- issue にするよう頼む: 私用のボードだけ。自セッションを先に、ボードに載っている生きているセッションへ頼む
+- 自セッションは生きているのが自明なので、カードや daemon の有無にかかわらず宛先に出す。自分へは peer メッセージを
+  送れないので `$.prompt.submit` で自分の入力へ渡し、idle になってから 1 ターンとして入る (#190)
+- タスクにする・issue にするよう頼むは、`$.session.send` が届いたとき、または `$.prompt.submit` が drop されなかった
+  ときだけ `park set <id> --status handed` にする
+<!-- cc-premise: 2.1.306 mods $.prompt.submit は idle になってから自分のターンとして入り、drop で入らなかったことが分かる -->
 - パーキングへ移す (`To parking`): 終了したセッションの未完了のタスクのノードを `park adopt <session_id> <task_id>` で
   `kind: task` のメモにし、タスクの記録を消す。`kind: task` は model の tool からは置けない
 

@@ -64,7 +64,10 @@ export type GraphNode = {
   ref?: string
   cwd?: string
   session_id?: string
+  // session は表示名 (同名のセッションがあれば session ID の先頭が付く)、session_name はセッション名そのもの
+  // (SendMessage の宛先に書く形)。
   session?: string
+  session_name?: string
   live: boolean
   depth: number
   downstream: number

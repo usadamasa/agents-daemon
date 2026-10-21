@@ -72,8 +72,11 @@ type Node struct {
 	Ref       string `json:"ref,omitempty"`
 	CWD       string `json:"cwd,omitempty"`
 	SessionID string `json:"session_id,omitempty"`
-	Session   string `json:"session,omitempty"`
-	Live      bool   `json:"live"`
+	// Session は表示名 (同名のセッションがあれば session ID の先頭が付く、sessionNames)。SessionName はセッション名
+	// そのもの (`claude --name`、SendMessage の宛先に書く形)。名前が無ければ空。
+	Session     string `json:"session,omitempty"`
+	SessionName string `json:"session_name,omitempty"`
+	Live        bool   `json:"live"`
 	// Depth は段 (前提をたどった最長の深さ)。前提の無いノードは 0。
 	Depth int `json:"depth"`
 	// Downstream は下流 (このノードが済まないと始められないノード) の数。
@@ -127,14 +130,14 @@ func buildGraph(in Input, cards []placed, panes map[string]*daemon.PaneStatus, n
 }
 
 func (g *graphBuilder) addCard(c placed, session string) {
-	n := &Node{Key: c.card.Key, Kind: c.card.Kind, Title: c.card.Subject, CWD: c.cwd, SessionID: c.card.SessionID, Session: session, Live: c.card.Live}
+	n := &Node{Key: c.card.Key, Kind: c.card.Kind, Title: c.card.Subject, CWD: c.cwd, SessionID: c.card.SessionID, Session: session, SessionName: g.in.SessionNames[c.card.SessionID], Live: c.card.Live}
 	n.State, n.Detail = nodeState(c.status, c.pane)
 	switch c.card.Kind {
 	case KindTask:
 		n.Ref = "task:" + c.card.SessionID + "/" + c.card.TaskID
 	case KindSession:
-		if name := g.in.SessionNames[c.card.SessionID]; name != "" {
-			n.Ref = "session:" + name
+		if n.SessionName != "" {
+			n.Ref = "session:" + n.SessionName
 		}
 	}
 	g.nodes[n.Key] = n
@@ -240,7 +243,7 @@ func (g *graphBuilder) placeholder(ep edge.Endpoint, title, sessionID, state str
 	if g.nodes[key] == nil {
 		n := &Node{Key: key, Kind: KindRef, State: state, Title: title, Ref: ep.Ref, CWD: ep.CWD, SessionID: sessionID}
 		if sessionID != "" {
-			n.Session = title
+			n.Session, n.SessionName = title, title
 		}
 		g.nodes[key] = n
 	}

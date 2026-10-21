@@ -60,11 +60,16 @@ export const registerBand: Register = on => {
   })
 
   // model が SendMessage を送った宛先を覚える。mod 自身の送信 (origin plugin、メモの手渡し) は依存ではないので覚えない。
+  // band は補助なので、覚えられなくても送信の結果は変えない。
   on('session.send', async ($, e, next) => {
     const sent = await next(e)
     if (e.origin.kind === 'model' && sent.isDelivered) {
       const name = recipient(e.to)
-      await update($, handed, prev => (prev.includes(name) ? prev : [...prev, name]))
+      try {
+        await update($, handed, prev => (prev.includes(name) ? prev : [...prev, name]))
+      } catch (err) {
+        await logChange($, 'band', 'mod.band.failed', { reason: reason(err, 'session.send') })
+      }
     }
 
     return sent

@@ -25,6 +25,7 @@ function node(key: string, state: string, title: string, extra: Record<string, u
     cwd: CWD,
     session_id: sid,
     session: sid.toLowerCase(),
+    session_name: sid.toLowerCase(),
     live: true,
     depth: 0,
     downstream: 0,

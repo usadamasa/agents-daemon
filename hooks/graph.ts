@@ -206,10 +206,11 @@ export function candidates(g: Graph, selected: GraphNode): GraphNode[] {
 // unlinked は handed (model が SendMessage で送った宛先の名前) のうち、辺の書き忘れを疑うもの: ボードに生きていて
 // 済んでいないノードを持つセッションで、`edge add` の辺 (kind edge) がどの端点にも無いもの。辺はノードへ解決された
 // 端点 (そのセッションのタスク) と、元の記録の参照 (`session:<名前>`) のどちらで当たってもよい。handed の順を保つ。
+// 名前は表示名 (session、同名なら ID の先頭が付く) ではなく session_name (SendMessage の宛先に書く形) で当てる。
 export function unlinked(g: Graph, handed: string[]): string[] {
-  const sessionOf = (key: string) => g.node(key)?.session ?? ''
+  const sessionOf = (key: string) => g.node(key)?.session_name ?? ''
   return handed.filter(name => {
-    const present = g.nodes.some(n => n.session === name && n.live && n.state !== 'completed')
+    const present = g.nodes.some(n => n.session_name === name && n.live && n.state !== 'completed')
     if (!present) return false
     return !g.links.some(
       l =>

@@ -224,6 +224,13 @@ func TestGraph_refEndpoints(t *testing.T) {
 	if got["L/session"].Ref != "session:live" {
 		t.Errorf("L/session の参照 = %q", got["L/session"].Ref)
 	}
+	// 同名のセッションは表示名 (Session) に session ID の先頭が付くが、SessionName は SendMessage の宛先に書く名前のまま。
+	if n := got["N/1"]; n.Session != "dup N" || n.SessionName != "dup" {
+		t.Errorf("同名のセッションの名前 = %q / %q", n.Session, n.SessionName)
+	}
+	if n := got["ref:session:gone"]; n.SessionName != "gone" {
+		t.Errorf("終了したセッションの置き場の名前 = %q", n.SessionName)
+	}
 	for _, l := range b.Graph.Links {
 		if l.Before == "N/1" && (l.Edge == nil || l.Edge.Before.Ref != "session:dup") {
 			t.Errorf("辺の元の参照 = %+v", l.Edge)

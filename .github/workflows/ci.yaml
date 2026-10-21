@@ -19,7 +19,7 @@ jobs:
     name: go test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6.0.3
+      - uses: actions/checkout@v7.0.1
 
       - uses: $/.github/actions/setup-nix
 
@@ -40,7 +40,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # analyze-modularity が揮発性を git の履歴から測る。shallow clone だと判定が効かない
-      - uses: actions/checkout@v6.0.3
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
 
@@ -53,7 +53,7 @@ jobs:
     name: bats
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6.0.3
+      - uses: actions/checkout@v7.0.1
 
       - uses: $/.github/actions/setup-nix
 
@@ -68,7 +68,7 @@ jobs:
     name: shellcheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6.0.3
+      - uses: actions/checkout@v7.0.1
 
       # apt の shellcheck ではなく devShell で固定した版を使い、ローカルと結果を揃える
       - uses: $/.github/actions/setup-nix
@@ -80,7 +80,7 @@ jobs:
     name: plugin validate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6.0.3
+      - uses: actions/checkout@v7.0.1
 
       # ubuntu-latest は node と npm を同梱するので setup-node は要らない。
       # nodejs は devShell に入れず setup-nix も通さない。devShell の npm は global prefix が /nix/store になり npm i -g が落ちる
@@ -100,7 +100,7 @@ jobs:
     name: actions-lock verify
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6.0.3
+      - uses: actions/checkout@v7.0.1
 
       - name: Install gh-actions-lock
         env:

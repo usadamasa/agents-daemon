@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/monitor"
+	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
 
 // PaneStatus は status.json に書き出す pane 1 枚分のスナップショット。
@@ -58,38 +58,15 @@ func zeroableTime(t time.Time) *time.Time {
 	return &t
 }
 
-// WriteStatusSnapshot は status.json を原子的に書き込む (同ディレクトリの
-// 一時ファイルに書いて rename)。
+// writeStatusSnapshot は status.json を原子的に書き込む (statefile)。
+// 人が cat して読む想定なので indent 付きで書く。
 func writeStatusSnapshot(path string, pid int, backend string, startedAt, now time.Time, panes []PaneStatus) error {
 	snap := StatusSnapshot{PID: pid, Backend: backend, StartedAt: startedAt, UpdatedAt: now, Panes: panes}
 	data, err := json.MarshalIndent(snap, "", "  ")
 	if err != nil {
 		return fmt.Errorf("status snapshot の JSON 化に失敗: %w", err)
 	}
-
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("状態ディレクトリの作成に失敗: %w", err)
-	}
-	tmp, err := os.CreateTemp(dir, ".status.json.*")
-	if err != nil {
-		return fmt.Errorf("status snapshot の一時ファイル作成に失敗: %w", err)
-	}
-	tmpPath := tmp.Name()
-	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		_ = os.Remove(tmpPath)
-		return fmt.Errorf("status snapshot の書き込みに失敗: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		_ = os.Remove(tmpPath)
-		return fmt.Errorf("status snapshot のクローズに失敗: %w", err)
-	}
-	if err := os.Rename(tmpPath, path); err != nil {
-		_ = os.Remove(tmpPath)
-		return fmt.Errorf("status snapshot の rename に失敗: %w", err)
-	}
-	return nil
+	return statefile.WriteFileAtomic(path, ".status.json.*", data)
 }
 
 // ReadStatusSnapshot は path から status.json を読む。ファイルが存在しない場合は

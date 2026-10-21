@@ -1,6 +1,6 @@
 // Package statefile は XDG state 配下に別プロセスが読み書きするファイルの共通の作法を持つ。
 // セッション ID をファイル名に使うときの検証と、書きかけを読ませないための原子的な書き込み。
-// ratelimit と sessioncontext (daemon が読む sidecar) と spend (statusline の cost の記録) が使う。
+// 書いている途中に別プロセス (daemon、statusline、hook、mod) が読みうるファイルはここを通す。
 package statefile
 
 import (

@@ -116,10 +116,11 @@ agents-daemon spawn --repo /path/to/repo < prompt.txt  # stdin を最初のタ�
 ## 開発
 
 ```sh
-task build    # ./bin/ へビルド
-task test     # go test と bats tests/
-task lint     # Go の静的解析 (devShell のツールを使う)
-task install  # hook と同じ cache のパスへビルドする
+task build      # ./bin/ へビルド
+task test       # go test と bats tests/
+task lint       # Go の静的解析 (devShell のツールを使う)
+task vulncheck  # govulncheck の symbol モード (lint が呼び、vulncheck workflow が週次で回す)
+task install    # hook と同じ cache のパスへビルドする
 claude plugin validate --strict .
 ```
 

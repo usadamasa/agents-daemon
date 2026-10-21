@@ -1,5 +1,9 @@
 # Changelog
 
+## [2026.1021.1](https://github.com/usadamasa/agents-daemon/compare/2026.1021.0...2026.1021.1) - 2026-10-21
+
+- ci: govulncheck を週次で定期実行する (合否は symbol、module は表示) by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/212
+
 ## [2026.1021.0](https://github.com/usadamasa/agents-daemon/compare/2026.1020.2...2026.1021.0) - 2026-10-21
 
 - build: nixpkgs の rev を 2026-10-20 の nixos-unstable へ上げる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/199

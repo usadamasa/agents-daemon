@@ -1,7 +1,7 @@
 package harvest
 
 import (
-	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/dream/jsonlscan"
+	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
 
 // writeStats は書き込み結果サマリ。
@@ -26,9 +27,6 @@ type writeStats struct {
 // idempotent: 同じ input で複数回叩いても最終ファイル内容は変わらない。
 func writeRecords(outDir string, records []HarvestRecord) (writeStats, error) {
 	harvestDir := filepath.Join(outDir, "harvest")
-	if err := os.MkdirAll(harvestDir, 0o750); err != nil {
-		return writeStats{}, err
-	}
 
 	// 日付ごとに records を bucket 化する
 	buckets := make(map[string][]HarvestRecord)
@@ -121,38 +119,15 @@ func mergeAndDedup(existing, incoming []HarvestRecord) []HarvestRecord {
 	return out
 }
 
-// writeJSONL は records を 1 行 1 JSON で write する。atomic rename で書き換え。
+// writeJSONL は records を 1 行 1 JSON で path へ原子的に書く (statefile)。
 func writeJSONL(path string, records []HarvestRecord) error {
-	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*.tmp")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmp.Name()
-	success := false
-	defer func() {
-		_ = tmp.Close()
-		if !success {
-			_ = os.Remove(tmpPath)
-		}
-	}()
-
-	w := bufio.NewWriter(tmp)
-	enc := json.NewEncoder(w)
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
 	for _, r := range records {
 		if err := enc.Encode(r); err != nil {
 			return err
 		}
 	}
-	if err := w.Flush(); err != nil {
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(tmpPath, path); err != nil {
-		return err
-	}
-	success = true
-	return nil
+	return statefile.WriteFileAtomic(path, filepath.Base(path)+".*.tmp", buf.Bytes())
 }

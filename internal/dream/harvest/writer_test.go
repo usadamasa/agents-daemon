@@ -102,6 +102,18 @@ func TestWriteRecords_MultipleDates(t *testing.T) {
 			t.Errorf("expected %s to exist: %v", path, err)
 		}
 	}
+	// 書き直しは一時ファイル経由なので、日付の jsonl 以外が残らないことを見る
+	entries, err := os.ReadDir(filepath.Join(outDir, "harvest"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 {
+		names := make([]string, 0, len(entries))
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		t.Errorf("harvest dir entries = %v, want 2 jsonl files", names)
+	}
 }
 
 func TestWriteRecords_SkipsCorruptedExistingLines(t *testing.T) {

@@ -45,6 +45,27 @@ func TestSaveState_CreatesDirectory(t *testing.T) {
 	}
 }
 
+// 書き直しは一時ファイル経由なので、終わった後に state file 以外が残らないことを見る。
+func TestSaveState_LeavesOnlyStateFile(t *testing.T) {
+	dir := t.TempDir()
+	for range 2 {
+		if err := saveState(dir, &HarvestState{LastRunTS: "2026-07-19T10:00:00+09:00"}); err != nil {
+			t.Fatalf("saveState: %v", err)
+		}
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != stateFileName {
+		names := make([]string, 0, len(entries))
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		t.Errorf("dir entries = %v, want [%s]", names, stateFileName)
+	}
+}
+
 func TestParseLastRun(t *testing.T) {
 	tests := []struct {
 		name     string

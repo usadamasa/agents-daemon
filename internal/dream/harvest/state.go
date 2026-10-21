@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
 
 // HarvestState は --incremental モードのための永続状態。
@@ -33,18 +35,14 @@ func loadState(outDir string) (*HarvestState, error) {
 	return &s, nil
 }
 
-// saveState は out ディレクトリに harvest-state.json を書く。
-// mkdir -p も行う (初回実行時に out ディレクトリが無い場合に備える)。
+// saveState は out ディレクトリに harvest-state.json を原子的に書く (statefile)。
+// out ディレクトリが無ければ作る (初回実行時に備える)。
 func saveState(outDir string, s *HarvestState) error {
-	if err := os.MkdirAll(outDir, 0o750); err != nil {
-		return err
-	}
-	path := filepath.Join(outDir, stateFileName)
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o644) // #nosec G306 -- ユーザー個人用状態ファイル
+	return statefile.WriteFileAtomic(filepath.Join(outDir, stateFileName), "."+stateFileName+".*", data)
 }
 
 // parseLastRun は state の LastRunTS を time.Time にする。未設定・パース失敗時は

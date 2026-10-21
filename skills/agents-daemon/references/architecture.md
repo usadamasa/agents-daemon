@@ -244,6 +244,12 @@ park add の後) ので、hint 行は自前の読み直しを持たない。`$.u
 
 - 1 行目: `■ ○ ▸ ↵ ✓ ◇` の数と `longest chain` (止まっているノードから下流の最長の鎖)。選べるものは置かず、
   止まっているものがあると分かれば `/board` を開く合図にする
+- `no edge: <名前>…` の行: model が `SendMessage` で送った宛先 (mods の `session.send`、`origin.kind: model`、届いたもの。
+  末尾の ` [ref]` は落とす) のうち、ボードに生きていて済んでいないノードを持つセッションで、`kind: edge` の辺が端点
+  (そのセッションのタスクへ解決された端点か、記録の `session:<名前>` の参照) に 1 本も無いもの (#172)。渡す側が辺を書く
+  手順は `agents-daemon:peer-sessions` skill にあり、この行は書き忘れの合図。辺が書かれるかそのセッションが済むと消え、
+  依存の無い送信なら名前を押して外す。subagent や cloud のセッションへの送信はボードの名前に当たらないので出ない。
+  mod 自身の送信 (メモの手渡し、`origin.kind: plugin`) は依存ではないので覚えない
 - 最後の行: メモを 3 件まで (種類と title)。残りは `+n`
 - ボードは `hooks/board-data.ts` で session.start、TaskUpdate の後、10 秒ごとに読み直す。B の pane を開いている間は
   B が 3 秒ごとに読み直し、band は同じ board を描く
@@ -253,6 +259,7 @@ park add の後) ので、hint 行は自前の読み直しを持たない。`$.u
   辺もメモも無くなれば band ごと消える。どちらも `--session` で開いたセッションの domain のメモだけを引く
 - band で選んだメモ (`target`) は B の pane と共有し、B でも同じものを開く
 <!-- cc-premise: 2.1.303 hooks mods の ui.render AbovePrompt (hasSurvey、bodyColumns) と、TaskUpdate の結果の statusChange -->
+<!-- cc-premise: 2.1.306 mods session.send は SendMessage tool と $.session.send の両方で起き、e.origin.kind と e.to を持つ -->
 
 #### 時刻の書き方
 
@@ -402,7 +409,7 @@ pane ごとに次を評価する。上限側の詳細は [rate-limit.md](rate-li
 | `$STATE/cost/<YYYY-MM-DD>/<session_id>.json` | `agents-daemon statusline` (`CLAUDE_STATUSLINE_SPEND_CAP` があるとき) | statusline の描画ごと (累計が変わったときだけ書き直す) | そのセッションの累計 cost と前日までの繰り越し (`internal/spend`)。daemon は読まない | `statusline` がその日の最初の書き込みで 45 日より古い日を消す |
 | `$STATE/tasks/<domain>/<session_id>/<task_id>.json` と `…/todos.json` | `agents-daemon ingest-task` (PostToolUse hook `hooks/ingest-task.sh` が呼ぶ) | TaskCreate / TaskUpdate / TaskList / TodoWrite の呼び出しごと | タスク 1 つ (subject、status、blockedBy、session_id、cwd) と TodoWrite のリスト全体 (`internal/tasklog`)。`<domain>` は `home` か `work` (config の `homePaths` / `defaultDomain`)。読み手はタスクのボード (`status --board`、`internal/board`) | daemon が完了したタスクを 1 日、それ以外を 7 日 (更新が無ければ) で消す。`park adopt` (ボードの「パーキングへ移す」) がメモへ移したタスクを消す |
 | `$STATE/parking/<domain>/<id>.json` | `agents-daemon park add` / `park set` / `park discard` / `park adopt` | メモを置いたとき、status を書き換えたとき (まとめて捨てたときを含む)、終了したセッションのタスクをメモへ移したとき (kind `task`) | パーキングのメモ 1 つ (kind、title、detail、files、default_taken、repo、sources (session_id、置いたときの進行中の task_id、cwd、まとめたときに後から置いた側の detail、時刻)、status) (`internal/parking`)。repo はボードの行と同じ main worktree のパス。domain、repo、正規化した title が同じ open のメモには sources を足す。`.lock` は書き込みを直列にするロック | daemon が open を 90 日、handed / discarded を 7 日 (更新が無ければ) で消す。同じメモが置き直されると数え直す。`.lock` は消さない |
-| `$STATE/edges/<domain>/<id>.json` | `agents-daemon edge add` / `edge rm` (作業を渡す側の skill が呼ぶ) | 辺を書いたとき、消したとき | セッションをまたぐ辺 1 本 (before と after の端点 (参照、cwd、repo)、note、created_at) (`internal/edge`)。辺は「before が済まないと after を始められない」。id は向きを含めた両端の参照から決まり、同じ辺の登録し直しは同じファイルを書き直す。両端の domain が違う辺は書かない。読み手は `edge list` とボードの DAG (`status --board` の `graph`) | daemon が 7 日 (更新が無ければ) で消す。登録し直すと数え直す。`edge rm` が消す |
+| `$STATE/edges/<domain>/<id>.json` | `agents-daemon edge add` / `edge rm` (作業を渡す側が `agents-daemon:peer-sessions` skill の手順で呼ぶ。ボードの `Add blocker` / `Unlink` も) | 辺を書いたとき、消したとき | セッションをまたぐ辺 1 本 (before と after の端点 (参照、cwd、repo)、note、created_at) (`internal/edge`)。辺は「before が済まないと after を始められない」。id は向きを含めた両端の参照から決まり、同じ辺の登録し直しは同じファイルを書き直す。両端の domain が違う辺は書かない。読み手は `edge list` とボードの DAG (`status --board` の `graph`) | daemon が 7 日 (更新が無ければ) で消す。登録し直すと数え直す。`edge rm` が消す |
 | `$STATE/daemon.pid` | daemon | 起動時に作成、終了時に削除 | 稼働中デーモンの PID | daemon |
 | `$STATE/status.json` | daemon | 毎 tick (既定 5 秒) | backend (rex)、監視中の pane 一覧と各 pane の自己申告 (`agent_status` と、あれば `agent_kind` / `agent_message`)・監視状態・試行回数・待機期限・直近の判定 | 上書き |
 | `$STATE/logs/daemon.log` | daemon | 報告に値する出来事があったときだけ | 上限検知と待ち時間、再開送信、ユーザーの自己再開、ゲート抑制、ネイティブへの譲り、エラー | rotate |

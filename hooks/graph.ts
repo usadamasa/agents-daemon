@@ -75,12 +75,14 @@ export function isBlocked(node: GraphNode): boolean {
 // Graph は graph の JSON を Key で引けるようにしたもの。
 export class Graph {
   readonly nodes: GraphNode[]
+  readonly links: GraphLink[]
   private readonly byKey = new Map<string, GraphNode>()
   private readonly succs = new Map<string, GraphLink[]>()
   private readonly preds = new Map<string, GraphLink[]>()
 
   constructor(data: BoardGraph) {
     this.nodes = data.nodes
+    this.links = data.links
     for (const n of data.nodes) this.byKey.set(n.key, n)
     for (const l of data.links) {
       this.succs.set(l.before, [...(this.succs.get(l.before) ?? []), l])
@@ -199,6 +201,22 @@ export function candidates(g: Graph, selected: GraphNode): GraphNode[] {
       n.state !== 'completed' &&
       n.state !== 'exited',
   )
+}
+
+// unlinked は handed (model が SendMessage で送った宛先の名前) のうち、辺の書き忘れを疑うもの: ボードに生きていて
+// 済んでいないノードを持つセッションで、`edge add` の辺 (kind edge) がどの端点にも無いもの。辺はノードへ解決された
+// 端点 (そのセッションのタスク) と、元の記録の参照 (`session:<名前>`) のどちらで当たってもよい。handed の順を保つ。
+export function unlinked(g: Graph, handed: string[]): string[] {
+  const sessionOf = (key: string) => g.node(key)?.session ?? ''
+  return handed.filter(name => {
+    const present = g.nodes.some(n => n.session === name && n.live && n.state !== 'completed')
+    if (!present) return false
+    return !g.links.some(
+      l =>
+        l.kind === 'edge' &&
+        (sessionOf(l.before) === name || sessionOf(l.after) === name || l.edge?.before.ref === `session:${name}` || l.edge?.after.ref === `session:${name}`),
+    )
+  })
 }
 
 // tags は行の末尾の印: 下流の数 (showDown のとき)、途中で置いたメモの数、待ちの輪。B は止まっているノードに

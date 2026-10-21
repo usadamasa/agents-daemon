@@ -4,25 +4,32 @@ import type { EngineInterface, Register, Timer } from 'claude-code'
 import type { ParkedMemo } from '../types'
 import { reloadForBand } from './board-data'
 import { daemonBin } from './daemon-bin'
-import { Graph, MEMO, fit, longest, summary } from './graph'
+import { Graph, MEMO, fit, longest, summary, unlinked } from './graph'
 import { logChange, reason, settle } from './log'
 import { parkedMemos } from './parking'
 
 // 依存の DAG (#134) の A: 入力欄の上の band に、依存の数と longest chain の 1 行 (B の pane を開く合図) と、
-// パーキングのメモの 1 行を出す。図は描かない (辺を読んで操作する面は B の pane に 1 つ)。
+// 辺の書き忘れを疑う渡し先の 1 行 (#172)、パーキングのメモの 1 行を出す。図は描かない (辺を読んで操作する面は
+// B の pane に 1 つ)。
 // - 数: `status --board` の graph。session.start、TaskUpdate、10 秒ごとに読み直す (B の pane を開いている間は B が 3 秒ごと)
+// - no edge: model が SendMessage で送った宛先 (session.send の origin model、届いたもの) のうち、ボードの生きている
+//   セッションで `edge add` の辺が無いもの (hooks/graph.ts の unlinked)。渡す側が辺を書くのは peer-sessions skill の
+//   手順で、書かれるかそのセッションが済むと消える。辺の要らない送信 (返事、報告) だったら名前を押して外す
 // - メモ: このセッションの repo の open のメモ (同じボードの here の行、hooks/board-data.ts の parked)。TaskUpdate で
 //   completed になったら、そのタスクの途中でこのセッションが置いたメモ (`park list --task`) を先頭に寄せる。
 //   寄せるのは並びだけで、open でなくなったメモは次の読み直しで消える
-// 選んだメモ (target) は B の pane と共有する。辺もメモも無ければ出さない。
+// 選んだメモ (target) は B の pane と共有する。辺も渡し先もメモも無ければ出さない。
 // cc-premise: 2.1.303 mods ui.render AbovePrompt の props (hasSurvey、bodyColumns) と、TaskUpdate の結果の statusChange で書いた
 // cc-premise: 2.1.303 mods Button の plain は端末で [ ] を描かず、variant より優先される。メモは plain
+// cc-premise: 2.1.306 mods session.send は SendMessage tool と $.session.send の両方で起き、e.origin.kind (model / plugin) で見分ける。
+//   e.to は tool に書かれた宛先そのまま (名前、末尾に ` [ref]` が付くことがある)
 
 const board = atom({ plugin: 'agents-daemon', key: 'board' } as const, null)
 // parked は hooks/park.tsx が書く。atom は読む module ごとに書く (state の scan が import を辿らない)。
 const parked = atom({ plugin: 'agents-daemon', key: 'parked' } as const, [])
 const front = atom({ plugin: 'agents-daemon', key: 'front' } as const, [])
 const target = atom({ plugin: 'agents-daemon', key: 'target' } as const, '')
+const handed = atom({ plugin: 'agents-daemon', key: 'handed' } as const, [])
 
 // メモの行に出すメモの数。残りは数だけ出す。
 const SHOWN = 3
@@ -52,17 +59,30 @@ export const registerBand: Register = on => {
     return ran
   })
 
+  // model が SendMessage を送った宛先を覚える。mod 自身の送信 (origin plugin、メモの手渡し) は依存ではないので覚えない。
+  on('session.send', async ($, e, next) => {
+    const sent = await next(e)
+    if (e.origin.kind === 'model' && sent.isDelivered) {
+      const name = recipient(e.to)
+      await update($, handed, prev => (prev.includes(name) ? prev : [...prev, name]))
+    }
+
+    return sent
+  })
+
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
     const data = await read($, board)
     const memos = bandMemos(await read($, front), await read($, parked))
     const links = data?.graph.links ?? []
-    if (links.length === 0 && memos.length === 0) return next(e)
+    const g = new Graph(data?.graph ?? { nodes: [], links: [], longest_chain: [], rows: [], rows_with_completed: [] })
+    const missing = unlinked(g, await read($, handed))
+    if (links.length === 0 && missing.length === 0 && memos.length === 0) return next(e)
 
     const { Box, Button, Text } = $.ui.resolve(e)
-    const g = new Graph(data?.graph ?? { nodes: [], links: [], longest_chain: [], rows: [], rows_with_completed: [] })
     const chosen = await read($, target)
     const choose = (key: string) => void update($, target, prev => (prev === key ? '' : key))
+    const forget = (name: string) => void update($, handed, prev => prev.filter(n => n !== name))
     const rest = memos.length - SHOWN
     // メモは 1 行に SHOWN 件並べる。先頭の「◇ n」と、1 件ごとの行頭の印と種類の分を除いた幅に title を収める。
     const memoRoom = Math.max(6, Math.floor((e.props.bodyColumns - 8) / SHOWN) - GUTTER - 7)
@@ -80,6 +100,16 @@ export const registerBand: Register = on => {
                 longest chain: {longest(g, data?.graph.longest_chain ?? [])}
               </Text>
             </Box>
+          </Box>
+        )}
+        {missing.length > 0 && (
+          <Box flexDirection="row" gap={1}>
+            <Text color="warning">no edge:</Text>
+            {missing.map(name => (
+              <Button key={`handed:${name}`} plain onPress={() => forget(name)}>
+                {name}
+              </Button>
+            ))}
           </Box>
         )}
         {memos.length > 0 && (
@@ -105,6 +135,11 @@ export const registerBand: Register = on => {
       </Box>
     )
   })
+}
+
+// recipient は SendMessage の宛先からセッション名を取る。同名が複数あるときに付く末尾の ` [ref]` を落とす。
+export function recipient(to: string): string {
+  return to.replace(/\s+\[[^\]]*\]$/, '').trim()
 }
 
 // bandMemos はメモの行の並び: 完了したタスクの途中で置いたメモ (first、id の順) のうち open のものを先に、残りを

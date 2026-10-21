@@ -136,6 +136,9 @@ declare module 'claude-code' {
       // front は band のメモの行の先頭に寄せるメモの id (completed になったタスクの途中で置いたもの、hooks/band.tsx)。
       // 並びの指示だけで、中身は parked から取る。
       front: string[]
+      // handed は model が SendMessage で送った宛先の名前 (届いたものだけ、hooks/band.tsx)。band はこのうちボードの
+      // 生きているセッションで辺の無いものを no edge の行に出す。名前を押すと外れる。
+      handed: string[]
       // showCompleted は B の pane で完了したノードを出すか (graph.rows_with_completed を描く)。既定は畳む。
       showCompleted: boolean
       // logged はボードの経路のログに slot ごとに最後に書いた中身 (hooks/log.ts)。同じものを書き直さないため。

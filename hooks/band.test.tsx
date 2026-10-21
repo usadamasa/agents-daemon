@@ -75,13 +75,14 @@ function output(stdout: string, exitCode = 0): ProcessRunResult {
 }
 
 // world は plugin の下にいる engine の代わりを立てる。process.run は argv を key にした答えを返し (無ければ [])、
-// TaskUpdate は status を書き換えた結果を返す。
-function world(on: On, answers: Record<string, unknown>) {
+// TaskUpdate は status を書き換えた結果を返す。session.send は宛先が undelivered に無ければ届いたことにする。
+function world(on: On, answers: Record<string, unknown>, undelivered: string[] = []) {
   const ran: string[][] = []
   mock.env(on, { HOME: '/home/u' })
   const clock = mock.clock(on)
   on('session.id', async () => ({ value: 'SELF' }))
   on('session.cwd', async () => ({ value: CWD }))
+  on('session.send', async (_$, e) => (undelivered.includes(e.to) ? { isDelivered: false, reason: 'gone' } : { isDelivered: true }))
   on('process.run', async (_$, e) => {
     if (e.argv[1] !== 'board-log') ran.push([...e.argv])
     return { value: output(JSON.stringify(answers[e.argv.join(' ')] ?? [])) }
@@ -235,6 +236,69 @@ test('メモは枠なしで描き、選んだものは行頭の › と太字で
     ((await ui.find({ key }))?.children ?? []).some(c => typeof c === 'object' && c !== null && (c as { props?: { bold?: boolean } }).props?.bold === true)
   expect(await hasBold('park:m4')).toBe(true)
   expect(await hasBold('park:m3')).toBe(false)
+})
+
+// send は model の SendMessage が session.send に出る形。
+const send = ($: T, to: string, origin: 'model' | 'plugin' = 'model') =>
+  $.session.send({ to, text: '引き継ぎ', origin: origin === 'model' ? { kind: 'model' } : { kind: 'plugin', name: 'other' } })
+
+test('model が SendMessage を送った宛先のうち、ボードのセッションで辺の無いものを no edge の行に出す', async ($, on) => {
+  world(on, { [STATUS.join(' ')]: board() }, ['gone'])
+  await $.session.start(START)
+
+  // ボードに無い名前 (subagent、cloud のセッション)、届かなかった送信、mod 自身の送信 (origin plugin) は出さない。
+  await send($, 'researcher')
+  await send($, 'gone')
+  await send($, 'w', 'plugin')
+  const quiet = await mount($)
+  expect(await quiet.find({ type: 'Text', text: /no edge/ })).toBeUndefined()
+  await quiet.unmount()
+
+  // 辺の無いセッション w は出る。[ref] 付きの宛先は名前だけにする。辺のある a と b (e1 の両端)、済んだ c は出ない。
+  await send($, 'w [3fa9c1]')
+  await send($, 'a')
+  await send($, 'b')
+  await send($, 'c')
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await mount($, surface)
+    expect(await ui.find({ type: 'Text', text: /no edge:/ })).toBeDefined()
+    expect(await ui.find({ key: 'handed:w', text: 'w' })).toBeDefined()
+    expect(await ui.find({ key: 'handed:a' })).toBeUndefined()
+    expect(await ui.find({ key: 'handed:b' })).toBeUndefined()
+    expect(await ui.find({ key: 'handed:c' })).toBeUndefined()
+    await ui.unmount()
+  }
+})
+
+test('辺が書かれるか、名前を押すと no edge の行から消え、全部消えたら行ごと消える', async ($, on) => {
+  const inner = LINKS.filter(l => l.kind === 'task')
+  const answers: Record<string, unknown> = { [STATUS.join(' ')]: board(inner) }
+  const w = world(on, answers)
+  await $.session.start(START)
+  await send($, 'a')
+  await send($, 'b')
+  await send($, 'w')
+  const all = await mount($)
+  expect((await all.findAll({ type: 'Button' })).map(b => b.key)).toEqual(['handed:a', 'handed:b', 'handed:w', 'park:m4', 'park:m3', 'park:m2'])
+  await all.unmount()
+
+  // session:w を after にした辺が書かれ、W の根のタスクへ解決された。before の c は handed に無い。
+  answers[STATUS.join(' ')] = board([
+    ...inner,
+    { before: 'C/1', after: 'W/1', kind: 'edge', edge: { id: 'e2', before: { ref: 'task:C/1', cwd: CWD, repo: CWD }, after: { ref: 'session:w', cwd: CWD, repo: CWD } } },
+  ])
+  await w.clock.advance(10000)
+  const linked = await mount($)
+  expect(await linked.find({ key: 'handed:w' })).toBeUndefined()
+  expect(await linked.find({ key: 'handed:a' })).toBeDefined()
+  expect(await linked.find({ key: 'handed:b' })).toBeDefined()
+
+  // 返事や報告で辺の要らない送信だったら、名前を押して消す。
+  await linked.press({ key: 'handed:b' })
+  expect(await linked.find({ key: 'handed:b' })).toBeUndefined()
+  expect(await linked.find({ type: 'Text', text: /no edge/ })).toBeDefined()
+  await linked.press({ key: 'handed:a' })
+  expect(await linked.find({ type: 'Text', text: /no edge/ })).toBeUndefined()
 })
 
 test('10 秒ごとにボードを読み直す', async ($, on) => {

@@ -55,6 +55,7 @@ Go と lint・テストのツールは `flake.nix` の devShell が揃え、`.en
 devShell の go は `go.mod` の `go` 行と同じ系列 (`go_1_26`) にし、`GOTOOLCHAIN=local` でずれを即座に落とす。
 版を上げるときは `nix flake update`。devShell は開発用で、利用者の環境で hook がバイナリをビルドするときは
 利用者の PATH の go を使う。
+`flake.lock`・`go.mod`・GitHub Actions の更新は Dependabot が週次で PR を出す (`.github/dependabot.yml`)。
 
 ## 文章を書くときの決めごと
 

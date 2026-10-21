@@ -1,5 +1,15 @@
 # Changelog
 
+## [2026.1021.0](https://github.com/usadamasa/agents-daemon/compare/2026.1020.2...2026.1021.0) - 2026-10-21
+
+- build: nixpkgs の rev を 2026-10-20 の nixos-unstable へ上げる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/199
+- docs: rex preview.17 の点検で rex-premise marker を上げる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/201
+- board: 自セッションで置いたメモを自セッションへ To task / Ask for issue で回す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/202
+- board: メモを渡す先に、新しいセッションを起こす経路を足す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/204
+- devShell の Go を 1.26.10 に差し替えて GO-2026-6809 を解消する by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/205
+- Dependabot で go.mod・GitHub Actions・flake.lock を週次で上げる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/206
+- feat: SendMessage で渡したのに辺の無いセッションを band に出す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/211
+
 ## [2026.1020.2](https://github.com/usadamasa/agents-daemon/compare/2026.1020.1...2026.1020.2) - 2026-10-20
 
 - ボードの pane の底に記号の凡例を置く by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/197

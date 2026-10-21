@@ -119,6 +119,7 @@ agents-daemon spawn --repo /path/to/repo < prompt.txt  # stdin を最初のタ�
 task build    # ./bin/ へビルド
 task test     # go test と bats tests/
 task lint     # Go の静的解析 (devShell のツールを使う)
+task vulncheck  # govulncheck を symbol と module で回す (lint が呼び、vulncheck workflow が週次で回す)
 task install  # hook と同じ cache のパスへビルドする
 claude plugin validate --strict .
 ```

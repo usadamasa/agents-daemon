@@ -1,0 +1,24 @@
+name: vulncheck
+
+# PR 時は ci.yaml の go-lint (task lint) が同じ task を回す。こちらはコードが変わらなくても
+# 新しく公開された脆弱性を拾うための定期実行
+on:
+  schedule:
+    - cron: '0 0 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  vulncheck:
+    name: vulncheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6.0.3
+
+      - uses: $/.github/actions/setup-nix
+
+      - name: Run govulncheck
+        run: task vulncheck

@@ -1,6 +1,6 @@
 import type { EngineInterface } from 'claude-code'
 
-import type { BoardCard, BoardData, GraphNode, ParkedMemo, ParkingCard, ParkingSource } from '../types'
+import type { BoardCard, BoardData, BoardRow, GraphNode, ParkedMemo, ParkingCard, ParkingSource } from '../types'
 import { daemonBin } from './daemon-bin'
 import { logEvent, reason } from './log'
 
@@ -26,8 +26,12 @@ export function isStale(memo: ParkingCard, now: number, days: number): boolean {
   return !Number.isNaN(ms) && now - ms > days * DAY_MS
 }
 
-// Destination はメモを渡す先のセッション。
-export type Destination = { session_id: string; session: string }
+// Destination はメモを渡す先のセッション。self は開いたセッション自身で、peer メッセージではなく自分の入力へ渡す (#190)。
+export type Destination = { session_id: string; session: string; self?: true }
+
+// SELF_LABEL は自セッションの宛先の名前。セッション名はカードに頼らず固定にする (自分が生きているのは自明で、
+// カードが無くても宛先に出す)。
+const SELF_LABEL = 'このセッション'
 
 // memoLabel はメモのカード 1 行: 種類 (park tool の kind の語のまま)、title、置かれた回数 (2 回以上のとき)。
 export function memoLabel(memo: ParkingCard): string {
@@ -61,16 +65,22 @@ export function stamp(at: string): string {
   return `${two(jst.getUTCMonth() + 1)}/${two(jst.getUTCDate())} ${two(jst.getUTCHours())}:${two(jst.getUTCMinutes())}`
 }
 
-// taskDestinations は「タスクにする」の宛先: cards (同じ repo のカード) のうち、生きている自分以外のセッション。
-export function taskDestinations(cards: BoardCard[], self: string): Destination[] {
-  return uniqueLive(cards, self)
+// taskDestinations は「タスクにする」の宛先: メモの行 (row) が開いたセッションの repo (here) なら自セッションを先に、
+// 続けて同じ repo の生きているほかのセッション。
+export function taskDestinations(data: BoardData, row: BoardRow, self: string): Destination[] {
+  const own = row.repo === data.here ? [selfDestination(self)] : []
+  return [...own, ...uniqueLive(row.cards, self)]
 }
 
-// issueDestinations は「issue にするよう頼む」の宛先。私用のボードだけで、同じ repo のセッションを先に、
-// ボードに載っているほかの生きているセッションを後に並べる。業務のものは外へ出さない (#121)。
+// issueDestinations は「issue にするよう頼む」の宛先。私用のボードだけで、自セッションを先に、同じ repo のセッション、
+// ボードに載っているほかの生きているセッションの順に並べる。業務のものは外へ出さない (#121)。
 export function issueDestinations(data: BoardData, cards: BoardCard[], self: string): Destination[] {
   if (data.domain !== 'home') return []
-  return uniqueLive([...cards, ...data.rows.flatMap(row => row.cards)], self)
+  return [selfDestination(self), ...uniqueLive([...cards, ...data.rows.flatMap(row => row.cards)], self)]
+}
+
+function selfDestination(self: string): Destination {
+  return { session_id: self, session: SELF_LABEL, self: true }
 }
 
 function uniqueLive(cards: BoardCard[], self: string): Destination[] {
@@ -140,19 +150,31 @@ export async function discardStale($: EngineInterface, days: number): Promise<st
 // handOff は text を to へ送り、届いたときだけメモを handed にする。届かなかったメモは open のまま残す。
 export async function handOff($: EngineInterface, memo: ParkingCard, to: Destination, text: string): Promise<string> {
   const sent = { via: 'memo', memo: memo.id, to: to.session_id }
-  try {
-    const result = await $.session.send({ to: { sessionId: to.session_id }, text })
-    if (!result.isDelivered) {
-      await logEvent($, 'mod.send', { ...sent, delivered: false, reason: result.reason })
-      return `${to.session} へ送れませんでした: ${result.reason}`
-    }
-    await logEvent($, 'mod.send', { ...sent, delivered: true })
-  } catch (err) {
-    await logEvent($, 'mod.send', { ...sent, delivered: false, reason: String(err) })
-    return `${to.session} へ送れませんでした: ${String(err)}`
+  const failed = await deliver($, to, text)
+  if (failed !== '') {
+    await logEvent($, 'mod.send', { ...sent, delivered: false, reason: failed })
+    return `${to.session} へ送れませんでした: ${failed}`
   }
+  await logEvent($, 'mod.send', { ...sent, delivered: true })
   const failure = await park($, ['set', memo.id, '--status', 'handed'])
   return failure === '' ? `${to.session} へ送り、メモを渡しました` : `${to.session} へ送りましたが、メモを handed にできませんでした: ${failure}`
+}
+
+// deliver は text を to へ届け、届かなかった理由を返す (届いたら空)。自セッションへは peer メッセージを送れないので、
+// 自分の入力に渡す (`$.prompt.submit`)。入力はセッションが idle になってから 1 ターンとして入り、drop されたら
+// 入っていない (`isDelivered` の false と同じ扱い)。
+// cc-premise: 2.1.306 mods $.prompt.submit は idle になってから自分のターンとして入り、drop で入らなかったことが分かる
+async function deliver($: EngineInterface, to: Destination, text: string): Promise<string> {
+  try {
+    if (to.self) {
+      const result = await $.prompt.submit({ text })
+      return result.drop === undefined ? '' : result.drop
+    }
+    const result = await $.session.send({ to: { sessionId: to.session_id }, text })
+    return result.isDelivered ? '' : result.reason
+  } catch (err) {
+    return String(err)
+  }
 }
 
 // adopt は終了したセッションのタスクをパーキングへ移す。タスクの ID はノードの Key (<session_id>/<task_id>) から取る。

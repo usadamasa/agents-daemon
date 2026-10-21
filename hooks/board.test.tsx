@@ -6,12 +6,14 @@ const CWD = '/src/home/agents-daemon'
 
 // world は plugin の下にいる engine の代わりを立てる。process.run は run が答え、呼ばれた argv (バイナリの後) を
 // ran に残す。ボードの経路のログ (hooks/log.ts) は log.test.tsx が見るので残さない。now は mod の時計の始点
-// (古いメモの判定に使う)。
-function world(on: On, run: (argv: readonly string[]) => ProcessRunResult = () => output('{}'), now = Date.parse('2026-10-19T00:00:00Z')) {
+// (古いメモの判定に使う)。submitted は自セッションの入力へ渡した文面 (prompt.submit)。drop を渡すと入らなかった
+// ことにする。
+function world(on: On, run: (argv: readonly string[]) => ProcessRunResult = () => output('{}'), now = Date.parse('2026-10-19T00:00:00Z'), drop = '') {
   const ran: string[][] = []
   const opened: string[] = []
   const closed: string[] = []
   const sent: { to: unknown; text: string }[] = []
+  const submitted: string[] = []
   mock.env(on, { HOME: '/home/u' })
   mock.clock(on, { now })
   on('ui.open', async (_$, e) => {
@@ -32,7 +34,12 @@ function world(on: On, run: (argv: readonly string[]) => ProcessRunResult = () =
     sent.push({ to: e.to, text: e.text })
     return { isDelivered: true as const }
   })
-  return { ran, opened, closed, sent }
+  on('prompt.submit', async (_$, e) => {
+    if (drop !== '') return { drop }
+    submitted.push(e.text)
+    return { text: e.text }
+  })
+  return { ran, opened, closed, sent, submitted }
 }
 
 function output(stdout: string, exitCode = 0, stderr = ''): ProcessRunResult {
@@ -45,8 +52,8 @@ function operations(ran: string[][]): string[][] {
 }
 
 // boardWorld は status --board に data を返し、それ以外 (park、edge) は成功を返す。
-function boardWorld(on: On, data: unknown = BOARD, now?: number) {
-  return world(on, argv => (argv[1] === 'status' ? output(JSON.stringify(data)) : output('{"created":true}')), now)
+function boardWorld(on: On, data: unknown = BOARD, now?: number, drop?: string) {
+  return world(on, argv => (argv[1] === 'status' ? output(JSON.stringify(data)) : output('{"created":true}')), now, drop)
 }
 
 function node(key: string, state: string, title: string, extra: Record<string, unknown> = {}) {
@@ -479,11 +486,12 @@ test('メモを選ぶと詳細を出し、Discard / To task / Ask for issue で�
   expect(await ui.find({ type: 'Text', text: /edge-cli 10\/18 19:30 別の定数も同じ/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /gone 10\/19 01:28/ })).toBeDefined()
 
-  // 宛先は同じ repo の生きているほかのセッション。issue は私用のボードでボード全体のセッション。
-  expect(await ui.find({ key: 'task:SELF' })).toBeUndefined()
+  // 宛先は自セッション (#190) と、同じ repo の生きているほかのセッション。issue は私用のボードでボード全体のセッション。
+  expect(await ui.find({ key: 'task:SELF', text: /To task → このセッション/ })).toBeDefined()
   expect(await ui.find({ key: 'task:G' })).toBeUndefined()
   expect(await ui.find({ key: 'task:P' })).toBeUndefined()
   expect(await ui.find({ key: 'task:W', text: /To task → edge-cli/ })).toBeDefined()
+  expect(await ui.find({ key: 'issue:SELF', text: /Ask for issue → このセッション/ })).toBeDefined()
   expect(await ui.find({ key: 'issue:P', text: /Ask for issue → peer/ })).toBeDefined()
 
   w.ran.length = 0
@@ -496,6 +504,45 @@ test('メモを選ぶと詳細を出し、Discard / To task / Ask for issue で�
   w.ran.length = 0
   await ui.press({ key: 'discard' })
   expect(operations(w.ran)).toEqual([[BIN, 'park', 'set', MEMO.id, '--status', 'discarded', ...SELF_ARGS]])
+})
+
+test('自セッションへは peer メッセージではなく自分の入力へ渡し、入ったらメモを handed にする (#190)', async ($, on) => {
+  const w = boardWorld(on)
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($)
+  await ui.press({ key: `park:${MEMO.id}` })
+
+  w.ran.length = 0
+  await ui.press({ key: 'issue:SELF' })
+  expect(w.sent).toEqual([])
+  expect(w.submitted).toHaveLength(1)
+  expect(w.submitted[0]).toMatch(/^パーキングロットのメモ「保持期間の根拠が無い」を GitHub の issue にしてください。repo: agents-daemon。/)
+  expect(operations(w.ran)).toEqual([[BIN, 'park', 'set', MEMO.id, '--status', 'handed', ...SELF_ARGS]])
+  expect(await ui.find({ type: 'Text', text: /このセッション へ送り、メモを渡しました/ })).toBeDefined()
+})
+
+test('自分の入力へ渡せなかった (drop) メモは open のまま残す', async ($, on) => {
+  const w = boardWorld(on, BOARD, undefined, 'Stop が立っている')
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($)
+  await ui.press({ key: `park:${MEMO.id}` })
+
+  w.ran.length = 0
+  await ui.press({ key: 'task:SELF' })
+  expect(operations(w.ran)).toEqual([])
+  expect(await ui.find({ type: 'Text', text: /このセッション へ送れませんでした: Stop が立っている/ })).toBeDefined()
+})
+
+test('ほかの repo のメモは自セッションでタスクにできないが、issue は頼める', async ($, on) => {
+  const elsewhere = { ...MEMO, id: '20261018T100000-bbbb', title: 'dotfile の件' }
+  const rows = [BOARD.rows[0], { ...BOARD.rows[1], parking: [elsewhere] }]
+  boardWorld(on, { ...BOARD, rows })
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($)
+  await ui.press({ key: `park:${elsewhere.id}` })
+  expect(await ui.find({ key: 'task:SELF' })).toBeUndefined()
+  expect(await ui.find({ key: 'task:P', text: /To task → peer/ })).toBeDefined()
+  expect(await ui.find({ key: 'issue:SELF', text: /Ask for issue → このセッション/ })).toBeDefined()
 })
 
 test('最後に置かれてから 30 日より経ったメモがあれば、パーキングの見出しからまとめて捨てる', async ($, on) => {
@@ -528,7 +575,9 @@ test('業務のボードには Ask for issue を出さない', async ($, on) => 
   const ui = await mount($)
   await ui.press({ key: `park:${MEMO.id}` })
   expect(await ui.find({ key: 'task:W' })).toBeDefined()
+  expect(await ui.find({ key: 'task:SELF' })).toBeDefined()
   expect(await ui.find({ key: 'issue:P' })).toBeUndefined()
+  expect(await ui.find({ key: 'issue:SELF' })).toBeUndefined()
 })
 
 test('ノードの無いボードと、daemon が動いていないことを描く', async ($, on) => {

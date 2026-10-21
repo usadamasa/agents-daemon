@@ -275,7 +275,7 @@ export const registerBoard: Register = on => {
 
     // メモの詳細もノードと同じ枠で出し、操作のボタンを枠の最後の行にまとめる。
     const memoDetail = ({ memo, row: memoRowData }: { memo: ParkingCard; row: BoardRow }) => {
-      const tasks = taskDestinations(memoRowData.cards, self)
+      const tasks = taskDestinations(data, memoRowData, self)
       return (
         <Box key="memo" flexDirection="column" borderStyle="round" borderDimColor paddingX={1} marginLeft={GUTTER}>
           {memoLines(memo).map((line, i) => (

@@ -42,7 +42,7 @@ README の「役割」が持つ。機能を足す・外す判断はそこに照�
 ```sh
 task test                                   # go test ./... と bats tests/
 task lint                                   # Go の全静的解析。devShell のツールが要る
-task vulncheck                              # govulncheck を symbol と module で回す (task lint が呼ぶ)
+task vulncheck                              # govulncheck の symbol モード (task lint が呼ぶ)
 shellcheck hooks/*.sh hooks/lib/*.sh scripts/*.sh tests/lib/*.bash tests/fixtures/fake-go .envrc
 claude plugin validate --strict .           # plugin manifest と hooks.json
 claude plugin validate --strict skills      # skill の frontmatter
@@ -52,7 +52,8 @@ claude plugin test .                        # mod (hooks/*.test.tsx) のテス�
 hook のテストは fake の `go` とバイナリで回るので、Go のビルドが通らなくても hook 側だけ確かめられる。
 bats は hook を `/bin/bash` で起動する (本番の shebang と同じ bash 3.2 で非互換を拾うため)。
 PR の CI は `.github/workflows/ci.yaml`。コードが変わらなくても新しく公開された脆弱性を拾うため、
-`.github/workflows/vulncheck.yaml` が `task vulncheck` を週次で回す。
+`.github/workflows/vulncheck.yaml` が `task vulncheck` を週次で回す。同じ workflow が `task vulncheck:module` も回すが、
+修正版の無い到達しない脆弱性でも落ちるので合否に入れず、結果を run の summary に残すだけにする。
 
 Go と lint・テストのツールは `flake.nix` の devShell が揃え、`.envrc` (nix-direnv の `use flake`) が読み込む。
 devShell の go は `go.mod` の `go` 行と同じ系列 (`go_1_26`) にし、`GOTOOLCHAIN=local` でずれを即座に落とす。

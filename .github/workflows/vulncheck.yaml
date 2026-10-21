@@ -20,5 +20,18 @@ jobs:
 
       - uses: $/.github/actions/setup-nix
 
-      - name: Run govulncheck
+      - name: Run govulncheck (symbol)
         run: task vulncheck
+
+      # module モードは修正版の無い到達しない脆弱性でも落ちるので、job の合否に入れず結果を残すだけにする
+      # symbol で落ちた週も module の結果を見られるよう、前の step の失敗では止めない
+      - name: Run govulncheck (module)
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        # shell を明示すると pipefail が付き、tee を挟んでも finding で step が失敗として残る
+        shell: bash
+        run: task vulncheck:module 2>&1 | tee vulncheck-module.txt
+
+      - name: Write module scan to summary
+        if: ${{ !cancelled() }}
+        run: printf '## govulncheck -scan module\n\n```\n%s\n```\n' "$(cat vulncheck-module.txt)" >> "$GITHUB_STEP_SUMMARY"

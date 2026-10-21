@@ -47,8 +47,13 @@ tasks:
       - go tool analyze-modularity --strict .
 
   vulncheck:
-    desc: govulncheck を symbol と module の両方で実行 (lint と週次の vulncheck workflow が呼ぶ)
+    desc: govulncheck を symbol モードで実行 (lint と週次の vulncheck workflow が呼ぶ)
     cmds:
       - go tool vulncheck ./...
+
+  vulncheck:module:
+    desc: govulncheck を module モードで実行 (週次の vulncheck workflow が表示だけに使う)
+    # 到達しない修正版無しの脆弱性でも落ちるため、合否には入れない
+    cmds:
       # -scan module はルートに Go ファイルが無いと落ちるので、main パッケージのディレクトリで回す
       - go tool vulncheck -C cmd/agents-daemon -scan module

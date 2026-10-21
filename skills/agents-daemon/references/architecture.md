@@ -193,9 +193,18 @@ B は fullscreen のレイアウトで dock に置かれるときだけ出す。
 - issue にするよう頼む: 私用のボードだけ。自セッションを先に、ボードに載っている生きているセッションへ頼む
 - 自セッションは生きているのが自明なので、カードや daemon の有無にかかわらず宛先に出す。自分へは peer メッセージを
   送れないので `$.prompt.submit` で自分の入力へ渡し、idle になってから 1 ターンとして入る (#190)
-- タスクにする・issue にするよう頼むは、`$.session.send` が届いたとき、または `$.prompt.submit` が drop されなかった
-  ときだけ `park set <id> --status handed` にする
+- 新しいセッションを起こして渡す (`To task → new session…`、私用なら `Ask for issue → new session…`): 生きているセッションの
+  無い repo へ渡す経路 (#162)。押すと repo の候補 (メモの行の repo、開いたセッションの repo、ボードのほかの行の repo) と
+  絶対パスの入力欄を出し、選んだ repo で `agents-daemon spawn --repo <path> --session <id> --cwd <cwd>` に本文を stdin で
+  渡す。バイナリが `claude --session-id <uuid> --model $CLAUDE_CODE_SUBAGENT_MODEL -- <本文>` を repo を cwd にした
+  rex の window に起こし (`internal/spawn`、フォーカスは奪わず、終了後も pane を残す)、claude が前景になってから
+  `{session_id, pane_id}` を返す。本文は最初のターンとして入るので、peer メッセージの inbox を待たない。文面は起こした
+  経緯の 1 行に続けて peer へ送るものと同じで、issue はメモの repo ではなく起こした repo を起票先にする。repo の
+  domain が開いたセッションの domain と違えば起こさない。モデルを subagent 用に揃えるのは peer-sessions skill と同じ
+- タスクにする・issue にするよう頼むは、`$.session.send` が届いたとき、`$.prompt.submit` が drop されなかったとき、
+  `spawn` が claude の前景を確かめて返ったときだけ `park set <id> --status handed` にする
 <!-- cc-premise: 2.1.306 mods $.prompt.submit は idle になってから自分のターンとして入り、drop で入らなかったことが分かる -->
+<!-- cc-premise: 2.1.306 cli claude [prompt] は最初のターンの本文、--session-id <uuid> でセッション ID を固定できる -->
 - パーキングへ移す (`To parking`): 終了したセッションの未完了のタスクのノードを `park adopt <session_id> <task_id>` で
   `kind: task` のメモにし、タスクの記録を消す。`kind: task` は model の tool からは置けない
 
@@ -316,6 +325,7 @@ stderr に 1 行出して何もせずに戻る (素の端末の SessionStart で
 | SendKeys | `send-key -b B KEY...` |
 | Reachable | `api call server.status` の `pid` が正 |
 | session_id | `context/<sid>.json` の `multiplexer.block` から逆引き (上の「statusline が書く state」) |
+| RunWindow (`internal/spawn` の Host。Client には無い) | `run --focus=false --keep-open -s S --cwd DIR --label L --json -- ARGV...` の `block_ids[0]`。`-s` は childEnv が `REX_SESSION` を外すので明示する。argv は shell を介さず 1 引数ずつ子へ渡る (空白、引用符、改行、`$` を変えない。実測) |
 
 待機中のラベルは出さない。rex で表示に使える `block rename` は利用者が付けた label を潰すため。
 

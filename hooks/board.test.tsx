@@ -14,6 +14,8 @@ function world(on: On, run: (argv: readonly string[]) => ProcessRunResult = () =
   const closed: string[] = []
   const sent: { to: unknown; text: string }[] = []
   const submitted: string[] = []
+  // fed は spawn の stdin に渡した本文。
+  const fed: string[] = []
   mock.env(on, { HOME: '/home/u' })
   mock.clock(on, { now })
   on('ui.open', async (_$, e) => {
@@ -28,6 +30,7 @@ function world(on: On, run: (argv: readonly string[]) => ProcessRunResult = () =
   on('session.cwd', async () => ({ value: CWD }))
   on('process.run', async (_$, e) => {
     if (e.argv[1] !== 'board-log') ran.push([...e.argv])
+    if (e.argv[1] === 'spawn') fed.push(e.init?.stdin ?? '')
     return { value: run(e.argv) }
   })
   on('session.send', async (_$, e) => {
@@ -39,8 +42,11 @@ function world(on: On, run: (argv: readonly string[]) => ProcessRunResult = () =
     submitted.push(e.text)
     return { text: e.text }
   })
-  return { ran, opened, closed, sent, submitted }
+  return { ran, opened, closed, sent, submitted, fed }
 }
+
+// SPAWNED は `agents-daemon spawn` の stdout。
+const SPAWNED = '{"session_id":"NEW","pane_id":"block:b1"}'
 
 function output(stdout: string, exitCode = 0, stderr = ''): ProcessRunResult {
   return { exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false }
@@ -51,9 +57,9 @@ function operations(ran: string[][]): string[][] {
   return ran.filter(argv => argv[1] !== 'status')
 }
 
-// boardWorld は status --board に data を返し、それ以外 (park、edge) は成功を返す。
+// boardWorld は status --board に data を返し、spawn は起こしたセッションを、それ以外 (park、edge) は成功を返す。
 function boardWorld(on: On, data: unknown = BOARD, now?: number, drop?: string) {
-  return world(on, argv => (argv[1] === 'status' ? output(JSON.stringify(data)) : output('{"created":true}')), now, drop)
+  return world(on, argv => (argv[1] === 'status' ? output(JSON.stringify(data)) : argv[1] === 'spawn' ? output(SPAWNED) : output('{"created":true}')), now, drop)
 }
 
 function node(key: string, state: string, title: string, extra: Record<string, unknown> = {}) {
@@ -576,8 +582,82 @@ test('業務のボードには Ask for issue を出さない', async ($, on) => 
   await ui.press({ key: `park:${MEMO.id}` })
   expect(await ui.find({ key: 'task:W' })).toBeDefined()
   expect(await ui.find({ key: 'task:SELF' })).toBeDefined()
+  expect(await ui.find({ key: 'spawn-task' })).toBeDefined()
   expect(await ui.find({ key: 'issue:P' })).toBeUndefined()
   expect(await ui.find({ key: 'issue:SELF' })).toBeUndefined()
+  expect(await ui.find({ key: 'spawn-issue' })).toBeUndefined()
+})
+
+test('メモを別の repo の新しいセッションへ渡す: 候補はメモの repo、ほかの行の repo の順 (#162)', async ($, on) => {
+  const w = boardWorld(on)
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($)
+  await ui.press({ key: `park:${MEMO.id}` })
+  expect(await ui.find({ key: 'spawn:/src/home/dotfile' })).toBeUndefined()
+
+  await ui.press({ key: 'spawn-task', text: /To task → new session…/ })
+  expect(await ui.find({ key: 'spawn:/src/home/agents-daemon', text: /agents-daemon/ })).toBeDefined()
+  expect(await ui.find({ key: 'spawn:/src/home/dotfile', text: /dotfile/ })).toBeDefined()
+
+  w.ran.length = 0
+  await ui.press({ key: 'spawn:/src/home/dotfile' })
+  expect(operations(w.ran)).toEqual([
+    [BIN, 'spawn', '--repo', '/src/home/dotfile', ...SELF_ARGS],
+    [BIN, 'park', 'set', MEMO.id, '--status', 'handed', ...SELF_ARGS],
+  ])
+  expect(w.fed).toHaveLength(1)
+  expect(w.fed[0]).toMatch(/^このメモを渡すため、dotfile \(\/src\/home\/dotfile\) で新しいセッションとして起こしました。/)
+  expect(w.fed[0]).toMatch(/パーキングロットのメモ「保持期間の根拠が無い」\(種類: aside\) をタスクにしてください。/)
+  expect(w.sent).toEqual([])
+  expect(await ui.find({ type: 'Text', text: /dotfile で新しいセッションを起こし、メモを渡しました/ })).toBeDefined()
+  // 候補は渡した後に畳む。
+  expect(await ui.find({ key: 'spawn:/src/home/dotfile' })).toBeUndefined()
+})
+
+test('issue を頼む新しいセッションには、起こした repo を起票先にした文面を渡す', async ($, on) => {
+  const w = boardWorld(on)
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($)
+  await ui.press({ key: `park:${MEMO.id}` })
+  await ui.press({ key: 'spawn-issue', text: /Ask for issue → new session…/ })
+  await ui.press({ key: 'spawn:/src/home/dotfile' })
+  expect(w.fed[0]).toMatch(/パーキングロットのメモ「保持期間の根拠が無い」を GitHub の issue にしてください。repo: dotfile。/)
+})
+
+test('候補に無い repo は絶対パスで指定する。相対パスは起こさずに弾き、Cancel で候補を畳む', async ($, on) => {
+  const w = boardWorld(on)
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($)
+  await ui.press({ key: `park:${MEMO.id}` })
+  await ui.press({ key: 'spawn-task' })
+
+  w.ran.length = 0
+  await ui.input({ key: 'spawn-path', text: 'src/home/other' })
+  expect(operations(w.ran)).toEqual([])
+  expect(await ui.find({ type: 'Text', text: /絶対パス/ })).toBeDefined()
+
+  await ui.input({ key: 'spawn-path', text: '/src/home/other' })
+  expect(operations(w.ran)[0]).toEqual([BIN, 'spawn', '--repo', '/src/home/other', ...SELF_ARGS])
+  expect(w.fed[0]).toMatch(/^このメモを渡すため、other \(\/src\/home\/other\) で新しいセッションとして起こしました。/)
+
+  await ui.press({ key: 'spawn-task' })
+  expect(await ui.find({ key: 'spawn-path' })).toBeDefined()
+  await ui.press({ key: 'spawn-cancel' })
+  expect(await ui.find({ key: 'spawn-path' })).toBeUndefined()
+})
+
+test('新しいセッションを起こせなかったメモは open のまま残す', async ($, on) => {
+  const w = world(on, argv =>
+    argv[1] === 'status' ? output(JSON.stringify(BOARD)) : argv[1] === 'spawn' ? output('', 1, 'Error: 開いたセッションの domain (home) と repo の domain (work) が違うので起こさない') : output('{}'),
+  )
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($)
+  await ui.press({ key: `park:${MEMO.id}` })
+  await ui.press({ key: 'spawn-task' })
+  w.ran.length = 0
+  await ui.press({ key: 'spawn:/src/home/dotfile' })
+  expect(operations(w.ran)).toEqual([[BIN, 'spawn', '--repo', '/src/home/dotfile', ...SELF_ARGS]])
+  expect(await ui.find({ type: 'Text', text: /dotfile で新しいセッションを起こせませんでした: .*domain \(work\) が違う/ })).toBeDefined()
 })
 
 test('ノードの無いボードと、daemon が動いていないことを描く', async ($, on) => {

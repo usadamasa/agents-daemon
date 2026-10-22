@@ -13,8 +13,8 @@ github.com/spf13/pflag v1.0.9/go.mod h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3An
 github.com/usadamasa/go-arch-metrics v0.0.0-20261018090303-e16d63e423d5 h1:+Mtiz0HSsc07bgOq95MoTuxOOmcUIPDGiJ0E2Mn2bTk=
 github.com/usadamasa/go-arch-metrics v0.0.0-20261018090303-e16d63e423d5/go.mod h1:wsBrN1zuorNi4FwD5TWunvK+oqw5fM+Vd91eFrRivFo=
 go.yaml.in/yaml/v3 v3.0.4/go.mod h1:DhzuOOF2ATzADvBadXxruRBLzYTpT36CKvDb3+aBEFg=
-golang.org/x/crypto/x509roots/fallback v0.0.0-20261016151342-0ae6809b7559 h1:M68k3yCPiXhrSyh9Twe3Kv7nOsvUumZDN/3kdSwUqw0=
-golang.org/x/crypto/x509roots/fallback v0.0.0-20261016151342-0ae6809b7559/go.mod h1:HPze8vhfG6fO06AM+VSvxRm4E3+5Yk375mgrJ5M2z1E=
+golang.org/x/crypto/x509roots/fallback v0.0.0-20261020153306-9f2b28d4331a h1:V5oicZXS0oqZx30gY/apgSVD7YvNBfrIOdcMnlelJY4=
+golang.org/x/crypto/x509roots/fallback v0.0.0-20261020153306-9f2b28d4331a/go.mod h1:HPze8vhfG6fO06AM+VSvxRm4E3+5Yk375mgrJ5M2z1E=
 golang.org/x/mod v0.42.0 h1:ICeL3t2L30ljSPHHxDnR4fqVcBt/zR2zJAb9juavmQg=
 golang.org/x/mod v0.42.0/go.mod h1:u5fzIrRInkL8MaO1cbRkUHT64v303YIT5KEqpNr7jRs=
 golang.org/x/sync v0.24.0 h1:iqiDrGoDgyuvAKrhLQthUEzU/R378N78gXbBjxed7oA=

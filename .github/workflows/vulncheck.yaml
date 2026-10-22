@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
 
-      - uses: $/.github/actions/setup-nix
+      - uses: usadamasa/gh-manage/.github/actions/setup-nix@main
 
       - name: Run govulncheck (symbol)
         run: task vulncheck

@@ -6,16 +6,14 @@ workflows:
     '.github/workflows/ci.yaml':
         - 'actions/checkout@v7.0.1'
         - 'actions/upload-artifact@v7.0.2'
-        - 'determinatesystems/nix-installer-action@v23'
-        - 'nicknovitski/nix-develop@v1.2.1'
+        - 'usadamasa/gh-manage@main'
     '.github/workflows/tagpr.yaml':
         - 'actions/checkout@v7.0.1'
         - 'actions/create-github-app-token@v3.3.0'
         - 'songmu/tagpr@v1.21.3'
     '.github/workflows/vulncheck.yaml':
         - 'actions/checkout@v7.0.1'
-        - 'determinatesystems/nix-installer-action@v23'
-        - 'nicknovitski/nix-develop@v1.2.1'
+        - 'usadamasa/gh-manage@main'
 dependencies:
     'actions/checkout@v7.0.1':
         ref: 'v7.0.1'
@@ -32,11 +30,6 @@ dependencies:
         commit: 'sha1-cf430e030ddbb5b0abf93d22962f4752f3646cd9'
         owner_id: 44036562
         repo_id: 192625955
-    'determinatesystems/nix-installer-action@v23':
-        ref: 'v23'
-        commit: 'sha1-3138316df39ed29be04236d7ffc686fa525866aa'
-        owner_id: 80991770
-        repo_id: 588678074
     'nicknovitski/nix-develop@v1.2.1':
         ref: 'v1.2.1'
         commit: 'sha1-9be7cfb4b10451d3390a75dc18ad0465bed4932a'
@@ -47,3 +40,10 @@ dependencies:
         commit: 'sha1-1fcd7292d1fe8ea9a8313eef46b8d80b7a15d227'
         owner_id: 177122
         repo_id: 524603982
+    'usadamasa/gh-manage@main':
+        ref: 'main'
+        commit: 'sha1-9ce27fb8d49735cc24edeea628538a9940f6d326'
+        owner_id: 513226
+        repo_id: 1390013800
+        uses:
+            - 'nicknovitski/nix-develop@v1.2.1'

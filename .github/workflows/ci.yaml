@@ -21,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
 
-      - uses: usadamasa/gh-manage/.github/actions/setup-nix@main
+      - uses: usadamasa/gh-manage/actions/setup-nix@main
 
       - name: go vet
         run: go vet ./...
@@ -44,7 +44,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: usadamasa/gh-manage/.github/actions/setup-nix@main
+      - uses: usadamasa/gh-manage/actions/setup-nix@main
 
       - name: Run all linters
         run: task lint
@@ -55,7 +55,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
 
-      - uses: usadamasa/gh-manage/.github/actions/setup-nix@main
+      - uses: usadamasa/gh-manage/actions/setup-nix@main
 
       # hook のテストは fake の go とバイナリで回るが、ソースが build できることもここで確かめる。
       - name: Build Go binaries
@@ -71,7 +71,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
 
       # apt の shellcheck ではなく devShell で固定した版を使い、ローカルと結果を揃える
-      - uses: usadamasa/gh-manage/.github/actions/setup-nix@main
+      - uses: usadamasa/gh-manage/actions/setup-nix@main
 
       - name: Run shellcheck
         run: shellcheck hooks/*.sh hooks/lib/*.sh scripts/*.sh tests/lib/*.bash tests/fixtures/fake-go .envrc

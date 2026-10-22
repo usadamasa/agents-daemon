@@ -47,7 +47,7 @@ dependencies:
         repo_id: 524603982
     'usadamasa/gh-manage@main':
         ref: 'main'
-        commit: 'sha1-9ce27fb8d49735cc24edeea628538a9940f6d326'
+        commit: 'sha1-cc5165205b2ba23355f1058b01b4648c00525746'
         owner_id: 513226
         repo_id: 1390013800
         uses:

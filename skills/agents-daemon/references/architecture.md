@@ -32,10 +32,13 @@ context の compact と prompt cache の失効には関わらない。Claude Cod
 ### [1] statusline が上限情報を渡し、バイナリが落とす
 
 <!-- cc-premise: 2.1.299 statusline stdin の rate_limits.five_hour / context_window と再実行の契機 -->
+<!-- cc-premise: 2.1.308 statusline stdin の rate_limits はモデル単位の週次ウィンドウを含まない -->
 
 Claude Code は statusline コマンドの stdin に JSON を渡す。その中に
 `rate_limits.five_hour.{used_percentage, resets_at}` が入る (`resets_at` は Unix epoch 秒)。
 この値は statusline の stdin にしか来ないので、statusline を経由するのは避けられない。
+モデル単位の週次ウィンドウ (`/usage` の `Current week (Fable)` の行) は stdin に来ないので、
+statusline には出せない (#116)。
 配線は 2 通りで、取り出しはどちらもバイナリ (`internal/sessionstate.Store.IngestStatusline`) が持つ
 (`agents-daemon:setup` skill の `references/statusline.md`)。
 

@@ -59,7 +59,8 @@ plugin が持つもの:
   block と session の対応も statusline が書く記録から引くので、必須になる。
 - **Go toolchain**: SessionStart hook が plugin のソースから `go build` でバイナリを建てる。
   hook は Claude Code を起動したシェルの PATH で `go` を探す。無ければ `brew install go` などで入れる。
-  初回の build では Go module のダウンロードにネットワークを使う。
+  初回の build では Go module のダウンロードにネットワークを使う。PATH の `go` が `go.mod` の `toolchain` 行
+  (go1.26.10) より古いと、`GOTOOLCHAIN` が既定の `auto` なら go がその版を取得してビルドする。
 - **jq**: hook が plugin.json の version と hook 入力の JSON を読むのに使う。
 
 ## インストール

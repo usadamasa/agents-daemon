@@ -4,10 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
+
+	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
 
 // ErrAlreadyRunning は生存している daemon が既に存在することを表す。
@@ -46,32 +47,9 @@ func PIDAlive(pid int) bool {
 	return err == nil || errors.Is(err, syscall.EPERM)
 }
 
-// WritePIDFile は path へ pid を原子的に書き込む (同ディレクトリの一時ファイルに
-// 書いて rename)。
+// writePIDFile は path へ pid を原子的に書き込む (statefile)。
 func writePIDFile(path string, pid int) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("状態ディレクトリの作成に失敗: %w", err)
-	}
-	tmp, err := os.CreateTemp(dir, ".daemon.pid.*")
-	if err != nil {
-		return fmt.Errorf("PID ファイルの一時ファイル作成に失敗: %w", err)
-	}
-	tmpPath := tmp.Name()
-	if _, err := fmt.Fprintf(tmp, "%d\n", pid); err != nil {
-		_ = tmp.Close()
-		_ = os.Remove(tmpPath)
-		return fmt.Errorf("PID の書き込みに失敗: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		_ = os.Remove(tmpPath)
-		return fmt.Errorf("PID ファイルのクローズに失敗: %w", err)
-	}
-	if err := os.Rename(tmpPath, path); err != nil {
-		_ = os.Remove(tmpPath)
-		return fmt.Errorf("PID ファイルの rename に失敗: %w", err)
-	}
-	return nil
+	return statefile.WriteFileAtomic(path, ".daemon.pid.*", []byte(strconv.Itoa(pid)+"\n"))
 }
 
 // RemovePIDFile は path が存在すれば削除する。既に無い場合はエラーにしない。

@@ -41,6 +41,42 @@ func TestSessionPath(t *testing.T) {
 	})
 }
 
+func TestReadJSON(t *testing.T) {
+	t.Run("ファイルが無ければ (false, nil) で v に触らない", func(t *testing.T) {
+		v := map[string]int{"keep": 1}
+		found, err := ReadJSON(filepath.Join(t.TempDir(), "missing.json"), &v)
+		if found || err != nil {
+			t.Errorf("ReadJSON() = %v, %v, want false, nil", found, err)
+		}
+		if v["keep"] != 1 {
+			t.Errorf("v = %v, want untouched", v)
+		}
+	})
+
+	t.Run("あれば (true, nil) で v を埋める", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "x.json")
+		if err := os.WriteFile(path, []byte(`{"a":1}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		var v map[string]int
+		found, err := ReadJSON(path, &v)
+		if !found || err != nil || v["a"] != 1 {
+			t.Errorf("ReadJSON() = %v, %v, v = %v, want true, nil, {a:1}", found, err, v)
+		}
+	})
+
+	t.Run("壊れた JSON はエラー (無いのとは区別する)", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "x.json")
+		if err := os.WriteFile(path, []byte(`{not json`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		var v map[string]int
+		if _, err := ReadJSON(path, &v); err == nil {
+			t.Error("ReadJSON() error = nil, want error")
+		}
+	})
+}
+
 func TestWriteJSONAtomic(t *testing.T) {
 	t.Run("親ディレクトリを作り、JSON 1 行と改行を書く。一時ファイルは残らない", func(t *testing.T) {
 		dir := filepath.Join(t.TempDir(), "sub")

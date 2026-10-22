@@ -1,6 +1,7 @@
 // Package statefile は XDG state 配下に別プロセスが読み書きするファイルの共通の作法を持つ。
-// セッション ID をファイル名に使うときの検証と、書きかけを読ませないための原子的な書き込み。
-// ratelimit と sessioncontext (daemon が読む sidecar) と spend (statusline の cost の記録) が使う。
+// セッション ID をファイル名に使うときの検証、書きかけを読ませないための原子的な書き込み、
+// 「無ければ正常系、壊れていればエラー」の JSON の読み込み。
+// 書いている途中に別プロセス (daemon、statusline、hook、mod) が読みうるファイルはここを通す。
 package statefile
 
 import (
@@ -35,6 +36,23 @@ func SessionPath(dir, sessionID, ext string) (string, error) {
 	return filepath.Join(dir, sessionID+ext), nil
 }
 
+// ReadJSON は path の JSON を v へ読む。ファイルが無ければ (false, nil) で v に触らない。
+// 読めない・JSON として壊れている場合はエラーで、無いのとは区別する。
+// 壊れていても読み飛ばしたい読み手 (ディレクトリを走査して拾えるものだけ集める側) は使わない。
+func ReadJSON(path string, v any) (bool, error) {
+	data, err := os.ReadFile(path) // #nosec G304 -- 呼び出し元が state 配下の検証済みのパスを渡す
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, fmt.Errorf("%s の読み込みに失敗: %w", path, err)
+	}
+	if err := json.Unmarshal(data, v); err != nil {
+		return false, fmt.Errorf("%s のパースに失敗: %w", path, err)
+	}
+	return true, nil
+}
+
 // WriteJSONAtomic は v を JSON 1 行 (末尾に改行) にして path へ原子的に書く。
 func WriteJSONAtomic(path, tmpPattern string, v any) error {
 	data, err := json.Marshal(v)
@@ -47,7 +65,8 @@ func WriteJSONAtomic(path, tmpPattern string, v any) error {
 // WriteFileAtomic は data を path へ原子的に書く。
 // 一時ファイルは path と同じディレクトリに tmpPattern の名前で作る。別のファイル
 // システムだと rename が原子的でなくなり、読み手が書きかけを読むため。rename 前に
-// 失敗したら一時ファイルを消す (消し損ねても housekeeping が mtime で拾う)。
+// 失敗したら一時ファイルを消す。消し損ねたものを拾うのは置き場の掃除 (daemon の housekeeping、
+// dreamstate の Prune) で、掃除の対象外の場所に書くなら残骸は残る。
 func WriteFileAtomic(path, tmpPattern string, data []byte) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o750); err != nil {

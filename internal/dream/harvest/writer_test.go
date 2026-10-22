@@ -102,6 +102,30 @@ func TestWriteRecords_MultipleDates(t *testing.T) {
 			t.Errorf("expected %s to exist: %v", path, err)
 		}
 	}
+	// 書き直しは一時ファイル経由なので、日付の jsonl 以外が残らないことを見る
+	entries, err := os.ReadDir(filepath.Join(outDir, "harvest"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 {
+		names := make([]string, 0, len(entries))
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		t.Errorf("harvest dir entries = %v, want 2 jsonl files", names)
+	}
+}
+
+// records が無い run (incremental で新しいセッションが無いとき) は harvest/ を作らない。
+// 読み手 (mine の WalkDir、dreamstate の Prune) は無いディレクトリを空として扱う。
+func TestWriteRecords_NoRecordsLeavesNoDirectory(t *testing.T) {
+	outDir := t.TempDir()
+	if _, err := writeRecords(outDir, nil); err != nil {
+		t.Fatalf("writeRecords(nil): %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(outDir, "harvest")); !os.IsNotExist(err) {
+		t.Errorf("harvest/ の Stat = %v, want not exist", err)
+	}
 }
 
 func TestWriteRecords_SkipsCorruptedExistingLines(t *testing.T) {

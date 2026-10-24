@@ -13,7 +13,7 @@
 
 | doctor が打つコマンド | 見る欄 | 突き合わせる先 |
 | ---- | ---- | ---- |
-| `version --json` | `rex_version` / `built_at`、あれば `api_revision` (CLI が対応する API の版)。解決した rex のパスを添える | `last-checked.md` の記録。パスで `Versions/` のどの build を引いたかを見る |
+| `version --json` | `rex_version` / `built_at`、あれば `api_revision` (CLI が対応する API の版) | `last-checked.md` の記録。doctor が添える rex のパスで `Versions/` のどの build に解決したかを見る |
 | `api call server.status` (CLI に `api_revision` があるときだけ) | `api_revision` (server が動かしている API の版) が CLI と同じ | `exec.go` の `serverStatusResult` (`pid` は `Reachable` が読む)、`testdata/2026-10-20_…/server_status.json` |
 | `block call -b block:01a12599-0000-7000-8000-000000000001 program_status` | stderr が `block target "…" not found`、exit 3 | `exec.go` の `exitTargetNotFound`、`exec_test.go` の `newFakeRex` |
 | `block call -b "$REX_BLOCK" program_status` | root record (`id` が無いか空) の `state` / `app` / `owner.pid` | `pane.go` の `programStatusRecord`、`testdata/` の `program_status-*.json` |

@@ -66,6 +66,8 @@ func (c *execClient) checkModes(ctx context.Context, blockID string, add addFind
 // api_revision)。api_revision は CLI が対応する API の版で、あるときだけ出して server が動かしている版
 // (api call server.status の api_revision) と比べる。CLI と server は別々に更新されるので、食い違いは
 // daemon が古い CLI で新しい server を叩いている (またはその逆) 状態。
+// 版と並べて解決した binary のパスも出す。rex の自動更新は Versions/ の下に複数の rex を置くので、
+// どれを引いたか (Current か数字名の build か、REX_BIN_PATH か) がパスで分かる (locate.go)。
 // rex-premise: preview.19 cli version --json は rex_version と built_at と api_revision を返す
 // rex-premise: preview.19 cli api call server.status は api_revision を返す (CLI と同じ値)
 func (c *execClient) checkVersion(ctx context.Context, add addFinding) {
@@ -80,10 +82,10 @@ func (c *execClient) checkVersion(ctx context.Context, add addFinding) {
 	}
 	cliRevision, has := m["api_revision"]
 	if !has {
-		add(true, "rex_version: %v (built_at %v)", m["rex_version"], m["built_at"])
+		add(true, "rex_version: %v (built_at %v)。呼んだ rex は %s", m["rex_version"], m["built_at"], c.binPath)
 		return
 	}
-	add(true, "rex_version: %v (built_at %v, api_revision %v)", m["rex_version"], m["built_at"], cliRevision)
+	add(true, "rex_version: %v (built_at %v, api_revision %v)。呼んだ rex は %s", m["rex_version"], m["built_at"], cliRevision, c.binPath)
 	c.checkServerAPIRevision(ctx, cliRevision, add)
 }
 

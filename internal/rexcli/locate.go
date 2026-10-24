@@ -12,15 +12,16 @@ import (
 )
 
 // versionsComponent は rex の自動更新がバイナリを置くディレクトリの、build 番号の 1 つ上の名前。
-// rex は block の PATH に `…/RexServer/Versions/<build>/Rex Server.app/Contents/MacOS` を build 番号ごと載せ、
-// 更新で旧 build のディレクトリを消す。daemon は起動時の PATH を持ち続けるので、更新のあとは PATH の項が
-// 指す先が無くなる。`RexServer/CLI/` は存在するが空で、版なしの固定パスは無い。
-// rex-premise: preview.15 cli block の PATH は Versions/<build>/… で、更新で旧 build のディレクトリが消える。RexServer/CLI/ は空
+// rex は block の PATH に `…/RexServer/Versions/Current/Rex Server.app/Contents/MacOS` と、同じ形で `<build>` (数字名) の
+// 項を載せる。`Current` は symlink ではなく build の複製のディレクトリで、更新のたびに中身だけ入れ替わる。
+// 前の数字名の build は次の更新で消え、ダウンロードの途中経過 `.staging-<UUID>/` が残ることがある。
+// `RexServer/CLI/` は存在するが空。
+// rex-premise: preview.19 cli block の PATH は Versions/Current/… と Versions/<build>/… の順。Current は更新で中身が入れ替わり、前の build は次の更新で消える
 const versionsComponent = "Versions"
 
-// locateBinary は rex のバイナリの絶対パスを返す。REX_BIN_PATH があればそのまま、無ければ PATH を探し、
-// PATH の `Versions/<build>/…` の項が指す先が消えていれば同じ置き場の一番新しい build を引く。
-// どこにも無ければ exec.ErrNotFound を wrap した error を返す。
+// locateBinary は rex のバイナリの絶対パスを返す。REX_BIN_PATH があればそのまま、無ければ PATH を探す。
+// PATH の項が全部外れたとき (`Versions/<build>/…` だけを持つ PATH で、その build が更新で消えた) に限り、
+// 同じ置き場の一番新しい数字名の build を引く。どこにも無ければ exec.ErrNotFound を wrap した error を返す。
 func locateBinary() (string, error) {
 	if bin := os.Getenv("REX_BIN_PATH"); bin != "" {
 		return bin, nil
@@ -57,7 +58,8 @@ func newestBuild(dir string) (bin string, ok bool) {
 }
 
 // newestBuildIn は versions の直下の数字名のディレクトリから、`<build>/<suffix>/rex` が実行できる一番大きい build を選ぶ。
-// ダウンロード途中でまだ rex の無い build は飛ばす。
+// ダウンロード途中でまだ rex の無い build は飛ばす。`Current` と `.staging-…` は数字名でないので候補にしない
+// (`Current` の中身は一番新しい数字名の build と同じ)。
 func newestBuildIn(versions, suffix string) (bin string, ok bool) {
 	entries, err := os.ReadDir(versions)
 	if err != nil {

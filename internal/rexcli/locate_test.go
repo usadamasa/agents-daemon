@@ -54,10 +54,14 @@ func TestLocateBinary(t *testing.T) {
 		t.Setenv("REX_BIN_PATH", "")
 		root := t.TempDir()
 		// 999 と 1203 は rex を持ち、1300 はダウンロード途中でまだ無い。辞書順なら 999 が勝つが数値順で 1203。
+		// Current (build の複製) と .staging-… (ダウンロードの途中経過) は数字名でないので候補にしない。
 		fakeRexInVersions(t, root, "999")
 		want := fakeRexInVersions(t, root, "1203").bin
-		if err := os.MkdirAll(versionsDir(root, "1300"), 0o755); err != nil {
-			t.Fatal(err)
+		fakeRexInVersions(t, root, "Current")
+		for _, dir := range []string{versionsDir(root, "1300"), versionsDir(root, ".staging-659F4200")} {
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
 		}
 		t.Setenv("PATH", searchPath(t.TempDir(), versionsDir(root, "100")))
 		got, err := locateBinary()

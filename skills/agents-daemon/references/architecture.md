@@ -346,13 +346,17 @@ rex の呼び出しには全部 `--autostart=false` を付け、子プロセス�
 rex の列挙は 1 tick に `ls` 1 回、session ごとに `block ls` 1 回、shell の block ごとに 2 回の fork になる。
 block が多い環境ほど tick あたりの時間が伸びる。
 
-<!-- rex-premise: preview.15 cli block の PATH は Versions/<build>/… で、更新で旧 build のディレクトリが消える -->
+<!-- rex-premise: preview.19 cli block の PATH は Versions/Current/… と Versions/<build>/… の順。Current は更新で中身が入れ替わり、前の build は次の更新で消える -->
 
 rex のバイナリは最初の呼び出しで PATH から絶対パスに引いて覚える (`REX_BIN_PATH` があればそれで固定)。
-rex の自動更新は `…/RexServer/Versions/<build>/` を入れ替えて旧 build のディレクトリを消すので、
-daemon が hook から継いだ PATH の項は指す先を失う。呼び出しがバイナリ無しで落ちたら、PATH の
-`Versions/<build>/…` の項から一番新しい build の rex を引き直して同じ呼び出しを 1 回やり直し、tick の失敗に数えない。
+rex は block の PATH に `…/RexServer/Versions/Current/…` を先に、`…/RexServer/Versions/<build>/…` をその後ろに
+載せる。自動更新は `Current/` の中身を入れ替え、前の数字名の build を次の更新で消す。最初の解決は先頭の `Current`
+の項に当たり、その項は更新をまたいで同じパスのまま残るので、覚えたパスは普段そのまま使える。
+呼び出しで rex のバイナリが見つからなければ、PATH の `Versions/` から一番新しい数字名の build の rex を引き直し、
+同じ呼び出しを 1 回やり直す。数字名の項だけを持つ PATH でその build が消えたときに起きる。このやり直しは tick の
+失敗に数えない。
 `REX_BIN_PATH` で固定しているときは引き直さない (`internal/rexcli/locate.go`)。
+doctor の「rex CLI の前提」の節は、解決した rex のパスを版と並べて出す。
 
 rex で Agent と AgentStatus を決めるのは Claude Code 自身が OSC 7501 で報告する `program_status` で、
 状態の対応と record を使う条件は [program-status.md](program-status.md)。

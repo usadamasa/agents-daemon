@@ -55,6 +55,7 @@ func TestCheckPremises_AllOK(t *testing.T) {
 	for _, want := range []string{
 		"rex_version: 0.0.1792158932-g88fd41",
 		"built_at 2026-10-16T13:55:32Z",
+		"呼んだ rex は " + f.bin, // doctor が解決した binary (rex の自動更新で Versions/ のどれを引いたか)
 		"exit 3",
 		"owner.pid",
 		"argv0",
@@ -192,7 +193,8 @@ func TestCheckPremises_APIRevision(t *testing.T) {
 		f := selfFixtures(t)
 		findings := f.client(staticResolver(nil)).CheckPremises(context.Background(), blockSelfOct18, sessionSelfOct18)
 
-		joined := strings.Join(findingTexts(findings), "\n")
+		// finding に添える rex のパスは TempDir (subtest 名を含む) なので、文面の判定から外す。
+		joined := strings.ReplaceAll(strings.Join(findingTexts(findings), "\n"), f.bin, "<bin>")
 		if strings.Contains(joined, "api_revision") {
 			t.Errorf("api_revision の無い版で api_revision に触れている:\n%s", joined)
 		}

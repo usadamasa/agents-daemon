@@ -432,7 +432,7 @@ func TestRun_OutsideRepositoryIsError(t *testing.T) {
 func TestParseLockReason(t *testing.T) {
 	cases := []struct {
 		reason string
-		kind   LockKind
+		kind   lockKind
 		pid    int
 	}{
 		{"claude session wt-a (pid 123 start Sat Aug 15 04:34:58 2026)", LockSession, 123},
@@ -444,7 +444,7 @@ func TestParseLockReason(t *testing.T) {
 		{"", LockForeign, 0},
 	}
 	for _, c := range cases {
-		got := ParseLockReason(c.reason)
+		got := parseLockReason(c.reason)
 		if got.Kind != c.kind || got.PID != c.pid {
 			t.Errorf("ParseLockReason(%q) = %+v; want kind=%v pid=%d", c.reason, got, c.kind, c.pid)
 		}
@@ -454,10 +454,10 @@ func TestParseLockReason(t *testing.T) {
 // ---- 生存判定 ----
 
 func TestProcessAlive(t *testing.T) {
-	if !ProcessAlive(os.Getpid()) {
+	if !processAlive(os.Getpid()) {
 		t.Error("自分自身を不在と判定した")
 	}
-	if ProcessAlive(deadPID(t)) {
+	if processAlive(deadPID(t)) {
 		t.Error("終了したプロセスを生存と判定した")
 	}
 }

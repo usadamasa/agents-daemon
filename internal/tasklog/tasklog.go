@@ -19,6 +19,8 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/domain"
@@ -281,8 +283,11 @@ func (w *writer) update() error {
 	return w.write(t)
 }
 
-// sync は TaskList の結果で全件を同期し直す。一覧に無いタスクのファイルは消す。
+// sync は TaskList の結果で全件を同期し直す。一覧に無いタスクのファイルのうち、一覧の最大の id より小さい id のものを消す。
+// 一覧は tool が実行された時点のもので、hook はその後に順序の決まらない形で動くので、一覧の後に TaskCreate の hook が
+// 書いた記録 (一覧のどの id より大きい) は消さない (models/handoff の TaskLog)。
 // TaskList の blockedBy には完了していない blocker しか載らないので、そのまま置き換える。
+// cc-premise: 2.1.302 hooks タスクの id はセッションの中で 1 から順に増える整数 (TaskCreate の tool_response の task.id)
 func (w *writer) sync() error {
 	var resp struct {
 		Tasks []struct {
@@ -297,11 +302,15 @@ func (w *writer) sync() error {
 		return fmt.Errorf("TaskList の結果を読めない: %w", err)
 	}
 	listed := map[string]bool{}
+	newest := 0
 	for _, item := range resp.Tasks {
 		if !statefile.ValidSessionID(item.ID) {
 			continue
 		}
 		listed[item.ID+".json"] = true
+		if n, err := strconv.Atoi(item.ID); err == nil && n > newest {
+			newest = n
+		}
 		t, ok := w.read(item.ID)
 		if !ok {
 			t = w.base(item.ID)
@@ -318,7 +327,7 @@ func (w *writer) sync() error {
 	}
 	var errs []error
 	for _, name := range taskFiles(w.dir) {
-		if listed[name] {
+		if listed[name] || createdAfter(name, newest) {
 			continue
 		}
 		if err := os.Remove(filepath.Join(w.dir, name)); err != nil {
@@ -330,6 +339,13 @@ func (w *writer) sync() error {
 		w.removed++
 	}
 	return errors.Join(errs...)
+}
+
+// createdAfter は記録のファイル名 (<id>.json) の id が newest (一覧の最大の id) より大きいか。整数でない id は順序が
+// 分からないので false (一覧に無ければ消す)。
+func createdAfter(name string, newest int) bool {
+	n, err := strconv.Atoi(strings.TrimSuffix(name, ".json"))
+	return err == nil && n > newest
 }
 
 // todos は TodoWrite のリスト全体で todos.json を置き換える。

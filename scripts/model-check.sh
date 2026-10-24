@@ -36,6 +36,6 @@ run() {
 }
 
 run models/handoff Handoff Handoff.cfg holds
-run models/handoff TaskLog TaskLog.cfg violated
+run models/handoff TaskLog TaskLog.cfg holds
 
 exit "$failed"

@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"os"
 	"time"
+
+	"github.com/usadamasa/agents-daemon/internal/applog"
+	"github.com/usadamasa/agents-daemon/internal/apppath"
 )
 
 // binaryStamp は起動時に読んだ実行ファイルの識別情報。
@@ -46,6 +49,18 @@ func (s binaryStamp) changed() bool {
 		return false
 	}
 	return !now.modTime.Equal(s.modTime) || now.size != s.size
+}
+
+// replaceSelf は差し替わった実行ファイル (stamp.path) を新しい版として detach 起動する。
+// 先に lock を離す。握ったままだと新しい版は ErrAlreadyRunning で終わり、daemon が 0 になる。
+// 離してから新しい版が取るまでの間に --ensure が入っても、lock を取れた 1 つだけが daemon になる。
+func replaceSelf(log *applog.Logger, lock *os.File, stamp binaryStamp, dryRun bool, p apppath.Paths) {
+	if err := lock.Close(); err != nil {
+		log.Logf("lock を離せません: %v", err)
+	}
+	if err := spawnDetached(stamp.path, dryRun, p); err != nil {
+		log.Logf("新しい版の起動に失敗しました。次回の SessionStart で起動されます: %v", err)
+	}
 }
 
 // Go のバイナリは起動時にメモリへ読み込まれるため、hook が

@@ -11,9 +11,6 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
 
-// ErrAlreadyRunning は生存している daemon が既に存在することを表す。
-var ErrAlreadyRunning = errors.New("daemon は既に起動しています")
-
 // ReadPIDFile は path から PID を読む。ファイルが存在しない場合や中身が
 // 数値として読めない場合は (0, nil) を返す (どちらも「生存プロセス無し」として
 // 扱えば十分で、reclaim 可能な状態だから)。
@@ -60,17 +57,15 @@ func RemovePIDFile(path string) error {
 	return nil
 }
 
-// CheckRunning は PID ファイルを見て、生存している daemon が既にあるかを判定する。
-// 生存していれば ErrAlreadyRunning を返す。ファイルが無い、または中身の PID が
-// 生存していない (stale) 場合は nil を返す — stale なファイルの reclaim (上書き) は
-// 呼び出し元が WritePIDFile で行う。
-func checkRunning(path string) error {
-	pid, err := ReadPIDFile(path)
+// removeOwnPIDFile は path に pid が書いてあるときだけ消す。他の daemon の pid なら残す
+// (消すと status / doctor / stop がその daemon を見失う)。無ければ何もしない。
+func removeOwnPIDFile(path string, pid int) error {
+	current, err := ReadPIDFile(path)
 	if err != nil {
 		return err
 	}
-	if pid != 0 && PIDAlive(pid) {
-		return ErrAlreadyRunning
+	if current != pid {
+		return nil
 	}
-	return nil
+	return RemovePIDFile(path)
 }

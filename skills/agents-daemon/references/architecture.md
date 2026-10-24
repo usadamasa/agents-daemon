@@ -137,6 +137,12 @@ skill がセッションの中から自分の session_id を引くときは `CLA
 `hooks/ensure-daemon.sh` が `agents-daemon daemon --ensure` を叩く。生きているデーモンが既にあれば
 即座に戻り、無ければ自分自身を detach 起動して戻る。hook を絶対にブロックしない。
 
+「生きているデーモンがあるか」は `$STATE/daemon.lock` の `flock(LOCK_EX|LOCK_NB)` で見る。lock はデーモンが
+寿命の間 fd を開いたまま持ち、取れた 1 つの process だけが daemon として進む (取れなければ `ErrAlreadyRunning`)。
+`--ensure` は lock を試して、取れなければ何もせず、取れたら離してから detach 起動し、子が取り直す。
+持ち主が死ねば OS が解放するので、stale な判定は残らない。pid file (`daemon.pid`) は lock を取った後に書き、
+`status` / `doctor` / `stop` が pid を読む用途にだけ使う。
+
 **配線は plugin の `hooks/hooks.json` にある。** 同じファイルの Stop に `hooks/dream-harvest.sh` があり、
 同じバイナリの `dream harvest --incremental --detach` を exec する (バイナリが無ければ何もしない)。
 こちらも detach して即座に戻り、子の stderr は `$STATE/logs/dream-harvest.log` に残る。
@@ -308,8 +314,10 @@ Go のバイナリは起動時にメモリへ読み込まれるので、ファ�
 ため、放っておくと直したはずのコードが何日も動かないままになる。
 
 そこでデーモンは毎 tick で自分の実行ファイルの mtime とサイズを見て、差し替わっていたら
-後始末をしてから新しい版を detach 起動して入れ替わる (`internal/daemon/selfupdate.go`)。
+後始末をして `daemon.lock` を離してから新しい版を detach 起動して入れ替わる (`internal/daemon/selfupdate.go`)。
 build の数秒後には新しい版が動いている。hook も手動操作も停止・再起動をしない。
+`build-daemon.sh` の `daemon --ensure` と入れ替わりの spawn が重なっても、lock を取れた 1 つだけが daemon になり、
+負けた側は `daemon.log` に `Error: daemon は既に起動しています` の 1 行を残して終わる。
 
 判定できないとき (実行ファイルが一時的に見えない等) は「変わっていない」に倒す。
 動いているデーモンを不用意に落とす方が害が大きいため。
@@ -417,7 +425,8 @@ pane ごとに次を評価する。上限側の詳細は [rate-limit.md](rate-li
 | `$STATE/tasks/<domain>/<session_id>/<task_id>.json` と `…/todos.json` | `agents-daemon ingest-task` (PostToolUse hook `hooks/ingest-task.sh` が呼ぶ) | TaskCreate / TaskUpdate / TaskList / TodoWrite の呼び出しごと | タスク 1 つ (subject、status、blockedBy、session_id、cwd) と TodoWrite のリスト全体 (`internal/tasklog`)。`<domain>` は `home` か `work` (config の `homePaths` / `defaultDomain`)。読み手はタスクのボード (`status --board`、`internal/board`) | daemon が完了したタスクを 1 日、それ以外を 7 日 (更新が無ければ) で消す。`park adopt` (ボードの「パーキングへ移す」) がメモへ移したタスクを消す |
 | `$STATE/parking/<domain>/<id>.json` | `agents-daemon park add` / `park set` / `park discard` / `park adopt` | メモを置いたとき、status を書き換えたとき (まとめて捨てたときを含む)、終了したセッションのタスクをメモへ移したとき (kind `task`) | パーキングのメモ 1 つ (kind、title、detail、files、default_taken、repo、sources (session_id、置いたときの進行中の task_id、cwd、まとめたときに後から置いた側の detail、時刻)、status) (`internal/parking`)。repo はボードの行と同じ main worktree のパス。domain、repo、正規化した title が同じ open のメモには sources を足す。`.lock` は書き込みを直列にするロック | daemon が open を 90 日、handed / discarded を 7 日 (更新が無ければ) で消す。同じメモが置き直されると数え直す。`.lock` は消さない |
 | `$STATE/edges/<domain>/<id>.json` | `agents-daemon edge add` / `edge rm` (作業を渡す側が `agents-daemon:peer-sessions` skill の手順で呼ぶ。ボードの `Add blocker` / `Unlink` も) | 辺を書いたとき、消したとき | セッションをまたぐ辺 1 本 (before と after の端点 (参照、cwd、repo)、note、created_at) (`internal/edge`)。辺は「before が済まないと after を始められない」。id は向きを含めた両端の参照から決まり、同じ辺の登録し直しは同じファイルを書き直す。両端の domain が違う辺は書かない。読み手は `edge list` とボードの DAG (`status --board` の `graph`) | daemon が 7 日 (更新が無ければ) で消す。登録し直すと数え直す。`edge rm` が消す |
-| `$STATE/daemon.pid` | daemon | 起動時に作成、終了時に削除 | 稼働中デーモンの PID | daemon |
+| `$STATE/daemon.lock` | daemon (`--ensure` も試しに開く) | 起動時に `flock(LOCK_EX|LOCK_NB)` で取り、寿命の間持つ | 空。起動の排他の対象で、lock を持つ process が daemon | 消さない (process の終了で OS が lock を解放する) |
+| `$STATE/daemon.pid` | daemon | lock を取った後に作成、終了時に自分の pid が書いてあれば削除 | 稼働中デーモンの PID (`status` / `doctor` / `stop` が読む) | daemon。`stop` が stale なものを消す |
 | `$STATE/status.json` | daemon | 毎 tick (既定 5 秒) | backend (rex)、監視中の pane 一覧と各 pane の自己申告 (`agent_status` と、あれば `agent_kind` / `agent_message`)・監視状態・試行回数・待機期限・直近の判定 | 上書き |
 | `$STATE/logs/daemon.log` | daemon | 報告に値する出来事があったときだけ | 上限検知と待ち時間、再開送信、ユーザーの自己再開、ゲート抑制、ネイティブへの譲り、エラー | rotate |
 | `$STATE/logs/daemon.log.YYYY-MM-DD` | daemon | 日付が変わって最初に書くとき | 前日までの `daemon.log` をそのまま退避したもの | daemon が 7 日で消す |

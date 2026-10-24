@@ -4,6 +4,11 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/applog"
+	"github.com/usadamasa/agents-daemon/internal/boardlog"
+	"github.com/usadamasa/agents-daemon/internal/edge"
+	"github.com/usadamasa/agents-daemon/internal/limitlog"
+	"github.com/usadamasa/agents-daemon/internal/parking"
+	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
 
 // ランタイム状態は揮発物として扱い、daemon 自身が古いものを消す。sidecar file の
@@ -16,6 +21,16 @@ const (
 	// housekeepInterval は削除を試みる間隔。起動時にも 1 回走る。
 	housekeepInterval = time.Hour
 )
+
+// attachStateDir は housekeeping が消す対象 (tasks / parking / edges / board log / limit-events) の置き場を
+// stateDir から配線する。limit-events は daemon が書く先でもある。
+func (r *daemonRuntime) attachStateDir(stateDir string) {
+	r.tasks = tasklog.New(stateDir)
+	r.parking = parking.New(stateDir)
+	r.edges = edge.New(stateDir)
+	r.boardLogs = boardlog.Paths(stateDir)
+	r.limits = limitlog.New(stateDir)
+}
 
 // housekeepDue は前回の housekeeping から housekeepInterval 以上経ったかを返す。
 func (r *daemonRuntime) housekeepDue(now time.Time) bool {

@@ -15,7 +15,7 @@ preview が出るので、上げたら changelog と実機の応答をこの rep
 
 | 資料 | 何が分かるか | 読み方 |
 | ---- | ---- | ---- |
-| changelog (superlogical MCP) | 版ごとの変更。「rex CLI」「Rex Server」の節に CLI と program_status の変更が載る | `read_changelog` で範囲の版を 1 版ずつ全文読む。`search_changelog` は検索語の裏取りに使う |
+| changelog (superlogical MCP) | 版ごとの変更。投稿は platform ごと (Mac、CLI、Linux Server、iOS) に分かれる | `list_changelog` の一覧から範囲の投稿を `read_changelog` に ID で渡して 1 投稿ずつ全文読む。`search_changelog` は検索語の裏取りに使う |
 | 実機の CLI (自分の block) | 応答の JSON の欄、exit code、flag の有無 | `doctor` の「rex CLI の前提」の節が固定コマンドを打って欄を名指しで出す。streaming と一覧の増減だけ人が打つ ([references/cli-checks.md](references/cli-checks.md)) |
 | rex docs | OSC 7501 の仕様 (何が仕様で何が rex 独自か) | [program-status](https://www.superlogical.com/rex/docs/build/program-status) |
 
@@ -35,20 +35,39 @@ go run ./cmd/agents-daemon doctor
 
 「rex CLI の前提」の節の `rex_version` と `built_at` と `api_revision` を控える (手順 4 の実機の点検もこの節が兼ねる)。
 機械で読むなら `--json doctor | jq '.premises.findings'` で同じ節だけを取り出せる。
-`api_revision` は CLI が対応する API の版で、機械で読める唯一の版。同じ節が server の版と比べ、食い違えば `⚠` に
-なる (CLI と server が別々に更新された状態)。rex の CLI は changelog の版 (`preview.N` の形) を出さない
-(`api call server.version` も同じ)。changelog の版は `list_changelog` の一覧から、`built_at` の日付と同じ日かその直後の
-post を取る。post は build より後に出る。
+`api_revision` は CLI が対応する API の版。同じ節が server の版と比べ、食い違えば `⚠` になる
+(CLI と server が別々に更新された状態)。
 
-前回見た版は [references/last-checked.md](references/last-checked.md) の最後の行。範囲はその次の版から今の版まで。
+changelog の投稿は platform ごとに分かれ、版の付け方も違う。手元の build に当たる投稿を 2 つ決める。
+
+- **Mac** (`Rex v0.1.0-preview.N (Mac)`): app と embedded server の版。`preview.N` が marker と testdata の
+  `<version>` になる。CLI は `preview.N` を出さないので、`list_changelog` の一覧から `built_at` の日付と同じ日か
+  その直後の Mac の投稿を取る (投稿は build より後に出る)。embedded server が CLI と同じ build かは
+  `rex whoami --json` の `rex_version` が `rex version --json` と同じことで確かめる
+- **CLI** (`Rex v0.1.0-<hash> (CLI)`): 版は commit hash。`rex version --json` の `commit` の先頭 7 桁と同じ hash の
+  投稿を取る (`rex version --json | jq -r '.commit[:7]'`)。hash は順序を持たないので marker には書かず、
+  last-checked.md の CLI の列に書く
+
+Linux Server (`🐧 … (Linux Server)`) の `preview.N` は Mac と別の数列で、版は記録しない。iOS の投稿は読まない。
+
+前回見た版は [references/last-checked.md](references/last-checked.md) の最後の行。範囲は Mac の列の次の版から
+手元の Mac の版まで。同じ期間の CLI と Linux Server の投稿も範囲に入る。
 `rex_version` が前回と同じなら changelog は読まず、手順 4 の実機の点検だけ行う。
 
 ### 2. changelog を読む
 
-範囲の版を `read_changelog` で 1 版ずつ読む。要約で済ませない (1 行の変更が前提を壊す)。読みながら 2 つの目で拾う。
+範囲の投稿を `read_changelog` で 1 投稿ずつ読む。`release` には `list_changelog` の一覧の ID を渡す。版の文字列で
+引くと Linux Server と Mac の `preview.N` が衝突して別の投稿が返る。要約で済ませない (1 行の変更が前提を壊す)。
+投稿ごとに読む範囲が違う。
 
-- **前提に当たるか**: 「前提の洗い出し」の topic の検索語に当たる項目。「rex CLI」「Rex Server」の節が本命で、
-  macOS App の節は飛ばしてよい
+- **CLI**: 全文。`cli` の前提は全部ここに載る
+- **Mac**: server の項目 (OSC 7501、program status、Kitty、「server restart」が要る項目)。app の UI の項目は飛ばす
+- **Linux Server**: server 共通の変更が Mac より先に載ることがあるので、参考として server の項目を読む。
+  Mac の embedded server に入っているかは実機 (手順 4) で確かめる
+
+読みながら 2 つの目で拾う。
+
+- **前提に当たるか**: 「前提の洗い出し」の topic の検索語に当たる項目
 - **アイデアになるか**: daemon が polling や画面の読み取りでやっていることを rex が直接出せるようになった項目
   (block の新しい method や event、Lua の常駐の手段)
 
@@ -59,8 +78,8 @@ rg -n -o 'rex-premise: preview\.[0-9]+ (program_status|cli).*' --glob '!tmp/**' 
 ```
 
 AGENTS.md の説明文の行は `rex-premise:` の後に版が続かないので、この pattern には当たらない。
-`<version>` が範囲の始まりより古い marker が点検の対象。全部が今の版なら changelog 側の点検は無しで、手順 4 へ進む
-(実機の点検は版に関係なく行う)。
+`<version>` は Mac の版なので、範囲の始まりの Mac の版より古い marker が点検の対象。全部が手元の版なら
+changelog 側の点検は無しで、手順 4 へ進む (実機の点検は版に関係なく行う)。
 
 ### 4. 実機で応答の形を突き合わせる
 
@@ -101,9 +120,10 @@ guard が拒否する。先に `printenv REX_BLOCK REX_SESSION` で値を取り�
 
 最後に 2 つを同じ PR に入れる。
 
-- 確かめ直して変更不要だった marker の `<version>` を今の版へ上げる。この差分が点検の証跡。ずれた marker は
+- 確かめ直して変更不要だった marker の `<version>` を手元の Mac の版へ上げる。この差分が点検の証跡。ずれた marker は
   上げずに残し、issue の番号を結果の列に書く
-- [references/last-checked.md](references/last-checked.md) に 1 行足す (日付、`rex_version`、changelog の版、結果と issue の番号)
+- [references/last-checked.md](references/last-checked.md) に 1 行足す (日付、`rex_version`、Mac の版、CLI の hash、
+  結果と issue の番号)
 
 ## 前提の洗い出し
 
@@ -114,7 +134,7 @@ guard が拒否する。先に `printenv REX_BLOCK REX_SESSION` で値を取り�
 rex-premise: <version> <topic> [メモ]
 ```
 
-- `<version>`: その前提を最後に確かめた changelog の版 (`preview.N` の形)
+- `<version>`: その前提を最後に確かめたときの Mac の changelog の版 (`preview.N` の形)。CLI の hash は書かない
 - `<topic>`: 下の表の 1 語
 - Go と sh はコメント行、md は `<!-- rex-premise: … -->` の 1 行
 
@@ -128,6 +148,6 @@ rex-premise: <version> <topic> [メモ]
 ## やらないこと
 
 - 見つけたずれをその場で直す。挙動が変わるので利用者の判断。docs の食い違いも同じ PR に混ぜない。
-- 範囲外の版や、macOS App の UI の項目の整理。レポートが長くなるだけで判断材料は増えない。
+- 範囲外の版や、Mac の投稿の UI の項目と iOS の投稿の整理。レポートが長くなるだけで判断材料は増えない。
 - 他人の block にコマンドを打つ。点検は自分の block (`$REX_BLOCK`) と、存在しない block ID だけで足りる。
 - Discord の URL を組み立てる。MCP の結果に出た link だけを使う。

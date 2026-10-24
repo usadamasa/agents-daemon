@@ -1,6 +1,7 @@
 # rexcli の実測 fixture
 
-rex に打ったコマンドの応答をそのまま置く。ディレクトリ名は `<実測の日付>_rex-<版>_cc-<Claude Code の版>`。
+rex に打ったコマンドの応答をそのまま置く。ディレクトリ名は `<実測の日付>_rex-<版>_cc-<Claude Code の版>` で、
+rex の `<版>` は Mac の changelog の版 (`preview.19`。marker の `<version>` と同じで、CLI の hash は書かない)。
 実測に無い形 (owner の欠けた record など) はテストの Go のコードに直接書き、ここには置かない。
 応答の取り方は `.claude/skills/catching-up-with-rex-changelog/references/cli-checks.md` にある。
 

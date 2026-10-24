@@ -103,7 +103,7 @@ devShell の go は `go.mod` の `go` 行と同じ系列 (`go_1_26`) にし、`G
   `.claude/skills/catching-up-with-claude-code-changelog/SKILL.md` の topic 一覧のどれか。
   skill がこの marker を grep して、更新後に見直す箇所の一覧にする。確かめ直したら `<version>` を上げる。
 - rex の版で変わりうる挙動 (`program_status` の record の中身、CLI の引数と exit code) も同じ形で
-  `rex-premise: <version> <topic> [メモ]` を置く。`<version>` は changelog の版 (`preview.15`)、`<topic>` は
+  `rex-premise: <version> <topic> [メモ]` を置く。`<version>` は Mac の changelog の版 (`preview.19`)、`<topic>` は
   `program_status` か `cli`。rex を上げたら `.claude/skills/catching-up-with-rex-changelog/SKILL.md` の手順で
   一覧し、changelog (superlogical MCP の `read_changelog`) と実機の応答と突き合わせる。
 

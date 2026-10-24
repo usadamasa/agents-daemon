@@ -2,13 +2,11 @@ package sessionstate
 
 import (
 	"errors"
-	"fmt"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/ratelimit"
 	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
+	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
 
 // Prune は保持期間を過ぎた sidecar file を削除し、消した数を利用上限 state と context に
@@ -16,50 +14,9 @@ import (
 //
 // sidecar file は揮発物として扱い、daemon が古いものを消す。保持期間は書式の知識なので
 // 各書式のパッケージの定数 (ratelimit.Retention、sessioncontext.Retention) を使う。
+// 中身は json / md / 拡張子なしの marker / statusline の mktemp の残骸で、名前で絞らない。
 func (s Store) Prune(now time.Time) (rateLimits, contexts int, err error) {
-	rateLimits, rateErr := pruneDir(s.RateLimits.Dir, now, ratelimit.Retention)
-	contexts, contextErr := pruneDir(s.Context.Dir, now, sessioncontext.Retention)
+	rateLimits, rateErr := statefile.PruneDir(s.RateLimits.Dir, now.Add(-ratelimit.Retention))
+	contexts, contextErr := statefile.PruneDir(s.Context.Dir, now.Add(-sessioncontext.Retention))
 	return rateLimits, contexts, errors.Join(rateErr, contextErr)
-}
-
-// pruneDir は dir 直下の通常ファイルのうち、mtime が now から maxAge より古いものを
-// 削除し、消した数を返す。
-//
-// 拡張子で絞らないのは、これらのディレクトリの中身が全てこの仕組みの書き出しで
-// あり (json / md / 拡張子なしの marker / statusline の mktemp の残骸)、名前で
-// 選り分ける意味が無いため。サブディレクトリは触らない。
-//
-// 判定に mtime を使うのは、中身 (observed_at) をパースせずに済ませるため。
-// 壊れた JSON も同じ規則で消える。
-func pruneDir(dir string, now time.Time, maxAge time.Duration) (int, error) {
-	if dir == "" {
-		return 0, nil
-	}
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return 0, nil
-		}
-		return 0, fmt.Errorf("%s の走査に失敗: %w", dir, err)
-	}
-
-	cutoff := now.Add(-maxAge)
-	removed := 0
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		info, err := entry.Info()
-		if err != nil {
-			return removed, fmt.Errorf("%s の情報を取得できません: %w", entry.Name(), err)
-		}
-		if !info.ModTime().Before(cutoff) {
-			continue
-		}
-		if err := os.Remove(filepath.Join(dir, entry.Name())); err != nil {
-			return removed, fmt.Errorf("%s の削除に失敗: %w", entry.Name(), err)
-		}
-		removed++
-	}
-	return removed, nil
 }

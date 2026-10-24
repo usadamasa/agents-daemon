@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
+	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
 
 // Retention は出来事の記録を残す期間。上限は週に数回で、確かめるのは次に rex や Claude Code の版を
@@ -111,33 +112,5 @@ func (s Store) Append(ev Event) error {
 
 // Prune は mtime が Retention より古いファイルを消し、消した数を返す。ディレクトリが無ければ何もしない。
 func (s Store) Prune(now time.Time) (int, error) {
-	if s.Dir == "" {
-		return 0, nil
-	}
-	entries, err := os.ReadDir(s.Dir)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return 0, nil
-		}
-		return 0, fmt.Errorf("%s の走査に失敗: %w", s.Dir, err)
-	}
-	cutoff := now.Add(-Retention)
-	removed := 0
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		info, err := entry.Info()
-		if err != nil {
-			return removed, fmt.Errorf("%s の情報を取得できません: %w", entry.Name(), err)
-		}
-		if !info.ModTime().Before(cutoff) {
-			continue
-		}
-		if err := os.Remove(filepath.Join(s.Dir, entry.Name())); err != nil {
-			return removed, fmt.Errorf("%s の削除に失敗: %w", entry.Name(), err)
-		}
-		removed++
-	}
-	return removed, nil
+	return statefile.PruneDir(s.Dir, now.Add(-Retention))
 }

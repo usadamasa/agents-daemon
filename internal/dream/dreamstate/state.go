@@ -6,10 +6,10 @@ package dreamstate
 
 import (
 	"errors"
-	"fmt"
-	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
 
 // Dir は XDG state ディレクトリ (apppath.Paths.StateDir) から dream の state の置き場を導出する。
@@ -44,40 +44,11 @@ func Prune(dreamDir string, now time.Time) (int, error) {
 	removed := 0
 	var errs []error
 	for _, name := range pruneDirs {
-		n, err := pruneDir(filepath.Join(dreamDir, name), now.Add(-retention))
+		n, err := statefile.PruneDir(filepath.Join(dreamDir, name), now.Add(-retention))
 		removed += n
 		if err != nil {
 			errs = append(errs, err)
 		}
 	}
 	return removed, errors.Join(errs...)
-}
-
-// pruneDir は dir 直下の通常ファイルのうち mtime が cutoff より古いものを消す。サブディレクトリは触らない。
-func pruneDir(dir string, cutoff time.Time) (int, error) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return 0, nil
-		}
-		return 0, fmt.Errorf("%s の走査に失敗: %w", dir, err)
-	}
-	removed := 0
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		info, err := entry.Info()
-		if err != nil {
-			return removed, fmt.Errorf("%s の情報を取得できません: %w", entry.Name(), err)
-		}
-		if !info.ModTime().Before(cutoff) {
-			continue
-		}
-		if err := os.Remove(filepath.Join(dir, entry.Name())); err != nil {
-			return removed, fmt.Errorf("%s の削除に失敗: %w", entry.Name(), err)
-		}
-		removed++
-	}
-	return removed, nil
 }

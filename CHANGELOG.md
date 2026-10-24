@@ -1,5 +1,18 @@
 # Changelog
 
+## [2026.1024.0](https://github.com/usadamasa/agents-daemon/compare/2026.1021.1...2026.1024.0) - 2026-10-24
+
+- build(deps): Bump actions/create-github-app-token from 3.2.0 to 3.3.0 by @dependabot[bot] in https://github.com/usadamasa/agents-daemon/pull/210
+- build(deps): Bump actions/checkout from 6.0.3 to 7.0.1 by @dependabot[bot] in https://github.com/usadamasa/agents-daemon/pull/208
+- build(deps): Bump actions/upload-artifact from 7.0.1 to 7.0.2 by @dependabot[bot] in https://github.com/usadamasa/agents-daemon/pull/209
+- build(deps): Bump Songmu/tagpr from 1.20.3 to 1.21.3 by @dependabot[bot] in https://github.com/usadamasa/agents-daemon/pull/207
+- refactor: ファイルの原子的な書き込みと JSON の読み込みを statefile に寄せる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/217
+- go.mod に toolchain go1.26.10 を足し、利用者の手元のビルドを crypto/x509 の修正版にそろえる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/218
+- build(go): x509roots/fallback を 2026-10-20 版へ上げる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/219
+- docs: statusline の stdin にモデル単位の週次ウィンドウが来ない前提を置く by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/220
+- ci: setup-nix を gh-manage の共有 composite action へ移す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/222
+- docs: rex preview.19 (CLI bd45734) の点検で rex-premise の marker を上げる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/225
+
 ## [2026.1021.1](https://github.com/usadamasa/agents-daemon/compare/2026.1021.0...2026.1021.1) - 2026-10-21
 
 - ci: govulncheck を週次で定期実行する (合否は symbol、module は表示) by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/212

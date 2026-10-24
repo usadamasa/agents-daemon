@@ -648,7 +648,7 @@ test('候補に無い repo は絶対パスで指定する。相対パスは起�
 
 test('新しいセッションを起こせなかったメモは open のまま残す', async ($, on) => {
   const w = world(on, argv =>
-    argv[1] === 'status' ? output(JSON.stringify(BOARD)) : argv[1] === 'spawn' ? output('', 1, 'Error: 開いたセッションの domain (home) と repo の domain (work) が違うので起こさない') : output('{}'),
+    argv[1] === 'status' ? output(JSON.stringify(BOARD)) : argv[1] === 'spawn' ? output('', 1, 'agents-daemon: 開いたセッションの domain (home) と repo の domain (work) が違うので起こさない') : output('{}'),
   )
   await $.command.run(OPEN_BOARD)
   const ui = await mount($)

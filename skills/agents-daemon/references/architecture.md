@@ -317,7 +317,7 @@ Go のバイナリは起動時にメモリへ読み込まれるので、ファ�
 後始末をして `daemon.lock` を離してから新しい版を detach 起動して入れ替わる (`internal/daemon/selfupdate.go`)。
 build の数秒後には新しい版が動いている。hook も手動操作も停止・再起動をしない。
 `build-daemon.sh` の `daemon --ensure` と入れ替わりの spawn が重なっても、lock を取れた 1 つだけが daemon になり、
-負けた側は `daemon.log` に `Error: daemon は既に起動しています` の 1 行を残して終わる。
+負けた側は `daemon.log` に `agents-daemon: daemon は既に起動しています` の 1 行を残して終わる。
 
 判定できないとき (実行ファイルが一時的に見えない等) は「変わっていない」に倒す。
 動いているデーモンを不用意に落とす方が害が大きいため。

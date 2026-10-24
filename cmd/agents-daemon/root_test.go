@@ -26,6 +26,22 @@ func TestRootCmd_registersAllCommands(t *testing.T) {
 	}
 }
 
+// error は main が 1 行だけ stderr に出す。cobra にも出させると、detach 起動した daemon の stderr (daemon.log) に
+// 同じ文が 2 行残る。
+func TestRootCmd_doesNotPrintErrorsItself(t *testing.T) {
+	root := newRootCmd()
+	var stderr bytes.Buffer
+	root.SetOut(&bytes.Buffer{})
+	root.SetErr(&stderr)
+	root.SetArgs([]string{"--json", "stop"})
+	if err := root.Execute(); err == nil {
+		t.Fatal("Execute() error = nil, want error")
+	}
+	if stderr.Len() != 0 {
+		t.Errorf("cobra が stderr に書いた: %q (main が 1 回出すので cobra は黙る)", stderr.String())
+	}
+}
+
 // --json は root のグローバルオプション。対応するのは読むだけの診断の doctor と status と、元から JSON を出す
 // park / edge。それ以外に付けると RunE の前に error で止まる (#182 で残りに広げる)。
 func TestRootCmd_jsonFlag(t *testing.T) {

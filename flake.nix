@@ -45,6 +45,8 @@
             shellcheck
             # hook と bats のテストが呼ぶ
             jq
+            # models/ の TLA+ のモデル検査 (tlc)。CI では回さない
+            tlaplus
           ];
           env.GOTOOLCHAIN = "local";
         };

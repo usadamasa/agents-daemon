@@ -59,7 +59,7 @@ const MEMOS = [
   memo('m4', '新しいメモ', '2026-10-18T12:00:00+09:00'),
 ]
 
-// board は status --board の答え。here がこのセッションの行を指し、その行の parking が band と hint 行のメモになる。
+// board は status --board の答え。here がこのセッションの行を指し、その行の parking が band のメモになる。
 function board(links: unknown[] = LINKS, parking: unknown[] = MEMOS) {
   return {
     domain: 'home',
@@ -90,7 +90,6 @@ function world(on: On, answers: Record<string, unknown>, undelivered: string[] =
   })
   // band を出さないときに engine が描くもの。
   on('ui.render', { component: 'AbovePrompt' }, async () => ({ type: 'engine', ref: 1 }))
-  on('ui.render', { component: 'PromptHint' }, async () => ({ type: 'engine', ref: 1 }))
   on('tool.register', async (_$, e) => ({ value: { tool: `mcp__agents-daemon__${e.name}` } }))
   on('command.register', async (_$, e) => ({ value: { command: e.name } }))
   on('session.start', async (_$, e) => ({ cwd: e.cwd }))
@@ -124,7 +123,7 @@ const PANE_PROPS = { title: 'Tasks', isFocused: true, bodyColumns: 80, placement
 test('session.start で依存の数と longest chain の 1 行と、メモの行を band に出す。図は描かない', async ($, on) => {
   const w = world(on, { [STATUS.join(' ')]: board() })
   await $.session.start(START)
-  // hint 行の数と band のメモは同じボードから取り、park list は呼ばない。
+  // band のメモはボードから取り、park list は呼ばない。
   expect(w.ran).toEqual([STATUS])
 
   for (const surface of ['terminal', 'desktop'] as const) {

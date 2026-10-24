@@ -7,28 +7,17 @@ const TOOL = 'mcp__agents-daemon__park'
 
 type Ran = { argv: string[]; stdin?: string }
 
-// world は plugin の下にいる engine の代わりを立てる。park と status の呼び出しは run が答え、status 行は statuses に、
-// prompt の hint 行へ足した tail は tails に溜める。
+// world は plugin の下にいる engine の代わりを立てる。park と status の呼び出しは run が答える。
 function world(on: On, run: (argv: readonly string[]) => ProcessRunResult) {
   const ran: Ran[] = []
-  const statuses: (string | undefined)[] = []
-  const tails: (string | undefined)[] = []
-  on('ui.render', { component: 'PromptHint' }, async (_$, e) => {
-    tails.push((e.props as { tail?: string }).tail)
-    return { type: 'engine', ref: 1 }
-  })
   const tools: Record<string, unknown>[] = []
   mock.env(on, { HOME: '/home/u' })
-  const clock = mock.clock(on)
+  mock.clock(on)
   on('session.id', async () => ({ value: 'SELF' }))
   on('session.cwd', async () => ({ value: CWD }))
   on('process.run', async (_$, e) => {
     ran.push({ argv: [...e.argv], stdin: e.init?.stdin })
     return { value: run(e.argv) }
-  })
-  on('ui.status', async (_$, e) => {
-    statuses.push(e.text)
-    return { value: undefined }
   })
   on('tool.register', async (_$, e) => {
     tools.push({ ...e })
@@ -37,16 +26,7 @@ function world(on: On, run: (argv: readonly string[]) => ProcessRunResult) {
   // board.tsx も同じ session.start で /board を登録する。
   on('command.register', async (_$, e) => ({ value: { command: e.name } }))
   on('session.start', async (_$, e) => ({ cwd: e.cwd }))
-  return { ran, statuses, tails, tools, clock }
-}
-
-const HINT = { isDraft: false, isWorking: false, hint: '? for shortcuts' } as const
-
-// hint は prompt の hint 行を描き、plugin がエンジンの行の末尾に足した tail を返す。
-async function hint($: Parameters<Parameters<typeof test>[1]>[0], w: ReturnType<typeof world>) {
-  const ui = await $.ui.mount({ plugin: 'agents-daemon', surface: 'terminal', component: 'PromptHint', props: HINT })
-  await ui.unmount()
-  return w.tails.at(-1)
+  return { ran, tools }
 }
 
 function output(stdout: string, exitCode = 0, stderr = ''): ProcessRunResult {
@@ -81,7 +61,7 @@ function answer(count: number, created: boolean) {
 
 const START = { cwd: CWD, surface: 'terminal', isInteractive: true } as const
 
-test('session.start で park の tool を登録し、その repo の open のメモの数を hint 行の末尾に出す', async ($, on) => {
+test('session.start で park の tool を登録する', async ($, on) => {
   const w = world(on, answer(2, true))
   await $.session.start(START)
 
@@ -98,11 +78,8 @@ test('session.start で park の tool を登録し、その repo の open のメ
   expect(tool.description).toMatch(/進めるのに要る判断/)
   expect(tool.description).toMatch(/危ない操作の確認/)
 
-  // メモの数は band (hooks/band.tsx) が読む status --board の here の行から取り、park list は呼ばない。
+  // メモの一覧は band (hooks/band.tsx) が読む status --board から取り、park list は呼ばない。
   expect(w.ran.map(r => r.argv)).toEqual([STATUS])
-  // status 行はエンジンが警告の印付きで描くので使わない。hint 行は置き換えず、末尾に足す。
-  expect(await hint($, w)).toBe('パーキングのメモ 2')
-  expect(w.statuses).toEqual([])
 })
 
 test('tool の呼び出しは park add に JSON を stdin で渡し、新しく置いたことを返す', async ($, on) => {
@@ -127,9 +104,8 @@ test('tool の呼び出しは park add に JSON を stdin で渡し、新しく�
     session_id: 'SELF',
   })
   expect(String(res.result)).toMatch(/^メモを置きました \(20261019T010000-abcd1234\)。既定 \(やらない\) で進めてください/)
-  // 置いた後にボードを読み直し、数を更新する。
+  // 置いた後にボードを読み直し、band のメモを更新する。
   expect(w.ran[1].argv).toEqual(STATUS)
-  expect(await hint($, w)).toBe('パーキングのメモ 1')
 })
 
 test('既に置かれていたメモにまとまったら、そう伝える', async ($, on) => {
@@ -138,7 +114,7 @@ test('既に置かれていたメモにまとまったら、そう伝える', as
 
   const res = await $.tool.call({ tool: TOOL, kind: 'scope', title: 't' } as never)
   expect(String(res.result)).toMatch(/^既に置かれていたメモ \(20261019T010000-abcd1234\) にまとめました。既定で進めてください/)
-  expect(await hint($, w)).toBe('パーキングのメモ 1')
+  expect(w.ran.at(-1)?.argv).toEqual(STATUS)
 })
 
 test('model が session_id を入れてきても、このセッションの ID で上書きする', async ($, on) => {
@@ -151,30 +127,10 @@ test('model が session_id を入れてきても、このセッションの ID �
 })
 
 test('park add が失敗したら、置けなかった理由を model へ返す', async ($, on) => {
-  const w = world(on, argv => (argv[2] === 'add' ? output('', 1, 'kind "decision" は aside / scope / preference のどれでもない') : output(JSON.stringify(board(0)))))
+  world(on, argv => (argv[2] === 'add' ? output('', 1, 'kind "decision" は aside / scope / preference のどれでもない') : output(JSON.stringify(board(0)))))
   await $.session.start(START)
 
   const res = await $.tool.call({ tool: TOOL, kind: 'decision', title: 't' } as never)
   // deny の文面は model にエラーの結果として届く。
   expect(res.deny).toMatch(/^メモを置けませんでした: kind "decision"/)
-  expect(await hint($, w)).toBeUndefined()
-})
-
-test('open のメモが無ければ hint 行に足さず、band の 10 秒ごとの読み直しで数が変わる', async ($, on) => {
-  let count = 0
-  const w = world(on, () => output(JSON.stringify(board(count))))
-  await $.session.start(START)
-  expect(await hint($, w)).toBeUndefined()
-
-  // 別のセッションが置いたメモも、ボードの読み直しで数に入る。
-  count = 3
-  await w.clock.advance(10000)
-  expect(await hint($, w)).toBe('パーキングのメモ 3')
-})
-
-test('ほかの repo のメモは hint 行に数えない', async ($, on) => {
-  const elsewhere = { ...board(0), rows: [{ repo: '/src/home/other', title: 'other', cards: [], parking: [item('x')] }] }
-  const w = world(on, () => output(JSON.stringify(elsewhere)))
-  await $.session.start(START)
-  expect(await hint($, w)).toBeUndefined()
 })

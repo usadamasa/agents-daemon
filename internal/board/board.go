@@ -129,7 +129,7 @@ type Board struct {
 	// UpdatedAt は status.json の更新時刻。daemon が動いていないか、まだ書いていなければ無い。
 	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 	Columns   []Column   `json:"columns"`
-	// Here は開いたセッションの cwd の行の鍵 (Row.Repo と同じ規則)。mod が自分の repo のメモ (hint 行と band) を
+	// Here は開いたセッションの cwd の行の鍵 (Row.Repo と同じ規則)。mod が自分の repo のメモ (band) を
 	// rows から引くのに使う。その repo の行が無ければ rows に無い鍵になる。
 	Here string `json:"here"`
 	Rows []Row  `json:"rows"`

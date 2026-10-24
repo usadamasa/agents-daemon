@@ -14,7 +14,7 @@ README の「役割」が持つ。機能を足す・外す判断はそこに照�
 | `hooks/register.ts`, `hooks/daemon-bin.ts` | mod の入口。board、park、band の hook を束ね、`session.start` を持つ。`daemon-bin.ts` はバイナリの置き場 |
 | `hooks/board.tsx`, `hooks/board.test.tsx`, `types/index.d.ts` | 依存のボード (B) を dock の pane に描く mod (Claude Code の mods)。`board` コマンドで開き、`agents-daemon status --board` の JSON を数秒ごとに読み直す。ノードを選んで `$.session.send` でそのタスクのセッションへ指示を送る。`types/` は mod が `$.state` に置く値の型。テストは `claude plugin test .` |
 | `hooks/graph.ts` | 依存の DAG の記号と凡例、数の行、レーンの行の分け方、Add blocker の候補 (B と A が使う) |
-| `hooks/park.tsx`, `hooks/park.test.tsx` | model が呼べる tool `park` (パーキングロットにメモを置く) と、repo の open のメモの数を出す prompt の hint 行 |
+| `hooks/park.tsx`, `hooks/park.test.tsx` | model が呼べる tool `park` (パーキングロットにメモを置く) |
 | `hooks/band.tsx`, `hooks/band.test.tsx` | 入力欄の上の band に依存の DAG (A)、`SendMessage` で渡したのに辺の無いセッション、パーキングのメモの行を出す |
 | `hooks/board-data.ts` | `status --board` を読んで board に置く (B と A が使う) |
 | `hooks/parking.ts` | メモの見せ方 (時刻の JST 表示を含む) とボードからの操作 (捨てる、タスクにする、issue にするよう頼む、パーキングへ移す) |

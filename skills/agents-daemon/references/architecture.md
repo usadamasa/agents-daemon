@@ -187,7 +187,7 @@ B は fullscreen のレイアウトで dock に置かれるときだけ出す。
 `park add` の結果の `item` と `park list` の配列の要素がこれに当たる。識別子と JSON のキーは `item` のまま。
 
 ボードの JSON は行ごとに open のメモ (`$STATE/parking/`) をタスクの列とは別の欄 `parking` に持ち、メモだけの repo も
-行にする。`here` は開いたセッションの行の鍵で、mod はこの行の `parking` を hint 行と band のメモにする。
+行にする。`here` は開いたセッションの行の鍵で、mod はこの行の `parking` を band のメモにする。
 メモの見せ方と操作は `hooks/parking.ts` が持ち、行と列の描き方には依存しない。メモの行は最後に置かれた時刻 (JST) を
 先頭に出し、どのメモが古いかを列で見比べられるようにする。操作はどれも
 `agents-daemon park ... --session <id> --cwd <cwd>` を呼び、開いたセッションの domain のメモとタスクだけを触る。
@@ -238,12 +238,8 @@ B は fullscreen のレイアウトで dock に置かれるときだけ出す。
 呼ばれたら `agents-daemon park add --cwd <cwd>` に、model が書いた欄とこのセッションの `session_id` を JSON で
 stdin に渡す。`session_id` と cwd は inputSchema に無く、model は書けないので、domain の判定は `status --board` と
 同じ入力で決まる。結果の `created` で「メモを置きました」と「既に置かれていたメモにまとめました」を分けて返す。
-prompt の hint 行の末尾 (`PromptHint` の `tail`) に、ボードの `here` の行の open のメモ (このセッションの repo) の数を出す。
-一覧は `hooks/board-data.ts` が `status --board` を読むたびに置き直す (band の session.start と 10 秒ごとの読み直し、
-park add の後) ので、hint 行は自前の読み直しを持たない。`$.ui.status` はエンジンが警告の印付きで描くので使わない。
-`tail` を描くのは terminal だけ。
-<!-- cc-premise: 2.1.302 hooks mods の tool.register / tool.call / ui.render PromptHint の tail -->
-<!-- cc-premise: 2.1.302 hooks $.ui.status は「⚠ <plugin>: <text>」と警告の印付きで描かれる -->
+置いた後は `hooks/board-data.ts` がボードを読み直し、band のメモをすぐ変える。
+<!-- cc-premise: 2.1.302 hooks mods の tool.register / tool.call -->
 <!-- cc-premise: 2.1.302 hooks modules は 1 つ、matcher の無い hook は event ごとに 1 つ -->
 <!-- cc-premise: 2.1.302 hooks tool.register は local の port を開く (sandbox の中の claude -p では落ちる) -->
 

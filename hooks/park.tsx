@@ -1,4 +1,3 @@
-import { atom, read } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import { reloadForBand } from './board-data'
@@ -7,15 +6,9 @@ import { logEvent } from './log'
 
 // パーキングロット (#89) の置く側 (#121 の段 5)。model が呼べる park の tool を登録し、呼ばれたら
 // `agents-daemon park add` に JSON を stdin で渡す。domain と repo はバイナリが --cwd と session_id から決める。
-// あわせて、その repo の open のメモの数を prompt の hint 行の末尾に出す。数はボード (hooks/board-data.ts の parked) から
-// 取り、band の 10 秒ごとの読み直しと park add の後に変わる。
-// $.ui.status はエンジンが警告の印 (⚠) 付きで描き、メモがあることが異常に見えるので使わない。
-// cc-premise: 2.1.302 mods tool.register / tool.call / ui.render PromptHint の tail の API で書いた
+// cc-premise: 2.1.302 mods tool.register / tool.call の API で書いた
 
 const TOOL = 'park'
-
-// parked は hooks/board-data.ts が置く。atom は読む module ごとに書く (state の scan が import を辿らない)。
-const parked = atom({ plugin: 'agents-daemon', key: 'parked' } as const, [])
 
 const DESCRIPTION = `作業の途中で見つけた脇のことを、ユーザーに聞かずにメモとしてパーキングロットへ置き、今の作業を続けるための tool。
 置いたメモはセッションが終わっても残り、後でボードから取り出される。
@@ -65,19 +58,10 @@ export const registerPark: Register = on => {
   on('tool.call', { tool: 'mcp__agents-daemon__park' }, ($, e) =>
     place($, e as unknown as Record<string, unknown>).catch(err => ({ deny: `メモを置けませんでした: ${String(err)}` })),
   )
-
-  // エンジンの hint の文面は置き換えず、tail で末尾に足す (terminal だけが描く)。区切りの「·」はエンジンが付ける。
-  // cc-premise: 2.1.302 hooks PromptHint の tail の前にエンジンが「 · 」を挟む (実機で確認)
-  on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
-    const count = (await read($, parked)).length
-    if (count === 0) return next(e)
-
-    return next({ ...e, props: { ...e.props, tail: `パーキングのメモ ${count}` } })
-  })
 }
 
 // place は model が書いた欄にこのセッションの ID を足して park add に渡し、置いた結果を model への文面にする。
-// 置いた後はボードを読み直し、hint 行と band の数をすぐ変える。読めなかったときは前の一覧が残る (band の読み直しと同じ)。
+// 置いた後はボードを読み直し、band のメモをすぐ変える。読めなかったときは前の一覧が残る (band の読み直しと同じ)。
 async function place($: EngineInterface, args: Record<string, unknown>): Promise<{ result: string } | { deny: string }> {
   const req: Record<string, unknown> = {}
   for (const field of FIELDS) {

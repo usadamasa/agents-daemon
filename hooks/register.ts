@@ -10,7 +10,7 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     await startBoard($)
     await startPark($)
-    // メモの一覧 (hint 行の数と band の行) は startBand が読むボードから取る。
+    // band のメモの行は startBand が読むボードから取る。
     await startBand($)
 
     return next(e)

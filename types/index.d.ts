@@ -39,7 +39,7 @@ export type ParkingCard = {
   sources: ParkingSource[]
 }
 
-// ParkedMemo はメモ 1 つを band のメモの行と hint 行に出す分だけにしたもの。at は最後に置かれた時刻。
+// ParkedMemo はメモ 1 つを band のメモの行に出す分だけにしたもの。at は最後に置かれた時刻。
 export type ParkedMemo = {
   id: string
   kind: ParkingCard['kind']
@@ -111,7 +111,7 @@ export type BoardData = {
   daemon_running: boolean
   updated_at?: string
   columns: BoardColumn[]
-  // here は開いたセッションの行の鍵 (BoardRow.repo と同じ規則)。この行の parking が hint 行と band のメモになる。
+  // here は開いたセッションの行の鍵 (BoardRow.repo と同じ規則)。この行の parking が band のメモになる。
   here: string
   rows: BoardRow[]
   graph: BoardGraph
@@ -134,7 +134,7 @@ declare module 'claude-code' {
       // notice は送信とメモの操作の結果。
       notice: string
       // parked はこのセッションの repo の open のメモ。board の here の行から hooks/board-data.ts が置き、
-      // hooks/park.tsx が数を prompt の hint 行に、hooks/band.tsx がメモの行に出す。
+      // hooks/band.tsx がメモの行に出す。
       parked: ParkedMemo[]
       // front は band のメモの行の先頭に寄せるメモの id (completed になったタスクの途中で置いたもの、hooks/band.tsx)。
       // 並びの指示だけで、中身は parked から取る。

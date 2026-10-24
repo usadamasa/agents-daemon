@@ -12,7 +12,7 @@ import { lastPlacedAt } from './parking'
 // atom は読み書きする module ごとに書く (state の scan が import を辿らない)。
 const board = atom({ plugin: 'agents-daemon', key: 'board' } as const, null)
 const error = atom({ plugin: 'agents-daemon', key: 'error' } as const, '')
-// parked はこのセッションの repo の open のメモ。hooks/park.tsx が数を hint 行に、hooks/band.tsx がメモの行に出す。
+// parked はこのセッションの repo の open のメモ。hooks/band.tsx がメモの行に出す。
 const parked = atom({ plugin: 'agents-daemon', key: 'parked' } as const, [])
 
 // loadBoard はボードを読み直して board に置き、失敗の理由を返す (読めたら空)。失敗は error に置き、前のボードは残す。
@@ -40,7 +40,7 @@ export async function loadBoard($: EngineInterface): Promise<{ data: BoardData }
 }
 
 // reloadForBand はボードを読み直し、読めなかった理由を band の slot に残す (読めたら slot を戻す)。band の 10 秒ごとの
-// 読み直しと、hint 行の数を変える park add の後が呼ぶ。band と hint 行は補助なので、失敗は理由をログに残すだけにする。
+// 読み直しと、メモを変える park add の後が呼ぶ。band は補助なので、失敗は理由をログに残すだけにする。
 export async function reloadForBand($: EngineInterface) {
   const loaded = await loadBoard($)
   if ('failure' in loaded) {
@@ -50,7 +50,7 @@ export async function reloadForBand($: EngineInterface) {
   await settle($, 'band-board')
 }
 
-// hereMemos は here の行の parking を band と hint 行に出す形にする。行が無ければ (この repo にメモが無い) 空。
+// hereMemos は here の行の parking を band に出す形にする。行が無ければ (この repo にメモが無い) 空。
 function hereMemos(data: BoardData): ParkedMemo[] {
   const row = data.rows.find(r => r.repo === data.here)
   return (row?.parking ?? []).map(memo => ({ id: memo.id, kind: memo.kind, title: memo.title, at: lastPlacedAt(memo) }))

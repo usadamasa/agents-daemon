@@ -10,9 +10,9 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/domain"
 )
 
-// Write は Report を人が読む形で w へ書く。節の見出しと OK / NG / ⚠ の行の形は
+// write は Report を人が読む形で w へ書く。節の見出しと OK / NG / ⚠ の行の形は
 // skill (agents-daemon:setup、catching-up-with-rex-changelog) が読む手がかりなので、変えるときはそちらも見る。
-func Write(w io.Writer, rep Report) {
+func write(w io.Writer, rep Report) {
 	_, _ = fmt.Fprintln(w, "=== agents-daemon doctor ===")
 
 	_, _ = fmt.Fprintln(w, "\n-- backend --")

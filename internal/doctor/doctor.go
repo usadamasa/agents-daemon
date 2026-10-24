@@ -193,7 +193,7 @@ type PathsReport struct {
 // main が exit 1 にする)。それ以外の欠落や陳腐化は情報として報告するに留め、error にはしない。
 func Run(ctx context.Context, w io.Writer, in Input) error {
 	rep, err := Collect(ctx, in)
-	Write(w, rep)
+	write(w, rep)
 	return err
 }
 

@@ -377,7 +377,7 @@ test('記号の凡例を pane の一番下に薄く置き、ボードが短く�
   // 数の行の記号、行だけに出る状態、行の末尾の印の 3 群を枠の内側いっぱいの罫線で分け、折り返しに任せず幅から
   // 列の数を決めた格子で組む。80 桁から枠と詰めの 4 桁を引いた 76 桁なら 5 列 (一番長い項目 13 桁 + 間 2 桁)。
   expect(legend?.props.flexWrap).toBeUndefined()
-  expect((await ui.find({ key: 'legend:0' }))?.text).toBe('■ blocked      ○ pending      ▸ working      ↵ done         ✓ completed')
+  expect((await ui.find({ key: 'legend:0' }))?.text).toBe('■ blocked      ○ pending      ▸ working      ↵ idle         ✓ completed')
   expect((await ui.find({ key: 'legend:1' }))?.text).toBe('◇ parked')
   expect((await ui.find({ key: 'legend:2' }))?.text).toBe('─'.repeat(76))
   expect((await ui.find({ key: 'legend:3' }))?.text).toBe('? question     ! permission   ⧗ limit        ✗ error        ⊘ exited')

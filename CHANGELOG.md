@@ -1,5 +1,11 @@
 # Changelog
 
+## [2026.1024.3](https://github.com/usadamasa/agents-daemon/compare/2026.1024.2...2026.1024.3) - 2026-10-24
+
+- prompt の hint 行に出すパーキングのメモの数を消す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/235
+- go-arch-metrics を 2026.1024.0 へ上げ、外から参照されない exported を unexport する by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/238
+- mtime で消す掃除を statefile.PruneDir に集める by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/239
+
 ## [2026.1024.2](https://github.com/usadamasa/agents-daemon/compare/2026.1024.1...2026.1024.2) - 2026-10-24
 
 - fix: CLI の error を main が agents-daemon: 付きで 1 行だけ stderr に出す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/233

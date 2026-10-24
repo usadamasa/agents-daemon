@@ -95,7 +95,7 @@ func TestRunner_Run(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if want := (Result{SessionID: newSID, PaneID: paneID}); got != want {
+	if want := (Result{SessionID: newSID, PaneID: paneID, Foreground: true}); got != want {
 		t.Errorf("Run() = %+v, want %+v", got, want)
 	}
 	if len(host.runs) != 1 {
@@ -151,12 +151,6 @@ func TestRunner_Run_Errors(t *testing.T) {
 			host:    &fakeHost{run: func(string, string, string, []string) (string, error) { return "", errors.New("rex: server error") }},
 			wantErr: "server error",
 		},
-		{
-			name:    "claude が前景にならなければ error (pane は残る)",
-			req:     func(r Request) Request { return r },
-			host:    &fakeHost{run: opened, paneGet: func(id string) (multiplexer.Pane, error) { return multiplexer.Pane{PaneID: id}, nil }},
-			wantErr: "前景",
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -172,6 +166,22 @@ func TestRunner_Run_Errors(t *testing.T) {
 				t.Errorf("入力の検査で落ちるときは window を作らない: %+v", host.runs)
 			}
 		})
+	}
+}
+
+// claude が前景にならなければ、window はできているので error にせず foreground=false で返す。pane は残り、claude が
+// 起きているかもしれないので、呼び出し側 (mod) はメモを戻さない (models/handoff の Spawn)。
+func TestRunner_Run_NotForeground(t *testing.T) {
+	host := &fakeHost{run: opened, paneGet: func(id string) (multiplexer.Pane, error) { return multiplexer.Pane{PaneID: id}, nil }}
+	got, err := runner(host).Run(context.Background(), request())
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if got.SessionID != newSID || got.PaneID != paneID || got.Foreground {
+		t.Errorf("Run() = %+v, want session %s / pane %s / foreground=false", got, newSID, paneID)
+	}
+	if !strings.Contains(got.Detail, "前景") || !strings.Contains(got.Detail, paneID) {
+		t.Errorf("Detail = %q, want 待ち時間と pane", got.Detail)
 	}
 }
 

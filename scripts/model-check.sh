@@ -37,7 +37,6 @@ run() {
 
 run models/handoff Handoff Handoff.cfg holds
 run models/handoff Handoff Handoff.LiveTaskKept.cfg violated
-run models/handoff Handoff Handoff.AtMostOneSession.cfg violated
 run models/handoff TaskLog TaskLog.cfg violated
 
 exit "$failed"

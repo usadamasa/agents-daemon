@@ -5,8 +5,8 @@
    - handOff は「ボードを読む → 取る (park set --status handed --from open) → 送る → 届かなければ戻す
      (park set --status open --from handed)」(hooks/parking.ts の handOff)。--from は元の status が違えば失敗する
      (internal/parking の Store.Set)。取れるのは 1 つの mod だけで、取られたメモはほかの mod のボードに open と出ても取れない。
-   - spawn は window を作ってから claude が前景になるのを待ち、待ち切れなければエラーで返す。pane は残り、
-     claude が起動していることもある (internal/spawn/spawn.go の waitForClaude)。mod は届かなかったとして戻す。
+   - spawn は window を作ってから claude が前景になるのを待ち、待ち切れなければ foreground=false で返す。pane は残り、
+     claude が起動していることもある (internal/spawn/spawn.go の waitForClaude)。mod はそのメモを戻さず handed のまま残す。
    - board は status.json が今の daemon のものでなければ pane を空として扱い、未完了のタスクを exited と描く
      (internal/board/board.go の livePanes、graph.go)。Adopt はセッションの生死を見ない (parking/place.go の Adopt)。
    - Adopt はメモを書いてからタスクの記録を消す 2 手 (place.go)。
@@ -93,8 +93,9 @@ Send(m) ==
   /\ UNCHANGED <<memo, attempts, sessions, daemonFresh, task, taskMemo, adoptedLive>>
 
 (* 取ったメモを、新しいセッションを起こして渡す。入力の検査で拒まれれば何も起きず戻しに進む。window を作れば claude が
-   前景になるのを待ち、なれば届いたことになる。待ち切れなければ pane は残り claude が起動していることもあるので、
-   セッションは数えたうえで届かなかったとして戻しに進む (spawn.go の waitForClaude、parking.ts の handOff)。 *)
+   前景になるのを待ち、なれば届いたことになる。待ち切れなければ pane は残り claude が起動していることもある。起きたか
+   分からないメモは戻さず handed のまま残し、人に pane を知らせる (spawn.go の waitForClaude が foreground=false で返し、
+   parking.ts の handOff は戻さない)。戻すと押し直しで 2 つ目が起きる。 *)
 Spawn(m) ==
   /\ pc[m] = "claimed"
   /\ \/ /\ pc' = [pc EXCEPT ![m] = "undelivered"]                   \* check で拒否
@@ -102,9 +103,10 @@ Spawn(m) ==
      \/ /\ sessions' = sessions + 1 /\ deliveries' = deliveries + 1 \* 前景になった
         /\ pc' = [pc EXCEPT ![m] = "idle"]
         /\ view' = [view EXCEPT ![m] = "none"]
-     \/ /\ sessions' = sessions + 1                                 \* 待ち切れ。claude は起きている
-        /\ pc' = [pc EXCEPT ![m] = "undelivered"]
-        /\ UNCHANGED <<deliveries, view>>
+     \/ /\ sessions' = sessions + 1                                 \* 待ち切れ。claude は起きているかもしれない
+        /\ pc' = [pc EXCEPT ![m] = "idle"]
+        /\ view' = [view EXCEPT ![m] = "none"]
+        /\ UNCHANGED deliveries
   /\ UNCHANGED <<memo, attempts, daemonFresh, task, taskMemo, adoptedLive>>
 
 (* 届かなかったメモを park set --status open --from handed で戻す。プロセスが失敗すれば handed のまま残る

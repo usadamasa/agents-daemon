@@ -28,7 +28,8 @@ func newSpawnCmd() *cobra.Command {
 		Short: "stdin の本文を最初のターンにした Claude Code のセッションを、--repo を cwd にした rex の window に起こす",
 		Long: "ボードのパーキングのメモを、生きているセッションの無い repo へ渡すときに mod が呼ぶ。\n" +
 			"新しいセッションは `claude --session-id <uuid> --model $" + subagentModelEnv + " -- <本文>` で起き、\n" +
-			"claude が前景になってから {session_id, pane_id} を JSON で出す。\n" +
+			"claude が前景になってから {session_id, pane_id, foreground} を JSON で出す。待ち切れたときは window を残したまま\n" +
+			"foreground=false と detail を出す (error にするのは window を作れなかったときだけ)。\n" +
 			"--repo の domain が開いたセッション (--session と --cwd) の domain と違えば起こさない (私用と業務の分離)。",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {

@@ -210,6 +210,11 @@ export async function handOff($: EngineInterface, memo: ParkingCard, to: Destina
     return `メモを取れませんでした (ほかのセッションが先に渡したか、捨てたかもしれません): ${claim}`
   }
   const delivered = await deliver($, to, text)
+  if ('unknown' in delivered) {
+    // 起きたか分からないメモは戻さない。戻すと押し直しで 2 つ目のセッションが起きる。
+    await logEvent($, 'mod.send', { ...sent, to: delivered.to, delivered: false, reason: delivered.unknown })
+    return `${destinationLabel(to)} で window を作りましたが、claude が前景になりませんでした: ${delivered.unknown}。メモは handed のまま残してあります (起きていなければ park set ${memo.id} --status open で戻す)`
+  }
   if ('failure' in delivered) {
     await logEvent($, 'mod.send', { ...sent, to: delivered.to, delivered: false, reason: delivered.failure })
     return `${said(to, false)}: ${delivered.failure}。${await revert($, memo)}`
@@ -231,8 +236,9 @@ function said(to: Destination, ok: boolean): string {
   return ok ? `${name} へ送り` : `${name} へ送れませんでした`
 }
 
-// Delivered は届いた先のセッション ID か、届かなかった理由。
-type Delivered = { to: string } | { to: string; failure: string }
+// Delivered は届いた先のセッション ID か、届かなかった理由 (failure)、届いたか分からない理由 (unknown。spawn が window を
+// 作ったが claude が前景にならなかった。pane は残る)。
+type Delivered = { to: string } | { to: string; failure: string } | { to: string; unknown: string }
 
 // deliver は text を to へ届ける。
 // - self: 自分へは peer メッセージを送れないので、自分の入力に渡す (`$.prompt.submit`)。入力はセッションが idle に
@@ -259,13 +265,14 @@ async function deliver($: EngineInterface, to: Destination, text: string): Promi
 }
 
 // spawnSession は repo で新しいセッションを起こし、本文を最初のターンにする。claude が前景になるまでバイナリが待つので、
-// park より長い timeout にする。
+// park より長い timeout にする。exit 0 で foreground が false なら window はできていて claude が前景にならなかった (unknown)。
 async function spawnSession($: EngineInterface, repo: string, text: string): Promise<Delivered> {
   const argv = [await daemonBin($), 'spawn', '--repo', repo, '--session', await $.session.id(), '--cwd', await $.session.cwd()]
   const { exitCode, stdout, stderr } = await $.process.run(argv, { stdin: text, timeoutMs: 30000 })
   if (exitCode !== 0) return { to: '', failure: stderr.trim() || `exit ${exitCode}` }
   try {
-    return { to: (JSON.parse(stdout) as { session_id: string }).session_id }
+    const res = JSON.parse(stdout) as { session_id: string; pane_id: string; foreground: boolean; detail?: string }
+    return res.foreground ? { to: res.session_id } : { to: res.session_id, unknown: res.detail ?? `pane ${res.pane_id} で claude が前景にならなかった` }
   } catch (err) {
     return { to: '', failure: reason(err, 'spawn') }
   }

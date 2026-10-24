@@ -46,7 +46,7 @@ function world(on: On, run: (argv: readonly string[]) => ProcessRunResult = () =
 }
 
 // SPAWNED は `agents-daemon spawn` の stdout。
-const SPAWNED = '{"session_id":"NEW","pane_id":"block:b1"}'
+const SPAWNED = '{"session_id":"NEW","pane_id":"block:b1","foreground":true}'
 
 function output(stdout: string, exitCode = 0, stderr = ''): ProcessRunResult {
   return { exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false }
@@ -673,6 +673,24 @@ test('新しいセッションを起こせなかった (window を作ってい�
   await ui.press({ key: 'spawn:/src/home/dotfile' })
   expect(operations(w.ran)).toEqual([CLAIM, [BIN, 'spawn', '--repo', '/src/home/dotfile', ...SELF_ARGS], REVERT])
   expect(await ui.find({ type: 'Text', text: /dotfile で新しいセッションを起こせませんでした: .*domain \(work\) が違う.*メモは open に戻しました/ })).toBeDefined()
+})
+
+test('claude が前景にならなかった (pane は残る) メモは戻さず、pane と戻し方を知らせる', async ($, on) => {
+  const w = world(on, argv =>
+    argv[1] === 'status'
+      ? output(JSON.stringify(BOARD))
+      : argv[1] === 'spawn'
+        ? output('{"session_id":"NEW","pane_id":"block:b1","foreground":false,"detail":"15s の間に pane block:b1 で claude が前景にならなかった"}')
+        : output('{}'),
+  )
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($)
+  await ui.press({ key: `park:${MEMO.id}` })
+  await ui.press({ key: 'spawn-task' })
+  w.ran.length = 0
+  await ui.press({ key: 'spawn:/src/home/dotfile' })
+  expect(operations(w.ran)).toEqual([CLAIM, [BIN, 'spawn', '--repo', '/src/home/dotfile', ...SELF_ARGS]])
+  expect(await ui.find({ type: 'Text', text: /dotfile で window を作りましたが.*前景にならなかった.*handed のまま.*park set .* --status open/ })).toBeDefined()
 })
 
 test('ノードの無いボードと、daemon が動いていないことを描く', async ($, on) => {

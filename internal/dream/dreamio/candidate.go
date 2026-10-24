@@ -41,14 +41,14 @@ type Candidate struct {
 	CoverageRatio    float64  `json:"coverage_ratio"`
 }
 
-// CandidatesFilename は Mine 出力 / Stage 入力 / Adopt 入力で共通の
+// candidatesFilename は Mine 出力 / Stage 入力 / Adopt 入力で共通の
 // "<project-slug>-YYYY-MM-DD.jsonl" 形式ファイル名を返す。
 //
 // project canonical name の先頭 - を除去した残りを stub として使う。
 // 例: project="-Users-x-workspace", date="2026-07-20"
 //
 //	→ "Users-x-workspace-2026-07-20.jsonl"
-func CandidatesFilename(project, date string) string {
+func candidatesFilename(project, date string) string {
 	stub := strings.TrimPrefix(project, "-")
 	return fmt.Sprintf("%s-%s.jsonl", stub, date)
 }
@@ -56,5 +56,5 @@ func CandidatesFilename(project, date string) string {
 // CandidatesPath は state ディレクトリ / project / date から candidates.jsonl の絶対パスを組み立てる。
 // mine が書き stage/adopt が読む共通のパス規約。
 func CandidatesPath(stateDir, project, date string) string {
-	return filepath.Join(stateDir, "candidates", CandidatesFilename(project, date))
+	return filepath.Join(stateDir, "candidates", candidatesFilename(project, date))
 }

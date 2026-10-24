@@ -25,7 +25,7 @@ import { parkedMemos } from './parking'
 //   e.to は tool に書かれた宛先そのまま (名前、末尾に ` [ref]` が付くことがある)
 
 const board = atom({ plugin: 'agents-daemon', key: 'board' } as const, null)
-// parked は hooks/park.tsx が書く。atom は読む module ごとに書く (state の scan が import を辿らない)。
+// parked は hooks/board-data.ts が書く。atom は読む module ごとに書く (state の scan が import を辿らない)。
 const parked = atom({ plugin: 'agents-daemon', key: 'parked' } as const, [])
 const front = atom({ plugin: 'agents-daemon', key: 'front' } as const, [])
 const target = atom({ plugin: 'agents-daemon', key: 'target' } as const, '')
@@ -41,7 +41,6 @@ const GUTTER = 2
 let timer: Timer | undefined
 
 // startBand は session.start でボードを読み、読み直しの timer を始める (session.start の hook は hooks/register.ts が持つ)。
-// 読んだボードの here の行のメモが hint 行 (hooks/park.tsx) の数にもなる。
 export async function startBand($: EngineInterface) {
   await reloadForBand($)
   timer?.cancel()

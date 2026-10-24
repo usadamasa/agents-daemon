@@ -29,7 +29,6 @@ function world(on: On, run: (argv: readonly string[]) => ProcessRunResult, regis
   })
   on('ui.open', async () => ({ value: { isPlaced: true } }))
   on('ui.render', { component: 'AbovePrompt' }, async () => ({ type: 'engine', ref: 1 }))
-  on('ui.render', { component: 'PromptHint' }, async () => ({ type: 'engine', ref: 1 }))
   on('tool.register', async (_$, e) => {
     if (register) register()
     return { value: { tool: `mcp__agents-daemon__${e.name}` } }

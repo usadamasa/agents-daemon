@@ -32,6 +32,18 @@ TLC は devShell の `tlaplus` (`tlc`)。CI では回さない。`scripts/model-
 
 どの cfg も `holds` を期待し、反例が出れば `model-check.sh` は exit 1 にする。
 
+同じ不変条件を、実物の Store を goroutine で交錯させる乱択テストが実装に対して持つ (`task test` で回る)。
+モデルは設計を変えるときに先に反例を探す場所で、実装の正しさはテストが持つ。
+
+| 不変条件 | テスト |
+| ---- | ---- |
+| `AtMostOneDelivery` / `AtMostOneSession` / `HandedWhenDelivered` と Claim の排他 | `internal/parking/invariants_test.go` |
+| `LiveTaskKept` / `AdoptLeavesOne` (実物の `verify.SessionExited` で daemon の pid と status.json を読む) | `internal/parking/adopt_invariants_test.go` |
+| `RecordsComplete` | `internal/tasklog/invariants_test.go` |
+
+mod の側 (取る → 送る → 届かなければ戻す、spawn で前景にならなければ戻さない、Discard は `--from open`) は
+`hooks/board.test.tsx` が `park` と `spawn` の呼び出しの列で固定する。
+
 ## 前提
 
 - ファイルの書き込みは `statefile.WriteJSONAtomic` なので、1 回の書き込みを原子的な 1 ステップにしている。

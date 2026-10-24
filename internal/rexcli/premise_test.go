@@ -55,6 +55,7 @@ func TestCheckPremises_AllOK(t *testing.T) {
 	for _, want := range []string{
 		"rex_version: 0.0.1792158932-g88fd41",
 		"built_at 2026-10-16T13:55:32Z",
+		"呼んだ rex は " + f.bin, // doctor が解決した binary (rex の自動更新で Versions/ のどれを引いたか)
 		"exit 3",
 		"owner.pid",
 		"argv0",

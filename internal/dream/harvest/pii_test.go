@@ -20,7 +20,7 @@ func TestMaskPII(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := MaskPII(tc.in)
+			got := maskPII(tc.in)
 			if got != tc.want {
 				t.Errorf("MaskPII(%q) = %q; want %q", tc.in, got, tc.want)
 			}

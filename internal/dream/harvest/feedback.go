@@ -30,20 +30,20 @@ var feedbackPatterns = []feedbackPattern{
 	},
 }
 
-// detectFeedback は text が feedback signal かを判定し、該当すれば FeedbackSignal を返す。
+// detectFeedback は text が feedback signal かを判定し、該当すれば feedbackSignal を返す。
 // 複数パターン該当時は最初にマッチした kind を採用する (correction を優先させる並び順)。
-func detectFeedback(text string) (FeedbackSignal, bool) {
+func detectFeedback(text string) (feedbackSignal, bool) {
 	trimmed := strings.TrimSpace(text)
 	if trimmed == "" {
-		return FeedbackSignal{}, false
+		return feedbackSignal{}, false
 	}
 	for _, fp := range feedbackPatterns {
 		if fp.pattern.MatchString(trimmed) {
-			return FeedbackSignal{
-				Quote: truncate(MaskPII(trimmed), maxFeedbackQuote),
+			return feedbackSignal{
+				Quote: truncate(maskPII(trimmed), maxFeedbackQuote),
 				Kind:  fp.kind,
 			}, true
 		}
 	}
-	return FeedbackSignal{}, false
+	return feedbackSignal{}, false
 }

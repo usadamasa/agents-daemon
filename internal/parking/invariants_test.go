@@ -61,10 +61,16 @@ func (h *claimHolder) acquire(id string, mod int) (int, bool) {
 	return 0, true
 }
 
-func (h *claimHolder) release(id string) {
+// release は revert (メモを open に戻す) を走らせ、戻せたら取っている印を外す。戻しと印の解除を同じロックの中で行うのは、
+// 戻した直後にほかの mod が取ったとき、その acquire が印の解除より先に走って排他の破れと誤って数えないため。
+func (h *claimHolder) release(id string, revert func() error) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if err := revert(); err != nil {
+		return err
+	}
 	delete(h.holder, id)
+	return nil
 }
 
 func (h *claimHolder) held(id string) bool {
@@ -233,7 +239,7 @@ func (m *handoffMod) discard(id string) {
 	m.reached.discard()
 }
 
-// after は取ったメモに起きることを 1 つ引いて写す。戻したときだけ取っている印を外す。
+// after は取ったメモに起きることを 1 つ引いて写す。戻したときだけ取っている印を外す (release)。
 func (m *handoffMod) after(id string) string {
 	outcome := handoffOutcome(m.r.IntN(len(handoffOutcomeNames)))
 	m.reached.outcome(outcome)
@@ -246,10 +252,13 @@ func (m *handoffMod) after(id string) string {
 	case outcomeSpawnTimeout:
 		m.counts[id].sessions.Add(1)
 	case outcomeReverted:
-		if _, _, err := m.s.Set(domain.Home, id, StatusOpen, StatusHanded); err != nil {
+		revert := func() error {
+			_, _, err := m.s.Set(domain.Home, id, StatusOpen, StatusHanded)
+			return err
+		}
+		if err := m.holder.release(id, revert); err != nil {
 			return fmt.Sprintf("取ったメモ %s を戻せなかった: %v", id, err)
 		}
-		m.holder.release(id)
 	case outcomeRevertFailed:
 	}
 	return ""

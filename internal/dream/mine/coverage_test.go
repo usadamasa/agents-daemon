@@ -12,8 +12,8 @@ func TestComputeCoverage_FullyInline(t *testing.T) {
 	if got.Covered != 2 || got.Total != 2 {
 		t.Errorf("covered=%d total=%d", got.Covered, got.Total)
 	}
-	if got.Ratio() != 1.0 {
-		t.Errorf("ratio = %f", got.Ratio())
+	if got.ratio() != 1.0 {
+		t.Errorf("ratio = %f", got.ratio())
 	}
 }
 
@@ -24,8 +24,8 @@ func TestComputeCoverage_None(t *testing.T) {
 	if got.Covered != 0 || got.Total != 2 {
 		t.Errorf("covered=%d total=%d", got.Covered, got.Total)
 	}
-	if got.Ratio() != 0.0 {
-		t.Errorf("ratio = %f", got.Ratio())
+	if got.ratio() != 0.0 {
+		t.Errorf("ratio = %f", got.ratio())
 	}
 }
 
@@ -36,15 +36,15 @@ func TestComputeCoverage_Partial(t *testing.T) {
 	if got.Covered != 1 || got.Total != 2 {
 		t.Errorf("covered=%d total=%d", got.Covered, got.Total)
 	}
-	if got.Ratio() != 0.5 {
-		t.Errorf("ratio = %f", got.Ratio())
+	if got.ratio() != 0.5 {
+		t.Errorf("ratio = %f", got.ratio())
 	}
 }
 
 func TestComputeCoverage_EmptyPhrases(t *testing.T) {
 	got := computeCoverage(nil, "body")
-	if got.Total != 0 || got.Ratio() != 0.0 {
-		t.Errorf("empty phrases: covered=%d total=%d ratio=%f", got.Covered, got.Total, got.Ratio())
+	if got.Total != 0 || got.ratio() != 0.0 {
+		t.Errorf("empty phrases: covered=%d total=%d ratio=%f", got.Covered, got.Total, got.ratio())
 	}
 }
 
@@ -105,7 +105,7 @@ func TestFindAssociatedSkill_ByDescription(t *testing.T) {
 
 func TestClassifyCoverage_HighMigration(t *testing.T) {
 	// coverage 0% → skill_body, confidence high
-	c := ClassifyCoverage(Coverage{Covered: 0, Total: 5})
+	c := classifyCoverage(coverage{Covered: 0, Total: 5})
 	if c.Kind != "skill_body" || c.Confidence != "high" {
 		t.Errorf("got %+v", c)
 	}
@@ -113,7 +113,7 @@ func TestClassifyCoverage_HighMigration(t *testing.T) {
 
 func TestClassifyCoverage_FullyCovered(t *testing.T) {
 	// coverage 100% → memory_dedup, confidence high
-	c := ClassifyCoverage(Coverage{Covered: 5, Total: 5})
+	c := classifyCoverage(coverage{Covered: 5, Total: 5})
 	if c.Kind != "memory_dedup" || c.Confidence != "high" {
 		t.Errorf("got %+v", c)
 	}
@@ -121,7 +121,7 @@ func TestClassifyCoverage_FullyCovered(t *testing.T) {
 
 func TestClassifyCoverage_MostlyCovered(t *testing.T) {
 	// coverage 80% → memory_dedup, confidence medium
-	c := ClassifyCoverage(Coverage{Covered: 4, Total: 5})
+	c := classifyCoverage(coverage{Covered: 4, Total: 5})
 	if c.Kind != "memory_dedup" || c.Confidence != "medium" {
 		t.Errorf("got %+v", c)
 	}
@@ -129,7 +129,7 @@ func TestClassifyCoverage_MostlyCovered(t *testing.T) {
 
 func TestClassifyCoverage_PartialLow(t *testing.T) {
 	// coverage 20% → skill_body, confidence medium (partial but mostly missing)
-	c := ClassifyCoverage(Coverage{Covered: 1, Total: 5})
+	c := classifyCoverage(coverage{Covered: 1, Total: 5})
 	if c.Kind != "skill_body" || c.Confidence != "medium" {
 		t.Errorf("got %+v", c)
 	}
@@ -137,7 +137,7 @@ func TestClassifyCoverage_PartialLow(t *testing.T) {
 
 func TestClassifyCoverage_HighBoundary15Percent(t *testing.T) {
 	// coverage 15% (boundary) → skill_body, confidence high
-	c := ClassifyCoverage(Coverage{Covered: 3, Total: 20})
+	c := classifyCoverage(coverage{Covered: 3, Total: 20})
 	if c.Kind != "skill_body" || c.Confidence != "high" {
 		t.Errorf("got %+v", c)
 	}
@@ -145,7 +145,7 @@ func TestClassifyCoverage_HighBoundary15Percent(t *testing.T) {
 
 func TestClassifyCoverage_MediumBoundary40Percent(t *testing.T) {
 	// coverage 40% (boundary) → skill_body, confidence medium
-	c := ClassifyCoverage(Coverage{Covered: 8, Total: 20})
+	c := classifyCoverage(coverage{Covered: 8, Total: 20})
 	if c.Kind != "skill_body" || c.Confidence != "medium" {
 		t.Errorf("got %+v", c)
 	}
@@ -153,7 +153,7 @@ func TestClassifyCoverage_MediumBoundary40Percent(t *testing.T) {
 
 func TestClassifyCoverage_Middle(t *testing.T) {
 	// coverage 50% → skill_body, confidence low (ambiguous)
-	c := ClassifyCoverage(Coverage{Covered: 3, Total: 6})
+	c := classifyCoverage(coverage{Covered: 3, Total: 6})
 	if c.Kind != "skill_body" || c.Confidence != "low" {
 		t.Errorf("got %+v", c)
 	}

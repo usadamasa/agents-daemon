@@ -32,7 +32,7 @@ func loadSkillFromDirs(dirs []string, name string) (Skill, error) {
 //
 // canonical name の逆演算は不可能 (- になった元の文字が / か _ か . か区別が付かない)
 // なので、harvest レコードに残っている生 cwd を頼りに絶対パスを取り戻す。
-func projectRootFromSessions(sessions []HarvestSession) string {
+func projectRootFromSessions(sessions []harvestSession) string {
 	for _, s := range sessions {
 		if s.CWD != "" {
 			return s.CWD

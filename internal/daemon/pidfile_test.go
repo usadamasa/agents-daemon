@@ -109,7 +109,7 @@ func TestRemovePIDFile(t *testing.T) {
 		if err := writePIDFile(path, 1); err != nil {
 			t.Fatalf("セットアップに失敗: %v", err)
 		}
-		if err := RemovePIDFile(path); err != nil {
+		if err := removePIDFile(path); err != nil {
 			t.Fatalf("RemovePIDFile() error = %v", err)
 		}
 		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
@@ -119,7 +119,7 @@ func TestRemovePIDFile(t *testing.T) {
 
 	t.Run("存在しないファイルはエラーにしない", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "no-such-file")
-		if err := RemovePIDFile(path); err != nil {
+		if err := removePIDFile(path); err != nil {
 			t.Errorf("RemovePIDFile() error = %v, want nil", err)
 		}
 	})

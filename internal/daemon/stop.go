@@ -21,7 +21,7 @@ func Stop(w io.Writer, p apppath.Paths, timeout time.Duration) error {
 		return err
 	}
 	if pid == 0 || !PIDAlive(pid) {
-		if err := RemovePIDFile(p.PIDFile()); err != nil {
+		if err := removePIDFile(p.PIDFile()); err != nil {
 			return err
 		}
 		_, _ = fmt.Fprintln(w, "daemon は起動していません")

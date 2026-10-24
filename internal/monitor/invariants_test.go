@@ -35,13 +35,17 @@ var traceScreens = []string{
 type step struct {
 	screen  string
 	readErr error
+	sendErr error
 	pane    multiplexer.Pane
 	rate    *ratelimit.State
 	account *ratelimit.State
 	now     time.Time
 }
 
-var errFuzzRead = errors.New("read failed")
+var (
+	errFuzzRead = errors.New("read failed")
+	errFuzzSend = errors.New("send failed")
+)
 
 func randomStep(r *rand.Rand, prev time.Time) step {
 	advances := []time.Duration{0, time.Second, 10 * time.Second, 31 * time.Second, 2 * time.Minute, 10 * time.Minute, time.Hour, 6 * time.Hour}
@@ -55,6 +59,9 @@ func randomStep(r *rand.Rand, prev time.Time) step {
 	}
 	if r.IntN(10) == 0 {
 		st.readErr = errFuzzRead
+	}
+	if r.IntN(10) == 0 {
+		st.sendErr = errFuzzSend
 	}
 	return st
 }
@@ -121,6 +128,15 @@ func (tr tickResult) sentText() bool {
 }
 
 func TestTick_不変条件を乱択のtick列で破らない(t *testing.T) {
+	// 乱択が状態機械の全ての経路を通ったことも見る。通っていない Outcome があれば、性質は何も確かめていない。
+	reached := map[Outcome]bool{}
+	defer func() {
+		for outcome, name := range outcomeNames {
+			if !reached[outcome] {
+				t.Errorf("Outcome %s に一度も至らなかった (入力の生成を見直す)", name)
+			}
+		}
+	}()
 	for seed := range traceCount {
 		r := rand.New(rand.NewPCG(uint64(seed), 0)) // #nosec G115 -- seed は非負
 		cfg := randomConfig(r)
@@ -129,6 +145,8 @@ func TestTick_不変条件を乱択のtick列で破らない(t *testing.T) {
 			PaneReadFunc: func(context.Context, string, multiplexer.PaneReadOptions) (string, error) {
 				return cur.screen, cur.readErr
 			},
+			SendTextFunc: func(context.Context, string, string) error { return cur.sendErr },
+			SendKeysFunc: func(context.Context, string, ...string) error { return cur.sendErr },
 		}
 		var tr tickResult
 		deps := newTestDeps(t, cfg, client)
@@ -145,6 +163,7 @@ func TestTick_不変条件を乱択のtick列で破らない(t *testing.T) {
 			before := len(client.Calls)
 			tr.outcome, tr.err = Tick(context.Background(), deps, cur.pane, ps, cur.rate, now)
 			tr.post, tr.calls = *ps, client.Calls[before:]
+			reached[tr.outcome] = true
 			if msg := checkTick(cfg, cur, tr); msg != "" {
 				t.Fatalf("seed %d tick %d: %s\n  pane=%+v screen=%q readErr=%v\n  pre=%+v\n  post=%+v\n  outcome=%v err=%v calls=%v observed=%v",
 					seed, tick, msg, cur.pane, cur.screen, cur.readErr, tr.pre, tr.post, tr.outcome, tr.err, tr.calls, tr.observed)

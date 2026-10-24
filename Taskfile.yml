@@ -26,6 +26,11 @@ tasks:
     cmds:
       - scripts/fuzz.sh
 
+  model-check:
+    desc: models/ の TLA+ のモデルを TLC で回し、期待 (反例なし / 反例あり) と突き合わせる
+    cmds:
+      - scripts/model-check.sh
+
   test-cover:
     desc: カバレッジ付きテスト
     cmds:

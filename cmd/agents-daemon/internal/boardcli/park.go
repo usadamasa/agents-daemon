@@ -38,18 +38,21 @@ func newParkCmd() *cobra.Command {
 			})
 		},
 	}
-	var status, session string
+	var status, from, session string
 	set := &cobra.Command{
 		Use:   "set <id>",
 		Short: "メモの status (open / handed / discarded) を書き換える",
-		Args:  cobra.ExactArgs(1),
+		Long: "--from を付けると、今の status がそれと違うときは書き換えずにエラーで返す。\n" +
+			"ボードの mod はメモを渡す前に `--status handed --from open` で取り、届かなければ `--status open --from handed` で戻す。",
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return withPlacer(cmd, cwd, func(paths apppath.Paths, p tasklog.Placer, cwd string) (any, error) {
-				return parkSet(paths.StateDir(), parking.New(paths.StateDir()), p, session, cwd, args[0], status, time.Now())
+				return parkSet(paths.StateDir(), parking.New(paths.StateDir()), p, session, cwd, args[0], status, from, time.Now())
 			})
 		},
 	}
 	set.Flags().StringVar(&status, "status", "", "open / handed / discarded")
+	set.Flags().StringVar(&from, "from", "", "今の status がこれのときだけ書き換える (open / handed / discarded)")
 	_ = set.MarkFlagRequired("status")
 	var repo, listStatus, task string
 	list := &cobra.Command{

@@ -179,9 +179,9 @@ function context(memo: ParkingCard): string[] {
   return lines
 }
 
-// discard はメモを捨て、結果の文面を返す。
+// discard は open のメモを捨て、結果の文面を返す。ほかのセッションが先に取ったメモは捨てない (`--from open`)。
 export async function discard($: EngineInterface, memo: ParkingCard): Promise<string> {
-  const failure = await park($, ['set', memo.id, '--status', 'discarded'])
+  const failure = await park($, ['set', memo.id, '--status', 'discarded', '--from', 'open'])
   return failure === '' ? `メモ「${memo.title}」を捨てました` : `メモを捨てられませんでした: ${failure}`
 }
 
@@ -199,17 +199,29 @@ export async function discardStale($: EngineInterface, days: number): Promise<st
   return `${days} 日より前のメモ ${count} つを捨てました (戻すには park set <id> --status open、id は logs --board に残る)`
 }
 
-// handOff は text を to へ渡し、届いたときだけメモを handed にする。届かなかったメモは open のまま残す。
+// handOff は text を to へ渡す。送る前にメモを取り (open のときだけ handed にする。取れるのは 1 つのセッションだけ)、
+// 届かなければ open に戻す。取れなかった (ほかのセッションが先に渡した、捨てた) メモは送らない。
+// 手順の交錯で破れないことは models/handoff の Handoff.tla (Claim → Send / Spawn → Revert) が持つ。
 export async function handOff($: EngineInterface, memo: ParkingCard, to: Destination, text: string): Promise<string> {
-  const delivered = await deliver($, to, text)
-  const sent = { via: 'memo', memo: memo.id, to: 'to' in delivered ? delivered.to : '', ...(to.route === 'spawn' ? { repo: to.repo } : {}) }
-  if ('failure' in delivered) {
-    await logEvent($, 'mod.send', { ...sent, delivered: false, reason: delivered.failure })
-    return `${said(to, false)}: ${delivered.failure}`
+  const sent = { via: 'memo', memo: memo.id, ...(to.route === 'spawn' ? { repo: to.repo } : {}) }
+  const claim = await park($, ['set', memo.id, '--status', 'handed', '--from', 'open'])
+  if (claim !== '') {
+    await logEvent($, 'mod.send', { ...sent, to: '', delivered: false, reason: `claim: ${claim}` })
+    return `メモを取れませんでした (ほかのセッションが先に渡したか、捨てたかもしれません): ${claim}`
   }
-  await logEvent($, 'mod.send', { ...sent, delivered: true })
-  const failure = await park($, ['set', memo.id, '--status', 'handed'])
-  return failure === '' ? `${said(to, true)}、メモを渡しました` : `${said(to, true)}ましたが、メモを handed にできませんでした: ${failure}`
+  const delivered = await deliver($, to, text)
+  if ('failure' in delivered) {
+    await logEvent($, 'mod.send', { ...sent, to: delivered.to, delivered: false, reason: delivered.failure })
+    return `${said(to, false)}: ${delivered.failure}。${await revert($, memo)}`
+  }
+  await logEvent($, 'mod.send', { ...sent, to: delivered.to, delivered: true })
+  return `${said(to, true)}、メモを渡しました`
+}
+
+// revert は届かなかったメモを open に戻し、結果の文面を返す。戻せなければ handed のまま残るので、手で戻す形を添える。
+async function revert($: EngineInterface, memo: ParkingCard): Promise<string> {
+  const failure = await park($, ['set', memo.id, '--status', 'open', '--from', 'handed'])
+  return failure === '' ? 'メモは open に戻しました' : `メモを open に戻せませんでした (park set ${memo.id} --status open で戻す): ${failure}`
 }
 
 // said は結果の文面の前半。起こす先は「起こし (た)」、セッションは「送り (送った)」。

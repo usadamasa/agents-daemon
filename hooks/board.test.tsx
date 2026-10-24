@@ -199,6 +199,9 @@ const mount = ($: T, surface: 'terminal' | 'desktop' = 'terminal', props: object
   $.ui.mount({ plugin: 'agents-daemon', surface, component: 'Pane', props: props as typeof PANE_PROPS, requestId: 'agents-daemon-board' })
 
 const SELF_ARGS = ['--session', 'SELF', '--cwd', CWD]
+// CLAIM は送る前にメモを取る park set、REVERT は届かなかったメモを戻す park set。
+const CLAIM = [BIN, 'park', 'set', MEMO.id, '--status', 'handed', '--from', 'open', ...SELF_ARGS]
+const REVERT = [BIN, 'park', 'set', MEMO.id, '--status', 'open', '--from', 'handed', ...SELF_ARGS]
 
 test('fullscreen でなければ /board は開かず、その旨を返す', async ($, on) => {
   const w = boardWorld(on)
@@ -504,12 +507,27 @@ test('メモを選ぶと詳細を出し、Discard / To task / Ask for issue で�
   await ui.press({ key: 'task:W' })
   expect(w.sent[0].to).toBe('W')
   expect(w.sent[0].text).toMatch(/^パーキングロットのメモ「保持期間の根拠が無い」\(種類: aside\) をタスクにしてください。/)
-  expect(operations(w.ran)).toEqual([[BIN, 'park', 'set', MEMO.id, '--status', 'handed', ...SELF_ARGS]])
+  // 送る前に取る (open のときだけ handed にする)。届いたら handed のまま。
+  expect(operations(w.ran)).toEqual([CLAIM])
 
-  // 選んだメモは操作の後も開いたまま (同じ行をもう一度押すと閉じる)。
+  // 選んだメモは操作の後も開いたまま (同じ行をもう一度押すと閉じる)。捨てるのも open のときだけ。
   w.ran.length = 0
   await ui.press({ key: 'discard' })
-  expect(operations(w.ran)).toEqual([[BIN, 'park', 'set', MEMO.id, '--status', 'discarded', ...SELF_ARGS]])
+  expect(operations(w.ran)).toEqual([[BIN, 'park', 'set', MEMO.id, '--status', 'discarded', '--from', 'open', ...SELF_ARGS]])
+})
+
+test('取れなかったメモ (ほかのセッションが先に渡した) は送らない', async ($, on) => {
+  const w = world(on, argv =>
+    argv[1] === 'status' ? output(JSON.stringify(BOARD)) : argv[2] === 'set' ? output('', 1, `agents-daemon: メモ ${MEMO.id} の status は handed (期待 open) なので書き換えない`) : output('{}'),
+  )
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($)
+  await ui.press({ key: `park:${MEMO.id}` })
+  w.ran.length = 0
+  await ui.press({ key: 'task:W' })
+  expect(operations(w.ran)).toEqual([CLAIM])
+  expect(w.sent).toEqual([])
+  expect(await ui.find({ type: 'Text', text: /メモを取れませんでした.*status は handed/ })).toBeDefined()
 })
 
 test('自セッションへは peer メッセージではなく自分の入力へ渡し、入ったらメモを handed にする (#190)', async ($, on) => {
@@ -523,11 +541,11 @@ test('自セッションへは peer メッセージではなく自分の入力�
   expect(w.sent).toEqual([])
   expect(w.submitted).toHaveLength(1)
   expect(w.submitted[0]).toMatch(/^パーキングロットのメモ「保持期間の根拠が無い」を GitHub の issue にしてください。repo: agents-daemon。/)
-  expect(operations(w.ran)).toEqual([[BIN, 'park', 'set', MEMO.id, '--status', 'handed', ...SELF_ARGS]])
+  expect(operations(w.ran)).toEqual([CLAIM])
   expect(await ui.find({ type: 'Text', text: /このセッション へ送り、メモを渡しました/ })).toBeDefined()
 })
 
-test('自分の入力へ渡せなかった (drop) メモは open のまま残す', async ($, on) => {
+test('自分の入力へ渡せなかった (drop) メモは open に戻す', async ($, on) => {
   const w = boardWorld(on, BOARD, undefined, 'Stop が立っている')
   await $.command.run(OPEN_BOARD)
   const ui = await mount($)
@@ -535,8 +553,8 @@ test('自分の入力へ渡せなかった (drop) メモは open のまま残す
 
   w.ran.length = 0
   await ui.press({ key: 'task:SELF' })
-  expect(operations(w.ran)).toEqual([])
-  expect(await ui.find({ type: 'Text', text: /このセッション へ送れませんでした: Stop が立っている/ })).toBeDefined()
+  expect(operations(w.ran)).toEqual([CLAIM, REVERT])
+  expect(await ui.find({ type: 'Text', text: /このセッション へ送れませんでした: Stop が立っている。メモは open に戻しました/ })).toBeDefined()
 })
 
 test('ほかの repo のメモは自セッションでタスクにできないが、issue は頼める', async ($, on) => {
@@ -601,10 +619,7 @@ test('メモを別の repo の新しいセッションへ渡す: 候補はメモ
 
   w.ran.length = 0
   await ui.press({ key: 'spawn:/src/home/dotfile' })
-  expect(operations(w.ran)).toEqual([
-    [BIN, 'spawn', '--repo', '/src/home/dotfile', ...SELF_ARGS],
-    [BIN, 'park', 'set', MEMO.id, '--status', 'handed', ...SELF_ARGS],
-  ])
+  expect(operations(w.ran)).toEqual([CLAIM, [BIN, 'spawn', '--repo', '/src/home/dotfile', ...SELF_ARGS]])
   expect(w.fed).toHaveLength(1)
   expect(w.fed[0]).toMatch(/^このメモを渡すため、dotfile \(\/src\/home\/dotfile\) で新しいセッションとして起こしました。/)
   expect(w.fed[0]).toMatch(/パーキングロットのメモ「保持期間の根拠が無い」\(種類: aside\) をタスクにしてください。/)
@@ -637,7 +652,7 @@ test('候補に無い repo は絶対パスで指定する。相対パスは起�
   expect(await ui.find({ type: 'Text', text: /絶対パス/ })).toBeDefined()
 
   await ui.input({ key: 'spawn-path', text: '/src/home/other' })
-  expect(operations(w.ran)[0]).toEqual([BIN, 'spawn', '--repo', '/src/home/other', ...SELF_ARGS])
+  expect(operations(w.ran)[1]).toEqual([BIN, 'spawn', '--repo', '/src/home/other', ...SELF_ARGS])
   expect(w.fed[0]).toMatch(/^このメモを渡すため、other \(\/src\/home\/other\) で新しいセッションとして起こしました。/)
 
   await ui.press({ key: 'spawn-task' })
@@ -646,7 +661,7 @@ test('候補に無い repo は絶対パスで指定する。相対パスは起�
   expect(await ui.find({ key: 'spawn-path' })).toBeUndefined()
 })
 
-test('新しいセッションを起こせなかったメモは open のまま残す', async ($, on) => {
+test('新しいセッションを起こせなかった (window を作っていない) メモは open に戻す', async ($, on) => {
   const w = world(on, argv =>
     argv[1] === 'status' ? output(JSON.stringify(BOARD)) : argv[1] === 'spawn' ? output('', 1, 'agents-daemon: 開いたセッションの domain (home) と repo の domain (work) が違うので起こさない') : output('{}'),
   )
@@ -656,8 +671,8 @@ test('新しいセッションを起こせなかったメモは open のまま�
   await ui.press({ key: 'spawn-task' })
   w.ran.length = 0
   await ui.press({ key: 'spawn:/src/home/dotfile' })
-  expect(operations(w.ran)).toEqual([[BIN, 'spawn', '--repo', '/src/home/dotfile', ...SELF_ARGS]])
-  expect(await ui.find({ type: 'Text', text: /dotfile で新しいセッションを起こせませんでした: .*domain \(work\) が違う/ })).toBeDefined()
+  expect(operations(w.ran)).toEqual([CLAIM, [BIN, 'spawn', '--repo', '/src/home/dotfile', ...SELF_ARGS], REVERT])
+  expect(await ui.find({ type: 'Text', text: /dotfile で新しいセッションを起こせませんでした: .*domain \(work\) が違う.*メモは open に戻しました/ })).toBeDefined()
 })
 
 test('ノードの無いボードと、daemon が動いていないことを描く', async ($, on) => {

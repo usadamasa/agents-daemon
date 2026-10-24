@@ -210,8 +210,10 @@ B は fullscreen のレイアウトで dock に置かれるときだけ出す。
   `{session_id, pane_id}` を返す。本文は最初のターンとして入るので、peer メッセージの inbox を待たない。文面は起こした
   経緯の 1 行に続けて peer へ送るものと同じで、issue はメモの repo ではなく起こした repo を起票先にする。repo の
   domain が開いたセッションの domain と違えば起こさない。モデルを subagent 用に揃えるのは peer-sessions skill と同じ
-- タスクにする・issue にするよう頼むは、`$.session.send` が届いたとき、`$.prompt.submit` が drop されなかったとき、
-  `spawn` が claude の前景を確かめて返ったときだけ `park set <id> --status handed` にする
+- タスクにする・issue にするよう頼むは、送る前に `park set <id> --status handed --from open` でメモを取る (今の status が
+  open でなければ失敗し、送らない。2 つのセッションが同じメモを渡そうとしても取れるのは 1 つ)。`$.session.send` が
+  届かなかった、`$.prompt.submit` が drop された、`spawn` が window を作れなかったときは `--status open --from handed` で
+  戻す。Discard も `--from open` で、取られたメモは捨てない。手順の交錯で破れない性質は `models/handoff` が持つ
 <!-- cc-premise: 2.1.306 mods $.prompt.submit は idle になってから自分のターンとして入り、drop で入らなかったことが分かる -->
 <!-- cc-premise: 2.1.306 cli claude [prompt] は最初のターンの本文、--session-id <uuid> でセッション ID を固定できる -->
 - パーキングへ移す (`To parking`): 終了したセッションの未完了のタスクのノードを `park adopt <session_id> <task_id>` で

@@ -61,9 +61,9 @@ func parkAdd(stateDir string, s parking.Store, stdin io.Reader, cwd string, p ta
 }
 
 // parkSet は開いたセッション (session、cwd) の domain で s.Set を走らせ、status の変化を書く (park set)。
-func parkSet(stateDir string, s parking.Store, p tasklog.Placer, session, cwd, id, status string, now time.Time) (parking.Item, error) {
+func parkSet(stateDir string, s parking.Store, p tasklog.Placer, session, cwd, id, status, expect string, now time.Time) (parking.Item, error) {
 	d := p.Domain(session, cwd)
-	item, from, err := s.Set(d, id, status)
+	item, from, err := s.Set(d, id, status, expect)
 	if err != nil {
 		parkFailed(stateDir, d, now, "set", session, err, kv("memo", id))
 		return item, err

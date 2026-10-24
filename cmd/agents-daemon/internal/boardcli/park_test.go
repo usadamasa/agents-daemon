@@ -265,6 +265,14 @@ func TestParkListAndSet(t *testing.T) {
 	if _, _, err := runPark(t, "", "set", first.ID, "--status", "discarded", "--cwd", work); err == nil {
 		t.Errorf("別の domain から書き換えられた")
 	}
+	// --from は元の status が違えば書き換えない (mod が送る前に取る)。
+	if _, _, err := runPark(t, "", "set", first.ID, "--status", "handed", "--from", "open", "--cwd", home); err == nil {
+		t.Errorf("discarded のメモを --from open で取れた")
+	}
+	out, _, err = runPark(t, "", "set", first.ID, "--status", "open", "--from", "discarded", "--cwd", home)
+	if err != nil || decodeItem(t, out).Status != "open" {
+		t.Fatalf("park set --from discarded: %v\n%s", err, out)
+	}
 }
 
 // adopt は開いたセッションの domain の側にあるタスクを kind task のメモにし、タスクの記録を消す。

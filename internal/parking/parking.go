@@ -145,28 +145,38 @@ func (s Store) add(d domain.Domain, repo string, e Entry, src Source) (Added, er
 }
 
 // Set は domain のメモ id の status を書き換え、書いた後のメモと書き換える前の status を返す。
-func (s Store) Set(d domain.Domain, id, status string) (Item, string, error) {
+// from が空でなければ、ファイルの status が from のときだけ書き換える (違えばエラー)。読んでから書くまでロックの中なので、
+// 同じメモを 2 つのセッションが同時に取ろうとしても通るのは 1 つだけ (models/handoff の Claim)。
+func (s Store) Set(d domain.Domain, id, status, from string) (Item, string, error) {
 	if s.Dir == "" {
 		return Item{}, "", errors.New("parking の置き場所が無い")
 	}
 	if err := validStatus(status); err != nil {
 		return Item{}, "", err
 	}
+	if from != "" {
+		if err := validStatus(from); err != nil {
+			return Item{}, "", err
+		}
+	}
 	if !statefile.ValidSessionID(id) {
 		return Item{}, "", fmt.Errorf("id %q はファイル名に使えない", id)
 	}
 	var item Item
-	var from string
+	var before string
 	err := s.locked(d, func(dir string) error {
 		var ok bool
 		item, ok = readItem(filepath.Join(dir, id+".json"))
 		if !ok {
 			return fmt.Errorf("%s のメモ %s が無い", d, id)
 		}
-		from, item.Status = item.Status, status
+		if from != "" && item.Status != from {
+			return fmt.Errorf("メモ %s の status は %s (期待 %s) なので書き換えない", id, item.Status, from)
+		}
+		before, item.Status = item.Status, status
 		return write(dir, item)
 	})
-	return item, from, err
+	return item, before, err
 }
 
 // DiscardBefore は domain の open のメモのうち、最後に置かれた時刻 (sources の最大の at) が before より前の

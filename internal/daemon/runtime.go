@@ -1,5 +1,5 @@
 // Package daemon は agents-daemon の監視デーモンの実体 (ポーリングループ、
-// PID ファイル、status snapshot、dry-run 経路) を提供する。cmd/agents-daemon/internal/daemoncli の
+// 起動の排他 (lock) と PID ファイル、status snapshot、dry-run 経路) を提供する。cmd/agents-daemon/internal/daemoncli の
 // daemon / status / stop はこのパッケージを薄く呼び出すだけの cobra 配線に徹する。
 package daemon
 
@@ -17,7 +17,6 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/applog"
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/backend"
-	"github.com/usadamasa/agents-daemon/internal/boardlog"
 	"github.com/usadamasa/agents-daemon/internal/config"
 	"github.com/usadamasa/agents-daemon/internal/detect"
 	"github.com/usadamasa/agents-daemon/internal/edge"
@@ -362,18 +361,29 @@ func logKey(outcome monitor.Outcome, err error, entry *paneEntry) string {
 // SessionStart hook から呼ばれる想定なので、常に高速に戻り、hook を絶対に
 // ブロック/失敗させない設計にする。
 func EnsureDaemon(p apppath.Paths, dryRun bool) error {
-	if err := checkRunning(p.PIDFile()); err != nil {
+	exe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("実行ファイルパスの取得に失敗: %w", err)
+	}
+	return ensureDaemon(p, func() error { return spawnDetached(exe, dryRun, p) })
+}
+
+// ensureDaemon は lock を試し、取れなければ既に動いているとして何もしない。取れたら離してから spawn を呼ぶ。
+// 子は RunForeground で lock を取り直す。親が握ったまま起こすと子は ErrAlreadyRunning で終わり、daemon が 0 になる
+// (os.File の fd は CLOEXEC なので子へは渡らない)。離してから子が取るまでの間に別の --ensure が入っても、
+// lock を取れた 1 つだけが daemon になる。
+func ensureDaemon(p apppath.Paths, spawn func() error) error {
+	lock, err := acquireLock(lockFile(p))
+	if err != nil {
 		if errors.Is(err, ErrAlreadyRunning) {
 			return nil // 既に動いている。何もしない。
 		}
 		return err
 	}
-
-	exe, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("実行ファイルパスの取得に失敗: %w", err)
+	if err := lock.Close(); err != nil {
+		return fmt.Errorf("lock を離せません: %w", err)
 	}
-	return spawnDetached(exe, dryRun, p)
+	return spawn()
 }
 
 // spawnDetached は exe を `daemon --foreground` として detach 起動する。
@@ -412,9 +422,13 @@ func spawnDetached(exe string, dryRun bool, p apppath.Paths) error {
 // RunForeground は --foreground の本体。SessionStart から detach 起動された
 // 子プロセスも最終的にここへ辿り着く。
 func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
-	if err := checkRunning(p.PIDFile()); err != nil {
+	// lock は設定や rex を見る前に取る。後に回すと、その間に起きた別の process と 2 つ進む。
+	// 以降のどこで戻っても、process の終了で OS が lock を解放する。
+	lock, err := acquireLock(lockFile(p))
+	if err != nil {
 		return err
 	}
+	defer func() { _ = lock.Close() }()
 
 	cfg, err := config.Load(p.ConfigFile())
 	if err != nil {
@@ -459,11 +473,7 @@ func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 	now := time.Now()
 	runtime := newDaemonRuntime(client, log, p.StatusFile(), store, time.Sleep, now)
 	runtime.backend = kind
-	runtime.tasks = tasklog.New(p.StateDir())
-	runtime.parking = parking.New(p.StateDir())
-	runtime.edges = edge.New(p.StateDir())
-	runtime.boardLogs = boardlog.Paths(p.StateDir())
-	runtime.limits = limitlog.New(p.StateDir())
+	runtime.attachStateDir(p.StateDir())
 	runtime.housekeep(p.LogFile(), now)
 
 	sigCh := make(chan os.Signal, 1)
@@ -474,7 +484,7 @@ func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 	defer stop()
 
 	cleanup := func(reason string) {
-		if err := RemovePIDFile(p.PIDFile()); err != nil {
+		if err := removeOwnPIDFile(p.PIDFile(), os.Getpid()); err != nil {
 			log.Logf("PID ファイルの削除に失敗: %v", err)
 		}
 		log.Logf("daemon 終了 (pid %d): %s", os.Getpid(), reason)
@@ -495,9 +505,7 @@ func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 			// 入れ替わる (理由は selfupdate.go を参照)。
 			if stamp.changed() {
 				cleanup("実行ファイルが更新されたため入れ替わります")
-				if err := spawnDetached(stamp.path, dryRun, p); err != nil {
-					log.Logf("新しい版の起動に失敗しました。次回の SessionStart で起動されます: %v", err)
-				}
+				replaceSelf(log, lock, stamp, dryRun, p)
 				return nil
 			}
 

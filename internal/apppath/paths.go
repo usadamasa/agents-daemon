@@ -69,7 +69,8 @@ func (p Paths) StateDir() string {
 // 読み込み側と同じ場所に置いて、書き出し先の規則が二重にならないようにするため。
 // cost/ (spend) と dream/ (dream/dreamstate) も同じく、書き手のパッケージが StateDir から導出する。
 
-// PIDFile は稼働中 daemon の PID を保持するファイルのパス。
+// PIDFile は稼働中 daemon の PID を保持するファイルのパス。起動の排他 (daemon.lock) を取った daemon が書く。
+// daemon.lock のパスは読み書きする daemon が StateDir から導出する。
 func (p Paths) PIDFile() string {
 	return filepath.Join(p.StateDir(), "daemon.pid")
 }

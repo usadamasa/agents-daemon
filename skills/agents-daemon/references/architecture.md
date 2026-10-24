@@ -215,7 +215,8 @@ B は fullscreen のレイアウトで dock に置かれるときだけ出す。
 - タスクにする・issue にするよう頼むは、送る前に `park set <id> --status handed --from open` でメモを取る (今の status が
   open でなければ失敗し、送らない。2 つのセッションが同じメモを渡そうとしても取れるのは 1 つ)。`$.session.send` が
   届かなかった、`$.prompt.submit` が drop された、`spawn` が window を作れなかったときは `--status open --from handed` で
-  戻す。Discard も `--from open` で、取られたメモは捨てない。手順の交錯で破れない性質は `models/handoff` が持つ
+  戻す。Discard も `--from open` で、取られたメモは捨てない。手順の交錯で破れない性質は `models/handoff` が持ち、
+  実装に対しては `internal/parking` と `internal/tasklog` の `invariants_test.go` が実物の Store の交錯で確かめる
 <!-- cc-premise: 2.1.306 mods $.prompt.submit は idle になってから自分のターンとして入り、drop で入らなかったことが分かる -->
 <!-- cc-premise: 2.1.306 cli claude [prompt] は最初のターンの本文、--session-id <uuid> でセッション ID を固定できる -->
 - パーキングへ移す (`To parking`): 終了したセッションの未完了のタスクのノードを `park adopt <session_id> <task_id>` で

@@ -53,8 +53,10 @@ claude plugin test .                        # mod (hooks/*.test.tsx) のテス�
 ```
 
 `invariants_test.go` と `fuzz_test.go` は、1 場面を固定する例ではなく「どの入力でも破ってはいけないこと」を書いて乱択で
-探す実行できる仕様 (`internal/monitor`、`internal/dag`、`internal/detect`、`internal/statefile`)。反例が出たらコードを
-直すか挙動を正当化し、性質を弱めて通さない。`task test` は fuzz の seed だけを回し、乱択は `task fuzz` で行う。
+探す実行できる仕様 (`internal/monitor`、`internal/dag`、`internal/detect`、`internal/statefile`、`internal/parking`、
+`internal/tasklog`、`internal/edge`)。反例が出たらコードを直すか挙動を正当化し、性質を弱めて通さない。
+`models/handoff` の不変条件は `internal/parking` と `internal/tasklog` の `invariants_test.go` が
+実物の Store の交錯で持つ。`task test` は fuzz の seed だけを回し、乱択は `task fuzz` で行う。
 hook のテストは fake の `go` とバイナリで回るので、Go のビルドが通らなくても hook 側だけ確かめられる。
 bats は hook を `/bin/bash` で起動する (本番の shebang と同じ bash 3.2 で非互換を拾うため)。
 PR の CI は `.github/workflows/ci.yaml`。コードが変わらなくても新しく公開された脆弱性を拾うため、

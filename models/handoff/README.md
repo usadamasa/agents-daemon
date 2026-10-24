@@ -23,7 +23,7 @@ TLC は devShell の `tlaplus` (`tlc`)。CI では回さない。`scripts/model-
 | cfg | 不変条件 | 今の設計 |
 | ---- | ---- | ---- |
 | `Handoff.cfg` | `TypeOK`、`AdoptLeavesOne` (adopt でメモかタスクの一方は残る) | 成り立つ |
-| `Handoff.AtMostOneDelivery.cfg` | 1 つのメモは高々 1 つの宛先に渡る | 破れる。2 つの mod が同じ open のメモを読み、両方が送る |
+| `Handoff.AtMostOneDelivery.cfg` | 1 つのメモは高々 1 つの宛先に渡る | 破れる。2 つの mod が同じ open のメモを読み、両方が送る。1 つの mod でも、送った後の `park set handed` が失敗すると open のまま残り、次に押すとまた送る |
 | `Handoff.LiveTaskKept.cfg` | 生きているセッションのタスクの記録は adopt で消えない | 破れる。daemon が止まると pane が空に見え、adopt が通る |
 | `Handoff.AtMostOneSession.cfg` | 1 つのメモから起きるセッションは高々 1 つ | 破れる。2 つの mod がそれぞれ spawn する。1 つの mod でも、前景待ちが切れた後にもう一度 spawn すると起きる |
 | `TaskLog.cfg` | TaskCreate の記録は失われない | 破れる。TaskList が先に実行され、その hook が TaskCreate の hook の後に動くと記録を消す |
@@ -38,3 +38,6 @@ TLC は devShell の `tlaplus` (`tlc`)。CI では回さない。`scripts/model-
 - `Handoff.tla` のセッションは生きているものだけを置く。終了したセッションのタスクの adopt は正しい操作で、
   モデルの対象にしていない。
 - hook は PostToolUse で、同じターンの並列の tool の hook は順序が決まらないとしている。
+- housekeeping (mtime による削除) は置いていない。1 回の受け渡しの間に上の不変条件と絡まないため。
+- `Mods = {m1}` にしても、渡る回数とセッションの数の不変条件は破れる (再試行の経路)。設計の直しは mod 同士の
+  取り合いだけでなく、同じ mod の押し直しも閉じる必要がある。

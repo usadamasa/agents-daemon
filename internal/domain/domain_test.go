@@ -43,7 +43,7 @@ func TestNew_dropsNonAbsolutePaths(t *testing.T) {
 func TestParse(t *testing.T) {
 	cases := map[string]Domain{"home": Home, "work": Work, "": Work, "Home": Work, "personal": Work}
 	for in, want := range cases {
-		if got := Parse(in); got != want {
+		if got := parse(in); got != want {
 			t.Errorf("Parse(%q) = %q, want %q", in, got, want)
 		}
 	}

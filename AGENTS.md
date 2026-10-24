@@ -41,6 +41,7 @@ README の「役割」が持つ。機能を足す・外す判断はそこに照�
 
 ```sh
 task test                                   # go test ./... と bats tests/
+task fuzz                                   # go の fuzz target を 1 つずつ回す (FUZZTIME で時間)
 task lint                                   # Go の全静的解析。devShell のツールが要る
 task vulncheck                              # govulncheck の symbol モード (task lint が呼ぶ)
 shellcheck hooks/*.sh hooks/lib/*.sh scripts/*.sh tests/lib/*.bash tests/fixtures/fake-go .envrc
@@ -49,6 +50,9 @@ claude plugin validate --strict skills      # skill の frontmatter
 claude plugin test .                        # mod (hooks/*.test.tsx) のテスト
 ```
 
+`invariants_test.go` と `fuzz_test.go` は、1 場面を固定する例ではなく「どの入力でも破ってはいけないこと」を書いて乱択で
+探す実行できる仕様 (`internal/monitor`、`internal/dag`、`internal/detect`、`internal/statefile`)。反例が出たらコードを
+直すか挙動を正当化し、性質を弱めて通さない。`task test` は fuzz の seed だけを回し、乱択は `task fuzz` で行う。
 hook のテストは fake の `go` とバイナリで回るので、Go のビルドが通らなくても hook 側だけ確かめられる。
 bats は hook を `/bin/bash` で起動する (本番の shebang と同じ bash 3.2 で非互換を拾うため)。
 PR の CI は `.github/workflows/ci.yaml`。コードが変わらなくても新しく公開された脆弱性を拾うため、

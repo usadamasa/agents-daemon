@@ -21,6 +21,11 @@ tasks:
       - go test ./...
       - bats tests/
 
+  fuzz:
+    desc: go の fuzz target を 1 つずつ回す (FUZZTIME で 1 target あたりの時間。既定 30s)
+    cmds:
+      - scripts/fuzz.sh
+
   test-cover:
     desc: カバレッジ付きテスト
     cmds:

@@ -49,8 +49,8 @@ func writePIDFile(path string, pid int) error {
 	return statefile.WriteFileAtomic(path, ".daemon.pid.*", []byte(strconv.Itoa(pid)+"\n"))
 }
 
-// RemovePIDFile は path が存在すれば削除する。既に無い場合はエラーにしない。
-func RemovePIDFile(path string) error {
+// removePIDFile は path が存在すれば削除する。既に無い場合はエラーにしない。
+func removePIDFile(path string) error {
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("PID ファイルの削除に失敗: %w", err)
 	}
@@ -67,5 +67,5 @@ func removeOwnPIDFile(path string, pid int) error {
 	if current != pid {
 		return nil
 	}
-	return RemovePIDFile(path)
+	return removePIDFile(path)
 }

@@ -265,7 +265,7 @@ func TestIngestStatuslineWithEnv_multiplexer(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			s := New(t.TempDir())
-			if err := s.IngestStatuslineWithEnv([]byte(inputNoRateLimits), envOf(tt.env), ingestNow); err != nil {
+			if err := s.ingestStatuslineWithEnv([]byte(inputNoRateLimits), envOf(tt.env), ingestNow); err != nil {
 				t.Fatalf("IngestStatuslineWithEnv() error = %v", err)
 			}
 			if got := readContextRaw(t, s, "sess-1"); got != tt.want {

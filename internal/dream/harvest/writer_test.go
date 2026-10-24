@@ -10,11 +10,11 @@ import (
 )
 
 func TestMergeAndDedup_LastWins(t *testing.T) {
-	existing := []HarvestRecord{
+	existing := []harvestRecord{
 		{SessionID: "a", NMessages: 1},
 		{SessionID: "b", NMessages: 2},
 	}
-	incoming := []HarvestRecord{
+	incoming := []harvestRecord{
 		{SessionID: "b", NMessages: 5}, // overrides
 		{SessionID: "c", NMessages: 3},
 	}
@@ -33,7 +33,7 @@ func TestMergeAndDedup_LastWins(t *testing.T) {
 
 func TestWriteRecords_Idempotent(t *testing.T) {
 	outDir := t.TempDir()
-	records := []HarvestRecord{
+	records := []harvestRecord{
 		{SessionID: "sess1", TSStart: "2026-07-19T10:00:00+09:00", NMessages: 5},
 		{SessionID: "sess2", TSStart: "2026-07-19T11:00:00+09:00", NMessages: 3},
 	}
@@ -62,7 +62,7 @@ func TestWriteRecords_Idempotent(t *testing.T) {
 
 func TestWriteRecords_DedupAcrossRuns(t *testing.T) {
 	outDir := t.TempDir()
-	initial := []HarvestRecord{
+	initial := []harvestRecord{
 		{SessionID: "sess1", TSStart: "2026-07-19T10:00:00+09:00", NMessages: 5},
 	}
 	if _, err := writeRecords(outDir, initial); err != nil {
@@ -70,7 +70,7 @@ func TestWriteRecords_DedupAcrossRuns(t *testing.T) {
 	}
 
 	// same session with updated NMessages (session ongoing)
-	updated := []HarvestRecord{
+	updated := []harvestRecord{
 		{SessionID: "sess1", TSStart: "2026-07-19T10:00:00+09:00", NMessages: 20},
 	}
 	if _, err := writeRecords(outDir, updated); err != nil {
@@ -88,7 +88,7 @@ func TestWriteRecords_DedupAcrossRuns(t *testing.T) {
 
 func TestWriteRecords_MultipleDates(t *testing.T) {
 	outDir := t.TempDir()
-	records := []HarvestRecord{
+	records := []harvestRecord{
 		{SessionID: "sess1", TSStart: "2026-07-19T10:00:00+09:00", NMessages: 1},
 		{SessionID: "sess2", TSStart: "2026-07-20T10:00:00+09:00", NMessages: 1},
 	}
@@ -140,7 +140,7 @@ func TestWriteRecords_SkipsCorruptedExistingLines(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	incoming := []HarvestRecord{
+	incoming := []harvestRecord{
 		{SessionID: "new", TSStart: "2026-07-19T11:00:00+09:00", NMessages: 2},
 	}
 	if _, err := writeRecords(outDir, incoming); err != nil {
@@ -158,21 +158,21 @@ func TestWriteRecords_SkipsCorruptedExistingLines(t *testing.T) {
 	}
 }
 
-func readAllRecords(t *testing.T, path string) []HarvestRecord {
+func readAllRecords(t *testing.T, path string) []harvestRecord {
 	t.Helper()
 	f, err := os.Open(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = f.Close() }()
-	var out []HarvestRecord
+	var out []harvestRecord
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
 		if line == "" {
 			continue
 		}
-		var r HarvestRecord
+		var r harvestRecord
 		if err := json.Unmarshal([]byte(line), &r); err != nil {
 			t.Fatalf("unmarshal %q: %v", line, err)
 		}

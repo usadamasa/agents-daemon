@@ -34,7 +34,7 @@ unhomed は coverage 判定を持たない (`confidence: unknown`) ため、
 `agents-daemon dream mine` の中核は、memory の主要フレーズが skill body に既に inline されているかの判定にある。
 substring/token/shingle の match で coverage ratio を求め、その値で分類する。
 
-**閾値** (`ClassifyCoverage` in `coverage.go`)。部分的な inline を積極的に「未完了 migration」として拾うため、`skill_body` 側は緩めに設定する。
+**閾値** (`classifyCoverage` in `coverage.go`)。部分的な inline を積極的に「未完了 migration」として拾うため、`skill_body` 側は緩めに設定する。
 
 | coverage ratio | 分類 | Confidence |
 |---------------|------|-----------|

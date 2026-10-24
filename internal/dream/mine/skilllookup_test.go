@@ -49,7 +49,7 @@ func TestLoadSkillFromDirs_NotFoundInAny(t *testing.T) {
 }
 
 func TestProjectRootFromSessions_PicksFirstCWD(t *testing.T) {
-	sessions := []HarvestSession{
+	sessions := []harvestSession{
 		{SessionID: "s1", CWD: "/Users/x/workspace"},
 		{SessionID: "s2", CWD: "/Users/x/other"},
 	}

@@ -33,7 +33,7 @@ func TestCandidatesFilename(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := CandidatesFilename(tc.project, tc.date)
+			got := candidatesFilename(tc.project, tc.date)
 			if got != tc.want {
 				t.Errorf("CandidatesFilename(%q, %q) = %q; want %q",
 					tc.project, tc.date, got, tc.want)

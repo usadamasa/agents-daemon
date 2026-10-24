@@ -11,10 +11,10 @@ import (
 	"strings"
 )
 
-// Memory は feedback / project / reference 用の auto memory 1 ファイル分の内容。
+// memory は feedback / project / reference 用の auto memory 1 ファイル分の内容。
 // Mine が候補判定に使うのは Type == "feedback" のみだが、他 type もロードして
 // 判定側でフィルタする (skill 全般に効く rule かどうかの判断を後段に任せる)。
-type Memory struct {
+type memory struct {
 	Path        string
 	Name        string
 	Description string
@@ -28,7 +28,7 @@ type Memory struct {
 // ディレクトリ未存在はエラーにする。mine にとって memory は主入力なので、
 // 空スライスで返すと project canonical name の解決ミスが「memory 0 件」に
 // 化けて表面化しない。存在するが空のディレクトリは正常系。
-func loadMemories(memDir string) ([]Memory, error) {
+func loadMemories(memDir string) ([]memory, error) {
 	entries, err := os.ReadDir(memDir)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -52,7 +52,7 @@ func loadMemories(memDir string) ([]Memory, error) {
 	}
 	sort.Strings(names)
 
-	out := make([]Memory, 0, len(names))
+	out := make([]memory, 0, len(names))
 	for _, n := range names {
 		path := filepath.Join(memDir, n)
 		data, err := os.ReadFile(path) // #nosec G304 -- CLI: memory dir 配下の *.md 限定
@@ -89,13 +89,13 @@ func splitFrontmatter(content string) (string, string, error) {
 	return fm, body, nil
 }
 
-// parseMemoryContent は 1 ファイル分の内容から Memory を組み立てる。
-func parseMemoryContent(path, content string) (Memory, error) {
+// parseMemoryContent は 1 ファイル分の内容から memory を組み立てる。
+func parseMemoryContent(path, content string) (memory, error) {
 	fm, body, err := splitFrontmatter(content)
 	if err != nil {
-		return Memory{}, err
+		return memory{}, err
 	}
-	mem := Memory{Path: path, Body: strings.TrimSpace(body)}
+	mem := memory{Path: path, Body: strings.TrimSpace(body)}
 	// 単純な YAML パーサ (top-level key と metadata.type だけ) 。
 	// PyYAML 等の依存を避けるため regexp ベース。
 	for _, m := range yamlLineRe.FindAllStringSubmatch(fm, -1) {

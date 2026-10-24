@@ -204,8 +204,8 @@ func lastPlacedAt(item Item) time.Time {
 	return last
 }
 
-// List は domain のメモを id の順 (置いた順) に返す。壊れたファイルは読み飛ばす。
-func (s Store) List(d domain.Domain) ([]Item, error) {
+// list は domain のメモを id の順 (置いた順) に返す。壊れたファイルは読み飛ばす。
+func (s Store) list(d domain.Domain) ([]Item, error) {
 	if s.Dir == "" {
 		return nil, nil
 	}
@@ -219,7 +219,7 @@ func (s Store) Find(d domain.Domain, repo, status string) ([]Item, error) {
 			return nil, err
 		}
 	}
-	items, err := s.List(d)
+	items, err := s.list(d)
 	if err != nil {
 		return nil, err
 	}

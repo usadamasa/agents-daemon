@@ -12,7 +12,7 @@ import (
 
 func TestGenerateCandidates_PIIMigration(t *testing.T) {
 	// coverage 0% ケース: PII rule が skill body に一切ない → skill_body high
-	mems := []Memory{
+	mems := []memory{
 		{
 			Name:        "feedback-standup-no-pii",
 			Description: "PII を伏せる",
@@ -21,10 +21,10 @@ func TestGenerateCandidates_PIIMigration(t *testing.T) {
 			Path:        "/mem/feedback_standup_no_pii.md",
 		},
 	}
-	skills := map[string]Skill{
+	skills := map[string]skill{
 		"daily-standup": {Name: "daily-standup", Body: "SKILL body without PII rule"},
 	}
-	cands := generateCandidates(mems, skills, "-Users-x-workspace", []HarvestSession{})
+	cands := generateCandidates(mems, skills, "-Users-x-workspace", []harvestSession{})
 	if len(cands) != 1 {
 		t.Fatalf("expected 1 candidate, got %d", len(cands))
 	}
@@ -47,7 +47,7 @@ func TestGenerateCandidates_PIIMigration(t *testing.T) {
 
 func TestGenerateCandidates_FullyCoveredMemoryDedup(t *testing.T) {
 	// coverage 100% ケース: memory 内容が skill body に完全 inline → memory_dedup high
-	mems := []Memory{
+	mems := []memory{
 		{
 			Name:        "feedback-standup-date-range",
 			Description: "date range default",
@@ -56,7 +56,7 @@ func TestGenerateCandidates_FullyCoveredMemoryDedup(t *testing.T) {
 			Path:        "/mem/feedback_standup_date_range.md",
 		},
 	}
-	skills := map[string]Skill{
+	skills := map[string]skill{
 		"daily-standup": {Name: "daily-standup", Body: "日付モデル: Done は前営業日 / Doing は当日"},
 	}
 	cands := generateCandidates(mems, skills, "-Users-x-workspace", nil)
@@ -72,7 +72,7 @@ func TestGenerateCandidates_FullyCoveredMemoryDedup(t *testing.T) {
 func TestGenerateCandidates_UnhomedWhenNoAssociatedSkill(t *testing.T) {
 	// association 先が無い memory も候補として出す｡skip すると stage レポートに現れず、
 	// 行き先を決める機会が消える｡
-	mems := []Memory{
+	mems := []memory{
 		{
 			Name:        "feedback-random",
 			Description: "unrelated to any skill",
@@ -81,7 +81,7 @@ func TestGenerateCandidates_UnhomedWhenNoAssociatedSkill(t *testing.T) {
 			Path:        "/mem/x.md",
 		},
 	}
-	skills := map[string]Skill{
+	skills := map[string]skill{
 		"daily-standup": {Name: "daily-standup", Body: "some body"},
 	}
 	cands := generateCandidates(mems, skills, "-p", nil)
@@ -107,11 +107,11 @@ func TestGenerateCandidates_UnhomedWhenNoAssociatedSkill(t *testing.T) {
 }
 
 func TestGenerateCandidates_UnhomedIDsAreUniquePerMemory(t *testing.T) {
-	mems := []Memory{
+	mems := []memory{
 		{Name: "feedback-alpha", Type: "feedback", Body: "a", Path: "/mem/a.md"},
 		{Name: "feedback-beta", Type: "feedback", Body: "b", Path: "/mem/b.md"},
 	}
-	cands := generateCandidates(mems, map[string]Skill{}, "-p", nil)
+	cands := generateCandidates(mems, map[string]skill{}, "-p", nil)
 	if len(cands) != 2 {
 		t.Fatalf("expected 2 candidates, got %d", len(cands))
 	}
@@ -121,7 +121,7 @@ func TestGenerateCandidates_UnhomedIDsAreUniquePerMemory(t *testing.T) {
 }
 
 func TestGenerateCandidates_IncludesEvidenceSessions(t *testing.T) {
-	mems := []Memory{
+	mems := []memory{
 		{
 			Name: "feedback-standup-default-channel",
 			Type: "feedback",
@@ -129,10 +129,10 @@ func TestGenerateCandidates_IncludesEvidenceSessions(t *testing.T) {
 			Path: "/mem/a.md",
 		},
 	}
-	skills := map[string]Skill{
+	skills := map[string]skill{
 		"daily-standup": {Name: "daily-standup", Body: "no channel default here"},
 	}
-	sessions := []HarvestSession{
+	sessions := []harvestSession{
 		{SessionID: "sess-a", SkillsInvoked: []string{"daily-standup"}, CWDProject: "-p"},
 		{SessionID: "sess-b", SkillsInvoked: []string{"caddi-obsidian"}, CWDProject: "-p"},
 		{SessionID: "sess-c", SkillsInvoked: []string{"daily-standup", "weekly-report"}, CWDProject: "-p"},

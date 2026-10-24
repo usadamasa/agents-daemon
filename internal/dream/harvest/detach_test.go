@@ -32,11 +32,11 @@ func waitFor(t *testing.T, cond func() bool) {
 
 func TestSpawnDetached_ReturnsBeforeChildEndsAndLogsItsStderr(t *testing.T) {
 	logDir := filepath.Join(t.TempDir(), "logs")
-	logPath := DetachLogPath(logDir)
+	logPath := detachLogPath(logDir)
 
 	start := time.Now()
 	// 子は 2 秒眠ってから stderr に 1 行書く。親はそれを待たずに戻る。
-	err := SpawnDetached("/bin/sh", []string{"-c", "sleep 2; printf 'child says hi\\n' >&2"}, logPath)
+	err := spawnDetached("/bin/sh", []string{"-c", "sleep 2; printf 'child says hi\\n' >&2"}, logPath)
 	if err != nil {
 		t.Fatalf("SpawnDetached: %v", err)
 	}
@@ -52,7 +52,7 @@ func TestSpawnDetached_ReturnsBeforeChildEndsAndLogsItsStderr(t *testing.T) {
 
 func TestSpawnDetached_AppendsToExistingLog(t *testing.T) {
 	logDir := filepath.Join(t.TempDir(), "logs")
-	logPath := DetachLogPath(logDir)
+	logPath := detachLogPath(logDir)
 	if err := os.MkdirAll(logDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +60,7 @@ func TestSpawnDetached_AppendsToExistingLog(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := SpawnDetached("/bin/sh", []string{"-c", "printf 'later line\\n'"}, logPath); err != nil {
+	if err := spawnDetached("/bin/sh", []string{"-c", "printf 'later line\\n'"}, logPath); err != nil {
 		t.Fatalf("SpawnDetached: %v", err)
 	}
 	waitFor(t, func() bool {
@@ -74,7 +74,7 @@ func TestSpawnDetached_AppendsToExistingLog(t *testing.T) {
 }
 
 func TestDetachLogPath(t *testing.T) {
-	if got, want := DetachLogPath("/state/logs"), "/state/logs/dream-harvest.log"; got != want {
+	if got, want := detachLogPath("/state/logs"), "/state/logs/dream-harvest.log"; got != want {
 		t.Errorf("DetachLogPath = %q; want %q", got, want)
 	}
 }

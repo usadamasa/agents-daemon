@@ -46,7 +46,7 @@ type Opts struct {
 	Force  bool               // 未コミットの変更がある worktree も削除する
 	DryRun bool               // 削除せず対象だけ表示する
 	Now    time.Time          // 零値なら time.Now()
-	Alive  func(pid int) bool // 零値なら ProcessAlive
+	Alive  func(pid int) bool // 零値なら processAlive
 	Stdout io.Writer          // 回収した・残した理由の報告先。何もしなければ何も書かない
 }
 
@@ -90,7 +90,7 @@ func newPruner(opts Opts) (*pruner, error) {
 		opts.Now = time.Now()
 	}
 	if opts.Alive == nil {
-		opts.Alive = ProcessAlive
+		opts.Alive = processAlive
 	}
 	if opts.Stdout == nil {
 		opts.Stdout = io.Discard
@@ -122,7 +122,7 @@ func (p *pruner) handle(e entry) error {
 	}
 	deadPID := 0
 	if e.Locked {
-		lock := ParseLockReason(e.Reason)
+		lock := parseLockReason(e.Reason)
 		switch lock.Kind {
 		case LockAgent:
 			// subagent の worktree は本体の sweep が消す。毎セッション報告しないよう黙って飛ばす。

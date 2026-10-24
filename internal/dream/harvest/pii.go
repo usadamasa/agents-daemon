@@ -34,8 +34,8 @@ var piiPatterns = []struct {
 	},
 }
 
-// MaskPII は text 内の既知 PII パターンを伏せ字化する。
-func MaskPII(text string) string {
+// maskPII は text 内の既知 PII パターンを伏せ字化する。
+func maskPII(text string) string {
 	if text == "" {
 		return text
 	}

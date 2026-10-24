@@ -20,7 +20,7 @@ func TestLoadState_MissingFile(t *testing.T) {
 
 func TestSaveAndLoadState_Roundtrip(t *testing.T) {
 	dir := t.TempDir()
-	in := &HarvestState{LastRunTS: "2026-07-19T10:00:00+09:00"}
+	in := &harvestState{LastRunTS: "2026-07-19T10:00:00+09:00"}
 	if err := saveState(dir, in); err != nil {
 		t.Fatalf("saveState: %v", err)
 	}
@@ -40,7 +40,7 @@ func TestSaveAndLoadState_Roundtrip(t *testing.T) {
 
 func TestSaveState_CreatesDirectory(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "nonexistent")
-	if err := saveState(dir, &HarvestState{LastRunTS: "2026-07-19T10:00:00+09:00"}); err != nil {
+	if err := saveState(dir, &harvestState{LastRunTS: "2026-07-19T10:00:00+09:00"}); err != nil {
 		t.Fatalf("saveState should create the dir: %v", err)
 	}
 }
@@ -49,7 +49,7 @@ func TestSaveState_CreatesDirectory(t *testing.T) {
 func TestSaveState_LeavesOnlyStateFile(t *testing.T) {
 	dir := t.TempDir()
 	for range 2 {
-		if err := saveState(dir, &HarvestState{LastRunTS: "2026-07-19T10:00:00+09:00"}); err != nil {
+		if err := saveState(dir, &harvestState{LastRunTS: "2026-07-19T10:00:00+09:00"}); err != nil {
 			t.Fatalf("saveState: %v", err)
 		}
 	}
@@ -69,13 +69,13 @@ func TestSaveState_LeavesOnlyStateFile(t *testing.T) {
 func TestParseLastRun(t *testing.T) {
 	tests := []struct {
 		name     string
-		s        *HarvestState
+		s        *harvestState
 		wantZero bool
 	}{
 		{"nil", nil, true},
-		{"empty ts", &HarvestState{}, true},
-		{"invalid ts", &HarvestState{LastRunTS: "not-a-timestamp"}, true},
-		{"valid ts", &HarvestState{LastRunTS: "2026-07-19T10:00:00+09:00"}, false},
+		{"empty ts", &harvestState{}, true},
+		{"invalid ts", &harvestState{LastRunTS: "not-a-timestamp"}, true},
+		{"valid ts", &harvestState{LastRunTS: "2026-07-19T10:00:00+09:00"}, false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -90,7 +90,7 @@ func TestParseLastRun(t *testing.T) {
 // Test that state timestamps parse in the expected timezone (defense against RFC3339 vs 3339Nano drift)
 func TestParseLastRun_MatchesRFC3339Format(t *testing.T) {
 	want := time.Date(2026, 7, 19, 10, 0, 0, 0, time.FixedZone("JST", 9*3600))
-	got := parseLastRun(&HarvestState{LastRunTS: want.Format(time.RFC3339)})
+	got := parseLastRun(&harvestState{LastRunTS: want.Format(time.RFC3339)})
 	if !got.Equal(want) {
 		t.Errorf("parseLastRun did not roundtrip: got %v, want %v", got, want)
 	}

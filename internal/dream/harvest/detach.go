@@ -14,19 +14,19 @@ const detachLogName = "dream-harvest.log"
 // DetachFlag は harvest を Stop hook から起こすときの flag。親はこれを外した引数で自分を detach 起動する。
 const DetachFlag = "--detach"
 
-// DetachLogPath は logs ディレクトリ (apppath.Paths.LogFile の親) から detach した harvest のログの場所を導出する。
-func DetachLogPath(logDir string) string {
+// detachLogPath は logs ディレクトリ (apppath.Paths.LogFile の親) から detach した harvest のログの場所を導出する。
+func detachLogPath(logDir string) string {
 	return filepath.Join(logDir, detachLogName)
 }
 
 // Detach は自分の実行ファイルを、args から DetachFlag を外した引数で detach 起動して戻る。
-// 子の stdout / stderr は logDir の DetachLogPath に残る。
+// 子の stdout / stderr は logDir の detachLogPath に残る。
 func Detach(args []string, logDir string) error {
 	exe, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("実行ファイルパスの取得に失敗: %w", err)
 	}
-	return SpawnDetached(exe, childArgs(args), DetachLogPath(logDir))
+	return spawnDetached(exe, childArgs(args), detachLogPath(logDir))
 }
 
 // childArgs は detach 起動する子に渡す引数。自分の引数から detach の flag だけを外す。
@@ -41,11 +41,11 @@ func childArgs(args []string) []string {
 	return out
 }
 
-// SpawnDetached は exe を args で detach 起動し、stdout / stderr を logPath に追記する。
+// spawnDetached は exe を args で detach 起動し、stdout / stderr を logPath に追記する。
 // Stop hook から呼ばれる想定で、子を Wait せずに即座に戻る (hook をブロックしない)。
 // stdin は繋がない。繋ぐと呼び出し元が子の終了までパイプを待ち続ける。
 // 成功した harvest は何も書かないので、ログが伸びるのは失敗したときだけ。
-func SpawnDetached(exe string, args []string, logPath string) error {
+func spawnDetached(exe string, args []string, logPath string) error {
 	if err := os.MkdirAll(filepath.Dir(logPath), 0o700); err != nil {
 		return fmt.Errorf("ログディレクトリの作成に失敗: %w", err)
 	}

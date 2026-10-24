@@ -125,7 +125,7 @@ Slack 投稿は明確なアクション/タスクのみ｡つぶやきは除外�
 	}
 
 	skillNames := extractInvokedSkills(sessions)
-	skills := make(map[string]Skill)
+	skills := make(map[string]skill)
 	for _, n := range skillNames {
 		s, err := loadSkill(skillsDir, n)
 		if err != nil {

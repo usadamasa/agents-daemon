@@ -326,7 +326,7 @@ func TestCollectDoctor_JSON(t *testing.T) {
 		}
 		// 文字の出力は同じ struct から書く (値の食い違いが無いことの確認)。
 		var buf bytes.Buffer
-		Write(&buf, rep)
+		write(&buf, rep)
 		for _, want := range []string{"(1m30s 前)", "OK: rex_version: 0.0.1", "pane=p1 cwd=/repo agent_status=blocked kind=permission"} {
 			if !strings.Contains(buf.String(), want) {
 				t.Errorf("出力に %q が無い:\n%s", want, buf.String())

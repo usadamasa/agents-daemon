@@ -6,14 +6,14 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/dream/dreamio"
 )
 
-// Coverage は「memory の主要フレーズが skill body 内にどれだけ含まれるか」の集計。
-type Coverage struct {
+// coverage は「memory の主要フレーズが skill body 内にどれだけ含まれるか」の集計。
+type coverage struct {
 	Covered int
 	Total   int
 }
 
-// Ratio は 0.0〜1.0 で coverage 率を返す。Total==0 は 0.0。
-func (c Coverage) Ratio() float64 {
+// ratio は 0.0〜1.0 で coverage 率を返す。Total==0 は 0.0。
+func (c coverage) ratio() float64 {
 	if c.Total == 0 {
 		return 0.0
 	}
@@ -37,7 +37,7 @@ func (c Coverage) Ratio() float64 {
 // → literal 不一致、token 「当日の2日分を収集する」も skill 側に無いが、
 //
 //	shingle レベル (「前営業」「営業日」「当日の」「2日分」「収集す」等) では高一致率。
-func computeCoverage(phrases []string, skillBody string) Coverage {
+func computeCoverage(phrases []string, skillBody string) coverage {
 	skillShingles := shinglesOf(skillBody, shingleSize)
 	var covered int
 	for _, p := range phrases {
@@ -57,7 +57,7 @@ func computeCoverage(phrases []string, skillBody string) Coverage {
 			covered++
 		}
 	}
-	return Coverage{Covered: covered, Total: len(phrases)}
+	return coverage{Covered: covered, Total: len(phrases)}
 }
 
 const (
@@ -208,52 +208,52 @@ func isASCIIWordByte(s string, i int) bool {
 
 // extractSkillKey は "daily-standup" → "standup" のような検索キーを返す。
 // prefix 部分 (daily- / caddi- 等) が memory 名から省略される慣習に対応する。
-func extractSkillKey(skill string) string {
+func extractSkillKey(name string) string {
 	// ハイフンで分割し、最後の 2 tokens を key とする (例: "daily-standup" → "standup")
 	// 単一 token skill (例: "dream") はそのまま
-	parts := strings.Split(skill, "-")
+	parts := strings.Split(name, "-")
 	if len(parts) <= 1 {
-		return skill
+		return name
 	}
 	// prefix が "caddi" "daily" "weekly" などなら末尾 tokens を返す
 	knownPrefixes := map[string]bool{"caddi": true, "daily": true, "weekly": true}
 	if knownPrefixes[parts[0]] {
 		return strings.Join(parts[1:], "-")
 	}
-	return skill
+	return name
 }
 
-// Classification は Mine 結果 candidate 1 件の分類 (kind + confidence)。
+// classification は Mine 結果 candidate 1 件の分類 (kind + confidence)。
 // 値は dreamio の Kind* / Confidence* 定数を使う。
-type Classification struct {
+type classification struct {
 	Kind       string
 	Confidence string
 }
 
-// ClassifyCoverage は coverage ratio に基づいて candidate の kind と confidence を決める。
+// classifyCoverage は coverage ratio に基づいて candidate の kind と confidence を決める。
 // 閾値は skills/dream/references/skill-mining-heuristics.md の「判定 4」表を
 // single source of truth とする。数値を変更したら reference 側も同時に更新すること。
-func ClassifyCoverage(c Coverage) Classification {
+func classifyCoverage(c coverage) classification {
 	// Total==0 は「フレーズ抽出できなかった memory」で判定不能 → skill_body low
 	if c.Total == 0 {
-		return Classification{Kind: dreamio.KindSkillBody, Confidence: dreamio.ConfidenceLow}
+		return classification{Kind: dreamio.KindSkillBody, Confidence: dreamio.ConfidenceLow}
 	}
-	ratio := c.Ratio()
+	ratio := c.ratio()
 	switch {
 	case ratio >= 0.95:
 		// ほぼ完全 inline → 削除して安全
-		return Classification{Kind: dreamio.KindMemoryDedup, Confidence: dreamio.ConfidenceHigh}
+		return classification{Kind: dreamio.KindMemoryDedup, Confidence: dreamio.ConfidenceHigh}
 	case ratio >= 0.80:
 		// 概ね inline だが一部残 → 削除候補、要確認
-		return Classification{Kind: dreamio.KindMemoryDedup, Confidence: dreamio.ConfidenceMedium}
+		return classification{Kind: dreamio.KindMemoryDedup, Confidence: dreamio.ConfidenceMedium}
 	case ratio <= 0.15:
 		// ほぼ inline されていない → migration 候補、確度高い
-		return Classification{Kind: dreamio.KindSkillBody, Confidence: dreamio.ConfidenceHigh}
+		return classification{Kind: dreamio.KindSkillBody, Confidence: dreamio.ConfidenceHigh}
 	case ratio <= 0.40:
 		// 部分的にしか inline されていない → migration 候補、middle confidence
-		return Classification{Kind: dreamio.KindSkillBody, Confidence: dreamio.ConfidenceMedium}
+		return classification{Kind: dreamio.KindSkillBody, Confidence: dreamio.ConfidenceMedium}
 	default:
 		// 40-80% は判定困難 → skill_body low とし人間判断に任せる
-		return Classification{Kind: dreamio.KindSkillBody, Confidence: dreamio.ConfidenceLow}
+		return classification{Kind: dreamio.KindSkillBody, Confidence: dreamio.ConfidenceLow}
 	}
 }

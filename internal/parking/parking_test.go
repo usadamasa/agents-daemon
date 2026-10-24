@@ -45,11 +45,11 @@ func TestAdd_writesOneFilePerItem(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(s.Dir, "home", item.ID+".json")); err != nil {
 		t.Errorf("ファイルが無い: %v", err)
 	}
-	got, err := s.List(domain.Home)
+	got, err := s.list(domain.Home)
 	if err != nil || len(got) != 1 || got[0].ID != item.ID || got[0].Title != "保持期間の根拠が無い" {
 		t.Errorf("List() = %+v, %v", got, err)
 	}
-	if work, _ := s.List(domain.Work); len(work) != 0 {
+	if work, _ := s.list(domain.Work); len(work) != 0 {
 		t.Errorf("work の側に出た: %+v", work)
 	}
 }
@@ -63,7 +63,7 @@ func TestPlacedDuring(t *testing.T) {
 	mustAdd(t, s, domain.Home, testRepo, aside("c"), source("s1", "4"))
 	mustAdd(t, s, domain.Home, testRepo, aside("d"), source("s2", "3"))
 	mustAdd(t, s, domain.Home, testRepo, aside("e"), source("s1", ""))
-	items, _ := s.List(domain.Home)
+	items, _ := s.list(domain.Home)
 
 	// 同じ時刻に置いたメモの id は乱数の部分で並ぶので、順は見ない。
 	got := PlacedDuring(items, "s1", "3")
@@ -92,7 +92,7 @@ func TestAdd_mergesSameItem(t *testing.T) {
 	if len(third.Sources) != 2 {
 		t.Errorf("sources = %+v, want 2 件", third.Sources)
 	}
-	if got, _ := s.List(domain.Home); len(got) != 1 {
+	if got, _ := s.list(domain.Home); len(got) != 1 {
 		t.Errorf("件数 = %d, want 1", len(got))
 	}
 }
@@ -172,7 +172,7 @@ func TestAdd_keepsTitleAsWritten(t *testing.T) {
 	if merged.ID != first.ID || merged.Title != "Fix  README の  表記" {
 		t.Errorf("まとめた後の item = %+v", merged)
 	}
-	if got, _ := s.List(domain.Home); len(got) != 1 || got[0].Title != "Fix  README の  表記" {
+	if got, _ := s.list(domain.Home); len(got) != 1 || got[0].Title != "Fix  README の  表記" {
 		t.Errorf("List() = %+v", got)
 	}
 }
@@ -217,7 +217,7 @@ func TestAdd_concurrentSameItem(t *testing.T) {
 		})
 	}
 	wg.Wait()
-	got, _ := s.List(domain.Home)
+	got, _ := s.list(domain.Home)
 	if len(got) != 1 || len(got[0].Sources) != 8 {
 		t.Errorf("List() = %+v, want 1 件で sources 8 つ", got)
 	}
@@ -255,7 +255,7 @@ func TestSet(t *testing.T) {
 	if from != StatusOpen {
 		t.Errorf("from = %q, want open", from)
 	}
-	if list, _ := s.List(domain.Home); list[0].Status != StatusHanded {
+	if list, _ := s.list(domain.Home); list[0].Status != StatusHanded {
 		t.Errorf("書き戻されていない: %+v", list)
 	}
 	if _, _, err := s.Set(domain.Home, item.ID, "done"); err == nil {
@@ -333,7 +333,7 @@ func TestPrune(t *testing.T) {
 	if err != nil || removed != 1 {
 		t.Fatalf("Prune() = %d, %v, want 1 件 (handed だけ)", removed, err)
 	}
-	if got, _ := s.List(domain.Home); len(got) != 1 {
+	if got, _ := s.list(domain.Home); len(got) != 1 {
 		t.Errorf("open が消えた")
 	}
 

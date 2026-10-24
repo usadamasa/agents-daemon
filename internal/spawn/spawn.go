@@ -67,7 +67,7 @@ type Runner struct {
 	Host Host
 	// Domain はセッションと cwd の domain (tasklog.Placer.Domain と同じ規則)。
 	Domain func(sessionID, cwd string) domain.Domain
-	// NewSessionID は新しいセッションの ID。nil なら NewSessionID (UUID v4)。
+	// NewSessionID は新しいセッションの ID。nil なら newSessionID (UUID v4)。
 	NewSessionID func() (string, error)
 	// Stat は repo の存在の確認。nil なら os.Stat。
 	Stat func(string) (os.FileInfo, error)
@@ -84,7 +84,7 @@ func (r Runner) Run(ctx context.Context, req Request) (Result, error) {
 	}
 	newID := r.NewSessionID
 	if newID == nil {
-		newID = NewSessionID
+		newID = newSessionID
 	}
 	id, err := newID()
 	if err != nil {
@@ -152,8 +152,8 @@ func (r Runner) waitForClaude(ctx context.Context, paneID string) error {
 	}
 }
 
-// NewSessionID は UUID v4 を返す。Claude Code の --session-id が受ける形。
-func NewSessionID() (string, error) {
+// newSessionID は UUID v4 を返す。Claude Code の --session-id が受ける形。
+func newSessionID() (string, error) {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
 		return "", err

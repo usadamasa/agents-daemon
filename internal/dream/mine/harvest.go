@@ -11,9 +11,9 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/dream/jsonlscan"
 )
 
-// HarvestSession は harvest 出力 (harvest jsonl) の 1 レコード。
+// harvestSession は harvest 出力 (harvest jsonl) の 1 レコード。
 // Mine が必要とするフィールドだけ抜粋する (前方互換 - unknown フィールドは無視)。
-type HarvestSession struct {
+type harvestSession struct {
 	SessionID         string           `json:"session_id"`
 	TSStart           string           `json:"ts_start,omitempty"`
 	TSEnd             string           `json:"ts_end,omitempty"`
@@ -21,18 +21,18 @@ type HarvestSession struct {
 	CWDProject        string           `json:"cwd_project,omitempty"`
 	NMessages         int              `json:"n_messages"`
 	SkillsInvoked     []string         `json:"skills_invoked"`
-	FeedbackSignals   []MinedFeedback  `json:"feedback_signals"`
-	FailedInvocations []MinedFailedInv `json:"failed_invocations"`
+	FeedbackSignals   []minedFeedback  `json:"feedback_signals"`
+	FailedInvocations []minedFailedInv `json:"failed_invocations"`
 }
 
-// MinedFeedback は harvest の FeedbackSignal と互換の subset。
-type MinedFeedback struct {
+// minedFeedback は harvest の feedbackSignal と互換の subset。
+type minedFeedback struct {
 	Quote string `json:"quote"`
 	Kind  string `json:"kind"`
 }
 
-// MinedFailedInv は harvest の FailedInvocation と互換の subset。
-type MinedFailedInv struct {
+// minedFailedInv は harvest の failedInvocation と互換の subset。
+type minedFailedInv struct {
 	InvokedSkill string `json:"invoked_skill"`
 	UserReaction string `json:"user_reaction"`
 }
@@ -40,8 +40,8 @@ type MinedFailedInv struct {
 // loadHarvestForProject は harvest ディレクトリ配下の全 jsonl から、
 // cwd_project が指定 canonical と一致するセッションだけを読み込む。
 // ディレクトリが存在しない場合は空スライスと nil error を返す (未 harvest 状態を許容)。
-func loadHarvestForProject(harvestDir, project string) ([]HarvestSession, error) {
-	var out []HarvestSession
+func loadHarvestForProject(harvestDir, project string) ([]harvestSession, error) {
+	var out []harvestSession
 	err := filepath.WalkDir(harvestDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
@@ -69,21 +69,21 @@ func loadHarvestForProject(harvestDir, project string) ([]HarvestSession, error)
 }
 
 // readHarvestFile は 1 つの harvest jsonl から project 一致 record を返す。
-func readHarvestFile(path, project string) ([]HarvestSession, error) {
+func readHarvestFile(path, project string) ([]harvestSession, error) {
 	f, err := os.Open(path) // #nosec G304 -- CLI: パスは WalkDir 由来
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = f.Close() }()
 
-	var out []HarvestSession
+	var out []harvestSession
 	scanner := jsonlscan.NewScanner(f)
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		if len(line) == 0 {
 			continue
 		}
-		var rec HarvestSession
+		var rec harvestSession
 		if err := json.Unmarshal(line, &rec); err != nil {
 			continue
 		}
@@ -97,7 +97,7 @@ func readHarvestFile(path, project string) ([]HarvestSession, error) {
 
 // extractInvokedSkills は harvest sessions から skill 名を dedup + sort した slice で返す。
 // Mine の第一段 (対象 skill 候補セットの決定) で使う。
-func extractInvokedSkills(recs []HarvestSession) []string {
+func extractInvokedSkills(recs []harvestSession) []string {
 	set := make(map[string]struct{})
 	for _, r := range recs {
 		for _, s := range r.SkillsInvoked {

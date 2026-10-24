@@ -20,8 +20,8 @@ const (
 	Work Domain = "work"
 )
 
-// Parse は config の defaultDomain の値を Domain にする。home 以外 (空、typo を含む) は業務に倒す。
-func Parse(s string) Domain {
+// parse は config の defaultDomain の値を Domain にする。home 以外 (空、typo を含む) は業務に倒す。
+func parse(s string) Domain {
 	if Domain(s) == Home {
 		return Home
 	}
@@ -38,7 +38,7 @@ type Classifier struct {
 // homePaths の先頭の ~ は userHome (ホームディレクトリ) に展開する。絶対パスにならないもの (相対パス、空) は捨てる。
 // 相対パスはどこを起点にするかで意味が変わり、私用の範囲が意図せず広がりうるため。
 func New(userHome string, homePaths []string, defaultDomain string) Classifier {
-	c := Classifier{fallback: Parse(defaultDomain)}
+	c := Classifier{fallback: parse(defaultDomain)}
 	for _, p := range homePaths {
 		if p == "~" || strings.HasPrefix(p, "~/") {
 			p = filepath.Join(userHome, strings.TrimPrefix(p, "~"))

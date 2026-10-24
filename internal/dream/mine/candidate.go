@@ -10,7 +10,7 @@ import (
 
 // generateCandidates は memory / skill / harvest を突き合わせて candidates を生成する。
 // 出力は dreamio.Candidate (mine/stage/adopt で共有される canonical schema)。
-func generateCandidates(mems []Memory, skills map[string]Skill, project string, sessions []HarvestSession) []dreamio.Candidate {
+func generateCandidates(mems []memory, skills map[string]skill, project string, sessions []harvestSession) []dreamio.Candidate {
 	// skill 名リスト (findAssociatedSkill 用)
 	skillNames := make([]string, 0, len(skills))
 	for n := range skills {
@@ -45,14 +45,14 @@ func generateCandidates(mems []Memory, skills map[string]Skill, project string, 
 			})
 			continue
 		}
-		skill, ok := skills[skillName]
+		loaded, ok := skills[skillName]
 		if !ok {
 			continue
 		}
 
 		phrases := extractApplicabilityPhrases(m.Body)
-		cov := computeCoverage(phrases, skill.Body)
-		cls := ClassifyCoverage(cov)
+		cov := computeCoverage(phrases, loaded.Body)
+		cls := classifyCoverage(cov)
 
 		perSkillIdx[skillName]++
 		cand := dreamio.Candidate{
@@ -60,12 +60,12 @@ func generateCandidates(mems []Memory, skills map[string]Skill, project string, 
 			Kind:             cls.Kind,
 			AssociatedSkill:  skillName,
 			MemoryPath:       m.Path,
-			SkillPath:        filepath.Join(skill.RealPath, "SKILL.md"),
+			SkillPath:        filepath.Join(loaded.RealPath, "SKILL.md"),
 			ScopedToProject:  project,
 			Diagnosis:        buildDiagnosis(cls, m, cov),
 			EvidenceSessions: sessionsBySkill[skillName],
 			Confidence:       cls.Confidence,
-			CoverageRatio:    cov.Ratio(),
+			CoverageRatio:    cov.ratio(),
 		}
 		out = append(out, cand)
 	}
@@ -78,8 +78,8 @@ func buildCandidateID(skillName string, idx int) string {
 }
 
 // buildDiagnosis は human-readable な診断メモを組み立てる。
-func buildDiagnosis(cls Classification, m Memory, cov Coverage) string {
-	pct := int(cov.Ratio() * 100)
+func buildDiagnosis(cls classification, m memory, cov coverage) string {
+	pct := int(cov.ratio() * 100)
 	switch cls.Kind {
 	case dreamio.KindSkillBody:
 		return fmt.Sprintf("memory %q の %d/%d フレーズ (%d%%) しか skill 本体に反映されていない - migration 候補",
@@ -92,7 +92,7 @@ func buildDiagnosis(cls Classification, m Memory, cov Coverage) string {
 }
 
 // buildUnhomedDiagnosis は association 先 skill が無い memory 向けの診断メモを組み立てる。
-func buildUnhomedDiagnosis(m Memory) string {
+func buildUnhomedDiagnosis(m memory) string {
 	return fmt.Sprintf("memory %q に domain overlap する skill が見つからない - 行き先未定。"+
 		"dream skill の行き先テーブルで行き先を決める", m.Name)
 }

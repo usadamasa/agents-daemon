@@ -9,7 +9,7 @@ import (
 //
 // 用途: global skills (~/.claude/skills) と project-local skills
 // (<project_root>/.claude/skills) の両方を探索する。
-func loadSkillFromDirs(dirs []string, name string) (Skill, error) {
+func loadSkillFromDirs(dirs []string, name string) (skill, error) {
 	var lastErr error
 	for _, d := range dirs {
 		if d == "" {
@@ -24,7 +24,7 @@ func loadSkillFromDirs(dirs []string, name string) (Skill, error) {
 	if lastErr == nil {
 		lastErr = fmt.Errorf("no skill dirs provided")
 	}
-	return Skill{}, fmt.Errorf("skill %q not found in any dir: %w", name, lastErr)
+	return skill{}, fmt.Errorf("skill %q not found in any dir: %w", name, lastErr)
 }
 
 // projectRootFromSessions は harvest sessions の cwd から project root を推定する。
@@ -32,7 +32,7 @@ func loadSkillFromDirs(dirs []string, name string) (Skill, error) {
 //
 // canonical name の逆演算は不可能 (- になった元の文字が / か _ か . か区別が付かない)
 // なので、harvest レコードに残っている生 cwd を頼りに絶対パスを取り戻す。
-func projectRootFromSessions(sessions []HarvestSession) string {
+func projectRootFromSessions(sessions []harvestSession) string {
 	for _, s := range sessions {
 		if s.CWD != "" {
 			return s.CWD

@@ -36,7 +36,7 @@ func links(g Graph) []string {
 // タスクの無い生きているセッションは 1 ノード、TodoWrite の項目もノードになる。
 func TestGraph_nodeStates(t *testing.T) {
 	until := time.Date(2026, 10, 18, 14, 30, 0, 0, time.Local)
-	b := Build(Input{
+	b := build(input{
 		Domain: domain.Work,
 		PID:    42,
 		Snapshot: snapshot(
@@ -117,7 +117,7 @@ func TestGraph_nodeStates(t *testing.T) {
 // 記録に無いタスクを指す辺は描かない。下流の数と段 (前提の深さ) を数える。
 func TestGraph_linksDepthAndDownstream(t *testing.T) {
 	const cwd = "/w/a"
-	b := Build(Input{
+	b := build(input{
 		Domain: domain.Work,
 		Tasks: []tasklog.Task{
 			task("A", "1", "設計", "completed", cwd),
@@ -168,7 +168,7 @@ func TestGraph_refEndpoints(t *testing.T) {
 	}
 	old := task("O", "1", "古い同名", "completed", cwd)
 	old.UpdatedAt = t0.Add(-time.Hour)
-	b := Build(Input{
+	b := build(input{
 		Domain: domain.Work,
 		PID:    42,
 		Snapshot: snapshot(
@@ -245,7 +245,7 @@ func TestGraph_refEndpointsEdgeCases(t *testing.T) {
 	e := func(id, before, after string) edge.Edge {
 		return edge.Edge{ID: id, Before: edge.Endpoint{Ref: before, CWD: cwd}, After: edge.Endpoint{Ref: after, CWD: cwd}}
 	}
-	b := Build(Input{
+	b := build(input{
 		Domain: domain.Work,
 		Tasks: []tasklog.Task{
 			task("C", "1", "x", "pending", cwd, "2"),
@@ -273,7 +273,7 @@ func TestGraph_refEndpointsEdgeCases(t *testing.T) {
 // 原因の鎖は完了していない上流だけをたどり、止まっているもの、進行中のものの順に選ぶ。
 func TestGraph_chains(t *testing.T) {
 	const cwd = "/w/a"
-	b := Build(Input{
+	b := build(input{
 		Domain: domain.Work,
 		PID:    42,
 		Snapshot: snapshot(
@@ -331,7 +331,7 @@ func drawRows(rows []dag.Row) string {
 // edge の辺 (セッションをまたぐ) は破線。
 func TestGraph_rows(t *testing.T) {
 	const cwd = "/w/a"
-	b := Build(Input{
+	b := build(input{
 		Domain: domain.Work,
 		PID:    42,
 		Snapshot: snapshot(
@@ -359,7 +359,7 @@ func TestGraph_rows(t *testing.T) {
 		t.Errorf("rows_with_completed =\n%s\nwant\n%s", got, want)
 	}
 	// ノードが無ければ空の配列 (JSON で null にしない)。
-	empty := Build(Input{Domain: domain.Work})
+	empty := build(input{Domain: domain.Work})
 	if empty.Graph.Rows == nil || empty.Graph.RowsWithCompleted == nil {
 		t.Errorf("rows = %v / %v, want 空の配列", empty.Graph.Rows, empty.Graph.RowsWithCompleted)
 	}
@@ -368,14 +368,14 @@ func TestGraph_rows(t *testing.T) {
 // 止まっているノードも待ちの輪も無ければ longest chain は空。循環した辺があっても止まらずに組む。
 func TestGraph_noBlockedAndCycle(t *testing.T) {
 	const cwd = "/w/a"
-	calm := Build(Input{
+	calm := build(input{
 		Domain: domain.Work,
 		Tasks:  []tasklog.Task{task("A", "1", "x", "pending", cwd), task("A", "2", "y", "pending", cwd, "1")},
 	})
 	if len(calm.Graph.LongestChain) != 0 {
 		t.Errorf("longest chain = %v, want 空", calm.Graph.LongestChain)
 	}
-	b := Build(Input{
+	b := build(input{
 		Domain: domain.Work,
 		Tasks: []tasklog.Task{
 			task("A", "1", "x", "pending", cwd, "2"),
@@ -390,7 +390,7 @@ func TestGraph_noBlockedAndCycle(t *testing.T) {
 // 待ちが輪になったノード (デッドロック) には印を付ける。輪の下流にいるだけのノードには付けない。
 func TestGraph_deadlock(t *testing.T) {
 	const cwd = "/w/a"
-	b := Build(Input{
+	b := build(input{
 		Domain: domain.Work,
 		Tasks: []tasklog.Task{
 			task("A", "1", "x", "pending", cwd, "2"),
@@ -419,7 +419,7 @@ func TestGraph_parked(t *testing.T) {
 	memo := func(id string, sources ...parking.Source) parking.Item {
 		return parking.Item{ID: id, Domain: domain.Work, Repo: cwd, Status: parking.StatusOpen, Entry: parking.Entry{Kind: parking.KindAside, Title: id}, Sources: sources}
 	}
-	b := Build(Input{
+	b := build(input{
 		Domain:   domain.Work,
 		PID:      42,
 		Snapshot: snapshot(daemon.PaneStatus{PaneID: "p1", SessionID: "S", CWD: cwd, AgentStatus: "working"}),

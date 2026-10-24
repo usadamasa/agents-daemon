@@ -63,12 +63,12 @@ func Run(opts Opts) error {
 		lastRun:     state.LastRunTS,
 	}
 
-	var records []HarvestRecord
+	var records []harvestRecord
 	err = jsonlscan.WalkJSONLFiles(resolvedProjects, jsonlscan.WalkOptions{Days: opts.Days}, func(path string) error {
 		if !filter.accept(path, resolvedProjects) {
 			return nil
 		}
-		rec, err := ScanSessionFile(path)
+		rec, err := scanSessionFile(path)
 		if err != nil {
 			return nil
 		}

@@ -11,9 +11,9 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/dream/jsonlscan"
 )
 
-// HarvestRecord は 1 セッション 1 レコードの集約結果。
+// harvestRecord は 1 セッション 1 レコードの集約結果。
 // 出力 JSONL の各行はこの構造体を JSON 化したもの。
-type HarvestRecord struct {
+type harvestRecord struct {
 	SessionID         string             `json:"session_id"`
 	TSStart           string             `json:"ts_start,omitempty"`
 	TSEnd             string             `json:"ts_end,omitempty"`
@@ -22,19 +22,19 @@ type HarvestRecord struct {
 	NMessages         int                `json:"n_messages"`
 	UserPrompts       []string           `json:"user_prompts"`
 	SkillsInvoked     []string           `json:"skills_invoked"`
-	FeedbackSignals   []FeedbackSignal   `json:"feedback_signals"`
-	FailedInvocations []FailedInvocation `json:"failed_invocations"`
+	FeedbackSignals   []feedbackSignal   `json:"feedback_signals"`
+	FailedInvocations []failedInvocation `json:"failed_invocations"`
 }
 
-// FeedbackSignal は user の訂正・却下発言をキャプチャする。
-type FeedbackSignal struct {
+// feedbackSignal は user の訂正・却下発言をキャプチャする。
+type feedbackSignal struct {
 	Quote string `json:"quote"`
 	Kind  string `json:"kind"` // "correction" | "stop_doing" | "rejection"
 }
 
-// FailedInvocation は「skill が invoked された直後に user が訂正した」ケースを記録する。
+// failedInvocation は「skill が invoked された直後に user が訂正した」ケースを記録する。
 // Mine phase の skill_description trigger 拡張候補の evidence 源。
-type FailedInvocation struct {
+type failedInvocation struct {
 	InvokedSkill string `json:"invoked_skill"`
 	UserReaction string `json:"user_reaction"` // 直後の user prompt (200 char truncate)
 }
@@ -70,9 +70,9 @@ type skillInput struct {
 	Skill string `json:"skill"`
 }
 
-// ScanSessionFile は 1 つのセッション JSONL を 1 HarvestRecord に集約する。
+// scanSessionFile は 1 つのセッション JSONL を 1 harvestRecord に集約する。
 // content ゼロ・parse エラーのみの空セッションは nil を返す。
-func ScanSessionFile(path string) (*HarvestRecord, error) {
+func scanSessionFile(path string) (*harvestRecord, error) {
 	f, err := os.Open(path) // #nosec G304 -- CLI: パスは WalkDir 由来
 	if err != nil {
 		return nil, err
@@ -80,7 +80,7 @@ func ScanSessionFile(path string) (*HarvestRecord, error) {
 	defer func() { _ = f.Close() }()
 
 	state := &scanState{
-		rec:        &HarvestRecord{},
+		rec:        &harvestRecord{},
 		skillsSeen: make(map[string]struct{}),
 	}
 
@@ -117,18 +117,18 @@ func ScanSessionFile(path string) (*HarvestRecord, error) {
 		rec.SkillsInvoked = []string{}
 	}
 	if rec.FeedbackSignals == nil {
-		rec.FeedbackSignals = []FeedbackSignal{}
+		rec.FeedbackSignals = []feedbackSignal{}
 	}
 	if rec.FailedInvocations == nil {
-		rec.FailedInvocations = []FailedInvocation{}
+		rec.FailedInvocations = []failedInvocation{}
 	}
 	return rec, nil
 }
 
-// scanState は ScanSessionFile が 1 セッションを走査する間に持ち回る mutable 状態。
-// entry ごとの分岐を state のメソッドに切り出すことで ScanSessionFile 本体の複雑度を下げる。
+// scanState は scanSessionFile が 1 セッションを走査する間に持ち回る mutable 状態。
+// entry ごとの分岐を state のメソッドに切り出すことで scanSessionFile 本体の複雑度を下げる。
 type scanState struct {
-	rec              *HarvestRecord
+	rec              *harvestRecord
 	skillsSeen       map[string]struct{}
 	lastInvokedSkill string
 }
@@ -179,7 +179,7 @@ func (s *scanState) handleUser(raw json.RawMessage) {
 	}
 	s.rec.FeedbackSignals = append(s.rec.FeedbackSignals, fs)
 	if s.lastInvokedSkill != "" {
-		s.rec.FailedInvocations = append(s.rec.FailedInvocations, FailedInvocation{
+		s.rec.FailedInvocations = append(s.rec.FailedInvocations, failedInvocation{
 			InvokedSkill: s.lastInvokedSkill,
 			UserReaction: truncate(text, maxFailedReaction),
 		})
@@ -201,11 +201,11 @@ func (s *scanState) handleAssistant(raw json.RawMessage) {
 }
 
 // addUserPrompt は最大 maxUserPrompts 件、それぞれ maxUserPromptLen で truncate + PII 伏せ字化して追加。
-func addUserPrompt(rec *HarvestRecord, text string) {
+func addUserPrompt(rec *harvestRecord, text string) {
 	if len(rec.UserPrompts) >= maxUserPrompts {
 		return
 	}
-	masked := MaskPII(text)
+	masked := maskPII(text)
 	rec.UserPrompts = append(rec.UserPrompts, truncate(masked, maxUserPromptLen))
 }
 

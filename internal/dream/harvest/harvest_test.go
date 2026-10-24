@@ -49,7 +49,7 @@ func TestScanSessionFile_NormalSession(t *testing.T) {
 		normalUserLine("sess1", "2026-07-19T10:01:00+09:00", "ありがとう"),
 	})
 
-	rec, err := ScanSessionFile(path)
+	rec, err := scanSessionFile(path)
 	if err != nil {
 		t.Fatalf("ScanSessionFile: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestScanSessionFile_CorrectionSession(t *testing.T) {
 		normalUserLine("sess2", "2026-07-19T10:00:10+09:00", "そうじゃなくて Go のテストで書いて"),
 	})
 
-	rec, err := ScanSessionFile(path)
+	rec, err := scanSessionFile(path)
 	if err != nil {
 		t.Fatalf("ScanSessionFile: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestScanSessionFile_PIIMaskedInUserPrompts(t *testing.T) {
 		normalUserLine("sess3", "2026-07-19T10:00:00+09:00", "JP-TECH-042 の一次面接の準備"),
 	})
 
-	rec, err := ScanSessionFile(path)
+	rec, err := scanSessionFile(path)
 	if err != nil {
 		t.Fatalf("ScanSessionFile: %v", err)
 	}
@@ -143,7 +143,7 @@ func TestScanSessionFile_MetaPromptsIgnored(t *testing.T) {
 		normalUserLine("sess4", "2026-07-19T10:00:10+09:00", "ほんとうの質問"),
 	})
 
-	rec, err := ScanSessionFile(path)
+	rec, err := scanSessionFile(path)
 	if err != nil {
 		t.Fatalf("ScanSessionFile: %v", err)
 	}
@@ -162,7 +162,7 @@ func TestScanSessionFile_EmptySessionReturnsNil(t *testing.T) {
 		normalUserLine("sess5", "2026-07-19T10:00:00+09:00", "<command-name>test</command-name>"),
 	})
 
-	rec, err := ScanSessionFile(path)
+	rec, err := scanSessionFile(path)
 	if err != nil {
 		t.Fatalf("ScanSessionFile: %v", err)
 	}
@@ -176,7 +176,7 @@ func TestScanSessionFile_ArrayContent(t *testing.T) {
 	line := `{"type":"user","sessionId":"sess6","timestamp":"2026-07-19T10:00:00+09:00","message":{"content":[{"type":"text","text":"配列コンテンツ"},{"type":"tool_result","tool_use_id":"x"}]}}`
 	path := writeJSONLTest(t, dir, "sess6.jsonl", []string{line})
 
-	rec, err := ScanSessionFile(path)
+	rec, err := scanSessionFile(path)
 	if err != nil {
 		t.Fatalf("ScanSessionFile: %v", err)
 	}
@@ -194,7 +194,7 @@ func TestScanSessionFile_MultipleSkillInvocations(t *testing.T) {
 		assistantSkillLine("sess7", "2026-07-19T10:00:15+09:00", "skill-a"), // duplicate
 	})
 
-	rec, err := ScanSessionFile(path)
+	rec, err := scanSessionFile(path)
 	if err != nil {
 		t.Fatalf("ScanSessionFile: %v", err)
 	}
@@ -215,7 +215,7 @@ func TestScanSessionFile_UserPromptsCap(t *testing.T) {
 	}
 	path := writeJSONLTest(t, dir, "sess8.jsonl", lines)
 
-	rec, err := ScanSessionFile(path)
+	rec, err := scanSessionFile(path)
 	if err != nil {
 		t.Fatalf("ScanSessionFile: %v", err)
 	}
@@ -235,7 +235,7 @@ func TestScanSessionFile_UserPromptTruncated(t *testing.T) {
 		normalUserLine("sess9", "2026-07-19T10:00:00+09:00", long),
 	})
 
-	rec, err := ScanSessionFile(path)
+	rec, err := scanSessionFile(path)
 	if err != nil {
 		t.Fatalf("ScanSessionFile: %v", err)
 	}
@@ -310,7 +310,7 @@ func TestScanSessionFile_SkillBodyDoesNotTriggerFeedback(t *testing.T) {
 				normalUserLine("sess", "2026-07-20T10:00:00+09:00", tc.userPrompt),
 				assistantSkillLine("sess", "2026-07-20T10:00:05+09:00", "some-skill"),
 			})
-			rec, err := ScanSessionFile(path)
+			rec, err := scanSessionFile(path)
 			if err != nil {
 				t.Fatalf("ScanSessionFile: %v", err)
 			}

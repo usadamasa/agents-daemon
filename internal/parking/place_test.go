@@ -81,7 +81,7 @@ func TestAdopt_rejects(t *testing.T) {
 			t.Errorf("移さなかったタスクの記録が消えた: %v", err)
 		}
 	}
-	if got, _ := s.List(domain.Home); len(got) != 0 {
+	if got, _ := s.list(domain.Home); len(got) != 0 {
 		t.Errorf("メモができた: %+v", got)
 	}
 }

@@ -58,7 +58,7 @@ func byKey(b Board) map[string]struct {
 
 func TestBuild_rowsAndColumns(t *testing.T) {
 	const main, wt, other = "/src/home/agents-daemon", "/src/home/agents-daemon/.claude/worktrees/x", "/src/home/dotfile"
-	b := Build(Input{
+	b := build(input{
 		Domain:   domain.Home,
 		PID:      42,
 		Snapshot: snapshot(daemon.PaneStatus{PaneID: "p1", SessionID: "A", CWD: main, AgentStatus: "working"}),
@@ -137,7 +137,7 @@ func TestBuild_parking(t *testing.T) {
 		Entry:   parking.Entry{Kind: parking.KindPreference, Title: "alias の命名"},
 		Sources: []parking.Source{{SessionID: "C", CWD: other, At: t0}},
 	}
-	b := Build(Input{
+	b := build(input{
 		Domain:   domain.Home,
 		PID:      42,
 		Snapshot: snapshot(daemon.PaneStatus{PaneID: "p1", SessionID: "A", CWD: main}),
@@ -181,7 +181,7 @@ func TestBuild_parking(t *testing.T) {
 // セッションの状態は進行中のカードの印になる。上限待ちは自己申告より先に見る。
 func TestBuild_marks(t *testing.T) {
 	until := time.Date(2026, 10, 18, 14, 30, 0, 0, time.Local)
-	b := Build(Input{
+	b := build(input{
 		Domain: domain.Work,
 		PID:    42,
 		Snapshot: snapshot(
@@ -209,7 +209,7 @@ func TestBuild_marks(t *testing.T) {
 // タスクを作っていない生きているセッションもカードで出す。msg も名前も無ければ見出しは cwd の末尾。
 // TodoWrite のリストもカードになる。
 func TestBuild_sessionsWithoutTasksAndTodos(t *testing.T) {
-	b := Build(Input{
+	b := build(input{
 		Domain: domain.Work,
 		PID:    42,
 		Snapshot: snapshot(
@@ -237,7 +237,7 @@ func TestBuild_sessionsWithoutTasksAndTodos(t *testing.T) {
 // msg が無ければ (rex の外、申告の前) セッション名、名前も無ければ cwd の末尾にして、どのセッションかを見せる。
 // タスクのあるセッションのカードは msg で変えない。
 func TestBuild_sessionCardShowsAgentMessage(t *testing.T) {
-	b := Build(Input{
+	b := build(input{
 		Domain: domain.Work,
 		PID:    42,
 		Snapshot: snapshot(
@@ -266,7 +266,7 @@ func TestBuild_sessionCardShowsAgentMessage(t *testing.T) {
 
 // ボードは 1 つの domain しか描かない。ほかの domain の pane と、業務に倒したセッションは載せない。
 func TestBuild_domain(t *testing.T) {
-	b := Build(Input{
+	b := build(input{
 		Domain: domain.Home,
 		PID:    42,
 		Snapshot: snapshot(
@@ -290,11 +290,11 @@ func TestBuild_domain(t *testing.T) {
 // daemon が動いていなくてもタスクの記録は描く。前の daemon の status.json は使わない。
 func TestBuild_daemonState(t *testing.T) {
 	tasks := []tasklog.Task{task("A", "1", "書く", "in_progress", "/w/a")}
-	stopped := Build(Input{Domain: domain.Work, Tasks: tasks, Snapshot: snapshot(daemon.PaneStatus{SessionID: "A", CWD: "/w/a"})})
+	stopped := build(input{Domain: domain.Work, Tasks: tasks, Snapshot: snapshot(daemon.PaneStatus{SessionID: "A", CWD: "/w/a"})})
 	if stopped.DaemonRunning || stopped.UpdatedAt != nil || len(stopped.Rows) != 1 || stopped.Rows[0].Cards[0].Live {
 		t.Errorf("stopped = %+v", stopped)
 	}
-	stale := Build(Input{Domain: domain.Work, PID: 7, Tasks: tasks, Snapshot: snapshot(daemon.PaneStatus{SessionID: "A", CWD: "/w/a"})})
+	stale := build(input{Domain: domain.Work, PID: 7, Tasks: tasks, Snapshot: snapshot(daemon.PaneStatus{SessionID: "A", CWD: "/w/a"})})
 	if !stale.DaemonRunning || stale.UpdatedAt != nil || stale.Rows[0].Cards[0].Live {
 		t.Errorf("stale = %+v", stale)
 	}
@@ -302,7 +302,7 @@ func TestBuild_daemonState(t *testing.T) {
 		t.Errorf("columns = %+v", stale.Columns)
 	}
 	// git の外の cwd は cwd そのものを行にする。cwd が無ければ「cwd 不明」の行。
-	odd := Build(Input{Domain: domain.Work, Tasks: []tasklog.Task{task("A", "1", "x", "pending", "")}})
+	odd := build(input{Domain: domain.Work, Tasks: []tasklog.Task{task("A", "1", "x", "pending", "")}})
 	if odd.Rows[0].Title != "(cwd 不明)" || odd.Rows[0].Cards[0].Session != "A" {
 		t.Errorf("odd = %+v", odd.Rows)
 	}

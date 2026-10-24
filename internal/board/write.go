@@ -61,7 +61,7 @@ func Write(w io.Writer, p apppath.Paths, v Viewer) error {
 	if err != nil {
 		return err
 	}
-	b := Build(Input{
+	b := build(input{
 		Domain:       d,
 		CWD:          v.CWD,
 		PID:          pid,

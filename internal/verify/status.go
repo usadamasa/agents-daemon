@@ -32,7 +32,7 @@ func RunStatus(w io.Writer, p apppath.Paths, now time.Time) error {
 	if err != nil {
 		return err
 	}
-	WriteStatus(w, rep, now)
+	writeStatus(w, rep, now)
 	return nil
 }
 
@@ -69,8 +69,8 @@ func CollectStatus(p apppath.Paths) (StatusReport, error) {
 	return rep, nil
 }
 
-// WriteStatus は StatusReport を人が読む形で w へ書く。
-func WriteStatus(w io.Writer, rep StatusReport, now time.Time) {
+// writeStatus は StatusReport を人が読む形で w へ書く。
+func writeStatus(w io.Writer, rep StatusReport, now time.Time) {
 	if !rep.Running {
 		_, _ = fmt.Fprintln(w, "daemon は起動していません")
 		return

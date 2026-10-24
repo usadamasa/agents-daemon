@@ -193,7 +193,8 @@ func TestCheckPremises_APIRevision(t *testing.T) {
 		f := selfFixtures(t)
 		findings := f.client(staticResolver(nil)).CheckPremises(context.Background(), blockSelfOct18, sessionSelfOct18)
 
-		joined := strings.Join(findingTexts(findings), "\n")
+		// finding に添える rex のパスは TempDir (subtest 名を含む) なので、文面の判定から外す。
+		joined := strings.ReplaceAll(strings.Join(findingTexts(findings), "\n"), f.bin, "<bin>")
 		if strings.Contains(joined, "api_revision") {
 			t.Errorf("api_revision の無い版で api_revision に触れている:\n%s", joined)
 		}

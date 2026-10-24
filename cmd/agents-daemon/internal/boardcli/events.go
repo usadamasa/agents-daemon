@@ -94,10 +94,11 @@ func parkDiscard(stateDir string, s parking.Store, p tasklog.Placer, session, cw
 	return items, nil
 }
 
-// parkAdopt は s.Adopt を走らせ、移したタスクとメモを書く (park adopt)。
-func parkAdopt(stateDir string, s parking.Store, p tasklog.Placer, viewer, cwd, sessionID, taskID string, now time.Time) (parking.Added, error) {
+// parkAdopt は s.Adopt を走らせ、移したタスクとメモを書く (park adopt)。exited はセッションが終了したと確かめる
+// (board.SessionExited)。
+func parkAdopt(stateDir string, s parking.Store, p tasklog.Placer, viewer, cwd, sessionID, taskID string, exited func(string, time.Time) error, now time.Time) (parking.Added, error) {
 	d := p.Domain(viewer, cwd)
-	added, err := s.Adopt(viewer, cwd, sessionID, taskID, p, now)
+	added, err := s.Adopt(viewer, cwd, sessionID, taskID, p, exited, now)
 	if err != nil {
 		parkFailed(stateDir, d, now, "adopt", viewer, err, kv("from_session", sessionID), kv("task", taskID))
 		return added, err

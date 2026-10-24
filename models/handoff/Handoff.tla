@@ -8,13 +8,14 @@
    - spawn は window を作ってから claude が前景になるのを待ち、待ち切れなければ foreground=false で返す。pane は残り、
      claude が起動していることもある (internal/spawn/spawn.go の waitForClaude)。mod はそのメモを戻さず handed のまま残す。
    - board は status.json が今の daemon のものでなければ pane を空として扱い、未完了のタスクを exited と描く
-     (internal/board/board.go の livePanes、graph.go)。Adopt はセッションの生死を見ない (parking/place.go の Adopt)。
+     (internal/board/board.go の livePanes、graph.go)。Adopt は「今の daemon がタスクの記録より後に書いた status.json に
+     そのセッションの pane が無い」ときだけ通す (internal/board の SessionExited、parking/place.go の Adopt)。
    - Adopt はメモを書いてからタスクの記録を消す 2 手 (place.go)。
    - どのファイルの書き込みも statefile.WriteJSONAtomic なので、1 手を原子的なステップにする。
 
-   登場するのはメモ 1 つ、ボードを開いた mod が Mods の数だけ、生きているセッション 1 つ (そのタスクの記録 1 つ)。
-   送信と spawn の成否、park set の成否、daemon の生き死には非決定。各 mod がボタンを押す回数は MaxAttempts まで
-   (状態を有限にする)。 *)
+   登場するのはメモ 1 つ、ボードを開いた mod が Mods の数だけ、セッション 1 つ (そのタスクの記録 1 つ)。セッションは
+   途中で終了しうる。送信と spawn の成否、park set の成否、daemon の生き死には非決定。各 mod がボタンを押す回数は
+   MaxAttempts まで (状態を有限にする)。 *)
 EXTENDS Naturals, FiniteSets
 
 CONSTANTS
@@ -28,12 +29,13 @@ VARIABLES
   attempts,    \* mod ごとの、渡そうとした回数
   deliveries,  \* このメモが宛先に届いた回数 (peer / self / spawn を問わない)
   sessions,    \* このメモから起きたセッションの数
-  daemonFresh, \* status.json が今の daemon のもの (daemon が動いていて、pane の一覧が信用できる)
-  task,        \* 生きているセッションのタスクの記録が残っているか
+  live,        \* タスクの記録を持つセッションが生きているか
+  seen,        \* 今の daemon の status.json がそのセッションをどう見ているか: "live" | "exited" | "none" (daemon が止まっている、前の daemon のもの)
+  task,        \* そのセッションのタスクの記録が残っているか
   taskMemo,    \* adopt がそのタスクから作ったメモがあるか
   adoptedLive  \* 生きているセッションのタスクの記録を adopt で消したか
 
-vars == <<memo, view, pc, attempts, deliveries, sessions, daemonFresh, task, taskMemo, adoptedLive>>
+vars == <<memo, view, pc, attempts, deliveries, sessions, live, seen, task, taskMemo, adoptedLive>>
 
 Status == {"open", "handed", "discarded"}
 
@@ -44,11 +46,14 @@ TypeOK ==
   /\ attempts \in [Mods -> 0..MaxAttempts]
   /\ deliveries \in Nat
   /\ sessions \in Nat
-  /\ daemonFresh \in BOOLEAN
+  /\ live \in BOOLEAN
+  /\ seen \in {"live", "exited", "none"}
   /\ task \in BOOLEAN
   /\ taskMemo \in BOOLEAN
   /\ adoptedLive \in BOOLEAN
 
+(* 始まりは、生きているセッションの記録を daemon が見ている状態。記録より古い status.json は Adopt が受け付けないので、
+   「記録はあるのに daemon がまだそのセッションを見ていない」状態は始まりに置かない。 *)
 Init ==
   /\ memo = "open"
   /\ view = [m \in Mods |-> "none"]
@@ -56,7 +61,8 @@ Init ==
   /\ attempts = [m \in Mods |-> 0]
   /\ deliveries = 0
   /\ sessions = 0
-  /\ daemonFresh = TRUE
+  /\ live = TRUE
+  /\ seen = "live"
   /\ task = TRUE
   /\ taskMemo = FALSE
   /\ adoptedLive = FALSE
@@ -66,7 +72,7 @@ Init ==
 Read(m) ==
   /\ pc[m] = "idle"
   /\ view' = [view EXCEPT ![m] = memo]
-  /\ UNCHANGED <<memo, pc, attempts, deliveries, sessions, daemonFresh, task, taskMemo, adoptedLive>>
+  /\ UNCHANGED <<memo, pc, attempts, deliveries, sessions, live, seen, task, taskMemo, adoptedLive>>
 
 (* 取る。mod は自分が読んだボードで open だったメモを、送る前に park set --status handed --from open で取る。
    ファイルの status が open でなければ (ほかの mod が先に取った、捨てた) 失敗し、読み直しに戻る。
@@ -80,7 +86,7 @@ Claim(m) ==
         /\ UNCHANGED view
      \/ /\ view' = [view EXCEPT ![m] = "none"]
         /\ UNCHANGED <<memo, pc>>
-  /\ UNCHANGED <<deliveries, sessions, daemonFresh, task, taskMemo, adoptedLive>>
+  /\ UNCHANGED <<deliveries, sessions, live, seen, task, taskMemo, adoptedLive>>
 
 (* 取ったメモを渡す (peer / self)。届けば handed のまま終わり、届かなければ戻しに進む。 *)
 Send(m) ==
@@ -90,7 +96,7 @@ Send(m) ==
         /\ view' = [view EXCEPT ![m] = "none"]
      \/ /\ pc' = [pc EXCEPT ![m] = "undelivered"]
         /\ UNCHANGED <<deliveries, view>>
-  /\ UNCHANGED <<memo, attempts, sessions, daemonFresh, task, taskMemo, adoptedLive>>
+  /\ UNCHANGED <<memo, attempts, sessions, live, seen, task, taskMemo, adoptedLive>>
 
 (* 取ったメモを、新しいセッションを起こして渡す。入力の検査で拒まれれば何も起きず戻しに進む。window を作れば claude が
    前景になるのを待ち、なれば届いたことになる。待ち切れなければ pane は残り claude が起動していることもある。起きたか
@@ -107,7 +113,7 @@ Spawn(m) ==
         /\ pc' = [pc EXCEPT ![m] = "idle"]
         /\ view' = [view EXCEPT ![m] = "none"]
         /\ UNCHANGED deliveries
-  /\ UNCHANGED <<memo, attempts, daemonFresh, task, taskMemo, adoptedLive>>
+  /\ UNCHANGED <<memo, attempts, live, seen, task, taskMemo, adoptedLive>>
 
 (* 届かなかったメモを park set --status open --from handed で戻す。プロセスが失敗すれば handed のまま残る
    (人が park set で戻す)。 *)
@@ -117,7 +123,7 @@ Revert(m) ==
   /\ view' = [view EXCEPT ![m] = "none"]
   /\ \/ memo' = "open"
      \/ UNCHANGED memo
-  /\ UNCHANGED <<attempts, deliveries, sessions, daemonFresh, task, taskMemo, adoptedLive>>
+  /\ UNCHANGED <<attempts, deliveries, sessions, live, seen, task, taskMemo, adoptedLive>>
 
 (* ボードの Discard。読んだボードで open だったメモを park set --status discarded --from open で捨てる。
    先に取られていれば失敗する。 *)
@@ -126,37 +132,42 @@ Discard(m) ==
   /\ view' = [view EXCEPT ![m] = "none"]
   /\ \/ /\ memo = "open" /\ memo' = "discarded"
      \/ UNCHANGED memo
-  /\ UNCHANGED <<pc, attempts, deliveries, sessions, daemonFresh, task, taskMemo, adoptedLive>>
+  /\ UNCHANGED <<pc, attempts, deliveries, sessions, live, seen, task, taskMemo, adoptedLive>>
 
 -----------------------------------------------------------------------------
-(* daemon が止まる・入れ替わる・起きる。止まっている間と、前の daemon が残した status.json しか無い間は、
-   board は pane を空として扱う (board.go の livePanes)。 *)
-DaemonStop == /\ daemonFresh /\ daemonFresh' = FALSE
-              /\ UNCHANGED <<memo, view, pc, attempts, deliveries, sessions, task, taskMemo, adoptedLive>>
-DaemonStart == /\ ~daemonFresh /\ daemonFresh' = TRUE
-               /\ UNCHANGED <<memo, view, pc, attempts, deliveries, sessions, task, taskMemo, adoptedLive>>
+(* タスクの記録を持つセッションが終了する。記録は残る (daemon の housekeeping が消すまで)。 *)
+SessionExit == /\ live /\ live' = FALSE
+               /\ UNCHANGED <<memo, view, pc, attempts, deliveries, sessions, seen, task, taskMemo, adoptedLive>>
 
-(* ボードの To parking。pane が無いので exited と描かれたカードに出る (graph.go、parking.ts の canAdopt)。
-   生きているセッションの pane が無く見えるのは daemon の一覧が信用できないとき。Adopt は生死を見ずに
-   メモを書く (place.go の Adopt)。 *)
+(* daemon の tick。今の pane の一覧を status.json に書く (daemon/status.go)。 *)
+DaemonTick == /\ seen' = IF live THEN "live" ELSE "exited"
+              /\ UNCHANGED <<memo, view, pc, attempts, deliveries, sessions, live, task, taskMemo, adoptedLive>>
+
+(* daemon が止まる・入れ替わる。止まっている間と、前の daemon が残した status.json しか無い間は、board は pane を
+   空として扱い (board.go の livePanes)、Adopt は受け付けない。 *)
+DaemonStop == /\ seen /= "none" /\ seen' = "none"
+              /\ UNCHANGED <<memo, view, pc, attempts, deliveries, sessions, live, task, taskMemo, adoptedLive>>
+
+(* ボードの To parking。Adopt は、今の daemon がタスクの記録より後に書いた status.json にそのセッションの pane が
+   無いときだけメモを書く (board の SessionExited)。daemon が止まっているときに exited と描かれても通さない。 *)
 AdoptWrite(m) ==
-  /\ pc[m] = "idle" /\ task /\ ~daemonFresh
+  /\ pc[m] = "idle" /\ task /\ seen = "exited"
   /\ taskMemo' = TRUE
   /\ pc' = [pc EXCEPT ![m] = "adopting"]
-  /\ UNCHANGED <<memo, view, attempts, deliveries, sessions, daemonFresh, task, adoptedLive>>
+  /\ UNCHANGED <<memo, view, attempts, deliveries, sessions, live, seen, task, adoptedLive>>
 
 (* Adopt の 2 手目。タスクの記録を消す。消し損ねればメモだけが残る (place.go の Adopt)。 *)
 AdoptRemove(m) ==
   /\ pc[m] = "adopting"
   /\ pc' = [pc EXCEPT ![m] = "idle"]
-  /\ \/ /\ task' = FALSE /\ adoptedLive' = TRUE
+  /\ \/ /\ task' = FALSE /\ adoptedLive' = (adoptedLive \/ live)
      \/ UNCHANGED <<task, adoptedLive>>
-  /\ UNCHANGED <<memo, view, attempts, deliveries, sessions, daemonFresh, taskMemo>>
+  /\ UNCHANGED <<memo, view, attempts, deliveries, sessions, live, seen, taskMemo>>
 
 -----------------------------------------------------------------------------
 Next ==
   \/ \E m \in Mods : Read(m) \/ Claim(m) \/ Send(m) \/ Spawn(m) \/ Revert(m) \/ Discard(m) \/ AdoptWrite(m) \/ AdoptRemove(m)
-  \/ DaemonStop \/ DaemonStart
+  \/ SessionExit \/ DaemonTick \/ DaemonStop
 
 Spec == Init /\ [][Next]_vars
 

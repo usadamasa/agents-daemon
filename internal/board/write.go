@@ -5,7 +5,6 @@ import (
 	"io"
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
-	"github.com/usadamasa/agents-daemon/internal/daemon"
 	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
@@ -25,18 +24,9 @@ type Viewer struct {
 // Write はボードを組み、JSON で w へ書く。daemon が動いていなくてもタスクの記録は描く
 // (daemon_running が false で、カードはすべて Live でない)。
 func Write(w io.Writer, p apppath.Paths, v Viewer) error {
-	pid, err := daemon.ReadPIDFile(p.PIDFile())
+	pid, snap, err := readDaemon(p)
 	if err != nil {
 		return err
-	}
-	if !daemon.PIDAlive(pid) {
-		pid = 0
-	}
-	var snap *daemon.StatusSnapshot
-	if pid != 0 {
-		if snap, err = daemon.ReadStatusSnapshot(p.StatusFile()); err != nil {
-			return err
-		}
 	}
 	placer := tasklog.LoadPlacer(p, v.UserHome)
 	store := placer.Tasks

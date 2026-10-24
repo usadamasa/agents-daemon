@@ -483,6 +483,15 @@ test('終了したセッションの未完了のタスクは To parking でメ�
   expect(operations(w.ran)).toEqual([[BIN, 'park', 'adopt', 'G', '1', ...SELF_ARGS]])
 })
 
+test('daemon が status.json を書いていないボードでは、exited と描かれても To parking を出さない', async ($, on) => {
+  const { updated_at: _, ...stale } = BOARD
+  boardWorld(on, { ...stale, daemon_running: false })
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($)
+  await ui.press({ key: 'row:G/1' })
+  expect(await ui.find({ key: 'adopt' })).toBeUndefined()
+})
+
 test('メモを選ぶと詳細を出し、Discard / To task / Ask for issue で渡す', async ($, on) => {
   const w = boardWorld(on)
   await $.command.run(OPEN_BOARD)

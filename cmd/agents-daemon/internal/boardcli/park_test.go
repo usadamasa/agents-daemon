@@ -6,8 +6,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -275,17 +277,33 @@ func TestParkListAndSet(t *testing.T) {
 	}
 }
 
+// writeDaemonStatus は動いている daemon (このテストプロセス) の pid と、たった今書いた status.json (pane は panes) を置く。
+func writeDaemonStatus(t *testing.T, root string, panes string) {
+	t.Helper()
+	state := filepath.Join(root, "state", "agents-daemon")
+	writeTestConfig(t, filepath.Join(state, "daemon.pid"), strconv.Itoa(os.Getpid())+"\n")
+	writeTestConfig(t, filepath.Join(state, "status.json"), `{"pid": `+strconv.Itoa(os.Getpid())+`, "updated_at": "`+time.Now().Add(time.Minute).Format(time.RFC3339)+`", "panes": [`+panes+`]}`)
+}
+
 // adopt は開いたセッションの domain の側にあるタスクを kind task のメモにし、タスクの記録を消す。
-// 別の domain のタスクは移さない。
+// 別の domain のタスクは移さない。セッションが終了したことは daemon の status.json で確かめ、daemon が動いていなければ移さない。
 func TestParkAdopt(t *testing.T) {
 	root := parkTestEnv(t)
 	cwd := filepath.Join(root, "src", "home", "a")
 	if err := os.MkdirAll(cwd, 0o750); err != nil {
 		t.Fatal(err)
 	}
-	writeTaskRecord(t, root, "home", "dead", `{"id": "4", "subject": "README を直す", "status": "pending", "session_id": "dead", "cwd": "`+cwd+`"}`)
+	writeTaskRecord(t, root, "home", "dead", `{"id": "4", "subject": "README を直す", "status": "pending", "session_id": "dead", "cwd": "`+cwd+`", "updated_at": "2026-10-18T09:00:00Z"}`)
 	writeTaskRecord(t, root, "work", "busy", `{"id": "1", "subject": "業務", "status": "pending", "session_id": "busy", "cwd": "`+cwd+`"}`)
 
+	if _, stderr, err := runPark(t, "", "adopt", "dead", "4", "--session", "viewer", "--cwd", cwd); err == nil || !strings.Contains(stderr, "daemon が動いていない") {
+		t.Fatalf("daemon が動いていないのに移した: %v %s", err, stderr)
+	}
+	writeDaemonStatus(t, root, `{"pane_id": "b1", "session_id": "dead", "cwd": "`+cwd+`"}`)
+	if _, stderr, err := runPark(t, "", "adopt", "dead", "4", "--session", "viewer", "--cwd", cwd); err == nil || !strings.Contains(stderr, "生きている") {
+		t.Fatalf("pane のあるセッションのタスクを移した: %v %s", err, stderr)
+	}
+	writeDaemonStatus(t, root, ``)
 	out, _, err := runPark(t, "", "adopt", "dead", "4", "--session", "viewer", "--cwd", cwd)
 	if err != nil {
 		t.Fatalf("park adopt: %v", err)

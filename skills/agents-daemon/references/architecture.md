@@ -219,7 +219,10 @@ B は fullscreen のレイアウトで dock に置かれるときだけ出す。
 <!-- cc-premise: 2.1.306 mods $.prompt.submit は idle になってから自分のターンとして入り、drop で入らなかったことが分かる -->
 <!-- cc-premise: 2.1.306 cli claude [prompt] は最初のターンの本文、--session-id <uuid> でセッション ID を固定できる -->
 - パーキングへ移す (`To parking`): 終了したセッションの未完了のタスクのノードを `park adopt <session_id> <task_id>` で
-  `kind: task` のメモにし、タスクの記録を消す。`kind: task` は model の tool からは置けない
+  `kind: task` のメモにし、タスクの記録を消す。`kind: task` は model の tool からは置けない。ボードは daemon が
+  status.json を書いているとき (`updated_at` があるとき) だけこの操作を出し、バイナリは動いている daemon がタスクの
+  記録より後に書いた status.json に pane が無いことを確かめてから移す (`internal/board` の `SessionExited`)。
+  daemon が止まっていると生きているセッションも exited と描かれるため
 
 ボードの JSON の `graph` はセッションをまたぐタスクの依存の DAG (#134)。ノードはタスク 1 つ (カードと同じ Key) で、
 辺は同じセッションの `blockedBy` (`kind: task`) と `$STATE/edges/` の辺 (`kind: edge`) を 1 つにしたもの。

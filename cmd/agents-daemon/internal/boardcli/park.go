@@ -12,6 +12,7 @@ import (
 
 	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/jsonflag"
 	"github.com/usadamasa/agents-daemon/internal/apppath"
+	"github.com/usadamasa/agents-daemon/internal/board"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
@@ -91,10 +92,13 @@ func newParkCmd() *cobra.Command {
 	adopt := &cobra.Command{
 		Use:   "adopt <session_id> <task_id>",
 		Short: "終了したセッションの未完了のタスクを kind task のメモにし、タスクの記録を消して {created, item} を出す",
-		Args:  cobra.ExactArgs(2),
+		Long: "セッションが終了したことは、動いている daemon がタスクの記録より後に書いた status.json に pane が無いことで確かめる。\n" +
+			"daemon が動いていない、status.json が古い、pane がある、のどれかなら移さない。",
+		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return withPlacer(cmd, cwd, func(paths apppath.Paths, p tasklog.Placer, cwd string) (any, error) {
-				return parkAdopt(paths.StateDir(), parking.New(paths.StateDir()), p, session, cwd, args[0], args[1], time.Now())
+				exited := func(sessionID string, after time.Time) error { return board.SessionExited(paths, sessionID, after) }
+				return parkAdopt(paths.StateDir(), parking.New(paths.StateDir()), p, session, cwd, args[0], args[1], exited, time.Now())
 			})
 		},
 	}

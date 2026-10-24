@@ -139,9 +139,11 @@ function basename(path: string): string {
   return path.replace(/\/+$/, '').split('/').pop() ?? path
 }
 
-// canAdopt はタスクのノードをパーキングへ移せるか。終了したセッションの未完了のタスクだけ。
-export function canAdopt(node: GraphNode, self: string): boolean {
-  return node.kind === 'task' && node.state === 'exited' && node.session_id !== undefined && node.session_id !== self
+// canAdopt はタスクのノードをパーキングへ移せるか。終了したセッションの未完了のタスクだけ。daemon が status.json を
+// 書いていない (daemon_running でも updated_at が無い) ボードは、生きているセッションも exited と描くので出さない。
+// 押した後の判定はバイナリが status.json で改めて行う (`park adopt`)。
+export function canAdopt(node: GraphNode, self: string, data: BoardData): boolean {
+  return data.updated_at !== undefined && node.kind === 'task' && node.state === 'exited' && node.session_id !== undefined && node.session_id !== self
 }
 
 // taskText は「タスクにする」で送る文面。

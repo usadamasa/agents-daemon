@@ -1,6 +1,6 @@
 // Package doctor は `doctor` サブコマンド (daemon が動作するための前提条件の診断) の実装を提供する。
 // 多重化ツールへの到達性、pane の見え方、rex CLI の前提、statusline の state、設定、domain、daemon の稼働、
-// peer messaging、解決済みパスを Report に集めてから書く。文字の出力 (Write) と `--json` の出力が同じ判定を
+// peer messaging、解決済みパスを Report に集めてから書く。文字の出力 (write) と `--json` の出力が同じ判定を
 // 見るためで、JSON の形は Report の json tag が決める。他の読むだけの診断 (inspect / status / logs) は internal/verify。
 package doctor
 

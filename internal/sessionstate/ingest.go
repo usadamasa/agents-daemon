@@ -49,7 +49,7 @@ type statuslineWindow struct {
 //     ときだけ書く。無い (初回 API レスポンス前、rate_limits が届かない契約、ウィンドウの
 //     切り替わり) ときは既存ファイルを残す
 //
-// 端末多重化ツールの場所はプロセスの環境変数から読む (IngestStatuslineWithEnv)。
+// 端末多重化ツールの場所はプロセスの環境変数から読む (ingestStatuslineWithEnv)。
 func (s Store) IngestStatusline(input []byte, now time.Time) error {
 	return s.ingestStatuslineWithEnv(input, os.Getenv, now)
 }

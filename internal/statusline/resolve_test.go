@@ -33,7 +33,7 @@ func TestGitBranch(t *testing.T) {
 		if out, err := exec.Command("git", "-C", repo, "checkout", "-q", "-b", "feature-x").CombinedOutput(); err != nil {
 			t.Fatalf("checkout: %v\n%s", err, out)
 		}
-		if got := GitBranch(repo); got != "feature-x" {
+		if got := gitBranch(repo); got != "feature-x" {
 			t.Errorf("GitBranch() = %q, want feature-x", got)
 		}
 	})
@@ -43,15 +43,15 @@ func TestGitBranch(t *testing.T) {
 		if out, err := exec.Command("git", "-C", repo, "checkout", "-q", "--detach").CombinedOutput(); err != nil {
 			t.Fatalf("checkout: %v\n%s", err, out)
 		}
-		if got := GitBranch(repo); got != "(detached)" {
+		if got := gitBranch(repo); got != "(detached)" {
 			t.Errorf("GitBranch() = %q, want (detached)", got)
 		}
 	})
 	t.Run("git 管理外と空のパスは空", func(t *testing.T) {
-		if got := GitBranch(t.TempDir()); got != "" {
+		if got := gitBranch(t.TempDir()); got != "" {
 			t.Errorf("GitBranch(非 git) = %q, want empty", got)
 		}
-		if got := GitBranch(""); got != "" {
+		if got := gitBranch(""); got != "" {
 			t.Errorf("GitBranch(\"\") = %q, want empty", got)
 		}
 	})
@@ -59,7 +59,7 @@ func TestGitBranch(t *testing.T) {
 
 func TestProjectBranch(t *testing.T) {
 	// 起動元が git 管理外でも 🏠 は出すので、branch の欄は (detached) で埋める。
-	if got := ProjectBranch(t.TempDir()); got != "(detached)" {
+	if got := projectBranch(t.TempDir()); got != "(detached)" {
 		t.Errorf("ProjectBranch(非 git) = %q, want (detached)", got)
 	}
 }
@@ -77,7 +77,7 @@ func TestOutsideProject(t *testing.T) {
 		{"", "/w/proj", false},
 	}
 	for _, tc := range tests {
-		if got := OutsideProject(tc.cur, tc.project); got != tc.want {
+		if got := outsideProject(tc.cur, tc.project); got != tc.want {
 			t.Errorf("OutsideProject(%q, %q) = %v, want %v", tc.cur, tc.project, got, tc.want)
 		}
 	}
@@ -87,21 +87,21 @@ func TestReadEffort(t *testing.T) {
 	t.Run("settings.json の effortLevel", func(t *testing.T) {
 		home := t.TempDir()
 		writeSettings(t, home, `{"effortLevel": "high"}`)
-		if got := ReadEffort(home); got != "high" {
+		if got := readEffort(home); got != "high" {
 			t.Errorf("ReadEffort() = %q, want high", got)
 		}
 	})
 	t.Run("ファイルが無い・キーが無い・壊れているなら空", func(t *testing.T) {
-		if got := ReadEffort(t.TempDir()); got != "" {
+		if got := readEffort(t.TempDir()); got != "" {
 			t.Errorf("ReadEffort(無し) = %q", got)
 		}
 		home := t.TempDir()
 		writeSettings(t, home, `{}`)
-		if got := ReadEffort(home); got != "" {
+		if got := readEffort(home); got != "" {
 			t.Errorf("ReadEffort(キー無し) = %q", got)
 		}
 		writeSettings(t, home, `{`)
-		if got := ReadEffort(home); got != "" {
+		if got := readEffort(home); got != "" {
 			t.Errorf("ReadEffort(壊れた JSON) = %q", got)
 		}
 	})

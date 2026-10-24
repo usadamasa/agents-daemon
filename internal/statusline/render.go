@@ -21,28 +21,28 @@ const (
 	separator = gray + " ･ﾟ " + reset
 )
 
-// SpendView は cost の合算 (USD) と月額上限。rate_limits が届かない契約 (Enterprise の seat) で
-// 利用上限の代わりに出す。上限が無ければ View.Spend は nil で、項目ごと出さない。
-type SpendView struct {
+// spendView は cost の合算 (USD) と月額上限。rate_limits が届かない契約 (Enterprise の seat) で
+// 利用上限の代わりに出す。上限が無ければ view.Spend は nil で、項目ごと出さない。
+type spendView struct {
 	Day   float64
 	Month float64
 	Cap   int
 }
 
-// View は描画に要るものを全て解決した形。stdin の値 (Input) に、呼び出し側が settings・git・
-// state から引いた値を足す。Render はここから先でファイルもコマンドも触らない。
-type View struct {
-	Input
-	Mode Mode
+// view は描画に要るものを全て解決した形。stdin の値 (input) に、呼び出し側が settings・git・
+// state から引いた値を足す。render はここから先でファイルもコマンドも触らない。
+type view struct {
+	input
+	Mode mode
 	// Home はパス表示で ~ に畳む起点。
 	Home string
 	// Effort は settings.json の effortLevel。無ければ空で項目を出さない。
 	Effort string
-	// Branch は CurrentDir の branch (GitBranch の値)。空なら項目を出さない。
+	// Branch は CurrentDir の branch (gitBranch の値)。空なら項目を出さない。
 	Branch string
-	// ProjectBranch は起動元 ProjectDir の branch (ProjectBranch の値)。CurrentDir が起動元の外にあるときだけ使う。
+	// ProjectBranch は起動元 ProjectDir の branch (projectBranch の値)。CurrentDir が起動元の外にあるときだけ使う。
 	ProjectBranch string
-	Spend         *SpendView
+	Spend         *spendView
 }
 
 // segment は statusline の 1 項目。色と、絵文字を含む本文。
@@ -51,8 +51,8 @@ type segment struct {
 	text  string
 }
 
-// segmentFunc は View から 1 項目を組む。出す条件を満たさなければ false。
-type segmentFunc func(v View, now time.Time) (segment, bool)
+// segmentFunc は view から 1 項目を組む。出す条件を満たさなければ false。
+type segmentFunc func(v view, now time.Time) (segment, bool)
 
 // fullLines は full (3 行) の並び。課金まわり (利用上限 / cost) と context を 1 行へ固めると、
 // 数字を横断で読むのに視線が飛ばず、どの行も折り返さない長さに収まる。
@@ -71,9 +71,9 @@ var fullLines = [][]segmentFunc{
 // 利用上限 (⏳) と月額 (🧾) はアカウント全体の値で pane ごとに変わらないので落とす。
 var compactLine = []segmentFunc{contextSegment, effortSegment, shortDirSegment, plainBranchSegment, worktreeSegment}
 
-// Render は Mode に応じた行を返す。full は 3 行を改行で繋ぎ、末尾に改行を付けない。
+// render は Mode に応じた行を返す。full は 3 行を改行で繋ぎ、末尾に改行を付けない。
 // now は利用上限のリセットまでの残り時間に使う。
-func (v View) Render(now time.Time) string {
+func (v view) render(now time.Time) string {
 	switch v.Mode {
 	case ModeHidden:
 		return ""
@@ -89,7 +89,7 @@ func (v View) Render(now time.Time) string {
 }
 
 // renderLine は 1 行ぶんの項目を左から組み、区切りで繋ぐ。
-func renderLine(v View, now time.Time, segments []segmentFunc) string {
+func renderLine(v view, now time.Time, segments []segmentFunc) string {
 	parts := make([]string, 0, len(segments))
 	for _, build := range segments {
 		if s, ok := build(v, now); ok {
@@ -115,7 +115,7 @@ func levelColor(percent int) string {
 
 // --- 1 行目: 何で動いているか ---
 
-func modelSegment(v View, _ time.Time) (segment, bool) {
+func modelSegment(v view, _ time.Time) (segment, bool) {
 	return segment{pink, "🌸 " + v.Model + " " + modelEmoji(v.Model)}, true
 }
 
@@ -144,7 +144,7 @@ var effortColors = map[string]string{
 	"max":    red,
 }
 
-func effortSegment(v View, _ time.Time) (segment, bool) {
+func effortSegment(v view, _ time.Time) (segment, bool) {
 	if v.Effort == "" {
 		return segment{}, false
 	}
@@ -155,14 +155,14 @@ func effortSegment(v View, _ time.Time) (segment, bool) {
 	return segment{color, "⚡ " + v.Effort}, true
 }
 
-func outputStyleSegment(v View, _ time.Time) (segment, bool) {
+func outputStyleSegment(v view, _ time.Time) (segment, bool) {
 	if v.OutputStyle == "" || v.OutputStyle == "default" {
 		return segment{}, false
 	}
 	return segment{purple, "🎀 " + v.OutputStyle}, true
 }
 
-func versionSegment(v View, _ time.Time) (segment, bool) {
+func versionSegment(v view, _ time.Time) (segment, bool) {
 	if v.Version == "" {
 		return segment{}, false
 	}
@@ -171,13 +171,13 @@ func versionSegment(v View, _ time.Time) (segment, bool) {
 
 // --- 2 行目: どれだけ使ったか ---
 
-func contextSegment(v View, _ time.Time) (segment, bool) {
+func contextSegment(v view, _ time.Time) (segment, bool) {
 	return segment{levelColor(v.ContextPercent), fmt.Sprintf("🧠 %dk (%d%%)", v.ContextTokens/1000, v.ContextPercent)}, true
 }
 
 // rateLimitSegment は 5 時間 / 7 日ウィンドウの使用率。rate_limits が届いたセッションにだけ出す。
 // 色は 5 時間ウィンドウの使用率に従う (詰まるのは常にこちらが先)。
-func rateLimitSegment(v View, now time.Time) (segment, bool) {
+func rateLimitSegment(v view, now time.Time) (segment, bool) {
 	if v.FiveHourPercent == nil {
 		return segment{}, false
 	}
@@ -204,11 +204,11 @@ func formatCountdown(d time.Duration) string {
 	return fmt.Sprintf("%dm", m)
 }
 
-func costSegment(v View, _ time.Time) (segment, bool) {
+func costSegment(v view, _ time.Time) (segment, bool) {
 	return segment{gray, fmt.Sprintf("💰 $%.2f", v.Cost)}, true
 }
 
-func daySpendSegment(v View, _ time.Time) (segment, bool) {
+func daySpendSegment(v view, _ time.Time) (segment, bool) {
 	if v.Spend == nil {
 		return segment{}, false
 	}
@@ -217,7 +217,7 @@ func daySpendSegment(v View, _ time.Time) (segment, bool) {
 
 // monthSpendSegment は当月の消費と月額上限。claude.ai と connectors の消費を含まない過小評価なので
 // ~ を付けて概算だと示す。
-func monthSpendSegment(v View, _ time.Time) (segment, bool) {
+func monthSpendSegment(v view, _ time.Time) (segment, bool) {
 	if v.Spend == nil {
 		return segment{}, false
 	}
@@ -239,19 +239,19 @@ func formatCap(capUSD int) string {
 // --- 3 行目: どこに居るか ---
 
 // dirColor は起動元の外に居るとき orange にして可視化する。
-func dirColor(v View) string {
-	if OutsideProject(v.CurrentDir, v.ProjectDir) {
+func dirColor(v view) string {
+	if outsideProject(v.CurrentDir, v.ProjectDir) {
 		return orange
 	}
 	return sky
 }
 
-func dirSegment(v View, _ time.Time) (segment, bool) {
+func dirSegment(v view, _ time.Time) (segment, bool) {
 	return segment{dirColor(v), "📁 " + collapseHome(v.CurrentDir, v.Home)}, true
 }
 
 // shortDirSegment は compact 用。フルパスをやめて末尾 1 要素にする。
-func shortDirSegment(v View, _ time.Time) (segment, bool) {
+func shortDirSegment(v view, _ time.Time) (segment, bool) {
 	dir := collapseHome(v.CurrentDir, v.Home)
 	if base := filepath.Base(dir); base != "." && base != string(filepath.Separator) {
 		dir = base
@@ -273,7 +273,7 @@ func collapseHome(dir, home string) string {
 	return dir
 }
 
-func branchSegment(v View, _ time.Time) (segment, bool) {
+func branchSegment(v view, _ time.Time) (segment, bool) {
 	if v.Branch == "" {
 		return segment{}, false
 	}
@@ -281,7 +281,7 @@ func branchSegment(v View, _ time.Time) (segment, bool) {
 }
 
 // plainBranchSegment は compact 用。飾りを落とす。
-func plainBranchSegment(v View, _ time.Time) (segment, bool) {
+func plainBranchSegment(v view, _ time.Time) (segment, bool) {
 	if v.Branch == "" {
 		return segment{}, false
 	}
@@ -289,7 +289,7 @@ func plainBranchSegment(v View, _ time.Time) (segment, bool) {
 }
 
 // worktreeSegment は linked worktree 名。Claude Code が workspace.git_worktree で渡す。
-func worktreeSegment(v View, _ time.Time) (segment, bool) {
+func worktreeSegment(v view, _ time.Time) (segment, bool) {
 	if v.Worktree == "" {
 		return segment{}, false
 	}
@@ -298,8 +298,8 @@ func worktreeSegment(v View, _ time.Time) (segment, bool) {
 
 // homeSegment は起動元プロジェクト (「ホーム」)。cwd が外に居るときだけ、名前と branch を添えて
 // 2 つの世界を一目で見せる。
-func homeSegment(v View, _ time.Time) (segment, bool) {
-	if !OutsideProject(v.CurrentDir, v.ProjectDir) {
+func homeSegment(v view, _ time.Time) (segment, bool) {
+	if !outsideProject(v.CurrentDir, v.ProjectDir) {
 		return segment{}, false
 	}
 	return segment{gray, "🏠 " + filepath.Base(v.ProjectDir) + " (" + v.ProjectBranch + ")"}, true

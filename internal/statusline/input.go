@@ -1,8 +1,8 @@
 // Package statusline は Claude Code の statusline コマンドの描画を持つ。
 // claude-config の dotclaude/statusline.sh (bash + jq) を移したもので、絵文字・色・閾値・
-// 行構成はそのまま。stdin の JSON の取り出し (Input)、幅モード (Mode)、描画 (View.Render) に
+// 行構成はそのまま。stdin の JSON の取り出し (input)、幅モード (mode)、描画 (view.render) に
 // 分かれる。state の書き込み (sessionstate)、cost の台帳 (spend)、git / settings の参照 (resolve.go) を
-// 組み立てて View に渡すのは Run (run.go) で、cmd は環境とパスを渡すだけにする。
+// 組み立てて view に渡すのは Run (run.go) で、cmd は環境とパスを渡すだけにする。
 package statusline
 
 import (
@@ -13,8 +13,8 @@ import (
 	"time"
 )
 
-// Input は statusline の stdin から描画に要る値を取り出したもの。
-type Input struct {
+// input は statusline の stdin から描画に要る値を取り出したもの。
+type input struct {
 	Model       string
 	CurrentDir  string
 	ProjectDir  string
@@ -68,14 +68,14 @@ type rawWindow struct {
 	ResetsAt       *float64 `json:"resets_at"`
 }
 
-// ParseInput は stdin の JSON を Input にする。無い値は statusline.sh の既定 (model は "?"、
+// parseInput は stdin の JSON を input にする。無い値は statusline.sh の既定 (model は "?"、
 // current_dir が無ければ cwd、数値は 0) に揃える。
-func ParseInput(data []byte) (Input, error) {
+func parseInput(data []byte) (input, error) {
 	var raw rawInput
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return Input{}, fmt.Errorf("statusline の入力のパースに失敗: %w", err)
+		return input{}, fmt.Errorf("statusline の入力のパースに失敗: %w", err)
 	}
-	in := Input{
+	in := input{
 		Model:          raw.Model.DisplayName,
 		CurrentDir:     raw.Workspace.CurrentDir,
 		ProjectDir:     raw.Workspace.ProjectDir,
@@ -112,14 +112,14 @@ func roundPercent(v float64) int {
 
 // cc-premise: 2.1.153 statusline 実行前に COLUMNS が設定される
 //
-// Mode は表示幅による段階的な圧縮。Claude Code v2.1.153+ は statusline の実行前に COLUMNS へ
+// mode は表示幅による段階的な圧縮。Claude Code v2.1.153+ は statusline の実行前に COLUMNS へ
 // 端末の実サイズを入れる。多重化ツールで pane を分割すると幅が縮み、3 行構成のままでは
 // 折り返して行数を食うため、幅に応じて出力量を落とす。
-type Mode int
+type mode int
 
 const (
 	// ModeFull は 3 行構成。
-	ModeFull Mode = iota
+	ModeFull mode = iota
 	// ModeCompact は 1 行に畳む (100 桁未満)。
 	ModeCompact
 	// ModeHidden は何も出さない (60 桁未満)。
@@ -131,9 +131,9 @@ const (
 	hiddenColumns  = 60
 )
 
-// ModeFor は COLUMNS の値からモードを決める。取れない環境 (古い版、他ハーネス) では
+// modeFor は COLUMNS の値からモードを決める。取れない環境 (古い版、他ハーネス) では
 // 0 や非数値になり、従来どおり full にする。
-func ModeFor(columns string) Mode {
+func modeFor(columns string) mode {
 	cols, err := strconv.Atoi(columns)
 	if err != nil || cols <= 0 {
 		return ModeFull

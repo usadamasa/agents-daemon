@@ -7,7 +7,7 @@ import (
 
 func TestParseInput(t *testing.T) {
 	t.Run("stdin の JSON から描画に要る値を取り出す", func(t *testing.T) {
-		in, err := ParseInput([]byte(`{
+		in, err := parseInput([]byte(`{
 			"model": {"display_name": "Opus 4.7"},
 			"workspace": {"current_dir": "/w/proj/sub", "project_dir": "/w/proj", "git_worktree": "wt-feature"},
 			"cwd": "/elsewhere",
@@ -24,7 +24,7 @@ func TestParseInput(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ParseInput() error = %v", err)
 		}
-		want := Input{
+		want := input{
 			Model:          "Opus 4.7",
 			CurrentDir:     "/w/proj/sub",
 			ProjectDir:     "/w/proj",
@@ -53,7 +53,7 @@ func TestParseInput(t *testing.T) {
 	})
 
 	t.Run("無い値は statusline.sh と同じ既定になる", func(t *testing.T) {
-		in, err := ParseInput([]byte(`{}`))
+		in, err := parseInput([]byte(`{}`))
 		if err != nil {
 			t.Fatalf("ParseInput() error = %v", err)
 		}
@@ -69,7 +69,7 @@ func TestParseInput(t *testing.T) {
 	})
 
 	t.Run("current_dir が無ければ cwd を使う", func(t *testing.T) {
-		in, err := ParseInput([]byte(`{"cwd": "/from-cwd"}`))
+		in, err := parseInput([]byte(`{"cwd": "/from-cwd"}`))
 		if err != nil {
 			t.Fatalf("ParseInput() error = %v", err)
 		}
@@ -79,7 +79,7 @@ func TestParseInput(t *testing.T) {
 	})
 
 	t.Run("5 時間ウィンドウの切り替わりでは five_hour が null で届く。値なしとして扱う", func(t *testing.T) {
-		in, err := ParseInput([]byte(`{"rate_limits": {"five_hour": {"used_percentage": null, "resets_at": null}, "seven_day": {"used_percentage": 47, "resets_at": 1788235200}}}`))
+		in, err := parseInput([]byte(`{"rate_limits": {"five_hour": {"used_percentage": null, "resets_at": null}, "seven_day": {"used_percentage": 47, "resets_at": 1788235200}}}`))
 		if err != nil {
 			t.Fatalf("ParseInput() error = %v", err)
 		}
@@ -92,7 +92,7 @@ func TestParseInput(t *testing.T) {
 	})
 
 	t.Run("使用率の丸めは jq の round と同じ (0.5 は 0 から遠い側へ)", func(t *testing.T) {
-		in, err := ParseInput([]byte(`{"context_window": {"used_percentage": 42.5}, "rate_limits": {"five_hour": {"used_percentage": 79.5}}}`))
+		in, err := parseInput([]byte(`{"context_window": {"used_percentage": 42.5}, "rate_limits": {"five_hour": {"used_percentage": 79.5}}}`))
 		if err != nil {
 			t.Fatalf("ParseInput() error = %v", err)
 		}
@@ -105,7 +105,7 @@ func TestParseInput(t *testing.T) {
 	})
 
 	t.Run("壊れた JSON はエラー", func(t *testing.T) {
-		if _, err := ParseInput([]byte(`{"session_id": `)); err == nil {
+		if _, err := parseInput([]byte(`{"session_id": `)); err == nil {
 			t.Error("ParseInput() error = nil, want error")
 		}
 	})
@@ -114,7 +114,7 @@ func TestParseInput(t *testing.T) {
 func TestModeFor(t *testing.T) {
 	tests := []struct {
 		columns string
-		want    Mode
+		want    mode
 	}{
 		{"200", ModeFull},
 		{"100", ModeFull},
@@ -126,7 +126,7 @@ func TestModeFor(t *testing.T) {
 		{"narrow", ModeFull},
 	}
 	for _, tc := range tests {
-		if got := ModeFor(tc.columns); got != tc.want {
+		if got := modeFor(tc.columns); got != tc.want {
 			t.Errorf("ModeFor(%q) = %v, want %v", tc.columns, got, tc.want)
 		}
 	}

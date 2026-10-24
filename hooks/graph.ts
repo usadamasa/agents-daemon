@@ -33,9 +33,10 @@ export const CYCLE = '⟳'
 
 // LEGEND は B の pane の底に置く凡例。数の行の記号、行だけに出る状態、行の末尾の印の 3 群に分ける。語は記号と同じく
 // OSC 7501 の state と Task 系ツールの status、それ以外は graph の JSON の欄の名前 (blocked_by、parked、downstream、
-// deadlock)。
+// deadlock)。↵ だけは state の done ではなく idle と書く。数の行の ↵ は isIdle (done と unknown) を数え、
+// 隣の completed と並ぶと done は「終わった」と読めて、親の確認を待つセッションを見落とすため。
 const LEGEND: readonly (readonly string[])[] = [
-  [`${STOP} blocked`, `${ICON.pending} pending`, `${ICON.working} working`, `${ICON.done} done`, `${ICON.completed} completed`, `${MEMO} parked`],
+  [`${STOP} blocked`, `${ICON.pending} pending`, `${ICON.working} working`, `${ICON.done} idle`, `${ICON.completed} completed`, `${MEMO} parked`],
   [`${ICON.question} question`, `${ICON.permission} permission`, `${ICON.limit} limit`, `${ICON.error} error`, `${ICON.exited} exited`, `${ICON.unknown} unknown`],
   ['↓n downstream', `${CYCLE} deadlock`],
 ]

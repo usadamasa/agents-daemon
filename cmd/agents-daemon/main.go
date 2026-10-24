@@ -28,7 +28,8 @@ import (
 
 func main() {
 	if err := newRootCmd().Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		// stderr が daemon.log に向くこと (detach 起動した daemon) があるので、誰の行か分かる形にする。
+		fmt.Fprintf(os.Stderr, "agents-daemon: %v\n", err)
 		os.Exit(1)
 	}
 }

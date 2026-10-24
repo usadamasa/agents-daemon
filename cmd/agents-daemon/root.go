@@ -23,6 +23,9 @@ func newRootCmd() *cobra.Command {
 			"今ある働きかけは、5 時間ウィンドウの利用上限や一時的なエラーで止まったセッションを\n" +
 			"解除後に再開させること。",
 		SilenceUsage: true,
+		// error は main が 1 行だけ出す。cobra にも出させると、detach 起動した daemon の stderr (daemon.log) に
+		// 同じ文が 2 行残る。
+		SilenceErrors: true,
 	}
 	// グローバルオプションは --json だけ。対応はコマンドが Annotations で宣言する (internal/jsonflag)。
 	jsonflag.Add(root)

@@ -137,8 +137,8 @@ type Board struct {
 	Graph Graph `json:"graph"`
 }
 
-// Input はボードを組む材料。
-type Input struct {
+// input はボードを組む材料。
+type input struct {
 	Domain domain.Domain
 	// CWD は開いたセッションの cwd (Board.Here の元)。
 	CWD string
@@ -162,8 +162,8 @@ type Input struct {
 	SessionNames map[string]string
 }
 
-// Build はボードを組む。
-func Build(in Input) Board {
+// build はボードを組む。
+func build(in input) Board {
 	b := Board{Domain: in.Domain, Columns: columns, Rows: []Row{}}
 	var panes map[string]*daemon.PaneStatus
 	b.DaemonRunning, b.UpdatedAt, panes = livePanes(in)
@@ -192,7 +192,7 @@ func sessionIDs(cards []placed, memos []parking.Item) map[string]bool {
 
 // livePanes は daemon が動いているか、status.json の更新時刻、このボードに載せる生きているセッションの
 // pane (session ID ごと) を返す。前の daemon が残した status.json は使わない (status コマンドと同じ判断)。
-func livePanes(in Input) (running bool, updatedAt *time.Time, panes map[string]*daemon.PaneStatus) {
+func livePanes(in input) (running bool, updatedAt *time.Time, panes map[string]*daemon.PaneStatus) {
 	panes = map[string]*daemon.PaneStatus{}
 	if in.PID == 0 {
 		return false, nil, panes
@@ -211,7 +211,7 @@ func livePanes(in Input) (running bool, updatedAt *time.Time, panes map[string]*
 }
 
 // collect はタスク、TodoWrite の項目、タスクの無い生きているセッションをカードにする。
-func collect(in Input, panes map[string]*daemon.PaneStatus) []placed {
+func collect(in input, panes map[string]*daemon.PaneStatus) []placed {
 	var cards []placed
 	withTasks := map[string]bool{}
 	for _, t := range in.Tasks {
@@ -308,7 +308,7 @@ type placed struct {
 
 // livePaneInDomain は pane のセッションをこのボードに載せるかを返す。記録がほかの domain の側にあれば
 // 載せず (業務に倒したセッション)、無ければ pane の cwd で決める。
-func livePaneInDomain(in Input, p *daemon.PaneStatus) bool {
+func livePaneInDomain(in input, p *daemon.PaneStatus) bool {
 	if in.Elsewhere != nil && in.Elsewhere(p.SessionID) {
 		return false
 	}

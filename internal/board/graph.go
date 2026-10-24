@@ -109,7 +109,7 @@ type EdgeRecord struct {
 
 // graphBuilder はグラフを組む途中の状態。
 type graphBuilder struct {
-	in    Input
+	in    input
 	panes map[string]*daemon.PaneStatus
 	nodes map[string]*Node
 	// bySession はセッションのタスク (と TodoWrite の項目、タスクの無いセッション) のノードの Key。
@@ -119,7 +119,7 @@ type graphBuilder struct {
 }
 
 // buildGraph はカードからノードを、blockedBy と辺の記録から Links を組み、段・下流・鎖を数える。
-func buildGraph(in Input, cards []placed, panes map[string]*daemon.PaneStatus, names map[string]string) Graph {
+func buildGraph(in input, cards []placed, panes map[string]*daemon.PaneStatus, names map[string]string) Graph {
 	g := &graphBuilder{in: in, panes: panes, nodes: map[string]*Node{}, bySession: map[string][]string{}, seen: map[[2]string]bool{}}
 	for _, c := range cards {
 		g.addCard(c, names[c.card.SessionID])

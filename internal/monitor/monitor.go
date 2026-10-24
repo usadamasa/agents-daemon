@@ -539,15 +539,19 @@ func (s WakeSource) String() string {
 
 // transientBackoff は transient エラーの指数バックオフを計算する
 // (base * 2^attempts を TransientMaxWaitSeconds で cap する)。
+// cap に届いた時点で倍にするのをやめる。先に 2^attempts を掛けると、transient の再試行は回数に上限が無いので
+// 既定の 60 秒でも 28 回目で int64 を溢れて負になり、待たずに送り続ける (invariants_test.go が見つけた)。
 func transientBackoff(attempts int, cfg config.Config) time.Duration {
 	base := time.Duration(cfg.TransientWaitSeconds) * time.Second
 	capped := time.Duration(cfg.TransientMaxWaitSeconds) * time.Second
 
-	// シフト量を抑えて time.Duration (int64) のオーバーフローを避ける。
-	// 実運用では cap が先に効くのでこの上限で十分。
-	shift := min(attempts, 32)
-	backoff := base * time.Duration(int64(1)<<uint(shift)) // #nosec G115 -- shift は 32 以下に抑制済み
-
+	backoff := base
+	for range attempts {
+		if backoff >= capped {
+			break
+		}
+		backoff *= 2
+	}
 	return min(backoff, capped)
 }
 

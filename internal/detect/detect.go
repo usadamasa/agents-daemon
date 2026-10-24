@@ -426,6 +426,11 @@ func resolveClockTime(m []string, now time.Time, local *time.Location) (time.Tim
 	return best, !best.IsZero()
 }
 
+// maxRelativeWait は相対表現として読む待ち時間の上限。上限の文言が言う待ちは 5 時間ウィンドウでも週次でも
+// これより短く、これを超える数は pane に流れた別の文章 (ログや tool result) で、掛け算で int64 を溢れて
+// 負の待ちになる (fuzz_test.go の seed)。
+const maxRelativeWait = 7 * 24 * time.Hour
+
 // ParseRelativeWait は "try again in 12 minutes" / "resets in 2 hours" のような
 // 相対的な待機時間の表現を screen から抽出する。見つからない場合は ok=false を返す。
 //
@@ -444,8 +449,12 @@ func ParseRelativeWait(screen string, n int) (time.Duration, bool) {
 	if err != nil {
 		return 0, false
 	}
+	unit := time.Hour
 	if strings.HasPrefix(strings.ToLower(m[2]), "m") {
-		return time.Duration(amount) * time.Minute, true
+		unit = time.Minute
 	}
-	return time.Duration(amount) * time.Hour, true
+	if amount > int(maxRelativeWait/unit) {
+		return 0, false
+	}
+	return time.Duration(amount) * unit, true
 }

@@ -1,5 +1,12 @@
 # Changelog
 
+## [2026.1024.4](https://github.com/usadamasa/agents-daemon/compare/2026.1024.3...2026.1024.4) - 2026-10-24
+
+- 形式手法の評価と、不変条件を乱択と fuzz で確かめる実行できる仕様の導入 by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/240
+- Phase 1: ボードの受け渡しとタスクの記録を TLA+ に写し、TLC で #242 の交錯を反例として出す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/246
+- ボードの受け渡しの直しをモデルで確かめてから実装する (Phase 2) by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/247
+- test: 受け渡しの不変条件を実物の Store の交錯で確かめる乱択テストにする (#245) by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/248
+
 ## [2026.1024.3](https://github.com/usadamasa/agents-daemon/compare/2026.1024.2...2026.1024.3) - 2026-10-24
 
 - prompt の hint 行に出すパーキングのメモの数を消す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/235

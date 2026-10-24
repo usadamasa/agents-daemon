@@ -60,6 +60,10 @@ type Request struct {
 type Result struct {
 	SessionID string `json:"session_id"`
 	PaneID    string `json:"pane_id"`
+	// Foreground は pane で claude が前景になった (本文が最初のターンとして入った) か。false なら待ち切れで、pane は残り
+	// claude が起きているかもしれない。呼び出し側はメモを戻さず、Detail を人に見せる。
+	Foreground bool   `json:"foreground"`
+	Detail     string `json:"detail,omitempty"`
 }
 
 // Runner は起こす手段。テストは Host と Domain を差し替える。
@@ -76,8 +80,9 @@ type Runner struct {
 	WaitInterval time.Duration
 }
 
-// Run は req のセッションを起こし、その pane で claude が前景になってから結果を返す。前景にならなければ error にする
-// (pane は残るので、起動の失敗は画面で読める)。
+// Run は req のセッションを起こし、その pane で claude が前景になってから結果を返す。error は window を作る前か
+// 作れなかったときだけ。前景にならなかったときは window ができているので Foreground=false で返す (pane は残るので、
+// 起動の失敗は画面で読める)。
 func (r Runner) Run(ctx context.Context, req Request) (Result, error) {
 	if err := r.check(req); err != nil {
 		return Result{}, err
@@ -96,10 +101,14 @@ func (r Runner) Run(ctx context.Context, req Request) (Result, error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("window を作れない: %w", err)
 	}
+	res := Result{SessionID: id, PaneID: paneID, Foreground: true}
 	if err := r.waitForClaude(ctx, paneID); err != nil {
-		return Result{}, err
+		if ctx.Err() != nil {
+			return Result{}, err
+		}
+		res.Foreground, res.Detail = false, err.Error()
 	}
-	return Result{SessionID: id, PaneID: paneID}, nil
+	return res, nil
 }
 
 // check は入力を確かめる。落ちるときは window を作らない。

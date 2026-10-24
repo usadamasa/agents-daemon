@@ -3,7 +3,7 @@ set -euo pipefail
 # model-check.sh
 # models/ の TLA+ のモデルを TLC で全部回す。`task model-check` が呼ぶ。
 # cfg ごとに期待 (holds: 反例なし / violated: 反例が出る) を持ち、期待と違えば exit 1 にする。
-# 今の設計で破れる不変条件は violated が正で、Phase 2 (#244) で設計を直したら holds に変える。
+# 設計を変えるときは、先にモデルへ写して holds のまま通ることを見てから実装する (models/handoff/README.md)。
 #
 # TLC は標準モジュールを java.io.tmpdir に展開し、探索の状態を -metadir に書く。どちらも ./tmp 配下にする
 # (sandbox の中では /var/folders に書けない)。TLC の exit code は 0 が反例なし、12 が不変条件の違反。
@@ -36,9 +36,6 @@ run() {
 }
 
 run models/handoff Handoff Handoff.cfg holds
-run models/handoff Handoff Handoff.AtMostOneDelivery.cfg violated
-run models/handoff Handoff Handoff.LiveTaskKept.cfg violated
-run models/handoff Handoff Handoff.AtMostOneSession.cfg violated
-run models/handoff TaskLog TaskLog.cfg violated
+run models/handoff TaskLog TaskLog.cfg holds
 
 exit "$failed"

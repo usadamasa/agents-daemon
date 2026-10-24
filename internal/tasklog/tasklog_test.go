@@ -121,6 +121,34 @@ func TestIngest_taskListAddsAndRemoves(t *testing.T) {
 	}
 }
 
+// TaskList の一覧を取った後に TaskCreate が書いた記録 (一覧の最大の id より大きい id) は、後から動いた TaskList の hook が
+// 消さない (models/handoff の TaskLog)。一覧より小さい id で一覧に無い記録は、消えたタスクなので消す。
+func TestIngest_taskListKeepsRecordsCreatedAfterListing(t *testing.T) {
+	s := New(t.TempDir())
+	ingest(t, s, allHome, "task-create-alpha", "task-create-beta")
+	created := withTool(t, fixture(t, "task-create-alpha"), "TaskCreate", map[string]any{"subject": "gamma", "description": "一覧の後に作った"}, map[string]any{"task": map[string]any{"id": "3", "subject": "gamma"}})
+	if _, err := s.Ingest(created, allHome, t0); err != nil {
+		t.Fatal(err)
+	}
+	// 一覧は 3 を作る前のもの。1 は一覧の後に消えたことにする。
+	listed := withTool(t, fixture(t, "task-list"), "TaskList", nil,
+		map[string]any{"tasks": []map[string]any{{"id": "2", "subject": "beta", "status": "in_progress", "blockedBy": []string{}}}})
+	res, err := s.Ingest(listed, allHome, t0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := (Result{Tool: "TaskList", SessionID: fixtureSession, Domain: domain.Home, Written: 1, Removed: 1}); res != want {
+		t.Errorf("Result = %+v, want %+v", res, want)
+	}
+	got := byID(t, s, domain.Home)
+	if _, ok := got["1"]; ok {
+		t.Errorf("一覧に無い古い記録が残った: %+v", got["1"])
+	}
+	if got["3"].Description != "一覧の後に作った" {
+		t.Errorf("一覧の後に作った記録が消えた: %+v", got)
+	}
+}
+
 func TestIngest_updateCases(t *testing.T) {
 	cases := []struct {
 		name  string

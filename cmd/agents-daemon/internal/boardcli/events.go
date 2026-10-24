@@ -61,9 +61,9 @@ func parkAdd(stateDir string, s parking.Store, stdin io.Reader, cwd string, p ta
 }
 
 // parkSet は開いたセッション (session、cwd) の domain で s.Set を走らせ、status の変化を書く (park set)。
-func parkSet(stateDir string, s parking.Store, p tasklog.Placer, session, cwd, id, status string, now time.Time) (parking.Item, error) {
+func parkSet(stateDir string, s parking.Store, p tasklog.Placer, session, cwd, id, status, expect string, now time.Time) (parking.Item, error) {
 	d := p.Domain(session, cwd)
-	item, from, err := s.Set(d, id, status)
+	item, from, err := s.Set(d, id, status, expect)
 	if err != nil {
 		parkFailed(stateDir, d, now, "set", session, err, kv("memo", id))
 		return item, err
@@ -94,10 +94,11 @@ func parkDiscard(stateDir string, s parking.Store, p tasklog.Placer, session, cw
 	return items, nil
 }
 
-// parkAdopt は s.Adopt を走らせ、移したタスクとメモを書く (park adopt)。
-func parkAdopt(stateDir string, s parking.Store, p tasklog.Placer, viewer, cwd, sessionID, taskID string, now time.Time) (parking.Added, error) {
+// parkAdopt は s.Adopt を走らせ、移したタスクとメモを書く (park adopt)。exited はセッションが終了したと確かめる
+// (verify.SessionExited)。
+func parkAdopt(stateDir string, s parking.Store, p tasklog.Placer, viewer, cwd, sessionID, taskID string, exited func(string, time.Time) error, now time.Time) (parking.Added, error) {
 	d := p.Domain(viewer, cwd)
-	added, err := s.Adopt(viewer, cwd, sessionID, taskID, p, now)
+	added, err := s.Adopt(viewer, cwd, sessionID, taskID, p, exited, now)
 	if err != nil {
 		parkFailed(stateDir, d, now, "adopt", viewer, err, kv("from_session", sessionID), kv("task", taskID))
 		return added, err

@@ -3,6 +3,7 @@ package parking
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -197,7 +198,7 @@ func TestAdd_doesNotMergeDifferentItems(t *testing.T) {
 	if other := mustAdd(t, s, domain.Work, testRepo, aside("t"), source("s1", "")); other.ID == base.ID {
 		t.Errorf("domain が違うのにまとめた")
 	}
-	if _, _, err := s.Set(domain.Home, base.ID, StatusDiscarded); err != nil {
+	if _, _, err := s.Set(domain.Home, base.ID, StatusDiscarded, ""); err != nil {
 		t.Fatal(err)
 	}
 	if again := mustAdd(t, s, domain.Home, testRepo, aside("t"), source("s1", "")); again.ID == base.ID {
@@ -247,7 +248,7 @@ func TestSet(t *testing.T) {
 	s := New(t.TempDir())
 	item := mustAdd(t, s, domain.Home, testRepo, aside("t"), source("s1", ""))
 
-	got, from, err := s.Set(domain.Home, item.ID, StatusHanded)
+	got, from, err := s.Set(domain.Home, item.ID, StatusHanded, "")
 	if err != nil || got.Status != StatusHanded {
 		t.Fatalf("Set() = %+v, %v", got, err)
 	}
@@ -258,14 +259,44 @@ func TestSet(t *testing.T) {
 	if list, _ := s.list(domain.Home); list[0].Status != StatusHanded {
 		t.Errorf("書き戻されていない: %+v", list)
 	}
-	if _, _, err := s.Set(domain.Home, item.ID, "done"); err == nil {
+	if _, _, err := s.Set(domain.Home, item.ID, "done", ""); err == nil {
 		t.Errorf("範囲外の status を通した")
 	}
-	if _, _, err := s.Set(domain.Work, item.ID, StatusOpen); err == nil {
+	if _, _, err := s.Set(domain.Work, item.ID, StatusOpen, ""); err == nil {
 		t.Errorf("別の domain のメモを書き換えた")
 	}
-	if _, _, err := s.Set(domain.Home, "../x", StatusOpen); err == nil {
+	if _, _, err := s.Set(domain.Home, "../x", StatusOpen, ""); err == nil {
 		t.Errorf("ファイル名に使えない id を通した")
+	}
+}
+
+// from を渡した Set は、ファイルの status が from のときだけ書き換える。2 つの mod が同じ open のメモを渡そうとしても、
+// 取れるのは先に書いた 1 つだけ (models/handoff の Claim)。
+func TestSet_from(t *testing.T) {
+	s := New(t.TempDir())
+	item := mustAdd(t, s, domain.Home, testRepo, aside("t"), source("s1", ""))
+
+	if _, _, err := s.Set(domain.Home, item.ID, StatusHanded, StatusOpen); err != nil {
+		t.Fatalf("open のメモを --from open で取れない: %v", err)
+	}
+	_, _, err := s.Set(domain.Home, item.ID, StatusHanded, StatusOpen)
+	if err == nil {
+		t.Fatal("handed のメモを --from open で取れた")
+	}
+	if !strings.Contains(err.Error(), StatusHanded) || !strings.Contains(err.Error(), StatusOpen) {
+		t.Errorf("理由に今の status と期待した status が無い: %v", err)
+	}
+	if _, _, err := s.Set(domain.Home, item.ID, StatusDiscarded, StatusOpen); err == nil {
+		t.Error("取られたメモを --from open で捨てられた")
+	}
+	if list, _ := s.list(domain.Home); list[0].Status != StatusHanded {
+		t.Errorf("失敗した Set が書き換えた: %+v", list)
+	}
+	if _, _, err := s.Set(domain.Home, item.ID, StatusOpen, StatusHanded); err != nil {
+		t.Errorf("届かなかったメモを --from handed で戻せない: %v", err)
+	}
+	if _, _, err := s.Set(domain.Home, item.ID, StatusOpen, "done"); err == nil {
+		t.Error("範囲外の from を通した")
 	}
 }
 
@@ -281,7 +312,7 @@ func TestDiscardBefore(t *testing.T) {
 	renewed := mustAdd(t, s, domain.Home, testRepo, aside("renewed"), placed("s1", 40*24*time.Hour))
 	mustAdd(t, s, domain.Home, testRepo, aside("renewed"), placed("s2", time.Hour))
 	handed := mustAdd(t, s, domain.Home, testRepo, aside("handed"), placed("s1", 40*24*time.Hour))
-	if _, _, err := s.Set(domain.Home, handed.ID, StatusHanded); err != nil {
+	if _, _, err := s.Set(domain.Home, handed.ID, StatusHanded, ""); err != nil {
 		t.Fatal(err)
 	}
 	work := mustAdd(t, s, domain.Work, testRepo, aside("work"), placed("s1", 40*24*time.Hour))
@@ -321,7 +352,7 @@ func TestPrune(t *testing.T) {
 	s := New(t.TempDir())
 	open := mustAdd(t, s, domain.Home, testRepo, aside("open"), source("s1", ""))
 	handed := mustAdd(t, s, domain.Work, testRepo, aside("handed"), source("s1", ""))
-	if _, _, err := s.Set(domain.Work, handed.ID, StatusHanded); err != nil {
+	if _, _, err := s.Set(domain.Work, handed.ID, StatusHanded, ""); err != nil {
 		t.Fatal(err)
 	}
 	now := time.Now()

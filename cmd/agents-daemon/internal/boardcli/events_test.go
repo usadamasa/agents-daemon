@@ -77,14 +77,18 @@ func TestParkEvents(t *testing.T) {
 	if _, err := parkAdd(dir, s, strings.NewReader(`{"kind": `), "/src/a", p, now); err == nil {
 		t.Fatal("壊れた JSON が通った")
 	}
-	if _, err := parkSet(dir, s, p, "viewer", "/src/a", added.Item.ID, parking.StatusDiscarded, now); err != nil {
+	if _, err := parkSet(dir, s, p, "viewer", "/src/a", added.Item.ID, parking.StatusDiscarded, "", now); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := parkSet(dir, s, p, "viewer", "/src/a", "missing", parking.StatusDiscarded, now); err == nil {
+	if _, err := parkSet(dir, s, p, "viewer", "/src/a", "missing", parking.StatusDiscarded, "", now); err == nil {
 		t.Fatal("無いメモを書き換えた")
 	}
+	if _, err := parkSet(dir, s, p, "viewer", "/src/a", added.Item.ID, parking.StatusHanded, parking.StatusOpen, now); err == nil {
+		t.Fatal("捨てたメモを --from open で取れた")
+	}
 	writeTestConfig(t, filepath.Join(dir, "tasks", "home", "dead", "4.json"), `{"id": "4", "subject": "秘密のタスク", "status": "pending", "session_id": "dead", "cwd": "/src/a"}`)
-	adopted, err := parkAdopt(dir, s, p, "viewer", "/src/a", "dead", "4", now)
+	exited := func(string, time.Time) error { return nil }
+	adopted, err := parkAdopt(dir, s, p, "viewer", "/src/a", "dead", "4", exited, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,6 +101,7 @@ func TestParkEvents(t *testing.T) {
 		`park.failed op=add reason="stdin の JSON を読めない: unexpected EOF"`,
 		"park.set session=viewer memo=" + id + " from=open to=discarded",
 		`park.failed op=set session=viewer memo=missing reason="home のメモ missing が無い"`,
+		`park.failed op=set session=viewer memo=` + id + ` reason="メモ ` + id + ` の status は discarded (期待 open) なので書き換えない"`,
 		"park.adopt session=viewer from_session=dead task=4 memo=" + adopted.Item.ID + " created=true",
 	})
 	if strings.Contains(strings.Join(got, "\n"), "秘密") {

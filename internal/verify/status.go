@@ -39,26 +39,11 @@ func RunStatus(w io.Writer, p apppath.Paths, now time.Time) error {
 // CollectStatus は status の結果を集める。PID ファイルと status.json を読めないときだけ error。
 func CollectStatus(p apppath.Paths) (StatusReport, error) {
 	rep := StatusReport{LogTail: []string{}}
-	pid, err := daemon.ReadPIDFile(p.PIDFile())
-	if err != nil {
+	pid, snap, err := daemon.Running(p)
+	if err != nil || pid == 0 {
 		return rep, err
 	}
-	if pid == 0 || !daemon.PIDAlive(pid) {
-		return rep, nil
-	}
-	rep.Running, rep.PID = true, pid
-
-	snap, err := daemon.ReadStatusSnapshot(p.StatusFile())
-	if err != nil {
-		return rep, err
-	}
-	// snap.PID を現に動いている pid と突き合わせるのは、前のデーモンが残した
-	// スナップショットを今のデーモンのものとして見せないため。突き合わせないと
-	// 「起動: 16 分前」のように、実際には数秒前に起きたデーモンの情報として
-	// 古い時刻が表示される (実際に踏んだ)。
-	if snap != nil && snap.PID == pid {
-		rep.Snapshot = snap
-	}
+	rep.Running, rep.PID, rep.Snapshot = true, pid, snap
 
 	tail, err := applog.TailLogLines(p.LogFile(), statusLogTailLines)
 	if err != nil {

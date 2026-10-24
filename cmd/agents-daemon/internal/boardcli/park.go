@@ -14,6 +14,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
+	"github.com/usadamasa/agents-daemon/internal/verify"
 )
 
 // Commands は root に登録するコマンド。
@@ -38,18 +39,21 @@ func newParkCmd() *cobra.Command {
 			})
 		},
 	}
-	var status, session string
+	var status, from, session string
 	set := &cobra.Command{
 		Use:   "set <id>",
 		Short: "メモの status (open / handed / discarded) を書き換える",
-		Args:  cobra.ExactArgs(1),
+		Long: "--from を付けると、今の status がそれと違うときは書き換えずにエラーで返す。\n" +
+			"ボードの mod はメモを渡す前に `--status handed --from open` で取り、届かなければ `--status open --from handed` で戻す。",
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return withPlacer(cmd, cwd, func(paths apppath.Paths, p tasklog.Placer, cwd string) (any, error) {
-				return parkSet(paths.StateDir(), parking.New(paths.StateDir()), p, session, cwd, args[0], status, time.Now())
+				return parkSet(paths.StateDir(), parking.New(paths.StateDir()), p, session, cwd, args[0], status, from, time.Now())
 			})
 		},
 	}
 	set.Flags().StringVar(&status, "status", "", "open / handed / discarded")
+	set.Flags().StringVar(&from, "from", "", "今の status がこれのときだけ書き換える (open / handed / discarded)")
 	_ = set.MarkFlagRequired("status")
 	var repo, listStatus, task string
 	list := &cobra.Command{
@@ -88,10 +92,13 @@ func newParkCmd() *cobra.Command {
 	adopt := &cobra.Command{
 		Use:   "adopt <session_id> <task_id>",
 		Short: "終了したセッションの未完了のタスクを kind task のメモにし、タスクの記録を消して {created, item} を出す",
-		Args:  cobra.ExactArgs(2),
+		Long: "セッションが終了したことは、動いている daemon がタスクの記録より後に書いた status.json に pane が無いことで確かめる。\n" +
+			"daemon が動いていない、status.json が古い、pane がある、のどれかなら移さない。",
+		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return withPlacer(cmd, cwd, func(paths apppath.Paths, p tasklog.Placer, cwd string) (any, error) {
-				return parkAdopt(paths.StateDir(), parking.New(paths.StateDir()), p, session, cwd, args[0], args[1], time.Now())
+				exited := func(sessionID string, after time.Time) error { return verify.SessionExited(paths, sessionID, after) }
+				return parkAdopt(paths.StateDir(), parking.New(paths.StateDir()), p, session, cwd, args[0], args[1], exited, time.Now())
 			})
 		},
 	}

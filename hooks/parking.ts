@@ -139,9 +139,11 @@ function basename(path: string): string {
   return path.replace(/\/+$/, '').split('/').pop() ?? path
 }
 
-// canAdopt はタスクのノードをパーキングへ移せるか。終了したセッションの未完了のタスクだけ。
-export function canAdopt(node: GraphNode, self: string): boolean {
-  return node.kind === 'task' && node.state === 'exited' && node.session_id !== undefined && node.session_id !== self
+// canAdopt はタスクのノードをパーキングへ移せるか。終了したセッションの未完了のタスクだけ。daemon が status.json を
+// 書いていない (daemon_running でも updated_at が無い) ボードは、生きているセッションも exited と描くので出さない。
+// 押した後の判定はバイナリが status.json で改めて行う (`park adopt`)。
+export function canAdopt(node: GraphNode, self: string, data: BoardData): boolean {
+  return data.updated_at !== undefined && node.kind === 'task' && node.state === 'exited' && node.session_id !== undefined && node.session_id !== self
 }
 
 // taskText は「タスクにする」で送る文面。
@@ -179,9 +181,9 @@ function context(memo: ParkingCard): string[] {
   return lines
 }
 
-// discard はメモを捨て、結果の文面を返す。
+// discard は open のメモを捨て、結果の文面を返す。ほかのセッションが先に取ったメモは捨てない (`--from open`)。
 export async function discard($: EngineInterface, memo: ParkingCard): Promise<string> {
-  const failure = await park($, ['set', memo.id, '--status', 'discarded'])
+  const failure = await park($, ['set', memo.id, '--status', 'discarded', '--from', 'open'])
   return failure === '' ? `メモ「${memo.title}」を捨てました` : `メモを捨てられませんでした: ${failure}`
 }
 
@@ -199,17 +201,34 @@ export async function discardStale($: EngineInterface, days: number): Promise<st
   return `${days} 日より前のメモ ${count} つを捨てました (戻すには park set <id> --status open、id は logs --board に残る)`
 }
 
-// handOff は text を to へ渡し、届いたときだけメモを handed にする。届かなかったメモは open のまま残す。
+// handOff は text を to へ渡す。送る前にメモを取り (open のときだけ handed にする。取れるのは 1 つのセッションだけ)、
+// 届かなければ open に戻す。取れなかった (ほかのセッションが先に渡した、捨てた) メモは送らない。
+// 手順の交錯で破れないことは models/handoff の Handoff.tla (Claim → Send / Spawn → Revert) が持つ。
 export async function handOff($: EngineInterface, memo: ParkingCard, to: Destination, text: string): Promise<string> {
-  const delivered = await deliver($, to, text)
-  const sent = { via: 'memo', memo: memo.id, to: 'to' in delivered ? delivered.to : '', ...(to.route === 'spawn' ? { repo: to.repo } : {}) }
-  if ('failure' in delivered) {
-    await logEvent($, 'mod.send', { ...sent, delivered: false, reason: delivered.failure })
-    return `${said(to, false)}: ${delivered.failure}`
+  const sent = { via: 'memo', memo: memo.id, ...(to.route === 'spawn' ? { repo: to.repo } : {}) }
+  const claim = await park($, ['set', memo.id, '--status', 'handed', '--from', 'open'])
+  if (claim !== '') {
+    await logEvent($, 'mod.send', { ...sent, to: '', delivered: false, reason: `claim: ${claim}` })
+    return `メモを取れませんでした (ほかのセッションが先に渡したか、捨てたかもしれません): ${claim}`
   }
-  await logEvent($, 'mod.send', { ...sent, delivered: true })
-  const failure = await park($, ['set', memo.id, '--status', 'handed'])
-  return failure === '' ? `${said(to, true)}、メモを渡しました` : `${said(to, true)}ましたが、メモを handed にできませんでした: ${failure}`
+  const delivered = await deliver($, to, text)
+  if ('unknown' in delivered) {
+    // 起きたか分からないメモは戻さない。戻すと押し直しで 2 つ目のセッションが起きる。
+    await logEvent($, 'mod.send', { ...sent, to: delivered.to, delivered: false, reason: delivered.unknown })
+    return `${destinationLabel(to)} で window を作りましたが、claude が前景になりませんでした: ${delivered.unknown}。メモは handed のまま残してあります (起きていなければ park set ${memo.id} --status open で戻す)`
+  }
+  if ('failure' in delivered) {
+    await logEvent($, 'mod.send', { ...sent, to: delivered.to, delivered: false, reason: delivered.failure })
+    return `${said(to, false)}: ${delivered.failure}。${await revert($, memo)}`
+  }
+  await logEvent($, 'mod.send', { ...sent, to: delivered.to, delivered: true })
+  return `${said(to, true)}、メモを渡しました`
+}
+
+// revert は届かなかったメモを open に戻し、結果の文面を返す。戻せなければ handed のまま残るので、手で戻す形を添える。
+async function revert($: EngineInterface, memo: ParkingCard): Promise<string> {
+  const failure = await park($, ['set', memo.id, '--status', 'open', '--from', 'handed'])
+  return failure === '' ? 'メモは open に戻しました' : `メモを open に戻せませんでした (park set ${memo.id} --status open で戻す): ${failure}`
 }
 
 // said は結果の文面の前半。起こす先は「起こし (た)」、セッションは「送り (送った)」。
@@ -219,8 +238,9 @@ function said(to: Destination, ok: boolean): string {
   return ok ? `${name} へ送り` : `${name} へ送れませんでした`
 }
 
-// Delivered は届いた先のセッション ID か、届かなかった理由。
-type Delivered = { to: string } | { to: string; failure: string }
+// Delivered は届いた先のセッション ID か、届かなかった理由 (failure)、届いたか分からない理由 (unknown。spawn が window を
+// 作ったが claude が前景にならなかった。pane は残る)。
+type Delivered = { to: string } | { to: string; failure: string } | { to: string; unknown: string }
 
 // deliver は text を to へ届ける。
 // - self: 自分へは peer メッセージを送れないので、自分の入力に渡す (`$.prompt.submit`)。入力はセッションが idle に
@@ -247,13 +267,14 @@ async function deliver($: EngineInterface, to: Destination, text: string): Promi
 }
 
 // spawnSession は repo で新しいセッションを起こし、本文を最初のターンにする。claude が前景になるまでバイナリが待つので、
-// park より長い timeout にする。
+// park より長い timeout にする。exit 0 で foreground が false なら window はできていて claude が前景にならなかった (unknown)。
 async function spawnSession($: EngineInterface, repo: string, text: string): Promise<Delivered> {
   const argv = [await daemonBin($), 'spawn', '--repo', repo, '--session', await $.session.id(), '--cwd', await $.session.cwd()]
   const { exitCode, stdout, stderr } = await $.process.run(argv, { stdin: text, timeoutMs: 30000 })
   if (exitCode !== 0) return { to: '', failure: stderr.trim() || `exit ${exitCode}` }
   try {
-    return { to: (JSON.parse(stdout) as { session_id: string }).session_id }
+    const res = JSON.parse(stdout) as { session_id: string; pane_id: string; foreground: boolean; detail?: string }
+    return res.foreground ? { to: res.session_id } : { to: res.session_id, unknown: res.detail ?? `pane ${res.pane_id} で claude が前景にならなかった` }
   } catch (err) {
     return { to: '', failure: reason(err, 'spawn') }
   }

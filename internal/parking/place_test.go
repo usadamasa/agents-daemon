@@ -2,9 +2,12 @@ package parking
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
@@ -31,6 +34,9 @@ func writeTask(t *testing.T, stateDir string, d domain.Domain, task tasklog.Task
 	return path
 }
 
+// exited は「終了したと確かめた」の代わり。
+func exited(string, time.Time) error { return nil }
+
 // 終了したセッションの未完了のタスクは、kind task のメモにしてからタスクの記録を消す。
 func TestAdopt_movesTaskToParking(t *testing.T) {
 	stateDir := t.TempDir()
@@ -38,7 +44,7 @@ func TestAdopt_movesTaskToParking(t *testing.T) {
 	path := writeTask(t, stateDir, domain.Home, tasklog.Task{ID: "4", Subject: "README を直す", Description: "表の列がずれている", Status: "in_progress", SessionID: "dead", CWD: cwd})
 	s := New(stateDir)
 
-	added, err := s.Adopt("viewer", cwd, "dead", "4", homePlacer(stateDir), testNow)
+	added, err := s.Adopt("viewer", cwd, "dead", "4", homePlacer(stateDir), exited, testNow)
 	if err != nil {
 		t.Fatalf("Adopt() error = %v", err)
 	}
@@ -72,7 +78,7 @@ func TestAdopt_rejects(t *testing.T) {
 		{"別の domain", "busy", "2"},
 		{"ファイル名に使えない", "../x", "1"},
 	} {
-		if _, err := s.Adopt("viewer", cwd, c.session, c.task, p, testNow); err == nil {
+		if _, err := s.Adopt("viewer", cwd, c.session, c.task, p, exited, testNow); err == nil {
 			t.Errorf("%s: Adopt() error = nil", c.name)
 		}
 	}
@@ -80,6 +86,36 @@ func TestAdopt_rejects(t *testing.T) {
 		if _, err := os.Stat(path); err != nil {
 			t.Errorf("移さなかったタスクの記録が消えた: %v", err)
 		}
+	}
+	if got, _ := s.list(domain.Home); len(got) != 0 {
+		t.Errorf("メモができた: %+v", got)
+	}
+}
+
+// セッションが終了したと確かめられなければ (daemon が止まっている、pane がある)、メモを書かず記録も消さない
+// (models/handoff の LiveTaskKept)。確かめる側にはタスクの記録の時刻を渡す。
+func TestAdopt_requiresExitedSession(t *testing.T) {
+	stateDir := t.TempDir()
+	cwd := t.TempDir()
+	updated := testNow.Add(-time.Hour)
+	path := writeTask(t, stateDir, domain.Home, tasklog.Task{ID: "4", Subject: "まだ動いている", Status: "in_progress", SessionID: "alive", CWD: cwd, UpdatedAt: updated})
+	s := New(stateDir)
+	var askedFor string
+	var askedAfter time.Time
+	alive := func(sessionID string, after time.Time) error {
+		askedFor, askedAfter = sessionID, after
+		return errors.New("セッション alive は生きている")
+	}
+
+	_, err := s.Adopt("viewer", cwd, "alive", "4", homePlacer(stateDir), alive, testNow)
+	if err == nil || !strings.Contains(err.Error(), "生きている") {
+		t.Fatalf("Adopt() error = %v, want 生きている", err)
+	}
+	if askedFor != "alive" || !askedAfter.Equal(updated) {
+		t.Errorf("確かめた対象 = %q / %v, want alive / %v", askedFor, askedAfter, updated)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("タスクの記録が消えた: %v", err)
 	}
 	if got, _ := s.list(domain.Home); len(got) != 0 {
 		t.Errorf("メモができた: %+v", got)

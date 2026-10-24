@@ -25,8 +25,10 @@ func (s Store) Park(req Request, cwd string, p tasklog.Placer, now time.Time) (A
 
 // Adopt は終了したセッションに残った未完了のタスクを kind task のメモにし、タスクの記録を消す。
 // viewer と cwd はボードを開いたセッションで、その domain の側にあるタスクだけを移す (私用と業務を混ぜない)。
-// セッションが終了したかは見ない。ボードが終了したセッションのカードにだけ操作を出す。
-func (s Store) Adopt(viewer, cwd, sessionID, taskID string, p tasklog.Placer, now time.Time) (Added, error) {
+// exited はセッションが終了したと確かめる (verify.SessionExited。タスクの記録の時刻より後の pane の一覧に無いこと)。
+// 確かめられなければメモを書かず記録も消さない。ボードが exited と描いた後に daemon が止まっていても、
+// 生きているセッションの記録を消さないため (models/handoff の LiveTaskKept)。
+func (s Store) Adopt(viewer, cwd, sessionID, taskID string, p tasklog.Placer, exited func(sessionID string, after time.Time) error, now time.Time) (Added, error) {
 	d := p.Domain(viewer, cwd)
 	t, ok := p.Tasks.Get(d, sessionID, taskID)
 	if !ok {
@@ -34,6 +36,9 @@ func (s Store) Adopt(viewer, cwd, sessionID, taskID string, p tasklog.Placer, no
 	}
 	if t.Status == "completed" {
 		return Added{}, fmt.Errorf("タスク %s/%s は完了している", sessionID, taskID)
+	}
+	if err := exited(sessionID, t.UpdatedAt); err != nil {
+		return Added{}, fmt.Errorf("タスク %s/%s は移さない: %w", sessionID, taskID, err)
 	}
 	e := Entry{Kind: KindTask, Title: t.Subject, Detail: t.Description, DefaultTaken: AdoptedDefault}
 	added, err := s.add(d, gitrepo.RepoKey(t.CWD), e, Source{SessionID: sessionID, TaskID: taskID, CWD: t.CWD, At: now})

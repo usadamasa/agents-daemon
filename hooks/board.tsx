@@ -199,7 +199,7 @@ export const registerBoard: Register = on => {
             Cancel
           </Button>
         ),
-        canAdopt(n, self) && (
+        canAdopt(n, self, data) && (
           <Button key="adopt" onPress={() => void act(() => adopt($, n))}>
             To parking
           </Button>

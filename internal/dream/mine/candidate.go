@@ -10,7 +10,7 @@ import (
 
 // generateCandidates は memory / skill / harvest を突き合わせて candidates を生成する。
 // 出力は dreamio.Candidate (mine/stage/adopt で共有される canonical schema)。
-func generateCandidates(mems []memory, skills map[string]Skill, project string, sessions []harvestSession) []dreamio.Candidate {
+func generateCandidates(mems []memory, skills map[string]skill, project string, sessions []harvestSession) []dreamio.Candidate {
 	// skill 名リスト (findAssociatedSkill 用)
 	skillNames := make([]string, 0, len(skills))
 	for n := range skills {
@@ -45,13 +45,13 @@ func generateCandidates(mems []memory, skills map[string]Skill, project string, 
 			})
 			continue
 		}
-		skill, ok := skills[skillName]
+		loaded, ok := skills[skillName]
 		if !ok {
 			continue
 		}
 
 		phrases := extractApplicabilityPhrases(m.Body)
-		cov := computeCoverage(phrases, skill.Body)
+		cov := computeCoverage(phrases, loaded.Body)
 		cls := classifyCoverage(cov)
 
 		perSkillIdx[skillName]++
@@ -60,7 +60,7 @@ func generateCandidates(mems []memory, skills map[string]Skill, project string, 
 			Kind:             cls.Kind,
 			AssociatedSkill:  skillName,
 			MemoryPath:       m.Path,
-			SkillPath:        filepath.Join(skill.RealPath, "SKILL.md"),
+			SkillPath:        filepath.Join(loaded.RealPath, "SKILL.md"),
 			ScopedToProject:  project,
 			Diagnosis:        buildDiagnosis(cls, m, cov),
 			EvidenceSessions: sessionsBySkill[skillName],

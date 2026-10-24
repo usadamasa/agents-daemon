@@ -75,7 +75,7 @@ func Run(opts Opts) error {
 	if projRoot := projectRootFromSessions(sessions); projRoot != "" {
 		skillDirs = append(skillDirs, filepath.Join(projRoot, ".claude", "skills"))
 	}
-	skills := make(map[string]Skill)
+	skills := make(map[string]skill)
 	for _, name := range invokedSkills {
 		s, err := loadSkillFromDirs(skillDirs, name)
 		if err != nil {

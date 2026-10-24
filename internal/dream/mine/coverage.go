@@ -208,19 +208,19 @@ func isASCIIWordByte(s string, i int) bool {
 
 // extractSkillKey は "daily-standup" → "standup" のような検索キーを返す。
 // prefix 部分 (daily- / caddi- 等) が memory 名から省略される慣習に対応する。
-func extractSkillKey(skill string) string {
+func extractSkillKey(name string) string {
 	// ハイフンで分割し、最後の 2 tokens を key とする (例: "daily-standup" → "standup")
 	// 単一 token skill (例: "dream") はそのまま
-	parts := strings.Split(skill, "-")
+	parts := strings.Split(name, "-")
 	if len(parts) <= 1 {
-		return skill
+		return name
 	}
 	// prefix が "caddi" "daily" "weekly" などなら末尾 tokens を返す
 	knownPrefixes := map[string]bool{"caddi": true, "daily": true, "weekly": true}
 	if knownPrefixes[parts[0]] {
 		return strings.Join(parts[1:], "-")
 	}
-	return skill
+	return name
 }
 
 // classification は Mine 結果 candidate 1 件の分類 (kind + confidence)。

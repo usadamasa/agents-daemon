@@ -21,7 +21,7 @@ func TestGenerateCandidates_PIIMigration(t *testing.T) {
 			Path:        "/mem/feedback_standup_no_pii.md",
 		},
 	}
-	skills := map[string]Skill{
+	skills := map[string]skill{
 		"daily-standup": {Name: "daily-standup", Body: "SKILL body without PII rule"},
 	}
 	cands := generateCandidates(mems, skills, "-Users-x-workspace", []harvestSession{})
@@ -56,7 +56,7 @@ func TestGenerateCandidates_FullyCoveredMemoryDedup(t *testing.T) {
 			Path:        "/mem/feedback_standup_date_range.md",
 		},
 	}
-	skills := map[string]Skill{
+	skills := map[string]skill{
 		"daily-standup": {Name: "daily-standup", Body: "日付モデル: Done は前営業日 / Doing は当日"},
 	}
 	cands := generateCandidates(mems, skills, "-Users-x-workspace", nil)
@@ -81,7 +81,7 @@ func TestGenerateCandidates_UnhomedWhenNoAssociatedSkill(t *testing.T) {
 			Path:        "/mem/x.md",
 		},
 	}
-	skills := map[string]Skill{
+	skills := map[string]skill{
 		"daily-standup": {Name: "daily-standup", Body: "some body"},
 	}
 	cands := generateCandidates(mems, skills, "-p", nil)
@@ -111,7 +111,7 @@ func TestGenerateCandidates_UnhomedIDsAreUniquePerMemory(t *testing.T) {
 		{Name: "feedback-alpha", Type: "feedback", Body: "a", Path: "/mem/a.md"},
 		{Name: "feedback-beta", Type: "feedback", Body: "b", Path: "/mem/b.md"},
 	}
-	cands := generateCandidates(mems, map[string]Skill{}, "-p", nil)
+	cands := generateCandidates(mems, map[string]skill{}, "-p", nil)
 	if len(cands) != 2 {
 		t.Fatalf("expected 2 candidates, got %d", len(cands))
 	}
@@ -129,7 +129,7 @@ func TestGenerateCandidates_IncludesEvidenceSessions(t *testing.T) {
 			Path: "/mem/a.md",
 		},
 	}
-	skills := map[string]Skill{
+	skills := map[string]skill{
 		"daily-standup": {Name: "daily-standup", Body: "no channel default here"},
 	}
 	sessions := []harvestSession{

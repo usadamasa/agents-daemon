@@ -15,7 +15,7 @@ preview が出るので、上げたら changelog と実機の応答をこの rep
 
 | 資料 | 何が分かるか | 読み方 |
 | ---- | ---- | ---- |
-| changelog (superlogical MCP) | 版ごとの変更。投稿は platform ごと (Mac、CLI、Linux Server、iOS) に分かれる | `list_changelog` の一覧から範囲の投稿を `read_changelog` に ID で渡して 1 投稿ずつ全文読む。`search_changelog` は検索語の裏取りに使う |
+| changelog (superlogical MCP) | 版ごとの変更。投稿は platform ごと (Mac、CLI、Linux Server、iOS) に分かれる | `list_changelog` の一覧から範囲の投稿を `read_changelog` に ID で渡して 1 投稿ずつ本文を読む。`search_changelog` は検索語の裏取りに使う |
 | 実機の CLI (自分の block) | 応答の JSON の欄、exit code、flag の有無 | `doctor` の「rex CLI の前提」の節が固定コマンドを打って欄を名指しで出す。streaming と一覧の増減だけ人が打つ ([references/cli-checks.md](references/cli-checks.md)) |
 | rex docs | OSC 7501 の仕様 (何が仕様で何が rex 独自か) | [program-status](https://www.superlogical.com/rex/docs/build/program-status) |
 
@@ -33,7 +33,7 @@ preview が出るので、上げたら changelog と実機の応答をこの rep
 go run ./cmd/agents-daemon doctor
 ```
 
-「rex CLI の前提」の節の `rex_version` と `built_at` と `api_revision` を控える (手順 4 の実機の点検もこの節が兼ねる)。
+「rex CLI の前提」の節の `rex_version`、`built_at`、`api_revision` を控える (手順 4 の実機の点検もこの節が兼ねる)。
 機械で読むなら `--json doctor | jq '.premises.findings'` で同じ節だけを取り出せる。
 `api_revision` は CLI が対応する API の版。同じ節が server の版と比べ、食い違えば `⚠` になる
 (CLI と server が別々に更新された状態)。
@@ -43,7 +43,9 @@ changelog の投稿は platform ごとに分かれ、版の付け方も違う。
 - **Mac** (`Rex v0.1.0-preview.N (Mac)`): app と embedded server の版。`preview.N` が marker と testdata の
   `<version>` になる。CLI は `preview.N` を出さないので、`list_changelog` の一覧から `built_at` の日付と同じ日か
   その直後の Mac の投稿を取る (投稿は build より後に出る)。embedded server が CLI と同じ build かは
-  `rex whoami --json` の `rex_version` が `rex version --json` と同じことで確かめる
+  `rex whoami --json` の `rex_version` (server の版) が `rex version --json` の `rex_version` と同じことで確かめる。
+  食い違えば server が旧 build のまま動いている (app の更新後に restart していない) ので、server を再起動して
+  手順 1 をやり直す
 - **CLI** (`Rex v0.1.0-<hash> (CLI)`): 版は commit hash。`rex version --json` の `commit` の先頭 7 桁と同じ hash の
   投稿を取る (`rex version --json | jq -r '.commit[:7]'`)。hash は順序を持たないので marker には書かず、
   last-checked.md の CLI の列に書く
@@ -65,7 +67,7 @@ Linux Server (`🐧 … (Linux Server)`) の `preview.N` は Mac と別の数列
 - **Linux Server**: server 共通の変更が Mac より先に載ることがあるので、参考として server の項目を読む。
   Mac の embedded server に入っているかは実機 (手順 4) で確かめる
 
-読みながら 2 つの目で拾う。
+読みながら 2 つの観点で拾う。
 
 - **前提に当たるか**: 「前提の洗い出し」の topic の検索語に当たる項目
 - **アイデアになるか**: daemon が polling や画面の読み取りでやっていることを rex が直接出せるようになった項目
@@ -78,7 +80,7 @@ rg -n -o 'rex-premise: preview\.[0-9]+ (program_status|cli).*' --glob '!tmp/**' 
 ```
 
 AGENTS.md の説明文の行は `rex-premise:` の後に版が続かないので、この pattern には当たらない。
-`<version>` は Mac の版なので、範囲の始まりの Mac の版より古い marker が点検の対象。全部が手元の版なら
+`<version>` は Mac の版なので、範囲の始まりの Mac の版より古い marker が点検の対象。そういう marker が無ければ
 changelog 側の点検は無しで、手順 4 へ進む (実機の点検は版に関係なく行う)。
 
 ### 4. 実機で応答の形を突き合わせる
@@ -90,9 +92,9 @@ guard が拒否する。先に `printenv REX_BLOCK REX_SESSION` で値を取り�
 
 手順 1 で回した `doctor` の出力を 2 つの節で読む。
 
-- 「pane 一覧」: 自分の block (`REX_BLOCK` の値) の `pane=` 行が `agent_status=working` で、`unknown の理由` の行が
-  付いていなければ、record の `owner.pid` と前景の pid の突き合わせは通っている。Bash ツールの実行中は working になる。
-  理由の行が出たら、その文面が欄の有無を言っている (`record に owner.pid が無い`)。
+- 「pane 一覧」: 自分の block (`REX_BLOCK` の値) の `pane=` 行を見る。`agent_status=working` で `unknown の理由` の行が
+  付いていなければ、record の `owner.pid` と foreground の process の pid の突き合わせは通っている。
+  Bash ツールの実行中は working になる。理由の行が出たら、その文面が欄の有無を言っている (`record に owner.pid が無い`)。
 - 「rex CLI の前提」: コードが読む欄と exit code を自分の block に打って名指しで出す。`⚠` の行がずれ。
   全部 `OK:` なら判断の要らない点検は済んでいる。
 
@@ -112,7 +114,7 @@ guard が拒否する。先に `printenv REX_BLOCK REX_SESSION` で値を取り�
 4. 確認して変更不要と判断したもの: 1 行ずつ根拠つき
 5. 手順上の落とし穴: 次回の自分へ
 
-1 と 2 は項目ごとに issue にする。利用者に起票するか聞かない (この skill を呼んだことが起票の指示で、レポートは
+1 と 2 は項目ごとに issue を立てる。利用者に起票するか聞かない (この skill を呼んだことが起票の指示で、レポートは
 `./tmp` に残るだけなので issue にしないと消える)。issue の本文は `./tmp` に Write し `gh issue create --body-file`。
 背景 (changelog の引用、実機の応答)、marker のある行、検証項目、レポートのパスを入れる。既存の issue と重ならないか
 `gh issue list` で見てから立て、重なるものは新しい issue にせずその issue へ `gh issue comment --body-file` で足す。
@@ -121,7 +123,7 @@ guard が拒否する。先に `printenv REX_BLOCK REX_SESSION` で値を取り�
 最後に 2 つを同じ PR に入れる。
 
 - 確かめ直して変更不要だった marker の `<version>` を手元の Mac の版へ上げる。この差分が点検の証跡。ずれた marker は
-  上げずに残し、issue の番号を結果の列に書く
+  上げずに残す (issue の番号は last-checked.md の結果の列に書く)
 - [references/last-checked.md](references/last-checked.md) に 1 行足す (日付、`rex_version`、Mac の版、CLI の hash、
   結果と issue の番号)
 

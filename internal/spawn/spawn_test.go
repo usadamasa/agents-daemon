@@ -177,7 +177,7 @@ func TestRunner_Run_Errors(t *testing.T) {
 
 // 既定の NewSessionID は UUID v4 の形。
 func TestNewSessionID(t *testing.T) {
-	id, err := NewSessionID()
+	id, err := newSessionID()
 	if err != nil {
 		t.Fatalf("NewSessionID() error = %v", err)
 	}

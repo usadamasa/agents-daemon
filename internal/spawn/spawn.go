@@ -84,7 +84,7 @@ func (r Runner) Run(ctx context.Context, req Request) (Result, error) {
 	}
 	newID := r.NewSessionID
 	if newID == nil {
-		newID = NewSessionID
+		newID = newSessionID
 	}
 	id, err := newID()
 	if err != nil {
@@ -152,8 +152,8 @@ func (r Runner) waitForClaude(ctx context.Context, paneID string) error {
 	}
 }
 
-// NewSessionID は UUID v4 を返す。Claude Code の --session-id が受ける形。
-func NewSessionID() (string, error) {
+// newSessionID は UUID v4 を返す。Claude Code の --session-id が受ける形。
+func newSessionID() (string, error) {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
 		return "", err

@@ -9,7 +9,7 @@
      claude が起動していることもある (internal/spawn/spawn.go の waitForClaude)。mod はそのメモを戻さず handed のまま残す。
    - board は status.json が今の daemon のものでなければ pane を空として扱い、未完了のタスクを exited と描く
      (internal/board/board.go の livePanes、graph.go)。Adopt は「今の daemon がタスクの記録より後に書いた status.json に
-     そのセッションの pane が無い」ときだけ通す (internal/board の SessionExited、parking/place.go の Adopt)。
+     そのセッションの pane が無い」ときだけ通す (internal/verify の SessionExited、parking/place.go の Adopt)。
    - Adopt はメモを書いてからタスクの記録を消す 2 手 (place.go)。
    - どのファイルの書き込みも statefile.WriteJSONAtomic なので、1 手を原子的なステップにする。
 
@@ -149,7 +149,7 @@ DaemonStop == /\ seen /= "none" /\ seen' = "none"
               /\ UNCHANGED <<memo, view, pc, attempts, deliveries, sessions, live, task, taskMemo, adoptedLive>>
 
 (* ボードの To parking。Adopt は、今の daemon がタスクの記録より後に書いた status.json にそのセッションの pane が
-   無いときだけメモを書く (board の SessionExited)。daemon が止まっているときに exited と描かれても通さない。 *)
+   無いときだけメモを書く (verify の SessionExited)。daemon が止まっているときに exited と描かれても通さない。 *)
 AdoptWrite(m) ==
   /\ pc[m] = "idle" /\ task /\ seen = "exited"
   /\ taskMemo' = TRUE

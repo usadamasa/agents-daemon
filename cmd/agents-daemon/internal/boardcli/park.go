@@ -12,9 +12,9 @@ import (
 
 	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/jsonflag"
 	"github.com/usadamasa/agents-daemon/internal/apppath"
-	"github.com/usadamasa/agents-daemon/internal/board"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
+	"github.com/usadamasa/agents-daemon/internal/verify"
 )
 
 // Commands は root に登録するコマンド。
@@ -97,7 +97,7 @@ func newParkCmd() *cobra.Command {
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return withPlacer(cmd, cwd, func(paths apppath.Paths, p tasklog.Placer, cwd string) (any, error) {
-				exited := func(sessionID string, after time.Time) error { return board.SessionExited(paths, sessionID, after) }
+				exited := func(sessionID string, after time.Time) error { return verify.SessionExited(paths, sessionID, after) }
 				return parkAdopt(paths.StateDir(), parking.New(paths.StateDir()), p, session, cwd, args[0], args[1], exited, time.Now())
 			})
 		},

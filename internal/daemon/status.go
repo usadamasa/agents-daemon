@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/monitor"
 	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
@@ -76,4 +77,20 @@ func ReadStatusSnapshot(path string) (*StatusSnapshot, error) {
 		return nil, err
 	}
 	return &snap, nil
+}
+
+// Running は動いている daemon の pid と、その daemon が書いた status.json を返す。daemon が動いていなければ pid は 0。
+// status.json が無いか前の daemon が残したものなら snap は nil (snap.PID を pid と突き合わせる。突き合わせないと、
+// 数秒前に起きた daemon の情報として古い pane の一覧や起動時刻を見せてしまう)。status / board / adopt が同じ判断で読む。
+func Running(p apppath.Paths) (pid int, snap *StatusSnapshot, err error) {
+	if pid, err = ReadPIDFile(p.PIDFile()); err != nil || !PIDAlive(pid) {
+		return 0, nil, err
+	}
+	if snap, err = ReadStatusSnapshot(p.StatusFile()); err != nil {
+		return 0, nil, err
+	}
+	if snap != nil && snap.PID != pid {
+		snap = nil
+	}
+	return pid, snap, nil
 }

@@ -25,7 +25,7 @@ func (s Store) Park(req Request, cwd string, p tasklog.Placer, now time.Time) (A
 
 // Adopt は終了したセッションに残った未完了のタスクを kind task のメモにし、タスクの記録を消す。
 // viewer と cwd はボードを開いたセッションで、その domain の側にあるタスクだけを移す (私用と業務を混ぜない)。
-// exited はセッションが終了したと確かめる (board.SessionExited。タスクの記録の時刻より後の pane の一覧に無いこと)。
+// exited はセッションが終了したと確かめる (verify.SessionExited。タスクの記録の時刻より後の pane の一覧に無いこと)。
 // 確かめられなければメモを書かず記録も消さない。ボードが exited と描いた後に daemon が止まっていても、
 // 生きているセッションの記録を消さないため (models/handoff の LiveTaskKept)。
 func (s Store) Adopt(viewer, cwd, sessionID, taskID string, p tasklog.Placer, exited func(sessionID string, after time.Time) error, now time.Time) (Added, error) {

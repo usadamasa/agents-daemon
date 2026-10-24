@@ -221,7 +221,7 @@ B は fullscreen のレイアウトで dock に置かれるときだけ出す。
 - パーキングへ移す (`To parking`): 終了したセッションの未完了のタスクのノードを `park adopt <session_id> <task_id>` で
   `kind: task` のメモにし、タスクの記録を消す。`kind: task` は model の tool からは置けない。ボードは daemon が
   status.json を書いているとき (`updated_at` があるとき) だけこの操作を出し、バイナリは動いている daemon がタスクの
-  記録より後に書いた status.json に pane が無いことを確かめてから移す (`internal/board` の `SessionExited`)。
+  記録より後に書いた status.json に pane が無いことを確かめてから移す (`internal/verify` の `SessionExited`)。
   daemon が止まっていると生きているセッションも exited と描かれるため
 
 ボードの JSON の `graph` はセッションをまたぐタスクの依存の DAG (#134)。ノードはタスク 1 つ (カードと同じ Key) で、

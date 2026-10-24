@@ -1,5 +1,12 @@
 # Changelog
 
+## [2026.1024.1](https://github.com/usadamasa/agents-daemon/compare/2026.1024.0...2026.1024.1) - 2026-10-24
+
+- docs: rex の changelog の platform 別投稿に合わせて rex-premise の <version> の規則を決める by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/228
+- fix(rexcli): rex の binary の置き場 (Versions/Current/) に locate の前提と doctor の出力を合わせる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/230
+- ボードの凡例の ↵ の語を done から idle にする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/231
+- fix(daemon): 起動の排他を daemon.lock の flock で取り、バイナリ差し替え時に 2 つ起きないようにする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/232
+
 ## [2026.1024.0](https://github.com/usadamasa/agents-daemon/compare/2026.1021.1...2026.1024.0) - 2026-10-24
 
 - build(deps): Bump actions/create-github-app-token from 3.2.0 to 3.3.0 by @dependabot[bot] in https://github.com/usadamasa/agents-daemon/pull/210

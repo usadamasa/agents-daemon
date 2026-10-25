@@ -5,7 +5,7 @@
 sandbox の中では `operation not permitted` になる。`dream forget` だけを `sandbox.excludedCommands` で外に出す。
 `rm` を出さない理由と削除範囲の制約は `agents-daemon:dream` skill の `references/layer-auto-memory.md`。
 
-<!-- cc-premise: 2.1.302 sandbox excludedCommands は Bash 許可ルールと同じ構文で呼び出しの文字列に当たる。変数から来る command name は sandbox に残る -->
+<!-- cc-premise: 2.1.310 sandbox excludedCommands は Bash 許可ルールと同じ構文で呼び出しの文字列に当たる。変数から来る command name は sandbox に残る -->
 
 ## 足す行
 

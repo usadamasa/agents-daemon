@@ -6,7 +6,7 @@
 // background session の worktree だけで、foreground セッションが keep したものは年齢に関わらず残り続ける。
 // このパッケージはその残りを、SessionStart のたびに今開いたリポジトリの分だけ回収する。
 //
-// cc-premise: 2.1.302 worktrees 本体の sweep は subagent / background session の worktree と exit 済みプロセスの stale lock だけを扱い、foreground の keep は残す (docs/worktrees)
+// cc-premise: 2.1.310 worktrees 本体の sweep は subagent / background session の worktree と exit 済みプロセスの stale lock だけを扱い、foreground の keep は残す (docs/worktrees)
 //
 // 回収する条件 (すべて満たすとき):
 //  1. パスが `<main worktree>/.claude/worktrees/` 配下

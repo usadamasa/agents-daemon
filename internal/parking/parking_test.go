@@ -1,6 +1,7 @@
 package parking
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -378,6 +379,52 @@ func TestPrune(t *testing.T) {
 	setMtime(t, path(domain.Home, open.ID), now.Add(-91*24*time.Hour))
 	if removed, err := s.Prune(now); err != nil || removed != 1 {
 		t.Fatalf("Prune() = %d, %v, want 1 件", removed, err)
+	}
+}
+
+// Prune は Set と同じロックを取る。Set が読んでから書くまでの間に Prune が消すと、Set の書き込みが消したメモを
+// 作り直す (#213 の検討で TLC が出した反例の形)。ロックを持っている間は Prune が消さないことを確かめる。
+func TestPrune_waitsForLock(t *testing.T) {
+	s := New(t.TempDir())
+	memo := mustAdd(t, s, domain.Home, testRepo, aside("handed"), source("s1", ""))
+	if _, _, err := s.Set(domain.Home, memo.ID, StatusHanded, ""); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	path := filepath.Join(s.Dir, string(domain.Home), memo.ID+".json")
+	setMtime(t, path, now.Add(-8*24*time.Hour))
+
+	type pruned struct {
+		removed int
+		err     error
+	}
+	done := make(chan pruned, 1)
+	var early *pruned
+	err := s.locked(domain.Home, func(dir string) error {
+		item, ok := readItem(path)
+		if !ok {
+			return errors.New("メモを読めない")
+		}
+		go func() {
+			removed, err := s.Prune(now)
+			done <- pruned{removed, err}
+		}()
+		select {
+		case got := <-done:
+			early = &got
+		case <-time.After(200 * time.Millisecond):
+		}
+		return write(dir, item)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if early != nil {
+		t.Fatalf("Prune がロックを待たずに終わった: %d, %v", early.removed, early.err)
+	}
+	// ロックを放した後の Prune は、書き直されて mtime の新しいメモを残す。
+	if got := <-done; got.err != nil || got.removed != 0 {
+		t.Errorf("Prune() = %d, %v, want 0 件 (書き直されたメモは残す)", got.removed, got.err)
 	}
 }
 

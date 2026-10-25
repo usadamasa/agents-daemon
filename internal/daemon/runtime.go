@@ -321,6 +321,11 @@ func (r *daemonRuntime) recordLimitEvent(ctx context.Context, pane multiplexer.P
 		Settings:  limitlog.Settings{ReadLines: cfg.ReadLines, DetectionTailLines: cfg.DetectionTailLines},
 		Screen:    observed.screen,
 	}
+	if detect.LowerPriorityActive(observed.screen, cfg.DetectionTailLines) {
+		ev.LowerPriority = true
+		r.log.Logf("pane %s: lower-priority mode の作業中の通知がある画面を %s と判定した (作業中の pane を待機に入れている可能性、#251)",
+			pane.PaneID, observed.kind)
+	}
 	if geom, err := r.client.PaneGeometry(ctx, pane.PaneID); err != nil {
 		ev.GeometryError = err.Error()
 	} else {

@@ -164,6 +164,7 @@ rex の外 (`REX_SESSION` なし) では exit 1 で止まる。「rex CLI の前
 | 小さい block で上限の文と `❯` の行が同時に見えるか、`/rate-limit-options` のメニューが出た状態の下限 (#39) | `geometry.rows` / `geometry.alternate_screen` と `screen` (判定した画面そのもの。上限の文が下から何行目か、メニューと入力行が入っているか) |
 | ゲートと起床時刻の判断は正しかったか | `rate_limit` (own)、`account`、`wait_until`、`outcome` |
 | 設定を変えたら判定が変わるか | `screen` を `inspect --file` に渡す (下) |
+| lower-priority mode で作業中の pane を待機に入れていないか (#251) | `lower_priority` が true の行の `outcome` と `screen` |
 
 ```sh
 jq -c '{at, pane_id, outcome, kind, record, geometry}' "$STATE"/limit-events/*.jsonl   # 出来事の一覧

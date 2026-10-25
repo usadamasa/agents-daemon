@@ -1,4 +1,4 @@
-package mine
+package corpus
 
 import (
 	"errors"
@@ -10,9 +10,9 @@ import (
 	"strings"
 )
 
-// skill は SKILL.md + references/*.md を連結した「skill 本体全体のテキスト」を持つ。
+// Skill は SKILL.md + references/*.md を連結した「skill 本体全体のテキスト」を持つ。
 // grep coverage check は Body に対して substring match で行う。
-type skill struct {
+type Skill struct {
 	Name     string
 	RealPath string // symlink 実体パス (Adopt phase で commit する repo を判定する用)
 	Body     string // SKILL.md + references/*.md を join したもの
@@ -20,28 +20,28 @@ type skill struct {
 
 // loadSkill は skillsDir/<name>/ 配下の SKILL.md と references/*.md を読み込む。
 // symlink 実体を辿って referenced files も同じ実体側から読み込む。
-func loadSkill(skillsDir, name string) (skill, error) {
+func loadSkill(skillsDir, name string) (Skill, error) {
 	skillPath := filepath.Join(skillsDir, name)
 	realPath, err := filepath.EvalSymlinks(skillPath)
 	if err != nil {
-		return skill{}, fmt.Errorf("skill %q not found: %w", name, err)
+		return Skill{}, fmt.Errorf("skill %q not found: %w", name, err)
 	}
 	skillMd := filepath.Join(realPath, "SKILL.md")
 	info, err := os.Stat(skillMd)
 	if err != nil {
-		return skill{}, fmt.Errorf("SKILL.md not found under %q: %w", realPath, err)
+		return Skill{}, fmt.Errorf("SKILL.md not found under %q: %w", realPath, err)
 	}
 	if info.IsDir() {
-		return skill{}, fmt.Errorf("SKILL.md is a directory: %q", skillMd)
+		return Skill{}, fmt.Errorf("SKILL.md is a directory: %q", skillMd)
 	}
 	body, err := os.ReadFile(skillMd) // #nosec G304 -- CLI: EvalSymlinks 済みパスの SKILL.md
 	if err != nil {
-		return skill{}, err
+		return Skill{}, err
 	}
 
 	refs, err := readReferencesDir(filepath.Join(realPath, "references"))
 	if err != nil {
-		return skill{}, err
+		return Skill{}, err
 	}
 
 	var b strings.Builder
@@ -51,7 +51,7 @@ func loadSkill(skillsDir, name string) (skill, error) {
 		b.WriteString(r)
 	}
 
-	return skill{
+	return Skill{
 		Name:     name,
 		RealPath: realPath,
 		Body:     b.String(),

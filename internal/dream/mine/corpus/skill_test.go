@@ -1,4 +1,4 @@
-package mine
+package corpus
 
 import (
 	"os"

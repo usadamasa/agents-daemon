@@ -14,6 +14,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/dream/dreamio"
 	"github.com/usadamasa/agents-daemon/internal/dream/dreamstate"
 	"github.com/usadamasa/agents-daemon/internal/dream/harvest/record"
+	"github.com/usadamasa/agents-daemon/internal/dream/mine/corpus"
 )
 
 // Stderr は cobra 側で必ず inject されるが、テストや直呼び用に nil 時は Discard に fallback する。
@@ -76,9 +77,9 @@ func Run(opts Opts) error {
 	if projRoot := projectRootFromSessions(sessions); projRoot != "" {
 		skillDirs = append(skillDirs, filepath.Join(projRoot, ".claude", "skills"))
 	}
-	skills := make(map[string]skill)
+	skills := make(map[string]corpus.Skill)
 	for _, name := range invokedSkills {
-		s, err := loadSkillFromDirs(skillDirs, name)
+		s, err := corpus.LoadSkillFromDirs(skillDirs, name)
 		if err != nil {
 			// plugin 由来 (e.g., commit-commands:commit-push-pr) や外部 skill は skip
 			continue
@@ -87,7 +88,7 @@ func Run(opts Opts) error {
 	}
 
 	// 4. memory: 対象 project の feedback memory
-	mems, err := loadMemories(resolvedMemory)
+	mems, err := corpus.LoadMemories(resolvedMemory)
 	if err != nil {
 		return fmt.Errorf("memory 読み込み失敗: %w", err)
 	}

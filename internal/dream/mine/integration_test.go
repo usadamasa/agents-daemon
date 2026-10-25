@@ -8,6 +8,7 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/dream/dreamio"
 	"github.com/usadamasa/agents-daemon/internal/dream/harvest/record"
+	"github.com/usadamasa/agents-daemon/internal/dream/mine/corpus"
 )
 
 // TestIntegration_DailyStandupFixture は 5 件の feedback memory + 1 skill (daily-standup)
@@ -126,9 +127,9 @@ Slack 投稿は明確なアクション/タスクのみ｡つぶやきは除外�
 	}
 
 	skillNames := extractInvokedSkills(sessions)
-	skills := make(map[string]skill)
+	skills := make(map[string]corpus.Skill)
 	for _, n := range skillNames {
-		s, err := loadSkill(skillsDir, n)
+		s, err := corpus.LoadSkillFromDirs([]string{skillsDir}, n)
 		if err != nil {
 			continue
 		}
@@ -138,9 +139,9 @@ Slack 投稿は明確なアクション/タスクのみ｡つぶやきは除外�
 		t.Fatal("daily-standup skill not loaded")
 	}
 
-	mems, err := loadMemories(memDir)
+	mems, err := corpus.LoadMemories(memDir)
 	if err != nil {
-		t.Fatalf("loadMemories: %v", err)
+		t.Fatalf("LoadMemories: %v", err)
 	}
 	if len(mems) != 5 {
 		t.Fatalf("expected 5 memories, got %d", len(mems))

@@ -7,11 +7,12 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/dream/dreamio"
 	"github.com/usadamasa/agents-daemon/internal/dream/harvest/record"
+	"github.com/usadamasa/agents-daemon/internal/dream/mine/corpus"
 )
 
 // generateCandidates は memory / skill / harvest を突き合わせて candidates を生成する。
 // 出力は dreamio.Candidate (mine/stage/adopt で共有される canonical schema)。
-func generateCandidates(mems []memory, skills map[string]skill, project string, sessions []record.Record) []dreamio.Candidate {
+func generateCandidates(mems []corpus.Memory, skills map[string]corpus.Skill, project string, sessions []record.Record) []dreamio.Candidate {
 	// skill 名リスト (findAssociatedSkill 用)
 	skillNames := make([]string, 0, len(skills))
 	for n := range skills {
@@ -79,7 +80,7 @@ func buildCandidateID(skillName string, idx int) string {
 }
 
 // buildDiagnosis は human-readable な診断メモを組み立てる。
-func buildDiagnosis(cls classification, m memory, cov coverage) string {
+func buildDiagnosis(cls classification, m corpus.Memory, cov coverage) string {
 	pct := int(cov.ratio() * 100)
 	switch cls.Kind {
 	case dreamio.KindSkillBody:
@@ -93,7 +94,7 @@ func buildDiagnosis(cls classification, m memory, cov coverage) string {
 }
 
 // buildUnhomedDiagnosis は association 先 skill が無い memory 向けの診断メモを組み立てる。
-func buildUnhomedDiagnosis(m memory) string {
+func buildUnhomedDiagnosis(m corpus.Memory) string {
 	return fmt.Sprintf("memory %q に domain overlap する skill が見つからない - 行き先未定。"+
 		"dream skill の行き先テーブルで行き先を決める", m.Name)
 }

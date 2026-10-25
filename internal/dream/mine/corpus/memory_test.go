@@ -1,4 +1,4 @@
-package mine
+package corpus
 
 import (
 	"os"
@@ -29,9 +29,9 @@ func TestLoadMemories_ReadsFrontmatterAndBody(t *testing.T) {
 	// MEMORY.md は index なので memory 本体ではない
 	_ = os.WriteFile(filepath.Join(dir, "MEMORY.md"), []byte("# index\n"), 0o644)
 
-	mems, err := loadMemories(dir)
+	mems, err := LoadMemories(dir)
 	if err != nil {
-		t.Fatalf("loadMemories: %v", err)
+		t.Fatalf("LoadMemories: %v", err)
 	}
 	if len(mems) != 2 {
 		t.Fatalf("expected 2 memories (MEMORY.md excluded), got %d", len(mems))
@@ -51,7 +51,7 @@ func TestLoadMemories_ReadsFrontmatterAndBody(t *testing.T) {
 // memory ディレクトリ不在は「memory が 0 件」ではなく解決ミスの兆候なので、
 // 空スライスで握り潰さずエラーにする｡
 func TestLoadMemories_MissingDirIsError(t *testing.T) {
-	_, err := loadMemories("/nonexistent/dir")
+	_, err := LoadMemories("/nonexistent/dir")
 	if err == nil {
 		t.Fatal("expected error for missing memory dir, got nil")
 	}
@@ -62,42 +62,12 @@ func TestLoadMemories_MissingDirIsError(t *testing.T) {
 
 // 存在するが空のディレクトリは正常系 (memory をまだ書いていない project)｡
 func TestLoadMemories_EmptyDirIsOK(t *testing.T) {
-	mems, err := loadMemories(t.TempDir())
+	mems, err := LoadMemories(t.TempDir())
 	if err != nil {
 		t.Fatalf("empty dir should not error: %v", err)
 	}
 	if len(mems) != 0 {
 		t.Errorf("expected 0 memories, got %d", len(mems))
-	}
-}
-
-func TestExtractApplicabilityPhrases_HowToApplyLine(t *testing.T) {
-	body := `# 概要
-
-前置き｡
-
-**Why:** 過去に事故があった｡
-
-**How to apply:** standup 実行時に必ず PII を伏せる｡ 迷ったら一般化する｡
-
-## 追加ルール
-
-- 面接候補者名は一次面接に一般化する
-- ID は伏せる
-`
-	phrases := extractApplicabilityPhrases(body)
-	// 少なくとも「PII を伏せる」「迷ったら一般化」「面接候補者名」「ID は伏せる」的なフレーズが含まれる
-	joined := strings.Join(phrases, "|")
-	for _, want := range []string{"standup 実行時", "PII", "一般化", "面接候補者名", "ID"} {
-		if !strings.Contains(joined, want) {
-			t.Errorf("phrases missing keyword %q; got: %v", want, phrases)
-		}
-	}
-	// frontmatter や Why: の直接内容は含まれるが、markdown 装飾は削られる
-	for _, unwanted := range []string{"---", "##", "**Why:**"} {
-		if strings.Contains(joined, unwanted) {
-			t.Errorf("phrases should not contain markdown %q; got: %v", unwanted, phrases)
-		}
 	}
 }
 

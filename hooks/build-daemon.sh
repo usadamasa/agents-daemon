@@ -102,7 +102,7 @@ if ! tmp_bin=$(mktemp "$DAEMON_BIN_DIR/.agents-daemon.XXXXXX"); then
   log_error "mktemp failed in $DAEMON_BIN_DIR"
   exit 1
 fi
-if ! go build -C "$PLUGIN_ROOT" -o "$tmp_bin" ./cmd/agents-daemon; then
+if ! go build -C "$PLUGIN_ROOT" -ldflags "-X main.version=$version" -o "$tmp_bin" ./cmd/agents-daemon; then
   log_error "go build failed"
   exit 1
 fi

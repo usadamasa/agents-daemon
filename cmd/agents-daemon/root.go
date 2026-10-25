@@ -11,6 +11,10 @@ import (
 	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/worktreecli"
 )
 
+// version は建てた元の plugin の version。hooks/build-daemon.sh が -ldflags -X main.version=<version> で埋め込む。
+// stamp (agents-daemon.version) は cache の外から読めないことがあるので、バイナリ自身にも名乗らせる。
+var version = "dev"
+
 // newRootCmd は agents-daemon の root cobra コマンドを組み立てる。
 // テストでも呼べるように関数化してある。
 func newRootCmd() *cobra.Command {
@@ -26,7 +30,15 @@ func newRootCmd() *cobra.Command {
 		// error は main が 1 行だけ出す。cobra にも出させると、detach 起動した daemon の stderr (daemon.log) に
 		// 同じ文が 2 行残る。
 		SilenceErrors: true,
+		Version:       version,
 	}
+	root.SetVersionTemplate("{{.Version}}\n")
+	root.AddCommand(&cobra.Command{
+		Use:   "version",
+		Short: "建てた元の plugin の version を表示する",
+		Args:  cobra.NoArgs,
+		Run:   func(cmd *cobra.Command, _ []string) { cmd.Println(version) },
+	})
 	// グローバルオプションは --json だけ。対応はコマンドが Annotations で宣言する (internal/jsonflag)。
 	jsonflag.Add(root)
 	// コマンドの組み立ては機能ごとの internal/<family>cli が持ち、ここは登録だけにする。

@@ -44,7 +44,7 @@ SessionStart hook は `--dry-run` **なし**で配線してある。検知の挙
 
 plugin の版で `go build` し、cache のバイナリと stamp を差し替えて `daemon --ensure` を叩く。動いている daemon は
 差し替えを次の tick で検知して自分で入れ替わる ([architecture.md](architecture.md) の「バイナリの用意と差し替え」)。
-`status` の `started_at` が進んでいれば済んでいる。Claude Code の sandbox は `~/.cache/agents-daemon` に書けないので、
+`status` の `started_at` が進み、`~/.cache/agents-daemon/bin/agents-daemon version` が plugin の版を出せば済んでいる。Claude Code の sandbox は `~/.cache/agents-daemon` に書けないので、
 利用者が `!` で打つ。
 
 ### 放置された worktree を回収する

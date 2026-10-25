@@ -2,6 +2,8 @@ import type { On, ProcessRunResult } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
 const BIN = '/home/u/.cache/agents-daemon/bin/agents-daemon'
+// CHAIN は longest chain の罫線の色 (hooks/graph.ts の CHAIN_COLOR)。
+const CHAIN = 'warning'
 const CWD = '/src/home/agents-daemon'
 
 // world は plugin の下にいる engine の代わりを立てる。process.run は run が答え、呼ばれた argv (バイナリの後) を
@@ -258,6 +260,27 @@ test('レーンの行を上から描く: 罫線は薄く、ノードは記号と
     expect(await ui.find({ type: 'Text', text: /blocked \d/ })).toBeUndefined()
     await ui.unmount()
   }
+})
+
+test('longest chain の辺の罫線 (marks の桁) は色を付けて描き、ほかの罫線は薄いまま (#195)', async ($, on) => {
+  const rows = [
+    { lanes: '*', node: 'Q/1' },
+    { lanes: '├─┐', marks: [0, 1, 2] },
+    { lanes: '* ┆', node: 'W/1', marks: [2] },
+    { lanes: '┌─┘', marks: [0, 1, 2] },
+    { lanes: '│ *', node: 'Q/2', marks: [0] },
+  ]
+  boardWorld(on, { ...BOARD, graph: { ...BOARD.graph, rows, rows_with_completed: rows } })
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($)
+  expect((await ui.find({ key: 'box:lane:1' }))?.text).toMatch(/^ {2}├─┐$/)
+  expect((await ui.find({ type: 'Text', text: /^├─┐$/ }))?.props.color).toBe(CHAIN)
+  expect((await ui.find({ type: 'Text', text: /^┌─┘$/ }))?.props.color).toBe(CHAIN)
+  // ノードの右のレーンも、左のレーンも、印の桁だけを色の Text に分ける。
+  expect((await ui.find({ key: 'box:row:W/1' }))?.text).toMatch(/^ {2}▸ ┆ edge の CLI ◇1$/)
+  expect((await ui.find({ type: 'Text', text: /^┆$/ }))?.props.color).toBe(CHAIN)
+  expect((await ui.find({ key: 'box:row:Q/2' }))?.text).toMatch(/^ {2}│ ○ 段5$/)
+  expect((await ui.find({ type: 'Text', text: /^│$/ }))?.props.color).toBe(CHAIN)
 })
 
 test('長い title は pane の幅からレーンの分を除いて 1 行に切り詰める', async ($, on) => {

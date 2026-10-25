@@ -358,6 +358,22 @@ func TestGraph_rows(t *testing.T) {
 	if got, want := drawRows(b.Graph.RowsWithCompleted), "* A/0\n│ * A/1\n│ │ * B/1\n├─┴┄┘\n* A/2\n* A/3\n* A/4\n* C/1"; got != want {
 		t.Errorf("rows_with_completed =\n%s\nwant\n%s", got, want)
 	}
+	// longest chain (A/1 → A/2 → A/3 → A/4) の辺の罫線に印が付く。B/1 → A/2 の横線には付かない。
+	marks := func(rows []dag.Row) map[int][]int {
+		out := map[int][]int{}
+		for i, r := range rows {
+			if len(r.Marks) > 0 {
+				out[i] = r.Marks
+			}
+		}
+		return out
+	}
+	if got, want := marks(b.Graph.Rows), map[int][]int{2: {0}}; !reflect.DeepEqual(got, want) {
+		t.Errorf("rows の印 = %v, want %v", got, want)
+	}
+	if got, want := marks(b.Graph.RowsWithCompleted), map[int][]int{3: {0, 1, 2}}; !reflect.DeepEqual(got, want) {
+		t.Errorf("rows_with_completed の印 = %v, want %v", got, want)
+	}
 	// ノードが無ければ空の配列 (JSON で null にしない)。
 	empty := build(input{Domain: domain.Work})
 	if empty.Graph.Rows == nil || empty.Graph.RowsWithCompleted == nil {

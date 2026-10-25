@@ -10,7 +10,7 @@ import (
 )
 
 // TestNew_ディレクトリ名が固定されている は protocol の固定。setup skill の確認手順と
-// architecture.md がパスを直に書くので固定する。
+// architecture.md と statusline-state.md がパスを直に書くので固定する。
 func TestNew_ディレクトリ名が固定されている(t *testing.T) {
 	if got, want := New("/state").Dir, "/state/rate-limits"; got != want {
 		t.Errorf("Dir = %q, want %q", got, want)

@@ -22,7 +22,7 @@ const (
 	AgentStatusWorking AgentStatus = "working"
 	// AgentStatusBlocked は Claude Code が「利用者の操作待ち」と自己申告した状態。permission prompt、
 	// 利用者への質問、認証失敗、その他の dialog が開いている間 (kind の対応は
-	// skills/agents-daemon/references/program-status.md)。
+	// .claude/skills/changing-agents-daemon-internals/references/program-status.md)。
 	AgentStatusBlocked AgentStatus = "blocked"
 	// AgentStatusDone は idle と同じ実体だが、focused UI で未観測のままバックグラウンド作業が終わった状態。
 	AgentStatusDone AgentStatus = "done"

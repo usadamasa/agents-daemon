@@ -42,13 +42,11 @@ SessionStart hook は `--dry-run` **なし**で配線してある。検知の挙
 ~/.cache/agents-daemon/bin/agents-daemon update
 ```
 
-`claude plugin marketplace update`、`claude plugin update` を走らせ、更新した版の `hooks/build-daemon.sh`
-(SessionStart が detach して呼ぶのと同じスクリプト) を叩く。段が失敗したら後の段は走らせない。
-build-daemon.sh は plugin の版で `go build` し、cache のバイナリと stamp を差し替えて `daemon --ensure` を叩く。
-動いている daemon は差し替えを次の tick で検知して自分で入れ替わる ([architecture.md](architecture.md) の
-「バイナリの用意と差し替え」)。`agents-daemon version` が plugin の版を出し、`logs` に「実行ファイルが更新された
-ため入れ替わります」が出れば済んでいる。Claude Code の sandbox は `~/.claude/plugins` と `~/.cache/agents-daemon` に
-書けないので、利用者が `!` で打つ。
+`claude plugin marketplace update`、`claude plugin update` を走らせ、更新した版でバイナリを建て直す。
+段が失敗したら後の段は走らせない。動いている daemon は差し替えを次の tick で検知して自分で入れ替わる。
+`agents-daemon version` が plugin の版を出し、`logs` に「実行ファイルが更新されたため入れ替わります」が出れば
+済んでいる。Claude Code の sandbox は `~/.claude/plugins` と `~/.cache/agents-daemon` に書けないので、
+利用者が `!` で打つ。
 
 ### 放置された worktree を回収する
 
@@ -96,9 +94,9 @@ agents-daemon edge list --cwd <dir> [--here | --repo <main worktree>] [--ref <�
 
 ### `--json`
 
-root のグローバルオプション。`doctor` と `status` は人が読む形の代わりに JSON を出す (形は `internal/doctor` の
-`Report` と `internal/verify` の `StatusReport` の json tag)。元から JSON を出す `status --board`、`park`、`edge` は付けても
-変わらない。それ以外のコマンドに付けると、文字の出力を JSON と思い込んで読む事故を避けるため error で止まる
+root のグローバルオプション。`doctor` と `status` は人が読む形の代わりに JSON を出す。
+元から JSON を出す `status --board`、`park`、`edge` は付けても変わらない。
+それ以外のコマンドに付けると、文字の出力を JSON と思い込んで読む事故を避けるため error で止まる
 (残りのコマンドへの対応は #182)。
 
 ```sh
@@ -106,113 +104,19 @@ agents-daemon --json doctor | jq '.premises.findings'   # rex CLI の前提の�
 agents-daemon --json status | jq '.snapshot.panes'      # 監視中の pane
 ```
 
-### 検証用コマンド
+### 診断
 
 ```sh
-agents-daemon doctor                    # 前提条件の診断
-agents-daemon inspect --pane <id>       # 生きた pane の画面を分類する
-agents-daemon inspect --file <path>     # 保存した画面テキストを分類する
-agents-daemon inspect --file <path> --session <id>  # ゲート判定に使うセッションを指定する
-agents-daemon simulate                  # 使い捨て pane で検知から送信まで通す
-agents-daemon simulate --send --keep    # 実際に送信し、pane を残して目で見る
+agents-daemon doctor                         # 前提条件の診断
+agents-daemon status                         # 稼働状況と監視中の pane
+agents-daemon logs -n 80                     # 上限の検知、再開の送信、エラー
+agents-daemon daemon --foreground --dry-run  # 送信せずに検知だけを流して様子を見る
 ```
 
-`statusLine.command` から呼ばれる `statusline` は stdin の JSON を受けて state file を書き、描画を stdout に出す。
-手で叩くなら `COLUMNS=200 agents-daemon statusline < in.json` で渡す (COLUMNS が無ければ full の 3 行)。
-自前の statusline から呼ぶ `ingest-statusline` は state file を書くだけで stdout には何も出さない。
-どちらも失敗しても exit 0 で終わる (理由は stderr)。
-
-`inspect` は判定結果だけでなく、走査した行・ゲートが開いているか・待機時刻をどの
-情報源から得たかを出す。検知がおかしいと疑ったときに、結論ではなく判断過程を見るためのもの。
-
-ゲート判定には「どのセッションの state を見るか」が要る。`--pane` を指定したときは
-pane から解決する。`--file` にはセッションが無いため `--session` で明示する。
-指定が無ければゲート判定を行わない旨を出力して、画面の分類だけを報告する。
-
-`simulate` は自分の block を分割して使い捨ての block を作り、Claude agent に見せかけ、limit 風の画面を
-書き込んで、デーモンと同じ判定を通す。既定では送信しない。自分が作った block 以外には
-決して触らない。`REX_SESSION` と `REX_BLOCK` が要る。
-
-使い捨て block の前景は `/bin/sh <script> <screen>`。script は limit 風の画面を cat したあと
-`exec cat -v` で居座り、daemon が送る esc・文字列・enter を解釈せずそのまま画面に書く (ESC は `^[`)。
-shell を受け手にすると ESC の直後の文字を Meta として食う (zsh の `KEYTIMEOUT` 0.4 秒) など shell の解釈が混ざり、
-`--send` で何が届いたかを画面で読めない。
-
-| 自分の block | script の起動 | Claude agent に見せる手段 | 後始末 |
-| ---- | ---- | ---- | ---- |
-| `REX_BLOCK` の block | `rex split --shell=none -- /bin/sh …` で shell を挟まず直接 | script の先頭で Claude Code と同じ OSC 7501 (`state=idle:app=claude-code`) を `printf` し、`program_status` の record に載せる | `rex block close` |
-
-登録が rex に載ったことを daemon と同じ経路 (`PaneGet` → `IsClaudeAgent`) で待ってから画面を読む。
-rex の `capture` は可視領域しか返さないので、使い捨て block は自分の block の 40% の高さで割る。
-OSC 7501 の書式と判定の条件は [program-status.md](program-status.md)。
-
-`doctor` は rex の server への到達性、Claude pane の一覧 (`session_id` が引けなければ `(なし)`、block の高さと screen、
-高さが `detect.MinDetectableRows` 未満なら ⚠) を出す。
-rex の外 (`REX_SESSION` なし) では exit 1 で止まる。「rex CLI の前提」は自分の block (`REX_BLOCK`) に固定の
-コマンドを打ち、コードが読む欄と exit code が rex の版で変わっていないかを `⚠` で名指しする (rex を上げた直後に
-全 pane が unknown になったときの最初の手がかり)。末尾の「peer messaging」は
-`CLAUDE_CODE_MESSAGING_SOCKET` と socket の有無で、Claude Code のセッション内 (Bash ツール) から呼んだときだけ
-意味を持つ (切り分けは `agents-daemon:setup` skill の `references/peer-messaging.md`)。
-`inspect --pane` の pane ID は block ID。
-
-### 次に上限を踏んだとき
-
-上限は起こさないと測れない。daemon は上限の出来事 (daemon.log に行を書くのと同じ遷移) のたびに、踏んだ瞬間の
-材料を `$STATE/limit-events/<YYYY-MM-DD>.jsonl` へ 1 行の JSON で残す (`internal/limitlog`、欄は package doc)。
-上限を踏んだあとにこれを読んで、未測定のまま残っている次の問いに答える。
-
-| 問い | 見る欄 |
-| ---- | ---- |
-| 上限到達時に Claude Code は record を何と申告するか (#77) | `record` (`agent_status` / `kind` / `msg`)。`working` のままか、`error` に msg が付くか |
-| 小さい block で上限の文と `❯` の行が同時に見えるか、`/rate-limit-options` のメニューが出た状態の下限 (#39) | `geometry.rows` / `geometry.alternate_screen` と `screen` (判定した画面そのもの。上限の文が下から何行目か、メニューと入力行が入っているか) |
-| ゲートと起床時刻の判断は正しかったか | `rate_limit` (own)、`account`、`wait_until`、`outcome` |
-| 設定を変えたら判定が変わるか | `screen` を `inspect --file` に渡す (下) |
-| lower-priority mode で作業中の pane を待機に入れていないか (#251) | `lower_priority` が true の行の `outcome` と `screen` |
-
-```sh
-jq -c '{at, pane_id, outcome, kind, record, geometry}' "$STATE"/limit-events/*.jsonl   # 出来事の一覧
-jq -r 'select(.outcome == "waiting") | .screen' "$STATE"/limit-events/2026-10-21.jsonl > ./tmp/limit-screen.txt
-agents-daemon inspect --file ./tmp/limit-screen.txt --session <session_id>             # 同じ画面を判定し直す
-```
-
-`screen` には上限の文言と reset 時刻がそのまま入っている。監視中の pane に `cat` すると daemon がそれを
-limit と判定するので、`jq` で欄を選んで読み、画面に出すなら別のファイルへ落として `inspect --file` に渡す。
-
-### 実機での検証順序
-
-誤検知しないことの確認を先に置く。検知できることの確認はその後。
-
-1. `task install` (リポジトリの clone で、hook と同じ cache のパスへ建てる)
-2. `doctor` — 前提が揃っているか
-3. `inspect --pane <自分の pane>` — 通常の画面が `none` と判定されること
-4. `inspect --file <limit 画面のサンプル>` — `limit` と判定され、待機時刻が `resets_at` 由来であること
-5. `daemon --foreground --dry-run` — 実 pane 相手に流し、誰にも送信せず誤爆もしないこと
-6. `simulate` — 検知から送信までを end-to-end で通す
-
-### この環境で実際に確認したこと
-
-2026-08-16、Ghostty + herdr 0.8.0 (当時の backend。herdr のサポートは #66 で廃止) で通した結果。
-
-- 開発中のセッション自身が 5 時間上限に到達し、本物の表示を取得した
-  (`You've hit your session limit · resets HH:MMpm (Asia/Tokyo)`、時刻は上記の理由で伏せてある)。
-  この文言に対する分類は `internal/detect/real_sample_test.go` に固定してある。
-- 同じ事象での `resets_at` は `1786851000` = 12:30 JST で、画面表示と一致した。
-- SessionStart hook からデーモンが自動起動することを確認。
-- `idle` の Claude セッションを誤検知しない。
-- 画面が limit に見えるが使用率が閾値未満の pane で、ゲートが実際に発火を抑制した。
-- 別ワークスペースの pane も監視対象に入る。
-- `simulate` が検知 → 待機 → 再開送信 (esc / テキスト / enter) まで通した。
-
-そして本番投入した当日、2 つのセッションが実際に上限へ到達し、**自動再開は失敗した**。
-待機のタイマーは正しく動いた (`resets_at` 17:50 + margin 60 秒 → 17:51 ちょうどに起床) が、
-送信が毎回エラーになり再試行上限まで進んだ。原因は herdr の応答の解釈違いで、
-成功時に何も出力しないコマンドへ JSON envelope を要求していた。修正後、`simulate --send`
-で送信まで通ることを確認した。教訓は「送信の経路は fake ではなく実機で 1 度は通す」で、
-rex の送信が未測定なのはこの教訓がまだ果たされていない箇所 (下の「既知の制約」)。
-
-同じ日に、既定の読み取り元が pane の viewport に制限されることも判明した
-([pane-io.md](pane-io.md) の「読み取り元」参照)。どちらも実際に動かすまで
-気づけなかった類の失敗で、`--dry-run` や `simulate` だけでは踏めなかった。
+`doctor` は rex の server への到達性、Claude pane の一覧 (`session_id` が引けなければ `(なし)`、block の高さ)、
+domain の判定、peer messaging を出す。rex の外 (`REX_SESSION` なし) では exit 1 で止まる。
+「rex CLI の前提」の節に `⚠` が出たら、rex の版で daemon が読む欄が変わった疑いがある。daemon 側の追従が要るので
+issue にする。
 
 ## 設定
 
@@ -249,7 +153,7 @@ rex の送信が未測定なのはこの教訓がまだ果たされていない�
 
 ### 私用と業務の区分
 
-セッションの cwd から、私用 (`home`) と業務 (`work`) のどちらの作業かを決める (`internal/domain`)。
+セッションの cwd から、私用 (`home`) と業務 (`work`) のどちらの作業かを決める。
 これから入るタスクの記録とパーキングロットは区分ごとに分けて置き、ボードも 1 つの区分しか描かない (#121)。
 業務のものをインターネットに出さず、私用と混ぜないための境界になる。
 
@@ -265,8 +169,8 @@ rex の送信が未測定なのはこの教訓がまだ果たされていない�
 
 ### 送る文面
 
-既定値は `internal/config/config.go` の `defaultRetryMessage`。
-上限の検知語 (`limit` / `rate` 等) を含めてはいけない ([pane-io.md](pane-io.md))。
+`retryMessage` で変える。上限の検知語 (`limit` / `rate` 等) を含めてはいけない。
+送った文面が画面に残り、daemon がそれを上限と読み違える。
 
 Claude Code の画面の文言は安定した API ではない。変わって検知が止まったら
 `customPatterns` に新しい表現を足せば、コードを変えずに追随できる。
@@ -307,13 +211,13 @@ Claude Code の画面の文言は安定した API ではない。変わって検
   文字列は tmux 側でフォーカスを持つペイン (teammate 一覧など) に吸われ、Claude の
   入力行は空のままになる (実測)。この形の pane には再開が届かない。
 - **rex は常に可視領域だけを読む。** scrollback を読む手段が無い。
-  小さい block では上限の文言が流れた時点で検知が効かなくなる ([pane-io.md](pane-io.md) の「読み取り元」)。
+  小さい block では上限の文言が流れた時点で検知が効かなくなる (`doctor` が高さの足りない block に `⚠` を出す)。
 - **待機中のラベルは出ない。** 表示に使える `block rename` は利用者が付けた label を潰すため。
   待機の状況は `agents-daemon status` で見る。
 - **rex の送信は実機で測っていない。** `send` / `send-key` の組み立ては fake の rex で確かめただけで、
   daemon が渡すキー名 (`esc` `enter`) が rex でそのまま通るかは未測定。
 - **rex の状態は Claude Code の OSC 7501 の報告に頼る。** どの状況でどの値が来るかは公式ドキュメントに無く、
-  Claude Code の版で変わりうる。測った版と対応は [program-status.md](program-status.md)。
+  Claude Code の版で変わりうる。
 - **kind の無い `blocked` (Session paused などの dialog) が開いた pane にも再開を送る。** 送らないのは kind が
   `permission` / `question` / `auth` のときだけ。上限到達時の record が kind 無しの `blocked` で来るかを
   実測していないため、全部の `blocked` を止めると上限からの再開そのものが止まりかねない (#77)。

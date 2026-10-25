@@ -5,8 +5,8 @@
 //
 // daemon.log の行は「何をしたか」だけで、判定した画面そのものと record と block の高さは残らない。上限は
 // 起こさないと測れず、次に踏んだときに手で見に行くには遅いので、daemon が踏んだ瞬間の材料をここへ写す。
-// 読み方と、どの欄が #39 / #77 のどの問いに答えるかは skills/agents-daemon/references/operations.md
-// 「次に上限を踏んだとき」。画面の文面 (上限の文言と reset 時刻) をそのまま含むので、監視中の pane に
+// 読み方と、どの欄が #39 / #77 のどの問いに答えるかは
+// .claude/skills/changing-agents-daemon-internals/references/verification.md「次に上限を踏んだとき」。画面の文面 (上限の文言と reset 時刻) をそのまま含むので、監視中の pane に
 // cat しない (daemon がそれを limit と判定する)。
 package limitlog
 

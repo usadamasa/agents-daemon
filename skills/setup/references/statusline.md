@@ -3,9 +3,7 @@
 setup skill の 3 段目で `context/<session_id>.json` が無い、または古かったときに読む。
 
 使用率と解除時刻は statusline の stdin にしか来ない。配線は 2 通りあり、どちらも
-取り出しはバイナリ (`internal/sessionstate`)、state file の書式は `internal/ratelimit` と
-`internal/sessioncontext` が持つ (書式は
-[architecture.md](../../agents-daemon/references/architecture.md) の「statusline が書く state」)。
+取り出しと state file の書き込みはバイナリが持つ。
 
 | 配線 | 向く人 |
 | ---- | ---- |

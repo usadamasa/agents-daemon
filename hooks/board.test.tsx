@@ -611,6 +611,12 @@ test('メモを選ぶと詳細を出し、Discard / To task / Ask for issue で�
   await ui.press({ key: 'task:W' })
   expect(w.sent[0].to).toBe('W')
   expect(w.sent[0].text).toMatch(/^パーキングロットのメモ「保持期間の根拠が無い」\(種類: aside\) をタスクにしてください。/)
+  // 着手の時期は指示せず、受け手の計画に任せる。ボードはタスクの description に書かれた id でメモと照合する (#213)。
+  expect(w.sent[0].text).not.toMatch(/今の作業の区切り/)
+  expect(w.sent[0].text).toMatch(/着手の時期は今の計画 \(タスクの依存\) に従ってください。/)
+  expect(w.sent[0].text).toMatch(/タスクの description にメモの id \(20261018T090000-aaaa\) を入れてください。/)
+  expect(w.sent[0].text).toMatch(/既にこのメモを扱うタスクがあれば、新しく作らずにその description に id を書き足すだけで構いません。/)
+  expect(w.sent[0].text).toMatch(/\(メモ 20261018T090000-aaaa\)$/)
   // 送る前に取る (open のときだけ handed にする)。届いたら handed のまま。
   expect(operations(w.ran)).toEqual([CLAIM])
 
@@ -727,6 +733,9 @@ test('メモを別の repo の新しいセッションへ渡す: 候補はメモ
   expect(w.fed).toHaveLength(1)
   expect(w.fed[0]).toMatch(/^このメモを渡すため、dotfile \(\/src\/home\/dotfile\) で新しいセッションとして起こしました。/)
   expect(w.fed[0]).toMatch(/パーキングロットのメモ「保持期間の根拠が無い」\(種類: aside\) をタスクにしてください。/)
+  expect(w.fed[0]).not.toMatch(/今の作業の区切り/)
+  expect(w.fed[0]).toMatch(/着手の時期は今の計画 \(タスクの依存\) に従ってください。/)
+  expect(w.fed[0]).toMatch(/タスクの description にメモの id \(20261018T090000-aaaa\) を入れてください。/)
   expect(w.sent).toEqual([])
   expect(await ui.find({ type: 'Text', text: /dotfile で新しいセッションを起こし、メモを渡しました/ })).toBeDefined()
   // 候補は渡した後に畳む。

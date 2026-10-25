@@ -32,12 +32,7 @@ tasks:
       - scripts/model-check.sh
 
   typecheck:
-    desc: mod (hooks/ と types/) を tsc で型検査する。型は Claude Code が mod を読み込んだときに .claude-plugin/types/ へ置く
-    cmds:
-      - tsc -p .
-
-  typecheck:ci:
-    desc: mod を ci/mod-types/ に写した型で tsc にかける。CI は .claude-plugin/types/ を用意できないのでこちらを回す
+    desc: mod (hooks/ と types/) を ci/mod-types/ に写した型で tsc にかける。手元と worktree と CI で同じ型を使う
     cmds:
       - tsc -p ci/mod-types
 

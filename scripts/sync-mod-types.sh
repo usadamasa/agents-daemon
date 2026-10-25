@@ -3,7 +3,7 @@ set -euo pipefail
 # sync-mod-types.sh
 # Claude Code が .claude-plugin/types/ に書いた mod の型を ci/mod-types/ へ写す。`task mod-types:sync` が呼ぶ。
 # 型は対話セッションが mod を hot-reload したときにしか書かれず、CI では用意できないので、写しをコミットして
-# `task typecheck:ci` がそれを読む。claude-code-mcp は接続中の MCP の一覧で人ごとに違うので写さない。
+# `task typecheck` がそれを読む。claude-code-mcp は接続中の MCP の一覧で人ごとに違うので写さない。
 # GitHub の anthropics/claude-code の mods/types/claude-code.d.ts は版が古く、この機械の built-in tools の表も無いので使わない。
 # cc-premise: 2.1.310 mods 型は対話の hot-reload でだけ書かれ、claude plugin test と claude -p --plugin-dir では書かれない
 

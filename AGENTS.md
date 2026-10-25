@@ -37,7 +37,7 @@ README の「役割」が持つ。機能を足す・外す判断はそこに照�
 | `internal/` | daemon の本体。パス定数は `internal/apppath`。statusline の描画と実行は `internal/statusline`、cost の台帳は `internal/statusline/spend`、daemon の監視ループは `internal/daemon`、daemon の起動の排他と status.json と PID ファイルは `internal/daemon/state`、sidecar の原子的な書き込みは `internal/statefile`。前提条件の診断 (`doctor`) は `internal/doctor`、ほかの読むだけの診断 (`inspect` / `status` / `logs`) は `internal/verify`、使い捨て pane へ送る e2e (`simulate`) は `internal/simulate`。dream の実行系は `internal/dream` (harvest の出力の書式は `internal/dream/harvest/record`、mine が読む memory と skill は `internal/dream/mine/corpus`)、放置 worktree の回収は `internal/worktree`、cwd から私用と業務を判定するのは `internal/domain`、cwd の repo と branch を求めるのは `internal/gitrepo`、タスクの記録は `internal/tasklog`、パーキングロットのメモは `internal/parking`、メモを渡す先の新しいセッションを rex の window に起こすのは `internal/spawn`、セッションをまたぐ辺は `internal/edge`、タスクの記録と status.json をボードに組むのは `internal/board`、ボードのカードから依存の DAG を組むのは `internal/board/graph`、依存の DAG の段・下流・輪・鎖を数え、pane のレーンの行を組むのは `internal/board/dag`、ボードの経路の出来事のログは `internal/boardlog`、上限の出来事の記録は `internal/daemon/limitlog`、plugin の更新と daemon の建て直し (`update`) は `internal/selfupdate` |
 | `internal/multiplexer`, `internal/multiplexer/rexcli`, `internal/backend` | pane 操作の interface (`multiplexer.Client`) とその rex 実装。`backend` が環境に `REX_SESSION` があることを確かめる (無ければ `daemon --ensure` は何もせず戻る) |
 | `tests/` | hook と script の bats テスト (`tests/lib/`、`tests/fixtures/`) |
-| `ci/mod-types/` | CI の型検査に使う mod の型の写し。`task mod-types:sync` (`scripts/sync-mod-types.sh`) が `.claude-plugin/types/` から写す |
+| `ci/mod-types/` | `task typecheck` (手元と CI) が使う mod の型の写し。`task mod-types:sync` (`scripts/sync-mod-types.sh`) が `.claude-plugin/types/` から写す |
 | `models/handoff/` | ボードの受け渡しとタスクの記録の TLA+ のモデル。`task model-check` (`scripts/model-check.sh`) が TLC で回す。使い方と期待は `models/handoff/README.md` |
 | `flake.nix` | 開発ツールの devShell (版は `flake.lock` が固定する)。go-arch-metrics の CLI は go.mod の tool directive が固定する |
 | `.claude/skills/changing-agents-daemon-internals/` | 実装の仕組みとその理由 (配線、上限の検知、pane の読み書き、mod、バイナリ、出力されるファイル) と実機での検証。plugin には同梱しない保守用 skill |
@@ -56,8 +56,7 @@ shellcheck hooks/*.sh hooks/lib/*.sh scripts/*.sh tests/lib/*.bash tests/fixture
 claude plugin validate --strict .           # plugin manifest と hooks.json
 claude plugin validate --strict skills      # skill の frontmatter
 claude plugin test .                        # mod (hooks/*.test.tsx) のテスト
-task typecheck                              # mod の型検査 (tsc)。型は Claude Code が .claude-plugin/types/ に置く
-task typecheck:ci                           # CI が回す mod の型検査。型は ci/mod-types/ の写し
+task typecheck                              # mod の型検査 (tsc)。型は ci/mod-types/ の写し (CI も同じ)
 ```
 
 `invariants_test.go` と `fuzz_test.go` は、1 場面を固定する例ではなく「どの入力でも破ってはいけないこと」を書いて乱択で

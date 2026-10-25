@@ -106,7 +106,7 @@ jobs:
       - uses: usadamasa/gh-manage/actions/setup-nix@main
 
       - name: Typecheck the mod
-        run: task typecheck:ci
+        run: task typecheck
 
   actions-lock:
     name: actions-lock verify

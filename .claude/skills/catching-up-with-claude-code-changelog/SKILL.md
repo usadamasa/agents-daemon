@@ -93,14 +93,14 @@ rg -a -o -N '.{0,160}(<CHANGELOG で見た設定キーや env 名>).{0,200}' "$B
 
 ### 5. mod の型の写しを上げる
 
-CI の `mod typecheck` は `ci/mod-types/` に写した型で tsc を回す。型は対話セッションが mod を hot-reload したとき
-だけ `.claude-plugin/types/` に書かれ、CI では用意できないため (`scripts/sync-mod-types.sh` の冒頭)。
+`task typecheck` (CI の `mod typecheck` も) は `ci/mod-types/` に写した型で tsc を回す。
+型は対話セッションが mod を hot-reload したときだけ `.claude-plugin/types/` に書かれ、
+CI と worktree では用意できないため (`scripts/sync-mod-types.sh` の冒頭)。
 写しの版は `ci/mod-types/claude-code/index.d.ts` の 1 行目にある。今の版より古ければ上げる。
 
 ```sh
 claude --plugin-dir .          # 対話で起こして終える。.claude-plugin/types/ が今の版で書き直される
 task mod-types:sync            # 写した版を 1 行出す
-task typecheck:ci
 task typecheck
 ```
 

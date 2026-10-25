@@ -106,6 +106,15 @@ var (
 	// ネイティブも動かずこのツールも動かない状態で固まる。そのため予約の判定より先に見る。
 	nativeStoodDownPattern = regexp.MustCompile(`(?i)automatic continue (?:cancelled|stopped|was turned off|did not run)`)
 
+	// lowerPriorityActivePattern は session limit の後に `/low-priority` で低優先度の作業を続けていることを示す。
+	// 通知は「limit resets at 5pm」と「weekly limit」を含み二重シグナルを満たすので、pane は作業中でも limit になる。
+	// cc-premise: 2.1.310 limit-screen lower-priority mode の作業中と終わりの通知 (lower_priority_test.go)
+	lowerPriorityActivePattern = regexp.MustCompile(`(?i)continuing now at lower priority|lower-priority mode is back on|^\s*lower priority until\b|working at lower priority`)
+
+	// lowerPriorityEndedPattern は lower-priority mode が終わり、通常の上限に戻ったことを示す。
+	// 作業中の通知は scrollback に残るので、同じ画面にあればこちらを優先する。
+	lowerPriorityEndedPattern = regexp.MustCompile(`(?i)lower-priority mode (?:ended|stopped|is off|is no longer available|isn't available|is taking a break)`)
+
 	// resumeReadyPattern は上限が解除済みで Enter だけを待っている状態を示す。
 	// ネイティブが解除まで待ったものの継続の窓を過ぎた (phase=stale) ときに出る。
 	resumeReadyPattern = regexp.MustCompile(`(?i)usage limit has reset.*press enter to continue`)
@@ -302,6 +311,14 @@ func (c *Classifier) Classify(screen string, n int) Kind {
 		return KindTransient
 	}
 	return KindNone
+}
+
+// LowerPriorityActive は画面の末尾 n 行 (Classify と同じ範囲) に lower-priority mode の作業中の通知があり、
+// 終わった通知が無いかを返す。判定には使わず、上限の出来事に印を付けるためだけに使う (#251)。
+func LowerPriorityActive(screen string, n int) bool {
+	lines := tailLines(splitScreen(screen), n)
+	return slices.ContainsFunc(lines, lowerPriorityActivePattern.MatchString) &&
+		!slices.ContainsFunc(lines, lowerPriorityEndedPattern.MatchString)
 }
 
 func (c *Classifier) isLimit(lines []string) bool {

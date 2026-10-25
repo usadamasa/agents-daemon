@@ -74,6 +74,20 @@ out of credits のいずれかがあれば、待機に入らず `hard-cap` と�
 文言は `internal/detect` が持つ。上流も同じ扱いで、retry watchdog は organization
 spend-limit と out-of-credits で即座に失敗する。
 
+## lower-priority mode の画面は印を付けて残す
+
+<!-- cc-premise: 2.1.310 limit-screen lower-priority mode の作業中と終わりの通知 -->
+
+session limit に当たった後、`/low-priority` で上限を越えて低優先度の作業を続けられる (flag 付き)。その間の通知
+(`Continuing now at lower priority until your limit resets at …`) は上限の行と並び、二重シグナルを満たすので、
+pane は作業中でも limit と判定される (#251)。実害をまだ見ていないので判定は変えず、気付けるようにだけしてある。
+その画面を上限の出来事として記録するとき、`limit-events/` の行に `lower_priority: true` を付け、daemon.log に
+1 行残す。
+
+終わった通知 (`Lower-priority mode ended`、`… stopped`、`… is off` など) が同じ画面にあれば印を付けない。
+作業中の通知は scrollback に残るので、取り消しの通知と同じく終わった側を優先する。上限の画面に並ぶ案内
+(`/low-priority to continue now …`) も、まだ低優先度で動いていないので印を付けない。文言は `internal/detect` が持つ。
+
 ## `agent_status` は判定に使わない
 
 rex の `agent_status` は Claude Code 自身が OSC 7501 で申告する state ([program-status.md](program-status.md))。

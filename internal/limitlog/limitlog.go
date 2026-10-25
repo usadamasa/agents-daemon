@@ -63,6 +63,9 @@ type Event struct {
 	Account   *Window `json:"account,omitempty"`
 	// Settings は判定に効いた設定値。
 	Settings Settings `json:"settings"`
+	// LowerPriority は画面に lower-priority mode の作業中の通知があった印 (detect.LowerPriorityActive)。
+	// pane は作業中でも limit と判定されうるので、後から拾えるようにする (#251)。
+	LowerPriority bool `json:"lower_priority,omitempty"`
 	// Screen は分類した画面そのもの (PaneRead が返した末尾 readLines 行)。`inspect --file` に渡せる。
 	Screen string `json:"screen"`
 }

@@ -15,7 +15,7 @@ func TestRootCmd_registersAllCommands(t *testing.T) {
 	}
 	want := []string{
 		"board-log", "daemon", "doctor", "dream", "edge", "ingest-statusline", "ingest-task", "inspect",
-		"logs", "park", "prune-worktrees", "simulate", "spawn", "status", "statusline", "stop", "version",
+		"logs", "park", "prune-worktrees", "simulate", "spawn", "status", "statusline", "stop", "update", "version",
 	}
 	slices.Sort(names)
 	if !slices.Equal(names, want) {

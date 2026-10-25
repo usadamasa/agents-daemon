@@ -30,7 +30,7 @@ README の「役割」が持つ。機能を足す・外す判断はそこに照�
 | `skills/peer-sessions/` | 別セッション (peer) へ作業を渡す手順 (`ListAgents` / `SendMessage`)。rex の block 操作は `references/rex.md` |
 | `skills/dream/` | 記憶階層の consolidation の手引き。実行系の呼び方は `references/pipeline.md` |
 | `cmd/agents-daemon/` | Go の main と root の登録。コマンドの組み立ては `internal/<family>cli` (境界は architecture.md「CLI の組み立て」) |
-| `internal/` | daemon の本体。パス定数は `internal/apppath`。statusline の描画と実行は `internal/statusline`、cost の台帳は `internal/spend`、sidecar の原子的な書き込みは `internal/statefile`。前提条件の診断 (`doctor`) は `internal/doctor`、ほかの読むだけの診断 (`inspect` / `status` / `logs`) は `internal/verify`、使い捨て pane へ送る e2e (`simulate`) は `internal/simulate`。dream の実行系は `internal/dream`、放置 worktree の回収は `internal/worktree`、cwd から私用と業務を判定するのは `internal/domain`、cwd の repo と branch を求めるのは `internal/gitrepo`、タスクの記録は `internal/tasklog`、パーキングロットのメモは `internal/parking`、メモを渡す先の新しいセッションを rex の window に起こすのは `internal/spawn`、セッションをまたぐ辺は `internal/edge`、タスクの記録と status.json をボードに組むのは `internal/board`、依存の DAG の段・下流・輪・鎖を数え、pane のレーンの行を組むのは `internal/dag`、ボードの経路の出来事のログは `internal/boardlog`、上限の出来事の記録は `internal/limitlog` |
+| `internal/` | daemon の本体。パス定数は `internal/apppath`。statusline の描画と実行は `internal/statusline`、cost の台帳は `internal/spend`、sidecar の原子的な書き込みは `internal/statefile`。前提条件の診断 (`doctor`) は `internal/doctor`、ほかの読むだけの診断 (`inspect` / `status` / `logs`) は `internal/verify`、使い捨て pane へ送る e2e (`simulate`) は `internal/simulate`。dream の実行系は `internal/dream`、放置 worktree の回収は `internal/worktree`、cwd から私用と業務を判定するのは `internal/domain`、cwd の repo と branch を求めるのは `internal/gitrepo`、タスクの記録は `internal/tasklog`、パーキングロットのメモは `internal/parking`、メモを渡す先の新しいセッションを rex の window に起こすのは `internal/spawn`、セッションをまたぐ辺は `internal/edge`、タスクの記録と status.json をボードに組むのは `internal/board`、依存の DAG の段・下流・輪・鎖を数え、pane のレーンの行を組むのは `internal/dag`、ボードの経路の出来事のログは `internal/boardlog`、上限の出来事の記録は `internal/limitlog`、plugin の更新と daemon の建て直し (`update`) は `internal/selfupdate` |
 | `internal/multiplexer`, `internal/rexcli`, `internal/backend` | pane 操作の interface (`multiplexer.Client`) とその rex 実装。`backend` が環境に `REX_SESSION` があることを確かめる (無ければ `daemon --ensure` は何もせず戻る) |
 | `tests/` | hook と script の bats テスト (`tests/lib/`、`tests/fixtures/`) |
 | `models/handoff/` | ボードの受け渡しとタスクの記録の TLA+ のモデル。`task model-check` (`scripts/model-check.sh`) が TLC で回す。使い方と期待は `models/handoff/README.md` |
@@ -146,7 +146,6 @@ hook・skill・daemon は別プロセスで、ファイル越しに繋がる。�
 tagpr (`.tagpr`、`.github/workflows/tagpr.yaml`) がリリース PR を作る。`version` は手で上げない。
 tag に **`v` を付けない。** `v2026.0926.0` は Go module が major 2026 の semver と解釈して拒否する。
 
-リリース PR の merge 後の plugin 更新 (`claude plugin marketplace update usadamasa`、
-`claude plugin update agents-daemon@usadamasa`) は sandbox が `~/.claude/plugins` への書き込みを止めるので
-利用者が `!` で打つ。動いている daemon の入れ替えも `!` で行う。コマンドは
-`skills/agents-daemon/references/operations.md` の「plugin の更新後に daemon を入れ替える」。
+リリース PR の merge 後の plugin 更新と動いている daemon の入れ替えは、`agents-daemon update` が 1 回で行う。
+sandbox が `~/.claude/plugins` と `~/.cache/agents-daemon` への書き込みを止めるので、利用者が `!` で打つ。
+コマンドは `skills/agents-daemon/references/operations.md` の「plugin の更新後に daemon を入れ替える」。

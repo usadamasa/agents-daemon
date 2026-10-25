@@ -1,4 +1,4 @@
-// Package daemoncli は daemon のライフサイクル (daemon、stop) と、読むだけの診断 (status、logs、doctor、inspect、
+// Package daemoncli は daemon のライフサイクル (daemon、stop、update) と、読むだけの診断 (status、logs、doctor、inspect、
 // simulate) のコマンドの組み立てを持つ。
 package daemoncli
 
@@ -17,7 +17,7 @@ import (
 // Commands は root に登録するコマンド。
 func Commands() []*cobra.Command {
 	return []*cobra.Command{
-		newDaemonCmd(), newStatusCmd(), newLogsCmd(), newStopCmd(), newDoctorCmd(), newInspectCmd(), newSimulateCmd(),
+		newDaemonCmd(), newStatusCmd(), newLogsCmd(), newStopCmd(), newUpdateCmd(), newDoctorCmd(), newInspectCmd(), newSimulateCmd(),
 	}
 }
 

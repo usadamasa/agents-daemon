@@ -1,5 +1,9 @@
 # Changelog
 
+## [2026.1025.2](https://github.com/usadamasa/agents-daemon/compare/2026.1025.1...2026.1025.2) - 2026-10-25
+
+- plugin の更新と daemon の建て直しを 1 回で行う update を足す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/263
+
 ## [2026.1025.1](https://github.com/usadamasa/agents-daemon/compare/2026.1025.0...2026.1025.1) - 2026-10-25
 
 - バイナリに plugin の version を埋め込み、version で名乗らせる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/260

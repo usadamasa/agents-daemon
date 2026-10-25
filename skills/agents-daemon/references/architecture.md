@@ -6,7 +6,7 @@ statusline・hook・daemon が別々のタイミングで動き、ファイル�
 互いを直接呼ばない。
 
 ```
-[1] Claude Code ──毎描画──stdin──> agents-daemon statusline (statusLine.command)
+[1] Claude Code ──再実行──stdin──> agents-daemon statusline (statusLine.command)
                                    または 利用者の statusline ──stdin──> agents-daemon ingest-statusline
                                                    ├──> rate-limits/<session_id>.json (あれば)
                                                    ├──> context/<session_id>.json     (毎回)
@@ -31,8 +31,8 @@ context の compact と prompt cache の失効には関わらない。Claude Cod
 
 ### [1] statusline が上限情報を渡し、バイナリが落とす
 
-<!-- cc-premise: 2.1.299 statusline stdin の rate_limits.five_hour / context_window と再実行の契機 -->
-<!-- cc-premise: 2.1.308 statusline stdin の rate_limits はモデル単位の週次ウィンドウを含まない -->
+<!-- cc-premise: 2.1.310 statusline stdin の rate_limits.five_hour / context_window と再実行の契機 -->
+<!-- cc-premise: 2.1.310 statusline stdin の rate_limits はモデル単位の週次ウィンドウを含まない -->
 
 Claude Code は statusline コマンドの stdin に JSON を渡す。その中に
 `rate_limits.five_hour.{used_percentage, resets_at}` が入る (`resets_at` は Unix epoch 秒)。
@@ -47,14 +47,17 @@ statusline には出せない (#116)。
   (`internal/spend`) にも記録する
 - 利用者の statusline から stdin を `agents-daemon ingest-statusline` へ渡す 1 行を足す。state file だけを書く
 
+statusline はイベントで再実行される (新しい assistant message、`/compact` の完了、permission mode の変更など。
+`refreshInterval` を設定すればその間隔でも)。描画のたびではなく、idle のセッションでは走らない。
+
 state file の出し分けは次のとおり。
 
 - `rate_limits` は**初回 API レスポンス後**にだけ現れる。
 - 無いときは何も書かない。既存ファイルも消さない (まだ届いていないセッションが、他のセッションの
   書いた state を壊さないため)。
-- **5 時間ウィンドウが切り替わる瞬間は `five_hour` が null で届く** (実機で `xx:10:01` の
-  ような境界時刻に観測)。これも書かず、最後に持っていた有効な state を残す。null で
-  上書きすると Go 側は 0 に読むため、待機明けのゲートが「fresh な 0%」で送信を抑制し、
+- **5 時間ウィンドウが切り替わる瞬間は `five_hour` が来ない**。docs は `resets_at` を過ぎた window を
+  落とすと書き、実機では `xx:10:01` のような境界時刻に null で観測した。どちらも書かず、最後に持っていた
+  有効な state を残す。無い値で上書きすると Go 側は 0 に読むため、待機明けのゲートが「fresh な 0%」で送信を抑制し、
   15 分後に state が古くなって改めて検知しても `resets_at` が無くフォールバック
   (5 時間待ち) に落ちる。2026-08-28 の取りこぼしはこれが原因だった。daemon 側も
   `resets_at` が 0 の state は「値が無い」として扱う (`ratelimit.State.HasFiveHour`)。
@@ -75,7 +78,7 @@ state file の出し分けは次のとおり。
 `resets 12:30pm (Asia/Tokyo)` のような表記を am/pm やタイムゾーンごとパースする処理が要らない。
 実機で `resets_at = 1786851000` と画面の `12:30pm (Asia/Tokyo)` が一致することを確認済み。
 
-同じ呼び出しで `context/<session_id>.json` へも書く。こちらは `rate_limits` と違って**毎描画で必ず書く**。
+同じ呼び出しで `context/<session_id>.json` へも書く。こちらは `rate_limits` と違って**statusline が走るたびに必ず書く**。
 daemon が使うのは `multiplexer` (block から session_id への対応) で、同じ block の記録が複数あれば
 `observed_at` が最新のものを採る。`session_name` はボードのカードに出すセッションの名前になる。
 `used_percentage` は参考として写すだけで、daemon は読まない。
@@ -109,7 +112,7 @@ daemon が使うのは `multiplexer` (block から session_id への対応) で�
 `observed_at` はどちらも書いた時点の Unix epoch 秒。
 
 `session_name` は statusline の stdin の `session_name` をそのまま写し、入力に無ければ付けない。
-<!-- cc-premise: 2.1.302 statusline session_name は custom title、無ければ AI の題 -->
+<!-- cc-premise: 2.1.310 statusline session_name は custom title、無ければ AI の題 -->
 中身は `--name` か `/rename` で付けた名前、無ければ Claude Code が会話から付けた題になる。`ListAgents` の名前とは
 同じとは限らない (同じ名前のセッションが既にいると `ListAgents` 側だけ `workspace-dc` のような接尾辞が付く)。
 ボード (`internal/board`) はこの名前をカードとパーキングの `sources` に出し、名前が無ければ session ID の先頭 8 文字、
@@ -153,7 +156,7 @@ SessionStart には `hooks/prune-worktrees.sh` も並び、`prune-worktrees --ho
 worktree を `git worktree remove` し、回収したときだけ `systemMessage` で知らせる。判定の条件は
 `internal/worktree` の package doc、手で叩く形と sandbox の制約は [operations.md](operations.md) の
 「放置された worktree を回収する」。state は書かない。
-<!-- cc-premise: 2.1.302 worktrees 本体の sweep は subagent / background session の worktree だけを消し、foreground の keep は残す -->
+<!-- cc-premise: 2.1.310 worktrees 本体の sweep は subagent / background session の worktree だけを消し、foreground の keep は残す -->
 subagent の worktree (`claude agent` の lock) は Claude Code 本体の periodic sweep (`cleanupPeriodDays`) が消すので
 触らない。daemon の housekeeping にしなかったのは、daemon が rex の外では起きず、対象リポジトリの一覧も cwd も
 持たないため (#97)。

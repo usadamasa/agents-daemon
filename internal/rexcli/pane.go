@@ -37,7 +37,7 @@ type processResult struct {
 
 // claudeApp は Claude Code が OSC 7501 の app に書く値。2.1.302 のバイナリでは固定で、
 // rex preview.13 までが process 名から補っていた `claude` は preview.15 では来ない (#69)。
-// cc-premise: 2.1.302 osc7501 app=claude-code 固定
+// cc-premise: 2.1.310 osc7501 app=claude-code 固定
 // rex-premise: preview.20 program_status rex は record を補わず、Claude Code の自己申告だけを返す
 const claudeApp = "claude-code"
 

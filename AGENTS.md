@@ -75,7 +75,7 @@ devShell の go は `go.mod` の `go` 行と同じ系列 (`go_1_26`) にし、`G
 
 ## hook を書くときの決めごと
 
-<!-- cc-premise: 2.1.299 hooks SessionStart の stdout は context に入る。UserPromptSubmit の既定 timeout は 30 秒 -->
+<!-- cc-premise: 2.1.310 hooks SessionStart の stdout は context に入る。UserPromptSubmit の既定 timeout は 30 秒 -->
 
 - hook の stdout は Claude Code が読む。SessionStart の stdout は会話の context へ入るので、ログは stderr へ出す。
 - SessionStart は 5 秒以内に返す。`go build` のような重い処理は `nohup ... </dev/null >>log 2>&1 &` で detach する。

@@ -147,7 +147,8 @@ type input struct {
 	Snapshot *daemon.StatusSnapshot
 	Tasks    []tasklog.Task
 	Todos    []tasklog.TodoList
-	// Parking は domain の open のメモ。
+	// Parking は domain のメモ (status を問わない)。パーキングの列には open のものだけを出し、タスクとの照合には
+	// 全部を使う。
 	Parking []parking.Item
 	// Edges は domain のセッションをまたぐ辺 (internal/edge)。
 	Edges []edge.Edge
@@ -168,12 +169,24 @@ func build(in input) Board {
 	var panes map[string]*daemon.PaneStatus
 	b.DaemonRunning, b.UpdatedAt, panes = livePanes(in)
 	cards := collect(in, panes)
-	names := sessionNames(sessionIDs(cards, in.Parking), in.SessionNames)
+	open := openMemos(in.Parking)
+	names := sessionNames(sessionIDs(cards, open), in.SessionNames)
 	l := locator{locate: in.Locate, cache: map[string]gitrepo.Place{}}
 	b.Here, _ = l.row(in.CWD)
-	b.Rows = arrange(cards, in.Parking, panes, names, l)
+	b.Rows = arrange(cards, open, panes, names, l)
 	b.Graph = buildGraph(in, cards, panes, names)
 	return b
+}
+
+// openMemos は memos のうち open のもの。
+func openMemos(memos []parking.Item) []parking.Item {
+	open := []parking.Item{}
+	for _, m := range memos {
+		if m.Status == parking.StatusOpen {
+			open = append(open, m)
+		}
+	}
+	return open
 }
 
 // sessionIDs はカードとメモの source に出てくるセッション。

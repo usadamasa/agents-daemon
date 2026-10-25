@@ -83,10 +83,20 @@ type Node struct {
 	Downstream int `json:"downstream"`
 	// Parked はこのタスクの途中で置かれた open のメモの数。
 	Parked int `json:"parked"`
+	// Memos はこのタスクが扱うメモ (description に id が書かれたもの、書かれた順)。status を問わず照合し、
+	// 消えたメモの id は落とす。
+	Memos []MemoRef `json:"memos"`
 	// BlockedBy は上流をたどった原因の鎖 (近い順)。完了していない上流を、止まっているもの、進行中のものの順に選ぶ。
 	BlockedBy []string `json:"blocked_by"`
 	// Deadlock は待ちが輪になっていて、たどると自分へ戻ってくるか。
 	Deadlock bool `json:"deadlock"`
+}
+
+// MemoRef はタスクが扱うメモ 1 つ。
+type MemoRef struct {
+	ID     string `json:"id"`
+	Title  string `json:"title"`
+	Status string `json:"status"`
 }
 
 // Link は辺 1 本 (before が済まないと after を始められない)。
@@ -324,6 +334,7 @@ func (g *graphBuilder) finish() Graph {
 	open := func(key string) bool { return g.nodes[key].State != StateCompleted }
 	rankOf := func(key string) int { return rank(g.nodes[key].State) }
 	out := Graph{Nodes: make([]Node, 0, len(g.nodes)), Links: g.links, LongestChain: []string{}}
+	memos := g.mentionedMemos()
 	for key, n := range g.nodes {
 		down, cyclic := a.Reach(key)
 		n.Depth = a.Depth(key)
@@ -331,6 +342,10 @@ func (g *graphBuilder) finish() Graph {
 		n.Deadlock = cyclic
 		n.BlockedBy = a.Cause(key, open, rankOf)
 		n.Parked = parked(*n, g.in.Parking)
+		n.Memos = memos[key]
+		if n.Memos == nil {
+			n.Memos = []MemoRef{}
+		}
 		out.Nodes = append(out.Nodes, *n)
 	}
 	sort.Slice(out.Nodes, func(i, j int) bool {
@@ -401,6 +416,25 @@ func rank(state string) int {
 	}
 }
 
+// mentionedMemos はタスクのノードの Key → description に id が書かれたメモ。メモの側にタスクを書き戻さず、
+// ボードを組むたびにここで照合する。
+func (g *graphBuilder) mentionedMemos() map[string][]MemoRef {
+	byID := map[string]parking.Item{}
+	for _, m := range g.in.Parking {
+		byID[m.ID] = m
+	}
+	out := map[string][]MemoRef{}
+	for _, t := range g.in.Tasks {
+		for _, id := range parking.MentionedIDs(t.Description) {
+			if m, ok := byID[id]; ok {
+				key := t.SessionID + "/" + t.ID
+				out[key] = append(out[key], MemoRef{ID: m.ID, Title: m.Title, Status: m.Status})
+			}
+		}
+	}
+	return out
+}
+
 // parked はノードのタスクの途中で置かれた open のメモの数。タスクを持たないノードは、タスクを指さずに
 // そのセッションが置いたメモを数える。
 func parked(n Node, memos []parking.Item) int {
@@ -413,6 +447,9 @@ func parked(n Node, memos []parking.Item) int {
 	}
 	count := 0
 	for _, m := range memos {
+		if m.Status != parking.StatusOpen {
+			continue
+		}
 		for _, s := range m.Sources {
 			if s.SessionID == n.SessionID && s.TaskID == taskID {
 				count++

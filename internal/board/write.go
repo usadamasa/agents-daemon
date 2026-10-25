@@ -40,7 +40,7 @@ func Write(w io.Writer, p apppath.Paths, v Viewer) error {
 	if err != nil {
 		return err
 	}
-	memos, err := parking.New(p.StateDir()).Find(d, "", parking.StatusOpen)
+	memos, err := parking.New(p.StateDir()).Find(d, "", "")
 	if err != nil {
 		return err
 	}

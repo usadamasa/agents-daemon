@@ -33,7 +33,7 @@ function output(stdout: string, exitCode = 0, stderr = ''): ProcessRunResult {
   return { exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false }
 }
 
-const STATUS = [BIN, 'status', '--board', '--session', 'SELF', '--cwd', CWD]
+const STATUS = [BIN, 'status', '--board', '--cwd', CWD]
 
 function item(id: string) {
   return { id, kind: 'aside', title: 't', sources: [{ session_id: 'SELF', session: 'self', live: true, at: '2026-10-19T01:00:00Z' }] }
@@ -42,7 +42,6 @@ function item(id: string) {
 // board は status --board の答え。here の行の parking がこの repo の open のメモ (count 個)。
 function board(count: number) {
   return {
-    domain: 'home',
     daemon_running: true,
     columns: [],
     here: CWD,

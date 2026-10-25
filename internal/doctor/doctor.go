@@ -1,5 +1,5 @@
 // Package doctor は `doctor` サブコマンド (daemon が動作するための前提条件の診断) の実装を提供する。
-// 多重化ツールへの到達性、pane の見え方、rex CLI の前提、statusline の state、設定、domain、daemon の稼働、
+// 多重化ツールへの到達性、pane の見え方、rex CLI の前提、statusline の state、設定、daemon の稼働、
 // peer messaging、解決済みパスを Report に集めてから書く。文字の出力 (write) と `--json` の出力が同じ判定を
 // 見るためで、JSON の形は Report の json tag が決める。他の読むだけの診断 (inspect / status / logs) は internal/verify。
 package doctor
@@ -19,7 +19,6 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/config"
 	"github.com/usadamasa/agents-daemon/internal/daemon/state"
 	"github.com/usadamasa/agents-daemon/internal/detect"
-	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/ratelimit"
 )
@@ -42,7 +41,6 @@ type Report struct {
 	Premises      *PremisesReport      `json:"premises,omitempty"`
 	RateLimits    *RateLimitsReport    `json:"rate_limits,omitempty"`
 	Config        *ConfigReport        `json:"config,omitempty"`
-	Domain        *DomainReport        `json:"domain,omitempty"`
 	Daemon        *DaemonReport        `json:"daemon,omitempty"`
 	PeerMessaging *PeerMessagingReport `json:"peer_messaging,omitempty"`
 	Paths         *PathsReport         `json:"paths,omitempty"`
@@ -136,23 +134,6 @@ type ConfigFieldReport struct {
 	Differs bool `json:"differs_from_default"`
 }
 
-// DomainReport は私用と業務の境界の判定。
-type DomainReport struct {
-	ConfigError string        `json:"config_error,omitempty"`
-	Fallback    domain.Domain `json:"fallback"`
-	HomePaths   []string      `json:"home_paths"`
-	// Dropped は homePaths のうち絶対パスでも ~/ 始まりでもないため無視した件数。
-	Dropped int                `json:"dropped_home_paths"`
-	Panes   []PaneDomainReport `json:"panes"`
-}
-
-// PaneDomainReport は Claude agent の pane の cwd の判定。
-type PaneDomainReport struct {
-	PaneID string        `json:"pane_id"`
-	Domain domain.Domain `json:"domain"`
-	CWD    string        `json:"cwd"`
-}
-
 // DaemonReport は PID ファイルと status.json から見た daemon の稼働状況。
 type DaemonReport struct {
 	Running       bool                  `json:"running"`
@@ -217,7 +198,6 @@ func Collect(ctx context.Context, in Input) (Report, error) {
 	rep.Premises = collectPremises(ctx, in.Premises, in.Getenv)
 	rep.RateLimits = collectRateLimitStates(in.Paths, panes, in.Now)
 	rep.Config = collectConfigState(in.Paths)
-	rep.Domain = collectDomain(in.Paths, panes, in.Getenv("HOME"))
 	rep.Daemon = collectDaemonState(in.Paths, in.Now)
 	rep.PeerMessaging = collectPeerMessaging(in.Getenv)
 	rep.Paths = collectPaths(in.Paths)
@@ -374,8 +354,6 @@ func configFields(cfg, def config.Config) []ConfigFieldReport {
 		{"customPatterns", cfg.CustomPatterns, def.CustomPatterns},
 		{"idleShutdownMinutes", cfg.IdleShutdownMinutes, def.IdleShutdownMinutes},
 		{"deferToNativeAutoContinue", cfg.DeferToNativeAutoContinue, def.DeferToNativeAutoContinue},
-		{"homePaths", cfg.HomePaths, def.HomePaths},
-		{"defaultDomain", cfg.DefaultDomain, def.DefaultDomain},
 	}
 	out := make([]ConfigFieldReport, 0, len(raw))
 	for _, r := range raw {
@@ -384,31 +362,6 @@ func configFields(cfg, def config.Config) []ConfigFieldReport {
 		})
 	}
 	return out
-}
-
-// collectDomain は config の homePaths と defaultDomain から、Claude agent の pane の cwd を
-// 私用と業務のどちらに判定するかを集める。判定を誤ると業務のものが私用の側に混ざるので、
-// 設定を書いたら pane ごとの結果をここで確かめる。
-func collectDomain(p apppath.Paths, panes []multiplexer.Pane, home string) *DomainReport {
-	rep := &DomainReport{Panes: []PaneDomainReport{}}
-	cfg, err := config.Load(p.ConfigFile())
-	if err != nil {
-		rep.ConfigError = err.Error()
-	}
-	c := domain.New(home, cfg.HomePaths, cfg.DefaultDomain)
-	rep.Fallback = c.Fallback()
-	rep.HomePaths = c.HomePaths()
-	if rep.HomePaths == nil {
-		rep.HomePaths = []string{}
-	}
-	rep.Dropped = len(cfg.HomePaths) - len(c.HomePaths())
-	for _, pane := range panes {
-		if !multiplexer.IsClaudeAgent(pane) {
-			continue
-		}
-		rep.Panes = append(rep.Panes, PaneDomainReport{PaneID: pane.PaneID, Domain: c.Classify(pane.CWD), CWD: pane.CWD})
-	}
-	return rep
 }
 
 // collectDaemonState は PID ファイルと status.json から daemon の稼働状況を集める。

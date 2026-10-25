@@ -31,7 +31,7 @@ func mkdirs(t *testing.T, dirs ...string) {
 	}
 }
 
-// add は両端の cwd から domain と repo を決めて辺を書く。linked worktree の cwd も main worktree の repo になる。
+// add は両端の cwd から repo を決めて辺を書く。linked worktree の cwd も main worktree の repo になる。
 // 同じ辺の二重登録は created = false で、辺は増えない。
 func TestEdgeAddListRm(t *testing.T) {
 	root := parkTestEnv(t)
@@ -49,7 +49,7 @@ func TestEdgeAddListRm(t *testing.T) {
 		t.Fatalf("add の JSON を読めない: %v\n%s", err, out)
 	}
 	e := added.Edge
-	if !added.Created || e.Domain != "home" || e.Before.Repo != gitrepo.RepoKey(repo) || e.After.Repo != other || e.Note != "段 4 の後" {
+	if !added.Created || e.Before.Repo != gitrepo.RepoKey(repo) || e.After.Repo != other || e.Note != "段 4 の後" {
 		t.Errorf("added = %+v", added)
 	}
 	out, err = runEdge(t, append([]string{"add"}, args...)...)
@@ -81,9 +81,6 @@ func TestEdgeAddListRm(t *testing.T) {
 	if got := list("--cwd", other, "--ref", "session:nobody"); got == nil || len(got) != 0 {
 		t.Errorf("--ref で絞れていない: %+v", got)
 	}
-	if got := list("--cwd", filepath.Join(root, "work")); len(got) != 0 {
-		t.Errorf("業務の側に私用の辺が出た: %+v", got)
-	}
 
 	out, err = runEdge(t, append([]string{"rm"}, args...)...)
 	if err != nil {
@@ -98,43 +95,12 @@ func TestEdgeAddListRm(t *testing.T) {
 	}
 }
 
-// list の domain は --session の記録が業務の側にあれば、--cwd が私用でも業務になる (status --board と同じ)。
-func TestEdgeList_sessionTiltedToWork(t *testing.T) {
-	root := parkTestEnv(t)
-	home := filepath.Join(root, "src", "home", "a")
-	work := filepath.Join(root, "work", "b")
-	mkdirs(t, home, work)
-	if _, err := runEdge(t, "add", "--before", "session:a", "--before-cwd", work, "--after", "session:b", "--after-cwd", work); err != nil {
-		t.Fatal(err)
-	}
-	writeTaskRecord(t, root, "work", "s1", `{"id": "1", "subject": "a", "status": "in_progress", "session_id": "s1"}`)
-
-	for name, tc := range map[string]struct {
-		args []string
-		want int
-	}{
-		"私用の cwd":     {[]string{"--cwd", home}, 0},
-		"業務に倒したセッション": {[]string{"--cwd", home, "--session", "s1"}, 1},
-	} {
-		out, err := runEdge(t, append([]string{"list"}, tc.args...)...)
-		if err != nil {
-			t.Fatalf("%s: %v", name, err)
-		}
-		var edges []edge.Edge
-		if err := json.Unmarshal([]byte(out), &edges); err != nil || len(edges) != tc.want {
-			t.Errorf("%s: edges = %+v, want %d 件 (%v)", name, edges, tc.want, err)
-		}
-	}
-}
-
-// 私用と業務をまたぐ辺は書かない。端点の cwd は両方要る。
+// 端点の cwd は両方要る。
 func TestEdgeAdd_refused(t *testing.T) {
 	root := parkTestEnv(t)
 	home := filepath.Join(root, "src", "home", "a")
-	work := filepath.Join(root, "work", "b")
-	mkdirs(t, home, work)
+	mkdirs(t, home)
 	for name, args := range map[string][]string{
-		"私用と業務をまたぐ":     {"--before", "session:a", "--before-cwd", home, "--after", "session:b", "--after-cwd", work},
 		"after-cwd が無い": {"--before", "session:a", "--before-cwd", home, "--after", "session:b"},
 		"参照の種類が範囲外":     {"--before", "branch:a", "--before-cwd", home, "--after", "session:b", "--after-cwd", home},
 	} {

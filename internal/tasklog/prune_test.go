@@ -5,8 +5,6 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
-
-	"github.com/usadamasa/agents-daemon/internal/domain"
 )
 
 func setMtime(t *testing.T, path string, mtime time.Time) {
@@ -18,8 +16,8 @@ func setMtime(t *testing.T, path string, mtime time.Time) {
 
 func TestPrune(t *testing.T) {
 	s := New(t.TempDir())
-	ingest(t, s, allHome, "task-create-alpha", "task-create-beta", "task-update-in-progress", "task-update-completed")
-	dir := filepath.Join(s.Dir, "home", fixtureSession)
+	ingest(t, s, "task-create-alpha", "task-create-beta", "task-update-in-progress", "task-update-completed")
+	dir := filepath.Join(s.Dir, fixtureSession)
 	now := time.Now()
 
 	// alpha (完了) は 1 日を過ぎ、beta (未完了) は 1 日を過ぎたが 1 週間は経っていない。
@@ -29,7 +27,7 @@ func TestPrune(t *testing.T) {
 	if err != nil || removed != 1 {
 		t.Fatalf("Prune() = %d, %v, want 1 件 (完了したタスクだけ)", removed, err)
 	}
-	if got := byID(t, s, domain.Home); len(got) != 1 || got["2"].ID != "2" {
+	if got := byID(t, s); len(got) != 1 || got["2"].ID != "2" {
 		t.Errorf("残ったタスク = %+v, want 2 だけ", got)
 	}
 

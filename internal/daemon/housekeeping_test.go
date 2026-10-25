@@ -10,7 +10,6 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/applog"
 	"github.com/usadamasa/agents-daemon/internal/boardlog"
 	"github.com/usadamasa/agents-daemon/internal/daemon/limitlog"
-	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
 	"github.com/usadamasa/agents-daemon/internal/parking"
@@ -54,20 +53,20 @@ func TestHousekeep(t *testing.T) {
 
 		// タスクの記録は 1 週間更新されなければ消える (保持期間の細部は internal/tasklog のテスト)。
 		r.tasks = tasklog.New(dir)
-		taskFile := filepath.Join(r.tasks.Dir, "home", "s1", "1.json")
+		taskFile := filepath.Join(r.tasks.Dir, "s1", "1.json")
 		touchAged(t, taskFile, 8*24*time.Hour, now)
 		// パーキングは 90 日更新されなければ消える (status ごとの期間は internal/parking のテスト)。
 		r.parking = parking.New(dir)
-		parkFile := filepath.Join(r.parking.Dir, "home", "p1.json")
+		parkFile := filepath.Join(r.parking.Dir, "p1.json")
 		touchAged(t, parkFile, 91*24*time.Hour, now)
 		// 辺は 1 週間更新されなければ消える (internal/edge のテスト)。
 		r.edges = edge.New(dir)
-		edgeFile := filepath.Join(r.edges.Dir, "home", "e1.json")
+		edgeFile := filepath.Join(r.edges.Dir, "e1.json")
 		touchAged(t, edgeFile, 8*24*time.Hour, now)
 		// ボードの経路のログは daemon.log と同じ 7 日で消す。
-		r.boardLogs = boardlog.Paths(dir)
-		boardOld := applog.RotatedPath(boardlog.Path(dir, domain.Work), "2026-08-01")
-		boardFresh := applog.RotatedPath(boardlog.Path(dir, domain.Home), "2026-08-27")
+		r.boardLog = boardlog.Path(dir)
+		boardOld := applog.RotatedPath(r.boardLog, "2026-08-01")
+		boardFresh := applog.RotatedPath(r.boardLog, "2026-08-27")
 		touchAged(t, boardOld, 20*24*time.Hour, now)
 		touchAged(t, boardFresh, 24*time.Hour, now)
 		// 上限の出来事の記録は 30 日で消す (internal/daemon/limitlog のテスト)。

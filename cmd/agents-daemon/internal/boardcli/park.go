@@ -23,19 +23,19 @@ func Commands() []*cobra.Command {
 }
 
 // newParkCmd は `agents-daemon park add|set|list|discard|adopt` を組み立てる (internal/parking)。
-// domain と repo は --cwd (既定は今の cwd) から決め、結果は JSON で stdout に出す。
+// repo は --cwd (既定は今の cwd) から決め、結果は JSON で stdout に出す。
 func newParkCmd() *cobra.Command {
 	var cwd string
 	cmd := &cobra.Command{Use: "park", Short: "パーキングロット (脇のメモ) を置く・書き換える・一覧する", Annotations: jsonflag.Supported()}
-	cmd.PersistentFlags().StringVar(&cwd, "cwd", "", "置いた (開いた) セッションの cwd。domain と repo をここから決める (既定は今の cwd)")
+	cmd.PersistentFlags().StringVar(&cwd, "cwd", "", "置いたセッションの cwd。repo をここから決める (既定は今の cwd)")
 
 	add := &cobra.Command{
 		Use:   "add",
 		Short: "stdin の JSON (kind、title、detail、files、default_taken、session_id) でメモを置き、{created, item} を出す",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withPlacer(cmd, cwd, func(paths apppath.Paths, p tasklog.Placer, cwd string) (any, error) {
-				return parkAdd(paths.StateDir(), parking.New(paths.StateDir()), cmd.InOrStdin(), cwd, p, time.Now())
+			return withState(cmd, cwd, func(paths apppath.Paths, cwd string) (any, error) {
+				return parkAdd(paths.StateDir(), parking.New(paths.StateDir()), cmd.InOrStdin(), cwd, tasklog.New(paths.StateDir()), time.Now())
 			})
 		},
 	}
@@ -47,8 +47,8 @@ func newParkCmd() *cobra.Command {
 			"ボードの mod はメモを渡す前に `--status handed --from open` で取り、届かなければ `--status open --from handed` で戻す。",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withPlacer(cmd, cwd, func(paths apppath.Paths, p tasklog.Placer, cwd string) (any, error) {
-				return parkSet(paths.StateDir(), parking.New(paths.StateDir()), p, session, cwd, args[0], status, from, time.Now())
+			return withState(cmd, cwd, func(paths apppath.Paths, _ string) (any, error) {
+				return parkSet(paths.StateDir(), parking.New(paths.StateDir()), session, args[0], status, from, time.Now())
 			})
 		},
 	}
@@ -58,14 +58,14 @@ func newParkCmd() *cobra.Command {
 	var repo, listStatus, task string
 	list := &cobra.Command{
 		Use:   "list",
-		Short: "cwd の domain のメモを JSON の配列で出す",
+		Short: "メモを JSON の配列で出す",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if task != "" && session == "" {
 				return errors.New("--task には --session が要る")
 			}
-			return withPark(cmd, cwd, func(s parking.Store, p tasklog.Placer, cwd string) (any, error) {
-				items, err := s.Find(p.Domain(session, cwd), repo, listStatus)
+			return withState(cmd, cwd, func(paths apppath.Paths, _ string) (any, error) {
+				items, err := parking.New(paths.StateDir()).Find(repo, listStatus)
 				if err != nil || task == "" {
 					return items, err
 				}
@@ -82,8 +82,8 @@ func newParkCmd() *cobra.Command {
 		Short: "最後に置かれてから --days 日より経った open のメモを discarded にし、捨てたメモを JSON の配列で出す",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withPlacer(cmd, cwd, func(paths apppath.Paths, p tasklog.Placer, cwd string) (any, error) {
-				return parkDiscard(paths.StateDir(), parking.New(paths.StateDir()), p, session, cwd, days, time.Now())
+			return withState(cmd, cwd, func(paths apppath.Paths, _ string) (any, error) {
+				return parkDiscard(paths.StateDir(), parking.New(paths.StateDir()), session, days, time.Now())
 			})
 		},
 	}
@@ -96,29 +96,22 @@ func newParkCmd() *cobra.Command {
 			"daemon が動いていない、status.json が古い、pane がある、のどれかなら移さない。",
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withPlacer(cmd, cwd, func(paths apppath.Paths, p tasklog.Placer, cwd string) (any, error) {
+			return withState(cmd, cwd, func(paths apppath.Paths, _ string) (any, error) {
 				exited := func(sessionID string, after time.Time) error { return verify.SessionExited(paths, sessionID, after) }
-				return parkAdopt(paths.StateDir(), parking.New(paths.StateDir()), p, session, cwd, args[0], args[1], exited, time.Now())
+				return parkAdopt(paths.StateDir(), parking.New(paths.StateDir()), tasklog.New(paths.StateDir()), session, args[0], args[1], exited, time.Now())
 			})
 		},
 	}
 	for _, c := range []*cobra.Command{set, list, discard, adopt} {
-		c.Flags().StringVar(&session, "session", "", "開いたセッションの ID。記録が業務の側にあれば業務のメモを扱う (status --board と同じ)")
+		c.Flags().StringVar(&session, "session", "", "操作したセッションの ID (ログに添える。list では --task のセッション)")
 	}
 	cmd.AddCommand(add, set, list, discard, adopt)
 	return cmd
 }
 
-// withPark は置き場と domain の決め方を環境から組んで fn を呼び、結果を JSON で stdout に書く。
-func withPark(cmd *cobra.Command, cwd string, fn func(parking.Store, tasklog.Placer, string) (any, error)) error {
-	return withPlacer(cmd, cwd, func(p apppath.Paths, placer tasklog.Placer, cwd string) (any, error) {
-		return fn(parking.New(p.StateDir()), placer, cwd)
-	})
-}
-
-// withPlacer は domain の決め方を環境から組んで fn を呼び、結果を JSON で stdout に書く。
-// cwd が空なら今の cwd にする。park と edge が使う。
-func withPlacer(cmd *cobra.Command, cwd string, fn func(apppath.Paths, tasklog.Placer, string) (any, error)) error {
+// withState は置き場を環境から決めて fn を呼び、結果を JSON で stdout に書く。
+// cwd が空なら今の cwd にする。park、edge、spawn が使う。
+func withState(cmd *cobra.Command, cwd string, fn func(apppath.Paths, string) (any, error)) error {
 	p, err := apppath.FromEnv()
 	if err != nil {
 		return err
@@ -128,7 +121,7 @@ func withPlacer(cmd *cobra.Command, cwd string, fn func(apppath.Paths, tasklog.P
 			return err
 		}
 	}
-	v, err := fn(p, tasklog.LoadPlacer(p, os.Getenv("HOME")), cwd)
+	v, err := fn(p, cwd)
 	if err != nil {
 		return err
 	}

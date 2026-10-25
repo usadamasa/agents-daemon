@@ -4,7 +4,7 @@ import type { Engine } from 'claude-code/testing'
 
 const BIN = '/home/u/.cache/agents-daemon/bin/agents-daemon'
 const CWD = '/src/home/agents-daemon'
-const STATUS = [BIN, 'status', '--board', '--session', 'SELF', '--cwd', CWD]
+const STATUS = [BIN, 'status', '--board', '--cwd', CWD]
 
 // card はボードの parking のメモ 1 つ。by はメモを置いたセッションの ID。
 function card(id: string, title: string, files: string[], by: string[] = ['OTHER'], extra: Record<string, unknown> = {}) {
@@ -20,7 +20,6 @@ function card(id: string, title: string, files: string[], by: string[] = ['OTHER
 
 function board(parking: unknown[]) {
   return {
-    domain: 'home',
     daemon_running: true,
     columns: [],
     here: CWD,

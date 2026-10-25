@@ -1,7 +1,7 @@
 // Package edge はセッションをまたぐ作業の依存 (DAG の辺、#134) を XDG state 配下に置く。辺の正は作業を渡す側
 // (workspace) が `agents-daemon edge add` で書いたもの。読むのは `edge list` と、ボードの DAG を組む internal/board。
 //
-//	edges/<domain>/<id>.json   1 本 1 ファイル
+//	edges/<id>.json   1 本 1 ファイル
 //
 // 辺は「before が済まないと after を始められない」を表す。端点は種類付きの参照と、その作業の cwd から求めた
 // repo (ボードの行と同じ鍵) を持つ。参照の種類:
@@ -12,7 +12,7 @@
 //	task:<session_id>/<task_id>     ボードのタスクのノードそのもの
 //
 // id は before と after の参照から決めるので、同じ辺の二重登録は同じファイルを書き直すだけになる
-// (Idempotent Receiver)。両端の domain が違う辺は書かない (私用と業務を混ぜない、internal/domain)。
+// (Idempotent Receiver)。
 package edge
 
 import (
@@ -28,7 +28,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
@@ -51,12 +50,11 @@ type Endpoint struct {
 
 // Edge は辺 1 本の記録。
 type Edge struct {
-	ID        string        `json:"id"`
-	Domain    domain.Domain `json:"domain"`
-	Before    Endpoint      `json:"before"`
-	After     Endpoint      `json:"after"`
-	Note      string        `json:"note,omitempty"`
-	CreatedAt time.Time     `json:"created_at"`
+	ID        string    `json:"id"`
+	Before    Endpoint  `json:"before"`
+	After     Endpoint  `json:"after"`
+	Note      string    `json:"note,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // Added は Add の結果。同じ辺が既にあったかを Created で分ける。
@@ -82,17 +80,17 @@ func New(stateDir string) Store {
 }
 
 // Add は辺を書く。同じ辺があれば created_at を残して書き直す (note と repo は後から書いた側)。
-func (s Store) Add(before, after Endpoint, note string, classify func(string) domain.Domain, now time.Time) (Added, error) {
-	d, id, err := s.resolve(&before, &after, classify)
+func (s Store) Add(before, after Endpoint, note string, now time.Time) (Added, error) {
+	id, err := s.resolve(&before, &after)
 	if err != nil {
 		return Added{}, err
 	}
-	dir := filepath.Join(s.Dir, string(d))
+	dir := s.Dir
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return Added{}, fmt.Errorf("edges の作成に失敗: %w", err)
 	}
 	before.Repo, after.Repo = gitrepo.RepoKey(before.CWD), gitrepo.RepoKey(after.CWD)
-	e := Edge{ID: id, Domain: d, Before: before, After: after, Note: strings.TrimSpace(note), CreatedAt: now}
+	e := Edge{ID: id, Before: before, After: after, Note: strings.TrimSpace(note), CreatedAt: now}
 	existing, found := readEdge(filepath.Join(dir, id+".json"))
 	if found {
 		e.CreatedAt = existing.CreatedAt
@@ -104,12 +102,12 @@ func (s Store) Add(before, after Endpoint, note string, classify func(string) do
 }
 
 // Remove は before と after の辺を消す。無い辺は消さずに Removed を false で返す。
-func (s Store) Remove(before, after Endpoint, classify func(string) domain.Domain) (Removed, error) {
-	d, id, err := s.resolve(&before, &after, classify)
+func (s Store) Remove(before, after Endpoint) (Removed, error) {
+	id, err := s.resolve(&before, &after)
 	if err != nil {
 		return Removed{}, err
 	}
-	err = os.Remove(filepath.Join(s.Dir, string(d), id+".json"))
+	err = os.Remove(filepath.Join(s.Dir, id+".json"))
 	if errors.Is(err, os.ErrNotExist) {
 		return Removed{ID: id}, nil
 	}
@@ -119,14 +117,14 @@ func (s Store) Remove(before, after Endpoint, classify func(string) domain.Domai
 	return Removed{Removed: true, ID: id}, nil
 }
 
-// Find は domain の辺のうち、どちらかの端点が repo に、どちらかの端点が ref に一致するものを登録の順に返す。
+// Find は辺のうち、どちらかの端点が repo に、どちらかの端点が ref に一致するものを登録の順に返す。
 // 空の条件は絞らない。該当なしは空の配列。壊れたファイルは読み飛ばす。
-func (s Store) Find(d domain.Domain, repo, ref string) ([]Edge, error) {
+func (s Store) Find(repo, ref string) ([]Edge, error) {
 	edges := []Edge{}
 	if s.Dir == "" {
 		return edges, nil
 	}
-	dir := filepath.Join(s.Dir, string(d))
+	dir := s.Dir
 	entries, err := os.ReadDir(dir)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, err
@@ -152,24 +150,20 @@ func (s Store) Find(d domain.Domain, repo, ref string) ([]Edge, error) {
 	return edges, nil
 }
 
-// resolve は両端を検証して整え (参照の前後の空白を落とす)、辺の domain と id を返す。
-func (s Store) resolve(before, after *Endpoint, classify func(string) domain.Domain) (domain.Domain, string, error) {
+// resolve は両端を検証して整え (参照の前後の空白を落とす)、辺の id を返す。
+func (s Store) resolve(before, after *Endpoint) (string, error) {
 	if s.Dir == "" {
-		return "", "", errors.New("edges の置き場所が無い")
+		return "", errors.New("edges の置き場所が無い")
 	}
 	for _, ep := range []*Endpoint{before, after} {
 		if err := normalizeEndpoint(ep); err != nil {
-			return "", "", err
+			return "", err
 		}
 	}
 	if before.Ref == after.Ref {
-		return "", "", fmt.Errorf("%s から自分自身への辺は書かない", before.Ref)
+		return "", fmt.Errorf("%s から自分自身への辺は書かない", before.Ref)
 	}
-	d := classify(before.CWD)
-	if other := classify(after.CWD); other != d {
-		return "", "", fmt.Errorf("%s (%s) と %s (%s) は私用と業務をまたぐので書かない", before.Ref, d, after.Ref, other)
-	}
-	return d, edgeID(before.Ref, after.Ref), nil
+	return edgeID(before.Ref, after.Ref), nil
 }
 
 // normalizeEndpoint は参照の前後の空白を落とし、参照の形と cwd が絶対パスであることを確かめる。

@@ -150,17 +150,15 @@ type Input struct {
 	Cards []Card
 	Tasks []tasklog.Task
 	Todos []tasklog.TodoList
-	// Edges は domain のセッションをまたぐ辺 (internal/edge)。
+	// Edges はセッションをまたぐ辺 (internal/edge)。
 	Edges []edge.Edge
-	// Memos は domain のメモ (status を問わない)。タスクの description との照合に使う。Open はそのうち open のもの。
+	// Memos はメモ (status を問わない)。タスクの description との照合に使う。Open はそのうち open のもの。
 	Memos []parking.Item
 	Open  []parking.Item
 	// Panes はボードに載せる生きているセッションの pane (session ID ごと)。
 	Panes map[string]*state.PaneStatus
 	// SessionNames は session ID → セッション名 (statusline の session_name)。
 	SessionNames map[string]string
-	// Elsewhere はセッションの記録がほかの domain の側にあるか。nil なら見ない。
-	Elsewhere func(sessionID string) bool
 }
 
 // builder はグラフを組む途中の状態。
@@ -306,15 +304,14 @@ func (g *builder) placeholder(ep edge.Endpoint, title, sessionID, state string) 
 }
 
 // latestSession は名前のセッションのうち最後に動いたもの (pane があればそれ、無ければタスクの更新が新しいもの)。
-// その名前のセッションが無ければ空。記録がほかの domain の側にあるセッションは選ばない (名前の記録は domain を
-// またいで 1 つなので)。
+// その名前のセッションが無ければ空。
 func (g *builder) latestSession(name string) string {
 	var best string
 	var bestAt time.Time
 	bestLive := false
 	ids := make([]string, 0)
 	for id, n := range g.in.SessionNames {
-		if n == name && (g.in.Elsewhere == nil || !g.in.Elsewhere(id)) {
+		if n == name {
 			ids = append(ids, id)
 		}
 	}

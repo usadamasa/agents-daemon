@@ -117,7 +117,6 @@ export type BoardGraph = {
 }
 
 export type BoardData = {
-  domain: 'home' | 'work'
   daemon_running: boolean
   updated_at?: string
   columns: BoardColumn[]

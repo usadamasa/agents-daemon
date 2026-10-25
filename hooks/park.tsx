@@ -5,7 +5,7 @@ import { daemonBin } from './daemon-bin'
 import { logEvent } from './log'
 
 // パーキングロット (#89) の置く側 (#121 の段 5)。model が呼べる park の tool を登録し、呼ばれたら
-// `agents-daemon park add` に JSON を stdin で渡す。domain と repo はバイナリが --cwd と session_id から決める。
+// `agents-daemon park add` に JSON を stdin で渡す。repo はバイナリが --cwd から決める。
 // cc-premise: 2.1.302 mods tool.register / tool.call の API で書いた
 
 const TOOL = 'park'

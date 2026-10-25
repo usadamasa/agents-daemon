@@ -6,9 +6,6 @@
 // 生きているセッションはカード 1 枚で出し、行から消えないようにする。見出しは今の作業 (program_status の msg)、
 // 無ければセッション名 (名前も無ければ cwd の末尾)。
 //
-// ボードは 1 つの domain しか描かない。開いたセッション自身の domain で、ほかの domain のタスクとセッションは
-// 載せない (私用と業務を混ぜない)。
-//
 // 読み手は plugin の mod (hooks/board.tsx) で、`agents-daemon status --board` の JSON を数秒ごとに読んで pane に描く。
 // 行と列の分け方と並び順はここが持ち、mod は受け取った順に描くだけにする (JSON を加工する処理は
 // バイナリに持たせる、という AGENTS.md の決めごとに合わせる)。
@@ -22,7 +19,6 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/board/graph"
 	"github.com/usadamasa/agents-daemon/internal/daemon/state"
-	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
@@ -125,8 +121,7 @@ type Row struct {
 
 // Board は `agents-daemon status --board` が出す JSON の全体。
 type Board struct {
-	Domain        domain.Domain `json:"domain"`
-	DaemonRunning bool          `json:"daemon_running"`
+	DaemonRunning bool `json:"daemon_running"`
 	// UpdatedAt は status.json の更新時刻。daemon が動いていないか、まだ書いていなければ無い。
 	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 	Columns   []Column   `json:"columns"`
@@ -140,7 +135,6 @@ type Board struct {
 
 // input はボードを組む材料。
 type input struct {
-	Domain domain.Domain
 	// CWD は開いたセッションの cwd (Board.Here の元)。
 	CWD string
 	// PID は動いている daemon の pid。0 なら動いていない。
@@ -148,16 +142,11 @@ type input struct {
 	Snapshot *state.StatusSnapshot
 	Tasks    []tasklog.Task
 	Todos    []tasklog.TodoList
-	// Parking は domain のメモ (status を問わない)。パーキングの列には open のものだけを出し、タスクとの照合には
+	// Parking はメモ (status を問わない)。パーキングの列には open のものだけを出し、タスクとの照合には
 	// 全部を使う。
 	Parking []parking.Item
-	// Edges は domain のセッションをまたぐ辺 (internal/edge)。
+	// Edges はセッションをまたぐ辺 (internal/edge)。
 	Edges []edge.Edge
-	// Classify は pane の cwd の domain を決める。
-	Classify func(cwd string) domain.Domain
-	// Elsewhere はセッションの記録がほかの domain の側にあるか。業務に倒したセッションを、cwd だけで
-	// 私用のボードに描かないために使う。nil なら見ない。
-	Elsewhere func(sessionID string) bool
 	// Locate は cwd の repo を決める。同じ cwd では 1 回だけ呼ぶ。
 	Locate func(cwd string) gitrepo.Place
 	// SessionNames は session ID → セッション名 (statusline の session_name、sessioncontext.ListSessionNames)。
@@ -166,7 +155,7 @@ type input struct {
 
 // build はボードを組む。
 func build(in input) Board {
-	b := Board{Domain: in.Domain, Columns: columns, Rows: []Row{}}
+	b := Board{Columns: columns, Rows: []Row{}}
 	var panes map[string]*state.PaneStatus
 	b.DaemonRunning, b.UpdatedAt, panes = livePanes(in)
 	cards := collect(in, panes)
@@ -184,7 +173,6 @@ func build(in input) Board {
 		Open:         open,
 		Panes:        panes,
 		SessionNames: in.SessionNames,
-		Elsewhere:    in.Elsewhere,
 	})
 	return b
 }
@@ -213,7 +201,7 @@ func sessionIDs(cards []placed, memos []parking.Item) map[string]bool {
 	return ids
 }
 
-// livePanes は daemon が動いているか、status.json の更新時刻、このボードに載せる生きているセッションの
+// livePanes は daemon が動いているか、status.json の更新時刻、生きているセッションの
 // pane (session ID ごと) を返す。前の daemon が残した status.json は使わない (status コマンドと同じ判断)。
 func livePanes(in input) (running bool, updatedAt *time.Time, panes map[string]*state.PaneStatus) {
 	panes = map[string]*state.PaneStatus{}
@@ -226,7 +214,7 @@ func livePanes(in input) (running bool, updatedAt *time.Time, panes map[string]*
 	updated := in.Snapshot.UpdatedAt
 	for i := range in.Snapshot.Panes {
 		p := &in.Snapshot.Panes[i]
-		if p.SessionID != "" && livePaneInDomain(in, p) {
+		if p.SessionID != "" {
 			panes[p.SessionID] = p
 		}
 	}
@@ -262,8 +250,7 @@ func collect(in input, panes map[string]*state.PaneStatus) []placed {
 
 // sessionSubject はタスクの無いセッションのカードの見出し。Claude Code が申告した今の作業 (作業中ならその作業、
 // ターンを終えたら要約、permission 待ちなら approve <tool>: ...) を出し、申告が無ければ (起動直後、古い record)
-// どのセッションかが分かるよう、セッション名 (name) か cwd の末尾にする。msg はタスクの subject と同じく漏れては
-// いけない情報で、ボードに載るのは自分の domain の pane だけ (livePaneInDomain)。
+// どのセッションかが分かるよう、セッション名 (name) か cwd の末尾にする。
 // cc-premise: 2.1.302 osc7501 msg は作業中の作業、ターン後の要約、permission 待ちの approve <tool>: <command>
 func sessionSubject(p *state.PaneStatus, name string) string {
 	switch {
@@ -327,18 +314,6 @@ type placed struct {
 	card   Card
 	status string
 	pane   *state.PaneStatus
-}
-
-// livePaneInDomain は pane のセッションをこのボードに載せるかを返す。記録がほかの domain の側にあれば
-// 載せず (業務に倒したセッション)、無ければ pane の cwd で決める。
-func livePaneInDomain(in input, p *state.PaneStatus) bool {
-	if in.Elsewhere != nil && in.Elsewhere(p.SessionID) {
-		return false
-	}
-	if in.Classify == nil {
-		return in.Domain == domain.Work
-	}
-	return in.Classify(p.CWD) == in.Domain
 }
 
 func taskCard(t tasklog.Task, all []tasklog.Task, p *state.PaneStatus) Card {

@@ -129,17 +129,17 @@ pane ごとに次を評価する。上限側の詳細は [rate-limit.md](rate-li
 | `$STATE/rate-limits/<session_id>.json` | `agents-daemon statusline` または `ingest-statusline` (利用者の statusline が呼ぶ) | statusline の描画ごと (`rate_limits.five_hour.resets_at` があるときだけ) | そのセッションの 5 時間 / 7 日ウィンドウの使用率と reset 時刻、観測時刻、session_id | daemon が 24 時間で消す |
 | `$STATE/context/<session_id>.json` | `agents-daemon statusline` または `ingest-statusline` (利用者の statusline が呼ぶ) | statusline の描画ごと | そのセッションの context 使用率、観測時刻、session_id、セッション名、多重化ツールの場所 | daemon が 7 日で消す |
 | `$STATE/cost/<YYYY-MM-DD>/<session_id>.json` | `agents-daemon statusline` (`CLAUDE_STATUSLINE_SPEND_CAP` があるとき) | statusline の描画ごと (累計が変わったときだけ書き直す) | そのセッションの累計 cost と前日までの繰り越し (`internal/statusline/spend`)。daemon は読まない | `statusline` がその日の最初の書き込みで 45 日より古い日を消す |
-| `$STATE/tasks/<domain>/<session_id>/<task_id>.json` と `…/todos.json` | `agents-daemon ingest-task` (PostToolUse hook `hooks/ingest-task.sh` が呼ぶ) | TaskCreate / TaskUpdate / TaskList / TodoWrite の呼び出しごと | タスク 1 つ (subject、status、blockedBy、session_id、cwd) と TodoWrite のリスト全体 (`internal/tasklog`)。`<domain>` は `home` か `work` (config の `homePaths` / `defaultDomain`)。読み手はタスクのボード (`status --board`、`internal/board`) | daemon が完了したタスクを 1 日、それ以外を 7 日 (更新が無ければ) で消す。`park adopt` (ボードの「パーキングへ移す」) がメモへ移したタスクを消す |
-| `$STATE/parking/<domain>/<id>.json` | `agents-daemon park add` / `park set` / `park discard` / `park adopt` | メモを置いたとき、status を書き換えたとき (まとめて捨てたときを含む)、終了したセッションのタスクをメモへ移したとき (kind `task`) | パーキングのメモ 1 つ (kind、title、detail、files、default_taken、repo、sources (session_id、置いたときの進行中の task_id、cwd、まとめたときに後から置いた側の detail、時刻)、status) (`internal/parking`)。repo はボードの行と同じ main worktree のパス。domain、repo、正規化した title が同じ open のメモには sources を足す。`.lock` は書き込みを直列にするロック | daemon が open を 90 日、handed / discarded を 7 日 (更新が無ければ) で消す。同じメモが置き直されると数え直す。`.lock` は消さない |
-| `$STATE/edges/<domain>/<id>.json` | `agents-daemon edge add` / `edge rm` (作業を渡す側が `agents-daemon:peer-sessions` skill の手順で呼ぶ。ボードの `Add blocker` / `Unlink` も) | 辺を書いたとき、消したとき | セッションをまたぐ辺 1 本 (before と after の端点 (参照、cwd、repo)、note、created_at) (`internal/edge`)。辺は「before が済まないと after を始められない」。id は向きを含めた両端の参照から決まり、同じ辺の登録し直しは同じファイルを書き直す。両端の domain が違う辺は書かない。読み手は `edge list` とボードの DAG (`status --board` の `graph`) | daemon が 7 日 (更新が無ければ) で消す。登録し直すと数え直す。`edge rm` が消す |
+| `$STATE/tasks/<session_id>/<task_id>.json` と `…/todos.json` | `agents-daemon ingest-task` (PostToolUse hook `hooks/ingest-task.sh` が呼ぶ) | TaskCreate / TaskUpdate / TaskList / TodoWrite の呼び出しごと | タスク 1 つ (subject、status、blockedBy、session_id、cwd) と TodoWrite のリスト全体 (`internal/tasklog`)。読み手はタスクのボード (`status --board`、`internal/board`) | daemon が完了したタスクを 1 日、それ以外を 7 日 (更新が無ければ) で消す。`park adopt` (ボードの「パーキングへ移す」) がメモへ移したタスクを消す |
+| `$STATE/parking/<id>.json` | `agents-daemon park add` / `park set` / `park discard` / `park adopt` | メモを置いたとき、status を書き換えたとき (まとめて捨てたときを含む)、終了したセッションのタスクをメモへ移したとき (kind `task`) | パーキングのメモ 1 つ (kind、title、detail、files、default_taken、repo、sources (session_id、置いたときの進行中の task_id、cwd、まとめたときに後から置いた側の detail、時刻)、status) (`internal/parking`)。repo はボードの行と同じ main worktree のパス。repo と正規化した title が同じ open のメモには sources を足す。`.lock` は書き込みを直列にするロック | daemon が open を 90 日、handed / discarded を 7 日 (更新が無ければ) で消す。同じメモが置き直されると数え直す。`.lock` は消さない |
+| `$STATE/edges/<id>.json` | `agents-daemon edge add` / `edge rm` (作業を渡す側が `agents-daemon:peer-sessions` skill の手順で呼ぶ。ボードの `Add blocker` / `Unlink` も) | 辺を書いたとき、消したとき | セッションをまたぐ辺 1 本 (before と after の端点 (参照、cwd、repo)、note、created_at) (`internal/edge`)。辺は「before が済まないと after を始められない」。id は向きを含めた両端の参照から決まり、同じ辺の登録し直しは同じファイルを書き直す。読み手は `edge list` とボードの DAG (`status --board` の `graph`) | daemon が 7 日 (更新が無ければ) で消す。登録し直すと数え直す。`edge rm` が消す |
 | `$STATE/daemon.lock` | daemon (`--ensure` も試しに開く) | 起動時に `flock(LOCK_EX|LOCK_NB)` で取り、寿命の間持つ | 空。起動の排他の対象で、lock を持つ process が daemon | 消さない (process の終了で OS が lock を解放する) |
 | `$STATE/daemon.pid` | daemon | lock を取った後に作成、終了時に自分の pid が書いてあれば削除 | 稼働中デーモンの PID (`status` / `doctor` / `stop` が読む) | daemon。`stop` が stale なものを消す |
 | `$STATE/status.json` | daemon | 毎 tick (既定 5 秒) | backend (rex)、監視中の pane 一覧と各 pane の自己申告 (`agent_status` と、あれば `agent_kind` / `agent_message`)・監視状態・試行回数・待機期限・直近の判定 | 上書き |
 | `$STATE/logs/daemon.log` | daemon | 報告に値する出来事があったときだけ | 上限検知と待ち時間、再開送信、ユーザーの自己再開、ゲート抑制、ネイティブへの譲り、エラー | rotate |
 | `$STATE/logs/daemon.log.YYYY-MM-DD` | daemon | 日付が変わって最初に書くとき | 前日までの `daemon.log` をそのまま退避したもの | daemon が 7 日で消す |
 | `$STATE/limit-events/<YYYY-MM-DD>.jsonl` | daemon | 上限の出来事 (検知して待機に入った、送った、抑制した、ネイティブに譲った、Enter 待ち、hard cap、prompt で見送り) で daemon.log に行を書くのと同じ遷移のとき | 1 出来事 1 行の JSON (`internal/daemon/limitlog`): 判定した画面そのもの (末尾 `readLines` 行)、分類 (kind)、outcome、Claude Code の自己申告 (record)、block の高さと screen (`size` / `modes`)、own と account の利用上限 state、`readLines` / `detectionTailLines`。読み方は verification.md「次に上限を踏んだとき」 | daemon が 30 日で消す |
-| `$STATE/logs/board-<domain>.log` | `agents-daemon ingest-task` / `park add` / `park set` / `park discard` / `park adopt` と、mod (`hooks/log.ts`) が呼ぶ `agents-daemon board-log` | タスクの記録、メモの操作、mod の出来事 (tool の登録の失敗、ボードの数と読み込みの失敗、送信の結果) があったとき。mod は同じ失敗と同じ数を書き直さない | ボードの経路の出来事を 1 行 1 件 (`internal/boardlog`、出来事の一覧は package doc)。session ID、task ID、メモの id、件数、失敗の理由だけで、subject、title、detail、送った文面は書かない。`<domain>` で分け、業務の出来事を私用の側に出さない。`logs --board` が読む | rotate |
-| `$STATE/logs/board-<domain>.log.YYYY-MM-DD` | 上と同じ | 日付が変わって最初に書くとき | 前日までの `board-<domain>.log` をそのまま退避したもの | daemon が 7 日で消す |
+| `$STATE/logs/board.log` | `agents-daemon ingest-task` / `park add` / `park set` / `park discard` / `park adopt` と、mod (`hooks/log.ts`) が呼ぶ `agents-daemon board-log` | タスクの記録、メモの操作、mod の出来事 (tool の登録の失敗、ボードの数と読み込みの失敗、送信の結果) があったとき。mod は同じ失敗と同じ数を書き直さない | ボードの経路の出来事を 1 行 1 件 (`internal/boardlog`、出来事の一覧は package doc)。session ID、task ID、メモの id、件数、失敗の理由だけで、subject、title、detail、送った文面は書かない。`logs --board` が読む | rotate |
+| `$STATE/logs/board.log.YYYY-MM-DD` | 上と同じ | 日付が変わって最初に書くとき | 前日までの `board.log` をそのまま退避したもの | daemon が 7 日で消す |
 | `$STATE/logs/build.log` | `hooks/build-daemon.sh` | SessionStart が build を起こしたとき | build の開始・完了・失敗 | 消さない (追記) |
 | `$STATE/logs/dream-harvest.log` | Stop hook が detach した `agents-daemon dream harvest` | 失敗したときだけ (成功は無音) | 時刻付きの失敗の行と stderr | 消さない (追記) |
 | `$STATE/dream/harvest/<YYYY-MM-DD>.jsonl` | `agents-daemon dream harvest` (Stop hook と手動) | Stop のたび | 1 セッション 1 行の transcript の要約 (PII 除去済み)。日付は ts_start | `dream harvest` が 90 日で消す |
@@ -152,9 +152,6 @@ pane ごとに次を評価する。上限側の詳細は [rate-limit.md](rate-li
 `$STATE` はデーモンが必要に応じて作る。消しても壊れない
 (次回の起動と次回の statusline 描画で再生成される)。
 
-旧版 (compact の自動化と ttl-guard を持っていた版) が書いていた `compact-state/` `compacted/` `cache/`
-`cache-ack/` `cache-idle-compacted/` は今の版では読みも消しもしない。残っていれば手で消す。
-
 静かな tick は**何も書かない**。ログが伸びていないことは、何も起きていないことを意味する。
 
 ### ログの rotate と自動削除
@@ -166,11 +163,11 @@ daemon の再起動を跨いで日付が変わっていた場合も、mtime か�
 退避する。退避先が既にあるとき (時計の巻き戻り等) は上書きせず、次の日付境界まで
 `daemon.log` へ追記し続ける。
 
-ボードの経路のログ (`board-<domain>.log`) も同じ規則で退避する。書くのは短命な CLI なので、1 行ごとに開いて閉じる。
+ボードの経路のログ (`board.log`) も同じ規則で退避する。書くのは短命な CLI なので、1 行ごとに開いて閉じる。
 並行するプロセスの行は O_APPEND と 1 回の write で混ざらない。
 
 古いファイルは daemon 自身が消す。起動時と 1 時間ごとに、mtime が保持期間を過ぎた
-rotate 済みログ (`daemon.log` と `board-<domain>.log`、7 日)、`rate-limits/` 配下の state (24 時間。ingest-statusline が rename 前に
+rotate 済みログ (`daemon.log` と `board.log`、7 日)、`rate-limits/` 配下の state (24 時間。ingest-statusline が rename 前に
 死んで残った `.rate-limits.*` も同じ扱い)、`context/` 配下 (7 日) を削除する。何かを消したときだけログに残す。
 
 保持期間は設定キーにせず定数 (`internal/daemon/housekeeping.go`、`internal/ratelimit` と `internal/sessioncontext` の `Retention`) に置く。

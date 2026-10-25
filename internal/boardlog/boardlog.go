@@ -2,11 +2,10 @@
 // 1 行 1 件で書く (#146)。daemon のプロセスを通らない CLI と mod (`board-log` 経由) が書き、
 // `agents-daemon logs --board` が読む。
 //
-//	logs/board-<domain>.log              現行のログ
-//	logs/board-<domain>.log.YYYY-MM-DD   日付が変わって退避したもの (daemon の housekeeping が消す)
+//	logs/board.log              現行のログ
+//	logs/board.log.YYYY-MM-DD   日付が変わって退避したもの (daemon の housekeeping が消す)
 //
-// daemon.log に混ぜず domain ごとに分けるのは、業務の domain の出来事を私用の側から読める場所に
-// 出さないため (#121)。書くのは session ID、task ID、メモの id、件数、失敗の理由だけにし、タスクの subject、
+// 書くのは session ID、task ID、メモの id、件数、失敗の理由だけにし、タスクの subject、
 // メモの title と detail、送った文面は書かない。
 //
 // 書式は `<RFC 3339 の時刻> <出来事> key=value …`。出来事:
@@ -40,7 +39,6 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/applog"
-	"github.com/usadamasa/agents-daemon/internal/domain"
 )
 
 // field は 1 行に添える key=value。
@@ -54,23 +52,18 @@ func f(key string, value any) field {
 	return field{key: key, value: fmt.Sprint(value)}
 }
 
-// Path は domain の現行のログのパス。
-func Path(stateDir string, d domain.Domain) string {
-	return filepath.Join(stateDir, "logs", "board-"+string(d)+".log")
+// Path は現行のログのパス。housekeeping が rotate 済みのものを消すのにも使う。
+func Path(stateDir string) string {
+	return filepath.Join(stateDir, "logs", "board.log")
 }
 
-// Paths は全 domain の現行のログのパス。housekeeping が rotate 済みのものを消すのに使う。
-func Paths(stateDir string) []string {
-	return []string{Path(stateDir, domain.Home), Path(stateDir, domain.Work)}
-}
-
-// write は domain のログへ 1 行書く。CLI は短命なので、1 回開いて書いて閉じる。書けなくても本処理を
+// write はログへ 1 行書く。CLI は短命なので、1 回開いて書いて閉じる。書けなくても本処理を
 // 止めない (applog.Logger.Logf と同じ)。
 //
 // 並行する CLI の行は、O_APPEND と 1 行を 1 回の write で書くことで混ざらない。日付の境目で別の
 // プロセスが先に退避した後でも、退避前に開いていたプロセスの行は退避したファイルへ入る。それは許す。
-func write(stateDir string, d domain.Domain, now func() time.Time, event string, fields ...field) {
-	log := applog.NewLogger(Path(stateDir, d), now)
+func write(stateDir string, now func() time.Time, event string, fields ...field) {
+	log := applog.NewLogger(Path(stateDir), now)
 	defer func() { _ = log.Close() }()
 	log.Logf("%s", format(event, fields))
 }

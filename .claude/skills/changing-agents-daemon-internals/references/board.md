@@ -11,11 +11,11 @@ mod は Claude Code の中で動き、データはバイナリのサブコマン
 ## 依存のボード (B)
 
 `board` コマンドで依存のボード (B) を会話の横 (dock) の pane に開き、
-`agents-daemon status --board --session <id> --cwd <cwd>` の JSON を数秒ごとに読み直して描く。
+`agents-daemon status --board --cwd <cwd>` の JSON を数秒ごとに読み直して描く。
 ボードは `internal/board` が `$STATE/tasks/` (PostToolUse hook の `ingest-task` が書く) と `status.json` から組む。
 行は repo (`git rev-parse --git-common-dir` の main worktree)、列はタスクの状態で、
 `blockedBy` に完了していないタスクがあればブロックの列に置く。セッションの pane が入力待ちか上限待ちなら、
-その進行中のカードに印を付ける。描くのは開いたセッションの domain だけで、指示を送れるのはボードに載った生きている
+その進行中のカードに印を付ける。生きているセッションと記録をすべて描き、指示を送れるのはボードに載った生きている
 セッションだけ。
 <!-- cc-premise: 2.1.302 hooks mods の pane / session.send / session.cwd と、PostToolUse の Task 系の形 -->
 
@@ -67,7 +67,7 @@ longest chain の辺の罫線 (`marks`) は色付き。同じノードは 1 回�
 ### メモとタスクの照合
 
 メモの側にはタスクを書き戻さない (#213)。ボードを組むたびに、タスクの記録の description から
-メモの id (`internal/parking` の `Mentioned`、`newID` と同じ形) を拾い、status を問わず domain のメモと照合して、
+メモの id (`internal/parking` の `Mentioned`、`newID` と同じ形) を拾い、status を問わずメモと照合して、
 そのタスクのノードの `memos` (id、title、status。description に書かれた順) に付ける。mod は選んだタスクの詳細に
 `◇ <title> (<status>)` で出す。handed のメモはパーキングの列から消え、渡した先のタスクの詳細に現れる。
 handed / discarded のメモが保持期間 (7 日) で消えた後は、description に id が残っていても照合できず、出さない。
@@ -76,30 +76,29 @@ handed / discarded のメモが保持期間 (7 日) で消えた後は、descrip
 
 メモの見せ方と操作は `hooks/parking.ts` が持ち、行と列の描き方には依存しない。メモの行は最後に置かれた時刻 (JST) を
 先頭に出し、どのメモが古いかを列で見比べられるようにする。操作はどれも
-`agents-daemon park ... --session <id> --cwd <cwd>` を呼び、開いたセッションの domain のメモとタスクだけを触る。
+`agents-daemon park ... --session <id> --cwd <cwd>` を呼ぶ (session はログに残すだけで、メモの絞り込みには使わない)。
 
 - 捨てる: `park set <id> --status discarded`
 - 古いメモをまとめて捨てる (`Discard N older than 30d`): 最後に置かれてから 30 日より経った open のメモがあるときだけ
-  パーキングの見出しに出し、`park discard --days 30` でその domain のメモをまとめて discarded にする。30 日は mod
+  パーキングの見出しに出し、`park discard --days 30` で open のメモをまとめて discarded にする。30 日は mod
   (`hooks/board.tsx` の `STALE_DAYS`) が持ち、CLI に既定は無い。housekeeping が open を 90 日で黙って消す前に、人が見て
   捨てる区切り。捨てたメモは 7 日残り、`logs --board` の `park.discard` に残る id を `park set <id> --status open` で戻せる
 - タスクにする: メモの行が開いたセッションの repo (`here`) なら自セッション (`このセッション`) を先に、続けて同じ repo の
   生きているほかのセッションへ TaskCreate を頼む文面を送る。文面は着手の時期を指示せず受け手の計画 (タスクの依存) に
   任せ、タスクの description にメモの id を入れるよう頼む (既にこのメモを扱うタスクがあれば書き足すだけ)。
   照合の規則は「メモとタスクの照合」
-- issue にするよう頼む: 私用のボードだけ。自セッションを先に、ボードに載っている生きているセッションへ頼む
+- issue にするよう頼む: 自セッションを先に、ボードに載っている生きているセッションへ頼む
 - 自セッションは生きているのが自明なので、カードや daemon の有無にかかわらず宛先に出す。自分へは peer メッセージを
   送れないので `$.prompt.submit` で自分の入力へ渡し、idle になってから 1 ターンとして入る (#190)
-- 新しいセッションを起こして渡す (`To task → new session…`、私用なら `Ask for issue → new session…`): 生きているセッションの
+- 新しいセッションを起こして渡す (`To task → new session…`、`Ask for issue → new session…`): 生きているセッションの
   無い repo へ渡す経路 (#162)。押すと repo の候補 (メモの行の repo、開いたセッションの repo、ボードのほかの行の repo) と
-  絶対パスの入力欄を出し、選んだ repo で `agents-daemon spawn --repo <path> --session <id> --cwd <cwd>` に本文を stdin で
+  絶対パスの入力欄を出し、選んだ repo で `agents-daemon spawn --repo <path>` に本文を stdin で
   渡す。バイナリが `claude --session-id <uuid> --model $CLAUDE_CODE_SUBAGENT_MODEL -- <本文>` を repo を cwd にした
   rex の window に起こし (`internal/spawn`、フォーカスは奪わず、終了後も pane を残す)、claude が前景になってから
   `{session_id, pane_id, foreground}` を返す。待ち切れたときは `foreground: false` と `detail` で返し、mod はメモを
   handed のまま残して pane を知らせる (起きたか分からないメモを戻すと、押し直しで 2 つ目が起きる)。本文は最初の
   ターンとして入るので、peer メッセージの inbox を待たない。文面は起こした
-  経緯の 1 行に続けて peer へ送るものと同じで、issue はメモの repo ではなく起こした repo を起票先にする。repo の
-  domain が開いたセッションの domain と違えば起こさない。モデルを subagent 用に揃えるのは peer-sessions skill と同じ
+  経緯の 1 行に続けて peer へ送るものと同じで、issue はメモの repo ではなく起こした repo を起票先にする。モデルを subagent 用に揃えるのは peer-sessions skill と同じ
 - タスクにする・issue にするよう頼むは、送る前に `park set <id> --status handed --from open` でメモを取る (今の status が
   open でなければ失敗し、送らない。2 つのセッションが同じメモを渡そうとしても取れるのは 1 つ)。`$.session.send` が
   届かなかった、`$.prompt.submit` が drop された、`spawn` が window を作れなかったときは `--status open --from handed` で
@@ -128,8 +127,7 @@ offset を揃えない。どの offset で書いても同じ瞬間に戻せる�
 
 `hooks/park.tsx` は model が呼べる tool `mcp__agents-daemon__park` を登録する (パーキングロットの置く側)。
 呼ばれたら `agents-daemon park add --cwd <cwd>` に、model が書いた欄とこのセッションの `session_id` を JSON で
-stdin に渡す。`session_id` と cwd は inputSchema に無く、model は書けないので、domain の判定は `status --board` と
-同じ入力で決まる。結果の `created` で「メモを置きました」と「既に置かれていたメモにまとめました」を分けて返す。
+stdin に渡す。`session_id` と cwd は inputSchema に無く、model は書けない。結果の `created` で「メモを置きました」と「既に置かれていたメモにまとめました」を分けて返す。
 置いた後は `hooks/board-data.ts` がボードを読み直し、band のメモをすぐ変える。
 <!-- cc-premise: 2.1.302 hooks mods の tool.register / tool.call -->
 <!-- cc-premise: 2.1.302 hooks modules は 1 つ、matcher の無い hook は event ごとに 1 つ -->
@@ -155,7 +153,7 @@ stdin に渡す。`session_id` と cwd は inputSchema に無く、model は書�
 - メモは同じボードの `here` の行の open のメモ (この repo のもの) を新しく置かれた順に並べる。TaskUpdate の結果が
   `completed` になったら、`park list --status open --task <task_id> --session <id> --cwd <cwd>` (そのタスクの途中で
   このセッションが置いたメモ) を先頭に寄せる。寄せるのは並びだけで、open でなくなったメモは次の読み直しで消え、
-  辺もメモも無くなれば band ごと消える。どちらも `--session` で開いたセッションの domain のメモだけを引く
+  辺もメモも無くなれば band ごと消える
 - band で選んだメモ (`target`) は B の pane と共有し、B でも同じものを開く
 <!-- cc-premise: 2.1.303 hooks mods の ui.render AbovePrompt (hasSurvey、bodyColumns) と、TaskUpdate の結果の statusChange -->
 <!-- cc-premise: 2.1.306 mods session.send は SendMessage tool と $.session.send の両方で起き、e.origin.kind と e.to を持つ -->

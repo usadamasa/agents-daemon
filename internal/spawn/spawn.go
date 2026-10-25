@@ -6,8 +6,6 @@
 //
 // window を起こす口 (Host) は multiplexer.Client に足さず、ここに閉じる。Client は daemon / monitor / verify が pane を
 // 見て送るための interface で、window の作成はこのコマンドだけが使う (simulate の simulateHost と同じ考え)。
-//
-// 私用と業務の分離 (#121): 起こす repo の domain が、開いたセッションの domain と違えば起こさない。
 package spawn
 
 import (
@@ -20,7 +18,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 )
 
@@ -44,9 +41,6 @@ type Host interface {
 type Request struct {
 	// Repo は新しいセッションの cwd (絶対パス)。
 	Repo string
-	// SessionID と CWD は開いた (頼んだ) セッションの ID と cwd。domain を決めるのに使う。
-	SessionID string
-	CWD       string
 	// Prompt は最初のターンとして入る本文。
 	Prompt string
 	// Model は新しいセッションのモデル。別セッションへ渡す作業は subagent 用のモデルに揃える (peer-sessions skill) ので、
@@ -66,11 +60,9 @@ type Result struct {
 	Detail     string `json:"detail,omitempty"`
 }
 
-// Runner は起こす手段。テストは Host と Domain を差し替える。
+// Runner は起こす手段。テストは Host を差し替える。
 type Runner struct {
 	Host Host
-	// Domain はセッションと cwd の domain (tasklog.Placer.Domain と同じ規則)。
-	Domain func(sessionID, cwd string) domain.Domain
 	// NewSessionID は新しいセッションの ID。nil なら newSessionID (UUID v4)。
 	NewSessionID func() (string, error)
 	// Stat は repo の存在の確認。nil なら os.Stat。
@@ -128,9 +120,6 @@ func (r Runner) check(req Request) error {
 	}
 	if req.Model == "" {
 		return errors.New("モデルが無いので起こさない (CLAUDE_CODE_SUBAGENT_MODEL を settings の env に定義する)")
-	}
-	if from, to := r.Domain(req.SessionID, req.CWD), r.Domain("", req.Repo); from != to {
-		return fmt.Errorf("開いたセッションの domain (%s) と repo の domain (%s) が違うので起こさない", from, to)
 	}
 	return nil
 }

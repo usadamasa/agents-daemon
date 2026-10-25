@@ -4,7 +4,7 @@ import type { EngineInterface } from 'claude-code'
 import { daemonBin } from './daemon-bin'
 
 // mod の出来事をボードの経路のログ (internal/boardlog) に残す。mod はファイルを直接書けないので
-// `agents-daemon board-log` に渡し、domain はバイナリがこのセッションの ID と cwd から決める。
+// `agents-daemon board-log` に渡し、このセッションの ID を添える。
 // 出来事の名前と欄の一覧は internal/boardlog の package doc が持つ。subject、title、送った文面は渡さない。
 
 // logged は slot ごとに最後に書いた中身。同じ失敗や同じ数が続く間は書き直さない (ボードは数秒ごとに読み直す)。
@@ -16,7 +16,7 @@ export type Fields = Record<string, string | number | boolean>
 export async function logEvent($: EngineInterface, event: string, fields: Fields = {}) {
   try {
     const args = Object.entries(fields).map(([key, value]) => `${key}=${value}`)
-    const argv = [await daemonBin($), 'board-log', '--session', await $.session.id(), '--cwd', await $.session.cwd(), '--', event, ...args]
+    const argv = [await daemonBin($), 'board-log', '--session', await $.session.id(), '--', event, ...args]
     await $.process.run(argv, { timeoutMs: 10000 })
   } catch {
     // ログは補助なので、書けなかったことはどこにも出さない。

@@ -8,8 +8,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/usadamasa/agents-daemon/internal/domain"
 )
 
 const testRepo = "/src/github.com/usadamasa/agents-daemon"
@@ -24,48 +22,45 @@ func source(sessionID, taskID string) Source {
 	return Source{SessionID: sessionID, TaskID: taskID, CWD: testRepo, At: testNow}
 }
 
-func mustAdd(t *testing.T, s Store, d domain.Domain, repo string, e Entry, src Source) Item {
+func mustAdd(t *testing.T, s Store, repo string, e Entry, src Source) Item {
 	t.Helper()
-	added, err := s.add(d, repo, e, src)
+	added, err := s.add(repo, e, src)
 	if err != nil {
 		t.Fatalf("add() error = %v", err)
 	}
 	return added.Item
 }
 
-// 置いたメモは parking/<domain>/<id>.json に open で書かれ、List で読める。
+// 置いたメモは parking/<id>.json に open で書かれ、List で読める。
 func TestAdd_writesOneFilePerItem(t *testing.T) {
 	s := New(t.TempDir())
-	item := mustAdd(t, s, domain.Home, testRepo, aside("保持期間の根拠が無い"), source("s1", "3"))
+	item := mustAdd(t, s, testRepo, aside("保持期間の根拠が無い"), source("s1", "3"))
 
-	if item.Status != StatusOpen || item.Domain != domain.Home || item.Repo != testRepo || item.Kind != KindAside {
+	if item.Status != StatusOpen || item.Repo != testRepo || item.Kind != KindAside {
 		t.Errorf("item = %+v", item)
 	}
 	if len(item.Sources) != 1 || item.Sources[0].TaskID != "3" {
 		t.Errorf("sources = %+v", item.Sources)
 	}
-	if _, err := os.Stat(filepath.Join(s.Dir, "home", item.ID+".json")); err != nil {
+	if _, err := os.Stat(filepath.Join(s.Dir, item.ID+".json")); err != nil {
 		t.Errorf("ファイルが無い: %v", err)
 	}
-	got, err := s.list(domain.Home)
+	got, err := s.list()
 	if err != nil || len(got) != 1 || got[0].ID != item.ID || got[0].Title != "保持期間の根拠が無い" {
 		t.Errorf("List() = %+v, %v", got, err)
-	}
-	if work, _ := s.list(domain.Work); len(work) != 0 {
-		t.Errorf("work の側に出た: %+v", work)
 	}
 }
 
 // PlacedDuring は session と task の組が sources にあるメモだけを残す。まとめたメモも、後から足した source で引ける。
 func TestPlacedDuring(t *testing.T) {
 	s := New(t.TempDir())
-	during := mustAdd(t, s, domain.Home, testRepo, aside("a"), source("s1", "3"))
-	mustAdd(t, s, domain.Home, testRepo, aside("b"), source("s2", "3"))
-	merged := mustAdd(t, s, domain.Home, testRepo, aside("b"), source("s1", "3"))
-	mustAdd(t, s, domain.Home, testRepo, aside("c"), source("s1", "4"))
-	mustAdd(t, s, domain.Home, testRepo, aside("d"), source("s2", "3"))
-	mustAdd(t, s, domain.Home, testRepo, aside("e"), source("s1", ""))
-	items, _ := s.list(domain.Home)
+	during := mustAdd(t, s, testRepo, aside("a"), source("s1", "3"))
+	mustAdd(t, s, testRepo, aside("b"), source("s2", "3"))
+	merged := mustAdd(t, s, testRepo, aside("b"), source("s1", "3"))
+	mustAdd(t, s, testRepo, aside("c"), source("s1", "4"))
+	mustAdd(t, s, testRepo, aside("d"), source("s2", "3"))
+	mustAdd(t, s, testRepo, aside("e"), source("s1", ""))
+	items, _ := s.list()
 
 	// 同じ時刻に置いたメモの id は乱数の部分で並ぶので、順は見ない。
 	got := PlacedDuring(items, "s1", "3")
@@ -155,20 +150,20 @@ func TestMentionedIDs_matchesNewID(t *testing.T) {
 	}
 }
 
-// domain、repo、正規化した title が同じ open のメモには sources を足し、新しいメモを作らない。
+// repo、正規化した title が同じ open のメモには sources を足し、新しいメモを作らない。
 func TestAdd_mergesSameItem(t *testing.T) {
 	s := New(t.TempDir())
-	first := mustAdd(t, s, domain.Home, testRepo, aside("保持期間の  根拠が無い"), source("s1", "3"))
-	second := mustAdd(t, s, domain.Home, testRepo, aside(" 保持期間の根拠が無い "), source("s2", "1"))
+	first := mustAdd(t, s, testRepo, aside("保持期間の  根拠が無い"), source("s1", "3"))
+	second := mustAdd(t, s, testRepo, aside(" 保持期間の根拠が無い "), source("s2", "1"))
 	if second.ID != first.ID {
 		t.Fatalf("別のメモになった: %s != %s", second.ID, first.ID)
 	}
 	// 同じ置き方 (同じ session と task) を二重に送っても sources は増えない。
-	third := mustAdd(t, s, domain.Home, testRepo, aside("保持期間の根拠が無い"), source("s2", "1"))
+	third := mustAdd(t, s, testRepo, aside("保持期間の根拠が無い"), source("s2", "1"))
 	if len(third.Sources) != 2 {
 		t.Errorf("sources = %+v, want 2 件", third.Sources)
 	}
-	if got, _ := s.list(domain.Home); len(got) != 1 {
+	if got, _ := s.list(); len(got) != 1 {
 		t.Errorf("件数 = %d, want 1", len(got))
 	}
 }
@@ -185,7 +180,7 @@ func TestAdd_reportsCreated(t *testing.T) {
 		{source("s2", "1"), false},
 	}
 	for i, c := range cases {
-		added, err := s.add(domain.Home, testRepo, aside("t"), c.src)
+		added, err := s.add(testRepo, aside("t"), c.src)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -198,14 +193,14 @@ func TestAdd_reportsCreated(t *testing.T) {
 // まとめるときは、後から置いた側の detail が最初のメモと違えば sources に残す。同じなら残さない。
 func TestAdd_keepsLaterDetailInSource(t *testing.T) {
 	s := New(t.TempDir())
-	mustAdd(t, s, domain.Home, testRepo, aside("t"), source("s1", ""))
-	same := mustAdd(t, s, domain.Home, testRepo, aside("t"), source("s2", ""))
+	mustAdd(t, s, testRepo, aside("t"), source("s1", ""))
+	same := mustAdd(t, s, testRepo, aside("t"), source("s2", ""))
 	if same.Sources[1].Detail != "" {
 		t.Errorf("同じ detail を sources に残した: %+v", same.Sources[1])
 	}
 	other := aside("t")
 	other.Detail = "別のファイルでも同じ"
-	merged := mustAdd(t, s, domain.Home, testRepo, other, source("s3", ""))
+	merged := mustAdd(t, s, testRepo, other, source("s3", ""))
 	if merged.Detail != "detail" || merged.Sources[2].Detail != "別のファイルでも同じ" {
 		t.Errorf("merged = %+v", merged)
 	}
@@ -218,20 +213,20 @@ func TestAdd_keepsLaterDetailInSource(t *testing.T) {
 // メモの detail か既にある source の detail と同じなら足さない (二重送信で増えない)。
 func TestAdd_keepsNewDetailFromSameSource(t *testing.T) {
 	s := New(t.TempDir())
-	mustAdd(t, s, domain.Home, testRepo, aside("t"), source("s1", "3"))
+	mustAdd(t, s, testRepo, aside("t"), source("s1", "3"))
 	later := aside("t")
 	later.Detail = "後から分かった補足"
 	src := source("s1", "3")
 	src.At = testNow.Add(time.Hour)
-	merged := mustAdd(t, s, domain.Home, testRepo, later, src)
+	merged := mustAdd(t, s, testRepo, later, src)
 	if len(merged.Sources) != 2 || merged.Sources[1].Detail != "後から分かった補足" || !merged.Sources[1].At.Equal(src.At) {
 		t.Fatalf("sources = %+v", merged.Sources)
 	}
-	again := mustAdd(t, s, domain.Home, testRepo, later, src)
+	again := mustAdd(t, s, testRepo, later, src)
 	if len(again.Sources) != 2 {
 		t.Errorf("同じ detail の二重送信で増えた: %+v", again.Sources)
 	}
-	if first := mustAdd(t, s, domain.Home, testRepo, aside("t"), source("s1", "3")); len(first.Sources) != 2 {
+	if first := mustAdd(t, s, testRepo, aside("t"), source("s1", "3")); len(first.Sources) != 2 {
 		t.Errorf("メモと同じ detail で増えた: %+v", first.Sources)
 	}
 }
@@ -240,15 +235,15 @@ func TestAdd_keepsNewDetailFromSameSource(t *testing.T) {
 // まとめたときは最初に置いた形を残す。
 func TestAdd_keepsTitleAsWritten(t *testing.T) {
 	s := New(t.TempDir())
-	first := mustAdd(t, s, domain.Home, testRepo, aside("  Fix  README の  表記 "), source("s1", ""))
+	first := mustAdd(t, s, testRepo, aside("  Fix  README の  表記 "), source("s1", ""))
 	if first.Title != "Fix  README の  表記" {
 		t.Errorf("保存した title = %q", first.Title)
 	}
-	merged := mustAdd(t, s, domain.Home, testRepo, aside("fix readme の表記"), source("s2", ""))
+	merged := mustAdd(t, s, testRepo, aside("fix readme の表記"), source("s2", ""))
 	if merged.ID != first.ID || merged.Title != "Fix  README の  表記" {
 		t.Errorf("まとめた後の item = %+v", merged)
 	}
-	if got, _ := s.list(domain.Home); len(got) != 1 || got[0].Title != "Fix  README の  表記" {
+	if got, _ := s.list(); len(got) != 1 || got[0].Title != "Fix  README の  表記" {
 		t.Errorf("List() = %+v", got)
 	}
 }
@@ -256,27 +251,24 @@ func TestAdd_keepsTitleAsWritten(t *testing.T) {
 // 大文字と小文字の違いも同じメモとみなす。
 func TestAdd_mergeIgnoresCase(t *testing.T) {
 	s := New(t.TempDir())
-	first := mustAdd(t, s, domain.Home, testRepo, aside("Fix README"), source("s1", ""))
-	second := mustAdd(t, s, domain.Home, testRepo, aside("fix readme"), source("s2", ""))
+	first := mustAdd(t, s, testRepo, aside("Fix README"), source("s1", ""))
+	second := mustAdd(t, s, testRepo, aside("fix readme"), source("s2", ""))
 	if first.ID != second.ID {
 		t.Errorf("別のメモになった")
 	}
 }
 
-// repo、domain が違うメモ、open でないメモはまとめない。
+// repo が違うメモ、open でないメモはまとめない。
 func TestAdd_doesNotMergeDifferentItems(t *testing.T) {
 	s := New(t.TempDir())
-	base := mustAdd(t, s, domain.Home, testRepo, aside("t"), source("s1", ""))
-	if other := mustAdd(t, s, domain.Home, "/src/other", aside("t"), source("s1", "")); other.ID == base.ID {
+	base := mustAdd(t, s, testRepo, aside("t"), source("s1", ""))
+	if other := mustAdd(t, s, "/src/other", aside("t"), source("s1", "")); other.ID == base.ID {
 		t.Errorf("repo が違うのにまとめた")
 	}
-	if other := mustAdd(t, s, domain.Work, testRepo, aside("t"), source("s1", "")); other.ID == base.ID {
-		t.Errorf("domain が違うのにまとめた")
-	}
-	if _, _, err := s.Set(domain.Home, base.ID, StatusDiscarded, ""); err != nil {
+	if _, _, err := s.Set(base.ID, StatusDiscarded, ""); err != nil {
 		t.Fatal(err)
 	}
-	if again := mustAdd(t, s, domain.Home, testRepo, aside("t"), source("s1", "")); again.ID == base.ID {
+	if again := mustAdd(t, s, testRepo, aside("t"), source("s1", "")); again.ID == base.ID {
 		t.Errorf("discarded のメモにまとめた")
 	}
 }
@@ -287,13 +279,13 @@ func TestAdd_concurrentSameItem(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := range 8 {
 		wg.Go(func() {
-			if _, err := s.add(domain.Home, testRepo, aside("t"), source("s"+string(rune('a'+i)), "")); err != nil {
+			if _, err := s.add(testRepo, aside("t"), source("s"+string(rune('a'+i)), "")); err != nil {
 				t.Error(err)
 			}
 		})
 	}
 	wg.Wait()
-	got, _ := s.list(domain.Home)
+	got, _ := s.list()
 	if len(got) != 1 || len(got[0].Sources) != 8 {
 		t.Errorf("List() = %+v, want 1 件で sources 8 つ", got)
 	}
@@ -307,23 +299,23 @@ func TestAdd_rejectsInvalidEntry(t *testing.T) {
 		"title が空":  {Kind: KindScope, Title: "  "},
 	}
 	for name, e := range cases {
-		if _, err := s.add(domain.Home, testRepo, e, source("s1", "")); err == nil {
+		if _, err := s.add(testRepo, e, source("s1", "")); err == nil {
 			t.Errorf("%s: add() error = nil", name)
 		}
 	}
-	if _, err := s.add(domain.Home, testRepo, aside("t"), source("../x", "")); err == nil {
+	if _, err := s.add(testRepo, aside("t"), source("../x", "")); err == nil {
 		t.Errorf("ファイル名に使えない session ID を通した")
 	}
-	if _, err := (Store{}).add(domain.Home, testRepo, aside("t"), source("s1", "")); err == nil {
+	if _, err := (Store{}).add(testRepo, aside("t"), source("s1", "")); err == nil {
 		t.Errorf("置き場所が無いのに通した")
 	}
 }
 
 func TestSet(t *testing.T) {
 	s := New(t.TempDir())
-	item := mustAdd(t, s, domain.Home, testRepo, aside("t"), source("s1", ""))
+	item := mustAdd(t, s, testRepo, aside("t"), source("s1", ""))
 
-	got, from, err := s.Set(domain.Home, item.ID, StatusHanded, "")
+	got, from, err := s.Set(item.ID, StatusHanded, "")
 	if err != nil || got.Status != StatusHanded {
 		t.Fatalf("Set() = %+v, %v", got, err)
 	}
@@ -331,16 +323,13 @@ func TestSet(t *testing.T) {
 	if from != StatusOpen {
 		t.Errorf("from = %q, want open", from)
 	}
-	if list, _ := s.list(domain.Home); list[0].Status != StatusHanded {
+	if list, _ := s.list(); list[0].Status != StatusHanded {
 		t.Errorf("書き戻されていない: %+v", list)
 	}
-	if _, _, err := s.Set(domain.Home, item.ID, "done", ""); err == nil {
+	if _, _, err := s.Set(item.ID, "done", ""); err == nil {
 		t.Errorf("範囲外の status を通した")
 	}
-	if _, _, err := s.Set(domain.Work, item.ID, StatusOpen, ""); err == nil {
-		t.Errorf("別の domain のメモを書き換えた")
-	}
-	if _, _, err := s.Set(domain.Home, "../x", StatusOpen, ""); err == nil {
+	if _, _, err := s.Set("../x", StatusOpen, ""); err == nil {
 		t.Errorf("ファイル名に使えない id を通した")
 	}
 }
@@ -349,68 +338,64 @@ func TestSet(t *testing.T) {
 // 取れるのは先に書いた 1 つだけ (models/handoff の Claim)。
 func TestSet_from(t *testing.T) {
 	s := New(t.TempDir())
-	item := mustAdd(t, s, domain.Home, testRepo, aside("t"), source("s1", ""))
+	item := mustAdd(t, s, testRepo, aside("t"), source("s1", ""))
 
-	if _, _, err := s.Set(domain.Home, item.ID, StatusHanded, StatusOpen); err != nil {
+	if _, _, err := s.Set(item.ID, StatusHanded, StatusOpen); err != nil {
 		t.Fatalf("open のメモを --from open で取れない: %v", err)
 	}
-	_, _, err := s.Set(domain.Home, item.ID, StatusHanded, StatusOpen)
+	_, _, err := s.Set(item.ID, StatusHanded, StatusOpen)
 	if err == nil {
 		t.Fatal("handed のメモを --from open で取れた")
 	}
 	if !strings.Contains(err.Error(), StatusHanded) || !strings.Contains(err.Error(), StatusOpen) {
 		t.Errorf("理由に今の status と期待した status が無い: %v", err)
 	}
-	if _, _, err := s.Set(domain.Home, item.ID, StatusDiscarded, StatusOpen); err == nil {
+	if _, _, err := s.Set(item.ID, StatusDiscarded, StatusOpen); err == nil {
 		t.Error("取られたメモを --from open で捨てられた")
 	}
-	if list, _ := s.list(domain.Home); list[0].Status != StatusHanded {
+	if list, _ := s.list(); list[0].Status != StatusHanded {
 		t.Errorf("失敗した Set が書き換えた: %+v", list)
 	}
-	if _, _, err := s.Set(domain.Home, item.ID, StatusOpen, StatusHanded); err != nil {
+	if _, _, err := s.Set(item.ID, StatusOpen, StatusHanded); err != nil {
 		t.Errorf("届かなかったメモを --from handed で戻せない: %v", err)
 	}
-	if _, _, err := s.Set(domain.Home, item.ID, StatusOpen, "done"); err == nil {
+	if _, _, err := s.Set(item.ID, StatusOpen, "done"); err == nil {
 		t.Error("範囲外の from を通した")
 	}
 }
 
 // DiscardBefore は最後に置かれた時刻が before より前の open のメモを discarded にし、捨てたメモを返す。
-// 置き直されたメモは最後の source の時刻で見る。open でないメモと別の domain のメモは触らない。
+// 置き直されたメモは最後の source の時刻で見る。open でないメモは触らない。
 func TestDiscardBefore(t *testing.T) {
 	s := New(t.TempDir())
 	placed := func(session string, ago time.Duration) Source {
 		return Source{SessionID: session, CWD: testRepo, At: testNow.Add(-ago)}
 	}
-	old := mustAdd(t, s, domain.Home, testRepo, aside("old"), placed("s1", 40*24*time.Hour))
-	fresh := mustAdd(t, s, domain.Home, testRepo, aside("fresh"), placed("s1", time.Hour))
-	renewed := mustAdd(t, s, domain.Home, testRepo, aside("renewed"), placed("s1", 40*24*time.Hour))
-	mustAdd(t, s, domain.Home, testRepo, aside("renewed"), placed("s2", time.Hour))
-	handed := mustAdd(t, s, domain.Home, testRepo, aside("handed"), placed("s1", 40*24*time.Hour))
-	if _, _, err := s.Set(domain.Home, handed.ID, StatusHanded, ""); err != nil {
+	old := mustAdd(t, s, testRepo, aside("old"), placed("s1", 40*24*time.Hour))
+	fresh := mustAdd(t, s, testRepo, aside("fresh"), placed("s1", time.Hour))
+	renewed := mustAdd(t, s, testRepo, aside("renewed"), placed("s1", 40*24*time.Hour))
+	mustAdd(t, s, testRepo, aside("renewed"), placed("s2", time.Hour))
+	handed := mustAdd(t, s, testRepo, aside("handed"), placed("s1", 40*24*time.Hour))
+	if _, _, err := s.Set(handed.ID, StatusHanded, ""); err != nil {
 		t.Fatal(err)
 	}
-	work := mustAdd(t, s, domain.Work, testRepo, aside("work"), placed("s1", 40*24*time.Hour))
 
 	cutoff := testNow.Add(-30 * 24 * time.Hour)
-	got, err := s.DiscardBefore(domain.Home, cutoff)
+	got, err := s.DiscardBefore(cutoff)
 	if err != nil || len(got) != 1 || got[0].ID != old.ID || got[0].Status != StatusDiscarded {
 		t.Fatalf("DiscardBefore() = %+v, %v, want %s だけ discarded", got, err, old.ID)
 	}
-	open, _ := s.Find(domain.Home, "", StatusOpen)
+	open, _ := s.Find("", StatusOpen)
 	if len(open) != 2 || open[0].ID != fresh.ID && open[1].ID != fresh.ID || open[0].ID != renewed.ID && open[1].ID != renewed.ID {
 		t.Errorf("open = %+v, want fresh と renewed", open)
 	}
-	if list, _ := s.Find(domain.Home, "", StatusHanded); len(list) != 1 || list[0].ID != handed.ID {
+	if list, _ := s.Find("", StatusHanded); len(list) != 1 || list[0].ID != handed.ID {
 		t.Errorf("handed が変わった: %+v", list)
 	}
-	if list, _ := s.Find(domain.Work, "", StatusOpen); len(list) != 1 || list[0].ID != work.ID {
-		t.Errorf("別の domain のメモが変わった: %+v", list)
-	}
-	if again, err := s.DiscardBefore(domain.Home, cutoff); err != nil || again == nil || len(again) != 0 {
+	if again, err := s.DiscardBefore(cutoff); err != nil || again == nil || len(again) != 0 {
 		t.Errorf("該当なしは空の配列: %+v, %v", again, err)
 	}
-	if _, err := (Store{}).DiscardBefore(domain.Home, cutoff); err == nil {
+	if _, err := (Store{}).DiscardBefore(cutoff); err == nil {
 		t.Errorf("置き場所が無いのに通した")
 	}
 }
@@ -425,32 +410,32 @@ func setMtime(t *testing.T, path string, mtime time.Time) {
 // open は 90 日、handed / discarded は 7 日で消す (mtime で判定する)。
 func TestPrune(t *testing.T) {
 	s := New(t.TempDir())
-	open := mustAdd(t, s, domain.Home, testRepo, aside("open"), source("s1", ""))
-	handed := mustAdd(t, s, domain.Work, testRepo, aside("handed"), source("s1", ""))
-	if _, _, err := s.Set(domain.Work, handed.ID, StatusHanded, ""); err != nil {
+	open := mustAdd(t, s, testRepo, aside("open"), source("s1", ""))
+	handed := mustAdd(t, s, testRepo, aside("handed"), source("s1", ""))
+	if _, _, err := s.Set(handed.ID, StatusHanded, ""); err != nil {
 		t.Fatal(err)
 	}
 	now := time.Now()
-	path := func(d domain.Domain, id string) string { return filepath.Join(s.Dir, string(d), id+".json") }
+	path := func(id string) string { return filepath.Join(s.Dir, id+".json") }
 
-	setMtime(t, path(domain.Home, open.ID), now.Add(-8*24*time.Hour))
-	setMtime(t, path(domain.Work, handed.ID), now.Add(-8*24*time.Hour))
+	setMtime(t, path(open.ID), now.Add(-8*24*time.Hour))
+	setMtime(t, path(handed.ID), now.Add(-8*24*time.Hour))
 	removed, err := s.Prune(now)
 	if err != nil || removed != 1 {
 		t.Fatalf("Prune() = %d, %v, want 1 件 (handed だけ)", removed, err)
 	}
-	if got, _ := s.list(domain.Home); len(got) != 1 {
+	if got, _ := s.list(); len(got) != 1 {
 		t.Errorf("open が消えた")
 	}
 
 	// 同じメモがまた置かれたら mtime が進み、open の 90 日はそこから数え直す (まだ文脈が生きている)。
-	setMtime(t, path(domain.Home, open.ID), now.Add(-91*24*time.Hour))
-	mustAdd(t, s, domain.Home, testRepo, aside("open"), source("s2", ""))
+	setMtime(t, path(open.ID), now.Add(-91*24*time.Hour))
+	mustAdd(t, s, testRepo, aside("open"), source("s2", ""))
 	if removed, err := s.Prune(now); err != nil || removed != 0 {
 		t.Fatalf("Prune() = %d, %v, want 0 件 (置き直されたメモは残す)", removed, err)
 	}
 
-	setMtime(t, path(domain.Home, open.ID), now.Add(-91*24*time.Hour))
+	setMtime(t, path(open.ID), now.Add(-91*24*time.Hour))
 	if removed, err := s.Prune(now); err != nil || removed != 1 {
 		t.Fatalf("Prune() = %d, %v, want 1 件", removed, err)
 	}
@@ -460,12 +445,12 @@ func TestPrune(t *testing.T) {
 // 作り直す (#213 の検討で TLC が出した反例の形)。ロックを持っている間は Prune が消さないことを確かめる。
 func TestPrune_waitsForLock(t *testing.T) {
 	s := New(t.TempDir())
-	memo := mustAdd(t, s, domain.Home, testRepo, aside("handed"), source("s1", ""))
-	if _, _, err := s.Set(domain.Home, memo.ID, StatusHanded, ""); err != nil {
+	memo := mustAdd(t, s, testRepo, aside("handed"), source("s1", ""))
+	if _, _, err := s.Set(memo.ID, StatusHanded, ""); err != nil {
 		t.Fatal(err)
 	}
 	now := time.Now()
-	path := filepath.Join(s.Dir, string(domain.Home), memo.ID+".json")
+	path := filepath.Join(s.Dir, memo.ID+".json")
 	setMtime(t, path, now.Add(-8*24*time.Hour))
 
 	type pruned struct {
@@ -474,7 +459,7 @@ func TestPrune_waitsForLock(t *testing.T) {
 	}
 	done := make(chan pruned, 1)
 	var early *pruned
-	err := s.locked(domain.Home, func(dir string) error {
+	err := s.locked(func(dir string) error {
 		item, ok := readItem(path)
 		if !ok {
 			return errors.New("メモを読めない")

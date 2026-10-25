@@ -9,7 +9,6 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/board/dag"
 	"github.com/usadamasa/agents-daemon/internal/board/graph"
 	"github.com/usadamasa/agents-daemon/internal/daemon/state"
-	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
@@ -38,8 +37,7 @@ func links(g graph.Graph) []string {
 func TestGraph_nodeStates(t *testing.T) {
 	until := time.Date(2026, 10, 18, 14, 30, 0, 0, time.Local)
 	b := build(input{
-		Domain: domain.Work,
-		PID:    42,
+		PID: 42,
 		Snapshot: snapshot(
 			state.PaneStatus{PaneID: "p1", SessionID: "W", CWD: "/w/a", AgentStatus: "working"},
 			state.PaneStatus{PaneID: "p2", SessionID: "D", CWD: "/w/a", AgentStatus: "done"},
@@ -119,7 +117,6 @@ func TestGraph_nodeStates(t *testing.T) {
 func TestGraph_linksDepthAndDownstream(t *testing.T) {
 	const cwd = "/w/a"
 	b := build(input{
-		Domain: domain.Work,
 		Tasks: []tasklog.Task{
 			task("A", "1", "設計", "completed", cwd),
 			task("A", "2", "実装", "pending", cwd, "1"),
@@ -170,8 +167,7 @@ func TestGraph_refEndpoints(t *testing.T) {
 	old := task("O", "1", "古い同名", "completed", cwd)
 	old.UpdatedAt = t0.Add(-time.Hour)
 	b := build(input{
-		Domain: domain.Work,
-		PID:    42,
+		PID: 42,
 		Snapshot: snapshot(
 			state.PaneStatus{PaneID: "p1", SessionID: "L", CWD: cwd, AgentStatus: "working", AgentMessage: "起きたばかり"},
 		),
@@ -239,32 +235,24 @@ func TestGraph_refEndpoints(t *testing.T) {
 	}
 }
 
-// 名前に当たるセッションがほかの domain の側にしか無ければ、まだ起きていないものとして扱い、その session ID を
-// 載せない (私用と業務を混ぜない)。セッションのタスクがすべて輪になっていて根も末端も無ければ、タスク全部につなぐ。
+// セッションのタスクがすべて輪になっていて根も末端も無ければ、タスク全部につなぐ。
 func TestGraph_refEndpointsEdgeCases(t *testing.T) {
 	const cwd = "/w/a"
 	e := func(id, before, after string) edge.Edge {
 		return edge.Edge{ID: id, Before: edge.Endpoint{Ref: before, CWD: cwd}, After: edge.Endpoint{Ref: after, CWD: cwd}}
 	}
 	b := build(input{
-		Domain: domain.Work,
 		Tasks: []tasklog.Task{
 			task("C", "1", "x", "pending", cwd, "2"),
 			task("C", "2", "y", "pending", cwd, "1"),
 			task("D", "1", "後", "pending", cwd),
 		},
 		Edges: []edge.Edge{
-			e("e1", "session:home-only", "task:D/1"),
 			e("e2", "session:loop", "task:D/1"),
 		},
-		Elsewhere:    func(id string) bool { return id == "H" },
-		SessionNames: map[string]string{"H": "home-only", "C": "loop", "D": "after"},
+		SessionNames: map[string]string{"C": "loop", "D": "after"},
 	})
-	got := nodes(b.Graph)
-	if n := got["ref:session:home-only"]; n.State != graph.StatePending || n.SessionID != "" || n.Session != "" {
-		t.Errorf("ほかの domain のセッション = %+v, want session ID の無い pending", n)
-	}
-	want := []string{"C/1>C/2", "C/1>D/1", "C/2>C/1", "C/2>D/1", "ref:session:home-only>D/1"}
+	want := []string{"C/1>C/2", "C/1>D/1", "C/2>C/1", "C/2>D/1"}
 	if !reflect.DeepEqual(links(b.Graph), want) {
 		t.Errorf("links = %v, want %v", links(b.Graph), want)
 	}
@@ -275,8 +263,7 @@ func TestGraph_refEndpointsEdgeCases(t *testing.T) {
 func TestGraph_chains(t *testing.T) {
 	const cwd = "/w/a"
 	b := build(input{
-		Domain: domain.Work,
-		PID:    42,
+		PID: 42,
 		Snapshot: snapshot(
 			state.PaneStatus{PaneID: "p1", SessionID: "A", CWD: cwd, AgentStatus: "blocked", AgentKind: "question"},
 			state.PaneStatus{PaneID: "p2", SessionID: "B", CWD: cwd, AgentStatus: "working"},
@@ -333,8 +320,7 @@ func drawRows(rows []dag.Row) string {
 func TestGraph_rows(t *testing.T) {
 	const cwd = "/w/a"
 	b := build(input{
-		Domain: domain.Work,
-		PID:    42,
+		PID: 42,
 		Snapshot: snapshot(
 			state.PaneStatus{PaneID: "p1", SessionID: "A", CWD: cwd, AgentStatus: "blocked", AgentKind: "question"},
 			state.PaneStatus{PaneID: "p2", SessionID: "B", CWD: cwd, AgentStatus: "working"},
@@ -377,7 +363,7 @@ func TestGraph_rows(t *testing.T) {
 		t.Errorf("rows_with_completed の印 = %v, want %v", got, want)
 	}
 	// ノードが無ければ空の配列 (JSON で null にしない)。
-	empty := build(input{Domain: domain.Work})
+	empty := build(input{})
 	if empty.Graph.Rows == nil || empty.Graph.RowsWithCompleted == nil {
 		t.Errorf("rows = %v / %v, want 空の配列", empty.Graph.Rows, empty.Graph.RowsWithCompleted)
 	}
@@ -387,14 +373,12 @@ func TestGraph_rows(t *testing.T) {
 func TestGraph_noBlockedAndCycle(t *testing.T) {
 	const cwd = "/w/a"
 	calm := build(input{
-		Domain: domain.Work,
-		Tasks:  []tasklog.Task{task("A", "1", "x", "pending", cwd), task("A", "2", "y", "pending", cwd, "1")},
+		Tasks: []tasklog.Task{task("A", "1", "x", "pending", cwd), task("A", "2", "y", "pending", cwd, "1")},
 	})
 	if len(calm.Graph.LongestChain) != 0 {
 		t.Errorf("longest chain = %v, want 空", calm.Graph.LongestChain)
 	}
 	b := build(input{
-		Domain: domain.Work,
 		Tasks: []tasklog.Task{
 			task("A", "1", "x", "pending", cwd, "2"),
 			task("A", "2", "y", "pending", cwd, "1"),
@@ -409,7 +393,6 @@ func TestGraph_noBlockedAndCycle(t *testing.T) {
 func TestGraph_deadlock(t *testing.T) {
 	const cwd = "/w/a"
 	b := build(input{
-		Domain: domain.Work,
 		Tasks: []tasklog.Task{
 			task("A", "1", "x", "pending", cwd, "2"),
 			task("A", "2", "y", "pending", cwd),
@@ -435,10 +418,9 @@ func TestGraph_deadlock(t *testing.T) {
 func TestGraph_parked(t *testing.T) {
 	const cwd = "/w/a"
 	memo := func(id string, sources ...parking.Source) parking.Item {
-		return parking.Item{ID: id, Domain: domain.Work, Repo: cwd, Status: parking.StatusOpen, Entry: parking.Entry{Kind: parking.KindAside, Title: id}, Sources: sources}
+		return parking.Item{ID: id, Repo: cwd, Status: parking.StatusOpen, Entry: parking.Entry{Kind: parking.KindAside, Title: id}, Sources: sources}
 	}
 	b := build(input{
-		Domain:   domain.Work,
 		PID:      42,
 		Snapshot: snapshot(state.PaneStatus{PaneID: "p1", SessionID: "S", CWD: cwd, AgentStatus: "working"}),
 		Tasks:    []tasklog.Task{task("A", "1", "x", "in_progress", cwd), task("A", "2", "y", "pending", cwd)},
@@ -463,7 +445,7 @@ func TestGraph_memos(t *testing.T) {
 	const cwd = "/w/a"
 	const handed, open, discarded, gone = "20261025T010000-0000000a", "20261025T020000-0000000b", "20261025T030000-0000000c", "20261025T040000-0000000d"
 	memo := func(id, title, status string) parking.Item {
-		return parking.Item{ID: id, Domain: domain.Work, Repo: cwd, Status: status, Entry: parking.Entry{Kind: parking.KindAside, Title: title},
+		return parking.Item{ID: id, Repo: cwd, Status: status, Entry: parking.Entry{Kind: parking.KindAside, Title: title},
 			Sources: []parking.Source{{SessionID: "A", TaskID: "1", CWD: cwd, At: t0}}}
 	}
 	withDescription := func(t tasklog.Task, description string) tasklog.Task {
@@ -471,7 +453,6 @@ func TestGraph_memos(t *testing.T) {
 		return t
 	}
 	b := build(input{
-		Domain:   domain.Work,
 		PID:      42,
 		Snapshot: snapshot(state.PaneStatus{PaneID: "p1", SessionID: "A", CWD: cwd, AgentStatus: "working"}),
 		Tasks: []tasklog.Task{

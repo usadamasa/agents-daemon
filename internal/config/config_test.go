@@ -71,9 +71,7 @@ func TestLoad(t *testing.T) {
 			"submitDelayMs": 200,
 			"customPatterns": ["foo.*bar"],
 			"idleShutdownMinutes": 15,
-			"deferToNativeAutoContinue": false,
-			"homePaths": ["~/src/github.com/usadamasa"],
-			"defaultDomain": "home"
+			"deferToNativeAutoContinue": false
 		}`)
 		cfg, err := Load(path)
 		if err != nil {
@@ -100,17 +98,15 @@ func TestLoad(t *testing.T) {
 			IdleShutdownMinutes:     15,
 
 			DeferToNativeAutoContinue: false,
-			HomePaths:                 []string{"~/src/github.com/usadamasa"},
-			DefaultDomain:             "home",
 		}
 		if !reflect.DeepEqual(cfg, want) {
 			t.Errorf("got %+v, want %+v", cfg, want)
 		}
 	})
 
-	t.Run("旧版の compact / cache のキーは無視され、他のキーはそのまま効く", func(t *testing.T) {
-		// 利用者の config.json に残ったキーで起動が止まったり他のキーが落ちたりしない。
-		path := writeTestFile(t, `{"compactAutoEnabled": true, "cacheIdleCompactEnabled": false, "marginSeconds": 45}`)
+	t.Run("知らないキーは無視され、他のキーはそのまま効く", func(t *testing.T) {
+		// 知らないキーで起動が止まったり他のキーが落ちたりしない。
+		path := writeTestFile(t, `{"unknownKey": true, "otherUnknown": {"x": 1}, "marginSeconds": 45}`)
 		cfg, err := Load(path)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -187,30 +183,4 @@ func TestLoad(t *testing.T) {
 			t.Errorf("readLines: got %d, want default %d", cfg.ReadLines, Default().ReadLines)
 		}
 	})
-}
-
-func TestLoad_domain(t *testing.T) {
-	cases := []struct {
-		name        string
-		content     string
-		wantPaths   []string
-		wantDefault string
-	}{
-		{"書かなければ私用のパスは無く、既定は業務", `{}`, []string{}, "work"},
-		{"私用の端末は defaultDomain を home にする", `{"defaultDomain":"home"}`, []string{}, "home"},
-		{"homePaths は書かれたとおり残す", `{"homePaths":["~/src/github.com/usadamasa"]}`, []string{"~/src/github.com/usadamasa"}, "work"},
-		{"defaultDomain の typo は業務のまま (私用へ倒さない)", `{"defaultDomain":"personal"}`, []string{}, "work"},
-		{"defaultDomain の型違いも業務のまま", `{"defaultDomain":1}`, []string{}, "work"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			cfg, err := Load(writeTestFile(t, tc.content))
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if !reflect.DeepEqual(cfg.HomePaths, tc.wantPaths) || cfg.DefaultDomain != tc.wantDefault {
-				t.Errorf("HomePaths/DefaultDomain = %v/%q, want %v/%q", cfg.HomePaths, cfg.DefaultDomain, tc.wantPaths, tc.wantDefault)
-			}
-		})
-	}
 }

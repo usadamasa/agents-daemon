@@ -1,10 +1,9 @@
 // Package parking は agent がタスクの途中で見つけた脇のメモ (パーキングロット、#89) を XDG state 配下に
 // 置く (#121)。置くのは `agents-daemon park add`、取り出すのはタスクのボードと band。
 //
-//	parking/<domain>/<id>.json   1 件 1 ファイル
+//	parking/<id>.json   1 件 1 ファイル
 //
-// domain (home / work) で置き場を分け、私用と業務のメモを混ぜない (internal/domain)。domain、repo、
-// 正規化した title が同じ open のメモがあれば、新しいメモを作らずに sources へ足す。同じ置き方が二重に
+// repo と正規化した title が同じ open のメモがあれば、新しいメモを作らずに sources へ足す。同じ置き方が二重に
 // 走ってもメモは増えない (Idempotent Receiver)。
 package parking
 
@@ -23,7 +22,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
 
@@ -53,7 +51,7 @@ const (
 	ClosedRetention = 7 * 24 * time.Hour
 )
 
-// lockFile は domain のディレクトリで add と Set を直列にするロック。まとめる判定と書き込みの間に
+// lockFile は parking/ で add と Set を直列にするロック。まとめる判定と書き込みの間に
 // 別の park add が割り込んで同じメモが 2 つできるのを防ぐ。
 const lockFile = ".lock"
 
@@ -79,8 +77,7 @@ type Source struct {
 
 // Item は置かれたメモ 1 つの記録。
 type Item struct {
-	ID     string        `json:"id"`
-	Domain domain.Domain `json:"domain"`
+	ID string `json:"id"`
 	// Repo は置いたときの cwd の main worktree のパス (git の外なら cwd)。ボードの行の鍵と同じ。
 	Repo string `json:"repo"`
 	Entry
@@ -106,7 +103,7 @@ type Added struct {
 
 // add はメモを置く。同じメモが open であれば src を sources に足し (同じ session、task、detail の組は足さない)、
 // 無ければ新しいメモを作る。書いた後のメモを返す。
-func (s Store) add(d domain.Domain, repo string, e Entry, src Source) (Added, error) {
+func (s Store) add(repo string, e Entry, src Source) (Added, error) {
 	if s.Dir == "" {
 		return Added{}, errors.New("parking の置き場所が無い")
 	}
@@ -121,7 +118,7 @@ func (s Store) add(d domain.Domain, repo string, e Entry, src Source) (Added, er
 		return Added{}, fmt.Errorf("session ID %q はファイル名に使えない", src.SessionID)
 	}
 	var added Added
-	err := s.locked(d, func(dir string) error {
+	err := s.locked(func(dir string) error {
 		key := normalize(e.Title)
 		for _, existing := range readDir(dir) {
 			if existing.Status == StatusOpen && existing.Repo == repo && normalize(existing.Title) == key {
@@ -139,16 +136,16 @@ func (s Store) add(d domain.Domain, repo string, e Entry, src Source) (Added, er
 		if err != nil {
 			return err
 		}
-		added = Added{Created: true, Item: Item{ID: id, Domain: d, Repo: repo, Entry: e, Sources: []Source{src}, Status: StatusOpen}}
+		added = Added{Created: true, Item: Item{ID: id, Repo: repo, Entry: e, Sources: []Source{src}, Status: StatusOpen}}
 		return write(dir, added.Item)
 	})
 	return added, err
 }
 
-// Set は domain のメモ id の status を書き換え、書いた後のメモと書き換える前の status を返す。
+// Set はメモ id の status を書き換え、書いた後のメモと書き換える前の status を返す。
 // from が空でなければ、ファイルの status が from のときだけ書き換える (違えばエラー)。読んでから書くまでロックの中なので、
 // 同じメモを 2 つのセッションが同時に取ろうとしても通るのは 1 つだけ (models/handoff の Claim)。
-func (s Store) Set(d domain.Domain, id, status, from string) (Item, string, error) {
+func (s Store) Set(id, status, from string) (Item, string, error) {
 	if s.Dir == "" {
 		return Item{}, "", errors.New("parking の置き場所が無い")
 	}
@@ -165,11 +162,11 @@ func (s Store) Set(d domain.Domain, id, status, from string) (Item, string, erro
 	}
 	var item Item
 	var before string
-	err := s.locked(d, func(dir string) error {
+	err := s.locked(func(dir string) error {
 		var ok bool
 		item, ok = readItem(filepath.Join(dir, id+".json"))
 		if !ok {
-			return fmt.Errorf("%s のメモ %s が無い", d, id)
+			return fmt.Errorf("メモ %s が無い", id)
 		}
 		if from != "" && item.Status != from {
 			return fmt.Errorf("メモ %s の status は %s (期待 %s) なので書き換えない", id, item.Status, from)
@@ -180,15 +177,15 @@ func (s Store) Set(d domain.Domain, id, status, from string) (Item, string, erro
 	return item, before, err
 }
 
-// DiscardBefore は domain の open のメモのうち、最後に置かれた時刻 (sources の最大の at) が before より前の
+// DiscardBefore は open のメモのうち、最後に置かれた時刻 (sources の最大の at) が before より前の
 // ものを discarded にし、捨てたメモを id の順に返す。該当なしは空の配列。ボードの「古いメモをまとめて捨てる」が
 // 呼び、「古い」の日数は呼び出し側 (mod) が持つ。
-func (s Store) DiscardBefore(d domain.Domain, before time.Time) ([]Item, error) {
+func (s Store) DiscardBefore(before time.Time) ([]Item, error) {
 	if s.Dir == "" {
 		return nil, errors.New("parking の置き場所が無い")
 	}
 	discarded := []Item{}
-	err := s.locked(d, func(dir string) error {
+	err := s.locked(func(dir string) error {
 		for _, item := range readDir(dir) {
 			if item.Status != StatusOpen || !lastPlacedAt(item).Before(before) {
 				continue
@@ -215,22 +212,22 @@ func lastPlacedAt(item Item) time.Time {
 	return last
 }
 
-// list は domain のメモを id の順 (置いた順) に返す。壊れたファイルは読み飛ばす。
-func (s Store) list(d domain.Domain) ([]Item, error) {
+// list はメモを id の順 (置いた順) に返す。壊れたファイルは読み飛ばす。
+func (s Store) list() ([]Item, error) {
 	if s.Dir == "" {
 		return nil, nil
 	}
-	return readDir(filepath.Join(s.Dir, string(d))), nil
+	return readDir(s.Dir), nil
 }
 
-// Find は domain のメモのうち repo と status が一致するものを返す。空の条件は絞らない。該当なしは空の配列。
-func (s Store) Find(d domain.Domain, repo, status string) ([]Item, error) {
+// Find はメモのうち repo と status が一致するものを返す。空の条件は絞らない。該当なしは空の配列。
+func (s Store) Find(repo, status string) ([]Item, error) {
 	if status != "" {
 		if err := validStatus(status); err != nil {
 			return nil, err
 		}
 	}
-	items, err := s.list(d)
+	items, err := s.list()
 	if err != nil {
 		return nil, err
 	}
@@ -311,9 +308,9 @@ func validKind(kind string) error {
 	return fmt.Errorf("kind %q は aside / scope / preference / task のどれでもない", kind)
 }
 
-// locked は domain のディレクトリを作り、ロックを取って fn を呼ぶ。
-func (s Store) locked(d domain.Domain, fn func(dir string) error) error {
-	dir := filepath.Join(s.Dir, string(d))
+// locked は parking/ を作り、ロックを取って fn を呼ぶ。
+func (s Store) locked(fn func(dir string) error) error {
+	dir := s.Dir
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return fmt.Errorf("parking の作成に失敗: %w", err)
 	}

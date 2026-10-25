@@ -1,12 +1,11 @@
 // Package tasklog は Claude Code のセッションのタスク (TaskCreate / TaskUpdate / TaskList、無効なときは
 // TodoWrite) を、PostToolUse hook の入力から XDG state 配下へ記録する (#121)。読み手はタスクのボード。
 //
-//	tasks/<domain>/<session_id>/<task_id>.json   タスク 1 つ (1 タスク 1 ファイル)
-//	tasks/<domain>/<session_id>/todos.json       TodoWrite のリスト全体
+//	tasks/<session_id>/<task_id>.json   タスク 1 つ (1 タスク 1 ファイル)
+//	tasks/<session_id>/todos.json       TodoWrite のリスト全体
 //
 // 1 タスク 1 ファイルにするのは、同じセッションの Task 系ツールが並列で走っても別のタスクなら
-// 別のファイルになり、読み直して書く処理が取り合わないため。domain (home / work) で置き場を分け、
-// 私用と業務を同じボードに混ぜない (internal/domain)。
+// 別のファイルになり、読み直して書く処理が取り合わないため。
 //
 // 本体の ~/.claude/tasks/ は読まない。単独セッションの保存先と形式が docs に無く、内部形式に依存するため。
 // 取りこぼした更新は、次に model が TaskList を呼んだときにその結果で全件を同期し直して埋める。
@@ -23,7 +22,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
 
@@ -95,19 +93,18 @@ type hookInput struct {
 }
 
 // Result は 1 回の Ingest で何をしたか。ボードの経路のログ (internal/boardlog) に出す。Tool が空なら記録しない
-// ツールで、Domain が空なら置き場を決める前に失敗した。
+// ツール。
 type Result struct {
 	Tool      string
 	SessionID string
 	AgentID   string
-	Domain    domain.Domain
 	// Written は書いたタスクの数 (TodoWrite はリストの項目の数)、Removed は消したタスクの数。
 	Written, Removed int
 }
 
 // Ingest は PostToolUse hook の stdin を読み、ツールに応じてタスクを書く。Task 系でも TodoWrite でもない
-// ツールは何もしない。domain は classify が cwd から決める。失敗しても、分かったところまでの Result を返す。
-func (s Store) Ingest(input []byte, classify func(cwd string) domain.Domain, now time.Time) (Result, error) {
+// ツールは何もしない。失敗しても、分かったところまでの Result を返す。
+func (s Store) Ingest(input []byte, now time.Time) (Result, error) {
 	if s.Dir == "" {
 		return Result{}, errors.New("tasks の置き場所が無い")
 	}
@@ -124,12 +121,8 @@ func (s Store) Ingest(input []byte, classify func(cwd string) domain.Domain, now
 		return Result{}, nil
 	}
 	res := Result{Tool: in.ToolName, SessionID: in.SessionID, AgentID: in.AgentID}
-	dir, d, err := s.sessionDir(in.SessionID, classify(in.CWD))
-	if err != nil {
-		return res, err
-	}
-	res.Domain = d
-	w := &writer{dir: dir, in: in, now: now}
+	w := &writer{dir: filepath.Join(s.Dir, in.SessionID), in: in, now: now}
+	var err error
 	switch in.ToolName {
 	case "TaskCreate":
 		err = w.create()
@@ -144,50 +137,12 @@ func (s Store) Ingest(input []byte, classify func(cwd string) domain.Domain, now
 	return res, err
 }
 
-// sessionDir はセッションのタスクを置くディレクトリとその domain を決める。1 つのセッションが私用と業務の両方の
-// ディレクトリを触ったら業務に倒す (#121): 業務と判定されたら私用の側にあった記録を業務へ移し、
-// 私用と判定されても業務の側に記録があれば業務のまま書く。業務の記録が私用の側へ出ないようにするため。
-func (s Store) sessionDir(sessionID string, d domain.Domain) (string, domain.Domain, error) {
-	home := filepath.Join(s.Dir, string(domain.Home), sessionID)
-	work := filepath.Join(s.Dir, string(domain.Work), sessionID)
-	if d == domain.Home {
-		if _, err := os.Stat(work); err == nil {
-			return work, domain.Work, nil
-		}
-		return home, domain.Home, nil
-	}
-	if _, err := os.Stat(home); err == nil {
-		if err := moveToWork(home, work); err != nil {
-			return "", domain.Work, err
-		}
-	}
-	return work, domain.Work, nil
-}
-
-// moveToWork は私用の側にあったセッションの記録を業務の側へ移す。業務の側にも既にあれば
-// (並行した hook が先に作った)、業務の側を残して私用の側を消す。
-func moveToWork(home, work string) error {
-	if err := os.MkdirAll(filepath.Dir(work), 0o750); err != nil {
-		return fmt.Errorf("tasks の作成に失敗: %w", err)
-	}
-	if _, err := os.Stat(work); err == nil {
-		if err := os.RemoveAll(home); err != nil {
-			return fmt.Errorf("私用の側の記録を消せない: %w", err)
-		}
-		return nil
-	}
-	if err := os.Rename(home, work); err != nil {
-		return fmt.Errorf("私用の側の記録を業務へ移せない: %w", err)
-	}
-	return nil
-}
-
-// List は domain の全セッションのタスクを返す。壊れたファイルは読み飛ばす。
-func (s Store) List(d domain.Domain) ([]Task, error) {
+// List は全セッションのタスクを返す。壊れたファイルは読み飛ばす。
+func (s Store) List() ([]Task, error) {
 	if s.Dir == "" {
 		return nil, nil
 	}
-	root := filepath.Join(s.Dir, string(d))
+	root := s.Dir
 	sessions, err := os.ReadDir(root)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {

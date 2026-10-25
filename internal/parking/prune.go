@@ -5,40 +5,28 @@ import (
 	"os"
 	"path/filepath"
 	"time"
-
-	"github.com/usadamasa/agents-daemon/internal/domain"
 )
 
 // Prune は保持期間を過ぎたメモを mtime で消し、消した数を返す。open は OpenRetention、handed /
 // discarded と読めないメモ、消し損ねた一時ファイルは ClosedRetention で消す。ロックのファイルは残す。
-// domain ごとに Set と同じロックを取る。Set が読んでから書くまでの間に消すと、その書き込みがメモを作り直す。
+// Set と同じロックを取る。Set が読んでから書くまでの間に消すと、その書き込みがメモを作り直す。
 func (s Store) Prune(now time.Time) (int, error) {
 	if s.Dir == "" {
 		return 0, nil
 	}
-	domains, err := os.ReadDir(s.Dir)
-	if err != nil {
+	if _, err := os.Stat(s.Dir); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return 0, nil
 		}
 		return 0, err
 	}
 	removed := 0
-	var errs []error
-	for _, d := range domains {
-		if !d.IsDir() {
-			continue
-		}
-		err := s.locked(domain.Domain(d.Name()), func(dir string) error {
-			n, err := pruneDir(dir, now)
-			removed += n
-			return err
-		})
-		if err != nil {
-			errs = append(errs, err)
-		}
-	}
-	return removed, errors.Join(errs...)
+	err := s.locked(func(dir string) error {
+		n, err := pruneDir(dir, now)
+		removed = n
+		return err
+	})
+	return removed, err
 }
 
 // pruneDir は dir の保持期間を過ぎたメモを消し、消した数を返す。呼び出し側がロックを持つ。

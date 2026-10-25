@@ -152,7 +152,6 @@ function card(key: string, column: string, subject: string, session_id: string, 
 
 // rows はメモの送り先 (同じ repo の生きているセッション) を決めるのに使う。
 const BOARD = {
-  domain: 'home',
   daemon_running: true,
   updated_at: '2026-10-18T09:00:00Z',
   columns: [],
@@ -217,10 +216,10 @@ test('fullscreen でなければ /board は開かず、その旨を返す', asyn
   expect(w.ran).toEqual([])
 })
 
-test('/board は開いたセッションの ID と cwd で status --board を読み、dock に開く', async ($, on) => {
+test('/board は開いたセッションの cwd で status --board を読み、dock に開く', async ($, on) => {
   const w = boardWorld(on)
   await $.command.run(OPEN_BOARD)
-  expect(w.ran[0]).toEqual([BIN, 'status', '--board', ...SELF_ARGS])
+  expect(w.ran[0]).toEqual([BIN, 'status', '--board', '--cwd', CWD])
   expect(w.opened).toEqual(['agents-daemon-board'])
 })
 
@@ -370,7 +369,7 @@ test('数の行の下にレーンの行を全部描き、完了は Show complete
 
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await mount($, surface)
-    expect(await ui.find({ type: 'Text', text: /私用のボード/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /のボード/ })).toBeUndefined()
     // 数: 止まっているノード、その下流、進行中、待っている、完了、メモ。
     expect(await ui.find({ type: 'Text', text: /■ 2 {2}○ 4 {2}▸ 2 {2}↵ 1 {2}✓ 1 {2}◇ 1/ })).toBeDefined()
     // 止まっているノードには下流の数、途中で置いたメモの数、待ちの輪の印。
@@ -706,19 +705,6 @@ test('30 日以内のメモだけなら、まとめて捨てるボタンを出�
   expect(await ui.find({ key: 'discard-stale' })).toBeUndefined()
 })
 
-test('業務のボードには Ask for issue を出さない', async ($, on) => {
-  boardWorld(on, { ...BOARD, domain: 'work' })
-  await $.command.run(OPEN_BOARD)
-  const ui = await mount($)
-  await ui.press({ key: `park:${MEMO.id}` })
-  expect(await ui.find({ key: 'task:W' })).toBeDefined()
-  expect(await ui.find({ key: 'task:SELF' })).toBeDefined()
-  expect(await ui.find({ key: 'spawn-task' })).toBeDefined()
-  expect(await ui.find({ key: 'issue:P' })).toBeUndefined()
-  expect(await ui.find({ key: 'issue:SELF' })).toBeUndefined()
-  expect(await ui.find({ key: 'spawn-issue' })).toBeUndefined()
-})
-
 test('メモを別の repo の新しいセッションへ渡す: 候補はメモの repo、ほかの行の repo の順 (#162)', async ($, on) => {
   const w = boardWorld(on)
   await $.command.run(OPEN_BOARD)
@@ -733,7 +719,7 @@ test('メモを別の repo の新しいセッションへ渡す: 候補はメモ
 
   w.ran.length = 0
   await ui.press({ key: 'spawn:/src/home/dotfile' })
-  expect(operations(w.ran)).toEqual([CLAIM, [BIN, 'spawn', '--repo', '/src/home/dotfile', ...SELF_ARGS]])
+  expect(operations(w.ran)).toEqual([CLAIM, [BIN, 'spawn', '--repo', '/src/home/dotfile']])
   expect(w.fed).toHaveLength(1)
   expect(w.fed[0]).toMatch(/^このメモを渡すため、dotfile \(\/src\/home\/dotfile\) で新しいセッションとして起こしました。/)
   expect(w.fed[0]).toMatch(/パーキングロットのメモ「保持期間の根拠が無い」\(種類: aside\) をタスクにしてください。/)
@@ -770,7 +756,7 @@ test('候補に無い repo は絶対パスで指定する。相対パスは起�
   expect(await ui.find({ type: 'Text', text: /絶対パス/ })).toBeDefined()
 
   await ui.input({ key: 'spawn-path', text: '/src/home/other' })
-  expect(operations(w.ran)[1]).toEqual([BIN, 'spawn', '--repo', '/src/home/other', ...SELF_ARGS])
+  expect(operations(w.ran)[1]).toEqual([BIN, 'spawn', '--repo', '/src/home/other'])
   expect(w.fed[0]).toMatch(/^このメモを渡すため、other \(\/src\/home\/other\) で新しいセッションとして起こしました。/)
 
   await ui.press({ key: 'spawn-task' })
@@ -781,7 +767,7 @@ test('候補に無い repo は絶対パスで指定する。相対パスは起�
 
 test('新しいセッションを起こせなかった (window を作っていない) メモは open に戻す', async ($, on) => {
   const w = world(on, argv =>
-    argv[1] === 'status' ? output(JSON.stringify(BOARD)) : argv[1] === 'spawn' ? output('', 1, 'agents-daemon: 開いたセッションの domain (home) と repo の domain (work) が違うので起こさない') : output('{}'),
+    argv[1] === 'status' ? output(JSON.stringify(BOARD)) : argv[1] === 'spawn' ? output('', 1, 'agents-daemon: repo が見つからない: /src/home/dotfile') : output('{}'),
   )
   await $.command.run(OPEN_BOARD)
   const ui = await mount($)
@@ -789,8 +775,8 @@ test('新しいセッションを起こせなかった (window を作ってい�
   await ui.press({ key: 'spawn-task' })
   w.ran.length = 0
   await ui.press({ key: 'spawn:/src/home/dotfile' })
-  expect(operations(w.ran)).toEqual([CLAIM, [BIN, 'spawn', '--repo', '/src/home/dotfile', ...SELF_ARGS], REVERT])
-  expect(await ui.find({ type: 'Text', text: /dotfile で新しいセッションを起こせませんでした: .*domain \(work\) が違う.*メモは open に戻しました/ })).toBeDefined()
+  expect(operations(w.ran)).toEqual([CLAIM, [BIN, 'spawn', '--repo', '/src/home/dotfile'], REVERT])
+  expect(await ui.find({ type: 'Text', text: /dotfile で新しいセッションを起こせませんでした: .*repo が見つからない.*メモは open に戻しました/ })).toBeDefined()
 })
 
 test('claude が前景にならなかった (pane は残る) メモは戻さず、pane と戻し方を知らせる', async ($, on) => {
@@ -807,15 +793,15 @@ test('claude が前景にならなかった (pane は残る) メモは戻さず�
   await ui.press({ key: 'spawn-task' })
   w.ran.length = 0
   await ui.press({ key: 'spawn:/src/home/dotfile' })
-  expect(operations(w.ran)).toEqual([CLAIM, [BIN, 'spawn', '--repo', '/src/home/dotfile', ...SELF_ARGS]])
+  expect(operations(w.ran)).toEqual([CLAIM, [BIN, 'spawn', '--repo', '/src/home/dotfile']])
   expect(await ui.find({ type: 'Text', text: /dotfile で window を作りましたが.*前景にならなかった.*handed のまま.*park set .* --status open/ })).toBeDefined()
 })
 
 test('ノードの無いボードと、daemon が動いていないことを描く', async ($, on) => {
-  boardWorld(on, { domain: 'work', daemon_running: false, columns: [], rows: [], graph: { nodes: [], links: [], longest_chain: [], rows: [], rows_with_completed: [] } })
+  boardWorld(on, { daemon_running: false, columns: [], rows: [], graph: { nodes: [], links: [], longest_chain: [], rows: [], rows_with_completed: [] } })
   await $.command.run(OPEN_BOARD)
   const ui = await mount($)
-  expect(await ui.find({ type: 'Text', text: /業務のボード \(agents-daemon が動いていない/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /agents-daemon が動いていないため、セッションの状態は出ません/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /タスクはまだありません/ })).toBeDefined()
 })
 

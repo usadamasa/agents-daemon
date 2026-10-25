@@ -3,7 +3,6 @@ package boardcli
 import (
 	"fmt"
 	"io"
-	"os"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -31,7 +30,7 @@ func newIngestTaskCmd() *cobra.Command {
 	}
 }
 
-// ingestTask は stdin を読み切り、config の homePaths / defaultDomain で domain を決めて記録する。
+// ingestTask は stdin を読み切って記録する。
 func ingestTask(stdin io.Reader, now time.Time) error {
 	input, err := io.ReadAll(stdin)
 	if err != nil {
@@ -41,8 +40,7 @@ func ingestTask(stdin io.Reader, now time.Time) error {
 	if err != nil {
 		return err
 	}
-	placer := tasklog.LoadPlacer(p, os.Getenv("HOME"))
-	res, err := placer.Tasks.Ingest(input, placer.Classify, now)
+	res, err := tasklog.New(p.StateDir()).Ingest(input, now)
 	logIngest(p.StateDir(), res, err, now)
 	return err
 }

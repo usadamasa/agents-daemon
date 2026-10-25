@@ -11,8 +11,6 @@ import (
 	"strconv"
 	"sync"
 	"testing"
-
-	"github.com/usadamasa/agents-daemon/internal/domain"
 )
 
 const (
@@ -65,7 +63,7 @@ func TestIngest_TaskCreateの記録は乱択の交錯で失われない(t *testi
 				defer done.Done()
 				ready.Done()
 				<-start
-				if _, err := s.Ingest(input, allHome, t0); err != nil {
+				if _, err := s.Ingest(input, t0); err != nil {
 					errs <- err
 				}
 			}()
@@ -78,7 +76,7 @@ func TestIngest_TaskCreateの記録は乱択の交錯で失われない(t *testi
 			t.Fatalf("seed %d (%v): Ingest() error = %v", seed, calls, err)
 		}
 
-		got := byID(t, s, domain.Home)
+		got := byID(t, s)
 		for _, id := range created {
 			if _, ok := got[id]; !ok {
 				t.Fatalf("seed %d (%v): RecordsComplete: TaskCreate の記録 %s が失われた (残り %v)", seed, calls, id, keys(got))

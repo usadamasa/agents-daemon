@@ -15,8 +15,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-
-	"github.com/usadamasa/agents-daemon/internal/domain"
 )
 
 const (
@@ -127,7 +125,7 @@ func TestHandoff_不変条件を乱択の交錯で破らない(t *testing.T) {
 		s := New(t.TempDir())
 		memos := make([]string, 1+r.IntN(3))
 		for i := range memos {
-			memos[i] = mustAdd(t, s, domain.Home, testRepo, aside("メモ "+strconv.Itoa(i)), source("s1", "")).ID
+			memos[i] = mustAdd(t, s, testRepo, aside("メモ "+strconv.Itoa(i)), source("s1", "")).ID
 		}
 		counts := map[string]*memoCounts{}
 		for _, id := range memos {
@@ -155,7 +153,7 @@ func TestHandoff_不変条件を乱択の交錯で破らない(t *testing.T) {
 			t.Fatalf("seed %d: %s", seed, msg)
 		}
 		for _, id := range memos {
-			item, ok := readItem(filepath.Join(s.Dir, string(domain.Home), id+".json"))
+			item, ok := readItem(filepath.Join(s.Dir, id+".json"))
 			if !ok {
 				t.Fatalf("seed %d: メモ %s を読めない", seed, id)
 			}
@@ -200,7 +198,7 @@ type handoffMod struct {
 func (m *handoffMod) run(barrier func(), failures chan<- string) {
 	for attempt := range handoffMaxAttempts {
 		id := m.memos[m.r.IntN(len(m.memos))]
-		view, err := m.s.Find(domain.Home, "", StatusOpen)
+		view, err := m.s.Find("", StatusOpen)
 		if err != nil {
 			failures <- fmt.Sprintf("mod %d: Find() error = %v", m.mod, err)
 			return
@@ -215,7 +213,7 @@ func (m *handoffMod) run(barrier func(), failures chan<- string) {
 			m.discard(id)
 			continue
 		}
-		if _, _, err := m.s.Set(domain.Home, id, StatusHanded, StatusOpen); err != nil {
+		if _, _, err := m.s.Set(id, StatusHanded, StatusOpen); err != nil {
 			m.reached.lost() // ほかの mod が先に取った、または捨てた
 			continue
 		}
@@ -232,7 +230,7 @@ func (m *handoffMod) run(barrier func(), failures chan<- string) {
 
 // discard は読んだボードで open だったメモを捨てる (Handoff.tla の Discard)。先に取られていれば失敗してよい。
 func (m *handoffMod) discard(id string) {
-	if _, _, err := m.s.Set(domain.Home, id, StatusDiscarded, StatusOpen); err != nil {
+	if _, _, err := m.s.Set(id, StatusDiscarded, StatusOpen); err != nil {
 		m.reached.lost()
 		return
 	}
@@ -253,7 +251,7 @@ func (m *handoffMod) after(id string) string {
 		m.counts[id].sessions.Add(1)
 	case outcomeReverted:
 		revert := func() error {
-			_, _, err := m.s.Set(domain.Home, id, StatusOpen, StatusHanded)
+			_, _, err := m.s.Set(id, StatusOpen, StatusHanded)
 			return err
 		}
 		if err := m.holder.release(id, revert); err != nil {

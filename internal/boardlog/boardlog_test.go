@@ -6,8 +6,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/usadamasa/agents-daemon/internal/domain"
 )
 
 func readLines(t *testing.T, path string) []string {
@@ -26,12 +24,9 @@ func realClock() (func() time.Time, string) {
 	return func() time.Time { return fixed }, fixed.Format(time.RFC3339)
 }
 
-func TestPath_separatesDomains(t *testing.T) {
-	if got, want := Path("/s", domain.Home), filepath.Join("/s", "logs", "board-home.log"); got != want {
-		t.Errorf("Path(home) = %q, want %q", got, want)
-	}
-	if got, want := Path("/s", domain.Work), filepath.Join("/s", "logs", "board-work.log"); got != want {
-		t.Errorf("Path(work) = %q, want %q", got, want)
+func TestPath(t *testing.T) {
+	if got, want := Path("/s"), filepath.Join("/s", "logs", "board.log"); got != want {
+		t.Errorf("Path() = %q, want %q", got, want)
 	}
 }
 
@@ -40,19 +35,16 @@ func TestWrite_oneLinePerEvent(t *testing.T) {
 	dir := t.TempDir()
 	now, ts := realClock()
 
-	write(dir, domain.Home, now, "park.add", f("session", "S1"), f("memo", "20261019T090000-abcd"), f("created", true), f("count", 2))
-	write(dir, domain.Home, now, "park.set", f("memo", "m"), f("from", "open"), f("to", "handed"))
+	write(dir, now, "park.add", f("session", "S1"), f("memo", "20261019T090000-abcd"), f("created", true), f("count", 2))
+	write(dir, now, "park.set", f("memo", "m"), f("from", "open"), f("to", "handed"))
 
-	got := readLines(t, Path(dir, domain.Home))
+	got := readLines(t, Path(dir))
 	want := []string{
 		ts + " park.add session=S1 memo=20261019T090000-abcd created=true count=2",
 		ts + " park.set memo=m from=open to=handed",
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("lines =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
-	}
-	if _, err := os.Stat(Path(dir, domain.Work)); !os.IsNotExist(err) {
-		t.Errorf("私用の出来事が業務のファイルに出た: %v", err)
 	}
 }
 
@@ -61,9 +53,9 @@ func TestWrite_quotesValues(t *testing.T) {
 	dir := t.TempDir()
 	now, ts := realClock()
 
-	write(dir, domain.Work, now, "mod.board.failed", f("reason", "exit 1\nstatus snapshot"), f("x", "a=b"), f("empty", ""), f("pct", "100%"))
+	write(dir, now, "mod.board.failed", f("reason", "exit 1\nstatus snapshot"), f("x", "a=b"), f("empty", ""), f("pct", "100%"))
 
-	got := readLines(t, Path(dir, domain.Work))
+	got := readLines(t, Path(dir))
 	want := ts + ` mod.board.failed reason="exit 1\nstatus snapshot" x="a=b" empty="" pct=100%`
 	if len(got) != 1 || got[0] != want {
 		t.Errorf("lines = %q, want [%q]", got, want)
@@ -72,13 +64,13 @@ func TestWrite_quotesValues(t *testing.T) {
 
 func TestWrite_rotatesOnDayChange(t *testing.T) {
 	dir := t.TempDir()
-	write(dir, domain.Home, func() time.Time { return time.Date(2026, 10, 18, 23, 0, 0, 0, time.UTC) }, "a")
-	path := Path(dir, domain.Home)
+	write(dir, func() time.Time { return time.Date(2026, 10, 18, 23, 0, 0, 0, time.UTC) }, "a")
+	path := Path(dir)
 	day := time.Date(2026, 10, 18, 23, 0, 0, 0, time.UTC)
 	if err := os.Chtimes(path, day, day); err != nil {
 		t.Fatal(err)
 	}
-	write(dir, domain.Home, func() time.Time { return time.Date(2026, 10, 19, 1, 0, 0, 0, time.UTC) }, "b")
+	write(dir, func() time.Time { return time.Date(2026, 10, 19, 1, 0, 0, 0, time.UTC) }, "b")
 
 	if got := readLines(t, path+".2026-10-18"); len(got) != 1 || !strings.HasSuffix(got[0], " a") {
 		t.Errorf("退避したファイル = %q", got)
@@ -119,12 +111,5 @@ func TestValidEvent(t *testing.T) {
 		if validEvent(bad) {
 			t.Errorf("validEvent(%q) = true", bad)
 		}
-	}
-}
-
-func TestPaths_bothDomains(t *testing.T) {
-	got := Paths("/s")
-	if len(got) != 2 || got[0] != Path("/s", domain.Home) || got[1] != Path("/s", domain.Work) {
-		t.Errorf("Paths = %v", got)
 	}
 }

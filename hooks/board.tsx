@@ -302,7 +302,6 @@ export const registerBoard: Register = on => {
     // 「new session…」で repo の候補を開き、新しいセッションを起こして渡す (#162)。
     const memoDetail = ({ memo, row: memoRowData }: { memo: ParkingCard; row: BoardRow }) => {
       const tasks = taskDestinations(data, memoRowData, self)
-      const canIssue = data.domain === 'home'
       // spawn は候補の repo で新しいセッションを起こし、渡したら候補を畳む。
       const spawn = async (to: Destination, intent: Intent) => {
         if (to.route !== 'spawn') return
@@ -339,11 +338,9 @@ export const registerBoard: Register = on => {
                 Ask for issue → {destinationLabel(to)}
               </Button>
             ))}
-            {canIssue && (
-              <Button key="spawn-issue" onPress={() => void update($, spawning, () => 'issue')}>
-                Ask for issue → new session…
-              </Button>
-            )}
+            <Button key="spawn-issue" onPress={() => void update($, spawning, () => 'issue')}>
+              Ask for issue → new session…
+            </Button>
           </Box>
           {isSpawning !== '' && (
             <Box key="spawn" flexDirection="column">
@@ -372,10 +369,7 @@ export const registerBoard: Register = on => {
       <Box key="root" flexDirection="column" minHeight={e.props.scroll.bodyRows} justifyContent="space-between">
         <Box key="content" flexDirection="column">
           {failure !== '' && <Text color="red">ボードを読めません: {failure}</Text>}
-          <Text dimColor>
-            {data.domain === 'home' ? '私用' : '業務'}のボード
-            {data.daemon_running ? '' : ' (agents-daemon が動いていないため、セッションの状態は出ません)'}
-          </Text>
+          {!data.daemon_running && <Text dimColor>agents-daemon が動いていないため、セッションの状態は出ません</Text>}
           <Text>{summary(g, memos.length)}</Text>
           {g.nodes.length === 0 && memos.length === 0 && <Text dimColor>タスクはまだありません</Text>}
           {rows.flatMap((r, i) => {
@@ -444,7 +438,7 @@ function counts(data: BoardData): Fields {
   }
 }
 
-// edge は `agents-daemon edge ...` を走らせ、失敗の理由を返す (成功なら空)。辺の domain はバイナリが端点の cwd から決める。
+// edge は `agents-daemon edge ...` を走らせ、失敗の理由を返す (成功なら空)。
 async function edge($: EngineInterface, args: string[]): Promise<string> {
   try {
     const { exitCode, stderr } = await $.process.run([await daemonBin($), 'edge', ...args], { timeoutMs: 10000 })

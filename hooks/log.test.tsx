@@ -6,7 +6,7 @@ import type { Engine } from 'claude-code/testing'
 
 const BIN = '/home/u/.cache/agents-daemon/bin/agents-daemon'
 const CWD = '/src/home/agents-daemon'
-const LOG = [BIN, 'board-log', '--session', 'SELF', '--cwd', CWD, '--']
+const LOG = [BIN, 'board-log', '--session', 'SELF', '--']
 
 function output(stdout: string, exitCode = 0, stderr = ''): ProcessRunResult {
   return { exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false }
@@ -88,7 +88,6 @@ const NODE = {
 
 function board(memos: unknown[]) {
   return {
-    domain: 'home',
     daemon_running: true,
     columns: COLUMNS,
     rows: [{ repo: CWD, title: 'agents-daemon', cards: [CARD], parking: memos }],

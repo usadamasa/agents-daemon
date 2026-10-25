@@ -15,7 +15,7 @@ Tasks == 1..MaxTasks
 
 VARIABLES
   ccTasks,  \* Claude Code 本体が持つタスクの集合
-  records,  \* tasks/<domain>/<session>/ に記録があるタスクの集合
+  records,  \* tasks/<session>/ に記録があるタスクの集合
   hooks     \* まだ動いていない hook の入力の集合
 
 vars == <<ccTasks, records, hooks>>

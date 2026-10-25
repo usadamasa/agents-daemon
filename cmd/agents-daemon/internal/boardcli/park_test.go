@@ -17,14 +17,13 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/parking"
 )
 
-// parkTestEnv は HOME と XDG_* を root へ向け、homePaths に ~/src/home を置く。
+// parkTestEnv は HOME と XDG_* を root へ向ける。
 func parkTestEnv(t *testing.T) (root string) {
 	t.Helper()
 	root = t.TempDir()
 	t.Setenv("HOME", root)
 	t.Setenv("XDG_STATE_HOME", filepath.Join(root, "state"))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
-	writeTestConfig(t, filepath.Join(root, "config", "agents-daemon", "config.json"), `{"homePaths": ["~/src/home"]}`)
 	return root
 }
 
@@ -80,7 +79,7 @@ func decodeAdded(t *testing.T, s string) parking.Added {
 	return added
 }
 
-func writeTaskRecord(t *testing.T, root, d, sessionID, body string) {
+func writeTaskRecord(t *testing.T, root, sessionID, body string) {
 	t.Helper()
 	var task struct {
 		ID string `json:"id"`
@@ -88,7 +87,7 @@ func writeTaskRecord(t *testing.T, root, d, sessionID, body string) {
 	if err := json.Unmarshal([]byte(body), &task); err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(root, "state", "agents-daemon", "tasks", d, sessionID, task.ID+".json")
+	path := filepath.Join(root, "state", "agents-daemon", "tasks", sessionID, task.ID+".json")
 	writeTestConfig(t, path, body)
 }
 
@@ -107,14 +106,14 @@ func TestParkHelpCallsItMemo(t *testing.T) {
 
 const parkInput = `{"kind": "aside", "title": "保持期間の根拠が無い", "detail": "d", "files": ["a.go"], "default_taken": "やらない", "session_id": "s1"}`
 
-// domain は cwd の判定、repo は main worktree のパス (linked worktree からでも同じ)、task_id は
+// repo は main worktree のパス (linked worktree からでも同じ)、task_id は
 // そのセッションの進行中のタスクのうち最後に更新されたものになる。
 func TestParkAdd(t *testing.T) {
 	root := parkTestEnv(t)
 	repo, wt := parkTestRepo(t, filepath.Join(root, "src", "home", "app"))
-	writeTaskRecord(t, root, "home", "s1", `{"id": "1", "subject": "a", "status": "in_progress", "session_id": "s1", "updated_at": "2026-10-19T10:00:00Z"}`)
-	writeTaskRecord(t, root, "home", "s1", `{"id": "2", "subject": "b", "status": "in_progress", "session_id": "s1", "updated_at": "2026-10-19T11:00:00Z"}`)
-	writeTaskRecord(t, root, "home", "s1", `{"id": "3", "subject": "c", "status": "pending", "session_id": "s1", "updated_at": "2026-10-19T12:00:00Z"}`)
+	writeTaskRecord(t, root, "s1", `{"id": "1", "subject": "a", "status": "in_progress", "session_id": "s1", "updated_at": "2026-10-19T10:00:00Z"}`)
+	writeTaskRecord(t, root, "s1", `{"id": "2", "subject": "b", "status": "in_progress", "session_id": "s1", "updated_at": "2026-10-19T11:00:00Z"}`)
+	writeTaskRecord(t, root, "s1", `{"id": "3", "subject": "c", "status": "pending", "session_id": "s1", "updated_at": "2026-10-19T12:00:00Z"}`)
 
 	stdout, _, err := runPark(t, parkInput, "add", "--cwd", wt)
 	if err != nil {
@@ -125,8 +124,8 @@ func TestParkAdd(t *testing.T) {
 		t.Errorf("新しいメモなのに created = false")
 	}
 	item := added.Item
-	if item.Domain != "home" || item.Repo != gitrepo.Locate(repo).Repo || item.Repo == "" {
-		t.Errorf("domain / repo = %q / %q, want home / %q", item.Domain, item.Repo, gitrepo.Locate(repo).Repo)
+	if item.Repo != gitrepo.Locate(repo).Repo || item.Repo == "" {
+		t.Errorf("repo = %q, want %q", item.Repo, gitrepo.Locate(repo).Repo)
 	}
 	if len(item.Sources) != 1 || item.Sources[0].TaskID != "2" || item.Sources[0].CWD != wt || item.Sources[0].SessionID != "s1" {
 		t.Errorf("sources = %+v", item.Sources)
@@ -142,25 +141,8 @@ func TestParkAdd(t *testing.T) {
 	}
 }
 
-// 業務の側にタスクの記録があるセッションは、cwd が私用でも業務に置く (ボードと同じ規則)。
-func TestParkAdd_sessionTiltedToWork(t *testing.T) {
-	root := parkTestEnv(t)
-	cwd := filepath.Join(root, "src", "home", "a")
-	if err := os.MkdirAll(cwd, 0o750); err != nil {
-		t.Fatal(err)
-	}
-	writeTaskRecord(t, root, "work", "s1", `{"id": "1", "subject": "a", "status": "in_progress", "session_id": "s1"}`)
-	stdout, _, err := runPark(t, parkInput, "add", "--cwd", cwd)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if item := decodeAdded(t, stdout).Item; item.Domain != "work" || item.Sources[0].TaskID != "1" {
-		t.Errorf("item = %+v, want work に task 1 で置く", item)
-	}
-}
-
-// git の外は cwd を repo にし (ボードの行と同じ)、homePaths の外は work に置く。
-func TestParkAdd_outsideGitIsWork(t *testing.T) {
+// git の外は cwd を repo にする (ボードの行と同じ)。
+func TestParkAdd_outsideGit(t *testing.T) {
 	root := parkTestEnv(t)
 	cwd := filepath.Join(root, "work", "plain")
 	if err := os.MkdirAll(cwd, 0o750); err != nil {
@@ -170,27 +152,8 @@ func TestParkAdd_outsideGitIsWork(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if item := decodeAdded(t, stdout).Item; item.Domain != "work" || item.Repo != cwd {
+	if item := decodeAdded(t, stdout).Item; item.Repo != cwd {
 		t.Errorf("item = %+v", item)
-	}
-}
-
-// 設定が無ければ homePaths の下でも work に置く (業務のものが私用の側へ出ない向き)。
-func TestParkAdd_withoutConfigIsWork(t *testing.T) {
-	root := parkTestEnv(t)
-	if err := os.Remove(filepath.Join(root, "config", "agents-daemon", "config.json")); err != nil {
-		t.Fatal(err)
-	}
-	cwd := filepath.Join(root, "src", "home", "a")
-	if err := os.MkdirAll(cwd, 0o750); err != nil {
-		t.Fatal(err)
-	}
-	stdout, _, err := runPark(t, parkInput, "add", "--cwd", cwd)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if item := decodeAdded(t, stdout).Item; item.Domain != "work" {
-		t.Errorf("domain = %q, want work", item.Domain)
 	}
 }
 
@@ -209,13 +172,12 @@ func TestParkAdd_invalidInput(t *testing.T) {
 	}
 }
 
-// list は cwd の domain のメモだけを出し、--repo と --status で絞る。set は status を書き換える。
+// list は --repo と --status で絞る。set は status を書き換える。
 func TestParkListAndSet(t *testing.T) {
 	root := parkTestEnv(t)
 	home := filepath.Join(root, "src", "home", "a")
 	other := filepath.Join(root, "src", "home", "b")
-	work := filepath.Join(root, "work")
-	for _, d := range []string{home, other, work} {
+	for _, d := range []string{home, other} {
 		if err := os.MkdirAll(d, 0o750); err != nil {
 			t.Fatal(err)
 		}
@@ -226,9 +188,6 @@ func TestParkListAndSet(t *testing.T) {
 	}
 	first := decodeAdded(t, out).Item
 	if _, _, err := runPark(t, strings.Replace(parkInput, "保持期間", "別の件", 1), "add", "--cwd", other); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := runPark(t, parkInput, "add", "--cwd", work); err != nil {
 		t.Fatal(err)
 	}
 
@@ -245,7 +204,7 @@ func TestParkListAndSet(t *testing.T) {
 		return items
 	}
 	if got := list("--cwd", home); len(got) != 2 {
-		t.Errorf("home の件数 = %d, want 2 (work のメモを出さない)", len(got))
+		t.Errorf("件数 = %d, want 2", len(got))
 	}
 	if got := list("--cwd", home, "--repo", home); len(got) != 1 || got[0].ID != first.ID {
 		t.Errorf("--repo で絞れていない: %+v", got)
@@ -258,14 +217,11 @@ func TestParkListAndSet(t *testing.T) {
 	if got := list("--cwd", home, "--status", "open"); len(got) != 1 || got[0].ID == first.ID {
 		t.Errorf("--status で絞れていない: %+v", got)
 	}
-	if got := list("--cwd", work, "--repo", home); got == nil || len(got) != 0 {
+	if got := list("--repo", filepath.Join(root, "none")); got == nil || len(got) != 0 {
 		t.Errorf("該当なしは空の配列: %+v", got)
 	}
 	if _, _, err := runPark(t, "", "list", "--cwd", home, "--status", "done"); err == nil {
 		t.Errorf("範囲外の --status が通った")
-	}
-	if _, _, err := runPark(t, "", "set", first.ID, "--status", "discarded", "--cwd", work); err == nil {
-		t.Errorf("別の domain から書き換えられた")
 	}
 	// --from は元の status が違えば書き換えない (mod が送る前に取る)。
 	if _, _, err := runPark(t, "", "set", first.ID, "--status", "handed", "--from", "open", "--cwd", home); err == nil {
@@ -285,16 +241,15 @@ func writeDaemonStatus(t *testing.T, root string, panes string) {
 	writeTestConfig(t, filepath.Join(state, "status.json"), `{"pid": `+strconv.Itoa(os.Getpid())+`, "updated_at": "`+time.Now().Add(time.Minute).Format(time.RFC3339)+`", "panes": [`+panes+`]}`)
 }
 
-// adopt は開いたセッションの domain の側にあるタスクを kind task のメモにし、タスクの記録を消す。
-// 別の domain のタスクは移さない。セッションが終了したことは daemon の status.json で確かめ、daemon が動いていなければ移さない。
+// adopt はタスクを kind task のメモにし、タスクの記録を消す。
+// セッションが終了したことは daemon の status.json で確かめ、daemon が動いていなければ移さない。
 func TestParkAdopt(t *testing.T) {
 	root := parkTestEnv(t)
 	cwd := filepath.Join(root, "src", "home", "a")
 	if err := os.MkdirAll(cwd, 0o750); err != nil {
 		t.Fatal(err)
 	}
-	writeTaskRecord(t, root, "home", "dead", `{"id": "4", "subject": "README を直す", "status": "pending", "session_id": "dead", "cwd": "`+cwd+`", "updated_at": "2026-10-18T09:00:00Z"}`)
-	writeTaskRecord(t, root, "work", "busy", `{"id": "1", "subject": "業務", "status": "pending", "session_id": "busy", "cwd": "`+cwd+`"}`)
+	writeTaskRecord(t, root, "dead", `{"id": "4", "subject": "README を直す", "status": "pending", "session_id": "dead", "cwd": "`+cwd+`", "updated_at": "2026-10-18T09:00:00Z"}`)
 
 	if _, stderr, err := runPark(t, "", "adopt", "dead", "4", "--session", "viewer", "--cwd", cwd); err == nil || !strings.Contains(stderr, "daemon が動いていない") {
 		t.Fatalf("daemon が動いていないのに移した: %v %s", err, stderr)
@@ -308,14 +263,11 @@ func TestParkAdopt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("park adopt: %v", err)
 	}
-	if item := decodeAdded(t, out).Item; item.Kind != parking.KindTask || item.Domain != "home" || item.Title != "README を直す" {
+	if item := decodeAdded(t, out).Item; item.Kind != parking.KindTask || item.Title != "README を直す" {
 		t.Errorf("item = %+v", item)
 	}
-	if _, err := os.Stat(filepath.Join(root, "state", "agents-daemon", "tasks", "home", "dead", "4.json")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(root, "state", "agents-daemon", "tasks", "dead", "4.json")); !os.IsNotExist(err) {
 		t.Errorf("タスクの記録が残った: %v", err)
-	}
-	if _, _, err := runPark(t, "", "adopt", "busy", "1", "--session", "viewer", "--cwd", cwd); err == nil {
-		t.Errorf("別の domain のタスクを移した")
 	}
 }
 
@@ -326,7 +278,7 @@ func TestParkList_task(t *testing.T) {
 	if err := os.MkdirAll(cwd, 0o750); err != nil {
 		t.Fatal(err)
 	}
-	writeTaskRecord(t, root, "home", "s1", `{"id": "3", "subject": "a", "status": "in_progress", "session_id": "s1"}`)
+	writeTaskRecord(t, root, "s1", `{"id": "3", "subject": "a", "status": "in_progress", "session_id": "s1"}`)
 	out, _, err := runPark(t, parkInput, "add", "--cwd", cwd)
 	if err != nil {
 		t.Fatal(err)
@@ -352,7 +304,7 @@ func TestParkList_task(t *testing.T) {
 	}
 }
 
-// discard は開いたセッションの domain の open のメモのうち、最後に置かれてから --days 日より経ったものを
+// discard は open のメモのうち、最後に置かれてから --days 日より経ったものを
 // discarded にし、捨てたメモを出す。--days は必須で 1 以上。
 func TestParkDiscard(t *testing.T) {
 	root := parkTestEnv(t)
@@ -362,8 +314,8 @@ func TestParkDiscard(t *testing.T) {
 	}
 	// add は今の時刻で置くので、古いメモは記録を直接置く。
 	const old = "20260901T000000-0ld0ld00"
-	writeTestConfig(t, filepath.Join(root, "state", "agents-daemon", "parking", "home", old+".json"),
-		`{"id":"`+old+`","domain":"home","repo":"`+cwd+`","kind":"aside","title":"古い","status":"open","sources":[{"session_id":"s1","cwd":"`+cwd+`","at":"2026-09-01T00:00:00Z"}]}`)
+	writeTestConfig(t, filepath.Join(root, "state", "agents-daemon", "parking", old+".json"),
+		`{"id":"`+old+`","repo":"`+cwd+`","kind":"aside","title":"古い","status":"open","sources":[{"session_id":"s1","cwd":"`+cwd+`","at":"2026-09-01T00:00:00Z"}]}`)
 	out, _, err := runPark(t, parkInput, "add", "--cwd", cwd)
 	if err != nil {
 		t.Fatal(err)

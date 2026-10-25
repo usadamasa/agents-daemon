@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/daemon/state"
-	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
@@ -17,15 +16,6 @@ var t0 = time.Date(2026, 10, 18, 9, 0, 0, 0, time.UTC)
 // places は cwd → Place の表を Locate にする。表に無い cwd は git の外。
 func places(m map[string]gitrepo.Place) func(string) gitrepo.Place {
 	return func(cwd string) gitrepo.Place { return m[cwd] }
-}
-
-func homeUnder(prefix string) func(string) domain.Domain {
-	return func(cwd string) domain.Domain {
-		if strings.HasPrefix(cwd, prefix) {
-			return domain.Home
-		}
-		return domain.Work
-	}
 }
 
 func task(sid, id, subject, status, cwd string, blockedBy ...string) tasklog.Task {
@@ -59,7 +49,6 @@ func byKey(b Board) map[string]struct {
 func TestBuild_rowsAndColumns(t *testing.T) {
 	const main, wt, other = "/src/home/agents-daemon", "/src/home/agents-daemon/.claude/worktrees/x", "/src/home/dotfile"
 	b := build(input{
-		Domain:   domain.Home,
 		PID:      42,
 		Snapshot: snapshot(state.PaneStatus{PaneID: "p1", SessionID: "A", CWD: main, AgentStatus: "working"}),
 		Tasks: []tasklog.Task{
@@ -70,7 +59,6 @@ func TestBuild_rowsAndColumns(t *testing.T) {
 			task("B", "1", "CI を直す", "in_progress", wt),
 			task("C", "1", "alias を整理", "pending", other),
 		},
-		Classify: homeUnder("/src/home"),
 		Locate: places(map[string]gitrepo.Place{
 			main:  {Repo: main, Branch: "main"},
 			wt:    {Repo: main, Branch: "fix-ci"},
@@ -125,7 +113,7 @@ func TestBuild_rowsAndColumns(t *testing.T) {
 func TestBuild_parking(t *testing.T) {
 	const main, wt, other = "/src/home/agents-daemon", "/src/home/agents-daemon/.claude/worktrees/x", "/src/home/dotfile"
 	memo := parking.Item{
-		ID: "20261018T090000-aaaa", Domain: domain.Home, Repo: main, Status: parking.StatusOpen,
+		ID: "20261018T090000-aaaa", Repo: main, Status: parking.StatusOpen,
 		Entry: parking.Entry{Kind: parking.KindAside, Title: "保持期間の根拠が無い", Detail: "d", Files: []string{"a.go"}, DefaultTaken: "やらない"},
 		Sources: []parking.Source{
 			{SessionID: "B", TaskID: "1", CWD: wt, At: t0},
@@ -133,17 +121,15 @@ func TestBuild_parking(t *testing.T) {
 		},
 	}
 	lone := parking.Item{
-		ID: "20261018T100000-bbbb", Domain: domain.Home, Repo: other, Status: parking.StatusOpen,
+		ID: "20261018T100000-bbbb", Repo: other, Status: parking.StatusOpen,
 		Entry:   parking.Entry{Kind: parking.KindPreference, Title: "alias の命名"},
 		Sources: []parking.Source{{SessionID: "C", CWD: other, At: t0}},
 	}
 	b := build(input{
-		Domain:   domain.Home,
 		PID:      42,
 		Snapshot: snapshot(state.PaneStatus{PaneID: "p1", SessionID: "A", CWD: main}),
 		Tasks:    []tasklog.Task{task("A", "1", "調査", "in_progress", main)},
 		Parking:  []parking.Item{memo, lone},
-		Classify: homeUnder("/src/home"),
 		Locate: places(map[string]gitrepo.Place{
 			main:  {Repo: main, Branch: "main"},
 			wt:    {Repo: main, Branch: "fix-ci"},
@@ -182,8 +168,7 @@ func TestBuild_parking(t *testing.T) {
 func TestBuild_marks(t *testing.T) {
 	until := time.Date(2026, 10, 18, 14, 30, 0, 0, time.Local)
 	b := build(input{
-		Domain: domain.Work,
-		PID:    42,
+		PID: 42,
 		Snapshot: snapshot(
 			state.PaneStatus{PaneID: "p1", SessionID: "A", CWD: "/w/a", AgentStatus: "blocked", AgentKind: "permission"},
 			state.PaneStatus{PaneID: "p2", SessionID: "B", CWD: "/w/b", AgentStatus: "idle", MonitorStatus: "waiting", WaitUntil: &until},
@@ -210,8 +195,7 @@ func TestBuild_marks(t *testing.T) {
 // TodoWrite のリストもカードになる。
 func TestBuild_sessionsWithoutTasksAndTodos(t *testing.T) {
 	b := build(input{
-		Domain: domain.Work,
-		PID:    42,
+		PID: 42,
 		Snapshot: snapshot(
 			state.PaneStatus{PaneID: "p1", SessionID: "A", CWD: "/w/a", AgentStatus: "blocked"},
 			state.PaneStatus{PaneID: "p2", SessionID: "T", CWD: "/w/t", AgentStatus: "working"},
@@ -238,8 +222,7 @@ func TestBuild_sessionsWithoutTasksAndTodos(t *testing.T) {
 // タスクのあるセッションのカードは msg で変えない。
 func TestBuild_sessionCardShowsAgentMessage(t *testing.T) {
 	b := build(input{
-		Domain: domain.Work,
-		PID:    42,
+		PID: 42,
 		Snapshot: snapshot(
 			state.PaneStatus{PaneID: "p1", SessionID: "A", CWD: "/w/a", AgentStatus: "working", AgentMessage: "Checking the running daemon's version"},
 			state.PaneStatus{PaneID: "p2", SessionID: "B", CWD: "/w/b", AgentStatus: "working"},
@@ -264,37 +247,14 @@ func TestBuild_sessionCardShowsAgentMessage(t *testing.T) {
 	}
 }
 
-// ボードは 1 つの domain しか描かない。ほかの domain の pane と、業務に倒したセッションは載せない。
-func TestBuild_domain(t *testing.T) {
-	b := build(input{
-		Domain: domain.Home,
-		PID:    42,
-		Snapshot: snapshot(
-			state.PaneStatus{PaneID: "p1", SessionID: "H", CWD: "/src/home/a", AgentMessage: "私用の作業"},
-			state.PaneStatus{PaneID: "p2", SessionID: "W", CWD: "/work/b", AgentMessage: "業務の作業"},
-			state.PaneStatus{PaneID: "p3", SessionID: "M", CWD: "/src/home/c", AgentMessage: "業務に倒した作業"}, // 記録が業務の側にある
-		),
-		Classify:  homeUnder("/src/home"),
-		Elsewhere: func(id string) bool { return id == "M" },
-	})
-	got := byKey(b)
-	// 今の作業 (msg) もタスクの subject と同じく、自分の domain のボードにだけ出る。
-	if len(got) != 1 || got["H/session"].SessionID != "H" || got["H/session"].Subject != "私用の作業" {
-		t.Errorf("cards = %+v, want H だけ", got)
-	}
-	if b.Domain != domain.Home {
-		t.Errorf("Domain = %q", b.Domain)
-	}
-}
-
 // daemon が動いていなくてもタスクの記録は描く。前の daemon の status.json は使わない。
 func TestBuild_daemonState(t *testing.T) {
 	tasks := []tasklog.Task{task("A", "1", "書く", "in_progress", "/w/a")}
-	stopped := build(input{Domain: domain.Work, Tasks: tasks, Snapshot: snapshot(state.PaneStatus{SessionID: "A", CWD: "/w/a"})})
+	stopped := build(input{Tasks: tasks, Snapshot: snapshot(state.PaneStatus{SessionID: "A", CWD: "/w/a"})})
 	if stopped.DaemonRunning || stopped.UpdatedAt != nil || len(stopped.Rows) != 1 || stopped.Rows[0].Cards[0].Live {
 		t.Errorf("stopped = %+v", stopped)
 	}
-	stale := build(input{Domain: domain.Work, PID: 7, Tasks: tasks, Snapshot: snapshot(state.PaneStatus{SessionID: "A", CWD: "/w/a"})})
+	stale := build(input{PID: 7, Tasks: tasks, Snapshot: snapshot(state.PaneStatus{SessionID: "A", CWD: "/w/a"})})
 	if !stale.DaemonRunning || stale.UpdatedAt != nil || stale.Rows[0].Cards[0].Live {
 		t.Errorf("stale = %+v", stale)
 	}
@@ -302,7 +262,7 @@ func TestBuild_daemonState(t *testing.T) {
 		t.Errorf("columns = %+v", stale.Columns)
 	}
 	// git の外の cwd は cwd そのものを行にする。cwd が無ければ「cwd 不明」の行。
-	odd := build(input{Domain: domain.Work, Tasks: []tasklog.Task{task("A", "1", "x", "pending", "")}})
+	odd := build(input{Tasks: []tasklog.Task{task("A", "1", "x", "pending", "")}})
 	if odd.Rows[0].Title != "(cwd 不明)" || odd.Rows[0].Cards[0].Session != "A" {
 		t.Errorf("odd = %+v", odd.Rows)
 	}

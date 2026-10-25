@@ -10,6 +10,7 @@
 | `Handoff.tla` | メモ 1 つを mod が取って渡す (peer / self / spawn)、戻す、捨てる。セッションの終了と daemon の見え方、終了したセッションのタスクを adopt する |
 | `TaskLog.tla` | TaskCreate と TaskList の PostToolUse hook がタスクの記録を書く・同期する |
 | `FileNotice.tla` | ファイルを触った tool の結果に、そのファイルに関係するメモを model 向けに添える。並列の tool の hook、呼び出しごとに `park list` で読んだ写しが update までに古くなること、compact |
+| `EdgeBind.tla` | daemon が辺の `session:<名前>` の端点をセッション台帳のセッションに結びつける。CLI の `edge add` / `edge rm` と同じ辺のファイルを交錯して書く |
 
 どのステップが実装のどこに当たるかは `.tla` のコメントが持つ (ファイルと関数)。
 
@@ -35,8 +36,12 @@ TLC は devShell の `tlaplus` (`tlc`)。CI では回さない。`scripts/model-
 | | `Informed`: compact の後に触ったファイルのメモを model が知っている | compact で told も空にし、compact の後に触ったときに伝え直す |
 | `FileNoticeRace.cfg` | `AtMostOnce` が破れる (`violated` を期待) | told を読んでから別のステップで書くと、並列の 2 つの Read が同じメモを添える。選ぶのと足すのを 1 回にした根拠 |
 | `FileNoticeCompact.cfg` | `Informed` が破れる (`violated` を期待) | compact の後も told を残すと、compact の前に伝えたメモを伝え直さない。添えたメモが要約に残るかは決まらないので、残らない側に倒している。compact で told を空にした根拠 |
+| `EdgeBind.cfg` | `BindOnce`: 結びついた端点は、辺が消されるまで名前や別のセッションに戻らない | `Add`、`Remove`、`Bind` が `edges/.lock` の中で読んでから書く。`edge add` は辺があれば端点を残す |
+| | `NoResurrect`: `edge rm` で消した辺を結びつけの書き込みが作り直さない (辺を無い状態から作るのは `edge add` だけ) | `Bind` はロックの中で、辺があるときだけ書き直す |
+| `EdgeBindRaceAdd.cfg` | `BindOnce` が破れる (`violated` を期待) | ロック無しで `edge add` が読んでから書くと、間に結びついた端点を読んだ値 (名前) に戻す |
+| `EdgeBindRaceRemove.cfg` | `NoResurrect` が破れる (`violated` を期待) | ロック無しで結びつけが読んでから書くと、間に `edge rm` で消した辺を作り直す。ロックを取った根拠 |
 
-`FileNoticeRace.cfg` と `FileNoticeCompact.cfg` 以外の cfg は `holds` を期待する。期待と違えば `model-check.sh` は exit 1 にする。
+`FileNoticeRace.cfg`、`FileNoticeCompact.cfg`、`EdgeBindRaceAdd.cfg`、`EdgeBindRaceRemove.cfg` 以外の cfg は `holds` を期待する。期待と違えば `model-check.sh` は exit 1 にする。
 
 同じ不変条件を、実物の Store を goroutine で交錯させる乱択テストが実装に対して持つ (`task test` で回る)。
 モデルは設計を変えるときに先に反例を探す場所で、実装の正しさはテストが持つ。
@@ -46,6 +51,7 @@ TLC は devShell の `tlaplus` (`tlc`)。CI では回さない。`scripts/model-
 | `AtMostOneDelivery` / `AtMostOneSession` / `HandedWhenDelivered` と Claim の排他 | `internal/parking/invariants_test.go` |
 | `LiveTaskKept` / `AdoptLeavesOne` (実物の `verify.SessionExited` で daemon の pid と status.json を読む) | `internal/parking/adopt_invariants_test.go` |
 | `RecordsComplete` | `internal/tasklog/invariants_test.go` |
+| `BindOnce` / `NoResurrect` と、書いたときの参照の組・今の参照の組ごとに辺が 1 本 | `internal/edge/bind_invariants_test.go` |
 
 mod の側 (取る → 送る → 届かなければ戻す、spawn で前景にならなければ戻さない、Discard は `--from open`) は
 `hooks/deps.test.tsx` が `park` と `spawn` の呼び出しの列で固定する。`AtMostOnce` / `NoneMissed` / `Informed` は
@@ -65,4 +71,7 @@ mod の側 (取る → 送る → 届かなければ戻す、spawn で前景に�
 - hook は PostToolUse で、同じターンの並列の tool の hook は順序が決まらないとしている。Claude Code のタスクの id は
   セッションの中で 1 から順に増える整数としている (`internal/tasklog` の cc-premise)。
 - housekeeping (mtime による削除) は置いていない。1 回の受け渡しの間に上の不変条件と絡まないため。
+- `EdgeBind.tla` は辺 1 本と、`edge add` と `edge rm` と結びつけを 1 つずつ置く。結びつけるセッションの選び方
+  (台帳の first_seen と辺の created_at、`ledger.Pick`) は非決定にし、現れたセッションのどれでも選べることにして広く
+  探す。`edge rm` の os.Remove は 1 ステップ。
 - 不変条件は `Mods = {m1}` でも回る。取ってから送る形は、mod 同士の取り合いだけでなく同じ mod の押し直しも閉じる。

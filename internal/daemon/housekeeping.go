@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/applog"
+	"github.com/usadamasa/agents-daemon/internal/daemon/ledger"
 	"github.com/usadamasa/agents-daemon/internal/daemon/limitlog"
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/eventlog"
@@ -12,7 +13,7 @@ import (
 )
 
 // ランタイム状態は揮発物として扱い、daemon 自身が古いものを消す。sidecar file の
-// 保持期間は書式のパッケージ (ratelimit、sessioncontext、tasklog、parking、edge、limitlog) が持つ (どれだけ古い state が
+// 保持期間は書式のパッケージ (ratelimit、sessioncontext、tasklog、parking、edge、ledger、limitlog) が持つ (どれだけ古い state が
 // 判定に効くかは、その state を読む側の知識のため)。ここに残すのはログの保持期間と、掃除の間隔だけ。
 const (
 	// logRetention は rotate 済みログ (daemon.log.YYYY-MM-DD と events.log.YYYY-MM-DD) を残す期間。
@@ -22,12 +23,13 @@ const (
 	housekeepInterval = time.Hour
 )
 
-// attachStateDir は housekeeping が消す対象 (tasks / parking / edges / events log / limit-events) の置き場を
-// stateDir から配線する。limit-events は daemon が書く先でもある。
+// attachStateDir は housekeeping が消す対象 (tasks / parking / edges / sessions / events log / limit-events) の置き場を
+// stateDir から配線する。sessions と limit-events は daemon が書く先、edges は daemon が端点を結びつける先でもある。
 func (r *daemonRuntime) attachStateDir(stateDir string) {
 	r.tasks = tasklog.New(stateDir)
 	r.parking = parking.New(stateDir)
 	r.edges = edge.New(stateDir)
+	r.sessions = ledger.New(stateDir)
 	r.eventLog = eventlog.Path(stateDir)
 	r.limits = limitlog.New(stateDir)
 }
@@ -74,7 +76,12 @@ func (r *daemonRuntime) housekeep(logPath string, now time.Time) {
 	if err != nil {
 		r.log.Logf("上限の出来事の記録の削除でエラー: %v", err)
 	}
-	if logs > 0 || states > 0 || contexts > 0 || tasks > 0 || parked > 0 || edges > 0 || limits > 0 {
-		r.log.Logf("保持期間を過ぎたファイルを削除しました: rotated ログ %d 件、利用上限 state %d 件、context state %d 件、タスクの記録 %d 件、パーキング %d 件、辺 %d 件、上限の出来事 %d 件", logs, states, contexts, tasks, parked, edges, limits)
+	sessions, err := r.sessions.Prune(now)
+	if err != nil {
+		r.log.Logf("セッション台帳の削除でエラー: %v", err)
+	}
+	if logs > 0 || states > 0 || contexts > 0 || tasks > 0 || parked > 0 || edges > 0 || limits > 0 || sessions > 0 {
+		r.log.Logf("保持期間を過ぎたファイルを削除しました: rotated ログ %d 件、利用上限 state %d 件、context state %d 件、タスクの記録 %d 件、パーキング %d 件、辺 %d 件、上限の出来事 %d 件、セッション台帳 %d 件",
+			logs, states, contexts, tasks, parked, edges, limits, sessions)
 	}
 }

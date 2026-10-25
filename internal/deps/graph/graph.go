@@ -8,9 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
-	"github.com/usadamasa/agents-daemon/internal/daemon/state"
 	"github.com/usadamasa/agents-daemon/internal/deps/dag"
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/parking"
@@ -168,8 +166,6 @@ type Input struct {
 	// Memos はメモ (status を問わない)。タスクの description との照合に使う。Open はそのうち open のもの。
 	Memos []parking.Item
 	Open  []parking.Item
-	// Panes は生きているセッションの pane (session ID ごと)。
-	Panes map[string]*state.PaneStatus
 	// SessionNames は session ID → セッション名 (statusline の session_name)。
 	SessionNames map[string]string
 }
@@ -261,19 +257,16 @@ func (g *builder) link(before, after, kind string, via *EdgeRecord) {
 	g.links = append(g.links, Link{Before: before, After: after, Kind: kind, Edge: via})
 }
 
-// resolve は端点の参照をノードの Key にする。session: と sid: はセッションのノードのうち pick (根か末端) が選んだもの。
-// ノードが無い参照は置き場のノードを作る。
+// resolve は端点の参照をノードの Key にする。sid: はセッションのノードのうち pick (根か末端) が選んだもの。
+// session:<名前> は daemon がまだセッションに結びつけていない端点で (internal/edge の Bind)、名前の置き場の
+// ノードにする。ノードが無い参照は置き場のノードを作る。
 func (g *builder) resolve(ep edge.Endpoint, pick func(sessionID string) []string) []string {
 	kind, rest, _ := strings.Cut(ep.Ref, ":")
 	switch kind {
 	case "task":
 		return []string{ep.Ref}
 	case "session":
-		id := g.latestSession(rest)
-		if id == "" {
-			return []string{g.placeholder(ep.Ref, ep.CWD, rest, "", StatePending)}
-		}
-		return g.sessionKeys(id, ep.CWD, pick)
+		return []string{g.placeholder(ep.Ref, ep.CWD, rest, "", StatePending)}
 	case "sid":
 		return g.sessionKeys(rest, ep.CWD, pick)
 	default:
@@ -309,43 +302,6 @@ func (g *builder) placeholder(key, cwd, title, sessionID, state string) string {
 		g.nodes[key] = n
 	}
 	return key
-}
-
-// latestSession は名前のセッションのうち最後に動いたもの (pane があればそれ、無ければタスクの更新が新しいもの)。
-// その名前のセッションが無ければ空。
-func (g *builder) latestSession(name string) string {
-	var best string
-	var bestAt time.Time
-	bestLive := false
-	ids := make([]string, 0)
-	for id, n := range g.in.SessionNames {
-		if n == name {
-			ids = append(ids, id)
-		}
-	}
-	sort.Strings(ids)
-	for _, id := range ids {
-		live, at := g.in.Panes[id] != nil, g.lastUpdate(id)
-		if best == "" || (live && !bestLive) || (live == bestLive && at.After(bestAt)) {
-			best, bestAt, bestLive = id, at, live
-		}
-	}
-	return best
-}
-
-func (g *builder) lastUpdate(sessionID string) time.Time {
-	var at time.Time
-	for _, t := range g.in.Tasks {
-		if t.SessionID == sessionID && t.UpdatedAt.After(at) {
-			at = t.UpdatedAt
-		}
-	}
-	for _, l := range g.in.Todos {
-		if l.SessionID == sessionID && l.UpdatedAt.After(at) {
-			at = l.UpdatedAt
-		}
-	}
-	return at
 }
 
 // roots はセッションのノードのうち、同じセッションの blockedBy で止められていないもの。

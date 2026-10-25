@@ -64,8 +64,13 @@ printenv REX_SESSION
   --note "<何の後か>"
 ```
 
-`--before` は `pr:<owner>/<repo>#<番号>` や `issue:` でもよい。参照の形と `rm` / `list` は
-`agents-daemon:agents-daemon` skill の `references/operations.md`「セッションをまたぐ辺を書く」。
+`--before` は `pr:<owner>/<repo>#<番号>` や `issue:` でもよい。`session:<name>` は、daemon が数秒のうちに
+その名前のセッションへ 1 回だけ結びつける。辺を書いた時点で同名のセッションが動いていれば最も新しく起きたもの
+(手順 1 で起こした相手)、まだ起きていなければ後から最初に現れたもの。結びついた後に同じ名前のセッションを
+起こし直しても辺の相手は変わらないので、別のセッションを待たせたいなら `edge rm` してから `sid:<session_id>` で
+書き直す。
+参照の形と結びつけ、`rm` / `list` は `agents-daemon:agents-daemon` skill の `references/operations.md`
+「セッションをまたぐ辺を書く」。
 
 辺を書かずに送ると、`SendMessage` の結果に辺が無いことと書き方が添えられる。依存があれば上の形で書き、
 返事や報告のように依存の無い送信なら書かずに進める。

@@ -21,15 +21,22 @@ func touch(t *testing.T, path string, age time.Duration) {
 	}
 }
 
-// Prune は Retention 更新の無い辺と消し損ねた一時ファイルを消し、新しいものは残す。
+// Prune は Retention 更新の無い辺と消し損ねた一時ファイルを消し、新しいものとロックは残す。
 func TestPrune(t *testing.T) {
 	s := New(t.TempDir())
 	old := filepath.Join(s.Dir, "old.json")
 	tmp := filepath.Join(s.Dir, ".edge.123")
 	fresh := filepath.Join(s.Dir, "fresh.json")
+	lock := filepath.Join(s.Dir, lockFile)
 	touch(t, old, Retention)
 	touch(t, tmp, Retention+time.Hour)
 	touch(t, fresh, Retention-time.Hour)
+	touch(t, lock, Retention+time.Hour)
+	defer func() {
+		if _, err := os.Stat(lock); err != nil {
+			t.Errorf("ロックが消えた: %v", err)
+		}
+	}()
 
 	removed, err := s.Prune(testNow)
 	if err != nil || removed != 2 {

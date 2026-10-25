@@ -39,8 +39,8 @@ longest chain の辺の罫線 (`marks`) は色付き。同じノードは 1 回�
 満たないときも底に寄せる。記号と数の行と凡例は `hooks/graph.ts`、レーンの割り当ては `internal/deps/dag` が持つ。
 選んだノードの詳細で辺を操作する。
 
-- `kind: edge` の辺は `Unlink` で `edge rm` に元の記録の参照を渡す (辺の id は記録の参照の組から決まるので、
-  解決した後のノードの key では消せない)
+- `kind: edge` の辺は `Unlink` で `edge rm` に元の記録の今の参照を渡す (`sid:` の端点がタスクへ解決された後の
+  ノードの key は辺の記録に無いので、それでは消せない)
 - `kind: task` の辺 (同じセッションの `blockedBy`) は daemon から外せず、TaskUpdate にも外す引数が無い。
   `Ask to unlink → <session>` でそのセッションへ、待たれている側を片付けるか待っている側を作り直すよう頼む
   (タスクの ID はノードの `task_id`)
@@ -61,13 +61,32 @@ pane を開いたとき、数 (repo、セッション、ノード、メモ) が�
 辺の記録の端点は依存図を組むたびにノードへ解決し直す (`internal/deps/graph`)。
 
 - `task:<sid>/<tid>` はそのタスク。記録が消えていればその辺は描かない
-- `session:<名前>` は、その名前のセッションのうち最後に動いたもの (pane があればそれ、無ければタスクの更新が新しいもの)。
-  `sid:<sid>` はそのセッション。どちらも after 側は根のタスク (同じセッションの blockedBy が無いもの)、before 側は
+- `sid:<sid>` はそのセッション。after 側は根のタスク (同じセッションの blockedBy が無いもの)、before 側は
   末端のタスク (同じセッションのどのタスクも止めていないもの) につなぐ。タスクの無い生きているセッションは
   `sid:<sid>` のノード
-- まだ起きていないセッションと `issue:` / `pr:` は参照を key にした置き場のノード (`pending`)。タスクを作らずに
-  終了したセッションは `sid:<sid>` を key にした置き場のノードにし、`exited` で下流が止まっていることを見せる。
-  名前と session ID のどちらで書いた辺も同じ置き場に集まる
+- `session:<名前>` は daemon がまだ結びつけていない端点で、同じ名前のセッションが生きていても名前を key にした
+  置き場のノード (`pending`) にする。読むたびに名前から引き直さないので、同名のセッションを起こし直しても辺の意味は
+  変わらない
+- `issue:` / `pr:` も参照を key にした置き場のノード (`pending`)。タスクを作らずに終了したセッションは `sid:<sid>` を
+  key にした置き場のノードにし、`exited` で下流が止まっていることを見せる
+
+`session:<名前>` の端点は、daemon が tick ごとに status.json を書いた直後、セッション台帳 (`$STATE/sessions/`、
+`internal/daemon/ledger`) を書いてから結びつける (`internal/edge` の `Bind`)。候補は名前が一致し、辺の
+created_at に生きていたか後から現れた (last_seen が created_at 以後の) セッション (`ledger.Pick`)。辺を書いた時点で
+動いていた候補 (first_seen が created_at 以前) があれば first_seen の最も新しいもの、無ければ created_at より後に
+最初に現れたものを選ぶ。渡す側は `claude --name` で起こしてすぐ `edge add` を書くので、直前に起きた同名のセッションが
+相手になる。古い同名のセッションを待たせたかった場合のような取り違えは、`edge rm` してから `sid:` で書き直す。結びつけた端点は `sid:<sid>` に書き換え、元の参照を `bound_from` に残し、二度と結び直さない。
+tick ごとにするのは、渡した側が `edge add` を書いてから数秒で端点がそのセッションのノードにつながり、pane が置き場の
+ノードを描き続けないようにするため。結びつく前の数秒は、`hooks/graph.ts` の `unlinked` が記録の `session:<名前>`
+で辺を見つけるので、辺の書き忘れの通知は出ない。
+
+辺の id は書いたときの両端の参照から決め、結びつけても変わらない (`edges/<id>.json` のまま)。`edge add` と
+`edge rm` は、書いたときの参照の組の id のファイルを先に見て、無ければ今の参照の組が同じ辺を探すので、どちらの組でも
+同じ辺に当たる。`edge add` は結びついた端点を残して note と cwd だけを書き直す。結びつけると今の参照の組が既にある
+辺と重なるときは、同じ依存なので結びつける側の辺を消して 1 本にする。`Add`、`Remove`、`Bind`、`Prune` は
+`edges/.lock` を取って読んでから書く。ロックが無いと、`edge add` が読んだ後に結びついた端点を名前に戻し
+(`BindOnce` の反例)、`Bind` が読んだ後に `edge rm` で消した辺を作り直す (`NoResurrect` の反例)。手順の交錯は
+`models/handoff/EdgeBind.tla`、実物の Store での交錯は `internal/edge/bind_invariants_test.go` が確かめる。
 
 pane を解釈するのは `internal/deps` の `activity` だけで、生きているセッションごとに 1 回、セッションの活動
 (`working` / `done` / `question` / `permission` / `error` / `limit` / `unknown`) を導く。上限待ちを agent の申告より

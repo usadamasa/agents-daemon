@@ -2,8 +2,7 @@ package edge
 
 // 辺の置き場が交錯しても破ってはいけないことを、実物の Store を goroutine で交錯させて確かめる。辺には models/handoff の
 // 不変条件は無い (受け渡しに絡まない) ので、ここで見るのは置き場の形: 参照の組ごとにファイルは 1 つで id はその組から
-// 決まる、残っている辺は書いた辺のどれかそのもの、Find は端点の一致で絞る。同じ辺の Add が重なると created_at は後から
-// 書いた側になりうる (ロックが無い) ので、created_at の保持は 1 本ずつ書く場合 (edge_test.go) にだけ求める。
+// 決まる、残っている辺は書いた辺のどれかそのもの、Find は端点の一致で絞る。結びつけとの交錯は bind_invariants_test.go。
 // seed が固定するのは各 goroutine の手で、交錯はスケジューラが決める。反例が出たらコードを直すか挙動を正当化する。
 
 import (
@@ -106,17 +105,22 @@ func checkEdges(s Store, written map[string]Edge) string {
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Sprintf("ReadDir() error = %v", err)
 	}
+	edgeFiles := 0
 	for _, entry := range entries {
-		if strings.HasPrefix(entry.Name(), ".") {
+		switch {
+		case entry.Name() == lockFile:
+		case strings.HasPrefix(entry.Name(), "."):
 			return fmt.Sprintf("書きかけの一時ファイルが残った: %s", entry.Name())
+		default:
+			edgeFiles++
 		}
 	}
 	found, err := s.Find("", "")
 	if err != nil {
 		return fmt.Sprintf("Find() error = %v", err)
 	}
-	if len(found) != len(entries) {
-		return fmt.Sprintf("ファイル %d 個のうち Find が返したのは %d 本 (壊れた辺がある)", len(entries), len(found))
+	if len(found) != edgeFiles {
+		return fmt.Sprintf("ファイル %d 個のうち Find が返したのは %d 本 (壊れた辺がある)", edgeFiles, len(found))
 	}
 	pairs := map[[2]string]bool{}
 	for _, e := range found {
@@ -124,8 +128,8 @@ func checkEdges(s Store, written map[string]Edge) string {
 		switch {
 		case pairs[pair]:
 			return fmt.Sprintf("参照の組 %v の辺が 2 本ある", pair)
-		case e.ID != edgeID(e.Before.Ref, e.After.Ref):
-			return fmt.Sprintf("辺 %s の id が参照の組から決まる値 %s でない", e.ID, edgeID(e.Before.Ref, e.After.Ref))
+		case e.ID != edgeID(e.Before.written(), e.After.written()):
+			return fmt.Sprintf("辺 %s の id が参照の組から決まる値 %s でない", e.ID, edgeID(e.Before.written(), e.After.written()))
 		case e.Before.Ref == e.After.Ref:
 			return fmt.Sprintf("自分自身への辺 %s がある", e.ID)
 		case !strings.HasPrefix(e.Note, "w"):

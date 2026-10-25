@@ -106,6 +106,15 @@ var (
 	// ネイティブも動かずこのツールも動かない状態で固まる。そのため予約の判定より先に見る。
 	nativeStoodDownPattern = regexp.MustCompile(`(?i)automatic continue (?:cancelled|stopped|was turned off|did not run)`)
 
+	// lowerPriorityActivePattern は session limit の後に `/low-priority` で低優先度の作業を続けていることを示す。
+	// 通知は「limit resets at 5pm」と「weekly limit」を含み二重シグナルを満たすが、pane は作業中なので待機に入らない。
+	// cc-premise: 2.1.310 limit-screen lower-priority mode の作業中と終わりの通知 (lower_priority_test.go)
+	lowerPriorityActivePattern = regexp.MustCompile(`(?i)continuing now at lower priority|lower-priority mode is back on|^\s*lower priority until\b|working at lower priority`)
+
+	// lowerPriorityEndedPattern は lower-priority mode が終わり、通常の上限に戻ったことを示す。
+	// 作業中の通知は scrollback に残るので、同じ画面にあればこちらを優先する。
+	lowerPriorityEndedPattern = regexp.MustCompile(`(?i)lower-priority mode (?:ended|stopped|is off|is no longer available|isn't available|is taking a break)`)
+
 	// resumeReadyPattern は上限が解除済みで Enter だけを待っている状態を示す。
 	// ネイティブが解除まで待ったものの継続の窓を過ぎた (phase=stale) ときに出る。
 	resumeReadyPattern = regexp.MustCompile(`(?i)usage limit has reset.*press enter to continue`)
@@ -275,7 +284,7 @@ func compilePatterns(patterns []string) ([]*regexp.Regexp, error) {
 //  1. ネイティブ auto-continue がカウントダウン中 (KindAutoContinueArmed)
 //  2. 解除済みで Enter 待ち (KindResumeReady)
 //  3. 二重シグナルが揃っており、かつ恒久的な上限 (KindSpendLimit)
-//  4. 二重シグナルが揃った通常の上限 (KindLimit)
+//  4. 二重シグナルが揃った通常の上限 (KindLimit)。lower-priority mode で作業中なら上限として扱わない
 //  5. 直近出力ブロックの `API Error` 行にある一時エラー (KindTransient)
 func (c *Classifier) Classify(screen string, n int) Kind {
 	lines := tailLines(splitScreen(screen), n)
@@ -288,7 +297,7 @@ func (c *Classifier) Classify(screen string, n int) Kind {
 		return KindResumeReady
 	}
 
-	if c.isLimit(lines) {
+	if c.isLimit(lines) && !lowerPriorityActive(lines) {
 		// 恒久的な上限の判定は「limit が成立した画面」に限る。単に spend limit の
 		// 語を含むだけの画面まで拾うと、transient の検知まで巻き込んで潰してしまう。
 		for _, line := range lines {
@@ -302,6 +311,12 @@ func (c *Classifier) Classify(screen string, n int) Kind {
 		return KindTransient
 	}
 	return KindNone
+}
+
+// lowerPriorityActive は lower-priority mode の作業中の通知があり、終わった通知が無いかを返す。
+func lowerPriorityActive(lines []string) bool {
+	return slices.ContainsFunc(lines, lowerPriorityActivePattern.MatchString) &&
+		!slices.ContainsFunc(lines, lowerPriorityEndedPattern.MatchString)
 }
 
 func (c *Classifier) isLimit(lines []string) bool {

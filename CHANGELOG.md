@@ -1,5 +1,14 @@
 # Changelog
 
+## [2026.1025.0](https://github.com/usadamasa/agents-daemon/compare/2026.1024.4...2026.1025.0) - 2026-10-25
+
+- rex preview.20 の前提を点検し marker を上げる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/249
+- Claude Code 2.1.310 の点検で references を直し cc-premise を上げる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/253
+- lower-priority mode の画面を上限と判定したら記録に印を残す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/255
+- auto-continue の通知欄の 2 行を予約中と Enter 待ちとして扱う by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/256
+- ボードの表示を直す (詳細の名前の重なり、止まったノードの色、送り先の補足) by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/258
+- ボードのレーンを左へ詰め、longest chain の辺に色を付ける by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/259
+
 ## [2026.1024.4](https://github.com/usadamasa/agents-daemon/compare/2026.1024.3...2026.1024.4) - 2026-10-24
 
 - 形式手法の評価と、不変条件を乱択と fuzz で確かめる実行できる仕様の導入 by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/240

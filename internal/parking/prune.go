@@ -5,10 +5,13 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/usadamasa/agents-daemon/internal/domain"
 )
 
 // Prune は保持期間を過ぎたメモを mtime で消し、消した数を返す。open は OpenRetention、handed /
 // discarded と読めないメモ、消し損ねた一時ファイルは ClosedRetention で消す。ロックのファイルは残す。
+// domain ごとに Set と同じロックを取る。Set が読んでから書くまでの間に消すと、その書き込みがメモを作り直す。
 func (s Store) Prune(now time.Time) (int, error) {
 	if s.Dir == "" {
 		return 0, nil
@@ -26,30 +29,43 @@ func (s Store) Prune(now time.Time) (int, error) {
 		if !d.IsDir() {
 			continue
 		}
-		dir := filepath.Join(s.Dir, d.Name())
-		entries, err := os.ReadDir(dir)
+		err := s.locked(domain.Domain(d.Name()), func(dir string) error {
+			n, err := pruneDir(dir, now)
+			removed += n
+			return err
+		})
 		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return removed, errors.Join(errs...)
+}
+
+// pruneDir は dir の保持期間を過ぎたメモを消し、消した数を返す。呼び出し側がロックを持つ。
+func pruneDir(dir string, now time.Time) (int, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return 0, err
+	}
+	removed := 0
+	var errs []error
+	for _, e := range entries {
+		if e.IsDir() || e.Name() == lockFile {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		path := filepath.Join(dir, e.Name())
+		if !expired(path, e, now.Sub(info.ModTime())) {
+			continue
+		}
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 			errs = append(errs, err)
 			continue
 		}
-		for _, e := range entries {
-			if e.IsDir() || e.Name() == lockFile {
-				continue
-			}
-			info, err := e.Info()
-			if err != nil {
-				continue
-			}
-			path := filepath.Join(dir, e.Name())
-			if !expired(path, e, now.Sub(info.ModTime())) {
-				continue
-			}
-			if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-				errs = append(errs, err)
-				continue
-			}
-			removed++
-		}
+		removed++
 	}
 	return removed, errors.Join(errs...)
 }

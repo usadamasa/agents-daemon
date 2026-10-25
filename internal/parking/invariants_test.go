@@ -3,7 +3,8 @@ package parking
 // メモの受け渡しの不変条件 (models/handoff の Handoff.tla) を、実物の Store を goroutine で交錯させて確かめる。
 // 個々のテストが 1 場面ずつ固定するのに対し、ここでは「どの mod がどの順で取っても、送っても、捨てても破ってはいけないこと」を
 // 書く。seed が固定するのは各 mod の選択 (どのメモを、取るか捨てるか、届くか) で、goroutine の交錯はスケジューラが決める。
-// 全 mod が同じ依存図 (open) を読み終えてから一斉に取りに行かせ、取り合いを毎回起こす。
+// 全 mod が同じ依存図 (open) を読み終えてから一斉に取りに行かせ、取り合いを毎回起こす。取るときは宛先を同じ Set で書き、
+// 宛先がメモの status と届いた先に合っていること (HandedHasDestination ほか) も見る。
 // 反例が出たら seed と mod を出す。反例が出たらコードを直すか挙動を正当化する。性質を弱めて通さない。
 
 import (
@@ -36,10 +37,26 @@ var handoffOutcomeNames = map[handoffOutcome]string{
 	outcomeDelivered: "delivered", outcomeSpawnTimeout: "spawn-timeout", outcomeReverted: "reverted", outcomeRevertFailed: "revert-failed",
 }
 
-// memoCounts はメモ 1 つについて、テストの側で数えるもの (Handoff.tla の deliveries / sessions)。
+// memoCounts はメモ 1 つについて、テストの側で数えるもの (Handoff.tla の deliveries / sessions / deliveredTo)。
 type memoCounts struct {
 	deliveries atomic.Int32
 	sessions   atomic.Int32
+	mu         sync.Mutex
+	// deliveredTo はメモが届いた宛先 (取ったときに --to で渡した値)。届いていなければ空。
+	deliveredTo string
+}
+
+func (c *memoCounts) deliver(to string) {
+	c.deliveries.Add(1)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.deliveredTo = to
+}
+
+func (c *memoCounts) delivered() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.deliveredTo
 }
 
 // claimHolder は今メモを取っている mod。取れるのは 1 つの mod だけ (Claim の排他) を、ロックの外から見張る。
@@ -178,6 +195,12 @@ func checkHandoff(item Item, c *memoCounts, held bool) string {
 		return "捨てたメモが届いた、またはセッションを起こした"
 	case item.Status == StatusOpen && held:
 		return "open のメモを取ったままの mod がいる"
+	case item.Status == StatusHanded && item.HandedTo == "":
+		return "HandedHasDestination: handed のメモに宛先が無い"
+	case item.Status != StatusHanded && item.HandedTo != "":
+		return "OnlyHandedHasDestination: handed でないメモに宛先が残った"
+	case c.delivered() != "" && item.HandedTo != c.delivered():
+		return fmt.Sprintf("DeliveredWhereRecorded: 届いた先 %s とメモの宛先 %s が違う", c.delivered(), item.HandedTo)
 	}
 	return ""
 }
@@ -213,7 +236,10 @@ func (m *handoffMod) run(barrier func(), failures chan<- string) {
 			m.discard(id)
 			continue
 		}
-		if _, _, err := m.s.Set(id, StatusHanded, StatusOpen); err != nil {
+		outcome := handoffOutcome(m.r.IntN(len(handoffOutcomeNames)))
+		spawned := outcome == outcomeSpawnTimeout || (outcome == outcomeDelivered && m.r.IntN(2) == 0)
+		to := m.destination(spawned)
+		if _, _, err := m.s.Set(id, StatusHanded, StatusOpen, to); err != nil {
 			m.reached.lost() // ほかの mod が先に取った、または捨てた
 			continue
 		}
@@ -221,7 +247,7 @@ func (m *handoffMod) run(barrier func(), failures chan<- string) {
 			failures <- fmt.Sprintf("mod %d: mod %d が取っているメモ %s を取れた (Claim の排他が破れた)", m.mod, other, id)
 			return
 		}
-		if msg := m.after(id); msg != "" {
+		if msg := m.after(id, outcome, spawned, to); msg != "" {
 			failures <- fmt.Sprintf("mod %d: %s", m.mod, msg)
 			return
 		}
@@ -230,28 +256,39 @@ func (m *handoffMod) run(barrier func(), failures chan<- string) {
 
 // discard は読んだ依存図で open だったメモを捨てる (Handoff.tla の Discard)。先に取られていれば失敗してよい。
 func (m *handoffMod) discard(id string) {
-	if _, _, err := m.s.Set(id, StatusDiscarded, StatusOpen); err != nil {
+	if _, _, err := m.s.Set(id, StatusDiscarded, StatusOpen, ""); err != nil {
 		m.reached.lost()
 		return
 	}
 	m.reached.discard()
 }
 
-// after は取ったメモに起きることを 1 つ引いて写す。戻したときだけ取っている印を外す (release)。
-func (m *handoffMod) after(id string) string {
-	outcome := handoffOutcome(m.r.IntN(len(handoffOutcomeNames)))
+// destination は取るときの宛先。spawn は起こす先の repo、それ以外は peer か self (どちらも session ID)。
+func (m *handoffMod) destination(spawned bool) string {
+	if spawned {
+		return ToRepo(filepath.Join("/w", "repo"+strconv.Itoa(m.r.IntN(2))))
+	}
+	if m.r.IntN(2) == 0 {
+		return ToSession("self" + strconv.Itoa(m.mod))
+	}
+	return ToSession("peer" + strconv.Itoa(m.r.IntN(3)))
+}
+
+// after は取ったメモに起きたこと (outcome) を写す。spawned は新しいセッションを起こして渡したか、to は取ったときの宛先。
+// 戻したときだけ取っている印を外す (release)。
+func (m *handoffMod) after(id string, outcome handoffOutcome, spawned bool, to string) string {
 	m.reached.outcome(outcome)
 	switch outcome {
 	case outcomeDelivered:
-		m.counts[id].deliveries.Add(1)
-		if m.r.IntN(2) == 0 { // spawn で届いた
+		m.counts[id].deliver(to)
+		if spawned {
 			m.counts[id].sessions.Add(1)
 		}
 	case outcomeSpawnTimeout:
 		m.counts[id].sessions.Add(1)
 	case outcomeReverted:
 		revert := func() error {
-			_, _, err := m.s.Set(id, StatusOpen, StatusHanded)
+			_, _, err := m.s.Set(id, StatusOpen, StatusHanded, "")
 			return err
 		}
 		if err := m.holder.release(id, revert); err != nil {

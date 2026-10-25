@@ -36,6 +36,8 @@ run() {
 }
 
 run models/handoff Handoff Handoff.cfg holds
+# 取るのと宛先を書くのを別の park set にすると、宛先の無い handed が見える (HandedHasDestination の反例)。
+run models/handoff Handoff HandoffSplit.cfg violated
 run models/handoff TaskLog TaskLog.cfg holds
 # 選ぶのと told に足すのを 1 回の update で行い、compact で told を空にする形 (hooks/notice.ts)。
 run models/handoff FileNotice FileNotice.cfg holds

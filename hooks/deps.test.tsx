@@ -153,6 +153,7 @@ const ROWS_WITH_COMPLETED = [...ROWS.slice(0, 10), { lanes: '*', node: 'task:C/1
 const MEMO = {
   id: '20261018T090000-aaaa',
   kind: 'aside',
+  origin: 'placed',
   title: '保持期間の根拠が無い',
   detail: '定数にコメントが無い',
   files: ['internal/parking/parking.go'],
@@ -216,8 +217,11 @@ const mount = ($: T, surface: 'terminal' | 'desktop' = 'terminal', props: object
   $.ui.mount({ plugin: 'agents-daemon', surface, component: 'Pane', props: props as typeof PANE_PROPS, requestId: 'agents-daemon-deps' })
 
 const SELF_ARGS = ['--session', 'SELF', '--cwd', CWD]
-// CLAIM は送る前にメモを取る park set、REVERT は届かなかったメモを戻す park set。
-const CLAIM = [BIN, 'park', 'set', MEMO.id, '--status', 'handed', '--from', 'open', ...SELF_ARGS]
+// claim は送る前にメモを取る park set (宛先を同じ park set で書く)、REVERT は届かなかったメモを戻す park set。
+const claim = (...to: string[]) => [BIN, 'park', 'set', MEMO.id, '--status', 'handed', '--from', 'open', ...to, ...SELF_ARGS]
+const CLAIM_W = claim('--to-session', 'W')
+const CLAIM_SELF = claim('--to-session', 'SELF')
+const CLAIM_DOTFILE = claim('--to-repo', '/src/home/dotfile')
 const REVERT = [BIN, 'park', 'set', MEMO.id, '--status', 'open', '--from', 'handed', ...SELF_ARGS]
 
 test('fullscreen でなければ /deps は開かず、その旨を返す', async ($, on) => {
@@ -661,8 +665,8 @@ test('メモを選ぶと詳細を出し、Discard / To task / Ask for issue で�
   expect(w.sent[0]?.text).toMatch(/タスクの description にメモの id \(20261018T090000-aaaa\) を入れてください。/)
   expect(w.sent[0]?.text).toMatch(/既にこのメモを扱うタスクがあれば、新しく作らずにその description に id を書き足すだけで構いません。/)
   expect(w.sent[0]?.text).toMatch(/\(メモ 20261018T090000-aaaa\)$/)
-  // 送る前に取る (open のときだけ handed にする)。届いたら handed のまま。
-  expect(operations(w.ran)).toEqual([CLAIM])
+  // 送る前に取る (open のときだけ handed にし、宛先のセッションを同じ park set で書く)。届いたら handed のまま。
+  expect(operations(w.ran)).toEqual([CLAIM_W])
 
   // 選んだメモは操作の後も開いたまま (同じ行をもう一度押すと閉じる)。捨てるのも open のときだけ。
   w.ran.length = 0
@@ -679,7 +683,7 @@ test('取れなかったメモ (ほかのセッションが先に渡した) は�
   await ui.press({ key: `park:${MEMO.id}` })
   w.ran.length = 0
   await ui.press({ key: 'task:W' })
-  expect(operations(w.ran)).toEqual([CLAIM])
+  expect(operations(w.ran)).toEqual([CLAIM_W])
   expect(w.sent).toEqual([])
   expect(await ui.find({ type: 'Text', text: /メモを取れませんでした.*status は handed/ })).toBeDefined()
 })
@@ -695,7 +699,7 @@ test('自セッションへは peer メッセージではなく自分の入力�
   expect(w.sent).toEqual([])
   expect(w.submitted).toHaveLength(1)
   expect(w.submitted[0]).toMatch(/^パーキングロットのメモ「保持期間の根拠が無い」を GitHub の issue にしてください。repo: agents-daemon。/)
-  expect(operations(w.ran)).toEqual([CLAIM])
+  expect(operations(w.ran)).toEqual([CLAIM_SELF])
   expect(await ui.find({ type: 'Text', text: /このセッション へ送り、メモを渡しました/ })).toBeDefined()
 })
 
@@ -707,7 +711,7 @@ test('自分の入力へ渡せなかった (drop) メモは open に戻す', asy
 
   w.ran.length = 0
   await ui.press({ key: 'task:SELF' })
-  expect(operations(w.ran)).toEqual([CLAIM, REVERT])
+  expect(operations(w.ran)).toEqual([CLAIM_SELF, REVERT])
   expect(await ui.find({ type: 'Text', text: /このセッション へ送れませんでした: Stop が立っている。メモは open に戻しました/ })).toBeDefined()
 })
 
@@ -721,6 +725,18 @@ test('ほかの repo のメモは自セッションでタスクにできない�
   expect(await ui.find({ key: 'task:SELF' })).toBeUndefined()
   expect(await ui.find({ key: 'task:P', text: /To task → peer/ })).toBeDefined()
   expect(await ui.find({ key: 'issue:SELF', text: /Ask for issue → このセッション/ })).toBeDefined()
+})
+
+test('終了したセッションから移したメモ (origin adopted) は種類に adopted を添えて出し、渡す文面にも添える', async ($, on) => {
+  const adopted = { ...MEMO, id: '20261018T110000-cccc', kind: 'scope', origin: 'adopted', title: '残ったタスク', sources: [MEMO.sources[1]] }
+  const repos = [{ ...DEPS.repos[0], memos: [adopted] }, DEPS.repos[1]]
+  const w = depsWorld(on, { ...DEPS, repos })
+  await $.command.run(OPEN_DEPS)
+  const ui = await mount($)
+  expect(await ui.find({ key: `park:${adopted.id}`, text: /\[scope・adopted\] 残ったタスク/ })).toBeDefined()
+  await ui.press({ key: `park:${adopted.id}` })
+  await ui.press({ key: 'task:W' })
+  expect(w.sent[0]?.text).toMatch(/^パーキングロットのメモ「残ったタスク」\(種類: scope・adopted\) をタスクにしてください。/)
 })
 
 test('最後に置かれてから 30 日より経ったメモがあれば、パーキングの見出しからまとめて捨てる', async ($, on) => {
@@ -761,7 +777,7 @@ test('メモを別の repo の新しいセッションへ渡す: 候補はメモ
 
   w.ran.length = 0
   await ui.press({ key: 'spawn:/src/home/dotfile' })
-  expect(operations(w.ran)).toEqual([CLAIM, [BIN, 'spawn', '--repo', '/src/home/dotfile']])
+  expect(operations(w.ran)).toEqual([CLAIM_DOTFILE, [BIN, 'spawn', '--repo', '/src/home/dotfile']])
   expect(w.fed).toHaveLength(1)
   expect(w.fed[0]).toMatch(/^このメモを渡すため、dotfile \(\/src\/home\/dotfile\) で新しいセッションとして起こしました。/)
   expect(w.fed[0]).toMatch(/パーキングロットのメモ「保持期間の根拠が無い」\(種類: aside\) をタスクにしてください。/)
@@ -798,6 +814,7 @@ test('候補に無い repo は絶対パスで指定する。相対パスは起�
   expect(await ui.find({ type: 'Text', text: /絶対パス/ })).toBeDefined()
 
   await ui.input({ key: 'spawn-path', text: '/src/home/other' })
+  expect(operations(w.ran)[0]).toEqual(claim('--to-repo', '/src/home/other'))
   expect(operations(w.ran)[1]).toEqual([BIN, 'spawn', '--repo', '/src/home/other'])
   expect(w.fed[0]).toMatch(/^このメモを渡すため、other \(\/src\/home\/other\) で新しいセッションとして起こしました。/)
 
@@ -817,7 +834,7 @@ test('新しいセッションを起こせなかった (window を作ってい�
   await ui.press({ key: 'spawn-task' })
   w.ran.length = 0
   await ui.press({ key: 'spawn:/src/home/dotfile' })
-  expect(operations(w.ran)).toEqual([CLAIM, [BIN, 'spawn', '--repo', '/src/home/dotfile'], REVERT])
+  expect(operations(w.ran)).toEqual([CLAIM_DOTFILE, [BIN, 'spawn', '--repo', '/src/home/dotfile'], REVERT])
   expect(await ui.find({ type: 'Text', text: /dotfile で新しいセッションを起こせませんでした: .*repo が見つからない.*メモは open に戻しました/ })).toBeDefined()
 })
 
@@ -835,7 +852,7 @@ test('claude が前景にならなかった (pane は残る) メモは戻さず�
   await ui.press({ key: 'spawn-task' })
   w.ran.length = 0
   await ui.press({ key: 'spawn:/src/home/dotfile' })
-  expect(operations(w.ran)).toEqual([CLAIM, [BIN, 'spawn', '--repo', '/src/home/dotfile']])
+  expect(operations(w.ran)).toEqual([CLAIM_DOTFILE, [BIN, 'spawn', '--repo', '/src/home/dotfile']])
   expect(await ui.find({ type: 'Text', text: /dotfile で window を作りましたが.*前景にならなかった.*handed のまま.*park set .* --status open/ })).toBeDefined()
 })
 

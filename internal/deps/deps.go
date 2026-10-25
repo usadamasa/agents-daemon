@@ -25,8 +25,10 @@ import (
 
 // ParkingCard は repo の open のメモ 1 つ (internal/parking の Item)。
 type ParkingCard struct {
-	ID           string   `json:"id"`
-	Kind         string   `json:"kind"`
+	ID   string `json:"id"`
+	Kind string `json:"kind"`
+	// Origin はメモの出自 (placed / adopted、internal/parking)。
+	Origin       string   `json:"origin"`
 	Title        string   `json:"title"`
 	Detail       string   `json:"detail,omitempty"`
 	Files        []string `json:"files,omitempty"`
@@ -306,7 +308,7 @@ func (s *subjectPick) offer(c graph.Card) {
 
 // parkingCard はメモを repo の memos の 1 つにする。sources は新しい順に並べる。
 func parkingCard(m parking.Item, names map[string]string, panes map[string]*state.PaneStatus) ParkingCard {
-	c := ParkingCard{ID: m.ID, Kind: m.Kind, Title: m.Title, Detail: m.Detail, Files: m.Files, DefaultTaken: m.DefaultTaken, Sources: []ParkingSource{}}
+	c := ParkingCard{ID: m.ID, Kind: m.Kind, Origin: m.Origin, Title: m.Title, Detail: m.Detail, Files: m.Files, DefaultTaken: m.DefaultTaken, Sources: []ParkingSource{}}
 	for _, s := range m.Sources {
 		var task string
 		if s.TaskID != "" {

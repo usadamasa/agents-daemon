@@ -51,10 +51,16 @@ const SELF_LABEL = 'このセッション'
 // Intent はメモを渡した先に頼むこと。
 export type Intent = 'task' | 'issue'
 
-// memoLabel はメモの 1 行: 種類 (park tool の kind の語のまま)、title、置かれた回数 (2 回以上のとき)。
+// kindLabel はメモの種類の語 (park tool の kind の語のまま)。終了したセッションから移したメモ (origin adopted) は
+// adopted を添える。hooks/notice.ts も使う。
+export function kindLabel(memo: { kind: string; origin?: string }): string {
+  return memo.origin === 'adopted' ? `${memo.kind}・adopted` : memo.kind
+}
+
+// memoLabel はメモの 1 行: 種類、title、置かれた回数 (2 回以上のとき)。
 export function memoLabel(memo: ParkingCard): string {
   const count = memo.sources.length > 1 ? ` ×${memo.sources.length}` : ''
-  return `[${memo.kind}] ${memo.title}${count}`
+  return `[${kindLabel(memo)}] ${memo.title}${count}`
 }
 
 // memoLines は選んだメモの詳細の行。sources は受け取った順 (新しい順) に出す。
@@ -151,7 +157,7 @@ export function canAdopt(node: GraphNode, self: string, data: DepsData): boolean
 // 書かれた id でメモと照合する (internal/deps/graph)。
 export function taskText(memo: ParkingCard): string {
   return [
-    `パーキングロットのメモ「${memo.title}」(種類: ${memo.kind}) をタスクにしてください。` +
+    `パーキングロットのメモ「${memo.title}」(種類: ${kindLabel(memo)}) をタスクにしてください。` +
       `TaskCreate で作り、タスクの description にメモの id (${memo.id}) を入れてください。` +
       `既にこのメモを扱うタスクがあれば、新しく作らずにその description に id を書き足すだけで構いません。` +
       `着手の時期は今の計画 (タスクの依存) に従ってください。`,
@@ -206,12 +212,18 @@ export async function discardStale($: EngineInterface, days: number): Promise<st
   return `${days} 日より前のメモ ${count} つを捨てました (戻すには park set <id> --status open、id は logs --events に残る)`
 }
 
-// handOff は text を to へ渡す。送る前にメモを取り (open のときだけ handed にする。取れるのは 1 つのセッションだけ)、
-// 届かなければ open に戻す。取れなかった (ほかのセッションが先に渡した、捨てた) メモは送らない。
-// 手順の交錯で破れないことは models/handoff の Handoff.tla (Claim → Send / Spawn → Revert) が持つ。
+// destinationArgs は取るときに宛先を書く `park set` の引数。セッションは ID、起こす先は repo のパスを渡し、宛先の形
+// (sid: / repo:) はバイナリが組む。起こしたセッションの ID は渡した後に分かるので、起こす先は repo のまま書く。
+function destinationArgs(to: Destination): string[] {
+  return to.route === 'spawn' ? ['--to-repo', to.repo] : ['--to-session', to.session_id]
+}
+
+// handOff は text を to へ渡す。送る前にメモを取り (open のときだけ handed にし、宛先を同じ park set で書く。取れるのは
+// 1 つのセッションだけ)、届かなければ open に戻す (宛先も空になる)。取れなかった (ほかのセッションが先に渡した、捨てた)
+// メモは送らない。手順の交錯で破れないことは models/handoff の Handoff.tla (Claim → Send / Spawn → Revert) が持つ。
 export async function handOff($: EngineInterface, memo: ParkingCard, to: Destination, text: string): Promise<string> {
   const sent = { via: 'memo', memo: memo.id, ...(to.route === 'spawn' ? { repo: to.repo } : {}) }
-  const claim = await park($, ['set', memo.id, '--status', 'handed', '--from', 'open'])
+  const claim = await park($, ['set', memo.id, '--status', 'handed', '--from', 'open', ...destinationArgs(to)])
   if (claim !== '') {
     await logEvent($, 'mod.send', { ...sent, to: '', delivered: false, reason: `claim: ${claim}` })
     return `メモを取れませんでした (ほかのセッションが先に渡したか、捨てたかもしれません): ${claim}`

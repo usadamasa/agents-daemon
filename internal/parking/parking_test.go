@@ -24,7 +24,7 @@ func source(sessionID, taskID string) Source {
 
 func mustAdd(t *testing.T, s Store, repo string, e Entry, src Source) Item {
 	t.Helper()
-	added, err := s.add(repo, e, src)
+	added, err := s.add(repo, e, OriginPlaced, src)
 	if err != nil {
 		t.Fatalf("add() error = %v", err)
 	}
@@ -180,7 +180,7 @@ func TestAdd_reportsCreated(t *testing.T) {
 		{source("s2", "1"), false},
 	}
 	for i, c := range cases {
-		added, err := s.add(testRepo, aside("t"), c.src)
+		added, err := s.add(testRepo, aside("t"), OriginPlaced, c.src)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -265,7 +265,7 @@ func TestAdd_doesNotMergeDifferentItems(t *testing.T) {
 	if other := mustAdd(t, s, "/src/other", aside("t"), source("s1", "")); other.ID == base.ID {
 		t.Errorf("repo が違うのにまとめた")
 	}
-	if _, _, err := s.Set(base.ID, StatusDiscarded, ""); err != nil {
+	if _, _, err := s.Set(base.ID, StatusDiscarded, "", ""); err != nil {
 		t.Fatal(err)
 	}
 	if again := mustAdd(t, s, testRepo, aside("t"), source("s1", "")); again.ID == base.ID {
@@ -279,7 +279,7 @@ func TestAdd_concurrentSameItem(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := range 8 {
 		wg.Go(func() {
-			if _, err := s.add(testRepo, aside("t"), source("s"+string(rune('a'+i)), "")); err != nil {
+			if _, err := s.add(testRepo, aside("t"), OriginPlaced, source("s"+string(rune('a'+i)), "")); err != nil {
 				t.Error(err)
 			}
 		})
@@ -294,19 +294,20 @@ func TestAdd_concurrentSameItem(t *testing.T) {
 func TestAdd_rejectsInvalidEntry(t *testing.T) {
 	s := New(t.TempDir())
 	cases := map[string]Entry{
-		"kind が無い":  {Title: "t"},
-		"kind が範囲外": {Kind: "decision", Title: "t"},
-		"title が空":  {Kind: KindScope, Title: "  "},
+		"kind が無い":    {Title: "t"},
+		"kind が範囲外":   {Kind: "decision", Title: "t"},
+		"kind が task": {Kind: "task", Title: "t"},
+		"title が空":    {Kind: KindScope, Title: "  "},
 	}
 	for name, e := range cases {
-		if _, err := s.add(testRepo, e, source("s1", "")); err == nil {
+		if _, err := s.add(testRepo, e, OriginPlaced, source("s1", "")); err == nil {
 			t.Errorf("%s: add() error = nil", name)
 		}
 	}
-	if _, err := s.add(testRepo, aside("t"), source("../x", "")); err == nil {
+	if _, err := s.add(testRepo, aside("t"), OriginPlaced, source("../x", "")); err == nil {
 		t.Errorf("ファイル名に使えない session ID を通した")
 	}
-	if _, err := (Store{}).add(testRepo, aside("t"), source("s1", "")); err == nil {
+	if _, err := (Store{}).add(testRepo, aside("t"), OriginPlaced, source("s1", "")); err == nil {
 		t.Errorf("置き場所が無いのに通した")
 	}
 }
@@ -315,7 +316,7 @@ func TestSet(t *testing.T) {
 	s := New(t.TempDir())
 	item := mustAdd(t, s, testRepo, aside("t"), source("s1", ""))
 
-	got, from, err := s.Set(item.ID, StatusHanded, "")
+	got, from, err := s.Set(item.ID, StatusHanded, "", ToSession("S2"))
 	if err != nil || got.Status != StatusHanded {
 		t.Fatalf("Set() = %+v, %v", got, err)
 	}
@@ -326,10 +327,10 @@ func TestSet(t *testing.T) {
 	if list, _ := s.list(); list[0].Status != StatusHanded {
 		t.Errorf("書き戻されていない: %+v", list)
 	}
-	if _, _, err := s.Set(item.ID, "done", ""); err == nil {
+	if _, _, err := s.Set(item.ID, "done", "", ""); err == nil {
 		t.Errorf("範囲外の status を通した")
 	}
-	if _, _, err := s.Set("../x", StatusOpen, ""); err == nil {
+	if _, _, err := s.Set("../x", StatusOpen, "", ""); err == nil {
 		t.Errorf("ファイル名に使えない id を通した")
 	}
 }
@@ -340,26 +341,26 @@ func TestSet_from(t *testing.T) {
 	s := New(t.TempDir())
 	item := mustAdd(t, s, testRepo, aside("t"), source("s1", ""))
 
-	if _, _, err := s.Set(item.ID, StatusHanded, StatusOpen); err != nil {
+	if _, _, err := s.Set(item.ID, StatusHanded, StatusOpen, ToSession("S2")); err != nil {
 		t.Fatalf("open のメモを --from open で取れない: %v", err)
 	}
-	_, _, err := s.Set(item.ID, StatusHanded, StatusOpen)
+	_, _, err := s.Set(item.ID, StatusHanded, StatusOpen, ToSession("S3"))
 	if err == nil {
 		t.Fatal("handed のメモを --from open で取れた")
 	}
 	if !strings.Contains(err.Error(), StatusHanded) || !strings.Contains(err.Error(), StatusOpen) {
 		t.Errorf("理由に今の status と期待した status が無い: %v", err)
 	}
-	if _, _, err := s.Set(item.ID, StatusDiscarded, StatusOpen); err == nil {
+	if _, _, err := s.Set(item.ID, StatusDiscarded, StatusOpen, ""); err == nil {
 		t.Error("取られたメモを --from open で捨てられた")
 	}
-	if list, _ := s.list(); list[0].Status != StatusHanded {
+	if list, _ := s.list(); list[0].Status != StatusHanded || list[0].HandedTo != "sid:S2" {
 		t.Errorf("失敗した Set が書き換えた: %+v", list)
 	}
-	if _, _, err := s.Set(item.ID, StatusOpen, StatusHanded); err != nil {
+	if _, _, err := s.Set(item.ID, StatusOpen, StatusHanded, ""); err != nil {
 		t.Errorf("届かなかったメモを --from handed で戻せない: %v", err)
 	}
-	if _, _, err := s.Set(item.ID, StatusOpen, "done"); err == nil {
+	if _, _, err := s.Set(item.ID, StatusOpen, "done", ""); err == nil {
 		t.Error("範囲外の from を通した")
 	}
 }
@@ -376,7 +377,7 @@ func TestDiscardBefore(t *testing.T) {
 	renewed := mustAdd(t, s, testRepo, aside("renewed"), placed("s1", 40*24*time.Hour))
 	mustAdd(t, s, testRepo, aside("renewed"), placed("s2", time.Hour))
 	handed := mustAdd(t, s, testRepo, aside("handed"), placed("s1", 40*24*time.Hour))
-	if _, _, err := s.Set(handed.ID, StatusHanded, ""); err != nil {
+	if _, _, err := s.Set(handed.ID, StatusHanded, "", ToSession("S2")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -412,7 +413,7 @@ func TestPrune(t *testing.T) {
 	s := New(t.TempDir())
 	open := mustAdd(t, s, testRepo, aside("open"), source("s1", ""))
 	handed := mustAdd(t, s, testRepo, aside("handed"), source("s1", ""))
-	if _, _, err := s.Set(handed.ID, StatusHanded, ""); err != nil {
+	if _, _, err := s.Set(handed.ID, StatusHanded, "", ToSession("S2")); err != nil {
 		t.Fatal(err)
 	}
 	now := time.Now()
@@ -446,7 +447,7 @@ func TestPrune(t *testing.T) {
 func TestPrune_waitsForLock(t *testing.T) {
 	s := New(t.TempDir())
 	memo := mustAdd(t, s, testRepo, aside("handed"), source("s1", ""))
-	if _, _, err := s.Set(memo.ID, StatusHanded, ""); err != nil {
+	if _, _, err := s.Set(memo.ID, StatusHanded, "", ToSession("S2")); err != nil {
 		t.Fatal(err)
 	}
 	now := time.Now()

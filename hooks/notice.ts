@@ -3,6 +3,7 @@ import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
 
 import { daemonBin } from './daemon-bin'
 import { logChange, logEvent, reason, settle } from './log'
+import { kindLabel } from './parking'
 
 // model がファイルを読む・書いたら、そのファイルを files に持つパーキングのメモを tool の結果の context で model に
 // 伝える (#89)。人には出さない (メモの一覧は依存図の pane が持つ)。
@@ -23,6 +24,7 @@ type Memo = {
   id: string
   repo: string
   kind: string
+  origin?: string
   title: string
   detail?: string
   files?: string[]
@@ -101,7 +103,7 @@ function inRepo(path: string, repo: string): string {
 function describe(path: string, memos: Memo[]): string {
   const lines = [`${path} に関係するパーキングのメモ (ほかのセッションが置いた脇のこと)。今の作業の範囲は変えず、関わるときだけ考慮する。`]
   for (const memo of memos) {
-    lines.push(`- [${memo.kind}] ${memo.title} (${memo.id})`)
+    lines.push(`- [${kindLabel(memo)}] ${memo.title} (${memo.id})`)
     if (memo.detail) lines.push(`  ${memo.detail}`)
     if (memo.default_taken) lines.push(`  置いた側の既定: ${memo.default_taken}`)
   }

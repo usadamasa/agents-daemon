@@ -112,6 +112,21 @@ agents-daemon park list --status open --task <task_id> --session <session_id> --
 - `--here` は `--cwd` の repo (linked worktree でも main worktree の鍵) で絞る。`--repo` とは併用できない。
   ファイルのメモの通知 (mod) は `--status open --here` で読む
 - `--task` は `--session` のセッションがそのタスクの途中で置いたメモで絞る
+- メモは種類 `kind` (aside / scope / preference) と出自 `origin` を持つ。`placed` は model が park tool で置いたメモ、
+  `adopted` は終了したセッションの未完了のタスクを依存図の pane の `To parking` (`park adopt task:<sid>/<tid>`) で
+  移したメモ (種類は scope)
+- handed のメモは宛先 `handed_to` (`sid:<session_id>` か、新しく起こしたセッションの `repo:<path>`) を持つ
+
+### パーキングのメモの status を書き換える
+
+```sh
+agents-daemon park set <id> --status open                                        # 渡せなかったメモを手で戻す
+agents-daemon park set <id> --status handed --from open --to-session <session_id> # 渡す前に取る (pane が使う)
+agents-daemon park set <id> --status handed --from open --to-repo <abs path>      # 新しく起こすセッションへ渡す前に取る
+```
+
+- handed にするときは宛先 (`--to-session` か `--to-repo`) が要り、ほかの status にすると宛先は空になる
+- `--from` を付けると、今の status がそれと違うときは書き換えずにエラーで返す
 
 ### `--json`
 

@@ -12,7 +12,9 @@ export type ParkingSource = {
 
 export type ParkingCard = {
   id: string
-  kind: 'aside' | 'scope' | 'preference' | 'task'
+  kind: 'aside' | 'scope' | 'preference'
+  // origin は出自。placed は park tool で置いたメモ、adopted は終了したセッションの未完了のタスクから移したメモ。
+  origin: 'placed' | 'adopted'
   title: string
   detail?: string
   files?: string[]

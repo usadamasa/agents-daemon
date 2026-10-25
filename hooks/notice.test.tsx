@@ -12,6 +12,7 @@ function memo(id: string, title: string, files: string[], by: string[] = ['OTHER
     id,
     repo: CWD,
     kind: 'aside',
+    origin: 'placed',
     title,
     files,
     sources: by.map(sid => ({ session_id: sid, cwd: CWD, at: '2026-10-25T10:00:00+09:00' })),
@@ -85,6 +86,12 @@ test('別のセッションが置いたメモの files に当たるファイル�
   expect(text).not.toMatch(/関係ないメモ/)
   // tool の結果そのものは変えない。
   expect(res.result).toEqual({ filePath: `${CWD}/internal/daemon/housekeeping.go` })
+})
+
+test('終了したセッションから移したメモ (origin adopted) は種類に adopted を添えて伝える', async ($, on) => {
+  world(on, { [LIST.join(' ')]: [memo('m1', '残ったタスク', ['a.go'], ['OTHER'], { kind: 'scope', origin: 'adopted' })] })
+  await $.session.start(START)
+  expect(context(await touch($, 'Read', `${CWD}/a.go`))).toMatch(/- \[scope・adopted\] 残ったタスク \(m1\)/)
 })
 
 test('メモは tool の結果のたびに park list で読み、依存図の読み直しを待たない', async ($, on) => {

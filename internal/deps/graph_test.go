@@ -476,7 +476,7 @@ func TestGraph_memos(t *testing.T) {
 	const cwd = "/w/a"
 	const handed, open, discarded, gone = "20261025T010000-0000000a", "20261025T020000-0000000b", "20261025T030000-0000000c", "20261025T040000-0000000d"
 	memo := func(id, title, status string) parking.Item {
-		return parking.Item{ID: id, Repo: cwd, Status: status, Entry: parking.Entry{Kind: parking.KindAside, Title: title},
+		return parking.Item{ID: id, Repo: cwd, Status: status, Origin: parking.OriginAdopted, Entry: parking.Entry{Kind: parking.KindAside, Title: title},
 			Sources: []parking.Source{{SessionID: "A", TaskID: "1", CWD: cwd, At: t0}}}
 	}
 	withDescription := func(t tasklog.Task, description string) tasklog.Task {
@@ -516,5 +516,8 @@ func TestGraph_memos(t *testing.T) {
 	}
 	if len(b.Repos) != 1 || len(b.Repos[0].Memos) != 1 || b.Repos[0].Memos[0].ID != open {
 		t.Errorf("repo の memos は open のメモだけ: %+v", b.Repos)
+	}
+	if b.Repos[0].Memos[0].Origin != parking.OriginAdopted {
+		t.Errorf("repo のメモの origin = %q", b.Repos[0].Memos[0].Origin)
 	}
 }

@@ -36,8 +36,9 @@ func parkAdd(stateDir string, s parking.Store, stdin io.Reader, cwd string, task
 }
 
 // parkSet は s.Set を走らせ、status の変化を書く (park set)。session は操作したセッションで、ログに添える。
-func parkSet(stateDir string, s parking.Store, session, id, status, expect string, now time.Time) (parking.Item, error) {
-	item, from, err := s.Set(id, status, expect)
+// dest は handed にするときの宛先 (parking.ToSession / ToRepo)。宛先はログに書かない (repo のパスを残さない)。
+func parkSet(stateDir string, s parking.Store, session, id, status, expect, dest string, now time.Time) (parking.Item, error) {
+	item, from, err := s.Set(id, status, expect, dest)
 	if err != nil {
 		parkFailed(stateDir, now, "set", session, err, kv("memo", id))
 		return item, err

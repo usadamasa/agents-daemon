@@ -32,7 +32,7 @@ func writeTask(t *testing.T, stateDir string, task tasklog.Task) string {
 // exited は「終了したと確かめた」の代わり。
 func exited(string, time.Time) error { return nil }
 
-// 終了したセッションの未完了のタスクは、kind task のメモにしてからタスクの記録を消す。
+// 終了したセッションの未完了のタスクは、kind scope、出自 adopted のメモにしてからタスクの記録を消す。
 func TestAdopt_movesTaskToParking(t *testing.T) {
 	stateDir := t.TempDir()
 	cwd := t.TempDir()
@@ -44,7 +44,7 @@ func TestAdopt_movesTaskToParking(t *testing.T) {
 		t.Fatalf("Adopt() error = %v", err)
 	}
 	item := added.Item
-	if !added.Created || item.Kind != KindTask || item.Title != "README を直す" || item.Detail != "表の列がずれている" || item.Repo != cwd {
+	if !added.Created || item.Kind != KindScope || item.Origin != OriginAdopted || item.Title != "README を直す" || item.Detail != "表の列がずれている" || item.Repo != cwd {
 		t.Errorf("item = %+v", item)
 	}
 	if item.DefaultTaken != AdoptedDefault {
@@ -113,11 +113,16 @@ func TestAdopt_requiresExitedSession(t *testing.T) {
 	}
 }
 
-// kind task は park adopt だけが置く。model の tool (park add) からは置けない。
-func TestPark_rejectsTaskKind(t *testing.T) {
+// 種類は aside / scope / preference の 3 つだけ。task は種類ではない (出自は origin が持つ)。model が置いたメモの出自は placed。
+func TestPark_kindAndOrigin(t *testing.T) {
 	stateDir := t.TempDir()
-	req := Request{Entry: Entry{Kind: KindTask, Title: "t"}, SessionID: "s1"}
-	if _, err := New(stateDir).Park(req, t.TempDir(), tasklog.New(stateDir), testNow); err == nil {
+	s := New(stateDir)
+	req := Request{Entry: Entry{Kind: "task", Title: "t"}, SessionID: "s1"}
+	if _, err := s.Park(req, t.TempDir(), tasklog.New(stateDir), testNow); err == nil {
 		t.Errorf("Park() が kind task を通した")
+	}
+	added, err := s.Park(Request{Entry: Entry{Kind: KindScope, Title: "t"}, SessionID: "s1"}, t.TempDir(), tasklog.New(stateDir), testNow)
+	if err != nil || added.Item.Origin != OriginPlaced {
+		t.Errorf("Park() = %+v, %v", added, err)
 	}
 }

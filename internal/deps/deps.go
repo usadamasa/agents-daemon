@@ -122,7 +122,6 @@ func build(in input) Deps {
 		Edges:        in.Edges,
 		Memos:        in.Parking,
 		Open:         open,
-		Panes:        panes,
 		SessionNames: in.SessionNames,
 	})
 	return d

@@ -155,45 +155,53 @@ func TestGraph_linksDepthAndDownstream(t *testing.T) {
 	}
 }
 
-// session: の端点は、after 側ならそのセッションの根のタスク (同じセッションの blockedBy が無いもの)、
-// before 側なら末端のタスク (同じセッションのどのタスクも止めていないもの) につなぐ。同じ名前のセッションが
-// 複数あれば最後に動いたもの (pane があればそれ、無ければタスクの更新が新しいもの)。タスクの無い生きている
-// セッションはそのノードへ。sid: の端点も同じ規則でそのセッションのノードにつなぐ。まだ起きていないセッションと
-// issue: / pr: は参照を鍵にした置き場のノード (pending)、終了していてタスクを作らなかったセッションは
-// sid: を鍵にした置き場のノード (exited) にする。名前で引いても session ID で引いても同じ置き場になる。
+// sid: の端点は、after 側ならそのセッションの根のタスク (同じセッションの blockedBy が無いもの)、
+// before 側なら末端のタスク (同じセッションのどのタスクも止めていないもの) につなぐ。タスクの無い生きている
+// セッションはそのノードへ。daemon がまだ結びつけていない session:<名前> は、同じ名前のセッションが生きていても
+// 名前を key にした置き場のノード (pending) にする。issue: / pr: も参照を key にした置き場のノード (pending)、
+// 終了していてタスクを作らなかったセッションは sid: を key にした置き場のノード (exited) にする。
 func TestGraph_refEndpoints(t *testing.T) {
 	const cwd = "/w/a"
-	e := func(id, before, after string) edge.Edge {
-		return edge.Edge{ID: id, Before: edge.Endpoint{Ref: before, CWD: cwd}, After: edge.Endpoint{Ref: after, CWD: cwd}}
+	ep := func(r string) edge.Endpoint {
+		if name, ok := strings.CutPrefix(r, "="); ok {
+			// =<sid>@<名前> は daemon が session:<名前> から結びつけた端点。
+			id, from, _ := strings.Cut(name, "@")
+			return edge.Endpoint{Ref: "sid:" + id, CWD: cwd, BoundFrom: "session:" + from}
+		}
+		return edge.Endpoint{Ref: r, CWD: cwd}
 	}
-	old := task("O", "1", "古い同名", "completed", cwd)
-	old.UpdatedAt = t0.Add(-time.Hour)
+	e := func(id, before, after string) edge.Edge {
+		return edge.Edge{ID: id, Before: ep(before), After: ep(after)}
+	}
 	b := build(input{
 		PID: 42,
 		Snapshot: snapshot(
 			state.PaneStatus{PaneID: "p1", SessionID: "L", CWD: cwd, AgentStatus: "working", AgentMessage: "起きたばかり"},
+			state.PaneStatus{PaneID: "p2", SessionID: "A", CWD: cwd, AgentStatus: "working"},
 		),
 		Tasks: []tasklog.Task{
 			task("A", "1", "根", "pending", cwd),
 			task("A", "2", "中", "pending", cwd, "1"),
 			task("A", "3", "末端 1", "pending", cwd, "2"),
 			task("A", "4", "末端 2", "pending", cwd, "1"),
-			old,
-			task("N", "1", "新しい同名", "pending", cwd),
+			task("N", "1", "同名", "pending", cwd),
+			task("O", "1", "同名", "pending", cwd),
 		},
 		Edges: []edge.Edge{
-			e("e1", "issue:o/r#1", "session:alpha"),
-			e("e2", "session:alpha", "pr:o/r#2"),
-			e("e3", "session:dup", "session:live"),
-			e("e4", "session:later", "session:gone"),
+			e("e1", "issue:o/r#1", "=A@alpha"),
+			e("e2", "=A@alpha", "pr:o/r#2"),
+			e("e3", "=N@dup", "=L@live"),
+			e("e4", "session:later", "sid:G"),
 			e("e5", "sid:G", "sid:A"),
 			e("e6", "sid:Z", "sid:L"),
+			e("e7", "session:alpha", "issue:o/r#3"),
 		},
 		SessionNames: map[string]string{"A": "alpha", "O": "dup", "N": "dup", "L": "live", "G": "gone"},
 	})
 	// 辺は before、after の Key の順に並ぶ。
 	want := []string{
 		"issue:o/r#1>task:A/1",
+		"session:alpha>issue:o/r#3",
 		"session:later>sid:G",
 		"sid:G>task:A/1",
 		"sid:Z>sid:L",
@@ -207,8 +215,10 @@ func TestGraph_refEndpoints(t *testing.T) {
 	got := nodes(b.Graph)
 	place := map[string]string{
 		"issue:o/r#1":   graph.StatePending,
+		"issue:o/r#3":   graph.StatePending,
 		"pr:o/r#2":      graph.StatePending,
 		"session:later": graph.StatePending,
+		"session:alpha": graph.StatePending,
 		"sid:G":         graph.StateExited,
 		"sid:Z":         graph.StateExited,
 	}
@@ -218,13 +228,16 @@ func TestGraph_refEndpoints(t *testing.T) {
 			t.Errorf("%s = %+v, want 置き場のノード (%s)", key, n, state)
 		}
 	}
-	if got["session:later"].Title != "later" || got["issue:o/r#1"].Title != "issue:o/r#1" || got["sid:Z"].Title != "sid:Z" {
-		t.Errorf("title = %q / %q / %q", got["session:later"].Title, got["issue:o/r#1"].Title, got["sid:Z"].Title)
+	if got["session:later"].Title != "later" || got["session:alpha"].Title != "alpha" || got["issue:o/r#1"].Title != "issue:o/r#1" || got["sid:Z"].Title != "sid:Z" {
+		t.Errorf("title = %q / %q / %q / %q", got["session:later"].Title, got["session:alpha"].Title, got["issue:o/r#1"].Title, got["sid:Z"].Title)
+	}
+	if n := got["session:alpha"]; n.SessionID != "" || n.Live {
+		t.Errorf("結びつく前の名前の置き場はセッションを持たない: %+v", n)
 	}
 	if n := got["sid:G"]; n.SessionID != "G" || n.Session != "gone" || n.SessionName != "gone" || n.Title != "gone" {
 		t.Errorf("終了したセッションの置き場 = %+v", n)
 	}
-	// 名前のあるタスクの無いセッションも sid: を鍵にする。
+	// 名前のあるタスクの無いセッションも sid: を key にする。
 	if n := got["sid:L"]; n.Kind != graph.KindSession || n.SessionName != "live" {
 		t.Errorf("sid:L = %+v", n)
 	}
@@ -232,8 +245,9 @@ func TestGraph_refEndpoints(t *testing.T) {
 	if n := got["task:N/1"]; n.Session != "dup N" || n.SessionName != "dup" {
 		t.Errorf("同名のセッションの名前 = %q / %q", n.Session, n.SessionName)
 	}
+	// 辺の元の記録は結びつけた後の参照と、書いたときの参照を持つ。
 	for _, l := range b.Graph.Links {
-		if l.Before == "task:N/1" && (l.Edge == nil || l.Edge.Before.Ref != "session:dup") {
+		if l.Before == "task:N/1" && (l.Edge == nil || l.Edge.Before.Ref != "sid:N" || l.Edge.Before.BoundFrom != "session:dup") {
 			t.Errorf("辺の元の参照 = %+v", l.Edge)
 		}
 	}
@@ -252,7 +266,7 @@ func TestGraph_refEndpointsEdgeCases(t *testing.T) {
 			task("D", "1", "後", "pending", cwd),
 		},
 		Edges: []edge.Edge{
-			e("e2", "session:loop", "task:D/1"),
+			e("e2", "sid:C", "task:D/1"),
 		},
 		SessionNames: map[string]string{"C": "loop", "D": "after"},
 	})

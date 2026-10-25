@@ -75,10 +75,12 @@ export type MemoRef = {
   status: 'open' | 'handed' | 'discarded'
 }
 
+// EdgeEndpoint は辺の記録の端点。bound_from は daemon が session:<名前> を sid:<id> に結びつけたときの元の参照。
 export type EdgeEndpoint = {
   ref: string
   cwd: string
   repo: string
+  bound_from?: string
 }
 
 // GraphLink は辺 1 本。kind task は同じセッションの blockedBy、kind edge は `edge add` で書かれた辺で edge に元の記録を持つ。

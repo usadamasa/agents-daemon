@@ -18,6 +18,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/backend"
 	"github.com/usadamasa/agents-daemon/internal/config"
+	"github.com/usadamasa/agents-daemon/internal/daemon/ledger"
 	"github.com/usadamasa/agents-daemon/internal/daemon/limitlog"
 	"github.com/usadamasa/agents-daemon/internal/daemon/state"
 	"github.com/usadamasa/agents-daemon/internal/detect"
@@ -57,9 +58,12 @@ type daemonRuntime struct {
 	// tasks は hook が書くタスクの記録 (internal/tasklog)。daemon は housekeeping で消すだけ。
 	// ゼロ値は何も消さない。
 	tasks tasklog.Store
-	// edges は `edge add` が書くセッションをまたぐ辺 (internal/edge)。daemon は housekeeping で消すだけ。
-	// ゼロ値は何も消さない。
+	// edges は `edge add` が書くセッションをまたぐ辺 (internal/edge)。daemon は tick ごとに session:<名前> の
+	// 端点を台帳のセッションに結びつけ、housekeeping で消す。ゼロ値は何もしない。
 	edges edge.Store
+	// sessions はセッション台帳 (internal/daemon/ledger)。daemon だけが tick ごとに書き、housekeeping で消す。
+	// ゼロ値は書かない。
+	sessions ledger.Store
 	// parking は `park add` が書くパーキングのメモ (internal/parking)。daemon は housekeeping で消すだけ。
 	// ゼロ値は何も消さない。
 	parking parking.Store
@@ -175,6 +179,7 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 	if err := state.WriteStatusSnapshot(r.statusPath, os.Getpid(), r.backend, r.startedAt, now, statusPanes); err != nil {
 		r.log.Logf("status snapshot の書き込みに失敗: %v", err)
 	}
+	r.recordSessions(statusPanes, now)
 
 	if claudeCount == 0 {
 		if r.idleSince.IsZero() {

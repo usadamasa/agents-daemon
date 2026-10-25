@@ -200,7 +200,7 @@ export const registerDeps: Register = on => {
     // 操作のボタンは枠の最後の行にまとめ、どのノードでも同じ位置に出す。
     const detail = (n: GraphNode, prefix: string) => {
       const links = g.blockers(n.key)
-      const canLink = n.ref !== undefined && n.cwd !== undefined
+      const canLink = n.endpoint && n.cwd !== undefined
       const actions = [
         canLink && !isPicking && (
           <Button key="add-blocker" onPress={() => void update($, picking, () => true)}>
@@ -229,7 +229,7 @@ export const registerDeps: Register = on => {
             <Text key={`memo:${m.id}`}>{`◇ ${m.title} (${m.status})`}</Text>
           ))}
           {links.map(link => blockerRow(n, link))}
-          {!canLink && <Text dimColor>辺の端点にできないタスクです (TodoWrite の項目、名前の無いセッション)</Text>}
+          {!canLink && <Text dimColor>辺の端点にできないタスクです (TodoWrite の項目)</Text>}
           {!canSend(n, self) && <Text dimColor>{whyNot(n, self)}</Text>}
           {canSend(n, self) && Input === undefined && <Text dimColor>この画面では指示を入力できません</Text>}
           {isPicking && <Text dimColor>先に済ませるタスクを選ぶ:</Text>}
@@ -285,7 +285,7 @@ export const registerDeps: Register = on => {
     // メモの行は最後に置かれた時刻 (JST) を先頭に置き、どのメモが古いかを列で見比べられるようにする。
     const memoRow = (memo: ParkingCard) => {
       const key = memoKey(memo)
-      const during = memo.sources.flatMap(s => (s.task_id ? (g.node(`${s.session_id}/${s.task_id}`) ?? []) : []))[0]
+      const during = memo.sources.flatMap(s => (s.task_ref ? (g.node(s.task_ref) ?? []) : []))[0]
       const isSel = key === chosen
       return (
         <Box key={`box:${key}`} flexDirection="row">
@@ -457,19 +457,9 @@ async function unlink($: EngineInterface, link: GraphLink): Promise<string> {
   return failure === '' ? `辺を外しました: ${e.before.ref} → ${e.after.ref}` : `辺を外せませんでした: ${failure}`
 }
 
-// addBlocker は before が済まないと after を始められない辺を書く。
+// addBlocker は before が済まないと after を始められない辺を書く。端点はノードの key そのもの。
 async function addBlocker($: EngineInterface, before: GraphNode, after: GraphNode): Promise<string> {
-  const failure = await edge($, [
-    'add',
-    '--before',
-    before.ref ?? '',
-    '--before-cwd',
-    before.cwd ?? '',
-    '--after',
-    after.ref ?? '',
-    '--after-cwd',
-    after.cwd ?? '',
-  ])
+  const failure = await edge($, ['add', '--before', before.key, '--before-cwd', before.cwd ?? '', '--after', after.key, '--after-cwd', after.cwd ?? ''])
   return failure === '' ? `辺を足しました: ${before.title} → ${after.title}` : `辺を足せませんでした: ${failure}`
 }
 
@@ -487,7 +477,7 @@ async function deliver($: EngineInterface, node: GraphNode, text: string, via: s
   }
 }
 
-// memoKey はメモの Key。ノードの Key (<session_id>/<task_id>) と重ならないよう前置きを付ける。
+// memoKey は pane でメモを選ぶ key。ノードの key (Ref) の種類に無い前置き park: を付けて重ならないようにする。
 function memoKey(memo: ParkingCard): string {
   return `park:${memo.id}`
 }
@@ -500,11 +490,11 @@ function findMemo(repos: DepsRepo[], key: string): { memo: ParkingCard; repo: De
   return undefined
 }
 
-// heading は詳細の 1 行目。セッションのノードの ref (session:<名前>) は名前と重なるので出さず、同名のセッションを
+// heading は詳細の 1 行目。タスクの無いセッションのノードは key の代わりに名前を出し、同名のセッションを
 // 見分けられるよう session ID の先頭を添える。
 function heading(n: GraphNode): string {
-  if (n.ref?.startsWith('session:')) return `${n.session ?? '-'} · ${(n.session_id ?? '').slice(0, 8)}`
-  return `${n.ref ?? n.key} · ${n.session ?? '-'}`
+  if (n.kind === 'session') return `${n.session ?? '-'} · ${(n.session_id ?? '').slice(0, 8)}`
+  return `${n.key} · ${n.session ?? '-'}`
 }
 
 // canSend はノードのセッションへ指示を送れるか。終了したセッション、セッションの無い置き場のノード、自分自身には送らない。
@@ -527,7 +517,7 @@ function instruction(node: GraphNode, text: string): string {
 // unlinkText は同じセッションの blockedBy の解消を頼む文面。TaskUpdate に blockedBy を外す引数が無いので、
 // 待たれている側を片付けるか、待っている側を作り直すよう頼む。
 function unlinkText(before: GraphNode, after: GraphNode): string {
-  const id = (n: GraphNode) => n.key.slice(n.key.indexOf('/') + 1)
+  const id = (n: GraphNode) => n.task_id ?? ''
   return [
     `タスク #${id(after)}「${after.title}」が #${id(before)}「${before.title}」の完了待ち (blockedBy) になっています。`,
     `この待ちが要らなければ、#${id(before)} を completed か deleted にするか、#${id(after)} を blockedBy なしで作り直してください。`,

@@ -261,15 +261,21 @@ func TestParkAdopt(t *testing.T) {
 	}
 	writeTaskRecord(t, root, "dead", `{"id": "4", "subject": "README を直す", "status": "pending", "session_id": "dead", "cwd": "`+cwd+`", "updated_at": "2026-10-18T09:00:00Z"}`)
 
-	if _, stderr, err := runPark(t, "", "adopt", "dead", "4", "--session", "viewer", "--cwd", cwd); err == nil || !strings.Contains(stderr, "daemon が動いていない") {
+	// 参照は task: の形だけを受け付ける。
+	for _, ref := range []string{"sid:dead", "todo:dead/0", "dead/4"} {
+		if _, stderr, err := runPark(t, "", "adopt", ref, "--session", "viewer", "--cwd", cwd); err == nil || !strings.Contains(stderr, "task:<session_id>/<task_id>") {
+			t.Errorf("%s: タスクの参照でないのに受け付けた: %v %s", ref, err, stderr)
+		}
+	}
+	if _, stderr, err := runPark(t, "", "adopt", "task:dead/4", "--session", "viewer", "--cwd", cwd); err == nil || !strings.Contains(stderr, "daemon が動いていない") {
 		t.Fatalf("daemon が動いていないのに移した: %v %s", err, stderr)
 	}
 	writeDaemonStatus(t, root, `{"pane_id": "b1", "session_id": "dead", "cwd": "`+cwd+`"}`)
-	if _, stderr, err := runPark(t, "", "adopt", "dead", "4", "--session", "viewer", "--cwd", cwd); err == nil || !strings.Contains(stderr, "生きている") {
+	if _, stderr, err := runPark(t, "", "adopt", "task:dead/4", "--session", "viewer", "--cwd", cwd); err == nil || !strings.Contains(stderr, "生きている") {
 		t.Fatalf("pane のあるセッションのタスクを移した: %v %s", err, stderr)
 	}
 	writeDaemonStatus(t, root, ``)
-	out, _, err := runPark(t, "", "adopt", "dead", "4", "--session", "viewer", "--cwd", cwd)
+	out, _, err := runPark(t, "", "adopt", "task:dead/4", "--session", "viewer", "--cwd", cwd)
 	if err != nil {
 		t.Fatalf("park adopt: %v", err)
 	}

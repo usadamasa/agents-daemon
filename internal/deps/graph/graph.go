@@ -15,6 +15,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/parking"
+	"github.com/usadamasa/agents-daemon/internal/ref"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
 
@@ -24,6 +25,8 @@ const (
 	KindTodo    = "todo"    // TodoWrite のリストの 1 項目
 	KindSession = "session" // タスクを作っていない生きているセッション (subject は今の作業か、セッションの名前)
 	// KindRef は辺の端点の参照だけがあるノード (まだ起きていないセッション、issue / PR、タスクを作らずに終了したセッション)。
+	// Key は端点の参照そのもの。終了したセッションは名前で引いても sid:<session_id> を Key にし、名前と session ID の
+	// どちらで書いた辺も同じノードに集める。
 	KindRef = "ref"
 )
 
@@ -72,17 +75,18 @@ type Graph struct {
 
 // Node はノード 1 つ。
 type Node struct {
-	// Key は Card の Key。置き場のノードは ref: に参照を続けたもの。
+	// Key はノードの Ref (internal/ref)。
 	Key   string `json:"key"`
 	Kind  string `json:"kind"`
 	State string `json:"state"`
 	Title string `json:"title"`
 	// Detail は状態の補足 (上限の解除時刻)。
 	Detail string `json:"detail,omitempty"`
-	// Ref は辺の端点に書く参照 (task:<sid>/<tid>、session:<名前>)。端点にできないノード (TodoWrite の項目、
-	// 名前の無いセッション) は空。CWD はその端点の cwd。
-	Ref       string `json:"ref,omitempty"`
-	CWD       string `json:"cwd,omitempty"`
+	// Endpoint は Key をそのまま辺の端点に書けるか (TodoWrite の項目は書けない)。CWD はその端点の cwd。
+	Endpoint bool   `json:"endpoint"`
+	CWD      string `json:"cwd,omitempty"`
+	// TaskID は kind task のノードのタスクの ID (TaskUpdate に書く形)。
+	TaskID    string `json:"task_id,omitempty"`
 	SessionID string `json:"session_id,omitempty"`
 	// Session は表示名 (同名のセッションがあれば session ID の先頭が付く)。SessionName はセッション名
 	// そのもの (`claude --name`、SendMessage の宛先に書く形)。名前が無ければ空。
@@ -117,7 +121,7 @@ type Link struct {
 	After  string `json:"after"`
 	Kind   string `json:"kind"`
 	// Edge は kind edge の辺の元の記録。mod が `edge rm` に渡す。1 本の記録が複数の辺になることがある
-	// (session: の端点が根や末端のタスクを複数持つとき)。
+	// (session: や sid: の端点が根や末端のタスクを複数持つとき)。
 	Edge *EdgeRecord `json:"edge,omitempty"`
 }
 
@@ -131,7 +135,7 @@ type EdgeRecord struct {
 
 // Card はノードにする作業 1 つ (タスク、TodoWrite の項目、タスクの無い生きているセッション)。
 type Card struct {
-	// Key は依存図で一意な識別子 (<session_id>/<task_id>、<session_id>/todo-<n>、<session_id>/session)。
+	// Key は依存図で一意な識別子 (task:、todo:、sid: の Ref)。
 	Key  string
 	Kind string
 	// TaskID は kind task のタスクの ID。
@@ -185,16 +189,9 @@ func Build(in Input) Graph {
 }
 
 func (g *builder) addCard(c Card) {
-	n := &Node{Key: c.Key, Kind: c.Kind, Title: c.Title, CWD: c.CWD, SessionID: c.SessionID, Session: c.Session, SessionName: g.in.SessionNames[c.SessionID], Live: c.Live, Memos: []MemoRef{}}
+	n := &Node{Key: c.Key, Kind: c.Kind, Title: c.Title, Endpoint: c.Kind != KindTodo, CWD: c.CWD, TaskID: c.TaskID, SessionID: c.SessionID,
+		Session: c.Session, SessionName: g.in.SessionNames[c.SessionID], Live: c.Live, Memos: []MemoRef{}}
 	n.State, n.Detail = nodeState(c.Status, c.Pane)
-	switch c.Kind {
-	case KindTask:
-		n.Ref = "task:" + c.SessionID + "/" + c.TaskID
-	case KindSession:
-		if n.SessionName != "" {
-			n.Ref = "session:" + n.SessionName
-		}
-	}
 	g.nodes[n.Key] = n
 	g.bySession[n.SessionID] = append(g.bySession[n.SessionID], n.Key)
 }
@@ -238,7 +235,7 @@ func nodeState(status string, p *state.PaneStatus) (state, detail string) {
 func (g *builder) linkBlockedBy() {
 	for _, t := range g.in.Tasks {
 		for _, id := range t.BlockedBy {
-			g.link(t.SessionID+"/"+id, t.SessionID+"/"+t.ID, LinkTask, nil)
+			g.link(ref.Task(t.SessionID, id), ref.Task(t.SessionID, t.ID), LinkTask, nil)
 		}
 	}
 }
@@ -267,39 +264,50 @@ func (g *builder) link(before, after, kind string, via *EdgeRecord) {
 	g.links = append(g.links, Link{Before: before, After: after, Kind: kind, Edge: via})
 }
 
-// resolve は端点の参照をノードの Key にする。session: はセッションのノードのうち pick (根か末端) が選んだもの。
+// resolve は端点の参照をノードの Key にする。session: と sid: はセッションのノードのうち pick (根か末端) が選んだもの。
 // ノードが無い参照は置き場のノードを作る。
 func (g *builder) resolve(ep edge.Endpoint, pick func(sessionID string) []string) []string {
 	kind, rest, _ := strings.Cut(ep.Ref, ":")
 	switch kind {
 	case "task":
-		return []string{rest}
+		return []string{ep.Ref}
 	case "session":
 		id := g.latestSession(rest)
 		if id == "" {
-			return []string{g.placeholder(ep, rest, "", StatePending)}
+			return []string{g.placeholder(ep.Ref, ep.CWD, rest, "", StatePending)}
 		}
-		if keys := pick(id); len(keys) > 0 {
-			return keys
-		}
-		// タスクがすべて輪になっていて根も末端も無い。
-		if keys := g.bySession[id]; len(keys) > 0 {
-			return keys
-		}
-		// タスクを作らずに終了したセッション。辺は残し、下流が止まっていることを見せる。
-		return []string{g.placeholder(ep, rest, id, StateExited)}
+		return g.sessionKeys(id, ep.CWD, pick)
+	case "sid":
+		return g.sessionKeys(rest, ep.CWD, pick)
 	default:
-		return []string{g.placeholder(ep, ep.Ref, "", StatePending)}
+		return []string{g.placeholder(ep.Ref, ep.CWD, ep.Ref, "", StatePending)}
 	}
 }
 
-// placeholder は参照を鍵にした置き場のノードを作り (既にあればそのまま)、Key を返す。
-func (g *builder) placeholder(ep edge.Endpoint, title, sessionID, state string) string {
-	key := "ref:" + ep.Ref
+// sessionKeys はセッションのノードのうち pick が選んだものの Key。ノードが無ければ sid: の置き場のノードを作る。
+func (g *builder) sessionKeys(sessionID, cwd string, pick func(sessionID string) []string) []string {
+	if keys := pick(sessionID); len(keys) > 0 {
+		return keys
+	}
+	// タスクがすべて輪になっていて根も末端も無い。
+	if keys := g.bySession[sessionID]; len(keys) > 0 {
+		return keys
+	}
+	// タスクを作らずに終了したセッション。辺は残し、下流が止まっていることを見せる。
+	key := ref.SessionID(sessionID)
+	title := g.in.SessionNames[sessionID]
+	if title == "" {
+		title = key
+	}
+	return []string{g.placeholder(key, cwd, title, sessionID, StateExited)}
+}
+
+// placeholder は参照を Key にした置き場のノードを作り (既にあればそのまま)、Key を返す。
+func (g *builder) placeholder(key, cwd, title, sessionID, state string) string {
 	if g.nodes[key] == nil {
-		n := &Node{Key: key, Kind: KindRef, State: state, Title: title, Ref: ep.Ref, CWD: ep.CWD, SessionID: sessionID, Memos: []MemoRef{}}
-		if sessionID != "" {
-			n.Session, n.SessionName = title, title
+		n := &Node{Key: key, Kind: KindRef, State: state, Title: title, Endpoint: true, CWD: cwd, SessionID: sessionID, Memos: []MemoRef{}}
+		if name := g.in.SessionNames[sessionID]; sessionID != "" && name != "" {
+			n.Session, n.SessionName = name, name
 		}
 		g.nodes[key] = n
 	}
@@ -462,7 +470,7 @@ func rank(state string) int {
 func (g *builder) mentionedMemos() map[string][]MemoRef {
 	out := map[string][]MemoRef{}
 	for _, t := range g.in.Tasks {
-		key := t.SessionID + "/" + t.ID
+		key := ref.Task(t.SessionID, t.ID)
 		for _, m := range parking.Mentioned(g.in.Memos, t.Description) {
 			out[key] = append(out[key], MemoRef{ID: m.ID, Title: m.Title, Status: m.Status})
 		}
@@ -476,14 +484,11 @@ func parked(n Node, memos []parking.Item) int {
 	if n.SessionID == "" || n.Kind == KindTodo {
 		return 0
 	}
-	taskID := ""
-	if n.Kind == KindTask {
-		_, taskID, _ = strings.Cut(strings.TrimPrefix(n.Ref, "task:"), "/")
-	}
-	return len(parking.PlacedDuring(memos, n.SessionID, taskID))
+	return len(parking.PlacedDuring(memos, n.SessionID, n.TaskID))
 }
 
-// KeyLess は Key を比べる。同じセッションの task ID は数字なので、"10" が "9" より後になるように数で比べる。
+// KeyLess は Key を比べる。同じセッションの task ID と TodoWrite の項目の番号は数字なので、"10" が "9" より後に
+// なるように数で比べる。
 func KeyLess(a, b string) bool {
 	da, ia := filepath.Split(a)
 	db, ib := filepath.Split(b)

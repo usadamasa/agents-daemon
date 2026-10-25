@@ -9,15 +9,17 @@ const CWD = '/src/home/agents-daemon'
 const PEER_CWD = '/src/home/agents-daemon/.claude/worktrees/edge-cli'
 const DEPS = [BIN, 'deps', '--cwd', CWD]
 
-function node(key: string, sessionName: string, extra: Record<string, unknown> = {}) {
+// node はタスクのノード。sid と tid から key (task:<sid>/<tid>) を組む。
+function node(sid: string, tid: string, sessionName: string, extra: Record<string, unknown> = {}) {
   return {
-    key,
+    key: `task:${sid}/${tid}`,
     kind: 'task',
     state: 'working',
     title: 't',
-    ref: `task:${key}`,
+    endpoint: true,
     cwd: PEER_CWD,
-    session_id: key.split('/')[0],
+    task_id: tid,
+    session_id: sid,
     session: sessionName,
     session_name: sessionName,
     live: true,
@@ -76,7 +78,7 @@ const context = (res: { context?: readonly string[] }) => (res.context ?? []).jo
 const depsCalls = (state: { ran: string[][] }) => state.ran.filter(argv => argv[1] === 'deps')
 
 test('辺の無い生きているセッションへ渡したら、辺の書き方を結果の context で model に伝える', async ($, on) => {
-  const w = world(on, deps([node('PEER/1', 'edge-cli')]))
+  const w = world(on, deps([node('PEER', '1','edge-cli')]))
   await $.session.start(START)
   w.ran.length = 0
 
@@ -95,25 +97,25 @@ test('辺の無い生きているセッションへ渡したら、辺の書き�
 })
 
 test('同名のセッションに付く末尾の [ref] を落として宛先を当てる', async ($, on) => {
-  world(on, deps([node('PEER/1', 'edge-cli')]))
+  world(on, deps([node('PEER', '1','edge-cli')]))
   await $.session.start(START)
 
   expect(context(await send($, 'edge-cli [ab12]'))).toMatch(/session:edge-cli /)
 })
 
 test('宛先が辺の端点にあれば伝えない (ノードへ解決された端点でも、元の参照でも)', async ($, on) => {
-  const resolved = { before: 'OTHER/1', after: 'PEER/1', kind: 'edge', edge: { id: 'e1', before: { ref: 'task:OTHER/1', cwd: CWD, repo: CWD }, after: { ref: 'session:edge-cli', cwd: PEER_CWD, repo: CWD } } }
-  const w = world(on, deps([node('PEER/1', 'edge-cli'), node('OTHER/1', 'other')], [resolved]))
+  const resolved = { before: 'task:OTHER/1', after: 'task:PEER/1', kind: 'edge', edge: { id: 'e1', before: { ref: 'task:OTHER/1', cwd: CWD, repo: CWD }, after: { ref: 'session:edge-cli', cwd: PEER_CWD, repo: CWD } } }
+  const w = world(on, deps([node('PEER', '1','edge-cli'), node('OTHER', '1', 'other')], [resolved]))
   await $.session.start(START)
   expect(context(await send($, 'edge-cli'))).toBe('')
 
   const byRef = { before: 'pr:o/r#1', after: 'x', kind: 'edge', edge: { id: 'e2', before: { ref: 'pr:o/r#1', cwd: CWD, repo: CWD }, after: { ref: 'session:edge-cli', cwd: PEER_CWD, repo: CWD } } }
-  w.deps = deps([node('PEER/1', 'edge-cli')], [byRef])
+  w.deps = deps([node('PEER', '1','edge-cli')], [byRef])
   expect(context(await send($, 'edge-cli'))).toBe('')
 })
 
 test('依存図に生きていない宛先 (subagent、teammate、済んだセッション) には伝えない', async ($, on) => {
-  world(on, deps([node('PEER/1', 'edge-cli', { state: 'completed' }), node('GONE/1', 'gone', { live: false })]))
+  world(on, deps([node('PEER', '1','edge-cli', { state: 'completed' }), node('GONE', '1', 'gone', { live: false })]))
   await $.session.start(START)
 
   expect(context(await send($, 'main'))).toBe('')
@@ -122,7 +124,7 @@ test('依存図に生きていない宛先 (subagent、teammate、済んだセ�
 })
 
 test('送信がエラーになったら、依存図を読まずに結果をそのまま返す', async ($, on) => {
-  const w = world(on, deps([node('PEER/1', 'edge-cli')]))
+  const w = world(on, deps([node('PEER', '1','edge-cli')]))
   await $.session.start(START)
   w.ran.length = 0
   w.failing = true
@@ -134,7 +136,7 @@ test('送信がエラーになったら、依存図を読まずに結果をそ�
 })
 
 test('subagent の送信と、文面の無い送信 (notify_when_idle だけ、shutdown の要求) では伝えない', async ($, on) => {
-  const w = world(on, deps([node('PEER/1', 'edge-cli')]))
+  const w = world(on, deps([node('PEER', '1','edge-cli')]))
   await $.session.start(START)
   w.ran.length = 0
 

@@ -12,7 +12,6 @@ package deps
 import (
 	"path/filepath"
 	"sort"
-	"strconv"
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/daemon/state"
@@ -20,6 +19,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/parking"
+	"github.com/usadamasa/agents-daemon/internal/ref"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
 
@@ -38,8 +38,8 @@ type ParkingCard struct {
 // ParkingSource はメモを置いたセッション 1 つ。
 type ParkingSource struct {
 	SessionID string `json:"session_id"`
-	// TaskID は置いたときに進めていたタスク (無ければ省く)。
-	TaskID string `json:"task_id,omitempty"`
+	// TaskRef は置いたときに進めていたタスクのノードの key (internal/ref の task:。無ければ省く)。
+	TaskRef string `json:"task_ref,omitempty"`
 	// Session はノードと同じ規則で付けたセッションの短い名前。
 	Session string `json:"session"`
 	Live    bool   `json:"live"`
@@ -170,14 +170,14 @@ func collect(in input, panes map[string]*state.PaneStatus) []graph.Card {
 	for _, t := range in.Tasks {
 		withTasks[t.SessionID] = true
 		p := panes[t.SessionID]
-		cards = append(cards, graph.Card{Key: t.SessionID + "/" + t.ID, Kind: graph.KindTask, TaskID: t.ID, Title: t.Subject, SessionID: t.SessionID,
+		cards = append(cards, graph.Card{Key: ref.Task(t.SessionID, t.ID), Kind: graph.KindTask, TaskID: t.ID, Title: t.Subject, SessionID: t.SessionID,
 			CWD: t.CWD, Live: p != nil, Status: t.Status, Pane: p})
 	}
 	for _, list := range in.Todos {
 		withTasks[list.SessionID] = true
 		p := panes[list.SessionID]
 		for i, todo := range list.Todos {
-			cards = append(cards, graph.Card{Key: list.SessionID + "/todo-" + strconv.Itoa(i), Kind: graph.KindTodo, Title: todo.Content, SessionID: list.SessionID,
+			cards = append(cards, graph.Card{Key: ref.Todo(list.SessionID, i), Kind: graph.KindTodo, Title: todo.Content, SessionID: list.SessionID,
 				CWD: list.CWD, Live: p != nil, Status: todo.Status, Pane: p})
 		}
 	}
@@ -185,7 +185,7 @@ func collect(in input, panes map[string]*state.PaneStatus) []graph.Card {
 		if withTasks[id] {
 			continue
 		}
-		cards = append(cards, graph.Card{Key: id + "/session", Kind: graph.KindSession, Title: sessionSubject(p, in.SessionNames[id]), SessionID: id,
+		cards = append(cards, graph.Card{Key: ref.SessionID(id), Kind: graph.KindSession, Title: sessionSubject(p, in.SessionNames[id]), SessionID: id,
 			CWD: p.CWD, Live: true, Status: "in_progress", Pane: p})
 	}
 	return cards
@@ -307,7 +307,11 @@ func (s *subjectPick) offer(c graph.Card) {
 func parkingCard(m parking.Item, names map[string]string, panes map[string]*state.PaneStatus) ParkingCard {
 	c := ParkingCard{ID: m.ID, Kind: m.Kind, Title: m.Title, Detail: m.Detail, Files: m.Files, DefaultTaken: m.DefaultTaken, Sources: []ParkingSource{}}
 	for _, s := range m.Sources {
-		c.Sources = append(c.Sources, ParkingSource{SessionID: s.SessionID, TaskID: s.TaskID, Session: names[s.SessionID], Live: panes[s.SessionID] != nil, Detail: s.Detail, At: s.At})
+		var task string
+		if s.TaskID != "" {
+			task = ref.Task(s.SessionID, s.TaskID)
+		}
+		c.Sources = append(c.Sources, ParkingSource{SessionID: s.SessionID, TaskRef: task, Session: names[s.SessionID], Live: panes[s.SessionID] != nil, Detail: s.Detail, At: s.At})
 	}
 	sort.SliceStable(c.Sources, func(i, j int) bool { return c.Sources[i].At.After(c.Sources[j].At) })
 	return c

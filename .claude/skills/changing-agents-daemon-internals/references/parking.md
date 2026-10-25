@@ -54,7 +54,7 @@ handed / discarded のメモが保持期間 (7 日) で消えた後は、descrip
   実装に対しては `internal/parking` と `internal/tasklog` の `invariants_test.go` が実物の Store の交錯で確かめる
 <!-- cc-premise: 2.1.306 mods $.prompt.submit は idle になってから自分のターンとして入り、drop で入らなかったことが分かる -->
 <!-- cc-premise: 2.1.306 cli claude [prompt] は最初のターンの本文、--session-id <uuid> でセッション ID を固定できる -->
-- パーキングへ移す (`To parking`): 終了したセッションの未完了のタスクのノードを `park adopt <session_id> <task_id>` で
+- パーキングへ移す (`To parking`): 終了したセッションの未完了のタスクのノードを `park adopt <ノードの key>` (`task:<sid>/<tid>`) で
   `kind: task` のメモにし、タスクの記録を消す。`kind: task` は model の tool からは置けない。pane は daemon が
   status.json を書いているとき (`updated_at` があるとき) だけこの操作を出し、バイナリは動いている daemon がタスクの
   記録より後に書いた status.json に pane が無いことを確かめてから移す (`internal/verify` の `SessionExited`)。

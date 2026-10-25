@@ -39,10 +39,13 @@ longest chain の辺の罫線 (`marks`) は色付き。同じノードは 1 回�
 満たないときも底に寄せる。記号と数の行と凡例は `hooks/graph.ts`、レーンの割り当ては `internal/deps/dag` が持つ。
 選んだノードの詳細で辺を操作する。
 
-- `kind: edge` の辺は `Unlink` で `edge rm` に元の記録の参照を渡す
+- `kind: edge` の辺は `Unlink` で `edge rm` に元の記録の参照を渡す (辺の id は記録の参照の組から決まるので、
+  解決した後のノードの key では消せない)
 - `kind: task` の辺 (同じセッションの `blockedBy`) は daemon から外せず、TaskUpdate にも外す引数が無い。
   `Ask to unlink → <session>` でそのセッションへ、待たれている側を片付けるか待っている側を作り直すよう頼む
-- `+ Add blocker` は足すと輪になる候補 (下流) を出さず、`edge add` に両端の参照と cwd を渡す
+  (タスクの ID はノードの `task_id`)
+- `+ Add blocker` は足すと輪になる候補 (下流) と `endpoint` が false のノードを出さず、`edge add` に両端のノードの
+  key と cwd を渡す
 <!-- cc-premise: 2.1.303 mods pane の placement (dock / inline) と command.run の presentation.isFullscreen -->
 
 pane を開いたとき、数 (repo、セッション、ノード、メモ) が変わったとき、`deps` が失敗したときは出来事のログに
@@ -50,17 +53,21 @@ pane を開いたとき、数 (repo、セッション、ノード、メモ) が�
 
 ## 依存の DAG (`graph`)
 
-`graph` はセッションをまたぐタスクの依存の DAG (#134)。ノードはタスク 1 つ、TodoWrite の項目 1 つ、タスクの無い
-生きているセッション 1 つ (`<sid>/session`) で、辺は同じセッションの `blockedBy` (`kind: task`) と
-`$STATE/edges/` の辺 (`kind: edge`) を 1 つにしたもの。ノードの材料 (`graph.Card`) は `internal/deps` が組み、
+`graph` はセッションをまたぐタスクの依存の DAG (#134)。ノードはタスク 1 つ (`task:<sid>/<tid>`)、TodoWrite の
+項目 1 つ (`todo:<sid>/<n>`)、タスクの無い生きているセッション 1 つ (`sid:<sid>`) で、辺は同じセッションの
+`blockedBy` (`kind: task`) と `$STATE/edges/` の辺 (`kind: edge`) を 1 つにしたもの。ノードの `key` は Ref
+(`internal/ref`) そのもので、辺の端点と同じ形になる。mod は key を切り出さず、端点にできるかは `endpoint`
+(TodoWrite の項目だけ false)、タスクの ID は `task_id` で読む。ノードの材料 (`graph.Card`) は `internal/deps` が組み、
 辺の記録の端点は依存図を組むたびにノードへ解決し直す (`internal/deps/graph`)。
 
 - `task:<sid>/<tid>` はそのタスク。記録が消えていればその辺は描かない
 - `session:<名前>` は、その名前のセッションのうち最後に動いたもの (pane があればそれ、無ければタスクの更新が新しいもの)。
-  after 側は根のタスク (同じセッションの blockedBy が無いもの)、before 側は末端のタスク (同じセッションのどのタスクも
-  止めていないもの) につなぐ。タスクの無い生きているセッションは `<sid>/session` のノード
-- まだ起きていないセッションと `issue:` / `pr:` は参照を鍵にした置き場のノード (`ref:<参照>`、`pending`)。
-  タスクを作らずに終了したセッションも置き場のノードにし、`exited` で下流が止まっていることを見せる
+  `sid:<sid>` はそのセッション。どちらも after 側は根のタスク (同じセッションの blockedBy が無いもの)、before 側は
+  末端のタスク (同じセッションのどのタスクも止めていないもの) につなぐ。タスクの無い生きているセッションは
+  `sid:<sid>` のノード
+- まだ起きていないセッションと `issue:` / `pr:` は参照を key にした置き場のノード (`pending`)。タスクを作らずに
+  終了したセッションは `sid:<sid>` を key にした置き場のノードにし、`exited` で下流が止まっていることを見せる。
+  名前と session ID のどちらで書いた辺も同じ置き場に集まる
 
 ノードの状態は、完了なら `completed`、pane の無いセッションの未完了は `exited`、生きている pane の未着手は `pending`、
 進行中は pane の状態 (上限待ちを agent の申告より先に見る)。段・下流の数・待ちの輪・原因の鎖・最長の鎖の数え方と、

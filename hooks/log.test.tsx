@@ -66,12 +66,13 @@ const MEMO = { id: 'm1', kind: 'aside', title: '秘密の題', detail: '秘密�
 const SESSION = { session_id: 'PEER', session: 'peer', subject: '秘密のタスク', live: true }
 
 const NODE = {
-  key: 'PEER/1',
+  key: 'task:PEER/1',
   kind: 'task',
   state: 'working',
   title: '秘密のタスク',
-  ref: 'task:PEER/1',
+  endpoint: true,
   cwd: CWD,
+  task_id: '1',
   session_id: 'PEER',
   session: 'peer',
   live: true,
@@ -112,7 +113,7 @@ test('依存図を開いたときの数と、変わったとき、deps の失敗
   await ui.press({ key: 'discard' })
   expect(logged.at(-1)).toEqual(['mod.deps.changed', 'repos=1', 'sessions=1', 'nodes=1', 'memos=0', 'daemon_running=true'])
   const count = logged.length
-  await ui.press({ key: 'row:PEER/1' })
+  await ui.press({ key: 'row:task:PEER/1' })
   await ui.input({ key: 'instruction', text: '秘密の指示' })
   await ui.unmount()
 

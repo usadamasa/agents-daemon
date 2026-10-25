@@ -98,6 +98,57 @@ func TestDaemonRuntimeTick_LimitEventRecorded(t *testing.T) {
 	}
 }
 
+// lower-priority mode の作業中の通知がある画面を上限と判定したときは、出来事に印を付け、daemon.log に 1 行残す (#251)。
+// 判定と待機はまだ変えない。
+func TestDaemonRuntimeTick_LimitEventMarksLowerPriority(t *testing.T) {
+	now := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
+	pane := claudePane("p1", multiplexer.AgentStatusWorking)
+	const screen = "⏺ You've hit your session limit · resets 5:00pm (Asia/Tokyo)\n\n" +
+		"Continuing now at lower priority until your limit resets at 5pm. Your weekly limit still applies. Run /low-priority to stop.\n❯ \n"
+	client := &multiplexerfake.Client{
+		PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) { return []multiplexer.Pane{pane}, nil },
+		PaneReadFunc: func(context.Context, string, multiplexer.PaneReadOptions) (string, error) { return screen, nil },
+	}
+	r, statusPath := newTestRuntime(t, client, now)
+
+	if _, _, err := r.tick(context.Background(), missingConfigPath(t), now); err != nil {
+		t.Fatalf("tick() error = %v", err)
+	}
+	events := readLimitEvents(t, r)
+	if len(events) != 1 {
+		t.Fatalf("events = %d 件, want 1: %+v", len(events), events)
+	}
+	if ev := events[0]; ev.Outcome != "waiting" || ev.Kind != "limit" || !ev.LowerPriority {
+		t.Errorf("event = outcome %q kind %q lower_priority %v, want waiting / limit / true", ev.Outcome, ev.Kind, ev.LowerPriority)
+	}
+	if log := readLog(t, statusPath); !strings.Contains(log, "lower-priority mode") {
+		t.Errorf("daemon.log に lower-priority mode の行が無い:\n%s", log)
+	}
+}
+
+// 通常の上限の画面では印を付けず、daemon.log にも出さない。
+func TestDaemonRuntimeTick_LimitEventWithoutLowerPriority(t *testing.T) {
+	now := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
+	pane := claudePane("p1", multiplexer.AgentStatusWorking)
+	const screen = "⏺ You've hit your session limit · resets 5:00pm (Asia/Tokyo)\n❯ \n"
+	client := &multiplexerfake.Client{
+		PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) { return []multiplexer.Pane{pane}, nil },
+		PaneReadFunc: func(context.Context, string, multiplexer.PaneReadOptions) (string, error) { return screen, nil },
+	}
+	r, statusPath := newTestRuntime(t, client, now)
+
+	if _, _, err := r.tick(context.Background(), missingConfigPath(t), now); err != nil {
+		t.Fatalf("tick() error = %v", err)
+	}
+	events := readLimitEvents(t, r)
+	if len(events) != 1 || events[0].LowerPriority {
+		t.Fatalf("events = %+v, want lower_priority の無い 1 件", events)
+	}
+	if log := readLog(t, statusPath); strings.Contains(log, "lower-priority mode") {
+		t.Errorf("通常の上限で lower-priority mode の行を出している:\n%s", log)
+	}
+}
+
 // geometry が取れなくても出来事は残し、理由を geometry_error に書く。通常の画面では何も書かない。
 func TestDaemonRuntimeTick_LimitEventWithoutGeometry(t *testing.T) {
 	now := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)

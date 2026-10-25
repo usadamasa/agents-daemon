@@ -96,6 +96,18 @@ jobs:
       - name: Test the mod
         run: claude plugin test .
 
+  mod-typecheck:
+    name: mod typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      # .claude-plugin/types/ は対話セッションでしか書かれないので、ci/mod-types/ に写した型で検査する
+      - uses: usadamasa/gh-manage/actions/setup-nix@main
+
+      - name: Typecheck the mod
+        run: task typecheck:ci
+
   actions-lock:
     name: actions-lock verify
     runs-on: ubuntu-latest
@@ -113,7 +125,7 @@ jobs:
         run: gh actions-lock --verify
 
   ci-status-check:
-    needs: [go-test, go-lint, bats, shellcheck, plugin-validate, actions-lock]
+    needs: [go-test, go-lint, bats, shellcheck, plugin-validate, mod-typecheck, actions-lock]
     if: always()
     runs-on: ubuntu-slim
     timeout-minutes: 10

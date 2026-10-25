@@ -91,7 +91,23 @@ rg -a -o -N '.{0,160}(<CHANGELOG で見た設定キーや env 名>).{0,200}' "$B
 | `https://code.claude.com/docs/en/statusline.md` | 「When the status line updates」、JSON の field 表、`rate_limits` の節 | `internal/sessionstate`、`architecture.md` [1] |
 | `https://code.claude.com/docs/en/settings-reference.md`、`env-vars.md` | usage limit、retry の設定キー | `rate-limit.md` |
 
-### 5. レポートを書く
+### 5. mod の型の写しを上げる
+
+CI の `mod typecheck` は `ci/mod-types/` に写した型で tsc を回す。型は対話セッションが mod を hot-reload したとき
+だけ `.claude-plugin/types/` に書かれ、CI では用意できないため (`scripts/sync-mod-types.sh` の冒頭)。
+写しの版は `ci/mod-types/claude-code/index.d.ts` の 1 行目にある。今の版より古ければ上げる。
+
+```sh
+claude --plugin-dir .          # 対話で起こして終える。.claude-plugin/types/ が今の版で書き直される
+task mod-types:sync            # 写した版を 1 行出す
+task typecheck:ci
+task typecheck
+```
+
+型の誤りが出たら、本体の API の変化として手順 6 のレポートの 1 か 3 に書く。直すのは別の PR にする。
+写しの更新だけなら `chore(ci): mod の型の写しを <version> に上げる` の PR にする。
+
+### 6. レポートを書く
 
 `./tmp/claude-code-drift/<YYYY-MM-DD>.md`。節は次の順。空の節も見出しだけ残す (「確認したが無かった」が伝わる)。
 
@@ -105,7 +121,7 @@ rg -a -o -N '.{0,160}(<CHANGELOG で見た設定キーや env 名>).{0,200}' "$B
 6. 確認して変更不要と判断したもの: 1 行ずつ根拠つき
 7. 手順上の落とし穴: 次回の自分へ
 
-### 6. issue にするか決める
+### 7. issue にするか決める
 
 レポートの要点を利用者へ伝え、1〜3 の各項目を次のどれにするか決めてもらう。
 

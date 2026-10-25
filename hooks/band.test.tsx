@@ -1,5 +1,6 @@
 import type { On, ProcessRunResult } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
+import type { Engine } from 'claude-code/testing'
 
 const BIN = '/home/u/.cache/agents-daemon/bin/agents-daemon'
 const CWD = '/src/home/agents-daemon'
@@ -114,7 +115,7 @@ const BAND_PROPS = {
   view: {},
 } as const
 
-type T = Parameters<Parameters<typeof test>[1]>[0]
+type T = Engine
 
 const mount = ($: T, surface: 'terminal' | 'desktop' = 'terminal', props: object = BAND_PROPS) =>
   $.ui.mount({ plugin: 'agents-daemon', surface, component: 'AbovePrompt', props: props as typeof BAND_PROPS })

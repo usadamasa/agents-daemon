@@ -64,7 +64,7 @@ func (p Paths) StateDir() string {
 	return p.stateDir
 }
 
-// 別プロセスと共有する sidecar file (rate-limits / context と、旧版が書いたディレクトリ) の
+// 別プロセスと共有する sidecar file (rate-limits / context) の
 // ディレクトリとファイル名は ratelimit と sessioncontext が StateDir から導出する。
 // 読み込み側と同じ場所に置いて、書き出し先の規則が二重にならないようにするため。
 // cost/ (spend) と dream/ (internal/dream) も同じく、書き手のパッケージが StateDir から導出する。

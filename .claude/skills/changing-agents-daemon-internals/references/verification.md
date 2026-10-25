@@ -88,27 +88,9 @@ limit と判定するので、`jq` で欄を選んで読み、画面に出すな
 5. `daemon --foreground --dry-run` — 実 pane 相手に流し、誰にも送信せず誤爆もしないこと
 6. `simulate` — 検知から送信までを end-to-end で通す
 
-## この環境で実際に確認したこと
+## 実機で通すこと
 
-2026-08-16、Ghostty + herdr 0.8.0 (当時の backend。herdr のサポートは #66 で廃止) で通した結果。
-
-- 開発中のセッション自身が 5 時間上限に到達し、本物の表示を取得した
-  (`You've hit your session limit · resets HH:MMpm (Asia/Tokyo)`、時刻は上記の理由で伏せてある)。
-  この文言に対する分類は `internal/detect/real_sample_test.go` に固定してある。
-- 同じ事象での `resets_at` は `1786851000` = 12:30 JST で、画面表示と一致した。
-- SessionStart hook からデーモンが自動起動することを確認。
-- `idle` の Claude セッションを誤検知しない。
-- 画面が limit に見えるが使用率が閾値未満の pane で、ゲートが実際に発火を抑制した。
-- 別ワークスペースの pane も監視対象に入る。
-- `simulate` が検知 → 待機 → 再開送信 (esc / テキスト / enter) まで通した。
-
-そして本番投入した当日、2 つのセッションが実際に上限へ到達し、**自動再開は失敗した**。
-待機のタイマーは正しく動いた (`resets_at` 17:50 + margin 60 秒 → 17:51 ちょうどに起床) が、
-送信が毎回エラーになり再試行上限まで進んだ。原因は herdr の応答の解釈違いで、
-成功時に何も出力しないコマンドへ JSON envelope を要求していた。修正後、`simulate --send`
-で送信まで通ることを確認した。教訓は「送信の経路は fake ではなく実機で 1 度は通す」で、
-rex の送信が未測定なのはこの教訓がまだ果たされていない箇所 (operations.md の「既知の制約」)。
-
-同じ日に、既定の読み取り元が pane の viewport に制限されることも判明した
-([pane-io.md](pane-io.md) の「読み取り元」参照)。どちらも実際に動かすまで
-気づけなかった類の失敗で、`--dry-run` や `simulate` だけでは踏めなかった。
+送信の経路と画面の読み取り元は、fake ではなく実機で 1 度は通す。多重化ツールの応答の解釈違いや
+読み取り元の範囲 ([pane-io.md](pane-io.md) の「読み取り元」) は、`--dry-run` や `simulate` だけでは踏めない。
+rex の送信が未測定なのは、まだ果たしていない箇所 (operations.md の「既知の制約」)。
+上限の文言の分類は、実機で取得した表示を `internal/detect/real_sample_test.go` に固定してある。

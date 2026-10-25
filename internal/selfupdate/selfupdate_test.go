@@ -80,7 +80,7 @@ func TestUpdate_stopsAtFailedStep(t *testing.T) {
 func TestUpdate_rejectsMissingOrRelativeInstall(t *testing.T) {
 	for name, plugins := range map[string]map[string]string{
 		"未 install": {"other@usadamasa": "/c/other/1.0.0"},
-		"相対パス":     {"agents-daemon@usadamasa": "cache/agents-daemon/2026.1025.0"},
+		"相対パス":      {"agents-daemon@usadamasa": "cache/agents-daemon/2026.1025.0"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			config := t.TempDir()

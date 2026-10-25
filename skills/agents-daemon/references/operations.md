@@ -35,17 +35,20 @@ SessionStart hook は `--dry-run` **なし**で配線してある。検知の挙
 ### plugin の更新後に daemon を入れ替える
 
 `claude plugin update` はバイナリを建て直さない。建て直すのは次の SessionStart hook で、
-それまで動いている daemon は古い版のまま。セッションを開き直さずに入れ替えるには、install 済み plugin の
-`hooks/build-daemon.sh` を直接叩く (SessionStart が detach して呼ぶのと同じスクリプト)。
+それまで動いている daemon は古い版のまま。セッションを開き直さずに plugin の更新から入れ替えまでを済ませるには、
+`update` を打つ。
 
 ```sh
-"$(jq -r '.plugins["agents-daemon@usadamasa"][0].installPath' ~/.claude/plugins/installed_plugins.json)/hooks/build-daemon.sh"
+~/.cache/agents-daemon/bin/agents-daemon update
 ```
 
-plugin の版で `go build` し、cache のバイナリと stamp を差し替えて `daemon --ensure` を叩く。動いている daemon は
-差し替えを次の tick で検知して自分で入れ替わる ([architecture.md](architecture.md) の「バイナリの用意と差し替え」)。
-`status` の `started_at` が進み、`~/.cache/agents-daemon/bin/agents-daemon version` が plugin の版を出せば済んでいる。Claude Code の sandbox は `~/.cache/agents-daemon` に書けないので、
-利用者が `!` で打つ。
+`claude plugin marketplace update`、`claude plugin update` を走らせ、更新した版の `hooks/build-daemon.sh`
+(SessionStart が detach して呼ぶのと同じスクリプト) を叩く。段が失敗したら後の段は走らせない。
+build-daemon.sh は plugin の版で `go build` し、cache のバイナリと stamp を差し替えて `daemon --ensure` を叩く。
+動いている daemon は差し替えを次の tick で検知して自分で入れ替わる ([architecture.md](architecture.md) の
+「バイナリの用意と差し替え」)。`agents-daemon version` が plugin の版を出し、`logs` に「実行ファイルが更新された
+ため入れ替わります」が出れば済んでいる。Claude Code の sandbox は `~/.claude/plugins` と `~/.cache/agents-daemon` に
+書けないので、利用者が `!` で打つ。
 
 ### 放置された worktree を回収する
 

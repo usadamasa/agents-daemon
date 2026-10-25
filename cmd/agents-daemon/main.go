@@ -8,6 +8,7 @@
 //	status    daemon の稼働状況と監視中の pane 一覧の表示
 //	logs      直近のログの表示
 //	stop      daemon の停止
+//	update    plugin の更新と、更新した版での daemon の建て直し
 //	doctor    前提条件の診断
 //	inspect   画面テキストの分類結果と判定根拠の表示
 //	simulate  使い捨て pane を使った end-to-end 検証

@@ -51,6 +51,7 @@ shellcheck hooks/*.sh hooks/lib/*.sh scripts/*.sh tests/lib/*.bash tests/fixture
 claude plugin validate --strict .           # plugin manifest と hooks.json
 claude plugin validate --strict skills      # skill の frontmatter
 claude plugin test .                        # mod (hooks/*.test.tsx) のテスト
+task typecheck                              # mod の型検査 (tsc)。型は Claude Code が .claude-plugin/types/ に置く
 ```
 
 `invariants_test.go` と `fuzz_test.go` は、1 場面を固定する例ではなく「どの入力でも破ってはいけないこと」を書いて乱択で

@@ -31,6 +31,11 @@ tasks:
     cmds:
       - scripts/model-check.sh
 
+  typecheck:
+    desc: mod (hooks/ と types/) を tsc で型検査する。型は Claude Code が mod を読み込んだときに .claude-plugin/types/ へ置く
+    cmds:
+      - tsc -p .
+
   test-cover:
     desc: カバレッジ付きテスト
     cmds:

@@ -1,5 +1,6 @@
 import type { On, ProcessRunResult } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
+import type { Engine } from 'claude-code/testing'
 
 const BIN = '/home/u/.cache/agents-daemon/bin/agents-daemon'
 const CWD = '/src/home/agents-daemon'
@@ -44,19 +45,17 @@ function world(on: On, answers: Record<string, unknown>, failing: string[] = [])
   on('tool.register', async (_$, e) => ({ value: { tool: `mcp__agents-daemon__${e.name}` } }))
   on('command.register', async (_$, e) => ({ value: { command: e.name } }))
   on('session.start', async (_$, e) => ({ cwd: e.cwd }))
-  for (const tool of ['Read', 'Edit', 'Write']) {
-    on('tool.call', { tool }, async (_$, e) => {
-      const path = (e as unknown as { file_path: string }).file_path
-      if (failing.includes(path)) return { isError: true, result: 'File does not exist.', text: 'File does not exist.' } as never
-      return { result: { filePath: path } } as never
-    })
-  }
+  const answer = (path: string) =>
+    (failing.includes(path) ? { isError: true, result: 'File does not exist.', text: 'File does not exist.' } : { result: { filePath: path } }) as never
+  on('tool.call', { tool: 'Read' }, async (_$, e) => answer(e.file_path))
+  on('tool.call', { tool: 'Edit' }, async (_$, e) => answer(e.file_path))
+  on('tool.call', { tool: 'Write' }, async (_$, e) => answer(e.file_path))
   return { clock }
 }
 
 const START = { cwd: CWD, surface: 'terminal', isInteractive: true } as const
 
-type T = Parameters<Parameters<typeof test>[1]>[0]
+type T = Engine
 
 const touch = ($: T, tool: 'Read' | 'Edit' | 'Write', path: string, extra: Record<string, unknown> = {}) =>
   $.tool.call({ tool, file_path: path, ...extra } as never)

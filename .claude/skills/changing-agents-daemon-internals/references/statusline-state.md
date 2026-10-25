@@ -107,7 +107,7 @@ daemon が使うのは `multiplexer` (block から session_id への対応) で�
 backend は block から session_id をこの記録で逆引きする (`sessioncontext.Store.ListMultiplexerBlocks`)。同じ ID の
 記録が複数あれば `observed_at` が最新のものを採る (同じ block で Claude Code を起動し直すと古い記録が残る)。
 `context/` は 7 日で消えるだけなので、5 時間の上限待ちを跨いでも対応は残る。制約 (初回描画までの
-数秒) は [operations.md](operations.md) の「既知の制約」。
+数秒) は [operations.md](../../../../skills/agents-daemon/references/operations.md) の「既知の制約」。
 
 skill がセッションの中から自分の session_id を引くときは `CLAUDE_CODE_SESSION_ID` を唯一の情報源にする
 (`scripts/get-session-id.sh`)。

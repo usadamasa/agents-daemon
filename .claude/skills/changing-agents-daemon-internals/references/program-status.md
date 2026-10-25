@@ -48,5 +48,5 @@ daemon.log の検知と送信の行に `agent_status=… kind=… msg="…"` の
 ## payload の書式
 
 `key=value` を `:` で繋ぎ、終端は BEL (`state=idle:app=claude-code`。`title` と `msg` は base64)。
-`agents-daemon simulate` ([operations.md](operations.md)) の使い捨て block の script はこれを `printf` で出し、
+`agents-daemon simulate` ([verification.md](verification.md)) の使い捨て block の script はこれを `printf` で出し、
 `exec cat` で同じ pid のまま foreground に居座って `owner.pid` の条件を満たす。

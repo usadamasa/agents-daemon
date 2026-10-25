@@ -26,7 +26,7 @@ Claude Code は alternate screen で描くので、Claude の block の capture 
 
 statusline が 1 行少なければ下限も 1 行下がる。`/rate-limit-options` のメニューが出た状態と Claude Code 自身の
 再描画 (縮めた後の描き直し) は測っておらず、メニューの分だけ下限は上がりうる (#39)。測るのは次に上限を踏んだときで、
-daemon が踏んだ瞬間の画面と block の高さを `limit-events/` に残す ([operations.md](operations.md)「次に上限を踏んだとき」)。
+daemon が踏んだ瞬間の画面と block の高さを `limit-events/` に残す ([verification.md](verification.md)「次に上限を踏んだとき」)。
 下限は `detect.MinDetectableRows` (11) にあり、`doctor` の pane 一覧が block の高さ (`size` の `rows`) と比べて ⚠ を出す。
 `--unwrap` で端末の折り返しは 1 行に戻るが、Claude Code が自分で改行した行は戻らない。
 

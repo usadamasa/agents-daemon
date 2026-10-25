@@ -23,7 +23,7 @@ plugin には install 時の lifecycle hook が無いので、バイナリも Se
   次の build が持ち主の死を `kill -0` で確かめて残骸を消し、取り直す (`build.log` に `stale lock` が残る)。
   手で消す必要は無い。
 - plugin の更新後にセッションを開き直さず入れ替えるには、`agents-daemon update` が plugin を更新してから
-  更新した版の `hooks/build-daemon.sh` を叩く (`internal/selfupdate`)。使い方は [operations.md](operations.md) の
+  更新した版の `hooks/build-daemon.sh` を叩く (`internal/selfupdate`)。使い方は [operations.md](../../../../skills/agents-daemon/references/operations.md) の
   「plugin の更新後に daemon を入れ替える」。
 - 開発中は `task install` で同じパスへ建てられる。中身は `hooks/build-daemon.sh` そのもので、
   stamp には clone の plugin.json の version が書かれる。install 済み plugin と version が同じなら

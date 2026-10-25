@@ -52,7 +52,8 @@ statusline はイベントで再実行される (新しい assistant message、`
 `resets 12:30pm (Asia/Tokyo)` のような表記を am/pm やタイムゾーンごとパースする処理が要らない。
 実機で `resets_at = 1786851000` と画面の `12:30pm (Asia/Tokyo)` が一致することを確認済み。
 
-同じ呼び出しで `context/<session_id>.json` へも書く。こちらは `rate_limits` と違って**statusline が走るたびに必ず書く**。
+同じ呼び出しで `context/<session_id>.json` へも書く。
+こちらは `rate_limits` と違って**statusline が走るたびに必ず書く**。
 daemon が使うのは `multiplexer` (block から session_id への対応) で、同じ block の記録が複数あれば
 `observed_at` が最新のものを採る。`session_name` はボードのカードに出すセッションの名前になる。
 `used_percentage` は参考として写すだけで、daemon は読まない。
@@ -63,7 +64,8 @@ daemon が使うのは `multiplexer` (block から session_id への対応) で�
 `${XDG_STATE_HOME:-~/.local/state}/agents-daemon/`。
 どちらも同一ディレクトリの一時ファイルへ書いてから rename で置き換える。
 読み手 (daemon) と書き手 (`statusline` / `ingest-statusline`) は書式ごとのパッケージの同じ型を使うので、
-書式はここに転記した参考で、実体は `rate-limits/` が `internal/ratelimit`、`context/` が `internal/sessioncontext` にある。
+書式はここに転記した参考で、実体は `rate-limits/` が `internal/ratelimit`、`context/` が
+`internal/sessioncontext` にある。
 
 `$STATE/rate-limits/<session_id>.json` (`rate_limits.five_hour.resets_at` があるときだけ):
 

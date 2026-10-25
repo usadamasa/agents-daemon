@@ -45,9 +45,10 @@ SessionStart hook は `--dry-run` **なし**で配線してある。検知の挙
 `claude plugin marketplace update`、`claude plugin update` を走らせ、更新した版の `hooks/build-daemon.sh`
 (SessionStart が detach して呼ぶのと同じスクリプト) を叩く。段が失敗したら後の段は走らせない。
 build-daemon.sh は plugin の版で `go build` し、cache のバイナリと stamp を差し替えて `daemon --ensure` を叩く。
-動いている daemon は差し替えを次の tick で検知して自分で入れ替わる ([binary.md](binary.md))。`agents-daemon version` が plugin の版を出し、`logs` に「実行ファイルが更新された
-ため入れ替わります」が出れば済んでいる。Claude Code の sandbox は `~/.claude/plugins` と `~/.cache/agents-daemon` に
-書けないので、利用者が `!` で打つ。
+動いている daemon は差し替えを次の tick で検知して自分で入れ替わる ([binary.md](binary.md))。
+`agents-daemon version` が plugin の版を出し、`logs` に「実行ファイルが更新されたため入れ替わります」が出れば
+済んでいる。Claude Code の sandbox は `~/.claude/plugins` と `~/.cache/agents-daemon` に書けないので、
+利用者が `!` で打つ。
 
 ### 放置された worktree を回収する
 

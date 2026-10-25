@@ -11,18 +11,21 @@ mod は Claude Code の中で動き、データはバイナリのサブコマン
 ## 依存のボード (B)
 
 `board` コマンドで依存のボード (B) を会話の横 (dock) の pane に開き、
-`agents-daemon status --board --session <id> --cwd <cwd>` の JSON を数秒ごとに読み直して描く。ボードは `internal/board` が `$STATE/tasks/` (PostToolUse hook の `ingest-task` が書く) と
-`status.json` から組む。行は repo (`git rev-parse --git-common-dir` の main worktree)、列はタスクの状態で、
+`agents-daemon status --board --session <id> --cwd <cwd>` の JSON を数秒ごとに読み直して描く。
+ボードは `internal/board` が `$STATE/tasks/` (PostToolUse hook の `ingest-task` が書く) と `status.json` から組む。
+行は repo (`git rev-parse --git-common-dir` の main worktree)、列はタスクの状態で、
 `blockedBy` に完了していないタスクがあればブロックの列に置く。セッションの pane が入力待ちか上限待ちなら、
 その進行中のカードに印を付ける。描くのは開いたセッションの domain だけで、指示を送れるのはボードに載った生きている
 セッションだけ。
 <!-- cc-premise: 2.1.302 hooks mods の pane / session.send / session.cwd と、PostToolUse の Task 系の形 -->
 
-B は fullscreen のレイアウトで dock に置かれるときだけ出す。`/board` は `presentation.isFullscreen` が false なら開かず、
+B は fullscreen のレイアウトで dock に置かれるときだけ出す。
+`/board` は `presentation.isFullscreen` が false なら開かず、
 開いた後に `placement: inline` で描かれたら (端末を 110 桁より狭めたときなど) mod が閉じる。
-中身は「依存の DAG」の `rows`: 1 行 1 ノードで上流を上に並べ、行頭に辺のレーンを罫線で描いたもの (`git log --graph` の形)。合流は
-`├─┘`、分岐は `├─┐` の行を挟み、閉じたレーンには右のレーンを 1 本ずつ `┌─┘` の行で詰める。セッションをまたぐ辺
-(`kind: edge`) は `┆ ┄` の破線、longest chain の辺の罫線 (`marks`) は色付き。同じノードは 1 回しか出ず、
+中身は「依存の DAG」の `rows`: 1 行 1 ノードで上流を上に並べ、行頭に辺のレーンを罫線で描いたもの
+(`git log --graph` の形)。合流は `├─┘`、分岐は `├─┐` の行を挟み、
+閉じたレーンには右のレーンを 1 本ずつ `┌─┘` の行で詰める。セッションをまたぐ辺 (`kind: edge`) は `┆ ┄` の破線、
+longest chain の辺の罫線 (`marks`) は色付き。同じノードは 1 回しか出ず、
 先頭の数の行 (`■ ○ ▸ ↵ ✓ ◇`) の下に全部の行を描く (pane はスクロールする)。完了したノードは既定で出さず、
 `Show completed` で `rows_with_completed` に切り替える。pane の底には記号の凡例を薄く置き、中身が pane の高さに
 満たないときも底に寄せる。記号と数の行と凡例は `hooks/graph.ts`、レーンの割り当ては `internal/dag` が持つ。

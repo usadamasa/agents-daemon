@@ -16,7 +16,7 @@ import (
 // 項を載せる。`Current` は symlink ではなく build の複製のディレクトリで、更新のたびに中身だけ入れ替わる。
 // 前の数字名の build は次の更新で消え、ダウンロードの途中経過 `.staging-<UUID>/` が残ることがある。
 // `RexServer/CLI/` は存在するが空。
-// rex-premise: preview.19 cli block の PATH は Versions/Current/… と Versions/<build>/… の順。Current は更新で中身が入れ替わり、前の build は次の更新で消える
+// rex-premise: preview.20 cli block の PATH は Versions/Current/… と Versions/<build>/… の順。Current は更新で中身が入れ替わり、前の build は次の更新で消える
 const versionsComponent = "Versions"
 
 // locateBinary は rex のバイナリの絶対パスを返す。REX_BIN_PATH があればそのまま、無ければ PATH を探す。

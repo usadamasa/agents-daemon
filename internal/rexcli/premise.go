@@ -19,7 +19,7 @@ var (
 	programStatusFields = []string{"state", "app", "owner.pid"}
 	processFields       = []string{"pid", "argv0", "cwd"}
 	// inspect の api.methods / api.events のうち、コードが打つ method と #78 で購読を検討している event。
-	// rex-premise: preview.19 cli block inspect --json は api.methods と api.events を method 名 / event 名を key にした object で返す
+	// rex-premise: preview.20 cli block inspect --json は api.methods と api.events を method 名 / event 名を key にした object で返す
 	inspectMethods = []string{"program_status", "process", "size", "modes"}
 	inspectEvents  = []string{"program_status_changed"}
 )
@@ -68,8 +68,8 @@ func (c *execClient) checkModes(ctx context.Context, blockID string, add addFind
 // daemon が古い CLI で新しい server を叩いている (またはその逆) 状態。
 // 版と並べて解決した binary のパスも出す。rex の自動更新は Versions/ の下に複数の rex を置くので、
 // どれを引いたか (Current か数字名の build か、REX_BIN_PATH か) がパスで分かる (locate.go)。
-// rex-premise: preview.19 cli version --json は rex_version と built_at と api_revision を返す
-// rex-premise: preview.19 cli api call server.status は api_revision を返す (CLI と同じ値)
+// rex-premise: preview.20 cli version --json は rex_version と built_at と api_revision を返す
+// rex-premise: preview.20 cli api call server.status は api_revision を返す (CLI と同じ値)
 func (c *execClient) checkVersion(ctx context.Context, add addFinding) {
 	m, err := c.runMap(ctx, "version", "--json")
 	if err != nil {

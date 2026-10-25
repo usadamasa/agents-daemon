@@ -33,6 +33,7 @@ streaming の `events` と、一覧の増減 (新しい method や event) は判
 | ---- | ---- | ---- |
 | `timeout 5 rex --autostart=false events --json -s "$REX_SESSION"` | `program_status_changed` の `payload.record` (`owner.pid` 付き) | #78 の本文の形 (コードが購読するようになったら `internal/rexcli`) |
 | `rex --autostart=false block inspect "$REX_BLOCK" --json` の `.api.methods` / `.api.events` の key 一覧 | 前回の実測 (`testdata/<日付>/block-inspect.json`) に無い method や event | daemon の polling や画面の読み取りを置き換えられるか (アイデアとして issue へ) |
+| `rex --autostart=false api list --json` の `.methods[].name` | 前回の実測 (`testdata/<日付>/api-list.json`) に無い server の method | 同上。`api_revision` が上がったのに block の api が同じときの手がかり |
 
 ## コマンドごとの注意
 

@@ -37,5 +37,8 @@ run() {
 
 run models/handoff Handoff Handoff.cfg holds
 run models/handoff TaskLog TaskLog.cfg holds
+run models/handoff FileNotice FileNotice.cfg holds
+# told を読んでから別のステップで書くと、並列の Read が同じメモを 2 回添える (AtMostOnce の反例)。
+run models/handoff FileNotice FileNoticeRace.cfg violated
 
 exit "$failed"

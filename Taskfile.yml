@@ -63,8 +63,8 @@ tasks:
       - go tool analyze-arch-lint --strict .
       - task: vulncheck
       - gosec ./...
-      # 揮発性を git の履歴から測る。CI の checkout は fetch-depth: 0 にする
-      - go tool analyze-modularity --strict .
+      # 揮発性を git の履歴から測り、base の commit と比べる。CI の checkout は fetch-depth: 0 にする
+      - scripts/analyze-modularity.sh
 
   vulncheck:
     desc: govulncheck を symbol モードで実行 (lint と週次の vulncheck workflow が呼ぶ)

@@ -13,15 +13,14 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/usadamasa/agents-daemon/internal/dream/dreamstate"
+	"github.com/usadamasa/agents-daemon/internal/dream"
 	"github.com/usadamasa/agents-daemon/internal/dream/harvest/record"
-	"github.com/usadamasa/agents-daemon/internal/dream/jsonlscan"
 )
 
 // Opts は harvest サブコマンドの実行パラメータ。値は呼び出し側 (cobra) で解決済み。
 type Opts struct {
 	ProjectsDir string // 空なら ~/.claude/projects
-	StateDir    string // dream の state ディレクトリ (dreamstate.Dir)。必須
+	StateDir    string // dream の state ディレクトリ (dream.Dir)。必須
 	Days        int    // 走査する直近日数 (mtime ベース)
 	ProjectGlob string // canonical name substring 一致
 	Incremental bool   // 前回 harvest 以降のみ
@@ -53,7 +52,7 @@ func Run(opts Opts) error {
 	}
 
 	runStart := time.Now()
-	pruned, err := dreamstate.Prune(opts.StateDir, runStart)
+	pruned, err := dream.Prune(opts.StateDir, runStart)
 	if err != nil {
 		return fmt.Errorf("state の掃除失敗: %w", err)
 	}
@@ -65,7 +64,7 @@ func Run(opts Opts) error {
 	}
 
 	var records []record.Record
-	err = jsonlscan.WalkJSONLFiles(resolvedProjects, jsonlscan.WalkOptions{Days: opts.Days}, func(path string) error {
+	err = dream.WalkJSONLFiles(resolvedProjects, dream.WalkOptions{Days: opts.Days}, func(path string) error {
 		if !filter.accept(path, resolvedProjects) {
 			return nil
 		}

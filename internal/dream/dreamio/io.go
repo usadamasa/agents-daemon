@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/usadamasa/agents-daemon/internal/dream/jsonlscan"
+	"github.com/usadamasa/agents-daemon/internal/dream"
 )
 
 // ReadCandidates は candidates.jsonl を読み Candidate slice を返す。
@@ -25,7 +25,7 @@ func ReadCandidates(path string) ([]Candidate, error) {
 	defer func() { _ = f.Close() }()
 
 	var out []Candidate
-	scanner := jsonlscan.NewScanner(f)
+	scanner := dream.NewScanner(f)
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		if len(line) == 0 {

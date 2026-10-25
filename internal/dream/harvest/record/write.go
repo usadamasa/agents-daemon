@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/usadamasa/agents-daemon/internal/dream/jsonlscan"
+	"github.com/usadamasa/agents-daemon/internal/dream"
 	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
 
@@ -84,7 +84,7 @@ func readExistingRecords(path string) ([]Record, error) {
 	defer func() { _ = f.Close() }()
 
 	var out []Record
-	sc := jsonlscan.NewScanner(f)
+	sc := dream.NewScanner(f)
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
 		if line == "" {

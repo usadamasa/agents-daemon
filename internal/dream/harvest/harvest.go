@@ -7,9 +7,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/usadamasa/agents-daemon/internal/dream/dreamstate"
+	"github.com/usadamasa/agents-daemon/internal/dream"
 	"github.com/usadamasa/agents-daemon/internal/dream/harvest/record"
-	"github.com/usadamasa/agents-daemon/internal/dream/jsonlscan"
 )
 
 const (
@@ -35,7 +34,7 @@ type userMessage struct {
 
 // assistantMessage は entry.Message (assistant 側)。
 type assistantMessage struct {
-	Content []jsonlscan.ContentBlock `json:"content"`
+	Content []dream.ContentBlock `json:"content"`
 }
 
 // skillInput は Skill tool_use の input フィールド。
@@ -57,7 +56,7 @@ func scanSessionFile(path string) (*record.Record, error) {
 		skillsSeen: make(map[string]struct{}),
 	}
 
-	scanner := jsonlscan.NewScanner(f)
+	scanner := dream.NewScanner(f)
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		if len(line) == 0 {
@@ -124,7 +123,7 @@ func (s *scanState) absorbMetadata(e *jsonlEntry) {
 	}
 	if s.rec.CWD == "" && e.CWD != "" {
 		s.rec.CWD = e.CWD
-		s.rec.CWDProject = dreamstate.CanonicalizeProjectPath(e.CWD)
+		s.rec.CWDProject = dream.CanonicalizeProjectPath(e.CWD)
 	}
 	if e.Timestamp == "" {
 		return

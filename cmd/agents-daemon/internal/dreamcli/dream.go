@@ -11,8 +11,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
+	"github.com/usadamasa/agents-daemon/internal/dream"
 	"github.com/usadamasa/agents-daemon/internal/dream/adopt"
-	"github.com/usadamasa/agents-daemon/internal/dream/dreamstate"
 	"github.com/usadamasa/agents-daemon/internal/dream/forget"
 	"github.com/usadamasa/agents-daemon/internal/dream/harvest"
 	"github.com/usadamasa/agents-daemon/internal/dream/mine"
@@ -28,7 +28,7 @@ func Commands() []*cobra.Command {
 //
 // dream は Claude Code の記憶階層 (CLAUDE.md / auto memory / skill) の consolidation で、
 // 手順は `agents-daemon:dream` skill が持つ。ここにあるのはその実行系 5 phase。
-// state は dreamstate.Dir(apppath の StateDir) に置き、各 phase は解決済みの絶対パスを受け取る。
+// state は dream.Dir(apppath の StateDir) に置き、各 phase は解決済みの絶対パスを受け取る。
 func newDreamCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "dream",
@@ -66,7 +66,7 @@ func resolveDreamEnv() (dreamEnv, error) {
 		return dreamEnv{}, err
 	}
 	cwd, _ := os.Getwd()
-	return dreamEnv{home: home, cwd: cwd, stateDir: dreamstate.Dir(p.StateDir()), logDir: filepath.Dir(p.LogFile())}, nil
+	return dreamEnv{home: home, cwd: cwd, stateDir: dream.Dir(p.StateDir()), logDir: filepath.Dir(p.LogFile())}, nil
 }
 
 func newDreamHarvestCmd() *cobra.Command {

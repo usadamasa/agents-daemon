@@ -117,7 +117,7 @@ func TestWriteRecords_MultipleDates(t *testing.T) {
 }
 
 // records が無い run (incremental で新しいセッションが無いとき) は harvest/ を作らない。
-// 読み手 (mine の WalkDir、dreamstate の Prune) は無いディレクトリを空として扱う。
+// 読み手 (mine の WalkDir、dream の Prune) は無いディレクトリを空として扱う。
 func TestWriteRecords_NoRecordsLeavesNoDirectory(t *testing.T) {
 	outDir := t.TempDir()
 	if _, err := Write(outDir, nil); err != nil {

@@ -1,6 +1,6 @@
-// Package jsonlscan は Claude Code のセッション JSONL (~/.claude/projects 配下) と
-// dream が書く JSONL を読むための走査と scanner を提供する。
-package jsonlscan
+package dream
+
+// Claude Code のセッション JSONL (~/.claude/projects 配下) と dream が書く JSONL を読むための走査と scanner。
 
 import (
 	"bufio"

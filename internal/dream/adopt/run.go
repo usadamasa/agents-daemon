@@ -15,8 +15,8 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/usadamasa/agents-daemon/internal/dream"
 	"github.com/usadamasa/agents-daemon/internal/dream/dreamio"
-	"github.com/usadamasa/agents-daemon/internal/dream/dreamstate"
 )
 
 // Opts は adopt サブコマンドの実行パラメータ。
@@ -26,7 +26,7 @@ type Opts struct {
 	Project        string // CandidatesFile 未指定時に必要
 	Date           string
 	DryRun         bool
-	StateDir       string // dream の state ディレクトリ (dreamstate.Dir)。CandidatesFile 未指定時に必要
+	StateDir       string // dream の state ディレクトリ (dream.Dir)。CandidatesFile 未指定時に必要
 
 	Home   string
 	Stdout io.Writer
@@ -45,7 +45,7 @@ func Run(opts Opts) error {
 		return fmt.Errorf("--candidate は必須")
 	}
 
-	resolvedDate := dreamstate.ResolveDate(opts.Date)
+	resolvedDate := dream.ResolveDate(opts.Date)
 	resolvedCandidates := opts.CandidatesFile
 	if resolvedCandidates == "" {
 		if opts.Project == "" {

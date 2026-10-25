@@ -12,8 +12,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/usadamasa/agents-daemon/internal/dream"
 	"github.com/usadamasa/agents-daemon/internal/dream/dreamio"
-	"github.com/usadamasa/agents-daemon/internal/dream/dreamstate"
 )
 
 // Opts は stage サブコマンドの実行パラメータ。
@@ -22,7 +22,7 @@ type Opts struct {
 	Date           string // 空なら今日
 	CandidatesFile string // 空なら StateDir/candidates/<slug>-<date>.jsonl
 	OutFile        string // 空なら Cwd/tmp/dream/<date>-<slug>.md
-	StateDir       string // dream の state ディレクトリ (dreamstate.Dir)。CandidatesFile 未指定時に必要
+	StateDir       string // dream の state ディレクトリ (dream.Dir)。CandidatesFile 未指定時に必要
 	Verbose        bool
 
 	Cwd    string // os.Getwd 相当 (呼び出し側で解決)。OutFile 未指定時に必要
@@ -38,7 +38,7 @@ func Run(opts Opts) error {
 		return errors.New("--project は必須 (canonical name を指定)")
 	}
 
-	resolvedDate := dreamstate.ResolveDate(opts.Date)
+	resolvedDate := dream.ResolveDate(opts.Date)
 	resolvedCandidates := opts.CandidatesFile
 	if resolvedCandidates == "" {
 		if opts.StateDir == "" {

@@ -11,8 +11,8 @@ import (
 	"io"
 	"path/filepath"
 
+	"github.com/usadamasa/agents-daemon/internal/dream"
 	"github.com/usadamasa/agents-daemon/internal/dream/dreamio"
-	"github.com/usadamasa/agents-daemon/internal/dream/dreamstate"
 	"github.com/usadamasa/agents-daemon/internal/dream/harvest/record"
 	"github.com/usadamasa/agents-daemon/internal/dream/mine/corpus"
 )
@@ -22,7 +22,7 @@ import (
 // Opts は mine サブコマンドの実行パラメータ。
 type Opts struct {
 	Project    string // "" なら Cwd から canonicalize
-	StateDir   string // dream の state ディレクトリ (dreamstate.Dir)。必須
+	StateDir   string // dream の state ディレクトリ (dream.Dir)。必須
 	HarvestDir string // 空なら StateDir/harvest
 	MemoryDir  string // 空なら ~/.claude/projects/<project>/memory
 	SkillsDir  string // 空なら ~/.claude/skills
@@ -43,7 +43,7 @@ func Run(opts Opts) error {
 		return errors.New("StateDir が未解決 (呼び出し側が apppath で決める)")
 	}
 
-	project, err := dreamstate.ResolveProject(opts.Project, opts.Cwd)
+	project, err := dream.ResolveProject(opts.Project, opts.Cwd)
 	if err != nil {
 		return fmt.Errorf("project 解決失敗: %w", err)
 	}
@@ -60,7 +60,7 @@ func Run(opts Opts) error {
 	if resolvedSkills == "" {
 		resolvedSkills = filepath.Join(opts.Home, ".claude", "skills")
 	}
-	resolvedDate := dreamstate.ResolveDate(opts.Date)
+	resolvedDate := dream.ResolveDate(opts.Date)
 
 	// 1. harvest: 対象 project のセッション
 	sessions, err := record.LoadForProject(resolvedHarvest, project)

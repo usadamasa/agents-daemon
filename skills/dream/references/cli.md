@@ -31,7 +31,7 @@ XDG の state に置き、`~/.claude/` には書かない。
 | `${XDG_STATE_HOME:-~/.local/state}/agents-daemon/logs/dream-harvest.log` | Stop hook が起こした `dream harvest` | 失敗の stderr (成功時は無音) |
 
 `harvest/` `candidates/` `replays/` `verdicts/` の 90 日より古いファイルは `dream harvest` が書き込みの前に
-mtime で消す (`internal/dream/dreamstate.Prune`)。daemon の housekeeping は rex の外では走らないので、
+mtime で消す (`internal/dream` の `Prune`)。daemon の housekeeping は rex の外では走らないので、
 Stop のたびに起きる harvest が書き手として掃除する。
 
 ## `dream harvest`

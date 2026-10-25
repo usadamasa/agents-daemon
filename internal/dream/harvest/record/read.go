@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/usadamasa/agents-daemon/internal/dream/jsonlscan"
+	"github.com/usadamasa/agents-daemon/internal/dream"
 )
 
 // LoadForProject は harvest ディレクトリ配下の全 jsonl から、
@@ -50,7 +50,7 @@ func readProjectFile(path, project string) ([]Record, error) {
 	defer func() { _ = f.Close() }()
 
 	var out []Record
-	scanner := jsonlscan.NewScanner(f)
+	scanner := dream.NewScanner(f)
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		if len(line) == 0 {

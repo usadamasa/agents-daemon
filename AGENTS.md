@@ -7,6 +7,9 @@ README の「役割」が持つ。機能を足す・外す判断はそこに照�
 
 ## レイアウト
 
+`internal/` のパッケージは、非テストの呼び手が 1 つならその呼び手の下に入れ子にする。複数の読み手がいる書式は、
+書き手の下に読み書きを置く (`internal/dream/harvest/record`)。
+
 | パス | 中身 |
 | ---- | ---- |
 | `.claude-plugin/plugin.json` | plugin manifest。version の実体はここ 1 箇所。marketplace.json は agents-marketplace リポジトリが持つ |
@@ -31,7 +34,7 @@ README の「役割」が持つ。機能を足す・外す判断はそこに照�
 | `skills/peer-sessions/` | 別セッション (peer) へ作業を渡す手順 (`ListAgents` / `SendMessage`)。rex の block 操作は `references/rex.md` |
 | `skills/dream/` | 記憶階層の consolidation の手引き。実行系の呼び方は `references/pipeline.md` |
 | `cmd/agents-daemon/` | Go の main と root の登録。コマンドの組み立ては `internal/<family>cli` (境界は `changing-agents-daemon-internals` skill の architecture.md「CLI の組み立て」) |
-| `internal/` | daemon の本体。パス定数は `internal/apppath`。statusline の描画と実行は `internal/statusline`、cost の台帳は `internal/statusline/spend`、daemon の監視ループは `internal/daemon`、daemon の起動の排他と status.json と PID ファイルは `internal/daemon/state`、sidecar の原子的な書き込みは `internal/statefile`。前提条件の診断 (`doctor`) は `internal/doctor`、ほかの読むだけの診断 (`inspect` / `status` / `logs`) は `internal/verify`、使い捨て pane へ送る e2e (`simulate`) は `internal/simulate`。dream の実行系は `internal/dream`、放置 worktree の回収は `internal/worktree`、cwd から私用と業務を判定するのは `internal/domain`、cwd の repo と branch を求めるのは `internal/gitrepo`、タスクの記録は `internal/tasklog`、パーキングロットのメモは `internal/parking`、メモを渡す先の新しいセッションを rex の window に起こすのは `internal/spawn`、セッションをまたぐ辺は `internal/edge`、タスクの記録と status.json をボードに組むのは `internal/board`、ボードのカードから依存の DAG を組むのは `internal/board/graph`、依存の DAG の段・下流・輪・鎖を数え、pane のレーンの行を組むのは `internal/board/dag`、ボードの経路の出来事のログは `internal/boardlog`、上限の出来事の記録は `internal/daemon/limitlog`、plugin の更新と daemon の建て直し (`update`) は `internal/selfupdate` |
+| `internal/` | daemon の本体。パス定数は `internal/apppath`。statusline の描画と実行は `internal/statusline`、cost の台帳は `internal/statusline/spend`、daemon の監視ループは `internal/daemon`、daemon の起動の排他と status.json と PID ファイルは `internal/daemon/state`、sidecar の原子的な書き込みは `internal/statefile`。前提条件の診断 (`doctor`) は `internal/doctor`、ほかの読むだけの診断 (`inspect` / `status` / `logs`) は `internal/verify`、使い捨て pane へ送る e2e (`simulate`) は `internal/simulate`。dream の実行系は `internal/dream` (harvest の出力の書式は `internal/dream/harvest/record`、mine が読む memory と skill は `internal/dream/mine/corpus`)、放置 worktree の回収は `internal/worktree`、cwd から私用と業務を判定するのは `internal/domain`、cwd の repo と branch を求めるのは `internal/gitrepo`、タスクの記録は `internal/tasklog`、パーキングロットのメモは `internal/parking`、メモを渡す先の新しいセッションを rex の window に起こすのは `internal/spawn`、セッションをまたぐ辺は `internal/edge`、タスクの記録と status.json をボードに組むのは `internal/board`、ボードのカードから依存の DAG を組むのは `internal/board/graph`、依存の DAG の段・下流・輪・鎖を数え、pane のレーンの行を組むのは `internal/board/dag`、ボードの経路の出来事のログは `internal/boardlog`、上限の出来事の記録は `internal/daemon/limitlog`、plugin の更新と daemon の建て直し (`update`) は `internal/selfupdate` |
 | `internal/multiplexer`, `internal/multiplexer/rexcli`, `internal/backend` | pane 操作の interface (`multiplexer.Client`) とその rex 実装。`backend` が環境に `REX_SESSION` があることを確かめる (無ければ `daemon --ensure` は何もせず戻る) |
 | `tests/` | hook と script の bats テスト (`tests/lib/`、`tests/fixtures/`) |
 | `ci/mod-types/` | CI の型検査に使う mod の型の写し。`task mod-types:sync` (`scripts/sync-mod-types.sh`) が `.claude-plugin/types/` から写す |

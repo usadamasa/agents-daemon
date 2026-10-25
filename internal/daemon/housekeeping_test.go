@@ -9,9 +9,9 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/applog"
 	"github.com/usadamasa/agents-daemon/internal/boardlog"
+	"github.com/usadamasa/agents-daemon/internal/daemon/limitlog"
 	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/edge"
-	"github.com/usadamasa/agents-daemon/internal/daemon/limitlog"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"

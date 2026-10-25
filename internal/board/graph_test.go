@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/usadamasa/agents-daemon/internal/board/dag"
 	"github.com/usadamasa/agents-daemon/internal/board/graph"
 	"github.com/usadamasa/agents-daemon/internal/daemon/state"
-	"github.com/usadamasa/agents-daemon/internal/board/dag"
 	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/parking"

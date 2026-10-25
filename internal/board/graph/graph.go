@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/usadamasa/agents-daemon/internal/daemon/state"
 	"github.com/usadamasa/agents-daemon/internal/board/dag"
+	"github.com/usadamasa/agents-daemon/internal/daemon/state"
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/parking"

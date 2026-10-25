@@ -81,6 +81,46 @@ func TestPlacedDuring(t *testing.T) {
 	}
 }
 
+// MentionedIDs は文面に書かれたメモの id を、現れた順に重複なく拾う。id の形の前後に英数字が続くものは拾わない。
+func TestMentionedIDs(t *testing.T) {
+	const a, b = "20261025T044319-7ed42d24", "20261019T120000-0a1b2c3d"
+	tests := []struct {
+		name string
+		text string
+		want []string
+	}{
+		{"無い", "メモの id を書いていない", []string{}},
+		{"空", "", []string{}},
+		{"1 つ", "(メモ " + a + ")", []string{a}},
+		{"2 つ", "メモ " + a + " と\nメモ " + b, []string{a, b}},
+		{"重複", a + ", " + b + ", " + a, []string{a, b}},
+		{"後ろに英数字が続く", a + "ff", []string{}},
+		{"前に英数字が付く", "x" + a, []string{}},
+		{"乱数の部分が大文字", "20261025T044319-7ED42D24", []string{}},
+		{"乱数の部分が短い", "20261025T044319-7ed42d2", []string{}},
+		{"時刻の区切りが無い", "20261025044319-7ed42d24", []string{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := MentionedIDs(tt.text)
+			if got == nil || strings.Join(got, ",") != strings.Join(tt.want, ",") {
+				t.Errorf("MentionedIDs(%q) = %#v, want %#v", tt.text, got, tt.want)
+			}
+		})
+	}
+}
+
+// newID が作る id は MentionedIDs が拾う形と同じ。
+func TestMentionedIDs_matchesNewID(t *testing.T) {
+	id, err := newID(testNow)
+	if err != nil {
+		t.Fatalf("newID() error = %v", err)
+	}
+	if got := MentionedIDs("メモ " + id + " を扱う"); len(got) != 1 || got[0] != id {
+		t.Errorf("MentionedIDs() = %v, want [%s]", got, id)
+	}
+}
+
 // domain、repo、正規化した title が同じ open のメモには sources を足し、新しいメモを作らない。
 func TestAdd_mergesSameItem(t *testing.T) {
 	s := New(t.TempDir())

@@ -449,6 +449,28 @@ test('選んだノードの詳細に参照とセッション、上流をたど�
   expect(await ui.find({ type: 'Text', text: /選んだタスクは今の図に出ていません/ })).toBeDefined()
 })
 
+test('セッションのノードの詳細は ref を出さず、名前と session ID の先頭 8 桁を出す (#196)', async ($, on) => {
+  const session = { ...node('S1234567890/session', 'working', 'design'), kind: 'session', ref: 'session:design', session_id: 'S1234567890', session: 'design' }
+  boardWorld(on, withNodes(session))
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($)
+  await ui.press({ key: 'row:S1234567890/session' })
+  expect(await ui.find({ type: 'Text', text: /^design · S1234567$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /session:design/ })).toBeUndefined()
+})
+
+test('止まっているノードは title も記号と同じ色で描く (#194)', async ($, on) => {
+  boardWorld(on)
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($)
+  // 行の Button の子は記号、右のレーン、title の 3 つの Text。
+  const colors = async (key: string) => ((await ui.find({ key }))?.children ?? []).map(c => (c as { props?: { color?: string } }).props?.color)
+  expect(await colors('row:Q/1')).toEqual(['warning', undefined, 'warning'])
+  expect(await colors('row:W/1')).toEqual(['suggestion', undefined, undefined])
+  // 待ちの輪にいるだけのノードは記号の色が無いので、title にも付けない。
+  expect(await colors('row:X/1')).toEqual([undefined, undefined, undefined])
+})
+
 test('edge の辺は Unlink で edge rm に元の参照を渡す', async ($, on) => {
   const w = boardWorld(on)
   await $.command.run(OPEN_BOARD)
@@ -547,6 +569,9 @@ test('メモを選ぶと詳細を出し、Discard / To task / Ask for issue で�
   expect(await ui.find({ key: 'task:W', text: /To task → edge-cli/ })).toBeDefined()
   expect(await ui.find({ key: 'issue:SELF', text: /Ask for issue → このセッション/ })).toBeDefined()
   expect(await ui.find({ key: 'issue:P', text: /Ask for issue → peer/ })).toBeDefined()
+  // 宛先のセッション名だけでは何をしているセッションか分からないので、そのセッションのカードの subject を添える (#191)。
+  expect((await ui.find({ key: 'task:W' }))?.text).toBe('To task → edge-cli (edge の CLI)')
+  expect((await ui.find({ key: 'issue:P' }))?.text).toBe('Ask for issue → peer (後続)')
 
   w.ran.length = 0
   await ui.press({ key: 'task:W' })

@@ -119,7 +119,9 @@ type EdgeRecord struct {
 
 // graphBuilder はグラフを組む途中の状態。
 type graphBuilder struct {
-	in    input
+	in input
+	// open は in.Parking のうち open のメモ (ノードの parked に数える)。
+	open  []parking.Item
 	panes map[string]*daemon.PaneStatus
 	nodes map[string]*Node
 	// bySession はセッションのタスク (と TodoWrite の項目、タスクの無いセッション) のノードの Key。
@@ -129,8 +131,8 @@ type graphBuilder struct {
 }
 
 // buildGraph はカードからノードを、blockedBy と辺の記録から Links を組み、段・下流・鎖を数える。
-func buildGraph(in input, cards []placed, panes map[string]*daemon.PaneStatus, names map[string]string) Graph {
-	g := &graphBuilder{in: in, panes: panes, nodes: map[string]*Node{}, bySession: map[string][]string{}, seen: map[[2]string]bool{}}
+func buildGraph(in input, open []parking.Item, cards []placed, panes map[string]*daemon.PaneStatus, names map[string]string) Graph {
+	g := &graphBuilder{in: in, open: open, panes: panes, nodes: map[string]*Node{}, bySession: map[string][]string{}, seen: map[[2]string]bool{}}
 	for _, c := range cards {
 		g.addCard(c, names[c.card.SessionID])
 	}
@@ -140,7 +142,7 @@ func buildGraph(in input, cards []placed, panes map[string]*daemon.PaneStatus, n
 }
 
 func (g *graphBuilder) addCard(c placed, session string) {
-	n := &Node{Key: c.card.Key, Kind: c.card.Kind, Title: c.card.Subject, CWD: c.cwd, SessionID: c.card.SessionID, Session: session, SessionName: g.in.SessionNames[c.card.SessionID], Live: c.card.Live}
+	n := &Node{Key: c.card.Key, Kind: c.card.Kind, Title: c.card.Subject, CWD: c.cwd, SessionID: c.card.SessionID, Session: session, SessionName: g.in.SessionNames[c.card.SessionID], Live: c.card.Live, Memos: []MemoRef{}}
 	n.State, n.Detail = nodeState(c.status, c.pane)
 	switch c.card.Kind {
 	case KindTask:
@@ -251,7 +253,7 @@ func (g *graphBuilder) resolve(ep edge.Endpoint, pick func(sessionID string) []s
 func (g *graphBuilder) placeholder(ep edge.Endpoint, title, sessionID, state string) string {
 	key := "ref:" + ep.Ref
 	if g.nodes[key] == nil {
-		n := &Node{Key: key, Kind: KindRef, State: state, Title: title, Ref: ep.Ref, CWD: ep.CWD, SessionID: sessionID}
+		n := &Node{Key: key, Kind: KindRef, State: state, Title: title, Ref: ep.Ref, CWD: ep.CWD, SessionID: sessionID, Memos: []MemoRef{}}
 		if sessionID != "" {
 			n.Session, n.SessionName = title, title
 		}
@@ -341,11 +343,8 @@ func (g *graphBuilder) finish() Graph {
 		n.Downstream = len(down)
 		n.Deadlock = cyclic
 		n.BlockedBy = a.Cause(key, open, rankOf)
-		n.Parked = parked(*n, g.in.Parking)
-		n.Memos = memos[key]
-		if n.Memos == nil {
-			n.Memos = []MemoRef{}
-		}
+		n.Parked = parked(*n, g.open)
+		n.Memos = append(n.Memos, memos[key]...)
 		out.Nodes = append(out.Nodes, *n)
 	}
 	sort.Slice(out.Nodes, func(i, j int) bool {
@@ -416,26 +415,19 @@ func rank(state string) int {
 	}
 }
 
-// mentionedMemos はタスクのノードの Key → description に id が書かれたメモ。メモの側にタスクを書き戻さず、
-// ボードを組むたびにここで照合する。
+// mentionedMemos はタスクのノードの Key → description に id が書かれたメモ (status を問わない)。
 func (g *graphBuilder) mentionedMemos() map[string][]MemoRef {
-	byID := map[string]parking.Item{}
-	for _, m := range g.in.Parking {
-		byID[m.ID] = m
-	}
 	out := map[string][]MemoRef{}
 	for _, t := range g.in.Tasks {
-		for _, id := range parking.MentionedIDs(t.Description) {
-			if m, ok := byID[id]; ok {
-				key := t.SessionID + "/" + t.ID
-				out[key] = append(out[key], MemoRef{ID: m.ID, Title: m.Title, Status: m.Status})
-			}
+		key := t.SessionID + "/" + t.ID
+		for _, m := range parking.Mentioned(g.in.Parking, t.Description) {
+			out[key] = append(out[key], MemoRef{ID: m.ID, Title: m.Title, Status: m.Status})
 		}
 	}
 	return out
 }
 
-// parked はノードのタスクの途中で置かれた open のメモの数。タスクを持たないノードは、タスクを指さずに
+// parked はノードのタスクの途中で置かれたメモの数。タスクを持たないノードは、タスクを指さずに
 // そのセッションが置いたメモを数える。
 func parked(n Node, memos []parking.Item) int {
 	if n.SessionID == "" || n.Kind == KindTodo {
@@ -445,17 +437,5 @@ func parked(n Node, memos []parking.Item) int {
 	if n.Kind == KindTask {
 		_, taskID, _ = strings.Cut(strings.TrimPrefix(n.Ref, "task:"), "/")
 	}
-	count := 0
-	for _, m := range memos {
-		if m.Status != parking.StatusOpen {
-			continue
-		}
-		for _, s := range m.Sources {
-			if s.SessionID == n.SessionID && s.TaskID == taskID {
-				count++
-				break
-			}
-		}
-	}
-	return count
+	return len(parking.PlacedDuring(memos, n.SessionID, taskID))
 }

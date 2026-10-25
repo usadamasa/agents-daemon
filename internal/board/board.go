@@ -169,24 +169,13 @@ func build(in input) Board {
 	var panes map[string]*daemon.PaneStatus
 	b.DaemonRunning, b.UpdatedAt, panes = livePanes(in)
 	cards := collect(in, panes)
-	open := openMemos(in.Parking)
+	open := parking.Filter(in.Parking, "", parking.StatusOpen)
 	names := sessionNames(sessionIDs(cards, open), in.SessionNames)
 	l := locator{locate: in.Locate, cache: map[string]gitrepo.Place{}}
 	b.Here, _ = l.row(in.CWD)
 	b.Rows = arrange(cards, open, panes, names, l)
-	b.Graph = buildGraph(in, cards, panes, names)
+	b.Graph = buildGraph(in, open, cards, panes, names)
 	return b
-}
-
-// openMemos は memos のうち open のもの。
-func openMemos(memos []parking.Item) []parking.Item {
-	open := []parking.Item{}
-	for _, m := range memos {
-		if m.Status == parking.StatusOpen {
-			open = append(open, m)
-		}
-	}
-	return open
 }
 
 // sessionIDs はカードとメモの source に出てくるセッション。

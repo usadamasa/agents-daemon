@@ -18,7 +18,12 @@ export const ICON: Record<GraphNode['state'], string> = {
   exited: '⊘',
 }
 
-// COLOR は記号の色 (テーマの鍵)。無い状態は既定の色。
+// 色 (テーマの鍵) は 1 つの鍵に 1 つの意味だけを持たせ、B の pane と A の band で同じ意味に使う。
+//   suggestion 進行中 / warning 人の返事待ち (question、permission) / permission 時間待ち (limit) /
+//   error 失敗 / success longest chain の辺の罫線
+// ほかの状態、レーンの罫線、メモ (◇) には色を使わない (メモの見出しは太字)。
+
+// COLOR は記号の色。無い状態は既定の色。
 export const COLOR: Partial<Record<GraphNode['state'], string>> = {
   working: 'suggestion',
   question: 'warning',
@@ -179,8 +184,9 @@ export function summary(g: Graph, memos: number): string {
   ].join('  ')
 }
 
-// CHAIN_COLOR は longest chain の辺の罫線の色。鎖は止まっているノードから下るので、question と同じ注意の色にする。
-export const CHAIN_COLOR = 'warning'
+// CHAIN_COLOR は longest chain の辺の罫線の色。止まっているノードの記号 (warning など) と別の色にし、
+// 「止まっている」と「先に解く道筋」を色で取り違えないようにする。
+export const CHAIN_COLOR = 'success'
 
 export type Piece = { text: string; marked: boolean }
 

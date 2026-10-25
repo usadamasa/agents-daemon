@@ -118,7 +118,7 @@ export const registerBand: Register = on => {
         )}
         {memos.length > 0 && (
           <Box flexDirection="row" gap={1}>
-            <Text color="success">
+            <Text bold>
               {MEMO} {String(memos.length)}
             </Text>
             {memos.slice(0, SHOWN).map(memo => {

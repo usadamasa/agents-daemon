@@ -390,7 +390,7 @@ export const registerBoard: Register = on => {
           {memos.length > 0 && (
             <Box key="section:parking" flexDirection="column">
               <Box flexDirection="row" gap={1}>
-                <Text bold color="success">
+                <Text bold>
                   {MEMO} parking {String(memos.length)}
                 </Text>
                 {/* 古いメモをまとめて捨てる。該当があるときだけ出し、日数はこの mod が決める (park discard --days)。 */}

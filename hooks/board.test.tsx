@@ -1,9 +1,11 @@
 import type { On, ProcessRunResult } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
+import { CHAIN_COLOR, COLOR } from './graph'
+
 const BIN = '/home/u/.cache/agents-daemon/bin/agents-daemon'
 // CHAIN は longest chain の罫線の色 (hooks/graph.ts の CHAIN_COLOR)。
-const CHAIN = 'warning'
+const CHAIN = 'success'
 const CWD = '/src/home/agents-daemon'
 
 // world は plugin の下にいる engine の代わりを立てる。process.run は run が答え、呼ばれた argv (バイナリの後) を
@@ -281,6 +283,17 @@ test('longest chain の辺の罫線 (marks の桁) は色を付けて描き、�
   expect((await ui.find({ type: 'Text', text: /^┆$/ }))?.props.color).toBe(CHAIN)
   expect((await ui.find({ key: 'box:row:Q/2' }))?.text).toMatch(/^ {2}│ ○ 段5$/)
   expect((await ui.find({ type: 'Text', text: /^│$/ }))?.props.color).toBe(CHAIN)
+})
+
+test('色は 1 つの鍵に 1 つの意味: 鎖の色はノードの状態の色と重ならず、メモの見出しには色を付けない', async ($, on) => {
+  expect(Object.values(COLOR)).not.toContain(CHAIN_COLOR)
+  expect(CHAIN_COLOR).toBe(CHAIN)
+  boardWorld(on)
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($)
+  const heading = await ui.find({ type: 'Text', text: /^◇ parking 1$/ })
+  expect(heading?.props.bold).toBe(true)
+  expect(heading?.props.color).toBeUndefined()
 })
 
 test('長い title は pane の幅からレーンの分を除いて 1 行に切り詰める', async ($, on) => {

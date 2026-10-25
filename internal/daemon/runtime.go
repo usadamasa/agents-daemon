@@ -18,7 +18,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/backend"
 	"github.com/usadamasa/agents-daemon/internal/config"
-	"github.com/usadamasa/agents-daemon/internal/daemonstate"
+	"github.com/usadamasa/agents-daemon/internal/daemon/state"
 	"github.com/usadamasa/agents-daemon/internal/detect"
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/limitlog"
@@ -138,7 +138,7 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 
 	seen := make(map[string]bool, len(panes))
 	claudeCount := 0
-	statusPanes := make([]daemonstate.PaneStatus, 0, len(panes))
+	statusPanes := make([]state.PaneStatus, 0, len(panes))
 
 	for _, pane := range panes {
 		if !multiplexer.IsClaudeAgent(pane) {
@@ -172,7 +172,7 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 
 	r.forgetUnseen(seen)
 
-	if err := daemonstate.WriteStatusSnapshot(r.statusPath, os.Getpid(), r.backend, r.startedAt, now, statusPanes); err != nil {
+	if err := state.WriteStatusSnapshot(r.statusPath, os.Getpid(), r.backend, r.startedAt, now, statusPanes); err != nil {
 		r.log.Logf("status snapshot の書き込みに失敗: %v", err)
 	}
 
@@ -213,8 +213,8 @@ func (r *daemonRuntime) forgetUnseen(seen map[string]bool) {
 }
 
 // paneStatus は status.json に書く pane 1 枚ぶんのスナップショットを組む。
-func paneStatus(pane multiplexer.Pane, entry *paneEntry, outcome monitor.Outcome, now time.Time) daemonstate.PaneStatus {
-	return daemonstate.PaneStatus{
+func paneStatus(pane multiplexer.Pane, entry *paneEntry, outcome monitor.Outcome, now time.Time) state.PaneStatus {
+	return state.PaneStatus{
 		PaneID:        pane.PaneID,
 		SessionID:     pane.SessionID,
 		CWD:           pane.CWD,
@@ -396,9 +396,9 @@ func EnsureDaemon(p apppath.Paths, dryRun bool) error {
 // (os.File の fd は CLOEXEC なので子へは渡らない)。離してから子が取るまでの間に別の --ensure が入っても、
 // lock を取れた 1 つだけが daemon になる。
 func ensureDaemon(p apppath.Paths, spawn func() error) error {
-	lock, err := acquireLock(lockFile(p))
+	lock, err := state.AcquireLock(state.LockFile(p))
 	if err != nil {
-		if errors.Is(err, ErrAlreadyRunning) {
+		if errors.Is(err, state.ErrAlreadyRunning) {
 			return nil // 既に動いている。何もしない。
 		}
 		return err
@@ -447,7 +447,7 @@ func spawnDetached(exe string, dryRun bool, p apppath.Paths) error {
 func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 	// lock は設定や rex を見る前に取る。後に回すと、その間に起きた別の process と 2 つ進む。
 	// 以降のどこで戻っても、process の終了で OS が lock を解放する。
-	lock, err := acquireLock(lockFile(p))
+	lock, err := state.AcquireLock(state.LockFile(p))
 	if err != nil {
 		return err
 	}
@@ -473,7 +473,7 @@ func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 		return fmt.Errorf("%s に到達できないため起動しません: %w", kind, reachErr)
 	}
 
-	if err := daemonstate.WritePIDFile(p.PIDFile(), os.Getpid()); err != nil {
+	if err := state.WritePIDFile(p.PIDFile(), os.Getpid()); err != nil {
 		return err
 	}
 
@@ -507,7 +507,7 @@ func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 	defer stop()
 
 	cleanup := func(reason string) {
-		if err := daemonstate.RemoveOwnPIDFile(p.PIDFile(), os.Getpid()); err != nil {
+		if err := state.RemoveOwnPIDFile(p.PIDFile(), os.Getpid()); err != nil {
 			log.Logf("PID ファイルの削除に失敗: %v", err)
 		}
 		log.Logf("daemon 終了 (pid %d): %s", os.Getpid(), reason)

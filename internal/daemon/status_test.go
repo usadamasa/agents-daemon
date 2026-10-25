@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/usadamasa/agents-daemon/internal/daemonstate"
+	"github.com/usadamasa/agents-daemon/internal/daemon/state"
 	"github.com/usadamasa/agents-daemon/internal/monitor"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
@@ -22,7 +22,7 @@ func TestDaemonRuntimeTick_StatusRecordsBackend(t *testing.T) {
 	if _, _, err := r.tick(context.Background(), missingConfigPath(t), now); err != nil {
 		t.Fatalf("tick() error = %v", err)
 	}
-	snap, err := daemonstate.ReadStatusSnapshot(statusPath)
+	snap, err := state.ReadStatusSnapshot(statusPath)
 	if err != nil || snap == nil {
 		t.Fatalf("ReadStatusSnapshot() = %+v, %v", snap, err)
 	}

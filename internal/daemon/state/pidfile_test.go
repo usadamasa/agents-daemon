@@ -1,4 +1,4 @@
-package daemonstate
+package state
 
 import (
 	"errors"

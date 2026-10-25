@@ -4,7 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
-	"github.com/usadamasa/agents-daemon/internal/daemonstate"
+	"github.com/usadamasa/agents-daemon/internal/daemon/state"
 )
 
 // newStopCmd は `agents-daemon stop` を組み立てる。
@@ -17,7 +17,7 @@ func newStopCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return daemonstate.Stop(cmd.OutOrStdout(), p, daemonstate.StopTimeout)
+			return state.Stop(cmd.OutOrStdout(), p, state.StopTimeout)
 		},
 	}
 }

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/board/graph"
-	"github.com/usadamasa/agents-daemon/internal/daemonstate"
+	"github.com/usadamasa/agents-daemon/internal/daemon/state"
 	"github.com/usadamasa/agents-daemon/internal/dag"
 	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/edge"
@@ -41,17 +41,17 @@ func TestGraph_nodeStates(t *testing.T) {
 		Domain: domain.Work,
 		PID:    42,
 		Snapshot: snapshot(
-			daemonstate.PaneStatus{PaneID: "p1", SessionID: "W", CWD: "/w/a", AgentStatus: "working"},
-			daemonstate.PaneStatus{PaneID: "p2", SessionID: "D", CWD: "/w/a", AgentStatus: "done"},
-			daemonstate.PaneStatus{PaneID: "p3", SessionID: "Q", CWD: "/w/a", AgentStatus: "blocked", AgentKind: "question"},
-			daemonstate.PaneStatus{PaneID: "p4", SessionID: "P", CWD: "/w/a", AgentStatus: "blocked", AgentKind: "permission"},
-			daemonstate.PaneStatus{PaneID: "p5", SessionID: "E", CWD: "/w/a", AgentStatus: "error"},
-			daemonstate.PaneStatus{PaneID: "p6", SessionID: "L", CWD: "/w/a", AgentStatus: "error", MonitorStatus: "waiting", WaitUntil: &until},
-			daemonstate.PaneStatus{PaneID: "p7", SessionID: "S", CWD: "/w/s", AgentStatus: "working", AgentMessage: "調べている"},
-			daemonstate.PaneStatus{PaneID: "p8", SessionID: "T", CWD: "/w/t", AgentStatus: "working"},
-			daemonstate.PaneStatus{PaneID: "p9", SessionID: "U", CWD: "/w/u", AgentStatus: "done"},
-			daemonstate.PaneStatus{PaneID: "p10", SessionID: "V", CWD: "/w/dotfiles", AgentStatus: "unknown"},
-			daemonstate.PaneStatus{PaneID: "p11", SessionID: "N", CWD: "/w/a", AgentStatus: "unknown"},
+			state.PaneStatus{PaneID: "p1", SessionID: "W", CWD: "/w/a", AgentStatus: "working"},
+			state.PaneStatus{PaneID: "p2", SessionID: "D", CWD: "/w/a", AgentStatus: "done"},
+			state.PaneStatus{PaneID: "p3", SessionID: "Q", CWD: "/w/a", AgentStatus: "blocked", AgentKind: "question"},
+			state.PaneStatus{PaneID: "p4", SessionID: "P", CWD: "/w/a", AgentStatus: "blocked", AgentKind: "permission"},
+			state.PaneStatus{PaneID: "p5", SessionID: "E", CWD: "/w/a", AgentStatus: "error"},
+			state.PaneStatus{PaneID: "p6", SessionID: "L", CWD: "/w/a", AgentStatus: "error", MonitorStatus: "waiting", WaitUntil: &until},
+			state.PaneStatus{PaneID: "p7", SessionID: "S", CWD: "/w/s", AgentStatus: "working", AgentMessage: "調べている"},
+			state.PaneStatus{PaneID: "p8", SessionID: "T", CWD: "/w/t", AgentStatus: "working"},
+			state.PaneStatus{PaneID: "p9", SessionID: "U", CWD: "/w/u", AgentStatus: "done"},
+			state.PaneStatus{PaneID: "p10", SessionID: "V", CWD: "/w/dotfiles", AgentStatus: "unknown"},
+			state.PaneStatus{PaneID: "p11", SessionID: "N", CWD: "/w/a", AgentStatus: "unknown"},
 		),
 		Tasks: []tasklog.Task{
 			task("W", "1", "書く", "in_progress", "/w/a"),
@@ -173,7 +173,7 @@ func TestGraph_refEndpoints(t *testing.T) {
 		Domain: domain.Work,
 		PID:    42,
 		Snapshot: snapshot(
-			daemonstate.PaneStatus{PaneID: "p1", SessionID: "L", CWD: cwd, AgentStatus: "working", AgentMessage: "起きたばかり"},
+			state.PaneStatus{PaneID: "p1", SessionID: "L", CWD: cwd, AgentStatus: "working", AgentMessage: "起きたばかり"},
 		),
 		Tasks: []tasklog.Task{
 			task("A", "1", "根", "pending", cwd),
@@ -278,9 +278,9 @@ func TestGraph_chains(t *testing.T) {
 		Domain: domain.Work,
 		PID:    42,
 		Snapshot: snapshot(
-			daemonstate.PaneStatus{PaneID: "p1", SessionID: "A", CWD: cwd, AgentStatus: "blocked", AgentKind: "question"},
-			daemonstate.PaneStatus{PaneID: "p2", SessionID: "B", CWD: cwd, AgentStatus: "working"},
-			daemonstate.PaneStatus{PaneID: "p3", SessionID: "C", CWD: cwd, AgentStatus: "blocked", AgentKind: "permission"},
+			state.PaneStatus{PaneID: "p1", SessionID: "A", CWD: cwd, AgentStatus: "blocked", AgentKind: "question"},
+			state.PaneStatus{PaneID: "p2", SessionID: "B", CWD: cwd, AgentStatus: "working"},
+			state.PaneStatus{PaneID: "p3", SessionID: "C", CWD: cwd, AgentStatus: "blocked", AgentKind: "permission"},
 		),
 		Tasks: []tasklog.Task{
 			task("A", "1", "論点を決める", "in_progress", cwd),
@@ -336,9 +336,9 @@ func TestGraph_rows(t *testing.T) {
 		Domain: domain.Work,
 		PID:    42,
 		Snapshot: snapshot(
-			daemonstate.PaneStatus{PaneID: "p1", SessionID: "A", CWD: cwd, AgentStatus: "blocked", AgentKind: "question"},
-			daemonstate.PaneStatus{PaneID: "p2", SessionID: "B", CWD: cwd, AgentStatus: "working"},
-			daemonstate.PaneStatus{PaneID: "p3", SessionID: "C", CWD: cwd, AgentStatus: "blocked", AgentKind: "permission"},
+			state.PaneStatus{PaneID: "p1", SessionID: "A", CWD: cwd, AgentStatus: "blocked", AgentKind: "question"},
+			state.PaneStatus{PaneID: "p2", SessionID: "B", CWD: cwd, AgentStatus: "working"},
+			state.PaneStatus{PaneID: "p3", SessionID: "C", CWD: cwd, AgentStatus: "blocked", AgentKind: "permission"},
 		),
 		Tasks: []tasklog.Task{
 			task("A", "1", "論点を決める", "in_progress", cwd),
@@ -440,7 +440,7 @@ func TestGraph_parked(t *testing.T) {
 	b := build(input{
 		Domain:   domain.Work,
 		PID:      42,
-		Snapshot: snapshot(daemonstate.PaneStatus{PaneID: "p1", SessionID: "S", CWD: cwd, AgentStatus: "working"}),
+		Snapshot: snapshot(state.PaneStatus{PaneID: "p1", SessionID: "S", CWD: cwd, AgentStatus: "working"}),
 		Tasks:    []tasklog.Task{task("A", "1", "x", "in_progress", cwd), task("A", "2", "y", "pending", cwd)},
 		Parking: []parking.Item{
 			memo("m1", parking.Source{SessionID: "A", TaskID: "1", CWD: cwd, At: t0}),
@@ -473,7 +473,7 @@ func TestGraph_memos(t *testing.T) {
 	b := build(input{
 		Domain:   domain.Work,
 		PID:      42,
-		Snapshot: snapshot(daemonstate.PaneStatus{PaneID: "p1", SessionID: "A", CWD: cwd, AgentStatus: "working"}),
+		Snapshot: snapshot(state.PaneStatus{PaneID: "p1", SessionID: "A", CWD: cwd, AgentStatus: "working"}),
 		Tasks: []tasklog.Task{
 			withDescription(task("A", "1", "x", "in_progress", cwd), "メモ "+open+" と "+handed+" と "+gone+" を扱う。(メモ "+handed+")"),
 			withDescription(task("A", "2", "y", "pending", cwd), "メモ "+discarded),

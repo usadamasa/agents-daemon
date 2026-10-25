@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
-	"github.com/usadamasa/agents-daemon/internal/daemonstate"
+	"github.com/usadamasa/agents-daemon/internal/daemon/state"
 	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
@@ -130,7 +130,7 @@ func TestRun(t *testing.T) {
 		home := t.TempDir()
 		p := apppath.New(home, "", "")
 		writeFixturePIDFile(t, p.PIDFile(), os.Getpid())
-		writeFixtureSnapshot(t, p.StatusFile(), daemonstate.StatusSnapshot{
+		writeFixtureSnapshot(t, p.StatusFile(), state.StatusSnapshot{
 			PID:       os.Getpid(),
 			StartedAt: fixedNow.Add(-time.Hour),
 			UpdatedAt: fixedNow,
@@ -526,7 +526,7 @@ func writeFixturePIDFile(t *testing.T, path string, pid int) {
 	}
 }
 
-func writeFixtureSnapshot(t *testing.T, path string, snap daemonstate.StatusSnapshot) {
+func writeFixtureSnapshot(t *testing.T, path string, snap state.StatusSnapshot) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatalf("state ディレクトリの作成に失敗: %v", err)

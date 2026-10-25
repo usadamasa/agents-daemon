@@ -192,6 +192,13 @@ B は fullscreen のレイアウトで dock に置かれるときだけ出す。
 
 ボードの JSON は行ごとに open のメモ (`$STATE/parking/`) をタスクの列とは別の欄 `parking` に持ち、メモだけの repo も
 行にする。`here` は開いたセッションの行の鍵で、mod はこの行の `parking` を band のメモにする。
+
+メモとタスクの照合 (#213): メモの側にはタスクを書き戻さない。ボードを組むたびに、タスクの記録の description から
+メモの id (`internal/parking` の `MentionedIDs`、`newID` と同じ形) を拾い、status を問わず domain のメモと照合して、
+そのタスクのノードの `memos` (id、title、status。description に書かれた順) に付ける。mod は選んだタスクの詳細に
+`◇ <title> (<status>)` で出す。handed のメモはパーキングの列から消え、渡した先のタスクの詳細に現れる。
+handed / discarded のメモが保持期間 (7 日) で消えた後は、description に id が残っていても照合できず、出さない。
+
 メモの見せ方と操作は `hooks/parking.ts` が持ち、行と列の描き方には依存しない。メモの行は最後に置かれた時刻 (JST) を
 先頭に出し、どのメモが古いかを列で見比べられるようにする。操作はどれも
 `agents-daemon park ... --session <id> --cwd <cwd>` を呼び、開いたセッションの domain のメモとタスクだけを触る。
@@ -202,7 +209,9 @@ B は fullscreen のレイアウトで dock に置かれるときだけ出す。
   (`hooks/board.tsx` の `STALE_DAYS`) が持ち、CLI に既定は無い。housekeeping が open を 90 日で黙って消す前に、人が見て
   捨てる区切り。捨てたメモは 7 日残り、`logs --board` の `park.discard` に残る id を `park set <id> --status open` で戻せる
 - タスクにする: メモの行が開いたセッションの repo (`here`) なら自セッション (`このセッション`) を先に、続けて同じ repo の
-  生きているほかのセッションへ TaskCreate を頼む文面を送る
+  生きているほかのセッションへ TaskCreate を頼む文面を送る。文面は着手の時期を指示せず受け手の計画 (タスクの依存) に
+  任せ、タスクの description にメモの id を入れるよう頼む (既にこのメモを扱うタスクがあれば書き足すだけ)。
+  照合の規則は上の段落
 - issue にするよう頼む: 私用のボードだけ。自セッションを先に、ボードに載っている生きているセッションへ頼む
 - 自セッションは生きているのが自明なので、カードや daemon の有無にかかわらず宛先に出す。自分へは peer メッセージを
   送れないので `$.prompt.submit` で自分の入力へ渡し、idle になってから 1 ターンとして入る (#190)

@@ -45,8 +45,7 @@ SessionStart hook は `--dry-run` **なし**で配線してある。検知の挙
 `claude plugin marketplace update`、`claude plugin update` を走らせ、更新した版の `hooks/build-daemon.sh`
 (SessionStart が detach して呼ぶのと同じスクリプト) を叩く。段が失敗したら後の段は走らせない。
 build-daemon.sh は plugin の版で `go build` し、cache のバイナリと stamp を差し替えて `daemon --ensure` を叩く。
-動いている daemon は差し替えを次の tick で検知して自分で入れ替わる ([architecture.md](architecture.md) の
-「バイナリの用意と差し替え」)。`agents-daemon version` が plugin の版を出し、`logs` に「実行ファイルが更新された
+動いている daemon は差し替えを次の tick で検知して自分で入れ替わる ([binary.md](binary.md))。`agents-daemon version` が plugin の版を出し、`logs` に「実行ファイルが更新された
 ため入れ替わります」が出れば済んでいる。Claude Code の sandbox は `~/.claude/plugins` と `~/.cache/agents-daemon` に
 書けないので、利用者が `!` で打つ。
 
@@ -66,6 +65,13 @@ build-daemon.sh は plugin の版で `go build` し、cache のバイナリと s
 回収するのは、lock が無いか foreground セッションの lock の PID が不在で、最終更新 (ルートの mtime・HEAD の
 コミット日時・管理 index の mtime の最大) が `--min-age-days` より古く、未コミットの変更が無いもの。ブランチは残す。
 自分が中にいる worktree、人手の lock、subagent の lock (`claude agent`。本体の sweep の担当) には触らない。
+
+hook の配線は plugin の `hooks/hooks.json` の SessionStart で、`hooks/prune-worktrees.sh` が hook 入力をそのまま
+`prune-worktrees --hook` に渡す。回収したときだけ `systemMessage` で知らせ、state は書かない。判定の条件の実体は
+`internal/worktree` の package doc。
+<!-- cc-premise: 2.1.310 worktrees 本体の sweep は subagent / background session の worktree だけを消し、foreground の keep は残す -->
+subagent の worktree は Claude Code 本体の periodic sweep (`cleanupPeriodDays`) が消すので触らない。daemon の
+housekeeping にしなかったのは、daemon が rex の外では起きず、対象リポジトリの一覧も cwd も持たないため (#97)。
 
 Claude Code の sandbox の中で叩くと、`git worktree remove` は main worktree の `.git/worktrees/` と兄弟の worktree
 ディレクトリに書く。worktree の中から叩くと cwd の外への書き込みになるので、sandbox の書き込み許可

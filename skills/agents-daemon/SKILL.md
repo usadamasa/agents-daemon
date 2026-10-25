@@ -22,11 +22,11 @@ plugin root の `README.md` の「役割」が持つ。部品のファイル越�
 | 関係ない pane にプロンプトが打ち込まれた | rate-limit.md の「limit の判定は 2 つの手がかりを要求する」「ゲート」 |
 | ネイティブの auto-continue と取り合う、解除後に Enter だけ送られる | rate-limit.md の「Claude Code 自身の auto-continue との関係」 |
 | `doctor` の pane 一覧が全部 `agent_status=unknown`、daemon.log に `agent_status を判定できません` が出る (rex を上げた直後) | program-status.md の「record を使う条件」。rex の record の形が変わった疑い |
-| daemon が起きない・バイナリがビルドされない | architecture.md の「バイナリの用意と差し替え」、`build.log` |
-| 直したコードが動いていない、plugin を更新したのに古い daemon が動いている | architecture.md の「バイナリの用意と差し替え」、operations.md の「plugin の更新後に daemon を入れ替える」 |
+| daemon が起きない・バイナリがビルドされない | binary.md の「build」、`build.log` |
+| 直したコードが動いていない、plugin を更新したのに古い daemon が動いている | binary.md の「動いている daemon の入れ替え」、operations.md の「plugin の更新後に daemon を入れ替える」 |
 | 送信が block に届かない | pane-io.md の「送信」、operations.md の「既知の制約」(block 内 tmux、rex 不在) |
-| `doctor` の pane 一覧が `session_id=(なし)` になる | architecture.md の「statusline が書く state」(`context/<sid>.json` の `multiplexer`) |
-| rex のセッションなのに daemon が起きない | architecture.md の「多重化ツールの backend」(`REX_SESSION` の無い起動では起こさない)。`doctor` の daemon の節で起動中の pid を見る |
+| `doctor` の pane 一覧が `session_id=(なし)` になる | statusline-state.md の「書式」(`context/<sid>.json` の `multiplexer`) |
+| rex のセッションなのに daemon が起きない | multiplexer.md (`REX_SESSION` の無い起動では起こさない)。`doctor` の daemon の節で起動中の pid を見る |
 | `stop` が `operation not permitted` で弾かれる | operations.md の「既知の制約」 |
 | 放置した worktree が回収されない、今すぐ回収したい、`prune-worktrees` が `operation not permitted` で落ちる | operations.md の「放置された worktree を回収する」 |
 | hook が 10 秒の timeout に当たっている疑い (prompt の送信が遅い、hook の効果が出ない) | `claude --debug` で起動し、`Hooks: SessionStart [...] finished with status 0 (31ms)` の行 (Claude Code 2.1.296+) で hook ごとの所要時間を見る。`timed out after <N>ms` なら当たっている |
@@ -44,7 +44,11 @@ plugin root の `README.md` の「役割」が持つ。部品のファイル越�
 
 | ファイル | 中身 |
 | ---- | ---- |
-| [architecture.md](references/architecture.md) | statusline / hook / daemon の連動、バイナリの用意と差し替え、prune-worktrees の配線、多重化ツールの backend (rex)、毎 tick の判定表、出力されるファイル、ログの rotate |
+| [architecture.md](references/architecture.md) | 部品の連動と出力されるファイル |
+| [statusline-state.md](references/statusline-state.md) | statusline が書く state |
+| [binary.md](references/binary.md) | バイナリの用意と差し替え |
+| [multiplexer.md](references/multiplexer.md) | 多重化ツールの backend (rex) |
+| [board.md](references/board.md) | ボードとパーキング (mod) |
 | [rate-limit.md](references/rate-limit.md) | ネイティブ auto-continue との分担、limit 検知の二重シグナルとゲート、待機時刻の決め方 |
 | [pane-io.md](references/pane-io.md) | 画面の読み取り元、送信のキーストロークと文面の制約 |
 | [program-status.md](references/program-status.md) | rex の `program_status` (OSC 7501) と `agent_status` の対応、record を使う条件 (owner.pid と foreground の pid の突き合わせ)、payload の書式 |

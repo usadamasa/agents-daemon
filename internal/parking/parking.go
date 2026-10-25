@@ -348,7 +348,7 @@ func hasSource(sources []Source, src Source) bool {
 
 // newID は置いた時刻と乱数で id を作る。時刻を先に置くので、名前の順が置いた順になる。
 // 時刻は UTC にする。端末の時刻帯に左右されず、ファイル名の並びが時刻の並びと一致する。人に見せるときは
-// id の時刻を出さず、sources の at を JST で出す (architecture.md「時刻の書き方」)。
+// id の時刻を出さず、sources の at を JST で出す (board.md「時刻の書き方」)。
 func newID(at time.Time) (string, error) {
 	b := make([]byte, 4)
 	if _, err := rand.Read(b); err != nil {

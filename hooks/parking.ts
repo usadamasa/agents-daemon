@@ -81,7 +81,7 @@ function sourceLine(source: ParkingSource): string {
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000
 
 // stamp は RFC 3339 の時刻を JST の「MM/DD HH:MM」にする。記録の offset にも mod の時刻帯にも頼らない
-// (architecture.md「時刻の書き方」)。
+// (board.md「時刻の書き方」)。
 export function stamp(at: string): string {
   const ms = Date.parse(at)
   if (Number.isNaN(ms)) return at

@@ -52,7 +52,7 @@ SIGKILL では画面も record も残るので、`screen` で Claude Code の終
 
 ## 送信
 
-`send` / `send-key` で送る ([architecture.md](architecture.md) の対応表)。
+`send` / `send-key` で送る ([multiplexer.md](multiplexer.md) の対応表)。
 Escape → テキスト → Enter を**別々のキーストロークとして**送る。まとめて送ると Claude の
 ペースト検知に引っかかり、`/rate-limit-options` メニューが出ていると解除できない。
 

@@ -373,14 +373,7 @@ export const registerBoard: Register = on => {
             {data.domain === 'home' ? '私用' : '業務'}のボード
             {data.daemon_running ? '' : ' (agents-daemon が動いていないため、セッションの状態は出ません)'}
           </Text>
-          <Box flexDirection="row" gap={2}>
-            <Text>{summary(g, memos.length)}</Text>
-            {g.nodes.some(n => n.state === 'completed') && (
-              <Button key="fold" onPress={() => void update($, showCompleted, () => !withCompleted)}>
-                {withCompleted ? 'Hide completed' : 'Show completed'}
-              </Button>
-            )}
-          </Box>
+          <Text>{summary(g, memos.length)}</Text>
           {g.nodes.length === 0 && memos.length === 0 && <Text dimColor>タスクはまだありません</Text>}
           {rows.flatMap((r, i) => {
             const out = [row(r, i)]
@@ -407,13 +400,19 @@ export const registerBoard: Register = on => {
           {selected !== undefined && !rows.some(r => r.node === chosen) && <Text dimColor>選んだタスクは今の図に出ていません (完了を畳んでいる)</Text>}
           {sent !== '' && <Text dimColor>{sent}</Text>}
         </Box>
-        {/* 凡例は詳細と同じ枠で囲む。枠と詰めの分 (左右 2 桁ずつ) を引いた幅で行を組む。 */}
+        {/* 凡例は詳細と同じ枠で囲む。枠と詰めの分 (左右 2 桁ずつ) を引いた幅で行を組む。完了の出し入れは
+            図の見せ方の切り替えなので、数の行に置かず凡例の枠の最後に枠なしで置く。 */}
         <Box key="legend" flexDirection="column" borderStyle="round" borderDimColor paddingX={1} marginTop={1}>
           {legendRows(e.props.bodyColumns - 4).map((line, i) => (
             <Box key={`legend:${i}`}>
               <Text dimColor>{line}</Text>
             </Box>
           ))}
+          {g.nodes.some(n => n.state === 'completed') && (
+            <Button key="fold" plain onPress={() => void update($, showCompleted, () => !withCompleted)}>
+              <Text dimColor>{withCompleted ? '› Hide completed' : '› Show completed'}</Text>
+            </Button>
+          )}
         </Box>
       </Box>
     )

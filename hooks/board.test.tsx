@@ -394,6 +394,22 @@ test('数の行の下にレーンの行を全部描き、完了は Show complete
   expect(await ui.find({ key: 'row:C/1' })).toBeUndefined()
 })
 
+test('Show completed は枠なしで凡例の枠の中に置き、数の行には置かない', async ($, on) => {
+  boardWorld(on)
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($)
+  expect((await ui.find({ key: 'fold' }))?.props.plain).toBe(true)
+  expect((await ui.find({ key: 'legend' }))?.text).toMatch(/Show completed/)
+  expect((await ui.find({ key: 'content' }))?.text).not.toMatch(/Show completed/)
+})
+
+test('完了したノードが無ければ Show completed を出さない', async ($, on) => {
+  boardWorld(on, { ...BOARD, graph: { ...BOARD.graph, nodes: NODES.filter(n => n.state !== 'completed') } })
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($)
+  expect(await ui.find({ key: 'fold' })).toBeUndefined()
+})
+
 test('記号の凡例を pane の一番下に薄く置き、ボードが短くても底に寄せる', async ($, on) => {
   boardWorld(on)
   await $.command.run(OPEN_BOARD)

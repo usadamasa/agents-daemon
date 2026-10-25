@@ -3,11 +3,9 @@ package doctor
 import (
 	"fmt"
 	"io"
-	"strings"
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/detect"
-	"github.com/usadamasa/agents-daemon/internal/domain"
 )
 
 // write は Report を人が読む形で w へ書く。節の見出しと OK / NG / ⚠ の行の形は
@@ -35,9 +33,6 @@ func write(w io.Writer, rep Report) {
 
 	_, _ = fmt.Fprintln(w, "\n-- 設定ファイル --")
 	writeConfigState(w, *rep.Config)
-
-	_, _ = fmt.Fprintln(w, "\n-- domain (私用と業務の境界) --")
-	writeDomain(w, *rep.Domain)
 
 	_, _ = fmt.Fprintln(w, "\n-- daemon --")
 	writeDaemonState(w, *rep.Daemon)
@@ -179,24 +174,6 @@ func writeConfigState(w io.Writer, rep ConfigReport) {
 			mark = " (*)"
 		}
 		_, _ = fmt.Fprintf(w, "    %-28s = %v%s\n", f.Name, f.Value, mark)
-	}
-}
-
-func writeDomain(w io.Writer, rep DomainReport) {
-	if rep.ConfigError != "" {
-		_, _ = fmt.Fprintf(w, "  設定の読み込みに失敗したため、既定 (すべて業務) で判定します: %s\n", rep.ConfigError)
-	}
-	_, _ = fmt.Fprintf(w, "  homePaths に当たらない cwd: %s\n", rep.Fallback)
-	if len(rep.HomePaths) > 0 {
-		_, _ = fmt.Fprintf(w, "  私用と判定するパス: %s\n", strings.Join(rep.HomePaths, ", "))
-	} else if rep.Fallback == domain.Work {
-		_, _ = fmt.Fprintln(w, "  私用と判定するパスはありません (私用の端末なら defaultDomain を home にする)")
-	}
-	if rep.Dropped > 0 {
-		_, _ = fmt.Fprintf(w, "  ⚠ homePaths のうち %d 件は絶対パスでも ~/ 始まりでもないため無視しています\n", rep.Dropped)
-	}
-	for _, pane := range rep.Panes {
-		_, _ = fmt.Fprintf(w, "  pane=%s %s cwd=%s\n", pane.PaneID, pane.Domain, pane.CWD)
 	}
 }
 

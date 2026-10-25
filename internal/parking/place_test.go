@@ -9,17 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
 
-func homePlacer(stateDir string) tasklog.Placer {
-	return tasklog.Placer{Tasks: tasklog.New(stateDir), Classify: func(string) domain.Domain { return domain.Home }}
-}
-
-func writeTask(t *testing.T, stateDir string, d domain.Domain, task tasklog.Task) string {
+func writeTask(t *testing.T, stateDir string, task tasklog.Task) string {
 	t.Helper()
-	dir := filepath.Join(stateDir, "tasks", string(d), task.SessionID)
+	dir := filepath.Join(stateDir, "tasks", task.SessionID)
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		t.Fatal(err)
 	}
@@ -41,15 +36,15 @@ func exited(string, time.Time) error { return nil }
 func TestAdopt_movesTaskToParking(t *testing.T) {
 	stateDir := t.TempDir()
 	cwd := t.TempDir()
-	path := writeTask(t, stateDir, domain.Home, tasklog.Task{ID: "4", Subject: "README を直す", Description: "表の列がずれている", Status: "in_progress", SessionID: "dead", CWD: cwd})
+	path := writeTask(t, stateDir, tasklog.Task{ID: "4", Subject: "README を直す", Description: "表の列がずれている", Status: "in_progress", SessionID: "dead", CWD: cwd})
 	s := New(stateDir)
 
-	added, err := s.Adopt("viewer", cwd, "dead", "4", homePlacer(stateDir), exited, testNow)
+	added, err := s.Adopt("dead", "4", tasklog.New(stateDir), exited, testNow)
 	if err != nil {
 		t.Fatalf("Adopt() error = %v", err)
 	}
 	item := added.Item
-	if !added.Created || item.Kind != KindTask || item.Title != "README を直す" || item.Detail != "表の列がずれている" || item.Repo != cwd || item.Domain != domain.Home {
+	if !added.Created || item.Kind != KindTask || item.Title != "README を直す" || item.Detail != "表の列がずれている" || item.Repo != cwd {
 		t.Errorf("item = %+v", item)
 	}
 	if item.DefaultTaken != AdoptedDefault {
@@ -63,31 +58,27 @@ func TestAdopt_movesTaskToParking(t *testing.T) {
 	}
 }
 
-// 完了したタスク、記録の無いタスク、別の domain のタスクは移さない。
+// 完了したタスクと記録の無いタスクは移さない。
 func TestAdopt_rejects(t *testing.T) {
 	stateDir := t.TempDir()
 	cwd := t.TempDir()
-	done := writeTask(t, stateDir, domain.Home, tasklog.Task{ID: "1", Subject: "済み", Status: "completed", SessionID: "dead", CWD: cwd})
-	work := writeTask(t, stateDir, domain.Work, tasklog.Task{ID: "2", Subject: "業務", Status: "pending", SessionID: "busy", CWD: cwd})
+	done := writeTask(t, stateDir, tasklog.Task{ID: "1", Subject: "済み", Status: "completed", SessionID: "dead", CWD: cwd})
 	s := New(stateDir)
-	p := homePlacer(stateDir)
+	p := tasklog.New(stateDir)
 
 	for _, c := range []struct{ name, session, task string }{
 		{"完了", "dead", "1"},
 		{"記録が無い", "dead", "9"},
-		{"別の domain", "busy", "2"},
 		{"ファイル名に使えない", "../x", "1"},
 	} {
-		if _, err := s.Adopt("viewer", cwd, c.session, c.task, p, exited, testNow); err == nil {
+		if _, err := s.Adopt(c.session, c.task, p, exited, testNow); err == nil {
 			t.Errorf("%s: Adopt() error = nil", c.name)
 		}
 	}
-	for _, path := range []string{done, work} {
-		if _, err := os.Stat(path); err != nil {
-			t.Errorf("移さなかったタスクの記録が消えた: %v", err)
-		}
+	if _, err := os.Stat(done); err != nil {
+		t.Errorf("移さなかったタスクの記録が消えた: %v", err)
 	}
-	if got, _ := s.list(domain.Home); len(got) != 0 {
+	if got, _ := s.list(); len(got) != 0 {
 		t.Errorf("メモができた: %+v", got)
 	}
 }
@@ -98,7 +89,7 @@ func TestAdopt_requiresExitedSession(t *testing.T) {
 	stateDir := t.TempDir()
 	cwd := t.TempDir()
 	updated := testNow.Add(-time.Hour)
-	path := writeTask(t, stateDir, domain.Home, tasklog.Task{ID: "4", Subject: "まだ動いている", Status: "in_progress", SessionID: "alive", CWD: cwd, UpdatedAt: updated})
+	path := writeTask(t, stateDir, tasklog.Task{ID: "4", Subject: "まだ動いている", Status: "in_progress", SessionID: "alive", CWD: cwd, UpdatedAt: updated})
 	s := New(stateDir)
 	var askedFor string
 	var askedAfter time.Time
@@ -107,7 +98,7 @@ func TestAdopt_requiresExitedSession(t *testing.T) {
 		return errors.New("セッション alive は生きている")
 	}
 
-	_, err := s.Adopt("viewer", cwd, "alive", "4", homePlacer(stateDir), alive, testNow)
+	_, err := s.Adopt("alive", "4", tasklog.New(stateDir), alive, testNow)
 	if err == nil || !strings.Contains(err.Error(), "生きている") {
 		t.Fatalf("Adopt() error = %v, want 生きている", err)
 	}
@@ -117,7 +108,7 @@ func TestAdopt_requiresExitedSession(t *testing.T) {
 	if _, err := os.Stat(path); err != nil {
 		t.Errorf("タスクの記録が消えた: %v", err)
 	}
-	if got, _ := s.list(domain.Home); len(got) != 0 {
+	if got, _ := s.list(); len(got) != 0 {
 		t.Errorf("メモができた: %+v", got)
 	}
 }
@@ -126,7 +117,7 @@ func TestAdopt_requiresExitedSession(t *testing.T) {
 func TestPark_rejectsTaskKind(t *testing.T) {
 	stateDir := t.TempDir()
 	req := Request{Entry: Entry{Kind: KindTask, Title: "t"}, SessionID: "s1"}
-	if _, err := New(stateDir).Park(req, t.TempDir(), homePlacer(stateDir), testNow); err == nil {
+	if _, err := New(stateDir).Park(req, t.TempDir(), tasklog.New(stateDir), testNow); err == nil {
 		t.Errorf("Park() が kind task を通した")
 	}
 }

@@ -8,18 +8,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 )
 
 const (
-	repoHome  = "/src/home/claude-config"
-	repoWork  = "/src/work/service"
-	openerCWD = "/src/home/agents-daemon"
-	openerSID = "0d5e717f-82c5-4e71-ac74-799f7197e0de"
-	newSID    = "6b1f3c2a-1111-4222-8333-944455556666"
-	rexSess   = "session:01a15e43-8a99-736e-ae8e-bcca535204e4"
-	paneID    = "block:01a15e6a-7fe3-7298-af51-8982a808f03b"
+	repoHome = "/src/home/claude-config"
+	newSID   = "6b1f3c2a-1111-4222-8333-944455556666"
+	rexSess  = "session:01a15e43-8a99-736e-ae8e-bcca535204e4"
+	paneID   = "block:01a15e6a-7fe3-7298-af51-8982a808f03b"
 )
 
 // fakeHost は Host のテスト用実装。run が nil なら window を作れないことにする。
@@ -56,17 +52,9 @@ func claudePane(id string) (multiplexer.Pane, error) {
 	return multiplexer.Pane{PaneID: id, Agent: "claude", AgentStatus: multiplexer.AgentStatusUnknown}, nil
 }
 
-// classify は /src/home を私用、それ以外を業務にする。
-func classify(_ string, cwd string) domain.Domain {
-	if strings.HasPrefix(cwd, "/src/home/") {
-		return domain.Home
-	}
-	return domain.Work
-}
-
-// exists は repoHome と repoWork だけがディレクトリとして存在することにする。
+// exists は repoHome だけがディレクトリとして存在することにする。
 func exists(path string) (os.FileInfo, error) {
-	if path == repoHome || path == repoWork {
+	if path == repoHome {
 		return os.Stat(".")
 	}
 	return nil, os.ErrNotExist
@@ -75,7 +63,6 @@ func exists(path string) (os.FileInfo, error) {
 func runner(host *fakeHost) Runner {
 	return Runner{
 		Host:         host,
-		Domain:       classify,
 		NewSessionID: func() (string, error) { return newSID, nil },
 		Stat:         exists,
 		WaitTimeout:  50 * time.Millisecond,
@@ -84,7 +71,7 @@ func runner(host *fakeHost) Runner {
 }
 
 func request() Request {
-	return Request{Repo: repoHome, SessionID: openerSID, CWD: openerCWD, Prompt: "メモをタスクにしてください。\n詳細: a", Model: "claude-sonnet-5[1m]", MultiplexerSession: rexSess}
+	return Request{Repo: repoHome, Prompt: "メモをタスクにしてください。\n詳細: a", Model: "claude-sonnet-5[1m]", MultiplexerSession: rexSess}
 }
 
 // 成功: repo を cwd にした window で claude を固定の session ID、subagent 用のモデル、本文で起こし、claude が前景になってから
@@ -142,7 +129,6 @@ func TestRunner_Run_Errors(t *testing.T) {
 	}{
 		{name: "repo は絶対パス", req: func(r Request) Request { r.Repo = "claude-config"; return r }, wantErr: "絶対パス"},
 		{name: "repo が無い", req: func(r Request) Request { r.Repo = "/src/home/missing"; return r }, wantErr: "見つからない"},
-		{name: "私用のボードから業務の repo へは起こさない", req: func(r Request) Request { r.Repo = repoWork; return r }, wantErr: "domain"},
 		{name: "本文が空なら起こさない", req: func(r Request) Request { r.Prompt = " \n"; return r }, wantErr: "本文"},
 		{name: "モデルが無ければ起こさない", req: func(r Request) Request { r.Model = ""; return r }, wantErr: "CLAUDE_CODE_SUBAGENT_MODEL"},
 		{

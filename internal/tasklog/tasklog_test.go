@@ -7,8 +7,6 @@ import (
 	"sort"
 	"testing"
 	"time"
-
-	"github.com/usadamasa/agents-daemon/internal/domain"
 )
 
 // testdata/*.json は Claude Code 2.1.302 の PostToolUse hook に届いた入力の実測 (パスだけ置き換えた)。
@@ -25,21 +23,18 @@ func fixture(t *testing.T, name string) []byte {
 	return data
 }
 
-func allHome(string) domain.Domain { return domain.Home }
-func allWork(string) domain.Domain { return domain.Work }
-
-func ingest(t *testing.T, s Store, classify func(string) domain.Domain, names ...string) {
+func ingest(t *testing.T, s Store, names ...string) {
 	t.Helper()
 	for i, name := range names {
-		if _, err := s.Ingest(fixture(t, name), classify, t0.Add(time.Duration(i)*time.Minute)); err != nil {
+		if _, err := s.Ingest(fixture(t, name), t0.Add(time.Duration(i)*time.Minute)); err != nil {
 			t.Fatalf("Ingest(%s) error = %v", name, err)
 		}
 	}
 }
 
-func byID(t *testing.T, s Store, d domain.Domain) map[string]Task {
+func byID(t *testing.T, s Store) map[string]Task {
 	t.Helper()
-	tasks, err := s.List(d)
+	tasks, err := s.List()
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
@@ -53,9 +48,9 @@ func byID(t *testing.T, s Store, d domain.Domain) map[string]Task {
 // 実測の入力の流れ (作成 2 件、blockedBy の追加、in_progress、completed) を書いて、List で読み戻す。
 func TestIngest_realHookInputs(t *testing.T) {
 	s := New(t.TempDir())
-	ingest(t, s, allHome, "task-create-alpha", "task-create-beta", "task-update-blocked-by", "task-update-in-progress", "task-update-completed")
+	ingest(t, s, "task-create-alpha", "task-create-beta", "task-update-blocked-by", "task-update-in-progress", "task-update-completed")
 
-	got := byID(t, s, domain.Home)
+	got := byID(t, s)
 	if len(got) != 2 {
 		t.Fatalf("タスクの数 = %d, want 2: %+v", len(got), got)
 	}
@@ -77,9 +72,9 @@ func TestIngest_realHookInputs(t *testing.T) {
 // TaskList の結果で全件を同期し直す。完了した blocker は blockedBy から外れる (実測)。
 func TestIngest_taskListResyncs(t *testing.T) {
 	s := New(t.TempDir())
-	ingest(t, s, allHome, "task-create-alpha", "task-create-beta", "task-update-blocked-by", "task-list")
+	ingest(t, s, "task-create-alpha", "task-create-beta", "task-update-blocked-by", "task-list")
 
-	got := byID(t, s, domain.Home)
+	got := byID(t, s)
 	if got["1"].Status != "completed" {
 		t.Errorf("TaskList の status が反映されていない: %+v", got["1"])
 	}
@@ -95,19 +90,19 @@ func TestIngest_taskListResyncs(t *testing.T) {
 // hook を入れる前に作られたタスクも、TaskList で記録に入り、一覧から消えたものは記録から消える。
 func TestIngest_taskListAddsAndRemoves(t *testing.T) {
 	s := New(t.TempDir())
-	ingest(t, s, allHome, "task-create-alpha", "task-create-beta")
+	ingest(t, s, "task-create-alpha", "task-create-beta")
 	input := withTool(t, fixture(t, "task-list"), "TaskList", nil,
 		map[string]any{"tasks": []map[string]any{{"id": "2", "subject": "beta", "status": "in_progress", "blockedBy": []string{}}, {"id": "7", "subject": "before hook", "status": "pending", "blockedBy": []string{}}}})
-	res, err := s.Ingest(input, allHome, t0)
+	res, err := s.Ingest(input, t0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// ログに出す件数: 一覧の 2 件を書き、一覧から消えた 1 件 (alpha) を消した。
-	if want := (Result{Tool: "TaskList", SessionID: fixtureSession, Domain: domain.Home, Written: 2, Removed: 1}); res != want {
+	if want := (Result{Tool: "TaskList", SessionID: fixtureSession, Written: 2, Removed: 1}); res != want {
 		t.Errorf("Result = %+v, want %+v", res, want)
 	}
 
-	got := byID(t, s, domain.Home)
+	got := byID(t, s)
 	var ids []string
 	for id := range got {
 		ids = append(ids, id)
@@ -125,22 +120,22 @@ func TestIngest_taskListAddsAndRemoves(t *testing.T) {
 // 消さない (models/handoff の TaskLog)。一覧より小さい id で一覧に無い記録は、消えたタスクなので消す。
 func TestIngest_taskListKeepsRecordsCreatedAfterListing(t *testing.T) {
 	s := New(t.TempDir())
-	ingest(t, s, allHome, "task-create-alpha", "task-create-beta")
+	ingest(t, s, "task-create-alpha", "task-create-beta")
 	created := withTool(t, fixture(t, "task-create-alpha"), "TaskCreate", map[string]any{"subject": "gamma", "description": "一覧の後に作った"}, map[string]any{"task": map[string]any{"id": "3", "subject": "gamma"}})
-	if _, err := s.Ingest(created, allHome, t0); err != nil {
+	if _, err := s.Ingest(created, t0); err != nil {
 		t.Fatal(err)
 	}
 	// 一覧は 3 を作る前のもの。1 は一覧の後に消えたことにする。
 	listed := withTool(t, fixture(t, "task-list"), "TaskList", nil,
 		map[string]any{"tasks": []map[string]any{{"id": "2", "subject": "beta", "status": "in_progress", "blockedBy": []string{}}}})
-	res, err := s.Ingest(listed, allHome, t0)
+	res, err := s.Ingest(listed, t0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := (Result{Tool: "TaskList", SessionID: fixtureSession, Domain: domain.Home, Written: 1, Removed: 1}); res != want {
+	if want := (Result{Tool: "TaskList", SessionID: fixtureSession, Written: 1, Removed: 1}); res != want {
 		t.Errorf("Result = %+v, want %+v", res, want)
 	}
-	got := byID(t, s, domain.Home)
+	got := byID(t, s)
 	if _, ok := got["1"]; ok {
 		t.Errorf("一覧に無い古い記録が残った: %+v", got["1"])
 	}
@@ -205,15 +200,15 @@ func TestIngest_updateCases(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			s := New(t.TempDir())
-			ingest(t, s, allHome, "task-create-alpha")
-			res, err := s.Ingest(withTool(t, fixture(t, "task-update-completed"), "TaskUpdate", tc.input, tc.resp), allHome, t0)
+			ingest(t, s, "task-create-alpha")
+			res, err := s.Ingest(withTool(t, fixture(t, "task-update-completed"), "TaskUpdate", tc.input, tc.resp), t0)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if res.Tool != "TaskUpdate" || res.Written != tc.written || res.Removed != tc.removed {
 				t.Errorf("Result = %+v, want written %d removed %d", res, tc.written, tc.removed)
 			}
-			tc.check(t, byID(t, s, domain.Home))
+			tc.check(t, byID(t, s))
 		})
 	}
 }
@@ -222,7 +217,7 @@ func TestIngest_todoWrite(t *testing.T) {
 	s := New(t.TempDir())
 	todos := []map[string]any{{"content": "a", "status": "completed", "activeForm": "doing a"}, {"content": "b", "status": "pending", "activeForm": "doing b"}}
 	input := withTool(t, fixture(t, "task-list"), "TodoWrite", map[string]any{"todos": todos}, map[string]any{"oldTodos": []any{}, "newTodos": todos})
-	res, err := s.Ingest(input, allHome, t0)
+	res, err := s.Ingest(input, t0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,7 +225,7 @@ func TestIngest_todoWrite(t *testing.T) {
 	if res.Tool != "TodoWrite" || res.Written != 2 || res.Removed != 0 {
 		t.Errorf("Result = %+v", res)
 	}
-	data, err := os.ReadFile(filepath.Join(s.Dir, "home", fixtureSession, "todos.json"))
+	data, err := os.ReadFile(filepath.Join(s.Dir, fixtureSession, "todos.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -239,14 +234,14 @@ func TestIngest_todoWrite(t *testing.T) {
 		t.Errorf("todos.json = %s (%v)", data, err)
 	}
 	// todos.json はタスクの一覧に混ざらない。
-	if tasks, _ := s.List(domain.Home); len(tasks) != 0 {
+	if tasks, _ := s.List(); len(tasks) != 0 {
 		t.Errorf("List に todos.json が混ざった: %+v", tasks)
 	}
 }
 
 func TestIngest_ignoresOtherToolsAndBadIDs(t *testing.T) {
 	s := New(t.TempDir())
-	res, err := s.Ingest(withTool(t, fixture(t, "task-list"), "Bash", map[string]any{"command": "ls"}, map[string]any{}), allHome, t0)
+	res, err := s.Ingest(withTool(t, fixture(t, "task-list"), "Bash", map[string]any{"command": "ls"}, map[string]any{}), t0)
 	if err != nil {
 		t.Errorf("Task 系でないツールでエラー: %v", err)
 	}
@@ -259,55 +254,27 @@ func TestIngest_ignoresOtherToolsAndBadIDs(t *testing.T) {
 	}
 
 	bad := withSession(t, fixture(t, "task-create-alpha"), "../escape")
-	if _, err := s.Ingest(bad, allHome, t0); err == nil {
+	if _, err := s.Ingest(bad, t0); err == nil {
 		t.Errorf("ディレクトリの外へ出る session ID を受け付けた")
 	}
 	badTask := withTool(t, fixture(t, "task-create-alpha"), "TaskCreate", map[string]any{"subject": "x"}, map[string]any{"task": map[string]any{"id": "../x", "subject": "x"}})
-	res, err = s.Ingest(badTask, allHome, t0)
+	res, err = s.Ingest(badTask, t0)
 	if err == nil {
 		t.Errorf("ディレクトリの外へ出る task ID を受け付けた")
 	}
-	// 失敗しても、置き場を決めた後なら domain を返す (失敗のログの置き場に使う)。
-	if res.Tool != "TaskCreate" || res.Domain != domain.Home || res.Written != 0 {
+	// 失敗しても、分かったところまでの Result を返す (失敗のログに使う)。
+	if res.Tool != "TaskCreate" || res.SessionID != fixtureSession || res.Written != 0 {
 		t.Errorf("失敗した TaskCreate の Result = %+v", res)
 	}
 }
 
-// 私用と業務を分けて置く。1 つのセッションが両方を触ったら業務に倒す。
-func TestIngest_domains(t *testing.T) {
-	t.Run("domain ごとに分けて置く", func(t *testing.T) {
-		s := New(t.TempDir())
-		ingest(t, s, allWork, "task-create-alpha")
-		if len(byID(t, s, domain.Home)) != 0 || len(byID(t, s, domain.Work)) != 1 {
-			t.Errorf("業務のタスクが業務の側にだけ無い")
-		}
-	})
-	t.Run("私用で始めたセッションが業務を触ったら、記録ごと業務へ移す", func(t *testing.T) {
-		s := New(t.TempDir())
-		ingest(t, s, allHome, "task-create-alpha")
-		ingest(t, s, allWork, "task-create-beta")
-		if home := byID(t, s, domain.Home); len(home) != 0 {
-			t.Errorf("私用の側に残っている: %+v", home)
-		}
-		if work := byID(t, s, domain.Work); len(work) != 2 {
-			t.Errorf("業務の側 = %+v, want 2 件", work)
-		}
-	})
-	t.Run("業務の記録があるセッションは、私用の cwd でも業務に書く", func(t *testing.T) {
-		s := New(t.TempDir())
-		ingest(t, s, allWork, "task-create-alpha")
-		res, err := s.Ingest(fixture(t, "task-create-beta"), allHome, t0)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if home := byID(t, s, domain.Home); len(home) != 0 {
-			t.Errorf("私用の側に書いた: %+v", home)
-		}
-		// ログも書いた側 (業務) に出す。
-		if res.Domain != domain.Work {
-			t.Errorf("Result.Domain = %q, want work", res.Domain)
-		}
-	})
+// タスクはセッションごとのディレクトリに置く。
+func TestIngest_layout(t *testing.T) {
+	s := New(t.TempDir())
+	ingest(t, s, "task-create-alpha")
+	if _, err := os.Stat(filepath.Join(s.Dir, fixtureSession, "1.json")); err != nil {
+		t.Errorf("tasks/<session_id>/<task_id>.json に置いていない: %v", err)
+	}
 }
 
 // withTool は fixture の hook 入力のツールと入出力を差し替える。nil は元のまま。
@@ -345,24 +312,18 @@ func withSession(t *testing.T, base []byte, sessionID string) []byte {
 	return out
 }
 
-func TestListTodosAndHasSession(t *testing.T) {
+func TestListTodos(t *testing.T) {
 	s := New(t.TempDir())
 	todos := []map[string]any{{"content": "a", "status": "in_progress", "activeForm": "doing a"}}
 	input := withTool(t, fixture(t, "task-list"), "TodoWrite", map[string]any{"todos": todos}, map[string]any{})
-	if _, err := s.Ingest(input, allWork, t0); err != nil {
+	if _, err := s.Ingest(input, t0); err != nil {
 		t.Fatal(err)
 	}
-	lists, err := s.ListTodos(domain.Work)
+	lists, err := s.ListTodos()
 	if err != nil || len(lists) != 1 || lists[0].SessionID != fixtureSession || lists[0].Todos[0].Content != "a" {
-		t.Errorf("ListTodos(work) = %+v, %v", lists, err)
+		t.Errorf("ListTodos() = %+v, %v", lists, err)
 	}
-	if lists, _ := s.ListTodos(domain.Home); len(lists) != 0 {
-		t.Errorf("ListTodos(home) = %+v, want 空", lists)
-	}
-	if !s.HasSession(domain.Work, fixtureSession) || s.HasSession(domain.Home, fixtureSession) {
-		t.Errorf("HasSession が記録の置き場と合わない")
-	}
-	if s.HasSession(domain.Work, "../x") || (Store{}).HasSession(domain.Work, fixtureSession) {
-		t.Errorf("不正な session ID かゼロ値の Store で true")
+	if lists, _ := (Store{}).ListTodos(); len(lists) != 0 {
+		t.Errorf("ゼロ値の Store の ListTodos() = %+v, want 空", lists)
 	}
 }

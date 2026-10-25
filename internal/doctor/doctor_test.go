@@ -14,7 +14,6 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/daemon/state"
-	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
 	"github.com/usadamasa/agents-daemon/internal/ratelimit"
@@ -306,7 +305,7 @@ func TestCollectDoctor_JSON(t *testing.T) {
 		if err := json.Unmarshal(body, &got); err != nil {
 			t.Fatalf("json.Unmarshal() error = %v", err)
 		}
-		for _, key := range []string{"backend", "panes", "premises", "rate_limits", "config", "domain", "daemon", "peer_messaging", "paths"} {
+		for _, key := range []string{"backend", "panes", "premises", "rate_limits", "config", "daemon", "peer_messaging", "paths"} {
 			if _, ok := got[key]; !ok {
 				t.Errorf("JSON に %q が無い:\n%s", key, body)
 			}
@@ -321,8 +320,8 @@ func TestCollectDoctor_JSON(t *testing.T) {
 		if st == nil || st.AgeSeconds != 90 || !st.Fresh || !st.Exhausted {
 			t.Errorf("rate_limits の state = %+v, want 90 秒前で fresh かつ閾値以上", st)
 		}
-		if rep.Config.Exists || rep.Daemon.Running || rep.Domain.Fallback != domain.Work {
-			t.Errorf("config/daemon/domain = %+v / %+v / %+v, want 設定なし・未起動・業務", rep.Config, rep.Daemon, rep.Domain)
+		if rep.Config.Exists || rep.Daemon.Running {
+			t.Errorf("config/daemon = %+v / %+v, want 設定なし・未起動", rep.Config, rep.Daemon)
 		}
 		// 文字の出力は同じ struct から書く (値の食い違いが無いことの確認)。
 		var buf bytes.Buffer
@@ -537,54 +536,5 @@ func writeFixtureSnapshot(t *testing.T, path string, snap state.StatusSnapshot) 
 	}
 	if err := os.WriteFile(path, body, 0o600); err != nil {
 		t.Fatalf("status snapshot の作成に失敗: %v", err)
-	}
-}
-
-// pane ごとの判定を出し、私用の範囲を広げうる書き方 (相対パス) は無視したと明言する。
-func TestReportDomain(t *testing.T) {
-	home := t.TempDir()
-	p := apppath.New(home, "", "")
-	writeJSONFile(t, p.ConfigFile(), map[string]any{
-		"homePaths": []string{"~/src/github.com/usadamasa", "src/relative"},
-	})
-	panes := []multiplexer.Pane{
-		{PaneID: "p1", Agent: "claude", CWD: filepath.Join(home, "src/github.com/usadamasa/agents-daemon")},
-		{PaneID: "p2", Agent: "claude", CWD: filepath.Join(home, "src/github.example.com/team/app")},
-		{PaneID: "p3", Agent: "", CWD: filepath.Join(home, "src/github.com/usadamasa/dotfile")},
-	}
-
-	var buf bytes.Buffer
-	writeDomain(&buf, *collectDomain(p, panes, home))
-	out := buf.String()
-
-	for _, want := range []string{
-		"homePaths に当たらない cwd: work",
-		"pane=p1 home ",
-		"pane=p2 work ",
-		"1 件は絶対パスでも ~/ 始まりでもないため無視しています",
-	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("出力に %q が無い:\n%s", want, out)
-		}
-	}
-	if strings.Contains(out, "pane=p3") {
-		t.Errorf("Claude agent でない pane まで出している:\n%s", out)
-	}
-}
-
-// 私用の端末 (defaultDomain=home) では、私用のパスが無くても案内を出さない。
-func TestReportDomain_homeMachine(t *testing.T) {
-	home := t.TempDir()
-	p := apppath.New(home, "", "")
-	writeJSONFile(t, p.ConfigFile(), map[string]any{"defaultDomain": "home"})
-
-	var buf bytes.Buffer
-	writeDomain(&buf, *collectDomain(p, nil, home))
-	out := buf.String()
-	if !strings.Contains(out, "homePaths に当たらない cwd: home") {
-		t.Errorf("既定が home と出ていない:\n%s", out)
-	}
-	if strings.Contains(out, "私用と判定するパスはありません") {
-		t.Errorf("私用の端末に業務の端末向けの案内を出している:\n%s", out)
 	}
 }

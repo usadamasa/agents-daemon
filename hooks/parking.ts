@@ -97,10 +97,9 @@ export function taskDestinations(data: BoardData, row: BoardRow, self: string): 
   return [...own, ...uniqueLive(row.cards, self)]
 }
 
-// issueDestinations は「issue にするよう頼む」の宛先。私用のボードだけで、自セッションを先に、同じ repo のセッション、
-// ボードに載っているほかの生きているセッションの順に並べる。業務のものは外へ出さない (#121)。
+// issueDestinations は「issue にするよう頼む」の宛先。自セッションを先に、同じ repo のセッション、
+// ボードに載っているほかの生きているセッションの順に並べる。
 export function issueDestinations(data: BoardData, cards: BoardCard[], self: string): Destination[] {
-  if (data.domain !== 'home') return []
   return [selfDestination(self), ...uniqueLive([...cards, ...data.rows.flatMap(row => row.cards)], self)]
 }
 
@@ -281,7 +280,7 @@ async function deliver($: EngineInterface, to: Destination, text: string): Promi
 // spawnSession は repo で新しいセッションを起こし、本文を最初のターンにする。claude が前景になるまでバイナリが待つので、
 // park より長い timeout にする。exit 0 で foreground が false なら window はできていて claude が前景にならなかった (unknown)。
 async function spawnSession($: EngineInterface, repo: string, text: string): Promise<Delivered> {
-  const argv = [await daemonBin($), 'spawn', '--repo', repo, '--session', await $.session.id(), '--cwd', await $.session.cwd()]
+  const argv = [await daemonBin($), 'spawn', '--repo', repo]
   const { exitCode, stdout, stderr } = await $.process.run(argv, { stdin: text, timeoutMs: 30000 })
   if (exitCode !== 0) return { to: '', failure: stderr.trim() || `exit ${exitCode}` }
   try {
@@ -300,7 +299,7 @@ export async function adopt($: EngineInterface, node: GraphNode): Promise<string
 }
 
 // park は開いたセッションの ID と cwd を添えて `agents-daemon park` を走らせ、失敗の理由を返す (成功なら空)。
-// domain はバイナリがこのセッションから決める (ボードと同じ domain のメモとタスクだけを触る)。
+// ID は操作したセッションとしてログに残る。
 async function park($: EngineInterface, args: string[]): Promise<string> {
   const ran = await run($, args)
   return 'failure' in ran ? ran.failure : ''

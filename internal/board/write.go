@@ -6,7 +6,6 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/daemon/state"
-	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/parking"
@@ -14,37 +13,27 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
 
-// Viewer はボードを開いたセッション。ボードはこのセッションの domain を描く。
-type Viewer struct {
-	SessionID string
-	CWD       string
-	// UserHome は config の homePaths の ~ を展開する先。
-	UserHome string
-}
-
-// Write はボードを組み、JSON で w へ書く。daemon が動いていなくてもタスクの記録は描く
-// (daemon_running が false で、カードはすべて Live でない)。
-func Write(w io.Writer, p apppath.Paths, v Viewer) error {
+// Write はボードを組み、JSON で w へ書く。cwd は開いたセッションの cwd (Board.Here の元)。daemon が動いていなくても
+// タスクの記録は描く (daemon_running が false で、カードはすべて Live でない)。
+func Write(w io.Writer, p apppath.Paths, cwd string) error {
 	pid, snap, err := state.Running(p)
 	if err != nil {
 		return err
 	}
-	placer := tasklog.LoadPlacer(p, v.UserHome)
-	store := placer.Tasks
-	d := placer.Domain(v.SessionID, v.CWD)
-	tasks, err := store.List(d)
+	store := tasklog.New(p.StateDir())
+	tasks, err := store.List()
 	if err != nil {
 		return err
 	}
-	todos, err := store.ListTodos(d)
+	todos, err := store.ListTodos()
 	if err != nil {
 		return err
 	}
-	memos, err := parking.New(p.StateDir()).Find(d, "", "")
+	memos, err := parking.New(p.StateDir()).Find("", "")
 	if err != nil {
 		return err
 	}
-	edges, err := edge.New(p.StateDir()).Find(d, "", "")
+	edges, err := edge.New(p.StateDir()).Find("", "")
 	if err != nil {
 		return err
 	}
@@ -53,31 +42,15 @@ func Write(w io.Writer, p apppath.Paths, v Viewer) error {
 		return err
 	}
 	b := build(input{
-		Domain:       d,
-		CWD:          v.CWD,
+		CWD:          cwd,
 		PID:          pid,
 		Snapshot:     snap,
 		Tasks:        tasks,
 		Todos:        todos,
 		Parking:      memos,
 		Edges:        edges,
-		Classify:     placer.Classify,
-		Elsewhere:    func(id string) bool { return store.HasSession(other(d), id) },
 		Locate:       gitrepo.Locate,
 		SessionNames: names,
 	})
 	return json.NewEncoder(w).Encode(b)
-}
-
-// ViewerDomain はボードを開いたセッションの domain (Write が描く domain と同じ)。`logs --board` が読むログを
-// 決めるのに使う。
-func ViewerDomain(p apppath.Paths, v Viewer) domain.Domain {
-	return tasklog.LoadPlacer(p, v.UserHome).Domain(v.SessionID, v.CWD)
-}
-
-func other(d domain.Domain) domain.Domain {
-	if d == domain.Home {
-		return domain.Work
-	}
-	return domain.Home
 }

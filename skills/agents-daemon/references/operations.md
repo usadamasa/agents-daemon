@@ -11,7 +11,7 @@ agents-daemon daemon --foreground [--dry-run]  # このプロセスで回す (�
 agents-daemon status                           # 稼働状況、監視中の pane、ログの末尾
 agents-daemon --json status                    # 同じものを JSON で出す (下の「--json」)
 agents-daemon logs -n 80                       # 現行ログ (daemon.log) の末尾
-agents-daemon logs --board [--session <id>]    # ボードの経路 (タスクの記録、パーキング、mod) のログの末尾。cwd の domain の分だけ
+agents-daemon logs --board                     # ボードの経路 (タスクの記録、パーキング、mod) のログの末尾
 agents-daemon stop                             # SIGTERM を送って停止
 agents-daemon dream harvest --incremental      # 直近の transcript を集める (Stop hook が --detach 付きで呼ぶ)
 agents-daemon dream mine|stage|adopt|forget    # 記憶階層の consolidation の実行系 (agents-daemon:dream skill)
@@ -87,10 +87,10 @@ agents-daemon edge list --cwd <dir> [--here | --repo <main worktree>] [--ref <�
 
 - 参照は `session:<セッション名>` (`claude --name` の名前)、`issue:<owner>/<repo>#<番号>`、`pr:<owner>/<repo>#<番号>`、
   `task:<session_id>/<task_id>` のどれか
-- `--before-cwd` / `--after-cwd` は、その作業のセッションを起こしたディレクトリ (絶対パス)。両端の domain (私用か業務) は
-  ここから決め、違えば書かずに失敗する。書く側のセッション自身の cwd は見ない
+- `--before-cwd` / `--after-cwd` は、その作業のセッションを起こしたディレクトリ (絶対パス)。端点の repo はここから決め、
+  書く側のセッション自身の cwd は見ない
 - 同じ参照の組 (向きを含む) は同じ辺になる。登録し直すと note と repo を書き直し、保持期間 (7 日) を数え直す
-- `list` は `--cwd` (と `--session`) の domain の辺だけを出す。`--repo` / `--here` / `--ref` はどちらかの端点で絞る
+- `list` はすべての辺を出す。`--cwd` は `--here` の基準で、`--repo` / `--here` / `--ref` はどちらかの端点で絞る
 
 ### `--json`
 
@@ -114,7 +114,7 @@ agents-daemon daemon --foreground --dry-run  # 送信せずに検知だけを流
 ```
 
 `doctor` は rex の server への到達性、Claude pane の一覧 (`session_id` が引けなければ `(なし)`、block の高さ)、
-domain の判定、peer messaging を出す。rex の外 (`REX_SESSION` なし) では exit 1 で止まる。
+peer messaging を出す。rex の外 (`REX_SESSION` なし) では exit 1 で止まる。
 「rex CLI の前提」の節に `⚠` が出たら、rex の版で daemon が読む欄が変わった疑いがある。daemon 側の追従が要るので
 issue にする。
 
@@ -145,27 +145,6 @@ issue にする。
 | `customPatterns` | `[]` | 上限として扱う追加の正規表現 |
 | `idleShutdownMinutes` | `30` | Claude pane が 0 のまま続いたら自己終了する |
 | `deferToNativeAutoContinue` | `true` | ネイティブの auto-continue が再開を予約している間は手を出さない |
-| `homePaths` | `[]` | 私用と判定するパス (絶対パスか `~/` 始まり)。cwd がこの下なら私用 |
-| `defaultDomain` | `work` | `homePaths` に当たらない cwd の区分 (`work` か `home`) |
-
-旧版の compact / cache のキー (`compactStall*` `compactAuto*` `compactResume*` `cacheIdleCompact*`) は
-読まない。config.json に残っていても他のキーには影響しないが、消してよい。
-
-### 私用と業務の区分
-
-セッションの cwd から、私用 (`home`) と業務 (`work`) のどちらの作業かを決める。
-これから入るタスクの記録とパーキングロットは区分ごとに分けて置き、ボードも 1 つの区分しか描かない (#121)。
-業務のものをインターネットに出さず、私用と混ぜないための境界になる。
-
-私用と言えるのは `homePaths` の下だけで、それ以外と判定できないもの (cwd が空、相対パス、
-`defaultDomain` の typo) はすべて業務に倒す。判定を誤っても、業務のものが私用の側に漏れない向きにするため。
-
-| 端末 | 書くもの |
-| ---- | ---- |
-| 業務の端末 (業務と私用の両方を触る) | `"homePaths": ["~/src/github.com/usadamasa"]` のように私用のリポジトリの置き場だけを書く |
-| 私用の端末 (私用だけを触る) | `"defaultDomain": "home"`。パスに関係なくすべて私用になる |
-
-書いたら `doctor` の「domain (私用と業務の境界)」で、Claude の pane ごとの判定を確かめる。
 
 ### 送る文面
 

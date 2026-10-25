@@ -164,8 +164,7 @@ func reportGate(w io.Writer, cfg config.Config, rateState *ratelimit.State, now 
 // (reportGate と同じ理由で、書き込みを伴わない独立した再現に留まる。)
 func reportWake(w io.Writer, cfg config.Config, rateState, account *ratelimit.State, screen string, now time.Time) {
 	// 計算そのものは daemon と同じ monitor.ComputeLimitWake に任せる。ここで
-	// 計算を書き直すと、診断の説明が実際の挙動とずれて嘘をつくようになる
-	// (実際、以前は inspect 側だけ鮮度チェックが残っていて別の結果を出していた)。
+	// 計算を書き直すと、診断の説明が実際の挙動とずれて嘘をつくようになる。
 	wake, source := monitor.ComputeLimitWake(cfg, rateState, account, screen, now)
 
 	margin := time.Duration(cfg.MarginSeconds) * time.Second

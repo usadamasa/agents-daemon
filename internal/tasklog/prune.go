@@ -14,7 +14,7 @@ func (s Store) Prune(now time.Time) (int, error) {
 	if s.Dir == "" {
 		return 0, nil
 	}
-	domains, err := os.ReadDir(s.Dir)
+	sessions, err := os.ReadDir(s.Dir)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return 0, nil
@@ -23,25 +23,14 @@ func (s Store) Prune(now time.Time) (int, error) {
 	}
 	removed := 0
 	var errs []error
-	for _, d := range domains {
-		if !d.IsDir() {
+	for _, session := range sessions {
+		if !session.IsDir() {
 			continue
 		}
-		root := filepath.Join(s.Dir, d.Name())
-		sessions, err := os.ReadDir(root)
+		n, err := pruneSession(filepath.Join(s.Dir, session.Name()), now)
+		removed += n
 		if err != nil {
 			errs = append(errs, err)
-			continue
-		}
-		for _, session := range sessions {
-			if !session.IsDir() {
-				continue
-			}
-			n, err := pruneSession(filepath.Join(root, session.Name()), now)
-			removed += n
-			if err != nil {
-				errs = append(errs, err)
-			}
 		}
 	}
 	return removed, errors.Join(errs...)

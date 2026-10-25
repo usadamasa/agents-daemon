@@ -15,7 +15,7 @@ import (
 // 保持期間は書式のパッケージ (ratelimit、sessioncontext、tasklog、parking、edge、limitlog) が持つ (どれだけ古い state が
 // 判定に効くかは、その state を読む側の知識のため)。ここに残すのはログの保持期間と、掃除の間隔だけ。
 const (
-	// logRetention は rotate 済みログ (daemon.log.YYYY-MM-DD と board-<domain>.log.YYYY-MM-DD) を残す期間。
+	// logRetention は rotate 済みログ (daemon.log.YYYY-MM-DD と board.log.YYYY-MM-DD) を残す期間。
 	// ログは出来事があったときだけ伸びるので、1 週間ぶんあれば振り返りに足りる。
 	logRetention = 7 * 24 * time.Hour
 	// housekeepInterval は削除を試みる間隔。起動時にも 1 回走る。
@@ -28,7 +28,7 @@ func (r *daemonRuntime) attachStateDir(stateDir string) {
 	r.tasks = tasklog.New(stateDir)
 	r.parking = parking.New(stateDir)
 	r.edges = edge.New(stateDir)
-	r.boardLogs = boardlog.Paths(stateDir)
+	r.boardLog = boardlog.Path(stateDir)
 	r.limits = limitlog.New(stateDir)
 }
 
@@ -43,8 +43,11 @@ func (r *daemonRuntime) housekeep(logPath string, now time.Time) {
 	r.lastHousekeepAt = now
 
 	logs := 0
-	// ボードの経路のログ (board-<domain>.log) も daemon.log と同じ規則で消す。
-	for _, path := range append([]string{logPath}, r.boardLogs...) {
+	// ボードの経路のログ (board.log) も daemon.log と同じ規則で消す。
+	for _, path := range []string{logPath, r.boardLog} {
+		if path == "" {
+			continue
+		}
 		n, err := applog.PruneRotated(path, now, logRetention)
 		if err != nil {
 			r.log.Logf("rotated ログの削除でエラー: %v", err)

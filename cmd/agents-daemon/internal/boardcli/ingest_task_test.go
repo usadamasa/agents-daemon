@@ -31,22 +31,16 @@ func taskCreateInput(cwd string) string {
 		` "tool_input": {"subject": "alpha", "description": "alpha"}, "tool_response": {"task": {"id": "1", "subject": "alpha"}}}`
 }
 
-// config の homePaths の下は home、それ以外は work に置く。stdout には何も出さない。
-func TestIngestTaskCmd_domain(t *testing.T) {
+// タスクは tasks/<session_id>/<task_id>.json に置く。stdout には何も出さない。
+func TestIngestTaskCmd_writesTask(t *testing.T) {
 	root := t.TempDir()
-	writeTestConfig(t, filepath.Join(root, "config", "agents-daemon", "config.json"), `{"homePaths": ["~/src/github.com/usadamasa"]}`)
 
 	stdout, stderr := runIngestTask(t, root, taskCreateInput(filepath.Join(root, "src/github.com/usadamasa/agents-daemon")))
 	if stdout != "" || stderr != "" {
 		t.Errorf("stdout / stderr = %q / %q, want 空", stdout, stderr)
 	}
-	if _, err := os.Stat(filepath.Join(root, "state", "agents-daemon", "tasks", "home", "s1", "1.json")); err != nil {
-		t.Errorf("home の側に書かれていない: %v", err)
-	}
-
-	runIngestTask(t, root, strings.Replace(taskCreateInput(filepath.Join(root, "src/github.example.com/corp/app")), `"s1"`, `"s2"`, 1))
-	if _, err := os.Stat(filepath.Join(root, "state", "agents-daemon", "tasks", "work", "s2", "1.json")); err != nil {
-		t.Errorf("work の側に書かれていない: %v", err)
+	if _, err := os.Stat(filepath.Join(root, "state", "agents-daemon", "tasks", "s1", "1.json")); err != nil {
+		t.Errorf("タスクが書かれていない: %v", err)
 	}
 }
 

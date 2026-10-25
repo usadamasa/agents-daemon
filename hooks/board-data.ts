@@ -16,7 +16,7 @@ const error = atom({ plugin: 'agents-daemon', key: 'error' } as const, '')
 const parked = atom({ plugin: 'agents-daemon', key: 'parked' } as const, [])
 
 // loadBoard はボードを読み直して board に置き、失敗の理由を返す (読めたら空)。失敗は error に置き、前のボードは残す。
-// 開いたセッションの ID と cwd を渡し、そのセッションの domain だけを描かせる (私用と業務を混ぜない)。
+// 開いたセッションの cwd を渡し、その repo の行を here にさせる。
 // あわせて、here の行の parking (この repo の open のメモ) を parked に置く。open でなくなったメモはここで消える。
 export async function loadBoard($: EngineInterface): Promise<{ data: BoardData } | { failure: string }> {
   const failed = async (failure: string) => {
@@ -24,7 +24,7 @@ export async function loadBoard($: EngineInterface): Promise<{ data: BoardData }
     return { failure }
   }
   try {
-    const argv = [await daemonBin($), 'status', '--board', '--session', await $.session.id(), '--cwd', await $.session.cwd()]
+    const argv = [await daemonBin($), 'status', '--board', '--cwd', await $.session.cwd()]
     const { exitCode, stdout, stderr } = await $.process.run(argv, { timeoutMs: 10000 })
     if (exitCode !== 0) return failed(stderr.trim() || `exit ${exitCode}`)
     const data = JSON.parse(stdout) as BoardData

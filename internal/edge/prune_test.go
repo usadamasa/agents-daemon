@@ -24,9 +24,9 @@ func touch(t *testing.T, path string, age time.Duration) {
 // Prune は Retention 更新の無い辺と消し損ねた一時ファイルを消し、新しいものは残す。
 func TestPrune(t *testing.T) {
 	s := New(t.TempDir())
-	old := filepath.Join(s.Dir, "home", "old.json")
-	tmp := filepath.Join(s.Dir, "work", ".edge.123")
-	fresh := filepath.Join(s.Dir, "home", "fresh.json")
+	old := filepath.Join(s.Dir, "old.json")
+	tmp := filepath.Join(s.Dir, ".edge.123")
+	fresh := filepath.Join(s.Dir, "fresh.json")
 	touch(t, old, Retention)
 	touch(t, tmp, Retention+time.Hour)
 	touch(t, fresh, Retention-time.Hour)
@@ -50,7 +50,7 @@ func TestPrune_reAddRefreshes(t *testing.T) {
 	s := New(t.TempDir())
 	before, after := Endpoint{Ref: "session:a", CWD: "/home/a"}, Endpoint{Ref: "session:b", CWD: "/home/b"}
 	added := mustAdd(t, s, before, after, "", testNow)
-	path := filepath.Join(s.Dir, "home", added.Edge.ID+".json")
+	path := filepath.Join(s.Dir, added.Edge.ID+".json")
 	stale := testNow.Add(-Retention)
 	if err := os.Chtimes(path, stale, stale); err != nil {
 		t.Fatal(err)

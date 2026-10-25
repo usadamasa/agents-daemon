@@ -100,10 +100,7 @@ pane は作業中でも limit と判定される (#251)。実害をまだ見て�
 
 rex の `agent_status` は Claude Code 自身が OSC 7501 で申告する state ([program-status.md](program-status.md))。
 上限で止まった pane は turn の途中で止まるので、`working` のまま申告され続ける。
-
-2026-08-19 の取りこぼし (当時の backend は herdr で、PTY の出力活動から状態を推定していた) は
-これと同じ形だった。上限で止まった pane が 5 時間以上 `working` と報告され続け、`working` を対象外に
-していたデーモンは画面を一度も読まなかった (`status.json` の `last_outcome` がずっと `skipped`)。
+`working` を対象外にすると、上限で止まった pane の画面を一度も読まないまま待ち続ける。
 
 **上限で止まった pane は、`agent_status` からは「働いている pane」と区別できない。**
 そのため `agent_status` は status 表示のためだけに残し、判定は画面テキストの分類だけで行う。

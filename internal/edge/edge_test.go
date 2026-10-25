@@ -6,43 +6,30 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/usadamasa/agents-daemon/internal/domain"
 )
 
 var testNow = time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)
 
-// classify は /home の下を私用、それ以外を業務にする。
-func classify(cwd string) domain.Domain {
-	if strings.HasPrefix(cwd, "/home/") {
-		return domain.Home
-	}
-	return domain.Work
-}
-
 func mustAdd(t *testing.T, s Store, before, after Endpoint, note string, now time.Time) Added {
 	t.Helper()
-	added, err := s.Add(before, after, note, classify, now)
+	added, err := s.Add(before, after, note, now)
 	if err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
 	return added
 }
 
-// 辺は edges/<domain>/<id>.json に 1 本 1 ファイルで書かれ、端点の repo は cwd の repo の鍵になる。
+// 辺は edges/<id>.json に 1 本 1 ファイルで書かれ、端点の repo は cwd の repo の鍵になる。
 func TestAdd_writesOneFilePerEdge(t *testing.T) {
 	s := New(t.TempDir())
 	added := mustAdd(t, s, Endpoint{Ref: "session:ad-134", CWD: "/home/a"}, Endpoint{Ref: "issue:usadamasa/agents-daemon#135", CWD: "/home/b"}, "段 4 の後", testNow)
 
 	e := added.Edge
-	if !added.Created || e.Domain != domain.Home || e.Before.Ref != "session:ad-134" || e.Before.Repo != "/home/a" || e.Before.CWD != "/home/a" || e.After.Repo != "/home/b" || e.Note != "段 4 の後" || !e.CreatedAt.Equal(testNow) {
+	if !added.Created || e.Before.Ref != "session:ad-134" || e.Before.Repo != "/home/a" || e.Before.CWD != "/home/a" || e.After.Repo != "/home/b" || e.Note != "段 4 の後" || !e.CreatedAt.Equal(testNow) {
 		t.Errorf("added = %+v", added)
 	}
-	if _, err := os.Stat(filepath.Join(s.Dir, "home", e.ID+".json")); err != nil {
+	if _, err := os.Stat(filepath.Join(s.Dir, e.ID+".json")); err != nil {
 		t.Errorf("ファイルが無い: %v", err)
-	}
-	if got, _ := s.Find(domain.Work, "", ""); len(got) != 0 {
-		t.Errorf("work の側に出た: %+v", got)
 	}
 }
 
@@ -60,24 +47,12 @@ func TestAdd_sameEdgeIsIdempotent(t *testing.T) {
 	if !second.Edge.CreatedAt.Equal(testNow) || second.Edge.Note != "補足" || second.Edge.After.Repo != "/home/c" {
 		t.Errorf("edge = %+v", second.Edge)
 	}
-	if got, _ := s.Find(domain.Home, "", ""); len(got) != 1 {
+	if got, _ := s.Find("", ""); len(got) != 1 {
 		t.Errorf("辺の数 = %d, want 1", len(got))
 	}
 	// 向きが逆なら別の辺。
 	if reversed := mustAdd(t, s, Endpoint{Ref: "session:b", CWD: "/home/b"}, Endpoint{Ref: "session:a", CWD: "/home/a"}, "", testNow); !reversed.Created {
 		t.Errorf("逆向きの辺がまとまった")
-	}
-}
-
-// 私用と業務をまたぐ辺は書かない。
-func TestAdd_refusesCrossDomain(t *testing.T) {
-	dir := t.TempDir()
-	s := New(dir)
-	if _, err := s.Add(Endpoint{Ref: "session:a", CWD: "/home/a"}, Endpoint{Ref: "session:b", CWD: "/work/b"}, "", classify, testNow); err == nil {
-		t.Fatal("私用と業務をまたぐ辺が書けた")
-	}
-	if entries, _ := os.ReadDir(filepath.Join(dir, "edges")); len(entries) != 0 {
-		t.Errorf("何か書かれた: %v", entries)
 	}
 }
 
@@ -95,15 +70,15 @@ func TestAdd_invalidRefs(t *testing.T) {
 		"cwd が空":          {Ref: "session:b", CWD: ""},
 		"cwd が相対":         {Ref: "session:b", CWD: "home/a"},
 	} {
-		if _, err := s.Add(ok, sp, "", classify, testNow); err == nil {
+		if _, err := s.Add(ok, sp, "", testNow); err == nil {
 			t.Errorf("%s: Add が通った", name)
 		}
 	}
-	if _, err := s.Add(ok, Endpoint{Ref: "session:a", CWD: "/home/b"}, "", classify, testNow); err == nil {
+	if _, err := s.Add(ok, Endpoint{Ref: "session:a", CWD: "/home/b"}, "", testNow); err == nil {
 		t.Errorf("自分自身への辺が通った")
 	}
 	for _, ref := range []string{"session:ad-134-edges", "issue:usadamasa/agents-daemon#134", "pr:usadamasa/agents-config.x#7", "task:2e0b-11/3"} {
-		if _, err := s.Add(ok, Endpoint{Ref: ref, CWD: "/home/b"}, "", classify, testNow); err != nil {
+		if _, err := s.Add(ok, Endpoint{Ref: ref, CWD: "/home/b"}, "", testNow); err != nil {
 			t.Errorf("%s: %v", ref, err)
 		}
 	}
@@ -115,19 +90,16 @@ func TestRemove(t *testing.T) {
 	before, after := Endpoint{Ref: "session:a", CWD: "/home/a"}, Endpoint{Ref: "session:b", CWD: "/home/b"}
 	added := mustAdd(t, s, before, after, "", testNow)
 
-	removed, err := s.Remove(before, after, classify)
+	removed, err := s.Remove(before, after)
 	if err != nil || !removed.Removed || removed.ID != added.Edge.ID {
 		t.Fatalf("Remove() = %+v, %v", removed, err)
 	}
-	if got, _ := s.Find(domain.Home, "", ""); len(got) != 0 {
+	if got, _ := s.Find("", ""); len(got) != 0 {
 		t.Errorf("消えていない: %+v", got)
 	}
-	again, err := s.Remove(before, after, classify)
+	again, err := s.Remove(before, after)
 	if err != nil || again.Removed {
 		t.Errorf("2 回目の Remove() = %+v, %v", again, err)
-	}
-	if _, err := s.Remove(before, Endpoint{Ref: "session:b", CWD: "/work/b"}, classify); err == nil {
-		t.Errorf("私用と業務をまたぐ指定が通った")
 	}
 }
 
@@ -148,7 +120,7 @@ func TestFind(t *testing.T) {
 		{"repo と参照の両方", "/home/a", "session:c", []string{}},
 	}
 	for _, c := range cases {
-		got, err := s.Find(domain.Home, c.repo, c.ref)
+		got, err := s.Find(c.repo, c.ref)
 		if err != nil {
 			t.Fatalf("%s: %v", c.name, err)
 		}
@@ -163,7 +135,7 @@ func TestFind(t *testing.T) {
 			t.Errorf("%s: %v, want %v", c.name, ids, c.want)
 		}
 	}
-	if got, err := (Store{}).Find(domain.Home, "", ""); err != nil || len(got) != 0 {
+	if got, err := (Store{}).Find("", ""); err != nil || len(got) != 0 {
 		t.Errorf("ゼロ値の Find() = %+v, %v", got, err)
 	}
 }

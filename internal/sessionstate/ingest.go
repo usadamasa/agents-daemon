@@ -115,8 +115,7 @@ func (w *statuslineWindow) window() ratelimit.Window {
 	}
 }
 
-// roundPercent は使用率を整数へ丸める (nil は 0)。jq の round と同じ四捨五入
-// (0.5 は 0 から遠い側へ) にして、旧 statusline の書き出しと同じ値になるようにする。
+// roundPercent は使用率を整数へ丸める (nil は 0)。jq の round と同じ四捨五入 (0.5 は 0 から遠い側へ)。
 func roundPercent(v *float64) float64 {
 	if v == nil {
 		return 0

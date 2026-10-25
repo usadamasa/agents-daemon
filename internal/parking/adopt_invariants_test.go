@@ -20,7 +20,6 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/daemon/state"
-	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/statefile"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
@@ -83,7 +82,7 @@ func (w *adoptWorld) writeStatus(pid int, at time.Time, withPane bool) error {
 }
 
 func (w *adoptWorld) writeRecord(at time.Time) error {
-	dir := filepath.Join(w.tasks.Dir, string(domain.Home), deadSession)
+	dir := filepath.Join(w.tasks.Dir, deadSession)
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return err
 	}
@@ -163,7 +162,6 @@ func TestAdopt_不変条件を乱択の交錯で破らない(t *testing.T) {
 		r := rand.New(rand.NewPCG(uint64(seed), 3)) // #nosec G115 -- seed は非負
 		w := newAdoptWorld(t, r)
 		store := parking.New(w.paths.StateDir())
-		placer := tasklog.Placer{Tasks: w.tasks, Classify: func(string) domain.Domain { return domain.Home }}
 		actions := make([]worldAction, 4+r.IntN(8))
 		for i := range actions {
 			actions[i] = worldAction(r.IntN(int(worldActions)))
@@ -192,7 +190,7 @@ func TestAdopt_不変条件を乱択の交錯で破らない(t *testing.T) {
 						verdict = w.exited(failures, mod, sessionID, after)
 						return verdict
 					}
-					_, err := store.Adopt("viewer", w.cwd, deadSession, deadTask, placer, exited, w.t0)
+					_, err := store.Adopt(deadSession, deadTask, w.tasks, exited, w.t0)
 					if err != nil {
 						reached.refuse(err)
 						continue
@@ -278,8 +276,8 @@ func (w *adoptWorld) exited(failures chan<- string, mod int, sessionID string, a
 // checkAdoptLeavesOne は全部が止まった後、タスクの記録かメモの少なくとも一方が残っていることを見る。
 // Adopt が一度も通っていなければ、記録が残りメモは無い。
 func checkAdoptLeavesOne(w *adoptWorld, store parking.Store) string {
-	_, recorded := w.tasks.Get(domain.Home, deadSession, deadTask)
-	memos, err := store.Find(domain.Home, "", "")
+	_, recorded := w.tasks.Get(deadSession, deadTask)
+	memos, err := store.Find("", "")
 	if err != nil {
 		return fmt.Sprintf("Find() error = %v", err)
 	}

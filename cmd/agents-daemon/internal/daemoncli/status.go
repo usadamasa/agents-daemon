@@ -19,7 +19,7 @@ import (
 func newStatusCmd() *cobra.Command {
 	var (
 		asBoard bool
-		viewer  board.Viewer
+		cwd     string
 	)
 	cmd := &cobra.Command{
 		Use:         "status",
@@ -40,20 +40,16 @@ func newStatusCmd() *cobra.Command {
 				}
 				return jsonflag.Write(cmd.OutOrStdout(), rep)
 			}
-			if viewer.CWD == "" {
-				if viewer.CWD, err = os.Getwd(); err != nil {
+			if cwd == "" {
+				if cwd, err = os.Getwd(); err != nil {
 					return err
 				}
 			}
-			if viewer.UserHome, err = os.UserHomeDir(); err != nil {
-				return err
-			}
-			return board.Write(cmd.OutOrStdout(), p, viewer)
+			return board.Write(cmd.OutOrStdout(), p, cwd)
 		},
 	}
 	f := cmd.Flags()
 	f.BoolVar(&asBoard, "board", false, "タスクのボードを JSON で出す (plugin の mod hooks/board.tsx が読む)")
-	f.StringVar(&viewer.CWD, "cwd", "", "--board: ボードを開いたセッションの cwd。この domain だけを描く (既定は今の cwd)")
-	f.StringVar(&viewer.SessionID, "session", "", "--board: ボードを開いたセッションの ID。記録が業務の側にあれば業務を描く")
+	f.StringVar(&cwd, "cwd", "", "--board: ボードを開いたセッションの cwd。この repo の行を here にする (既定は今の cwd)")
 	return cmd
 }

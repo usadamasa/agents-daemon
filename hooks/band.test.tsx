@@ -7,12 +7,12 @@ const CWD = '/src/home/agents-daemon'
 
 const SELF_ARGS = ['--session', 'SELF', '--cwd', CWD]
 const DURING = (task: string) => [BIN, 'park', 'list', '--status', 'open', '--task', task, ...SELF_ARGS]
-const STATUS = [BIN, 'status', '--board', ...SELF_ARGS]
+const STATUS = [BIN, 'status', '--board', '--cwd', CWD]
 
 // memo はメモ 1 つ。ボードの parking (sources は新しい順) にも park list の答え (sources は置いた順) にも使えるよう、
 // source は 1 つにする。
 function memo(id: string, title: string, at: string) {
-  return { id, domain: 'home', repo: CWD, kind: 'aside', title, sources: [{ session_id: 'SELF', session: 'self', live: true, cwd: CWD, at }], status: 'open' }
+  return { id, repo: CWD, kind: 'aside', title, sources: [{ session_id: 'SELF', session: 'self', live: true, cwd: CWD, at }], status: 'open' }
 }
 
 function node(key: string, state: string, title: string, extra: Record<string, unknown> = {}) {
@@ -64,7 +64,6 @@ const MEMOS = [
 // board は status --board の答え。here がこのセッションの行を指し、その行の parking が band のメモになる。
 function board(links: unknown[] = LINKS, parking: unknown[] = MEMOS) {
   return {
-    domain: 'home',
     daemon_running: true,
     columns: [],
     here: CWD,

@@ -110,6 +110,40 @@ func TestMentionedIDs(t *testing.T) {
 	}
 }
 
+// Mentioned は文面に id が書かれたメモを、書かれた順に返す。items に無い id は落とす。
+func TestMentioned(t *testing.T) {
+	const a, b, gone = "20261025T044319-7ed42d24", "20261019T120000-0a1b2c3d", "20261019T130000-0a1b2c3e"
+	items := []Item{{ID: a, Status: StatusHanded}, {ID: b, Status: StatusOpen}}
+	got := Mentioned(items, "メモ "+b+" と "+gone+" と "+a)
+	if len(got) != 2 || got[0].ID != b || got[1].ID != a || got[1].Status != StatusHanded {
+		t.Errorf("Mentioned() = %+v", got)
+	}
+	if got := Mentioned(items, ""); got == nil || len(got) != 0 {
+		t.Errorf("該当なしは空の配列: %#v", got)
+	}
+}
+
+// Filter は repo と status が一致するメモを残す。空の条件は絞らない。
+func TestFilter(t *testing.T) {
+	items := []Item{{ID: "1", Repo: "r", Status: StatusOpen}, {ID: "2", Repo: "r", Status: StatusHanded}, {ID: "3", Repo: "s", Status: StatusOpen}}
+	ids := func(items []Item) string {
+		out := []string{}
+		for _, item := range items {
+			out = append(out, item.ID)
+		}
+		return strings.Join(out, ",")
+	}
+	if got := ids(Filter(items, "", StatusOpen)); got != "1,3" {
+		t.Errorf("status で絞る = %s", got)
+	}
+	if got := ids(Filter(items, "r", "")); got != "1,2" {
+		t.Errorf("repo で絞る = %s", got)
+	}
+	if got := Filter(items, "x", ""); got == nil || len(got) != 0 {
+		t.Errorf("該当なしは空の配列: %#v", got)
+	}
+}
+
 // newID が作る id は MentionedIDs が拾う形と同じ。
 func TestMentionedIDs_matchesNewID(t *testing.T) {
 	id, err := newID(testNow)

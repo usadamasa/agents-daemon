@@ -31,7 +31,7 @@ func TestDaemonRuntimeTick_StatusRecordsBackend(t *testing.T) {
 	}
 }
 
-// session_id はボードがタスクとセッションを突き合わせる鍵で、指示を送る宛先にもなるので、pane から status.json へ写す。
+// session_id は依存図がタスクとセッションを突き合わせる鍵で、指示を送る宛先にもなるので、pane から status.json へ写す。
 func TestPaneStatus_sessionID(t *testing.T) {
 	now := time.Date(2026, 10, 18, 9, 0, 0, 0, time.UTC)
 	got := paneStatus(multiplexer.Pane{PaneID: "p1", SessionID: "s1"}, &paneEntry{state: &monitor.PaneState{}}, 0, now)

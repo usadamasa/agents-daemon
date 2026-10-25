@@ -23,7 +23,7 @@ function world(on: On, run: (argv: readonly string[]) => ProcessRunResult) {
     tools.push({ ...e })
     return { value: { tool: `mcp__agents-daemon__${e.name}` } }
   })
-  // board.tsx も同じ session.start で /board を登録する。
+  // deps.tsx も同じ session.start で /deps を登録する。
   on('command.register', async (_$, e) => ({ value: { command: e.name } }))
   on('session.start', async (_$, e) => ({ cwd: e.cwd }))
   return { ran, tools }
@@ -61,7 +61,7 @@ test('session.start で park の tool を登録する', async ($, on) => {
   expect(tool.description).toMatch(/進めるのに要る判断/)
   expect(tool.description).toMatch(/危ない操作の確認/)
 
-  // session.start ではメモの一覧もボードも読まない。
+  // session.start ではメモの一覧も依存図も読まない。
   expect(w.ran.map(r => r.argv)).toEqual([])
 })
 
@@ -87,7 +87,7 @@ test('tool の呼び出しは park add に JSON を stdin で渡し、新しく�
     session_id: 'SELF',
   })
   expect(String(res.result)).toMatch(/^メモを置きました \(20261019T010000-abcd1234\)。既定 \(やらない\) で進めてください/)
-  // 置いた後にボードは読み直さない (pane は開いている間だけ自分で読み直す)。
+  // 置いた後に依存図は読み直さない (pane は開いている間だけ自分で読み直す)。
   expect(w.ran).toHaveLength(1)
 })
 

@@ -3,7 +3,7 @@ package parking
 // メモの受け渡しの不変条件 (models/handoff の Handoff.tla) を、実物の Store を goroutine で交錯させて確かめる。
 // 個々のテストが 1 場面ずつ固定するのに対し、ここでは「どの mod がどの順で取っても、送っても、捨てても破ってはいけないこと」を
 // 書く。seed が固定するのは各 mod の選択 (どのメモを、取るか捨てるか、届くか) で、goroutine の交錯はスケジューラが決める。
-// 全 mod が同じボード (open) を読み終えてから一斉に取りに行かせ、取り合いを毎回起こす。
+// 全 mod が同じ依存図 (open) を読み終えてから一斉に取りに行かせ、取り合いを毎回起こす。
 // 反例が出たら seed と mod を出す。反例が出たらコードを直すか挙動を正当化する。性質を弱めて通さない。
 
 import (
@@ -182,7 +182,7 @@ func checkHandoff(item Item, c *memoCounts, held bool) string {
 	return ""
 }
 
-// handoffMod はボードを開いた 1 つのセッションの mod (hooks/parking.ts の handOff と discard)。
+// handoffMod は依存図を開いた 1 つのセッションの mod (hooks/parking.ts の handOff と discard)。
 type handoffMod struct {
 	s       Store
 	r       *rand.Rand
@@ -193,7 +193,7 @@ type handoffMod struct {
 	reached *handoffReached
 }
 
-// run は MaxAttempts 回まで、ボードを読んで open のメモを取りに行く。最初の読みの後は barrier で全 mod を揃える
+// run は MaxAttempts 回まで、依存図を読んで open のメモを取りに行く。最初の読みの後は barrier で全 mod を揃える
 // (Handoff.tla の Read → Claim)。破れを見つけたら failures に書く。
 func (m *handoffMod) run(barrier func(), failures chan<- string) {
 	for attempt := range handoffMaxAttempts {
@@ -207,7 +207,7 @@ func (m *handoffMod) run(barrier func(), failures chan<- string) {
 			barrier()
 		}
 		if !slices.ContainsFunc(view, func(it Item) bool { return it.ID == id }) {
-			continue // 読んだボードで open でないメモには触らない
+			continue // 読んだ依存図で open でないメモには触らない
 		}
 		if m.r.IntN(5) == 0 {
 			m.discard(id)
@@ -228,7 +228,7 @@ func (m *handoffMod) run(barrier func(), failures chan<- string) {
 	}
 }
 
-// discard は読んだボードで open だったメモを捨てる (Handoff.tla の Discard)。先に取られていれば失敗してよい。
+// discard は読んだ依存図で open だったメモを捨てる (Handoff.tla の Discard)。先に取られていれば失敗してよい。
 func (m *handoffMod) discard(id string) {
 	if _, _, err := m.s.Set(id, StatusDiscarded, StatusOpen); err != nil {
 		m.reached.lost()

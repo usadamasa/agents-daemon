@@ -11,7 +11,7 @@ agents-daemon daemon --foreground [--dry-run]  # このプロセスで回す (�
 agents-daemon status                           # 稼働状況、監視中の pane、ログの末尾
 agents-daemon --json status                    # 同じものを JSON で出す (下の「--json」)
 agents-daemon logs -n 80                       # 現行ログ (daemon.log) の末尾
-agents-daemon logs --board                     # ボードの経路 (タスクの記録、パーキング、mod) のログの末尾
+agents-daemon logs --events                    # 依存図とパーキングロットの経路 (タスクの記録、パーキング、mod) の出来事のログの末尾
 agents-daemon stop                             # SIGTERM を送って停止
 agents-daemon dream harvest --incremental      # 直近の transcript を集める (Stop hook が --detach 付きで呼ぶ)
 agents-daemon dream mine|stage|adopt|forget    # 記憶階層の consolidation の実行系 (agents-daemon:dream skill)
@@ -107,7 +107,7 @@ agents-daemon park list --status open --task <task_id> --session <session_id> --
 ### `--json`
 
 root のグローバルオプション。`doctor` と `status` は人が読む形の代わりに JSON を出す。
-元から JSON を出す `status --board`、`park`、`edge` は付けても変わらない。
+元から JSON を出す `deps`、`park`、`edge` は付けても変わらない。
 それ以外のコマンドに付けると、文字の出力を JSON と思い込んで読む事故を避けるため error で止まる
 (残りのコマンドへの対応は #182)。
 

@@ -2,7 +2,7 @@
 name: changing-agents-daemon-internals
 description: >-
   agents-daemon の実装 (statusline と daemon のファイル越しの配線、利用上限の検知と待機、pane の読み取りと送信、
-  rex の backend、ボードとパーキングの mod、バイナリの用意と差し替え) を変える・不具合の原因を切り分ける・
+  rex の backend、依存図とパーキングロットの mod、バイナリの用意と差し替え) を変える・不具合の原因を切り分ける・
   実機で検証するときに使う。
 ---
 
@@ -23,7 +23,8 @@ plugin の `agents-daemon:agents-daemon` skill の `references/operations.md` �
 | [pane-io.md](references/pane-io.md) | pane の読み取りと送信 |
 | [program-status.md](references/program-status.md) | rex の program_status (OSC 7501) |
 | [multiplexer.md](references/multiplexer.md) | 多重化ツールの backend (rex) |
-| [board.md](references/board.md) | ボードとパーキング (mod) |
+| [deps.md](references/deps.md) | 依存図 (mod) |
+| [parking.md](references/parking.md) | パーキングロット (mod) |
 | [binary.md](references/binary.md) | バイナリの用意と差し替え |
 | [verification.md](references/verification.md) | 検証用コマンドと実機での検証 |
 

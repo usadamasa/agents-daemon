@@ -10,7 +10,7 @@ import (
 // DefaultLogTailLines は `logs` が既定で表示する行数。
 const DefaultLogTailLines = 80
 
-// RunLogs は現行ログ path (daemon.log か、ボードの経路の board-<domain>.log) の末尾 n 行を w へ書く。
+// RunLogs は現行ログ path (daemon.log か、出来事の events.log) の末尾 n 行を w へ書く。
 // ログが無いこと自体は異常ではないので (daemon 未起動、あるいは報告すべき出来事が何も起きていない)、
 // エラーにせずその旨を伝える。
 func RunLogs(w io.Writer, path string, n int) error {

@@ -1,8 +1,8 @@
-import type { BoardGraph, GraphLink, GraphNode } from '../types'
+import type { DepsGraph, GraphLink, GraphNode } from '../types'
 
-// 依存の DAG (#134、`status --board` の graph) の見せ方。記号、数の行、レーンの行の分け方、Add blocker の候補、
-// 辺の書き忘れを疑う渡し先を持つ。段・下流の数・原因の鎖・レーンの行はバイナリ (internal/board/graph、internal/board/dag) が
-// 数えて渡すので、ここは並べるだけにする。描くのは hooks/board.tsx (B の pane)。
+// 依存の DAG (#134、`agents-daemon deps` の graph) の見せ方。記号、数の行、レーンの行の分け方、Add blocker の候補、
+// 辺の書き忘れを疑う渡し先を持つ。段・下流の数・原因の鎖・レーンの行はバイナリ (internal/deps/graph、internal/deps/dag) が
+// 数えて渡すので、ここは並べるだけにする。描くのは hooks/deps.tsx (依存図の pane)。
 
 // 記号は絵文字を避け、端末の等幅で 1 桁に収まるもの。語は OSC 7501 の state / kind と Task 系ツールの status。
 export const ICON: Record<GraphNode['state'], string> = {
@@ -36,7 +36,7 @@ export const STOP = '■'
 export const MEMO = '◇'
 export const CYCLE = '⟳'
 
-// LEGEND は B の pane の底に置く凡例。数の行の記号、行だけに出る状態、行の末尾の印の 3 群に分ける。語は記号と同じく
+// LEGEND は依存図の pane の底に置く凡例。数の行の記号、行だけに出る状態、行の末尾の印の 3 群に分ける。語は記号と同じく
 // OSC 7501 の state と Task 系ツールの status、それ以外は graph の JSON の欄の名前 (blocked_by、parked、downstream、
 // deadlock)。↵ だけは state の done ではなく idle と書く。数の行の ↵ は isIdle (done と unknown) を数え、
 // 隣の completed と並ぶと done は「終わった」と読めて、親の確認を待つセッションを見落とすため。
@@ -86,7 +86,7 @@ export class Graph {
   private readonly succs = new Map<string, GraphLink[]>()
   private readonly preds = new Map<string, GraphLink[]>()
 
-  constructor(data: BoardGraph) {
+  constructor(data: DepsGraph) {
     this.nodes = data.nodes
     this.links = data.links
     for (const n of data.nodes) this.byKey.set(n.key, n)
@@ -181,7 +181,7 @@ export const CHAIN_COLOR = 'success'
 
 export type Piece = { text: string; marked: boolean }
 
-// pieces は lanes の [from, to) を印 (marks、internal/board/dag の Row.Marks) の有無で切った区間。罫線は 1 桁 1 文字
+// pieces は lanes の [from, to) を印 (marks、internal/deps/dag の Row.Marks) の有無で切った区間。罫線は 1 桁 1 文字
 // (BMP) なので、文字列の位置がそのまま桁になる。区間が無くても 1 つ返す (描く Text の数を行で揃える)。
 export function pieces(lanes: string, marks: readonly number[] | undefined, from: number, to: number): Piece[] {
   const marked = new Set(marks ?? [])
@@ -196,7 +196,7 @@ export function pieces(lanes: string, marks: readonly number[] | undefined, from
   return out.length === 0 ? [{ text: '', marked: false }] : out
 }
 
-// splitLanes はレーンの行の罫線を、ノードの記号の左右に分ける。`*` がノードの位置 (internal/board/dag の Rows)。
+// splitLanes はレーンの行の罫線を、ノードの記号の左右に分ける。`*` がノードの位置 (internal/deps/dag の Rows)。
 // `*` が無い行 (辺をつなぐだけの行) は全部が left。
 export function splitLanes(lanes: string): { left: string; right: string } {
   const at = lanes.indexOf('*')
@@ -222,7 +222,7 @@ export function candidates(g: Graph, selected: GraphNode): GraphNode[] {
 }
 
 // unlinked は handed (model が SendMessage で送った宛先の名前、hooks/handoff-notice.ts) のうち、辺の書き忘れを
-// 疑うもの: ボードに生きていて済んでいないノードを持つセッションで、`edge add` の辺 (kind edge) がどの端点にも
+// 疑うもの: 依存図に生きていて済んでいないノードを持つセッションで、`edge add` の辺 (kind edge) がどの端点にも
 // 無いもの。辺はノードへ解決された端点 (そのセッションのタスク) と、元の記録の参照 (`session:<名前>`) のどちらで
 // 当たってもよい。handed の順を保つ。
 // 名前は表示名 (session、同名なら ID の先頭が付く) ではなく session_name (SendMessage の宛先に書く形) で当てる。
@@ -239,7 +239,7 @@ export function unlinked(g: Graph, handed: string[]): string[] {
   })
 }
 
-// tags は行の末尾の印: 下流の数 (showDown のとき)、途中で置いたメモの数、待ちの輪。B は止まっているノードに
+// tags は行の末尾の印: 下流の数 (showDown のとき)、途中で置いたメモの数、待ちの輪。pane は止まっているノードに
 // 下流の数を出す。
 export function tags(node: GraphNode, showDown: boolean): string {
   const parts: string[] = []

@@ -55,7 +55,7 @@ printenv REX_SESSION
 ### 依存の辺を書く
 
 セッションをまたぐ依存は Task 系ツールの `blockedBy` では張れないので、渡す側が agents-daemon の
-辺として書く。辺は依存のボード (`/board`) に出る。
+辺として書く。辺は依存図 (`/deps`) に出る。
 
 ```sh
 "${XDG_CACHE_HOME:-$HOME/.cache}/agents-daemon/bin/agents-daemon" edge add \

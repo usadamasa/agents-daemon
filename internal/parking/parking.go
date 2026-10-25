@@ -1,5 +1,5 @@
 // Package parking は agent がタスクの途中で見つけた脇のメモ (パーキングロット、#89) を XDG state 配下に
-// 置く (#121)。置くのは `agents-daemon park add`、取り出すのはタスクのボードとファイルのメモの通知 (`park list`)。
+// 置く (#121)。置くのは `agents-daemon park add`、取り出すのは依存図の pane とファイルのメモの通知 (`park list`)。
 //
 //	parking/<id>.json   1 件 1 ファイル
 //
@@ -30,7 +30,7 @@ const (
 	KindAside      = "aside"
 	KindScope      = "scope"
 	KindPreference = "preference"
-	// KindTask は終了したセッションに残った未完了のタスク。ボードの操作 (park adopt) だけが置き、
+	// KindTask は終了したセッションに残った未完了のタスク。pane の操作 (park adopt) だけが置き、
 	// model の tool には出さない。
 	KindTask = "task"
 )
@@ -78,7 +78,7 @@ type Source struct {
 // Item は置かれたメモ 1 つの記録。
 type Item struct {
 	ID string `json:"id"`
-	// Repo は置いたときの cwd の main worktree のパス (git の外なら cwd)。ボードの行の鍵と同じ。
+	// Repo は置いたときの cwd の main worktree のパス (git の外なら cwd)。依存図の repo の鍵と同じ。
 	Repo string `json:"repo"`
 	Entry
 	Sources []Source `json:"sources"`
@@ -178,7 +178,7 @@ func (s Store) Set(id, status, from string) (Item, string, error) {
 }
 
 // DiscardBefore は open のメモのうち、最後に置かれた時刻 (sources の最大の at) が before より前の
-// ものを discarded にし、捨てたメモを id の順に返す。該当なしは空の配列。ボードの「古いメモをまとめて捨てる」が
+// ものを discarded にし、捨てたメモを id の順に返す。該当なしは空の配列。pane の「古いメモをまとめて捨てる」が
 // 呼び、「古い」の日数は呼び出し側 (mod) が持つ。
 func (s Store) DiscardBefore(before time.Time) ([]Item, error) {
 	if s.Dir == "" {
@@ -345,7 +345,7 @@ func hasSource(sources []Source, src Source) bool {
 
 // newID は置いた時刻と乱数で id を作る。時刻を先に置くので、名前の順が置いた順になる。
 // 時刻は UTC にする。端末の時刻帯に左右されず、ファイル名の並びが時刻の並びと一致する。人に見せるときは
-// id の時刻を出さず、sources の at を JST で出す (board.md「時刻の書き方」)。
+// id の時刻を出さず、sources の at を JST で出す (parking.md「時刻の書き方」)。
 func newID(at time.Time) (string, error) {
 	b := make([]byte, 4)
 	if _, err := rand.Read(b); err != nil {

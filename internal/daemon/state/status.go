@@ -13,7 +13,7 @@ import (
 type PaneStatus struct {
 	PaneID string `json:"pane_id"`
 	// SessionID は pane で動いている Claude セッションの ID。紐づいていなければ省く。
-	// ボード (internal/board) がタスクとセッションを突き合わせ、指示を送る宛先にする。
+	// 依存図 (internal/deps) がタスクとセッションを突き合わせ、指示を送る宛先にする。
 	SessionID   string `json:"session_id,omitempty"`
 	CWD         string `json:"cwd"`
 	AgentStatus string `json:"agent_status"`
@@ -63,7 +63,7 @@ func ReadStatusSnapshot(path string) (*StatusSnapshot, error) {
 
 // Running は動いている daemon の pid と、その daemon が書いた status.json を返す。daemon が動いていなければ pid は 0。
 // status.json が無いか前の daemon が残したものなら snap は nil (snap.PID を pid と突き合わせる。突き合わせないと、
-// 数秒前に起きた daemon の情報として古い pane の一覧や起動時刻を見せてしまう)。status / board / adopt が同じ判断で読む。
+// 数秒前に起きた daemon の情報として古い pane の一覧や起動時刻を見せてしまう)。status / deps / adopt が同じ判断で読む。
 func Running(p apppath.Paths) (pid int, snap *StatusSnapshot, err error) {
 	if pid, err = ReadPIDFile(p.PIDFile()); err != nil || !PIDAlive(pid) {
 		return 0, nil, err

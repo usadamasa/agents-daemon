@@ -174,7 +174,7 @@ rg -n 'agents-daemon dream forget' ~/.claude/settings.json
 
 ## 8. タスクのツール
 
-タスクのボード (`/board`) は TaskCreate / TaskUpdate / TaskList / TodoWrite の呼び出しを PostToolUse hook で記録して描く。
+依存図 (`/deps`) は TaskCreate / TaskUpdate / TaskList / TodoWrite の呼び出しを PostToolUse hook で記録して描く。
 このセッションのツールにそれらがあるかを見る。
 
 <!-- cc-premise: 2.1.302 tools Task 系ツールは env の CLAUDE_CODE_ENABLE_TODO_TOOLS=1 が無いと載らない (interactive と -p の両方で実測) -->
@@ -182,7 +182,7 @@ rg -n 'agents-daemon dream forget' ~/.claude/settings.json
 | 結果 | 判定 |
 | ---- | ---- |
 | TaskCreate か TodoWrite がある | OK |
-| どちらも無い (`TaskStop` だけ) | 情報。ボードにはタスクが載らず、セッションごとのカード (今の作業か、セッションの名前) だけになる。使うなら settings の `env` に `"CLAUDE_CODE_ENABLE_TODO_TOOLS": "1"` を足し、Claude Code を起動し直す |
+| どちらも無い (`TaskStop` だけ) | 情報。依存図にはタスクが載らず、セッションごとのノード (今の作業か、セッションの名前) だけになる。使うなら settings の `env` に `"CLAUDE_CODE_ENABLE_TODO_TOOLS": "1"` を足し、Claude Code を起動し直す |
 
 ## 報告
 

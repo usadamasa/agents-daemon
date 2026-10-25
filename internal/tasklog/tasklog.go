@@ -1,5 +1,5 @@
 // Package tasklog は Claude Code のセッションのタスク (TaskCreate / TaskUpdate / TaskList、無効なときは
-// TodoWrite) を、PostToolUse hook の入力から XDG state 配下へ記録する (#121)。読み手はタスクのボード。
+// TodoWrite) を、PostToolUse hook の入力から XDG state 配下へ記録する (#121)。読み手は依存図 (internal/deps)。
 //
 //	tasks/<session_id>/<task_id>.json   タスク 1 つ (1 タスク 1 ファイル)
 //	tasks/<session_id>/todos.json       TodoWrite のリスト全体
@@ -27,7 +27,7 @@ import (
 
 // 保持期間。消すのは daemon の housekeeping (Prune) で、mtime で判定する。
 const (
-	// CompletedRetention は完了したタスクを残す期間。ボードの「完了 (直近)」で今日の進み具合が
+	// CompletedRetention は完了したタスクを残す期間。依存図の Show completed で今日の進み具合が
 	// 見えれば足りる。
 	CompletedRetention = 24 * time.Hour
 	// Retention は 1 週間更新されなかったタスクと TodoWrite のリストを残す期間。終了したセッションの
@@ -92,7 +92,7 @@ type hookInput struct {
 	ToolResponse json.RawMessage `json:"tool_response"`
 }
 
-// Result は 1 回の Ingest で何をしたか。ボードの経路のログ (internal/boardlog) に出す。Tool が空なら記録しない
+// Result は 1 回の Ingest で何をしたか。出来事のログ (internal/eventlog) に出す。Tool が空なら記録しない
 // ツール。
 type Result struct {
 	Tool      string

@@ -55,7 +55,7 @@ statusline はイベントで再実行される (新しい assistant message、`
 同じ呼び出しで `context/<session_id>.json` へも書く。
 こちらは `rate_limits` と違って**statusline が走るたびに必ず書く**。
 daemon が使うのは `multiplexer` (block から session_id への対応) で、同じ block の記録が複数あれば
-`observed_at` が最新のものを採る。`session_name` はボードのカードに出すセッションの名前になる。
+`observed_at` が最新のものを採る。`session_name` は依存図のノードとメモに出すセッションの名前になる。
 `used_percentage` は参考として写すだけで、daemon は読まない。
 
 ## 書式
@@ -92,9 +92,9 @@ daemon が使うのは `multiplexer` (block から session_id への対応) で�
 <!-- cc-premise: 2.1.310 statusline session_name は custom title、無ければ AI の題 -->
 中身は `--name` か `/rename` で付けた名前、無ければ Claude Code が会話から付けた題になる。`ListAgents` の名前とは
 同じとは限らない (同じ名前のセッションが既にいると `ListAgents` 側だけ `workspace-dc` のような接尾辞が付く)。
-ボード (`internal/board`) はこの名前をカードとパーキングの `sources` に出し、名前が無ければ session ID の先頭 8 文字、
-同じ名前のセッションが複数あれば名前の後ろに session ID の先頭を足す。記録は `context/` の保持期間 (7 日) の間残るので、
-終了したセッションのカードとメモにも名前が付く。
+依存図 (`internal/deps`) はこの名前をノード、`repos` の `sessions`、メモの `sources` に出し、名前が無ければ
+session ID の先頭 8 文字、同じ名前のセッションが複数あれば名前の後ろに session ID の先頭を足す。記録は `context/` の
+保持期間 (7 日) の間残るので、終了したセッションのノードとメモにも名前が付く。
 
 `multiplexer` は Claude Code が動いている多重化ツールの場所。statusline のコマンドは Claude Code の環境を
 継承するので、バイナリが環境変数から読んで書く (`sessioncontext.MultiplexerRefFromEnv`)。

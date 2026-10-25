@@ -37,8 +37,8 @@ plugin が持つもの:
 | `agents-daemon ingest-statusline` | 自前の statusline から stdin を渡して state file だけを書かせるサブコマンド |
 | `agents-daemon dream` | consolidation の実行系 (`harvest` / `mine` / `stage` / `adopt` / `forget`) |
 | `agents-daemon prune-worktrees` | 誰も使っていない Claude Code の worktree の回収 (SessionStart hook が `--hook` 付きで呼ぶ。手で叩く形は `skills/agents-daemon/references/operations.md`) |
-| `board` コマンド (mod、`hooks/board.tsx`) | セッションをまたぐタスクの依存を、辺をレーンで描いた行 (`git log --graph` の形、上流が上) で会話の横の pane に描く。fullscreen のレイアウトでだけ開く。生きているセッションとタスクをすべて描き、ノードを選ぶと辺を外す・足す、そのタスクのセッションへ指示を送れる (#134) |
-| `agents-daemon status --board` | mod が読むボードの JSON (タスクの記録と status.json を組み直したもの) を出す |
+| `/deps` コマンド (mod、`hooks/deps.tsx`) | 依存図: セッションをまたぐタスクの依存を、辺をレーンで描いた行 (`git log --graph` の形、上流が上) で会話の横の pane に描く。fullscreen のレイアウトでだけ開く。生きているセッションとタスクをすべて描き、ノードを選ぶと辺を外す・足す、そのタスクのセッションへ指示を送れる (#134) |
+| `agents-daemon deps` | mod が読む依存図の JSON (タスクの記録、status.json、辺、メモを組み直したもの) を出す |
 | `agents-daemon ingest-task` | PostToolUse hook の stdin からタスクを `tasks/<session_id>/` に記録する |
 | `agents-daemon park add\|set\|list\|discard\|adopt` | パーキングロット (タスクの途中で見つけた脇のメモ) を `parking/` に置く・status を書き換える・一覧する・古い open のメモをまとめて捨てる・終了したセッションのタスクをメモへ移す。同じメモは 1 つにまとめる (#121) |
 | `agents-daemon edge add\|rm\|list` | 作業を渡す側が、セッションをまたぐ作業の依存 (辺) を `edges/` に書く・消す・一覧する (#134。使い方は `skills/agents-daemon/references/operations.md`) |
@@ -99,7 +99,7 @@ daemon は毎 tick 読み直すので、編集は数秒で反映される。
 ```sh
 agents-daemon status                     # 稼働状況、監視中の pane、ログの末尾
 agents-daemon logs -n 80                 # daemon.log の末尾
-agents-daemon logs --board               # ボードの経路のログの末尾
+agents-daemon logs --events              # 依存図とパーキングロットの経路の出来事のログの末尾
 agents-daemon doctor                     # 前提条件の診断
 agents-daemon --json doctor              # 同じ診断を JSON で出す (--json は doctor と status に効く)
 agents-daemon inspect --pane <block id>  # 生きた block の画面を分類する
@@ -112,7 +112,7 @@ agents-daemon dream mine --project <canonical>   # memory と skill を突き合
 agents-daemon dream stage --project <canonical>  # 候補の承認レポートを ./tmp/dream/ に書く
 agents-daemon dream forget <memory-name>...      # auto memory を消す (sandbox の外で動かす)
 agents-daemon prune-worktrees --dry-run          # 回収対象の worktree を表示する (SessionStart hook が --hook 付きで呼ぶ)
-agents-daemon spawn --repo /path/to/repo < prompt.txt  # stdin を最初のターンにした Claude Code を repo の rex window に起こす (ボードが呼ぶ)
+agents-daemon spawn --repo /path/to/repo < prompt.txt  # stdin を最初のターンにした Claude Code を repo の rex window に起こす (依存図の pane が呼ぶ)
 ```
 
 ## 開発

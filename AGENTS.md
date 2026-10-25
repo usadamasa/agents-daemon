@@ -14,15 +14,15 @@ README の「役割」が持つ。機能を足す・外す判断はそこに照�
 | ---- | ---- |
 | `.claude-plugin/plugin.json` | plugin manifest。version の実体はここ 1 箇所。marketplace.json は agents-marketplace リポジトリが持つ |
 | `hooks/hooks.json` | SessionStart、Stop、PostToolUse の配線と、mod の読み込み (`modules` の `hooks/register.ts`) |
-| `hooks/register.ts`, `hooks/daemon-bin.ts` | mod の入口。board、park、notice、handoff-notice の hook を束ね、`session.start` を持つ。`daemon-bin.ts` はバイナリの置き場 |
-| `hooks/board.tsx`, `hooks/board.test.tsx`, `types/index.d.ts` | 依存のボード (B) を dock の pane に描く mod (Claude Code の mods)。`board` コマンドで開き、`agents-daemon status --board` の JSON を数秒ごとに読み直す。ノードを選んで `$.session.send` でそのタスクのセッションへ指示を送る。`types/` は mod が `$.state` に置く値の型。テストは `claude plugin test .` |
+| `hooks/register.ts`, `hooks/daemon-bin.ts` | mod の入口。deps、park、notice、handoff-notice の hook を束ね、`session.start` を持つ。`daemon-bin.ts` はバイナリの置き場 |
+| `hooks/deps.tsx`, `hooks/deps.test.tsx`, `types/index.d.ts` | 依存図を dock の pane に描く mod (Claude Code の mods)。`/deps` で開き、`agents-daemon deps` の JSON を数秒ごとに読み直す。ノードを選んで `$.session.send` でそのタスクのセッションへ指示を送る。`types/` は mod が `$.state` に置く値の型。テストは `claude plugin test .` |
 | `hooks/graph.ts` | 依存の DAG の記号と凡例、数の行、レーンの行の分け方、Add blocker の候補、辺の無い渡し先 |
 | `hooks/park.tsx`, `hooks/park.test.tsx` | model が呼べる tool `park` (パーキングロットにメモを置く) |
-| `hooks/board-data.ts` | `status --board` を読んで board に置く (B と handoff-notice が使う) |
-| `hooks/parking.ts` | メモの見せ方 (時刻の JST 表示を含む) とボードからの操作 (捨てる、タスクにする、issue にするよう頼む、パーキングへ移す) |
+| `hooks/deps-data.ts` | `agents-daemon deps` を読んで deps に置く (pane と handoff-notice が使う) |
+| `hooks/parking.ts` | メモの見せ方 (時刻の JST 表示を含む) と pane からの操作 (捨てる、タスクにする、issue にするよう頼む、パーキングへ移す) |
 | `hooks/notice.ts`, `hooks/notice.test.tsx` | Read / Edit / Write の結果に、触ったファイルに関係するパーキングのメモを model 向けに添える。compact で伝え直す |
 | `hooks/handoff-notice.ts`, `hooks/handoff-notice.test.tsx` | `SendMessage` の結果に、辺の無い宛先への辺の書き方を model 向けに添える |
-| `hooks/log.ts`, `hooks/log.test.tsx` | mod の出来事を `board-log` でボードの経路のログに残す |
+| `hooks/log.ts`, `hooks/log.test.tsx` | mod の出来事を `event-log` で出来事のログに残す |
 | `hooks/ensure-daemon.sh`, `hooks/build-daemon.sh` | バイナリの用意 (detach build) と `daemon --ensure` |
 | `hooks/dream-harvest.sh` | Stop で `dream harvest --detach` を exec する |
 | `hooks/prune-worktrees.sh` | SessionStart で `prune-worktrees --hook` に stdin を渡す |
@@ -34,11 +34,11 @@ README の「役割」が持つ。機能を足す・外す判断はそこに照�
 | `skills/peer-sessions/` | 別セッション (peer) へ作業を渡す手順 (`ListAgents` / `SendMessage`)。rex の block 操作は `references/rex.md` |
 | `skills/dream/` | 記憶階層の consolidation の手引き。実行系の呼び方は `references/pipeline.md` |
 | `cmd/agents-daemon/` | Go の main と root の登録。コマンドの組み立ては `internal/<family>cli` (境界は `changing-agents-daemon-internals` skill の architecture.md「CLI の組み立て」) |
-| `internal/` | daemon の本体。パス定数は `internal/apppath`。statusline の描画と実行は `internal/statusline`、cost の台帳は `internal/statusline/spend`、daemon の監視ループは `internal/daemon`、daemon の起動の排他と status.json と PID ファイルは `internal/daemon/state`、sidecar の原子的な書き込みは `internal/statefile`。前提条件の診断 (`doctor`) は `internal/doctor`、ほかの読むだけの診断 (`inspect` / `status` / `logs`) は `internal/verify`、使い捨て pane へ送る e2e (`simulate`) は `internal/simulate`。dream の実行系は `internal/dream` (harvest の出力の書式は `internal/dream/harvest/record`、mine の出力の書式は `internal/dream/mine/candidates`、mine が読む memory と skill は `internal/dream/mine/corpus`)、放置 worktree の回収は `internal/worktree`、cwd の repo と branch を求めるのは `internal/gitrepo`、タスクの記録は `internal/tasklog`、パーキングロットのメモは `internal/parking`、メモを渡す先の新しいセッションを rex の window に起こすのは `internal/spawn`、セッションをまたぐ辺は `internal/edge`、タスクの記録と status.json をボードに組むのは `internal/board`、ボードのカードから依存の DAG を組むのは `internal/board/graph`、依存の DAG の段・下流・輪・鎖を数え、pane のレーンの行を組むのは `internal/board/dag`、ボードの経路の出来事のログは `internal/boardlog`、上限の出来事の記録は `internal/daemon/limitlog`、plugin の更新と daemon の建て直し (`update`) は `internal/selfupdate` |
+| `internal/` | daemon の本体。パス定数は `internal/apppath`。statusline の描画と実行は `internal/statusline`、cost の台帳は `internal/statusline/spend`、daemon の監視ループは `internal/daemon`、daemon の起動の排他と status.json と PID ファイルは `internal/daemon/state`、sidecar の原子的な書き込みは `internal/statefile`。前提条件の診断 (`doctor`) は `internal/doctor`、ほかの読むだけの診断 (`inspect` / `status` / `logs`) は `internal/verify`、使い捨て pane へ送る e2e (`simulate`) は `internal/simulate`。dream の実行系は `internal/dream` (harvest の出力の書式は `internal/dream/harvest/record`、mine の出力の書式は `internal/dream/mine/candidates`、mine が読む memory と skill は `internal/dream/mine/corpus`)、放置 worktree の回収は `internal/worktree`、cwd の repo と branch を求めるのは `internal/gitrepo`、タスクの記録は `internal/tasklog`、パーキングロットのメモは `internal/parking`、メモを渡す先の新しいセッションを rex の window に起こすのは `internal/spawn`、セッションをまたぐ辺は `internal/edge`、タスクの記録と status.json を依存図に組むのは `internal/deps`、ノードの材料から依存の DAG を組むのは `internal/deps/graph`、依存の DAG の段・下流・輪・鎖を数え、pane のレーンの行を組むのは `internal/deps/dag`、依存図とパーキングロットの経路の出来事のログは `internal/eventlog`、上限の出来事の記録は `internal/daemon/limitlog`、plugin の更新と daemon の建て直し (`update`) は `internal/selfupdate` |
 | `internal/multiplexer`, `internal/multiplexer/rexcli`, `internal/backend` | pane 操作の interface (`multiplexer.Client`) とその rex 実装。`backend` が環境に `REX_SESSION` があることを確かめる (無ければ `daemon --ensure` は何もせず戻る) |
 | `tests/` | hook と script の bats テスト (`tests/lib/`、`tests/fixtures/`) |
 | `ci/mod-types/` | `task typecheck` (手元と CI) が使う mod の型の写し。`task mod-types:sync` (`scripts/sync-mod-types.sh`) が `.claude-plugin/types/` から写す |
-| `models/handoff/` | ボードの受け渡しとタスクの記録の TLA+ のモデル。`task model-check` (`scripts/model-check.sh`) が TLC で回す。使い方と期待は `models/handoff/README.md` |
+| `models/handoff/` | メモの受け渡しとタスクの記録の TLA+ のモデル。`task model-check` (`scripts/model-check.sh`) が TLC で回す。使い方と期待は `models/handoff/README.md` |
 | `flake.nix` | 開発ツールの devShell (版は `flake.lock` が固定する)。go-arch-metrics の CLI は go.mod の tool directive が固定する |
 | `.claude/skills/changing-agents-daemon-internals/` | 実装の仕組みとその理由 (配線、上限の検知、pane の読み書き、mod、バイナリ、出力されるファイル) と実機での検証。plugin には同梱しない保守用 skill |
 | `.claude/skills/catching-up-with-claude-code-changelog/` | Claude Code の更新後に CHANGELOG・バイナリ・docs を追い、この repo の前提 (画面の文言、hook と statusline の field、本体の新機能との重なり) を点検して issue に落とす手順。plugin には同梱しない保守用 skill |
@@ -60,7 +60,7 @@ task typecheck                              # mod の型検査 (tsc)。型は ci
 ```
 
 `invariants_test.go` と `fuzz_test.go` は、1 場面を固定する例ではなく「どの入力でも破ってはいけないこと」を書いて乱択で
-探す実行できる仕様 (`internal/monitor`、`internal/board/dag`、`internal/detect`、`internal/statefile`、`internal/parking`、
+探す実行できる仕様 (`internal/monitor`、`internal/deps/dag`、`internal/detect`、`internal/statefile`、`internal/parking`、
 `internal/tasklog`、`internal/edge`)。反例が出たらコードを直すか挙動を正当化し、性質を弱めて通さない。
 `models/handoff` の不変条件は `internal/parking` と `internal/tasklog` の `invariants_test.go` が
 実物の Store の交錯で持つ。`task test` は fuzz の seed だけを回し、乱択は `task fuzz` で行う。
@@ -138,14 +138,14 @@ hook・skill・daemon は別プロセスで、ファイル越しに繋がる。�
 | `hooks/lib/daemon-bin.sh` | `Taskfile.yml` の `install` | `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon` |
 | 利用者の `statusLine.command`、または自前の statusline に足す 1 行 (`skills/setup/references/statusline.md`) | `hooks/lib/daemon-bin.sh` と `Taskfile.yml` の `install` | `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon statusline` (または `ingest-statusline`)。`rate-limits/` の書式は `internal/ratelimit`、`context/` の書式は `internal/sessioncontext` が読み書き両方で持つ |
 | `statusline` / `ingest-statusline` が `context/<sid>.json` の `multiplexer` に書く場所 (環境変数 `REX_SESSION` / `REX_BLOCK` から) | `internal/sessioncontext` の `ListMultiplexerBlocks` を `internal/multiplexer/rexcli` が引く (`internal/backend` が配線) | rex の block から session_id への対応。書式と読み方は `internal/sessioncontext` が両方持つ |
-| `hooks/daemon-bin.ts` の `daemonBin` (mod が `agents-daemon status --board --cwd <cwd>` と `park` を呼ぶ) | `hooks/lib/daemon-bin.sh` と `Taskfile.yml` の `install` | `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon`。mod は `$.env.get` で `XDG_CACHE_HOME` と `HOME` を読む |
-| `hooks/board.tsx` の `BoardData` (`types/index.d.ts`) | `internal/board` の `Board` (`graph` は `internal/board/graph` の `Graph`) | `status --board` の JSON の形。片方の欄を変えたらもう片方も変える |
+| `hooks/daemon-bin.ts` の `daemonBin` (mod が `agents-daemon deps --cwd <cwd>` と `park` を呼ぶ) | `hooks/lib/daemon-bin.sh` と `Taskfile.yml` の `install` | `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon`。mod は `$.env.get` で `XDG_CACHE_HOME` と `HOME` を読む |
+| `hooks/deps.tsx` の `DepsData` (`types/index.d.ts`) | `internal/deps` の `Deps` (`graph` は `internal/deps/graph` の `Graph`) | `deps` の JSON の形。片方の欄を変えたらもう片方も変える |
 | `hooks/park.tsx` の `FIELDS` と `Added` | `internal/parking` の `Request` と `Added` | `park add` の stdin と stdout の JSON の形 |
-| `hooks/parking.ts` の `park` と `run` が組む引数 | `cmd/agents-daemon/internal/boardcli/park.go` の `set`、`discard`、`adopt` | `park set <id> --status <status> --from <status>`、`park discard --days <N>`、`park adopt <session_id> <task_id>` に `--session` と `--cwd` を添える。渡す前に `--status handed --from open` で取り、届かなければ `--status open --from handed` で戻す |
-| `hooks/board.tsx` の `unlink` と `addBlocker` が組む引数、`hooks/handoff-notice.ts` の `describe` が model に示す形 | `cmd/agents-daemon/internal/boardcli/edge.go` の `rm` と `add` | `edge rm\|add --before <ref> --before-cwd <cwd> --after <ref> --after-cwd <cwd>` |
-| `hooks/notice.ts` の `openMemos` が組む引数と読む欄 | `cmd/agents-daemon/internal/boardcli/park.go` の `list` の `--here` と `internal/parking` の `Item` | `park list --status open --here --session <id> --cwd <cwd>`。stdout は `Item` の配列 (`id`、`repo`、`files`、`sources[].session_id` などを読む) |
-| `hooks/parking.ts` の `spawnSession` が組む引数と stdin | `cmd/agents-daemon/internal/boardcli/spawn.go` と `internal/spawn` の `Result` | `spawn --repo <path>`、stdin は最初のターンの本文、stdout は `{session_id, pane_id, foreground, detail}` (foreground が false なら mod はメモを戻さない) |
-| `hooks/log.ts` の `logEvent` が組む引数 | `cmd/agents-daemon/internal/boardcli/board_log.go` の `board-log` と `internal/boardlog` の `Record` | `board-log --session <id> -- <event> key=value…`。出来事の名前は `internal/boardlog` の package doc |
+| `hooks/parking.ts` の `park` と `run` が組む引数 | `cmd/agents-daemon/internal/parkcli/park.go` の `set`、`discard`、`adopt` | `park set <id> --status <status> --from <status>`、`park discard --days <N>`、`park adopt <session_id> <task_id>` に `--session` と `--cwd` を添える。渡す前に `--status handed --from open` で取り、届かなければ `--status open --from handed` で戻す |
+| `hooks/deps.tsx` の `unlink` と `addBlocker` が組む引数、`hooks/handoff-notice.ts` の `describe` が model に示す形 | `cmd/agents-daemon/internal/depscli/edge.go` の `rm` と `add` | `edge rm\|add --before <ref> --before-cwd <cwd> --after <ref> --after-cwd <cwd>` |
+| `hooks/notice.ts` の `openMemos` が組む引数と読む欄 | `cmd/agents-daemon/internal/parkcli/park.go` の `list` の `--here` と `internal/parking` の `Item` | `park list --status open --here --session <id> --cwd <cwd>`。stdout は `Item` の配列 (`id`、`repo`、`files`、`sources[].session_id` などを読む) |
+| `hooks/parking.ts` の `spawnSession` が組む引数と stdin | `cmd/agents-daemon/internal/parkcli/spawn.go` と `internal/spawn` の `Result` | `spawn --repo <path>`、stdin は最初のターンの本文、stdout は `{session_id, pane_id, foreground, detail}` (foreground が false なら mod はメモを戻さない) |
+| `hooks/log.ts` の `logEvent` が組む引数 | `cmd/agents-daemon/internal/depscli/event_log.go` の `event-log` と `internal/eventlog` の `Record` | `event-log --session <id> -- <event> key=value…`。出来事の名前は `internal/eventlog` の package doc |
 | 利用者の settings の `env` の `CLAUDE_STATUSLINE_SPEND_CAP` | `internal/statusline/run.go` の `SpendCapEnv` | 月額上限 (USD)。あるときだけ `statusline` が `cost/` の台帳 (`internal/statusline/spend`) を書き、📅 / 🧾 を出す |
 
 ## リリース

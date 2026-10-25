@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/applog"
-	"github.com/usadamasa/agents-daemon/internal/boardlog"
 	"github.com/usadamasa/agents-daemon/internal/daemon/limitlog"
 	"github.com/usadamasa/agents-daemon/internal/edge"
+	"github.com/usadamasa/agents-daemon/internal/eventlog"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
@@ -63,12 +63,12 @@ func TestHousekeep(t *testing.T) {
 		r.edges = edge.New(dir)
 		edgeFile := filepath.Join(r.edges.Dir, "e1.json")
 		touchAged(t, edgeFile, 8*24*time.Hour, now)
-		// ボードの経路のログは daemon.log と同じ 7 日で消す。
-		r.boardLog = boardlog.Path(dir)
-		boardOld := applog.RotatedPath(r.boardLog, "2026-08-01")
-		boardFresh := applog.RotatedPath(r.boardLog, "2026-08-27")
-		touchAged(t, boardOld, 20*24*time.Hour, now)
-		touchAged(t, boardFresh, 24*time.Hour, now)
+		// 出来事のログは daemon.log と同じ 7 日で消す。
+		r.eventLog = eventlog.Path(dir)
+		eventsOld := applog.RotatedPath(r.eventLog, "2026-08-01")
+		eventsFresh := applog.RotatedPath(r.eventLog, "2026-08-27")
+		touchAged(t, eventsOld, 20*24*time.Hour, now)
+		touchAged(t, eventsFresh, 24*time.Hour, now)
 		// 上限の出来事の記録は 30 日で消す (internal/daemon/limitlog のテスト)。
 		r.limits = limitlog.New(dir)
 		limitFile := filepath.Join(r.limits.Dir, "2026-07-01.jsonl")
@@ -80,11 +80,11 @@ func TestHousekeep(t *testing.T) {
 			t.Errorf("31 日前の上限の出来事の記録は消えるべき (err=%v)", err)
 		}
 
-		if _, err := os.Stat(boardOld); !os.IsNotExist(err) {
-			t.Errorf("20 日前のボードのログは消えるべき (err=%v)", err)
+		if _, err := os.Stat(eventsOld); !os.IsNotExist(err) {
+			t.Errorf("20 日前の出来事のログは消えるべき (err=%v)", err)
 		}
-		if _, err := os.Stat(boardFresh); err != nil {
-			t.Errorf("1 日前のボードのログは残るべき: %v", err)
+		if _, err := os.Stat(eventsFresh); err != nil {
+			t.Errorf("1 日前の出来事のログは残るべき: %v", err)
 		}
 
 		if _, err := os.Stat(edgeFile); !os.IsNotExist(err) {

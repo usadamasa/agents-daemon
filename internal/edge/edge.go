@@ -1,15 +1,15 @@
 // Package edge はセッションをまたぐ作業の依存 (DAG の辺、#134) を XDG state 配下に置く。辺の正は作業を渡す側
-// (workspace) が `agents-daemon edge add` で書いたもの。読むのは `edge list` と、ボードの DAG を組む internal/board。
+// (workspace) が `agents-daemon edge add` で書いたもの。読むのは `edge list` と、依存図の DAG を組む internal/deps。
 //
 //	edges/<id>.json   1 本 1 ファイル
 //
 // 辺は「before が済まないと after を始められない」を表す。端点は種類付きの参照と、その作業の cwd から求めた
-// repo (ボードの行と同じ鍵) を持つ。参照の種類:
+// repo (依存図の repo と同じ鍵) を持つ。参照の種類:
 //
 //	session:<セッション名>          `claude --name` で渡したセッション。渡す時点でタスク ID はまだ無い
 //	issue:<owner>/<repo>#<番号>     渡した issue
 //	pr:<owner>/<repo>#<番号>        渡した PR
-//	task:<session_id>/<task_id>     ボードのタスクのノードそのもの
+//	task:<session_id>/<task_id>     依存図のタスクのノードそのもの
 //
 // id は before と after の参照から決めるので、同じ辺の二重登録は同じファイルを書き直すだけになる
 // (Idempotent Receiver)。
@@ -33,8 +33,8 @@ import (
 )
 
 // Retention は更新の無い辺を残す期間。消すのは daemon の housekeeping (Prune) で、mtime で判定する。
-// 端点がボードに出うる最も長いタスクのノード (終了したセッションの未完了のタスク、7 日) に合わせる。
-// それを過ぎた辺は両端ともボードに出ない。渡す側が登録し直すと数え直す。
+// 端点が依存図に出うる最も長いタスクのノード (終了したセッションの未完了のタスク、7 日) に合わせる。
+// それを過ぎた辺は両端とも依存図に出ない。渡す側が登録し直すと数え直す。
 const Retention = 7 * 24 * time.Hour
 
 // refPattern は参照の形。issue / pr の repo は GitHub の owner/name、task は session_id と task_id の組。

@@ -87,7 +87,7 @@ test('別のセッションが置いたメモの files に当たるファイル�
   expect(res.result).toEqual({ filePath: `${CWD}/internal/daemon/housekeeping.go` })
 })
 
-test('メモは tool の結果のたびに park list で読み、ボードの読み直しを待たない', async ($, on) => {
+test('メモは tool の結果のたびに park list で読み、依存図の読み直しを待たない', async ($, on) => {
   const w = world(on, { [LIST.join(' ')]: [memo('m1', 'メモ', ['a.go'])] })
   await $.session.start(START)
   expect(w.ran.list).toBe(0)

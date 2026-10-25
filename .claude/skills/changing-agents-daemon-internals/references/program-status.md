@@ -25,7 +25,8 @@ docs に無く、2.1.302 のバイナリと実測 (2026-10-17、rex preview.15�
 `done` と `idle` はどちらも入力待ち。`kind` と `msg` は `Pane` の `AgentKind` / `AgentMessage` に写し、
 `status.json` (`agent_kind` / `agent_message`)、`status`、`doctor` の pane 行、`inspect --pane` の `record:` 行、
 daemon.log の検知と送信の行に `agent_status=… kind=… msg="…"` の形で出す。
-タスクのボードは、タスクの記録が無いセッションのカードの見出しに `msg` を出す (無ければセッション名か cwd の末尾)。
+依存図は、タスクの記録が無いセッションのノードの見出しと、進行中のタスクが無いセッションの `subject` に `msg` を出す
+(無ければセッション名か cwd の末尾)。
 `unknown` の pane のノードは working に倒さず、`unknown` の状態として idle の節に出す。
 
 `blocked` のうち kind が `permission` / `question` / `auth` の pane には、待機明けでも再開を送らない

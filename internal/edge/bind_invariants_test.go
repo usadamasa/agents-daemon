@@ -71,14 +71,15 @@ func TestBind_交錯しても結び直さず辺は組ごとに1本(t *testing.T)
 		stop := make(chan struct{})
 		var mu sync.Mutex
 		observed := map[incarnation][2]string{} // 見た端点のうち結びついたもの (before、after)
+		// 読むのも mu の中で行う。2 つの観測者が外で読むと、先に読んだ古い写しを後から照合して結び直しと取り違える。
 		observe := func() {
+			mu.Lock()
+			defer mu.Unlock()
 			got, err := s.Find("", "")
 			if err != nil {
 				failures <- fmt.Sprintf("Find() error = %v", err)
 				return
 			}
-			mu.Lock()
-			defer mu.Unlock()
 			for _, e := range got {
 				key := incarnation{e.ID, e.CreatedAt}
 				prev := observed[key]

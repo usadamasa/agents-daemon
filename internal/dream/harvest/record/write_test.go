@@ -1,4 +1,4 @@
-package harvest
+package record
 
 import (
 	"bufio"
@@ -10,11 +10,11 @@ import (
 )
 
 func TestMergeAndDedup_LastWins(t *testing.T) {
-	existing := []harvestRecord{
+	existing := []Record{
 		{SessionID: "a", NMessages: 1},
 		{SessionID: "b", NMessages: 2},
 	}
-	incoming := []harvestRecord{
+	incoming := []Record{
 		{SessionID: "b", NMessages: 5}, // overrides
 		{SessionID: "c", NMessages: 3},
 	}
@@ -33,14 +33,14 @@ func TestMergeAndDedup_LastWins(t *testing.T) {
 
 func TestWriteRecords_Idempotent(t *testing.T) {
 	outDir := t.TempDir()
-	records := []harvestRecord{
+	records := []Record{
 		{SessionID: "sess1", TSStart: "2026-07-19T10:00:00+09:00", NMessages: 5},
 		{SessionID: "sess2", TSStart: "2026-07-19T11:00:00+09:00", NMessages: 3},
 	}
 
 	// First run
-	if _, err := writeRecords(outDir, records); err != nil {
-		t.Fatalf("first writeRecords: %v", err)
+	if _, err := Write(outDir, records); err != nil {
+		t.Fatalf("first Write: %v", err)
 	}
 	first, err := os.ReadFile(filepath.Join(outDir, "harvest", "2026-07-19.jsonl"))
 	if err != nil {
@@ -48,8 +48,8 @@ func TestWriteRecords_Idempotent(t *testing.T) {
 	}
 
 	// Second run — identical input
-	if _, err := writeRecords(outDir, records); err != nil {
-		t.Fatalf("second writeRecords: %v", err)
+	if _, err := Write(outDir, records); err != nil {
+		t.Fatalf("second Write: %v", err)
 	}
 	second, err := os.ReadFile(filepath.Join(outDir, "harvest", "2026-07-19.jsonl"))
 	if err != nil {
@@ -62,18 +62,18 @@ func TestWriteRecords_Idempotent(t *testing.T) {
 
 func TestWriteRecords_DedupAcrossRuns(t *testing.T) {
 	outDir := t.TempDir()
-	initial := []harvestRecord{
+	initial := []Record{
 		{SessionID: "sess1", TSStart: "2026-07-19T10:00:00+09:00", NMessages: 5},
 	}
-	if _, err := writeRecords(outDir, initial); err != nil {
+	if _, err := Write(outDir, initial); err != nil {
 		t.Fatalf("initial: %v", err)
 	}
 
 	// same session with updated NMessages (session ongoing)
-	updated := []harvestRecord{
+	updated := []Record{
 		{SessionID: "sess1", TSStart: "2026-07-19T10:00:00+09:00", NMessages: 20},
 	}
-	if _, err := writeRecords(outDir, updated); err != nil {
+	if _, err := Write(outDir, updated); err != nil {
 		t.Fatalf("updated: %v", err)
 	}
 
@@ -88,12 +88,12 @@ func TestWriteRecords_DedupAcrossRuns(t *testing.T) {
 
 func TestWriteRecords_MultipleDates(t *testing.T) {
 	outDir := t.TempDir()
-	records := []harvestRecord{
+	records := []Record{
 		{SessionID: "sess1", TSStart: "2026-07-19T10:00:00+09:00", NMessages: 1},
 		{SessionID: "sess2", TSStart: "2026-07-20T10:00:00+09:00", NMessages: 1},
 	}
-	if _, err := writeRecords(outDir, records); err != nil {
-		t.Fatalf("writeRecords: %v", err)
+	if _, err := Write(outDir, records); err != nil {
+		t.Fatalf("Write: %v", err)
 	}
 
 	for _, date := range []string{"2026-07-19", "2026-07-20"} {
@@ -120,8 +120,8 @@ func TestWriteRecords_MultipleDates(t *testing.T) {
 // 読み手 (mine の WalkDir、dreamstate の Prune) は無いディレクトリを空として扱う。
 func TestWriteRecords_NoRecordsLeavesNoDirectory(t *testing.T) {
 	outDir := t.TempDir()
-	if _, err := writeRecords(outDir, nil); err != nil {
-		t.Fatalf("writeRecords(nil): %v", err)
+	if _, err := Write(outDir, nil); err != nil {
+		t.Fatalf("Write(nil): %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(outDir, "harvest")); !os.IsNotExist(err) {
 		t.Errorf("harvest/ の Stat = %v, want not exist", err)
@@ -140,11 +140,11 @@ func TestWriteRecords_SkipsCorruptedExistingLines(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	incoming := []harvestRecord{
+	incoming := []Record{
 		{SessionID: "new", TSStart: "2026-07-19T11:00:00+09:00", NMessages: 2},
 	}
-	if _, err := writeRecords(outDir, incoming); err != nil {
-		t.Fatalf("writeRecords should tolerate corruption: %v", err)
+	if _, err := Write(outDir, incoming); err != nil {
+		t.Fatalf("Write should tolerate corruption: %v", err)
 	}
 	got := readAllRecords(t, dst)
 	ids := make([]string, 0, len(got))
@@ -158,21 +158,21 @@ func TestWriteRecords_SkipsCorruptedExistingLines(t *testing.T) {
 	}
 }
 
-func readAllRecords(t *testing.T, path string) []harvestRecord {
+func readAllRecords(t *testing.T, path string) []Record {
 	t.Helper()
 	f, err := os.Open(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = f.Close() }()
-	var out []harvestRecord
+	var out []Record
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
 		if line == "" {
 			continue
 		}
-		var r harvestRecord
+		var r Record
 		if err := json.Unmarshal([]byte(line), &r); err != nil {
 			t.Fatalf("unmarshal %q: %v", line, err)
 		}

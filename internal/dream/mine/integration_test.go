@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/usadamasa/agents-daemon/internal/dream/dreamio"
+	"github.com/usadamasa/agents-daemon/internal/dream/harvest/record"
 )
 
 // TestIntegration_DailyStandupFixture は 5 件の feedback memory + 1 skill (daily-standup)
@@ -116,9 +117,9 @@ Slack 投稿は明確なアクション/タスクのみ｡つぶやきは除外�
 	}
 
 	// 4. Mine 実行 (main を直接叩けないので internal 関数を組み立てる)
-	sessions, err := loadHarvestForProject(harvestDir, "-fixture-workspace")
+	sessions, err := record.LoadForProject(harvestDir, "-fixture-workspace")
 	if err != nil {
-		t.Fatalf("loadHarvestForProject: %v", err)
+		t.Fatalf("LoadForProject: %v", err)
 	}
 	if len(sessions) != 2 {
 		t.Fatalf("expected 2 sessions, got %d", len(sessions))

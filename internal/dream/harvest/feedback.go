@@ -3,6 +3,8 @@ package harvest
 import (
 	"regexp"
 	"strings"
+
+	"github.com/usadamasa/agents-daemon/internal/dream/harvest/record"
 )
 
 // feedback パターン。日本語・英語 mixed。word boundary は日本語で機能しないので
@@ -32,18 +34,18 @@ var feedbackPatterns = []feedbackPattern{
 
 // detectFeedback は text が feedback signal かを判定し、該当すれば feedbackSignal を返す。
 // 複数パターン該当時は最初にマッチした kind を採用する (correction を優先させる並び順)。
-func detectFeedback(text string) (feedbackSignal, bool) {
+func detectFeedback(text string) (record.FeedbackSignal, bool) {
 	trimmed := strings.TrimSpace(text)
 	if trimmed == "" {
-		return feedbackSignal{}, false
+		return record.FeedbackSignal{}, false
 	}
 	for _, fp := range feedbackPatterns {
 		if fp.pattern.MatchString(trimmed) {
-			return feedbackSignal{
+			return record.FeedbackSignal{
 				Quote: truncate(maskPII(trimmed), maxFeedbackQuote),
 				Kind:  fp.kind,
 			}, true
 		}
 	}
-	return feedbackSignal{}, false
+	return record.FeedbackSignal{}, false
 }

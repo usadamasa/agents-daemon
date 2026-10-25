@@ -1,4 +1,4 @@
-package harvest
+package record
 
 import (
 	"bytes"
@@ -15,27 +15,27 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
 
-// writeStats は書き込み結果サマリ。
-type writeStats struct {
+// Stats は書き込み結果サマリ。
+type Stats struct {
 	Written          int
 	SkippedDuplicate int
 }
 
-// writeRecords は records を YYYY-MM-DD.jsonl 単位で outDir/harvest/ に書く。
+// Write は records を YYYY-MM-DD.jsonl 単位で outDir/harvest/ に書く。
 // 既存ファイルの内容と session_id ベースで dedup (last-wins) してから rewrite する。
 //
 // idempotent: 同じ input で複数回叩いても最終ファイル内容は変わらない。
-func writeRecords(outDir string, records []harvestRecord) (writeStats, error) {
+func Write(outDir string, records []Record) (Stats, error) {
 	harvestDir := filepath.Join(outDir, "harvest")
 
 	// 日付ごとに records を bucket 化する
-	buckets := make(map[string][]harvestRecord)
+	buckets := make(map[string][]Record)
 	for _, r := range records {
 		key := recordDateKey(r)
 		buckets[key] = append(buckets[key], r)
 	}
 
-	stats := writeStats{}
+	stats := Stats{}
 	for date, recs := range buckets {
 		path := filepath.Join(harvestDir, date+".jsonl")
 		existing, err := readExistingRecords(path)
@@ -56,7 +56,7 @@ func writeRecords(outDir string, records []harvestRecord) (writeStats, error) {
 
 // recordDateKey は record を書き込む対象日 (JST の date 文字列)。
 // ts_start がなければ ts_end、それも無ければ今日。
-func recordDateKey(r harvestRecord) string {
+func recordDateKey(r Record) string {
 	ts := r.TSStart
 	if ts == "" {
 		ts = r.TSEnd
@@ -71,9 +71,9 @@ func recordDateKey(r harvestRecord) string {
 	return t.Local().Format("2006-01-02")
 }
 
-// readExistingRecords は既存 jsonl から harvestRecord を復元する。
+// readExistingRecords は既存 jsonl から Record を復元する。
 // ファイル未存在は空スライスを返す (エラーではない)。
-func readExistingRecords(path string) ([]harvestRecord, error) {
+func readExistingRecords(path string) ([]Record, error) {
 	f, err := os.Open(path) // #nosec G304 -- CLI: 出力先ディレクトリ固定
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -83,14 +83,14 @@ func readExistingRecords(path string) ([]harvestRecord, error) {
 	}
 	defer func() { _ = f.Close() }()
 
-	var out []harvestRecord
+	var out []Record
 	sc := jsonlscan.NewScanner(f)
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
 		if line == "" {
 			continue
 		}
-		var r harvestRecord
+		var r Record
 		if err := json.Unmarshal([]byte(line), &r); err != nil {
 			continue // 破損行は skip (fail-open)
 		}
@@ -101,15 +101,15 @@ func readExistingRecords(path string) ([]harvestRecord, error) {
 
 // mergeAndDedup は session_id last-wins で 2 スライスをマージする。
 // 結果は session_id で昇順ソートされる (deterministic output)。
-func mergeAndDedup(existing, incoming []harvestRecord) []harvestRecord {
-	byID := make(map[string]harvestRecord, len(existing)+len(incoming))
+func mergeAndDedup(existing, incoming []Record) []Record {
+	byID := make(map[string]Record, len(existing)+len(incoming))
 	for _, r := range existing {
 		byID[r.SessionID] = r
 	}
 	for _, r := range incoming {
 		byID[r.SessionID] = r // last-wins
 	}
-	out := make([]harvestRecord, 0, len(byID))
+	out := make([]Record, 0, len(byID))
 	for _, r := range byID {
 		out = append(out, r)
 	}
@@ -120,7 +120,7 @@ func mergeAndDedup(existing, incoming []harvestRecord) []harvestRecord {
 }
 
 // writeJSONL は records を 1 行 1 JSON で path へ原子的に書く (statefile)。
-func writeJSONL(path string, records []harvestRecord) error {
+func writeJSONL(path string, records []Record) error {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)

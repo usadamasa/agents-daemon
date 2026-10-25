@@ -6,11 +6,12 @@ import (
 	"sort"
 
 	"github.com/usadamasa/agents-daemon/internal/dream/dreamio"
+	"github.com/usadamasa/agents-daemon/internal/dream/harvest/record"
 )
 
 // generateCandidates は memory / skill / harvest を突き合わせて candidates を生成する。
 // 出力は dreamio.Candidate (mine/stage/adopt で共有される canonical schema)。
-func generateCandidates(mems []memory, skills map[string]skill, project string, sessions []harvestSession) []dreamio.Candidate {
+func generateCandidates(mems []memory, skills map[string]skill, project string, sessions []record.Record) []dreamio.Candidate {
 	// skill 名リスト (findAssociatedSkill 用)
 	skillNames := make([]string, 0, len(skills))
 	for n := range skills {

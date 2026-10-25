@@ -13,6 +13,7 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/dream/dreamio"
 	"github.com/usadamasa/agents-daemon/internal/dream/dreamstate"
+	"github.com/usadamasa/agents-daemon/internal/dream/harvest/record"
 )
 
 // Stderr は cobra 側で必ず inject されるが、テストや直呼び用に nil 時は Discard に fallback する。
@@ -61,7 +62,7 @@ func Run(opts Opts) error {
 	resolvedDate := dreamstate.ResolveDate(opts.Date)
 
 	// 1. harvest: 対象 project のセッション
-	sessions, err := loadHarvestForProject(resolvedHarvest, project)
+	sessions, err := record.LoadForProject(resolvedHarvest, project)
 	if err != nil {
 		return fmt.Errorf("harvest 読み込み失敗: %w", err)
 	}

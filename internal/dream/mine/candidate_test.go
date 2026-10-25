@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/usadamasa/agents-daemon/internal/dream/dreamio"
+	"github.com/usadamasa/agents-daemon/internal/dream/harvest/record"
 )
 
 func TestGenerateCandidates_PIIMigration(t *testing.T) {
@@ -24,7 +25,7 @@ func TestGenerateCandidates_PIIMigration(t *testing.T) {
 	skills := map[string]skill{
 		"daily-standup": {Name: "daily-standup", Body: "SKILL body without PII rule"},
 	}
-	cands := generateCandidates(mems, skills, "-Users-x-workspace", []harvestSession{})
+	cands := generateCandidates(mems, skills, "-Users-x-workspace", []record.Record{})
 	if len(cands) != 1 {
 		t.Fatalf("expected 1 candidate, got %d", len(cands))
 	}
@@ -132,7 +133,7 @@ func TestGenerateCandidates_IncludesEvidenceSessions(t *testing.T) {
 	skills := map[string]skill{
 		"daily-standup": {Name: "daily-standup", Body: "no channel default here"},
 	}
-	sessions := []harvestSession{
+	sessions := []record.Record{
 		{SessionID: "sess-a", SkillsInvoked: []string{"daily-standup"}, CWDProject: "-p"},
 		{SessionID: "sess-b", SkillsInvoked: []string{"caddi-obsidian"}, CWDProject: "-p"},
 		{SessionID: "sess-c", SkillsInvoked: []string{"daily-standup", "weekly-report"}, CWDProject: "-p"},

@@ -26,17 +26,3 @@ func loadSkillFromDirs(dirs []string, name string) (skill, error) {
 	}
 	return skill{}, fmt.Errorf("skill %q not found in any dir: %w", name, lastErr)
 }
-
-// projectRootFromSessions は harvest sessions の cwd から project root を推定する。
-// 最初の非空 cwd を返す。見つからなければ ""。
-//
-// canonical name の逆演算は不可能 (- になった元の文字が / か _ か . か区別が付かない)
-// なので、harvest レコードに残っている生 cwd を頼りに絶対パスを取り戻す。
-func projectRootFromSessions(sessions []harvestSession) string {
-	for _, s := range sessions {
-		if s.CWD != "" {
-			return s.CWD
-		}
-	}
-	return ""
-}

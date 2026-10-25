@@ -47,20 +47,3 @@ func TestLoadSkillFromDirs_NotFoundInAny(t *testing.T) {
 		t.Fatal("expected error when skill not in any dir")
 	}
 }
-
-func TestProjectRootFromSessions_PicksFirstCWD(t *testing.T) {
-	sessions := []harvestSession{
-		{SessionID: "s1", CWD: "/Users/x/workspace"},
-		{SessionID: "s2", CWD: "/Users/x/other"},
-	}
-	got := projectRootFromSessions(sessions)
-	if got != "/Users/x/workspace" {
-		t.Errorf("got %q; want /Users/x/workspace", got)
-	}
-}
-
-func TestProjectRootFromSessions_EmptyReturnsEmpty(t *testing.T) {
-	if got := projectRootFromSessions(nil); got != "" {
-		t.Errorf("got %q; want ''", got)
-	}
-}

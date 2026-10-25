@@ -5,7 +5,7 @@
      open でなくなる。
    - mod はボードを読み直して、この repo の open のメモの写し (parked の atom、hooks/board-data.ts の loadBoard) を持つ。
      写しは読み直すまで古いまま。
-   - model が Read / Edit / Write を呼ぶと、tool が走った後の tool.call の hook (hooks/band.tsx の noticeFiles) が
+   - model が Read / Edit / Write を呼ぶと、tool が走った後の tool.call の hook (hooks/notice.ts の claim) が
      写しのうち触ったファイルを files に持つメモを選び、まだ伝えていないものを結果の context に添える。
      伝えたメモの id は told の atom に置く ($.state なので mod の読み直しでも残る)。
    - このセッションだけが置いたメモは model が自分で置いたものなので伝えない。

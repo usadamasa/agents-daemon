@@ -152,6 +152,8 @@ declare module 'claude-code' {
       // handed は model が SendMessage で送った宛先の名前 (届いたものだけ、hooks/band.tsx)。band はこのうちボードの
       // 生きているセッションで辺の無いものを no edge の行に出す。名前を押すと外れる。
       handed: string[]
+      // told はファイルを触った tool の結果で model に伝えたメモの id (hooks/notice.ts)。同じメモを 2 度伝えない。
+      told: string[]
       // showCompleted は B の pane で完了したノードを出すか (graph.rows_with_completed を描く)。既定は畳む。
       showCompleted: boolean
       // logged はボードの経路のログに slot ごとに最後に書いた中身 (hooks/log.ts)。同じものを書き直さないため。

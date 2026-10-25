@@ -30,7 +30,7 @@ const INPUT_SCHEMA = {
     kind: { type: 'string', enum: ['aside', 'scope', 'preference'], description: 'メモの種類' },
     title: { type: 'string', description: 'メモを 1 行で。同じ repo に同じ title の open のメモがあれば 1 つにまとまる' },
     detail: { type: 'string', description: '後で取り出した人が文脈を復元できる説明' },
-    files: { type: 'array', items: { type: 'string' }, description: '関係するファイルのパス' },
+    files: { type: 'array', items: { type: 'string' }, description: '関係するファイルのパス (repo からの相対か絶対)。別のセッションがそのファイルを触ったとき、その model に伝わる' },
     default_taken: { type: 'string', description: '今どうしたか (「やらない」、仮に決めた内容)' },
   },
   required: ['kind', 'title'],

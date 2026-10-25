@@ -2,6 +2,7 @@ import type { Register } from 'claude-code'
 
 import { registerBand, startBand } from './band'
 import { registerBoard, startBoard } from './board'
+import { registerNotice } from './notice'
 import { registerPark, startPark } from './park'
 
 // hooks.json の modules は 1 つしか書けず、matcher の無い hook は 1 つの plugin で 1 つの event に 1 つしか
@@ -18,4 +19,5 @@ export const register: Register = (on, options) => {
   registerBoard(on, options)
   registerPark(on, options)
   registerBand(on, options)
+  registerNotice(on, options)
 }

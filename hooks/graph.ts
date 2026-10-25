@@ -18,7 +18,12 @@ export const ICON: Record<GraphNode['state'], string> = {
   exited: '⊘',
 }
 
-// COLOR は記号の色 (テーマの鍵)。無い状態は既定の色。
+// 色 (テーマの鍵) は 1 つの鍵に 1 つの意味だけを持たせ、B の pane と A の band で同じ意味に使う。
+//   suggestion 進行中 / warning 人の返事待ち (question、permission) / permission 時間待ち (limit) /
+//   error 失敗 / success longest chain の辺の罫線
+// ほかの状態、レーンの罫線、メモ (◇) には色を使わない (メモの見出しは太字)。
+
+// COLOR は記号の色。無い状態は既定の色。
 export const COLOR: Partial<Record<GraphNode['state'], string>> = {
   working: 'suggestion',
   question: 'warning',
@@ -177,6 +182,26 @@ export function summary(g: Graph, memos: number): string {
     `${ICON.completed} ${count(n => n.state === 'completed')}`,
     `${MEMO} ${memos}`,
   ].join('  ')
+}
+
+// CHAIN_COLOR は longest chain の辺の罫線の色。止まっているノードの記号 (warning など) と別の色にし、
+// 「止まっている」と「先に解く道筋」を色で取り違えないようにする。
+export const CHAIN_COLOR = 'success'
+
+export type Piece = { text: string; marked: boolean }
+
+// pieces は lanes の [from, to) を印 (marks、internal/dag の Row.Marks) の有無で切った区間。罫線は 1 桁 1 文字
+// (BMP) なので、文字列の位置がそのまま桁になる。区間が無くても 1 つ返す (描く Text の数を行で揃える)。
+export function pieces(lanes: string, marks: readonly number[] | undefined, from: number, to: number): Piece[] {
+  const marked = new Set(marks ?? [])
+  const out: Piece[] = []
+  for (let i = from; i < to; i++) {
+    const m = marked.has(i)
+    const tail = out.at(-1)
+    if (tail !== undefined && tail.marked === m) tail.text += lanes[i]
+    else out.push({ text: lanes[i], marked: m })
+  }
+  return out.length === 0 ? [{ text: '', marked: false }] : out
 }
 
 // splitLanes はレーンの行の罫線を、ノードの記号の左右に分ける。`*` がノードの位置 (internal/dag の Rows)。

@@ -3,6 +3,7 @@ package dag
 import (
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -85,22 +86,41 @@ func TestRows(t *testing.T) {
 			want:  "* a\n│ * b\n├─┘\n* c",
 		},
 		{
-			name:  "分岐は下流の分だけ右にレーンを開く行を挟み、閉じたレーンは空きのまま残す",
+			name:  "分岐は下流の分だけ右にレーンを開く行を挟み、閉じたレーンには右のレーンを詰める",
 			links: [][2]string{{"a", "b"}, {"a", "c"}},
 			order: []string{"a", "b", "c"},
-			want:  "* a\n├─┐\n* │ b\n  * c",
+			want:  "* a\n├─┐\n* │ b\n┌─┘\n* c",
 		},
 		{
-			name:  "3 本に分かれる",
+			name:  "分岐の先の鎖も、詰めた後のレーンで続く",
+			links: [][2]string{{"a", "b"}, {"a", "c"}, {"c", "d"}},
+			order: []string{"a", "b", "c", "d"},
+			want:  "* a\n├─┐\n* │ b\n┌─┘\n* c\n* d",
+		},
+		{
+			name:  "右に 2 本以上あれば 1 本ずつ行を分けて詰める",
 			links: [][2]string{{"a", "b"}, {"a", "c"}, {"a", "d"}},
 			order: []string{"a", "b", "c", "d"},
-			want:  "* a\n├─┬─┐\n* │ │ b\n  * │ c\n    * d",
+			want:  "* a\n├─┬─┐\n* │ │ b\n┌─┘ │\n│ ┌─┘\n* │ c\n┌─┘\n* d",
+		},
+		{
+			name:   "詰める行の横線は、動くレーンが dashed なら ┄",
+			links:  [][2]string{{"a", "b"}, {"a", "c"}},
+			order:  []string{"a", "b", "c"},
+			dashed: func(_, after string) bool { return after == "c" },
+			want:   "* a\n├┄┐\n* ┆ b\n┌┄┘\n* c",
 		},
 		{
 			name:  "合流の間を通り抜けるレーンとは ┼ で交差する",
 			links: [][2]string{{"a", "d"}, {"b", "e"}, {"c", "d"}, {"f", "e"}},
 			order: []string{"a", "b", "c", "d", "f", "e"},
-			want:  "* a\n│ * b\n│ │ * c\n├─┼─┘\n* │ d\n* │ f\n├─┘\n* e",
+			want:  "* a\n│ * b\n│ │ * c\n├─┼─┘\n* │ d\n┌─┘\n│ * f\n├─┘\n* e",
+		},
+		{
+			name:  "合流で外れたレーンの右にレーンがあれば、ノードの行の前に詰める",
+			links: [][2]string{{"a", "d"}, {"b", "d"}, {"b", "e"}},
+			order: []string{"a", "b", "d", "e"},
+			want:  "* a\n│ * b\n│ ├─┐\n├─┘ │\n│ ┌─┘\n* │ d\n┌─┘\n* e",
 		},
 		{
 			name:   "dashed の辺は縦を ┆、横を ┄ で描く。辺の無いノードは空きのレーンに出る",
@@ -116,10 +136,10 @@ func TestRows(t *testing.T) {
 			want:  "* a\n* b\n* c\n* d",
 		},
 		{
-			name:  "閉じて空いたレーンを次のノードが使い、右端の空きは詰める",
+			name:  "上流の無いノードは右端にレーンを開く",
 			links: [][2]string{{"a", "b"}, {"a", "c"}, {"c", "d"}, {"f", "d"}},
 			order: []string{"a", "b", "c", "f", "d", "g"},
-			want:  "* a\n├─┐\n* │ b\n  * c\n* │ f\n├─┘\n* d\n* g",
+			want:  "* a\n├─┐\n* │ b\n┌─┘\n* c\n│ * f\n├─┘\n* d\n* g",
 		},
 		{
 			name:  "待ちの輪は Depth の小さいものから出し、戻る辺は描かない。ノードは 1 回だけ出る",
@@ -140,9 +160,63 @@ func TestRows(t *testing.T) {
 			if dashed == nil {
 				dashed = solid
 			}
-			got := draw(New(tt.links, less).Rows(tt.order, dashed))
+			got := draw(New(tt.links, less).Rows(tt.order, dashed, solid))
 			if got != tt.want {
 				t.Errorf("Rows =\n%s\nwant\n%s", got, tt.want)
+			}
+		})
+	}
+}
+
+// drawMarks は Rows の結果のうち、印の付いた桁だけを残し、ほかを空白にした形にする。
+func drawMarks(rows []Row) string {
+	lines := make([]string, 0, len(rows))
+	for _, r := range rows {
+		cells := []rune(r.Lanes)
+		out := []rune(strings.Repeat(" ", len(cells)))
+		for _, i := range r.Marks {
+			out[i] = cells[i]
+		}
+		lines = append(lines, strings.TrimRight(string(out), " "))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func TestRows_highlight(t *testing.T) {
+	tests := []struct {
+		name  string
+		links [][2]string
+		order []string
+		chain [][2]string
+		want  string
+	}{
+		{
+			name:  "印の付いた辺は、分岐の横線、縦線、詰める行の罫線に印を付ける。ノードの * には付けない",
+			links: [][2]string{{"a", "b"}, {"a", "c"}, {"c", "d"}},
+			order: []string{"a", "b", "c", "d"},
+			chain: [][2]string{{"a", "c"}, {"c", "d"}},
+			want:  "\n├─┐\n  │\n┌─┘\n\n",
+		},
+		{
+			name:  "合流は印の付いた上流のレーンと、そこまでの横線に印を付ける。通り抜けるレーンは自分の印に従う",
+			links: [][2]string{{"a", "d"}, {"b", "e"}, {"c", "d"}, {"f", "e"}},
+			order: []string{"a", "b", "c", "d", "f", "e"},
+			chain: [][2]string{{"c", "d"}},
+			want:  "\n\n\n├─┼─┘\n\n\n\n\n",
+		},
+		{
+			name:  "印の付いた辺が無ければ、どの行にも印は無い",
+			links: [][2]string{{"a", "b"}, {"a", "c"}},
+			order: []string{"a", "b", "c"},
+			want:  "\n\n\n\n",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			highlight := func(before, after string) bool { return slices.Contains(tt.chain, [2]string{before, after}) }
+			got := drawMarks(New(tt.links, less).Rows(tt.order, solid, highlight))
+			if got != tt.want {
+				t.Errorf("Rows の印 =\n%q\nwant\n%q", got, tt.want)
 			}
 		})
 	}

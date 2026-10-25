@@ -4,7 +4,7 @@ import type { EngineInterface, Register, Timer } from 'claude-code'
 import type { BoardData, BoardRow, GraphLink, GraphNode, GraphRow, ParkingCard } from '../types'
 import { loadBoard } from './board-data'
 import { daemonBin } from './daemon-bin'
-import { COLOR, Graph, ICON, MEMO, candidates, cells, chain, fit, isBlocked, isStuck, legendRows, splitLanes, summary, tags } from './graph'
+import { CHAIN_COLOR, COLOR, Graph, ICON, MEMO, candidates, cells, chain, fit, isBlocked, isStuck, legendRows, pieces, splitLanes, summary, tags } from './graph'
 import { logChange, logEvent, settle } from './log'
 import type { Fields } from './log'
 import {
@@ -155,6 +155,19 @@ export const registerBoard: Register = on => {
 
     // 行は枠なし (plain) の Button にして、枠付きの Button は操作だけに使う。レーンの罫線は薄く描き、ノードの記号の
     // 左右に分けて置く。辺をつなぐだけの行は罫線だけ。
+    // lanes は罫線の区間を描く。longest chain の辺の桁 (marks) だけ色を付け、ほかは薄く描く。
+    const lanes = (r: GraphRow, from: number, to: number) =>
+      pieces(r.lanes, r.marks, from, to).map((p, k) =>
+        p.marked ? (
+          <Text key={k} color={CHAIN_COLOR}>
+            {p.text}
+          </Text>
+        ) : (
+          <Text key={k} dimColor>
+            {p.text}
+          </Text>
+        ),
+      )
     const row = (r: GraphRow, i: number) => {
       const { left, right } = splitLanes(r.lanes)
       const n = r.node === undefined ? undefined : g.node(r.node)
@@ -162,7 +175,7 @@ export const registerBoard: Register = on => {
         return (
           <Box key={`box:lane:${i}`} flexDirection="row">
             <Text>{' '.repeat(GUTTER)}</Text>
-            <Text dimColor>{left}</Text>
+            {lanes(r, 0, left.length)}
           </Box>
         )
       }
@@ -173,10 +186,10 @@ export const registerBoard: Register = on => {
       return (
         <Box key={`box:row:${n.key}`} flexDirection="row">
           <Text>{isSel ? '› ' : ' '.repeat(GUTTER)}</Text>
-          <Text dimColor>{left}</Text>
+          {lanes(r, 0, left.length)}
           <Button key={`row:${n.key}`} plain onPress={() => choose(isSel ? '' : n.key)}>
             <Text color={COLOR[n.state]}>{ICON[n.state]}</Text>
-            <Text dimColor>{right}</Text>
+            {lanes(r, left.length + 1, r.lanes.length)}
             <Text color={isStuck(n) ? COLOR[n.state] : undefined} bold={isSel ? true : undefined}>{` ${fit(n.title, room)}${tag}`}</Text>
           </Button>
         </Box>
@@ -377,7 +390,7 @@ export const registerBoard: Register = on => {
           {memos.length > 0 && (
             <Box key="section:parking" flexDirection="column">
               <Box flexDirection="row" gap={1}>
-                <Text bold color="success">
+                <Text bold>
                   {MEMO} parking {String(memos.length)}
                 </Text>
                 {/* 古いメモをまとめて捨てる。該当があるときだけ出し、日数はこの mod が決める (park discard --days)。 */}

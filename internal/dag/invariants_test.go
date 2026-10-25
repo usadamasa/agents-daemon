@@ -178,6 +178,7 @@ func checkCause(fail func(key, msg string), r *rand.Rand, links [][2]string, g *
 }
 
 // checkRows は order のノードを 1 回ずつ出し、ノードの行には `*` が 1 つだけ、つなぐ行には無いことを見る。
+// ノードの行のレーンには空きの列が無く (閉じたレーンには右のレーンを詰める)、印は罫線の桁にだけ付く。
 // order には辺の無いノードも混ぜ、辺のあるノードを落とすこともある。
 func checkRows(fail func(key, msg string), r *rand.Rand, g *Graph, nodes []string) {
 	order := slices.Clone(nodes)
@@ -189,8 +190,9 @@ func checkRows(fail func(key, msg string), r *rand.Rand, g *Graph, nodes []strin
 	}
 	r.Shuffle(len(order), func(i, j int) { order[i], order[j] = order[j], order[i] })
 	dashed := func(string, string) bool { return r.IntN(2) == 0 }
+	highlight := func(string, string) bool { return r.IntN(2) == 0 }
 
-	rows := g.Rows(order, dashed)
+	rows := g.Rows(order, dashed, highlight)
 
 	emitted := []string{}
 	for _, row := range rows {
@@ -200,6 +202,19 @@ func checkRows(fail func(key, msg string), r *rand.Rand, g *Graph, nodes []strin
 			fail("", fmt.Sprintf("Rows(%v): つなぐ行 %q に * がある", order, row.Lanes))
 		case row.Node != "" && stars != 1:
 			fail("", fmt.Sprintf("Rows(%v): ノードの行 %q の * が 1 つでない", order, row.Lanes))
+		}
+		cells := []rune(row.Lanes)
+		if row.Node != "" {
+			for i := 0; i < len(cells); i += 2 {
+				if cells[i] == ' ' {
+					fail("", fmt.Sprintf("Rows(%v): ノードの行 %q の %d 桁目が空きのレーン", order, row.Lanes, i))
+				}
+			}
+		}
+		for _, i := range row.Marks {
+			if i < 0 || i >= len(cells) || cells[i] == ' ' || cells[i] == '*' {
+				fail("", fmt.Sprintf("Rows(%v): 行 %q の印 %d が罫線の桁でない", order, row.Lanes, i))
+			}
 		}
 		if row.Node != "" {
 			emitted = append(emitted, row.Node)

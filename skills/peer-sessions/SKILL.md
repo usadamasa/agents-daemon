@@ -55,7 +55,7 @@ printenv REX_SESSION
 ### 依存の辺を書く
 
 セッションをまたぐ依存は Task 系ツールの `blockedBy` では張れないので、渡す側が agents-daemon の
-辺として書く。辺は依存のボード (`/board`) と入力欄の上の band に出る。
+辺として書く。辺は依存のボード (`/board`) に出る。
 
 ```sh
 "${XDG_CACHE_HOME:-$HOME/.cache}/agents-daemon/bin/agents-daemon" edge add \
@@ -67,8 +67,8 @@ printenv REX_SESSION
 `--before` は `pr:<owner>/<repo>#<番号>` や `issue:` でもよい。参照の形と `rm` / `list` は
 `agents-daemon:agents-daemon` skill の `references/operations.md`「セッションをまたぐ辺を書く」。
 
-辺を書かずに送ると、band に `no edge: <name>` が出て、辺を書くかその peer が済むまで残る。
-返事や報告のように依存の無い送信なら、ユーザーが名前を押して消す。
+辺を書かずに送ると、`SendMessage` の結果に辺が無いことと書き方が添えられる。依存があれば上の形で書き、
+返事や報告のように依存の無い送信なら書かずに進める。
 
 ### やらないこと
 

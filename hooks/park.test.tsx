@@ -7,7 +7,7 @@ const TOOL = 'mcp__agents-daemon__park'
 
 type Ran = { argv: string[]; stdin?: string }
 
-// world は plugin の下にいる engine の代わりを立てる。park と status の呼び出しは run が答える。
+// world は plugin の下にいる engine の代わりを立てる。park の呼び出しは run が答える。
 function world(on: On, run: (argv: readonly string[]) => ProcessRunResult) {
   const ran: Ran[] = []
   const tools: Record<string, unknown>[] = []
@@ -33,35 +33,19 @@ function output(stdout: string, exitCode = 0, stderr = ''): ProcessRunResult {
   return { exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false }
 }
 
-const STATUS = [BIN, 'status', '--board', '--cwd', CWD]
-
 function item(id: string) {
-  return { id, kind: 'aside', title: 't', sources: [{ session_id: 'SELF', session: 'self', live: true, at: '2026-10-19T01:00:00Z' }] }
+  return { id, kind: 'aside', title: 't', sources: [{ session_id: 'SELF', cwd: CWD, at: '2026-10-19T01:00:00Z' }] }
 }
 
-// board は status --board の答え。here の行の parking がこの repo の open のメモ (count 個)。
-function board(count: number) {
-  return {
-    daemon_running: true,
-    columns: [],
-    here: CWD,
-    rows: [{ repo: CWD, title: 'agents-daemon', cards: [], parking: Array.from({ length: count }, (_, i) => item(`id${i}`)) }],
-    graph: { nodes: [], links: [], longest_chain: [] },
-  }
-}
-
-// add と status --board に答える。
-function answer(count: number, created: boolean) {
-  return (argv: readonly string[]) => {
-    if (argv[2] === 'add') return output(JSON.stringify({ created, item: item('20261019T010000-abcd1234') }))
-    return output(JSON.stringify(board(count)))
-  }
+// park add に答える。
+function answer(created: boolean) {
+  return () => output(JSON.stringify({ created, item: item('20261019T010000-abcd1234') }))
 }
 
 const START = { cwd: CWD, surface: 'terminal', isInteractive: true } as const
 
 test('session.start で park の tool を登録する', async ($, on) => {
-  const w = world(on, answer(2, true))
+  const w = world(on, answer(true))
   await $.session.start(START)
 
   expect(w.tools.length).toBe(1)
@@ -77,12 +61,12 @@ test('session.start で park の tool を登録する', async ($, on) => {
   expect(tool.description).toMatch(/進めるのに要る判断/)
   expect(tool.description).toMatch(/危ない操作の確認/)
 
-  // メモの一覧は band (hooks/band.tsx) が読む status --board から取り、park list は呼ばない。
-  expect(w.ran.map(r => r.argv)).toEqual([STATUS])
+  // session.start ではメモの一覧もボードも読まない。
+  expect(w.ran.map(r => r.argv)).toEqual([])
 })
 
 test('tool の呼び出しは park add に JSON を stdin で渡し、新しく置いたことを返す', async ($, on) => {
-  const w = world(on, answer(1, true))
+  const w = world(on, answer(true))
   await $.session.start(START)
   w.ran.length = 0
 
@@ -103,21 +87,21 @@ test('tool の呼び出しは park add に JSON を stdin で渡し、新しく�
     session_id: 'SELF',
   })
   expect(String(res.result)).toMatch(/^メモを置きました \(20261019T010000-abcd1234\)。既定 \(やらない\) で進めてください/)
-  // 置いた後にボードを読み直し、band のメモを更新する。
-  expect(w.ran[1]?.argv).toEqual(STATUS)
+  // 置いた後にボードは読み直さない (pane は開いている間だけ自分で読み直す)。
+  expect(w.ran).toHaveLength(1)
 })
 
 test('既に置かれていたメモにまとまったら、そう伝える', async ($, on) => {
-  const w = world(on, answer(1, false))
+  const w = world(on, answer(false))
   await $.session.start(START)
 
   const res = await $.tool.call({ tool: TOOL, kind: 'scope', title: 't' } as never)
   expect(String(res.result)).toMatch(/^既に置かれていたメモ \(20261019T010000-abcd1234\) にまとめました。既定で進めてください/)
-  expect(w.ran.at(-1)?.argv).toEqual(STATUS)
+  expect(w.ran.at(-1)?.argv).toEqual([BIN, 'park', 'add', '--cwd', CWD])
 })
 
 test('model が session_id を入れてきても、このセッションの ID で上書きする', async ($, on) => {
-  const w = world(on, answer(1, true))
+  const w = world(on, answer(true))
   await $.session.start(START)
   w.ran.length = 0
 
@@ -126,7 +110,7 @@ test('model が session_id を入れてきても、このセッションの ID �
 })
 
 test('park add が失敗したら、置けなかった理由を model へ返す', async ($, on) => {
-  world(on, argv => (argv[2] === 'add' ? output('', 1, 'kind "decision" は aside / scope / preference のどれでもない') : output(JSON.stringify(board(0)))))
+  world(on, () => output('', 1, 'kind "decision" は aside / scope / preference のどれでもない'))
   await $.session.start(START)
 
   const res = await $.tool.call({ tool: TOOL, kind: 'decision', title: 't' } as never)

@@ -9,7 +9,7 @@
 | ---- | ---- |
 | `Handoff.tla` | メモ 1 つを mod が取って渡す (peer / self / spawn)、戻す、捨てる。セッションの終了と daemon の見え方、終了したセッションのタスクを adopt する |
 | `TaskLog.tla` | TaskCreate と TaskList の PostToolUse hook がタスクの記録を書く・同期する |
-| `FileNotice.tla` | ファイルを触った tool の結果に、そのファイルに関係するメモを model 向けに添える。並列の tool の hook と、古いままのボードの写し |
+| `FileNotice.tla` | ファイルを触った tool の結果に、そのファイルに関係するメモを model 向けに添える。並列の tool の hook、呼び出しごとに `park list` で読んだ写しが update までに古くなること、compact |
 
 どのステップが実装のどこに当たるかは `.tla` のコメントが持つ (ファイルと関数)。
 
@@ -30,11 +30,11 @@ TLC は devShell の `tlaplus` (`tlc`)。CI では回さない。`scripts/model-
 | | `AdoptLeavesOne`: adopt でメモかタスクの一方は残る | メモを書いてから記録を消す |
 | | `HandedWhenDelivered`: 届いたメモは handed のまま | Discard も `--from open` で、取られたメモを上書きしない |
 | `TaskLog.cfg` | `RecordsComplete`: TaskCreate の記録は失われない | TaskList の sync は、一覧の最大の id より大きい id の記録 (一覧の後に作られた) を消さない |
-| `FileNotice.cfg` | `AtMostOnce`: 1 つのメモを添えるのはセッションの中で高々 1 回 | 添えるメモを選ぶのと told に足すのを 1 回の `update` の中で行う |
-| | `NoneMissed`: 触ったファイルに関係するメモは、hook が済んだ時点で伝わっている | 写しにあって told に無いものは全部添える。後から置かれたメモは次に触ったときに伝える |
-| `FileNoticeRace.cfg` | `AtMostOnce` が破れる (`violated` を期待) | told を読んでから別のステップで書くと、並列の 2 つの Read が同じメモを添える。上の形を選んだ根拠 |
-| `FileNoticeCompact.cfg` | `Informed` が破れる (`violated` を期待): compact の後に触ったファイルのメモを model が知っている | 今の `hooks/notice.ts` は compact の後も told を残すので、compact の前に伝えたメモを伝え直さない。添えたメモが要約に残るかは決まらないので、残らない側に倒している |
-| `FileNoticeReset.cfg` | `AtMostOnce` (1 つの context の中で) / `NoneMissed` / `Informed` | compact で told も空にする形。compact の後に触ったときに伝え直す |
+| `FileNotice.cfg` | `AtMostOnce`: 1 つのメモを添えるのは 1 つの context の中で高々 1 回 | 添えるメモを選ぶのと told に足すのを 1 回の `update` の中で行う。読んだ一覧が古くても、選ぶときに told を見る |
+| | `NoneMissed`: 触ったファイルに関係するメモは、hook が済んだ時点で伝わっている | 読んだ一覧にあって told に無いものは全部添える。読んだ後に置かれたメモは次に触ったときに伝える |
+| | `Informed`: compact の後に触ったファイルのメモを model が知っている | compact で told も空にし、compact の後に触ったときに伝え直す |
+| `FileNoticeRace.cfg` | `AtMostOnce` が破れる (`violated` を期待) | told を読んでから別のステップで書くと、並列の 2 つの Read が同じメモを添える。選ぶのと足すのを 1 回にした根拠 |
+| `FileNoticeCompact.cfg` | `Informed` が破れる (`violated` を期待) | compact の後も told を残すと、compact の前に伝えたメモを伝え直さない。添えたメモが要約に残るかは決まらないので、残らない側に倒している。compact で told を空にした根拠 |
 
 `FileNoticeRace.cfg` と `FileNoticeCompact.cfg` 以外の cfg は `holds` を期待する。期待と違えば `model-check.sh` は exit 1 にする。
 
@@ -48,8 +48,8 @@ TLC は devShell の `tlaplus` (`tlc`)。CI では回さない。`scripts/model-
 | `RecordsComplete` | `internal/tasklog/invariants_test.go` |
 
 mod の側 (取る → 送る → 届かなければ戻す、spawn で前景にならなければ戻さない、Discard は `--from open`) は
-`hooks/board.test.tsx` が `park` と `spawn` の呼び出しの列で固定する。`AtMostOnce` / `NoneMissed` は
-`hooks/band.test.tsx` が並列の `tool.call` で固定する。
+`hooks/board.test.tsx` が `park` と `spawn` の呼び出しの列で固定する。`AtMostOnce` / `NoneMissed` / `Informed` は
+`hooks/notice.test.tsx` が並列の `tool.call` と `session.compact` で固定する。
 
 ## 前提
 
@@ -60,6 +60,8 @@ mod の側 (取る → 送る → 届かなければ戻す、spawn で前景に�
   (届いていないメモが handed なだけ) ので、モデルでも失敗を許している。
 - 始まりの状態では daemon がそのセッションを生きていると見ている。タスクの記録より古い status.json は Adopt が受け付けない
   ので、「記録はあるのに daemon がまだそのセッションを見ていない」状態は始まりに置かない。
+- compact はターンの間に走り、tool の hook と交錯しない。モデルは compact を 1 ステップにし、どの時点でも起きうる
+  (hook の途中にも挟まる) ことにして、実際より広く探している。
 - hook は PostToolUse で、同じターンの並列の tool の hook は順序が決まらないとしている。Claude Code のタスクの id は
   セッションの中で 1 から順に増える整数としている (`internal/tasklog` の cc-premise)。
 - housekeeping (mtime による削除) は置いていない。1 回の受け渡しの間に上の不変条件と絡まないため。

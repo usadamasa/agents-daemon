@@ -1,18 +1,12 @@
 import type { EngineInterface } from 'claude-code'
 
-import type { BoardCard, BoardData, BoardRow, GraphNode, ParkedMemo, ParkingCard, ParkingSource } from '../types'
+import type { BoardCard, BoardData, BoardRow, GraphNode, ParkingCard, ParkingSource } from '../types'
 import { daemonBin } from './daemon-bin'
 import { fit } from './graph'
 import { logEvent, reason } from './log'
 
 // パーキングのメモの見せ方と、ボード (#121 の段 6) からの操作。行と列の描き方には依存させず、ボードの形が
-// 変わっても (#134) そのまま使えるようにする。描くのは hooks/board.tsx と hooks/band.tsx。
-
-// parkedMemos は `park list` の stdout を band に出す形にする。at は最後に置かれた時刻 (sources は置いた順)。
-export function parkedMemos(stdout: string): ParkedMemo[] {
-  const items = JSON.parse(stdout) as { id: string; kind: ParkedMemo['kind']; title: string; sources: { at: string }[] }[]
-  return items.map(item => ({ id: item.id, kind: item.kind, title: item.title, at: item.sources.at(-1)?.at ?? '' }))
-}
+// 変わっても (#134) そのまま使えるようにする。描くのは hooks/board.tsx。
 
 // lastPlacedAt はボードのメモが最後に置かれた時刻 (ボードの sources は新しい順)。
 export function lastPlacedAt(memo: ParkingCard): string {

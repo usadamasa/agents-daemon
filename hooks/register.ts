@@ -1,7 +1,7 @@
 import type { Register } from 'claude-code'
 
-import { registerBand, startBand } from './band'
 import { registerBoard, startBoard } from './board'
+import { registerHandoffNotice } from './handoff-notice'
 import { registerNotice } from './notice'
 import { registerPark, startPark } from './park'
 
@@ -11,13 +11,11 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     await startBoard($)
     await startPark($)
-    // band のメモの行は startBand が読むボードから取る。
-    await startBand($)
 
     return next(e)
   })
   registerBoard(on, options)
   registerPark(on, options)
-  registerBand(on, options)
   registerNotice(on, options)
+  registerHandoffNotice(on, options)
 }

@@ -14,14 +14,14 @@ README の「役割」が持つ。機能を足す・外す判断はそこに照�
 | ---- | ---- |
 | `.claude-plugin/plugin.json` | plugin manifest。version の実体はここ 1 箇所。marketplace.json は agents-marketplace リポジトリが持つ |
 | `hooks/hooks.json` | SessionStart、Stop、PostToolUse の配線と、mod の読み込み (`modules` の `hooks/register.ts`) |
-| `hooks/register.ts`, `hooks/daemon-bin.ts` | mod の入口。board、park、band の hook を束ね、`session.start` を持つ。`daemon-bin.ts` はバイナリの置き場 |
+| `hooks/register.ts`, `hooks/daemon-bin.ts` | mod の入口。board、park、notice、handoff-notice の hook を束ね、`session.start` を持つ。`daemon-bin.ts` はバイナリの置き場 |
 | `hooks/board.tsx`, `hooks/board.test.tsx`, `types/index.d.ts` | 依存のボード (B) を dock の pane に描く mod (Claude Code の mods)。`board` コマンドで開き、`agents-daemon status --board` の JSON を数秒ごとに読み直す。ノードを選んで `$.session.send` でそのタスクのセッションへ指示を送る。`types/` は mod が `$.state` に置く値の型。テストは `claude plugin test .` |
-| `hooks/graph.ts` | 依存の DAG の記号と凡例、数の行、レーンの行の分け方、Add blocker の候補 (B と A が使う) |
+| `hooks/graph.ts` | 依存の DAG の記号と凡例、数の行、レーンの行の分け方、Add blocker の候補、辺の無い渡し先 |
 | `hooks/park.tsx`, `hooks/park.test.tsx` | model が呼べる tool `park` (パーキングロットにメモを置く) |
-| `hooks/band.tsx`, `hooks/band.test.tsx` | 入力欄の上の band に依存の DAG (A)、`SendMessage` で渡したのに辺の無いセッション、パーキングのメモの行を出す |
-| `hooks/board-data.ts` | `status --board` を読んで board に置く (B と A が使う) |
+| `hooks/board-data.ts` | `status --board` を読んで board に置く (B と handoff-notice が使う) |
 | `hooks/parking.ts` | メモの見せ方 (時刻の JST 表示を含む) とボードからの操作 (捨てる、タスクにする、issue にするよう頼む、パーキングへ移す) |
-| `hooks/notice.ts`, `hooks/notice.test.tsx` | Read / Edit / Write の結果に、触ったファイルに関係するパーキングのメモを model 向けに添える |
+| `hooks/notice.ts`, `hooks/notice.test.tsx` | Read / Edit / Write の結果に、触ったファイルに関係するパーキングのメモを model 向けに添える。compact で伝え直す |
+| `hooks/handoff-notice.ts`, `hooks/handoff-notice.test.tsx` | `SendMessage` の結果に、辺の無い宛先への辺の書き方を model 向けに添える |
 | `hooks/log.ts`, `hooks/log.test.tsx` | mod の出来事を `board-log` でボードの経路のログに残す |
 | `hooks/ensure-daemon.sh`, `hooks/build-daemon.sh` | バイナリの用意 (detach build) と `daemon --ensure` |
 | `hooks/dream-harvest.sh` | Stop で `dream harvest --detach` を exec する |
@@ -142,8 +142,8 @@ hook・skill・daemon は別プロセスで、ファイル越しに繋がる。�
 | `hooks/board.tsx` の `BoardData` (`types/index.d.ts`) | `internal/board` の `Board` (`graph` は `internal/board/graph` の `Graph`) | `status --board` の JSON の形。片方の欄を変えたらもう片方も変える |
 | `hooks/park.tsx` の `FIELDS` と `Added` | `internal/parking` の `Request` と `Added` | `park add` の stdin と stdout の JSON の形 |
 | `hooks/parking.ts` の `park` と `run` が組む引数 | `cmd/agents-daemon/internal/boardcli/park.go` の `set`、`discard`、`adopt` | `park set <id> --status <status> --from <status>`、`park discard --days <N>`、`park adopt <session_id> <task_id>` に `--session` と `--cwd` を添える。渡す前に `--status handed --from open` で取り、届かなければ `--status open --from handed` で戻す |
-| `hooks/board.tsx` の `unlink` と `addBlocker` が組む引数 | `cmd/agents-daemon/internal/boardcli/edge.go` の `rm` と `add` | `edge rm\|add --before <ref> --before-cwd <cwd> --after <ref> --after-cwd <cwd>` |
-| `hooks/band.tsx` の `bringForward` が組む引数 | `cmd/agents-daemon/internal/boardcli/park.go` の `list` の `--task` | `park list --status open --task <task_id> --session <id> --cwd <cwd>` |
+| `hooks/board.tsx` の `unlink` と `addBlocker` が組む引数、`hooks/handoff-notice.ts` の `describe` が model に示す形 | `cmd/agents-daemon/internal/boardcli/edge.go` の `rm` と `add` | `edge rm\|add --before <ref> --before-cwd <cwd> --after <ref> --after-cwd <cwd>` |
+| `hooks/notice.ts` の `openMemos` が組む引数と読む欄 | `cmd/agents-daemon/internal/boardcli/park.go` の `list` の `--here` と `internal/parking` の `Item` | `park list --status open --here --session <id> --cwd <cwd>`。stdout は `Item` の配列 (`id`、`repo`、`files`、`sources[].session_id` などを読む) |
 | `hooks/parking.ts` の `spawnSession` が組む引数と stdin | `cmd/agents-daemon/internal/boardcli/spawn.go` と `internal/spawn` の `Result` | `spawn --repo <path>`、stdin は最初のターンの本文、stdout は `{session_id, pane_id, foreground, detail}` (foreground が false なら mod はメモを戻さない) |
 | `hooks/log.ts` の `logEvent` が組む引数 | `cmd/agents-daemon/internal/boardcli/board_log.go` の `board-log` と `internal/boardlog` の `Record` | `board-log --session <id> -- <event> key=value…`。出来事の名前は `internal/boardlog` の package doc |
 | 利用者の settings の `env` の `CLAUDE_STATUSLINE_SPEND_CAP` | `internal/statusline/run.go` の `SpendCapEnv` | 月額上限 (USD)。あるときだけ `statusline` が `cost/` の台帳 (`internal/statusline/spend`) を書き、📅 / 🧾 を出す |

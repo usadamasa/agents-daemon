@@ -1,5 +1,5 @@
 // Package parking は agent がタスクの途中で見つけた脇のメモ (パーキングロット、#89) を XDG state 配下に
-// 置く (#121)。置くのは `agents-daemon park add`、取り出すのはタスクのボードと band。
+// 置く (#121)。置くのは `agents-daemon park add`、取り出すのはタスクのボードとファイルのメモの通知 (`park list`)。
 //
 //	parking/<id>.json   1 件 1 ファイル
 //

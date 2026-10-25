@@ -304,6 +304,41 @@ func TestParkList_task(t *testing.T) {
 	}
 }
 
+// --here は --cwd の repo (linked worktree からでも main worktree の鍵) で絞る。--repo とは併用できない。
+func TestParkList_here(t *testing.T) {
+	root := parkTestEnv(t)
+	repo, wt := parkTestRepo(t, filepath.Join(root, "src", "home", "app"))
+	other := filepath.Join(root, "src", "home", "other")
+	if err := os.MkdirAll(other, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	out, _, err := runPark(t, parkInput, "add", "--cwd", wt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mine := decodeAdded(t, out).Item
+	if _, _, err := runPark(t, strings.Replace(parkInput, "保持期間", "別の件", 1), "add", "--cwd", other); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, cwd := range []string{repo, wt} {
+		out, _, err := runPark(t, "", "list", "--status", "open", "--here", "--session", "s1", "--cwd", cwd)
+		if err != nil {
+			t.Fatalf("park list --here --cwd %s: %v", cwd, err)
+		}
+		var items []parking.Item
+		if err := json.Unmarshal([]byte(out), &items); err != nil {
+			t.Fatalf("list の JSON を読めない: %v\n%s", err, out)
+		}
+		if len(items) != 1 || items[0].ID != mine.ID {
+			t.Errorf("--here --cwd %s = %+v, want %s だけ", cwd, items, mine.ID)
+		}
+	}
+	if _, _, err := runPark(t, "", "list", "--here", "--repo", repo, "--cwd", repo); err == nil {
+		t.Errorf("--here と --repo を併用できた")
+	}
+}
+
 // discard は open のメモのうち、最後に置かれてから --days 日より経ったものを
 // discarded にし、捨てたメモを出す。--days は必須で 1 以上。
 func TestParkDiscard(t *testing.T) {

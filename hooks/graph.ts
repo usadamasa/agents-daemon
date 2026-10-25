@@ -1,7 +1,7 @@
 import type { BoardGraph, GraphLink, GraphNode } from '../types'
 
 // 依存の DAG (#134、`status --board` の graph) の見せ方。記号、数の行、レーンの行の分け方、Add blocker の候補を持つ。
-// 段・下流の数・原因の鎖・レーンの行はバイナリ (internal/board、internal/dag) が数えて渡すので、ここは並べるだけにする。
+// 段・下流の数・原因の鎖・レーンの行はバイナリ (internal/board/graph、internal/dag) が数えて渡すので、ここは並べるだけにする。
 // 描くのは hooks/board.tsx (B の pane) と hooks/band.tsx (A の band、数の行だけ)。
 
 // 記号は絵文字を避け、端末の等幅で 1 桁に収まるもの。語は OSC 7501 の state / kind と Task 系ツールの status。

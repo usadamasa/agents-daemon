@@ -17,6 +17,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"syscall"
@@ -233,13 +234,34 @@ func (s Store) Find(d domain.Domain, repo, status string) ([]Item, error) {
 	if err != nil {
 		return nil, err
 	}
+	return Filter(items, repo, status), nil
+}
+
+// Filter は items のうち repo と status が一致するものを返す。空の条件は絞らない。該当なしは空の配列。
+func Filter(items []Item, repo, status string) []Item {
 	matched := []Item{}
 	for _, item := range items {
 		if (repo == "" || item.Repo == repo) && (status == "" || item.Status == status) {
 			matched = append(matched, item)
 		}
 	}
-	return matched, nil
+	return matched
+}
+
+// Mentioned は items のうち text に id が書かれたメモを、書かれた順に返す。items に無い id (消えたメモ) は落とす。
+// タスクの description からそのタスクが扱うメモを引くのに使い、メモの側にはタスクを書き戻さない。
+func Mentioned(items []Item, text string) []Item {
+	byID := map[string]Item{}
+	for _, item := range items {
+		byID[item.ID] = item
+	}
+	matched := []Item{}
+	for _, id := range mentionedIDs(text) {
+		if item, ok := byID[id]; ok {
+			matched = append(matched, item)
+		}
+	}
+	return matched
 }
 
 // PlacedDuring は items のうち、sessionID のセッションが taskID のタスクの途中で置いたメモを返す。
@@ -333,6 +355,22 @@ func newID(at time.Time) (string, error) {
 		return "", fmt.Errorf("id の乱数を作れない: %w", err)
 	}
 	return at.UTC().Format("20060102T150405") + "-" + hex.EncodeToString(b), nil
+}
+
+// idPattern は newID が作る id の形。前後に英数字が続くものは別の文字列とみなす。
+var idPattern = regexp.MustCompile(`\b\d{8}T\d{6}-[0-9a-f]{8}\b`)
+
+// mentionedIDs は text に書かれたメモの id を、現れた順に重複なく返す。無ければ空の配列。
+func mentionedIDs(text string) []string {
+	ids := []string{}
+	seen := map[string]bool{}
+	for _, id := range idPattern.FindAllString(text, -1) {
+		if !seen[id] {
+			seen[id] = true
+			ids = append(ids, id)
+		}
+	}
+	return ids
 }
 
 func write(dir string, item Item) error {

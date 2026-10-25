@@ -1,7 +1,11 @@
-package board
+// Package graph はボードのカードとタスクの記録から、セッションをまたぐタスクの依存の DAG を組む (#134)。
+// ボードの行と列を組むのは internal/board、段・下流・待ちの輪・鎖の数え方とレーンの割り当ては internal/dag が持つ。
+package graph
 
 import (
+	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -10,6 +14,16 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/parking"
+	"github.com/usadamasa/agents-daemon/internal/tasklog"
+)
+
+// ノードの種類。KindRef 以外はボードのカードの種類と同じ。
+const (
+	KindTask    = "task"    // TaskCreate で作られたタスク
+	KindTodo    = "todo"    // TodoWrite のリストの 1 項目
+	KindSession = "session" // タスクを作っていない生きているセッション (subject は今の作業か、セッションの名前)
+	// KindRef は辺の端点の参照だけがあるノード (まだ起きていないセッション、issue / PR、タスクを作らずに終了したセッション)。
+	KindRef = "ref"
 )
 
 // ノードの状態。語は OSC 7501 の state / kind と Task 系ツールの status に合わせる (#134)。
@@ -28,9 +42,6 @@ const (
 	// working に倒さない。
 	StateUnknown = "unknown"
 )
-
-// KindRef は辺の端点の参照だけがあるノード (まだ起きていないセッション、issue / PR、タスクを作らずに終了したセッション)。
-const KindRef = "ref"
 
 // 辺の出どころ。
 const (
@@ -72,7 +83,7 @@ type Node struct {
 	Ref       string `json:"ref,omitempty"`
 	CWD       string `json:"cwd,omitempty"`
 	SessionID string `json:"session_id,omitempty"`
-	// Session は表示名 (同名のセッションがあれば session ID の先頭が付く、sessionNames)。SessionName はセッション名
+	// Session は表示名 (同名のセッションがあれば session ID の先頭が付く、カードと同じ)。SessionName はセッション名
 	// そのもの (`claude --name`、SendMessage の宛先に書く形)。名前が無ければ空。
 	Session     string `json:"session,omitempty"`
 	SessionName string `json:"session_name,omitempty"`
@@ -83,10 +94,20 @@ type Node struct {
 	Downstream int `json:"downstream"`
 	// Parked はこのタスクの途中で置かれた open のメモの数。
 	Parked int `json:"parked"`
+	// Memos はこのタスクが扱うメモ (description に id が書かれたもの、書かれた順)。status を問わず照合し、
+	// 消えたメモの id は落とす。
+	Memos []MemoRef `json:"memos"`
 	// BlockedBy は上流をたどった原因の鎖 (近い順)。完了していない上流を、止まっているもの、進行中のものの順に選ぶ。
 	BlockedBy []string `json:"blocked_by"`
 	// Deadlock は待ちが輪になっていて、たどると自分へ戻ってくるか。
 	Deadlock bool `json:"deadlock"`
+}
+
+// MemoRef はタスクが扱うメモ 1 つ。
+type MemoRef struct {
+	ID     string `json:"id"`
+	Title  string `json:"title"`
+	Status string `json:"status"`
 }
 
 // Link は辺 1 本 (before が済まないと after を始められない)。
@@ -107,10 +128,44 @@ type EdgeRecord struct {
 	Note   string        `json:"note,omitempty"`
 }
 
-// graphBuilder はグラフを組む途中の状態。
-type graphBuilder struct {
-	in    input
-	panes map[string]*daemon.PaneStatus
+// Card はノードにするボードのカード 1 枚。
+type Card struct {
+	Key  string
+	Kind string
+	// TaskID は kind task のカードのタスクの ID。
+	TaskID    string
+	Title     string
+	SessionID string
+	// Session はカードと同じ表示名。CWD はカードの行を決めた cwd。
+	Session string
+	CWD     string
+	Live    bool
+	// Status はタスクの status (タスクの無いセッションは in_progress)。Pane はセッションの pane (無ければ nil)。
+	Status string
+	Pane   *daemon.PaneStatus
+}
+
+// Input はグラフを組む材料。
+type Input struct {
+	Cards []Card
+	Tasks []tasklog.Task
+	Todos []tasklog.TodoList
+	// Edges は domain のセッションをまたぐ辺 (internal/edge)。
+	Edges []edge.Edge
+	// Memos は domain のメモ (status を問わない)。タスクの description との照合に使う。Open はそのうち open のもの。
+	Memos []parking.Item
+	Open  []parking.Item
+	// Panes はボードに載せる生きているセッションの pane (session ID ごと)。
+	Panes map[string]*daemon.PaneStatus
+	// SessionNames は session ID → セッション名 (statusline の session_name)。
+	SessionNames map[string]string
+	// Elsewhere はセッションの記録がほかの domain の側にあるか。nil なら見ない。
+	Elsewhere func(sessionID string) bool
+}
+
+// builder はグラフを組む途中の状態。
+type builder struct {
+	in    Input
 	nodes map[string]*Node
 	// bySession はセッションのタスク (と TodoWrite の項目、タスクの無いセッション) のノードの Key。
 	bySession map[string][]string
@@ -118,23 +173,23 @@ type graphBuilder struct {
 	seen      map[[2]string]bool
 }
 
-// buildGraph はカードからノードを、blockedBy と辺の記録から Links を組み、段・下流・鎖を数える。
-func buildGraph(in input, cards []placed, panes map[string]*daemon.PaneStatus, names map[string]string) Graph {
-	g := &graphBuilder{in: in, panes: panes, nodes: map[string]*Node{}, bySession: map[string][]string{}, seen: map[[2]string]bool{}}
-	for _, c := range cards {
-		g.addCard(c, names[c.card.SessionID])
+// Build はカードからノードを、blockedBy と辺の記録から Links を組み、段・下流・鎖を数える。
+func Build(in Input) Graph {
+	g := &builder{in: in, nodes: map[string]*Node{}, bySession: map[string][]string{}, seen: map[[2]string]bool{}}
+	for _, c := range in.Cards {
+		g.addCard(c)
 	}
 	g.linkBlockedBy()
 	g.linkEdges()
 	return g.finish()
 }
 
-func (g *graphBuilder) addCard(c placed, session string) {
-	n := &Node{Key: c.card.Key, Kind: c.card.Kind, Title: c.card.Subject, CWD: c.cwd, SessionID: c.card.SessionID, Session: session, SessionName: g.in.SessionNames[c.card.SessionID], Live: c.card.Live}
-	n.State, n.Detail = nodeState(c.status, c.pane)
-	switch c.card.Kind {
+func (g *builder) addCard(c Card) {
+	n := &Node{Key: c.Key, Kind: c.Kind, Title: c.Title, CWD: c.CWD, SessionID: c.SessionID, Session: c.Session, SessionName: g.in.SessionNames[c.SessionID], Live: c.Live, Memos: []MemoRef{}}
+	n.State, n.Detail = nodeState(c.Status, c.Pane)
+	switch c.Kind {
 	case KindTask:
-		n.Ref = "task:" + c.card.SessionID + "/" + c.card.TaskID
+		n.Ref = "task:" + c.SessionID + "/" + c.TaskID
 	case KindSession:
 		if n.SessionName != "" {
 			n.Ref = "session:" + n.SessionName
@@ -145,7 +200,7 @@ func (g *graphBuilder) addCard(c placed, session string) {
 }
 
 // nodeState はタスクの status とセッションの pane からノードの状態を決める。上限待ちは agent の自己申告より
-// 先に見る (mark と同じ順)。
+// 先に見る (カードの印と同じ順)。
 func nodeState(status string, p *daemon.PaneStatus) (state, detail string) {
 	switch {
 	case status == "completed":
@@ -179,7 +234,7 @@ func nodeState(status string, p *daemon.PaneStatus) (state, detail string) {
 }
 
 // linkBlockedBy は同じセッションの blockedBy を辺にする。記録に無い blocker は描かない。
-func (g *graphBuilder) linkBlockedBy() {
+func (g *builder) linkBlockedBy() {
 	for _, t := range g.in.Tasks {
 		for _, id := range t.BlockedBy {
 			g.link(t.SessionID+"/"+id, t.SessionID+"/"+t.ID, LinkTask, nil)
@@ -188,7 +243,7 @@ func (g *graphBuilder) linkBlockedBy() {
 }
 
 // linkEdges は辺の記録の端点をノードに解決して辺にする。before 側は末端、after 側は根のタスクにつなぐ。
-func (g *graphBuilder) linkEdges() {
+func (g *builder) linkEdges() {
 	for _, e := range g.in.Edges {
 		befores := g.resolve(e.Before, g.sinks)
 		afters := g.resolve(e.After, g.roots)
@@ -202,7 +257,7 @@ func (g *graphBuilder) linkEdges() {
 }
 
 // link は before → after を足す。どちらかのノードが無い辺、自分自身への辺、既にある辺は足さない。
-func (g *graphBuilder) link(before, after, kind string, via *EdgeRecord) {
+func (g *builder) link(before, after, kind string, via *EdgeRecord) {
 	pair := [2]string{before, after}
 	if g.nodes[before] == nil || g.nodes[after] == nil || before == after || g.seen[pair] {
 		return
@@ -213,7 +268,7 @@ func (g *graphBuilder) link(before, after, kind string, via *EdgeRecord) {
 
 // resolve は端点の参照をノードの Key にする。session: はセッションのノードのうち pick (根か末端) が選んだもの。
 // ノードが無い参照は置き場のノードを作る。
-func (g *graphBuilder) resolve(ep edge.Endpoint, pick func(sessionID string) []string) []string {
+func (g *builder) resolve(ep edge.Endpoint, pick func(sessionID string) []string) []string {
 	kind, rest, _ := strings.Cut(ep.Ref, ":")
 	switch kind {
 	case "task":
@@ -238,10 +293,10 @@ func (g *graphBuilder) resolve(ep edge.Endpoint, pick func(sessionID string) []s
 }
 
 // placeholder は参照を鍵にした置き場のノードを作り (既にあればそのまま)、Key を返す。
-func (g *graphBuilder) placeholder(ep edge.Endpoint, title, sessionID, state string) string {
+func (g *builder) placeholder(ep edge.Endpoint, title, sessionID, state string) string {
 	key := "ref:" + ep.Ref
 	if g.nodes[key] == nil {
-		n := &Node{Key: key, Kind: KindRef, State: state, Title: title, Ref: ep.Ref, CWD: ep.CWD, SessionID: sessionID}
+		n := &Node{Key: key, Kind: KindRef, State: state, Title: title, Ref: ep.Ref, CWD: ep.CWD, SessionID: sessionID, Memos: []MemoRef{}}
 		if sessionID != "" {
 			n.Session, n.SessionName = title, title
 		}
@@ -253,7 +308,7 @@ func (g *graphBuilder) placeholder(ep edge.Endpoint, title, sessionID, state str
 // latestSession は名前のセッションのうち最後に動いたもの (pane があればそれ、無ければタスクの更新が新しいもの)。
 // その名前のセッションが無ければ空。記録がほかの domain の側にあるセッションは選ばない (名前の記録は domain を
 // またいで 1 つなので)。
-func (g *graphBuilder) latestSession(name string) string {
+func (g *builder) latestSession(name string) string {
 	var best string
 	var bestAt time.Time
 	bestLive := false
@@ -265,7 +320,7 @@ func (g *graphBuilder) latestSession(name string) string {
 	}
 	sort.Strings(ids)
 	for _, id := range ids {
-		live, at := g.panes[id] != nil, g.lastUpdate(id)
+		live, at := g.in.Panes[id] != nil, g.lastUpdate(id)
 		if best == "" || (live && !bestLive) || (live == bestLive && at.After(bestAt)) {
 			best, bestAt, bestLive = id, at, live
 		}
@@ -273,7 +328,7 @@ func (g *graphBuilder) latestSession(name string) string {
 	return best
 }
 
-func (g *graphBuilder) lastUpdate(sessionID string) time.Time {
+func (g *builder) lastUpdate(sessionID string) time.Time {
 	var at time.Time
 	for _, t := range g.in.Tasks {
 		if t.SessionID == sessionID && t.UpdatedAt.After(at) {
@@ -289,16 +344,16 @@ func (g *graphBuilder) lastUpdate(sessionID string) time.Time {
 }
 
 // roots はセッションのノードのうち、同じセッションの blockedBy で止められていないもの。
-func (g *graphBuilder) roots(sessionID string) []string {
+func (g *builder) roots(sessionID string) []string {
 	return g.sessionEnds(sessionID, func(l Link) string { return l.After })
 }
 
 // sinks はセッションのノードのうち、同じセッションのどのノードも止めていないもの。
-func (g *graphBuilder) sinks(sessionID string) []string {
+func (g *builder) sinks(sessionID string) []string {
 	return g.sessionEnds(sessionID, func(l Link) string { return l.Before })
 }
 
-func (g *graphBuilder) sessionEnds(sessionID string, side func(Link) string) []string {
+func (g *builder) sessionEnds(sessionID string, side func(Link) string) []string {
 	inner := map[string]bool{}
 	for _, l := range g.links {
 		if l.Kind == LinkTask {
@@ -315,38 +370,40 @@ func (g *graphBuilder) sessionEnds(sessionID string, side func(Link) string) []s
 }
 
 // finish は段・下流・原因の鎖・メモの数を数え、ノードと辺を並べる。
-func (g *graphBuilder) finish() Graph {
+func (g *builder) finish() Graph {
 	pairs := make([][2]string, 0, len(g.links))
 	for _, l := range g.links {
 		pairs = append(pairs, [2]string{l.Before, l.After})
 	}
-	a := dag.New(pairs, keyLess)
+	a := dag.New(pairs, KeyLess)
 	open := func(key string) bool { return g.nodes[key].State != StateCompleted }
 	rankOf := func(key string) int { return rank(g.nodes[key].State) }
 	out := Graph{Nodes: make([]Node, 0, len(g.nodes)), Links: g.links, LongestChain: []string{}}
+	memos := g.mentionedMemos()
 	for key, n := range g.nodes {
 		down, cyclic := a.Reach(key)
 		n.Depth = a.Depth(key)
 		n.Downstream = len(down)
 		n.Deadlock = cyclic
 		n.BlockedBy = a.Cause(key, open, rankOf)
-		n.Parked = parked(*n, g.in.Parking)
+		n.Parked = parked(*n, g.in.Open)
+		n.Memos = append(n.Memos, memos[key]...)
 		out.Nodes = append(out.Nodes, *n)
 	}
 	sort.Slice(out.Nodes, func(i, j int) bool {
 		if out.Nodes[i].Downstream != out.Nodes[j].Downstream {
 			return out.Nodes[i].Downstream > out.Nodes[j].Downstream
 		}
-		return keyLess(out.Nodes[i].Key, out.Nodes[j].Key)
+		return KeyLess(out.Nodes[i].Key, out.Nodes[j].Key)
 	})
 	if out.Links == nil {
 		out.Links = []Link{}
 	}
 	sort.Slice(out.Links, func(i, j int) bool {
 		if out.Links[i].Before != out.Links[j].Before {
-			return keyLess(out.Links[i].Before, out.Links[j].Before)
+			return KeyLess(out.Links[i].Before, out.Links[j].Before)
 		}
-		return keyLess(out.Links[i].After, out.Links[j].After)
+		return KeyLess(out.Links[i].After, out.Links[j].After)
 	})
 	// 待ちの輪も、人が解かないと進まないので止まっているノードとして数える。
 	for _, n := range out.Nodes {
@@ -361,7 +418,7 @@ func (g *graphBuilder) finish() Graph {
 
 // rows はレーンの行を 2 組組む: 完了したノードとその辺を落としたものと、全部を含むもの。落とした方は辺を絞って
 // 組み直す (Depth で輪を切る位置が辺の集合で変わるので、全部の表を使い回さない)。longest chain の辺には印を付ける。
-func (g *graphBuilder) rows(all *dag.Graph, nodes []Node, pairs [][2]string, open func(string) bool, chain []string) (opened, every []dag.Row) {
+func (g *builder) rows(all *dag.Graph, nodes []Node, pairs [][2]string, open func(string) bool, chain []string) (opened, every []dag.Row) {
 	kinds := map[[2]string]string{}
 	for _, l := range g.links {
 		kinds[[2]string{l.Before, l.After}] = l.Kind
@@ -386,7 +443,7 @@ func (g *graphBuilder) rows(all *dag.Graph, nodes []Node, pairs [][2]string, ope
 			openPairs = append(openPairs, p)
 		}
 	}
-	return dag.New(openPairs, keyLess).Rows(openOrder, dashed, highlight), all.Rows(order, dashed, highlight)
+	return dag.New(openPairs, KeyLess).Rows(openOrder, dashed, highlight), all.Rows(order, dashed, highlight)
 }
 
 // rank は原因の鎖で先に選ぶ上流の順。止まっているもの、進行中のもの、それ以外。
@@ -401,7 +458,19 @@ func rank(state string) int {
 	}
 }
 
-// parked はノードのタスクの途中で置かれた open のメモの数。タスクを持たないノードは、タスクを指さずに
+// mentionedMemos はタスクのノードの Key → description に id が書かれたメモ (status を問わない)。
+func (g *builder) mentionedMemos() map[string][]MemoRef {
+	out := map[string][]MemoRef{}
+	for _, t := range g.in.Tasks {
+		key := t.SessionID + "/" + t.ID
+		for _, m := range parking.Mentioned(g.in.Memos, t.Description) {
+			out[key] = append(out[key], MemoRef{ID: m.ID, Title: m.Title, Status: m.Status})
+		}
+	}
+	return out
+}
+
+// parked はノードのタスクの途中で置かれたメモの数。タスクを持たないノードは、タスクを指さずに
 // そのセッションが置いたメモを数える。
 func parked(n Node, memos []parking.Item) int {
 	if n.SessionID == "" || n.Kind == KindTodo {
@@ -411,14 +480,19 @@ func parked(n Node, memos []parking.Item) int {
 	if n.Kind == KindTask {
 		_, taskID, _ = strings.Cut(strings.TrimPrefix(n.Ref, "task:"), "/")
 	}
-	count := 0
-	for _, m := range memos {
-		for _, s := range m.Sources {
-			if s.SessionID == n.SessionID && s.TaskID == taskID {
-				count++
-				break
-			}
+	return len(parking.PlacedDuring(memos, n.SessionID, taskID))
+}
+
+// KeyLess は Key を比べる。同じセッションの task ID は数字なので、"10" が "9" より後になるように数で比べる。
+func KeyLess(a, b string) bool {
+	da, ia := filepath.Split(a)
+	db, ib := filepath.Split(b)
+	if da == db {
+		na, errA := strconv.Atoi(ia)
+		nb, errB := strconv.Atoi(ib)
+		if errA == nil && errB == nil {
+			return na < nb
 		}
 	}
-	return count
+	return a < b
 }

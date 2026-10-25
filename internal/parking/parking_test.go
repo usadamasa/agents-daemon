@@ -81,6 +81,80 @@ func TestPlacedDuring(t *testing.T) {
 	}
 }
 
+// mentionedIDs は文面に書かれたメモの id を、現れた順に重複なく拾う。id の形の前後に英数字が続くものは拾わない。
+func TestMentionedIDs(t *testing.T) {
+	const a, b = "20261025T044319-7ed42d24", "20261019T120000-0a1b2c3d"
+	tests := []struct {
+		name string
+		text string
+		want []string
+	}{
+		{"無い", "メモの id を書いていない", []string{}},
+		{"空", "", []string{}},
+		{"1 つ", "(メモ " + a + ")", []string{a}},
+		{"2 つ", "メモ " + a + " と\nメモ " + b, []string{a, b}},
+		{"重複", a + ", " + b + ", " + a, []string{a, b}},
+		{"後ろに英数字が続く", a + "ff", []string{}},
+		{"前に英数字が付く", "x" + a, []string{}},
+		{"乱数の部分が大文字", "20261025T044319-7ED42D24", []string{}},
+		{"乱数の部分が短い", "20261025T044319-7ed42d2", []string{}},
+		{"時刻の区切りが無い", "20261025044319-7ed42d24", []string{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := mentionedIDs(tt.text)
+			if got == nil || strings.Join(got, ",") != strings.Join(tt.want, ",") {
+				t.Errorf("mentionedIDs(%q) = %#v, want %#v", tt.text, got, tt.want)
+			}
+		})
+	}
+}
+
+// Mentioned は文面に id が書かれたメモを、書かれた順に返す。items に無い id は落とす。
+func TestMentioned(t *testing.T) {
+	const a, b, gone = "20261025T044319-7ed42d24", "20261019T120000-0a1b2c3d", "20261019T130000-0a1b2c3e"
+	items := []Item{{ID: a, Status: StatusHanded}, {ID: b, Status: StatusOpen}}
+	got := Mentioned(items, "メモ "+b+" と "+gone+" と "+a)
+	if len(got) != 2 || got[0].ID != b || got[1].ID != a || got[1].Status != StatusHanded {
+		t.Errorf("Mentioned() = %+v", got)
+	}
+	if got := Mentioned(items, ""); got == nil || len(got) != 0 {
+		t.Errorf("該当なしは空の配列: %#v", got)
+	}
+}
+
+// Filter は repo と status が一致するメモを残す。空の条件は絞らない。
+func TestFilter(t *testing.T) {
+	items := []Item{{ID: "1", Repo: "r", Status: StatusOpen}, {ID: "2", Repo: "r", Status: StatusHanded}, {ID: "3", Repo: "s", Status: StatusOpen}}
+	ids := func(items []Item) string {
+		out := []string{}
+		for _, item := range items {
+			out = append(out, item.ID)
+		}
+		return strings.Join(out, ",")
+	}
+	if got := ids(Filter(items, "", StatusOpen)); got != "1,3" {
+		t.Errorf("status で絞る = %s", got)
+	}
+	if got := ids(Filter(items, "r", "")); got != "1,2" {
+		t.Errorf("repo で絞る = %s", got)
+	}
+	if got := Filter(items, "x", ""); got == nil || len(got) != 0 {
+		t.Errorf("該当なしは空の配列: %#v", got)
+	}
+}
+
+// newID が作る id は mentionedIDs が拾う形と同じ。
+func TestMentionedIDs_matchesNewID(t *testing.T) {
+	id, err := newID(testNow)
+	if err != nil {
+		t.Fatalf("newID() error = %v", err)
+	}
+	if got := mentionedIDs("メモ " + id + " を扱う"); len(got) != 1 || got[0] != id {
+		t.Errorf("mentionedIDs() = %v, want [%s]", got, id)
+	}
+}
+
 // domain、repo、正規化した title が同じ open のメモには sources を足し、新しいメモを作らない。
 func TestAdd_mergesSameItem(t *testing.T) {
 	s := New(t.TempDir())

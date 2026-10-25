@@ -81,6 +81,7 @@ function node(key: string, state: string, title: string, extra: Record<string, u
     depth: 0,
     downstream: 0,
     parked: 0,
+    memos: [] as { id: string; title: string; status: string }[],
     blocked_by: [] as string[],
     deadlock: false,
     ...extra,
@@ -465,6 +466,23 @@ test('選んだノードの詳細に参照とセッション、上流をたど�
   expect(await ui.find({ type: 'Text', text: /選んだタスクは今の図に出ていません/ })).toBeDefined()
 })
 
+test('選んだタスクの詳細に、そのタスクが扱うメモ (description に id が書かれたもの) の title と status を出す (#213)', async ($, on) => {
+  const memos = [
+    { id: '20261025T010000-0000000a', title: '渡したメモ', status: 'handed' },
+    { id: '20261025T020000-0000000b', title: 'まだ置いてあるメモ', status: 'open' },
+  ]
+  boardWorld(on, withNodes(node('M/1', 'working', 'メモを扱う', { session: 'memo', memos })))
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($)
+  await ui.press({ key: 'row:M/1' })
+  const detail = await ui.find({ key: 'detail:M/1' })
+  expect(detail?.text).toMatch(/◇ 渡したメモ \(handed\)/)
+  expect(detail?.text).toMatch(/◇ まだ置いてあるメモ \(open\)/)
+  // メモの無いタスクには出さない。
+  await ui.press({ key: 'row:W/1' })
+  expect((await ui.find({ key: 'detail:W/1' }))?.text).not.toMatch(/\((handed|open|discarded)\)/)
+})
+
 test('セッションのノードの詳細は ref を出さず、名前と session ID の先頭 8 桁を出す (#196)', async ($, on) => {
   const session = { ...node('S1234567890/session', 'working', 'design'), kind: 'session', ref: 'session:design', session_id: 'S1234567890', session: 'design' }
   boardWorld(on, withNodes(session))
@@ -593,6 +611,12 @@ test('メモを選ぶと詳細を出し、Discard / To task / Ask for issue で�
   await ui.press({ key: 'task:W' })
   expect(w.sent[0].to).toBe('W')
   expect(w.sent[0].text).toMatch(/^パーキングロットのメモ「保持期間の根拠が無い」\(種類: aside\) をタスクにしてください。/)
+  // 着手の時期は指示せず、受け手の計画に任せる。ボードはタスクの description に書かれた id でメモと照合する (#213)。
+  expect(w.sent[0].text).not.toMatch(/今の作業の区切り/)
+  expect(w.sent[0].text).toMatch(/着手の時期は今の計画 \(タスクの依存\) に従ってください。/)
+  expect(w.sent[0].text).toMatch(/タスクの description にメモの id \(20261018T090000-aaaa\) を入れてください。/)
+  expect(w.sent[0].text).toMatch(/既にこのメモを扱うタスクがあれば、新しく作らずにその description に id を書き足すだけで構いません。/)
+  expect(w.sent[0].text).toMatch(/\(メモ 20261018T090000-aaaa\)$/)
   // 送る前に取る (open のときだけ handed にする)。届いたら handed のまま。
   expect(operations(w.ran)).toEqual([CLAIM])
 
@@ -709,6 +733,9 @@ test('メモを別の repo の新しいセッションへ渡す: 候補はメモ
   expect(w.fed).toHaveLength(1)
   expect(w.fed[0]).toMatch(/^このメモを渡すため、dotfile \(\/src\/home\/dotfile\) で新しいセッションとして起こしました。/)
   expect(w.fed[0]).toMatch(/パーキングロットのメモ「保持期間の根拠が無い」\(種類: aside\) をタスクにしてください。/)
+  expect(w.fed[0]).not.toMatch(/今の作業の区切り/)
+  expect(w.fed[0]).toMatch(/着手の時期は今の計画 \(タスクの依存\) に従ってください。/)
+  expect(w.fed[0]).toMatch(/タスクの description にメモの id \(20261018T090000-aaaa\) を入れてください。/)
   expect(w.sent).toEqual([])
   expect(await ui.find({ type: 'Text', text: /dotfile で新しいセッションを起こし、メモを渡しました/ })).toBeDefined()
   // 候補は渡した後に畳む。

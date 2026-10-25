@@ -154,10 +154,14 @@ export function canAdopt(node: GraphNode, self: string, data: BoardData): boolea
   return data.updated_at !== undefined && node.kind === 'task' && node.state === 'exited' && node.session_id !== undefined && node.session_id !== self
 }
 
-// taskText は「タスクにする」で送る文面。
+// taskText は「タスクにする」で送る文面。着手の時期は受け手の計画に任せる。ボードはタスクの description に
+// 書かれた id でメモと照合する (internal/board/graph)。
 export function taskText(memo: ParkingCard): string {
   return [
-    `パーキングロットのメモ「${memo.title}」(種類: ${memo.kind}) をタスクにしてください。TaskCreate で作り、今の作業の区切りで進めてください。`,
+    `パーキングロットのメモ「${memo.title}」(種類: ${memo.kind}) をタスクにしてください。` +
+      `TaskCreate で作り、タスクの description にメモの id (${memo.id}) を入れてください。` +
+      `既にこのメモを扱うタスクがあれば、新しく作らずにその description に id を書き足すだけで構いません。` +
+      `着手の時期は今の計画 (タスクの依存) に従ってください。`,
     ...context(memo),
   ].join('\n')
 }

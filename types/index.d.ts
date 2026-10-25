@@ -72,8 +72,17 @@ export type GraphNode = {
   depth: number
   downstream: number
   parked: number
+  // memos はこのタスクの description に id が書かれたメモ (書かれた順)。status を問わない。
+  memos: MemoRef[]
   blocked_by: string[]
   deadlock: boolean
+}
+
+// MemoRef はタスクが扱うメモ 1 つ。
+export type MemoRef = {
+  id: string
+  title: string
+  status: 'open' | 'handed' | 'discarded'
 }
 
 export type EdgeEndpoint = {

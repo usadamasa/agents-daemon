@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/usadamasa/agents-daemon/internal/board/graph"
 	"github.com/usadamasa/agents-daemon/internal/daemon"
 	"github.com/usadamasa/agents-daemon/internal/dag"
 	"github.com/usadamasa/agents-daemon/internal/domain"
@@ -15,8 +16,8 @@ import (
 )
 
 // nodes はグラフのノードを Key で引けるようにする。
-func nodes(g Graph) map[string]Node {
-	m := map[string]Node{}
+func nodes(g graph.Graph) map[string]graph.Node {
+	m := map[string]graph.Node{}
 	for _, n := range g.Nodes {
 		m[n.Key] = n
 	}
@@ -24,7 +25,7 @@ func nodes(g Graph) map[string]Node {
 }
 
 // links はグラフの辺を "before>after" の並びにする。
-func links(g Graph) []string {
+func links(g graph.Graph) []string {
 	out := []string{}
 	for _, l := range g.Links {
 		out = append(out, l.Before+">"+l.After)
@@ -72,13 +73,13 @@ func TestGraph_nodeStates(t *testing.T) {
 	})
 	got := nodes(b.Graph)
 	want := map[string]string{
-		"W/1": StateWorking, "W/2": StatePending, "W/3": StateCompleted,
-		"D/1": StateDone, "Q/1": StateQuestion, "P/1": StatePermission, "E/1": StateError, "L/1": StateLimit,
-		"X/1": StateExited, "X/2": StateExited,
-		"S/session": StateWorking, "U/session": StateDone,
+		"W/1": graph.StateWorking, "W/2": graph.StatePending, "W/3": graph.StateCompleted,
+		"D/1": graph.StateDone, "Q/1": graph.StateQuestion, "P/1": graph.StatePermission, "E/1": graph.StateError, "L/1": graph.StateLimit,
+		"X/1": graph.StateExited, "X/2": graph.StateExited,
+		"S/session": graph.StateWorking, "U/session": graph.StateDone,
 		// 状態を分類できないセッション (申告の前、古い record) は working に倒さない。
-		"V/session": StateUnknown, "N/1": StateUnknown,
-		"T/todo-0": StateCompleted, "T/todo-1": StateWorking,
+		"V/session": graph.StateUnknown, "N/1": graph.StateUnknown,
+		"T/todo-0": graph.StateCompleted, "T/todo-1": graph.StateWorking,
 	}
 	if len(got) != len(want) {
 		t.Errorf("nodes = %d, want %d: %+v", len(got), len(want), got)
@@ -137,11 +138,11 @@ func TestGraph_linksDepthAndDownstream(t *testing.T) {
 	for _, l := range b.Graph.Links {
 		switch l.Before + ">" + l.After {
 		case "A/3>B/1":
-			if l.Kind != LinkEdge || l.Edge == nil || l.Edge.ID != "e1" || l.Edge.Before.Ref != "task:A/3" || l.Edge.After.CWD != cwd || l.Edge.Note != "PR の後" {
+			if l.Kind != graph.LinkEdge || l.Edge == nil || l.Edge.ID != "e1" || l.Edge.Before.Ref != "task:A/3" || l.Edge.After.CWD != cwd || l.Edge.Note != "PR の後" {
 				t.Errorf("edge の辺 = %+v", l)
 			}
 		default:
-			if l.Kind != LinkTask || l.Edge != nil {
+			if l.Kind != graph.LinkTask || l.Edge != nil {
 				t.Errorf("blockedBy の辺 = %+v", l)
 			}
 		}
@@ -203,14 +204,14 @@ func TestGraph_refEndpoints(t *testing.T) {
 	}
 	got := nodes(b.Graph)
 	place := map[string]string{
-		"ref:issue:o/r#1":   StatePending,
-		"ref:pr:o/r#2":      StatePending,
-		"ref:session:later": StatePending,
-		"ref:session:gone":  StateExited,
+		"ref:issue:o/r#1":   graph.StatePending,
+		"ref:pr:o/r#2":      graph.StatePending,
+		"ref:session:later": graph.StatePending,
+		"ref:session:gone":  graph.StateExited,
 	}
 	for key, state := range place {
 		n := got[key]
-		if n.Kind != KindRef || n.State != state || n.Ref != key[len("ref:"):] || n.CWD != cwd {
+		if n.Kind != graph.KindRef || n.State != state || n.Ref != key[len("ref:"):] || n.CWD != cwd {
 			t.Errorf("%s = %+v, want 置き場のノード (%s)", key, n, state)
 		}
 	}
@@ -260,7 +261,7 @@ func TestGraph_refEndpointsEdgeCases(t *testing.T) {
 		SessionNames: map[string]string{"H": "home-only", "C": "loop", "D": "after"},
 	})
 	got := nodes(b.Graph)
-	if n := got["ref:session:home-only"]; n.State != StatePending || n.SessionID != "" || n.Session != "" {
+	if n := got["ref:session:home-only"]; n.State != graph.StatePending || n.SessionID != "" || n.Session != "" {
 		t.Errorf("ほかの domain のセッション = %+v, want session ID の無い pending", n)
 	}
 	want := []string{"C/1>C/2", "C/1>D/1", "C/2>C/1", "C/2>D/1", "ref:session:home-only>D/1"}
@@ -453,5 +454,55 @@ func TestGraph_parked(t *testing.T) {
 	}
 	if b.Rows[0].Parking[0].Sources[0].TaskID != "1" {
 		t.Errorf("source の task_id = %+v", b.Rows[0].Parking[0].Sources)
+	}
+}
+
+// タスクの description に書かれたメモの id をメモと照合し、ノードの memos に書かれた順で付ける。open 以外のメモも
+// 照合するが、パーキングの列と parked には open のメモだけを出す。記録に無い id (消えたメモ) は付けない。
+func TestGraph_memos(t *testing.T) {
+	const cwd = "/w/a"
+	const handed, open, discarded, gone = "20261025T010000-0000000a", "20261025T020000-0000000b", "20261025T030000-0000000c", "20261025T040000-0000000d"
+	memo := func(id, title, status string) parking.Item {
+		return parking.Item{ID: id, Domain: domain.Work, Repo: cwd, Status: status, Entry: parking.Entry{Kind: parking.KindAside, Title: title},
+			Sources: []parking.Source{{SessionID: "A", TaskID: "1", CWD: cwd, At: t0}}}
+	}
+	withDescription := func(t tasklog.Task, description string) tasklog.Task {
+		t.Description = description
+		return t
+	}
+	b := build(input{
+		Domain:   domain.Work,
+		PID:      42,
+		Snapshot: snapshot(daemon.PaneStatus{PaneID: "p1", SessionID: "A", CWD: cwd, AgentStatus: "working"}),
+		Tasks: []tasklog.Task{
+			withDescription(task("A", "1", "x", "in_progress", cwd), "メモ "+open+" と "+handed+" と "+gone+" を扱う。(メモ "+handed+")"),
+			withDescription(task("A", "2", "y", "pending", cwd), "メモ "+discarded),
+			task("A", "3", "z", "pending", cwd),
+		},
+		Parking: []parking.Item{
+			memo(handed, "渡したメモ", parking.StatusHanded),
+			memo(open, "まだ置いてあるメモ", parking.StatusOpen),
+			memo(discarded, "捨てたメモ", parking.StatusDiscarded),
+		},
+	})
+	got := nodes(b.Graph)
+	want := []graph.MemoRef{
+		{ID: open, Title: "まだ置いてあるメモ", Status: parking.StatusOpen},
+		{ID: handed, Title: "渡したメモ", Status: parking.StatusHanded},
+	}
+	if !reflect.DeepEqual(got["A/1"].Memos, want) {
+		t.Errorf("A/1 memos = %+v, want %+v", got["A/1"].Memos, want)
+	}
+	if want := []graph.MemoRef{{ID: discarded, Title: "捨てたメモ", Status: parking.StatusDiscarded}}; !reflect.DeepEqual(got["A/2"].Memos, want) {
+		t.Errorf("A/2 memos = %+v, want %+v", got["A/2"].Memos, want)
+	}
+	if got["A/3"].Memos == nil || len(got["A/3"].Memos) != 0 {
+		t.Errorf("description の無いタスクの memos は空の配列: %#v", got["A/3"].Memos)
+	}
+	if got["A/1"].Parked != 1 {
+		t.Errorf("parked = %d, want 1 (open のメモだけ数える)", got["A/1"].Parked)
+	}
+	if len(b.Rows) != 1 || len(b.Rows[0].Parking) != 1 || b.Rows[0].Parking[0].ID != open {
+		t.Errorf("パーキングの列は open のメモだけ: %+v", b.Rows)
 	}
 }

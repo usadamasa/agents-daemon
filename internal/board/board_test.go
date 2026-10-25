@@ -307,9 +307,3 @@ func TestBuild_daemonState(t *testing.T) {
 		t.Errorf("odd = %+v", odd.Rows)
 	}
 }
-
-func TestKeyLess(t *testing.T) {
-	if !keyLess("A/9", "A/10") || keyLess("A/10", "A/9") || !keyLess("A/1", "B/0") || !keyLess("A/session", "A/todo-0") {
-		t.Errorf("keyLess の並びが合わない")
-	}
-}

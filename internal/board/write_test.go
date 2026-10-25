@@ -92,6 +92,23 @@ func TestWrite_parking(t *testing.T) {
 	}
 }
 
+// タスクの description との照合には open 以外のメモも読む。
+func TestWrite_memos(t *testing.T) {
+	p := paths(t)
+	writeFile(t, p.ConfigFile(), `{"homePaths": ["/src/home"]}`)
+	const id = "20261025T010000-0000000a"
+	writeFile(t, filepath.Join(p.StateDir(), "tasks", "home", "H", "1.json"), `{"id":"1","subject":"渡されたメモ","description":"(メモ `+id+`)","status":"pending","session_id":"H","cwd":"/src/home/a"}`)
+	writeFile(t, filepath.Join(p.StateDir(), "parking", "home", id+".json"), `{"id":"`+id+`","repo":"/src/home/a","kind":"aside","title":"渡した","status":"handed","sources":[{"session_id":"H","cwd":"/src/home/a","at":"2026-10-18T09:00:00Z"}]}`)
+
+	home := writeBoard(t, p, Viewer{CWD: "/src/home/a"})
+	if len(home.Graph.Nodes) != 1 || len(home.Graph.Nodes[0].Memos) != 1 || home.Graph.Nodes[0].Memos[0].Title != "渡した" {
+		t.Errorf("nodes = %+v", home.Graph.Nodes)
+	}
+	if len(home.Rows) != 1 || len(home.Rows[0].Parking) != 0 {
+		t.Errorf("handed のメモはパーキングの列に出ない: %+v", home.Rows)
+	}
+}
+
 // グラフの辺には、開いたセッションの domain の辺 (edges/<domain>/) だけを使う。
 func TestWrite_edges(t *testing.T) {
 	p := paths(t)

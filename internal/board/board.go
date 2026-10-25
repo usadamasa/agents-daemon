@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/usadamasa/agents-daemon/internal/board/graph"
 	"github.com/usadamasa/agents-daemon/internal/daemon"
 	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/edge"
@@ -45,11 +46,11 @@ var columns = []Column{
 	{ID: ColumnCompleted, Title: "完了 (直近)"},
 }
 
-// カードの種類。
+// カードの種類。グラフのノードの種類と同じ語を使う。
 const (
-	KindTask    = "task"    // TaskCreate で作られたタスク
-	KindTodo    = "todo"    // TodoWrite のリストの 1 項目
-	KindSession = "session" // タスクを作っていない生きているセッション (subject は今の作業か、セッションの名前)
+	KindTask    = graph.KindTask
+	KindTodo    = graph.KindTodo
+	KindSession = graph.KindSession
 )
 
 // カードの印。セッションが人の手か時間を待っているときに、その進行中のカードに付く。
@@ -134,7 +135,7 @@ type Board struct {
 	Here string `json:"here"`
 	Rows []Row  `json:"rows"`
 	// Graph はタスクの依存の DAG (#134)。rows と同じカードとメモから組む。
-	Graph Graph `json:"graph"`
+	Graph graph.Graph `json:"graph"`
 }
 
 // input はボードを組む材料。
@@ -147,7 +148,8 @@ type input struct {
 	Snapshot *daemon.StatusSnapshot
 	Tasks    []tasklog.Task
 	Todos    []tasklog.TodoList
-	// Parking は domain の open のメモ。
+	// Parking は domain のメモ (status を問わない)。パーキングの列には open のものだけを出し、タスクとの照合には
+	// 全部を使う。
 	Parking []parking.Item
 	// Edges は domain のセッションをまたぐ辺 (internal/edge)。
 	Edges []edge.Edge
@@ -168,12 +170,33 @@ func build(in input) Board {
 	var panes map[string]*daemon.PaneStatus
 	b.DaemonRunning, b.UpdatedAt, panes = livePanes(in)
 	cards := collect(in, panes)
-	names := sessionNames(sessionIDs(cards, in.Parking), in.SessionNames)
+	open := parking.Filter(in.Parking, "", parking.StatusOpen)
+	names := sessionNames(sessionIDs(cards, open), in.SessionNames)
 	l := locator{locate: in.Locate, cache: map[string]gitrepo.Place{}}
 	b.Here, _ = l.row(in.CWD)
-	b.Rows = arrange(cards, in.Parking, panes, names, l)
-	b.Graph = buildGraph(in, cards, panes, names)
+	b.Rows = arrange(cards, open, panes, names, l)
+	b.Graph = graph.Build(graph.Input{
+		Cards:        graphCards(cards, names),
+		Tasks:        in.Tasks,
+		Todos:        in.Todos,
+		Edges:        in.Edges,
+		Memos:        in.Parking,
+		Open:         open,
+		Panes:        panes,
+		SessionNames: in.SessionNames,
+		Elsewhere:    in.Elsewhere,
+	})
 	return b
+}
+
+// graphCards はカードをグラフのノードの材料にする。
+func graphCards(cards []placed, names map[string]string) []graph.Card {
+	out := make([]graph.Card, 0, len(cards))
+	for _, c := range cards {
+		out = append(out, graph.Card{Key: c.card.Key, Kind: c.card.Kind, TaskID: c.card.TaskID, Title: c.card.Subject, SessionID: c.card.SessionID,
+			Session: names[c.card.SessionID], CWD: c.cwd, Live: c.card.Live, Status: c.status, Pane: c.pane})
+	}
+	return out
 }
 
 // sessionIDs はカードとメモの source に出てくるセッション。
@@ -400,20 +423,6 @@ func sortCards(cards []Card) {
 		if a.Session != b.Session {
 			return a.Session < b.Session
 		}
-		return keyLess(a.Key, b.Key)
+		return graph.KeyLess(a.Key, b.Key)
 	})
-}
-
-// keyLess は Key を比べる。同じセッションの task ID は数字なので、"10" が "9" より後になるように数で比べる。
-func keyLess(a, b string) bool {
-	da, ia := filepath.Split(a)
-	db, ib := filepath.Split(b)
-	if da == db {
-		na, errA := strconv.Atoi(ia)
-		nb, errB := strconv.Atoi(ib)
-		if errA == nil && errB == nil {
-			return na < nb
-		}
-	}
-	return a < b
 }

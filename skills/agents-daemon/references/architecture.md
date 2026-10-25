@@ -194,7 +194,7 @@ B は fullscreen のレイアウトで dock に置かれるときだけ出す。
 行にする。`here` は開いたセッションの行の鍵で、mod はこの行の `parking` を band のメモにする。
 
 メモとタスクの照合 (#213): メモの側にはタスクを書き戻さない。ボードを組むたびに、タスクの記録の description から
-メモの id (`internal/parking` の `MentionedIDs`、`newID` と同じ形) を拾い、status を問わず domain のメモと照合して、
+メモの id (`internal/parking` の `Mentioned`、`newID` と同じ形) を拾い、status を問わず domain のメモと照合して、
 そのタスクのノードの `memos` (id、title、status。description に書かれた順) に付ける。mod は選んだタスクの詳細に
 `◇ <title> (<status>)` で出す。handed のメモはパーキングの列から消え、渡した先のタスクの詳細に現れる。
 handed / discarded のメモが保持期間 (7 日) で消えた後は、description に id が残っていても照合できず、出さない。

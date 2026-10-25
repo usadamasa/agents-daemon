@@ -256,7 +256,7 @@ func Mentioned(items []Item, text string) []Item {
 		byID[item.ID] = item
 	}
 	matched := []Item{}
-	for _, id := range MentionedIDs(text) {
+	for _, id := range mentionedIDs(text) {
 		if item, ok := byID[id]; ok {
 			matched = append(matched, item)
 		}
@@ -360,8 +360,8 @@ func newID(at time.Time) (string, error) {
 // idPattern は newID が作る id の形。前後に英数字が続くものは別の文字列とみなす。
 var idPattern = regexp.MustCompile(`\b\d{8}T\d{6}-[0-9a-f]{8}\b`)
 
-// MentionedIDs は text に書かれたメモの id を、現れた順に重複なく返す。無ければ空の配列。
-func MentionedIDs(text string) []string {
+// mentionedIDs は text に書かれたメモの id を、現れた順に重複なく返す。無ければ空の配列。
+func mentionedIDs(text string) []string {
 	ids := []string{}
 	seen := map[string]bool{}
 	for _, id := range idPattern.FindAllString(text, -1) {

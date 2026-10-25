@@ -81,7 +81,7 @@ func TestPlacedDuring(t *testing.T) {
 	}
 }
 
-// MentionedIDs は文面に書かれたメモの id を、現れた順に重複なく拾う。id の形の前後に英数字が続くものは拾わない。
+// mentionedIDs は文面に書かれたメモの id を、現れた順に重複なく拾う。id の形の前後に英数字が続くものは拾わない。
 func TestMentionedIDs(t *testing.T) {
 	const a, b = "20261025T044319-7ed42d24", "20261019T120000-0a1b2c3d"
 	tests := []struct {
@@ -102,9 +102,9 @@ func TestMentionedIDs(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := MentionedIDs(tt.text)
+			got := mentionedIDs(tt.text)
 			if got == nil || strings.Join(got, ",") != strings.Join(tt.want, ",") {
-				t.Errorf("MentionedIDs(%q) = %#v, want %#v", tt.text, got, tt.want)
+				t.Errorf("mentionedIDs(%q) = %#v, want %#v", tt.text, got, tt.want)
 			}
 		})
 	}
@@ -144,14 +144,14 @@ func TestFilter(t *testing.T) {
 	}
 }
 
-// newID が作る id は MentionedIDs が拾う形と同じ。
+// newID が作る id は mentionedIDs が拾う形と同じ。
 func TestMentionedIDs_matchesNewID(t *testing.T) {
 	id, err := newID(testNow)
 	if err != nil {
 		t.Fatalf("newID() error = %v", err)
 	}
-	if got := MentionedIDs("メモ " + id + " を扱う"); len(got) != 1 || got[0] != id {
-		t.Errorf("MentionedIDs() = %v, want [%s]", got, id)
+	if got := mentionedIDs("メモ " + id + " を扱う"); len(got) != 1 || got[0] != id {
+		t.Errorf("mentionedIDs() = %v, want [%s]", got, id)
 	}
 }
 

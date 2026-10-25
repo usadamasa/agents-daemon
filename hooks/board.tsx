@@ -4,7 +4,7 @@ import type { EngineInterface, Register, Timer } from 'claude-code'
 import type { BoardData, BoardRow, GraphLink, GraphNode, GraphRow, ParkingCard } from '../types'
 import { loadBoard } from './board-data'
 import { daemonBin } from './daemon-bin'
-import { COLOR, Graph, ICON, MEMO, candidates, cells, chain, fit, isBlocked, legendRows, splitLanes, summary, tags } from './graph'
+import { COLOR, Graph, ICON, MEMO, candidates, cells, chain, fit, isBlocked, isStuck, legendRows, splitLanes, summary, tags } from './graph'
 import { logChange, logEvent, settle } from './log'
 import type { Fields } from './log'
 import {
@@ -177,7 +177,7 @@ export const registerBoard: Register = on => {
           <Button key={`row:${n.key}`} plain onPress={() => choose(isSel ? '' : n.key)}>
             <Text color={COLOR[n.state]}>{ICON[n.state]}</Text>
             <Text dimColor>{right}</Text>
-            <Text bold={isSel ? true : undefined}>{` ${fit(n.title, room)}${tag}`}</Text>
+            <Text color={isStuck(n) ? COLOR[n.state] : undefined} bold={isSel ? true : undefined}>{` ${fit(n.title, room)}${tag}`}</Text>
           </Button>
         </Box>
       )
@@ -208,7 +208,7 @@ export const registerBoard: Register = on => {
       return (
         <Box key={`detail:${n.key}`} flexDirection="column" borderStyle="round" borderDimColor paddingX={1} marginLeft={GUTTER + cells(prefix)}>
           <Text dimColor>
-            {n.ref ?? n.key} · {n.session ?? '-'}
+            {heading(n)}
             {n.state === 'limit' && n.detail ? ` (再開 ${n.detail})` : ''}
           </Text>
           <Text>blocked by: {chain(g, n)}</Text>
@@ -488,6 +488,13 @@ function findMemo(rows: BoardRow[], key: string): { memo: ParkingCard; row: Boar
     if (memo) return { memo, row }
   }
   return undefined
+}
+
+// heading は詳細の 1 行目。セッションのノードの ref (session:<名前>) は名前と重なるので出さず、同名のセッションを
+// 見分けられるよう session ID の先頭を添える。
+function heading(n: GraphNode): string {
+  if (n.ref?.startsWith('session:')) return `${n.session ?? '-'} · ${(n.session_id ?? '').slice(0, 8)}`
+  return `${n.ref ?? n.key} · ${n.session ?? '-'}`
 }
 
 // canSend はノードのセッションへ指示を送れるか。終了したセッション、セッションの無い置き場のノード、自分自身には送らない。

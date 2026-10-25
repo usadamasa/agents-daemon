@@ -2,6 +2,7 @@ import type { EngineInterface } from 'claude-code'
 
 import type { BoardCard, BoardData, BoardRow, GraphNode, ParkedMemo, ParkingCard, ParkingSource } from '../types'
 import { daemonBin } from './daemon-bin'
+import { fit } from './graph'
 import { logEvent, reason } from './log'
 
 // パーキングのメモの見せ方と、ボード (#121 の段 6) からの操作。行と列の描き方には依存させず、ボードの形が
@@ -28,8 +29,10 @@ export function isStale(memo: ParkingCard, now: number, days: number): boolean {
 
 // Destination はメモを渡す先。peer は生きているほかのセッション (`$.session.send`)、self は開いたセッション自身
 // (peer メッセージではなく自分の入力へ渡す。#190)、spawn は repo で新しく起こすセッション (`agents-daemon spawn`。#162)。
+// peer の subject はそのセッションのカードの subject (タスクか今の作業)。自動で付いたセッション名だけでは
+// 何をしているセッションか分からないので、宛先の名前に添える (#191)。
 export type Destination =
-  | { route: 'peer'; session_id: string; session: string }
+  | { route: 'peer'; session_id: string; session: string; subject: string }
   | { route: 'self'; session_id: string; session: string }
   | { route: 'spawn'; repo: string; title: string }
 
@@ -38,9 +41,14 @@ export function destinationKey(to: Destination): string {
   return to.route === 'spawn' ? to.repo : to.session_id
 }
 
+// SUBJECT_CELLS は宛先の名前に添える subject の桁数の上限。ボタンが 1 行に収まる長さにする。
+const SUBJECT_CELLS = 24
+
 // destinationLabel は宛先の名前。
 export function destinationLabel(to: Destination): string {
-  return to.route === 'spawn' ? to.title : to.session
+  if (to.route === 'spawn') return to.title
+  if (to.route === 'peer' && to.subject !== '') return `${to.session} (${fit(to.subject, SUBJECT_CELLS)})`
+  return to.session
 }
 
 // SELF_LABEL は自セッションの宛先の名前。セッション名はカードに頼らず固定にする (自分が生きているのは自明で、
@@ -106,7 +114,7 @@ function uniqueLive(cards: BoardCard[], self: string): Destination[] {
   for (const card of cards) {
     if (!card.live || card.session_id === '' || card.session_id === self || seen.has(card.session_id)) continue
     seen.add(card.session_id)
-    out.push({ route: 'peer', session_id: card.session_id, session: card.session })
+    out.push({ route: 'peer', session_id: card.session_id, session: card.session, subject: card.subject })
   }
   return out
 }

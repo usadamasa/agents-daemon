@@ -119,6 +119,15 @@ var (
 	// ネイティブが解除まで待ったものの継続の窓を過ぎた (phase=stale) ときに出る。
 	resumeReadyPattern = regexp.MustCompile(`(?i)usage limit has reset.*press enter to continue`)
 
+	// footer* は上限で待っている間の通知欄。status の行と、字下げした next の行に分けて描かれる。transcript に足される
+	// 1 行の文 (上の 2 つ) が走査範囲の外へ出ると、画面に残るのはこの 2 行だけになる。引用された文で発火しないよう、
+	// どちらも行頭から一致させる (status の頭の記号 1 つは許す)。
+	// cc-premise: 2.1.310 limit-screen 通知欄は status と next を別の行に描く (footer_test.go)
+	footerArmedStatusPattern = regexp.MustCompile(`(?i)^\s*(?:[^\w\s]\s*)?usage limit reached\b`)
+	footerArmedNextPattern   = regexp.MustCompile(`(?i)^\s*continuing (?:automatically|shortly)\b`)
+	footerStaleStatusPattern = regexp.MustCompile(`(?i)^\s*(?:[^\w\s]\s*)?your usage limit has reset\s*$`)
+	footerStaleNextPattern   = regexp.MustCompile(`(?i)^\s*press enter to continue\s*(?:·|$)`)
+
 	// hardCapPatterns は待っても解除されない上限を示す。2.1.239 で月次 spend limit の
 	// メッセージにも session / weekly のリセット時刻が載るようになり、二重シグナル
 	// 要件を満たすようになった。待機に入ると解除時刻に送信 → 再び弾かれる、を
@@ -290,10 +299,13 @@ func (c *Classifier) Classify(screen string, n int) Kind {
 	lines := tailLines(splitScreen(screen), n)
 
 	stoodDown := slices.ContainsFunc(lines, nativeStoodDownPattern.MatchString)
-	if !stoodDown && slices.ContainsFunc(lines, autoContinueArmedPattern.MatchString) {
+	armed := slices.ContainsFunc(lines, autoContinueArmedPattern.MatchString) ||
+		hasFooterPair(lines, footerArmedStatusPattern, footerArmedNextPattern)
+	if !stoodDown && armed {
 		return KindAutoContinueArmed
 	}
-	if slices.ContainsFunc(lines, resumeReadyPattern.MatchString) {
+	if slices.ContainsFunc(lines, resumeReadyPattern.MatchString) ||
+		hasFooterPair(lines, footerStaleStatusPattern, footerStaleNextPattern) {
 		return KindResumeReady
 	}
 
@@ -311,6 +323,23 @@ func (c *Classifier) Classify(screen string, n int) Kind {
 		return KindTransient
 	}
 	return KindNone
+}
+
+// footerPairWindow は通知欄の status の行から next の行までの行数の上限。狭い pane では status が折り返される。
+const footerPairWindow = 2
+
+// hasFooterPair は status に一致する行の後 footerPairWindow 行以内に next に一致する行があるかを返す。
+func hasFooterPair(lines []string, status, next *regexp.Regexp) bool {
+	for i, line := range lines {
+		if !status.MatchString(line) {
+			continue
+		}
+		end := min(i+1+footerPairWindow, len(lines))
+		if slices.ContainsFunc(lines[i+1:end], next.MatchString) {
+			return true
+		}
+	}
+	return false
 }
 
 // LowerPriorityActive は画面の末尾 n 行 (Classify と同じ範囲) に lower-priority mode の作業中の通知があり、

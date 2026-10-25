@@ -30,6 +30,14 @@ Usage limit reached · continuing automatically at HH:MMpm · esc or type to can
 overage の使用有無・解除が 24 時間以内かで決まる。それらが解決された結果が出るのは
 画面だけである。
 
+<!-- cc-premise: 2.1.310 limit-screen 通知欄は status と next を別の行に描く -->
+
+表示は 2 か所に出る。状態が変わった瞬間に transcript へ足される上の 1 行と、待っている間ずっと prompt のそばの
+通知欄に出る 2 行 (`Usage limit reached · limit resets …` の下に、字下げした `Continuing automatically …`。
+解除済みなら `Your usage limit has reset` の下に `Press enter to continue`) だ。transcript の 1 行が走査範囲の外へ出ると、
+残るのは通知欄だけになる。そのため通知欄の status の行と、その 2 行以内の next の行の組も同じ状態として扱う。
+引用された文で発火しないよう、どちらの行も行頭から一致させる。
+
 ネイティブが降りたときは別の文言になり、そこからはこのツールの担当に戻る:
 
 | 画面 | 意味 | このツール |

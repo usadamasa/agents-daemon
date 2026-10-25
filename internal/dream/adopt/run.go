@@ -15,8 +15,8 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/usadamasa/agents-daemon/internal/dream/dreamio"
-	"github.com/usadamasa/agents-daemon/internal/dream/dreamstate"
+	"github.com/usadamasa/agents-daemon/internal/dream"
+	"github.com/usadamasa/agents-daemon/internal/dream/mine/candidates"
 )
 
 // Opts は adopt サブコマンドの実行パラメータ。
@@ -26,7 +26,7 @@ type Opts struct {
 	Project        string // CandidatesFile 未指定時に必要
 	Date           string
 	DryRun         bool
-	StateDir       string // dream の state ディレクトリ (dreamstate.Dir)。CandidatesFile 未指定時に必要
+	StateDir       string // dream の state ディレクトリ (dream.Dir)。CandidatesFile 未指定時に必要
 
 	Home   string
 	Stdout io.Writer
@@ -45,7 +45,7 @@ func Run(opts Opts) error {
 		return fmt.Errorf("--candidate は必須")
 	}
 
-	resolvedDate := dreamstate.ResolveDate(opts.Date)
+	resolvedDate := dream.ResolveDate(opts.Date)
 	resolvedCandidates := opts.CandidatesFile
 	if resolvedCandidates == "" {
 		if opts.Project == "" {
@@ -54,20 +54,20 @@ func Run(opts Opts) error {
 		if opts.StateDir == "" {
 			return fmt.Errorf("StateDir が未解決 (呼び出し側が apppath で決める)")
 		}
-		resolvedCandidates = dreamio.CandidatesPath(opts.StateDir, opts.Project, resolvedDate)
+		resolvedCandidates = candidates.Path(opts.StateDir, opts.Project, resolvedDate)
 	}
 
-	cand, err := dreamio.FindCandidateByID(resolvedCandidates, opts.CandidateID)
+	cand, err := candidates.FindByID(resolvedCandidates, opts.CandidateID)
 	if err != nil {
 		return fmt.Errorf("候補読み込み失敗: %w", err)
 	}
 
-	if cand.Kind == dreamio.KindUnhomed {
+	if cand.Kind == candidates.KindUnhomed {
 		return fmt.Errorf("候補 %s は行き先未定 (unhomed)。dream skill の行き先テーブルで行き先を決めてから adopt する", cand.ID)
 	}
 
 	targetPath := cand.SkillPath
-	if cand.Kind == dreamio.KindMemoryDedup {
+	if cand.Kind == candidates.KindMemoryDedup {
 		// memory_dedup は auto memory を削除する候補。Adopt の対象は memory ファイル自体。
 		// auto memory は ~/.claude/projects/<proj>/memory/ にあり git 管理外の可能性が高い。
 		targetPath = cand.MemoryPath
@@ -101,7 +101,7 @@ func Run(opts Opts) error {
 }
 
 // printAdoptPlan は user (と LLM) 向けの実行手順を stdout に出す。
-func printAdoptPlan(w io.Writer, cand *dreamio.Candidate, target, repoRoot, branch string, dryRun bool) {
+func printAdoptPlan(w io.Writer, cand *candidates.Candidate, target, repoRoot, branch string, dryRun bool) {
 	pf := func(format string, a ...any) { _, _ = fmt.Fprintf(w, format, a...) }
 
 	pf("## Adopt 準備: %s\n\n", cand.ID)
@@ -121,9 +121,9 @@ func printAdoptPlan(w io.Writer, cand *dreamio.Candidate, target, repoRoot, bran
 	}
 
 	switch cand.Kind {
-	case dreamio.KindSkillBody:
+	case candidates.KindSkillBody:
 		pf("2. `%s` を編集し、memory `%s` の内容を反映\n", target, cand.MemoryPath)
-	case dreamio.KindMemoryDedup:
+	case candidates.KindMemoryDedup:
 		pf("2. `%s` を削除 or `deprecated_by:` frontmatter を追加\n", target)
 	default:
 		pf("2. 候補の kind に応じて `%s` を編集\n", target)

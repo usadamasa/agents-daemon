@@ -3,7 +3,7 @@ package mine
 import (
 	"strings"
 
-	"github.com/usadamasa/agents-daemon/internal/dream/dreamio"
+	"github.com/usadamasa/agents-daemon/internal/dream/mine/candidates"
 )
 
 // coverage は「memory の主要フレーズが skill body 内にどれだけ含まれるか」の集計。
@@ -224,7 +224,7 @@ func extractSkillKey(name string) string {
 }
 
 // classification は Mine 結果 candidate 1 件の分類 (kind + confidence)。
-// 値は dreamio の Kind* / Confidence* 定数を使う。
+// 値は candidates の Kind* / Confidence* 定数を使う。
 type classification struct {
 	Kind       string
 	Confidence string
@@ -236,24 +236,24 @@ type classification struct {
 func classifyCoverage(c coverage) classification {
 	// Total==0 は「フレーズ抽出できなかった memory」で判定不能 → skill_body low
 	if c.Total == 0 {
-		return classification{Kind: dreamio.KindSkillBody, Confidence: dreamio.ConfidenceLow}
+		return classification{Kind: candidates.KindSkillBody, Confidence: candidates.ConfidenceLow}
 	}
 	ratio := c.ratio()
 	switch {
 	case ratio >= 0.95:
 		// ほぼ完全 inline → 削除して安全
-		return classification{Kind: dreamio.KindMemoryDedup, Confidence: dreamio.ConfidenceHigh}
+		return classification{Kind: candidates.KindMemoryDedup, Confidence: candidates.ConfidenceHigh}
 	case ratio >= 0.80:
 		// 概ね inline だが一部残 → 削除候補、要確認
-		return classification{Kind: dreamio.KindMemoryDedup, Confidence: dreamio.ConfidenceMedium}
+		return classification{Kind: candidates.KindMemoryDedup, Confidence: candidates.ConfidenceMedium}
 	case ratio <= 0.15:
 		// ほぼ inline されていない → migration 候補、確度高い
-		return classification{Kind: dreamio.KindSkillBody, Confidence: dreamio.ConfidenceHigh}
+		return classification{Kind: candidates.KindSkillBody, Confidence: candidates.ConfidenceHigh}
 	case ratio <= 0.40:
 		// 部分的にしか inline されていない → migration 候補、middle confidence
-		return classification{Kind: dreamio.KindSkillBody, Confidence: dreamio.ConfidenceMedium}
+		return classification{Kind: candidates.KindSkillBody, Confidence: candidates.ConfidenceMedium}
 	default:
 		// 40-80% は判定困難 → skill_body low とし人間判断に任せる
-		return classification{Kind: dreamio.KindSkillBody, Confidence: dreamio.ConfidenceLow}
+		return classification{Kind: candidates.KindSkillBody, Confidence: candidates.ConfidenceLow}
 	}
 }

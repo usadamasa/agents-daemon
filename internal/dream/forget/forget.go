@@ -14,7 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/usadamasa/agents-daemon/internal/dream/dreamstate"
+	"github.com/usadamasa/agents-daemon/internal/dream"
 )
 
 // Opts は forget サブコマンドの実行パラメータ。
@@ -83,7 +83,7 @@ func resolveMemoryDir(opts Opts) (string, error) {
 	if opts.MemoryDir != "" {
 		return opts.MemoryDir, nil
 	}
-	project, err := dreamstate.ResolveProject(opts.Project, opts.Cwd)
+	project, err := dream.ResolveProject(opts.Project, opts.Cwd)
 	if err != nil {
 		return "", err
 	}

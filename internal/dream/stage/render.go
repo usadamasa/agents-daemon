@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/usadamasa/agents-daemon/internal/dream/dreamio"
+	"github.com/usadamasa/agents-daemon/internal/dream/mine/candidates"
 )
 
 // projectSlug は canonical name の先頭 - を除去した slug を返す (ファイル名/ディレクトリ名用)。
@@ -27,9 +27,9 @@ func reportPath(cwd, project, date string) string {
 // unhomed は人間が決めるため空文字を返し、レポート上では空欄になる。
 func dispositionFromKind(kind string) string {
 	switch kind {
-	case dreamio.KindSkillBody:
+	case candidates.KindSkillBody:
 		return "skill 本体へ統合"
-	case dreamio.KindMemoryDedup:
+	case candidates.KindMemoryDedup:
 		return "memory 削除"
 	}
 	return ""
@@ -37,7 +37,7 @@ func dispositionFromKind(kind string) string {
 
 // renderReport は Stage 用の Markdown レポート本文を生成する。
 // Summary + 行き先表 + 各候補セクション + 承認手順。
-func renderReport(project, date string, cands []dreamio.Candidate) string {
+func renderReport(project, date string, cands []candidates.Candidate) string {
 	var sb strings.Builder
 
 	// 本文タイトル
@@ -46,7 +46,7 @@ func renderReport(project, date string, cands []dreamio.Candidate) string {
 	_, _ = fmt.Fprintf(&sb, "- 候補数: %d\n", len(cands))
 
 	// 内訳
-	skillBody, memoryDedup, unhomed := dreamio.CountByKind(cands)
+	skillBody, memoryDedup, unhomed := candidates.CountByKind(cands)
 	_, _ = fmt.Fprintf(&sb, "- 内訳: skill_body: %d, memory_dedup: %d, unhomed: %d\n\n", skillBody, memoryDedup, unhomed)
 
 	if len(cands) == 0 {

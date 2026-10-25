@@ -1,8 +1,9 @@
-// Package dreamstate は dream サブコマンド共通の state ディレクトリの導出と掃除、date / project の解決を提供する。
+// Package dream は dream 7-phase pipeline の各 phase (サブパッケージ) が共有するもの、つまり state ディレクトリの
+// 導出と掃除、date / project の解決、JSONL の走査と scanner を提供する。
 //
 // 環境変数を読む入口は apppath.FromEnv に限り、このパッケージは XDG を見ない。各サブコマンドは cobra 層で
 // Dir(apppath.Paths.StateDir()) と解決した絶対パスを Opts で受け取る。
-package dreamstate
+package dream
 
 import (
 	"errors"

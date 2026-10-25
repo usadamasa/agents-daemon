@@ -1,4 +1,4 @@
-package dreamstate
+package dream
 
 import (
 	"errors"

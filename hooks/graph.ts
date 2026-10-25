@@ -1,8 +1,8 @@
 import type { BoardGraph, GraphLink, GraphNode } from '../types'
 
-// 依存の DAG (#134、`status --board` の graph) の見せ方。記号、数の行、レーンの行の分け方、Add blocker の候補を持つ。
-// 段・下流の数・原因の鎖・レーンの行はバイナリ (internal/board/graph、internal/board/dag) が数えて渡すので、ここは並べるだけにする。
-// 描くのは hooks/board.tsx (B の pane) と hooks/band.tsx (A の band、数の行だけ)。
+// 依存の DAG (#134、`status --board` の graph) の見せ方。記号、数の行、レーンの行の分け方、Add blocker の候補、
+// 辺の書き忘れを疑う渡し先を持つ。段・下流の数・原因の鎖・レーンの行はバイナリ (internal/board/graph、internal/board/dag) が
+// 数えて渡すので、ここは並べるだけにする。描くのは hooks/board.tsx (B の pane)。
 
 // 記号は絵文字を避け、端末の等幅で 1 桁に収まるもの。語は OSC 7501 の state / kind と Task 系ツールの status。
 export const ICON: Record<GraphNode['state'], string> = {
@@ -18,7 +18,7 @@ export const ICON: Record<GraphNode['state'], string> = {
   exited: '⊘',
 }
 
-// 色 (テーマの鍵) は 1 つの鍵に 1 つの意味だけを持たせ、B の pane と A の band で同じ意味に使う。
+// 色 (テーマの鍵) は 1 つの鍵に 1 つの意味だけを持たせる。
 //   suggestion 進行中 / warning 人の返事待ち (question、permission) / permission 時間待ち (limit) /
 //   error 失敗 / success longest chain の辺の罫線
 // ほかの状態、レーンの罫線、メモ (◇) には色を使わない (メモの見出しは太字)。
@@ -133,15 +133,6 @@ export class Graph {
   }
 }
 
-// longest は longest chain を記号と title でつないだもの。止まっているノードが無ければ none。
-export function longest(g: Graph, keys: string[]): string {
-  const parts = keys.flatMap(k => {
-    const n = g.node(k)
-    return n === undefined ? [] : [`${ICON[n.state]} ${n.title}`]
-  })
-  return parts.length === 0 ? 'none' : parts.join(' → ')
-}
-
 // isIdle はターンを終えて待っているか、状態を分類できない (作業中とは限らない) ノードか。
 function isIdle(node: GraphNode): boolean {
   return node.state === 'done' || node.state === 'unknown'
@@ -230,9 +221,10 @@ export function candidates(g: Graph, selected: GraphNode): GraphNode[] {
   )
 }
 
-// unlinked は handed (model が SendMessage で送った宛先の名前) のうち、辺の書き忘れを疑うもの: ボードに生きていて
-// 済んでいないノードを持つセッションで、`edge add` の辺 (kind edge) がどの端点にも無いもの。辺はノードへ解決された
-// 端点 (そのセッションのタスク) と、元の記録の参照 (`session:<名前>`) のどちらで当たってもよい。handed の順を保つ。
+// unlinked は handed (model が SendMessage で送った宛先の名前、hooks/handoff-notice.ts) のうち、辺の書き忘れを
+// 疑うもの: ボードに生きていて済んでいないノードを持つセッションで、`edge add` の辺 (kind edge) がどの端点にも
+// 無いもの。辺はノードへ解決された端点 (そのセッションのタスク) と、元の記録の参照 (`session:<名前>`) のどちらで
+// 当たってもよい。handed の順を保つ。
 // 名前は表示名 (session、同名なら ID の先頭が付く) ではなく session_name (SendMessage の宛先に書く形) で当てる。
 export function unlinked(g: Graph, handed: string[]): string[] {
   const sessionOf = (key: string) => g.node(key)?.session_name ?? ''

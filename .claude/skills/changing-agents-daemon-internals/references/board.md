@@ -1,12 +1,14 @@
 # ボードとパーキング (mod)
 
-plugin の mod が描く依存のボード (B)、入力欄の上の band (A)、パーキングのメモの見せ方と操作、model が呼ぶ park tool。
-mod は Claude Code の中で動き、データはバイナリのサブコマンド越しに読み書きする。
+plugin の mod が描く依存のボード (B)、パーキングのメモの見せ方と操作、model が呼ぶ park tool、model の tool の結果に
+添える通知 (ファイルのメモ、渡した宛先の辺)。mod は Claude Code の中で動き、データはバイナリのサブコマンド越しに
+読み書きする。
 
 ## mod の束ね方
 
 `hooks/hooks.json` の `modules` に書ける module は 1 つなので、`hooks/register.ts` が
-`hooks/board.tsx`、`hooks/park.tsx`、`hooks/band.tsx` の hook を束ね、皆が使う `session.start` を持つ。
+`hooks/board.tsx`、`hooks/park.tsx`、`hooks/notice.ts`、`hooks/handoff-notice.ts` の hook を束ね、皆が使う
+`session.start` を持つ。
 
 ## 依存のボード (B)
 
@@ -62,7 +64,7 @@ longest chain の辺の罫線 (`marks`) は色付き。同じノードは 1 回�
 `park add` の結果の `item` と `park list` の配列の要素がこれに当たる。識別子と JSON のキーは `item` のまま。
 
 ボードの JSON は行ごとに open のメモ (`$STATE/parking/`) をタスクの列とは別の欄 `parking` に持ち、メモだけの repo も
-行にする。`here` は開いたセッションの行の鍵で、mod はこの行の `parking` を band のメモにする。
+行にする。`here` は開いたセッションの行の鍵で、B はこの行を自セッションの repo として扱う。
 
 ### メモとタスクの照合
 
@@ -128,32 +130,41 @@ offset を揃えない。どの offset で書いても同じ瞬間に戻せる�
 `hooks/park.tsx` は model が呼べる tool `mcp__agents-daemon__park` を登録する (パーキングロットの置く側)。
 呼ばれたら `agents-daemon park add --cwd <cwd>` に、model が書いた欄とこのセッションの `session_id` を JSON で
 stdin に渡す。`session_id` と cwd は inputSchema に無く、model は書けない。結果の `created` で「メモを置きました」と「既に置かれていたメモにまとめました」を分けて返す。
-置いた後は `hooks/board-data.ts` がボードを読み直し、band のメモをすぐ変える。
+B は開いている間だけ自分でボードを読み直すので、置いたメモは次の読み直しで B に出る。
 <!-- cc-premise: 2.1.302 hooks mods の tool.register / tool.call -->
 <!-- cc-premise: 2.1.302 hooks modules は 1 つ、matcher の無い hook は event ごとに 1 つ -->
 <!-- cc-premise: 2.1.302 hooks tool.register は local の port を開く (sandbox の中の claude -p では落ちる) -->
 
-## band (A)
+## ファイルのメモの通知
 
-`hooks/band.tsx` は入力欄の上の band (`ui.render` の `AbovePrompt`) に、依存の数の 1 行 (A) とパーキングのメモの 1 行を
-出す。band は 1 枚で、両方が分け合う。辺もメモも無ければ出さず、survey があるときは譲る。図は描かない (辺を読んで
-操作する面は B の pane に 1 つ)。
+`hooks/notice.ts` は main の model の Read / Edit / Write が成功したら、
+`park list --status open --here --session <id> --cwd <cwd>` (この repo の open のメモ) を読み、触ったファイルを
+`files` に持つメモのうち、ほかのセッションも置いたものを tool の結果の `context` に添える。人には出さない。
 
-- 1 行目: `■ ○ ▸ ↵ ✓ ◇` の数と `longest chain` (止まっているノードから下流の最長の鎖)。選べるものは置かず、
-  止まっているものがあると分かれば `/board` を開く合図にする
-- `no edge: <名前>…` の行: model が `SendMessage` で送った宛先 (mods の `session.send`、`origin.kind: model`、届いたもの。
-  末尾の ` [ref]` は落とす) のうち、ボードに生きていて済んでいないノードを持つセッションで、`kind: edge` の辺が端点
-  (そのセッションのタスクへ解決された端点か、記録の `session:<名前>` の参照) に 1 本も無いもの (#172)。渡す側が辺を書く
-  手順は `agents-daemon:peer-sessions` skill にあり、この行は書き忘れの合図。辺が書かれるかそのセッションが済むと消え、
-  依存の無い送信なら名前を押して外す。subagent や cloud のセッションへの送信はボードの名前に当たらないので出ない。
-  mod 自身の送信 (メモの手渡し、`origin.kind: plugin`) は依存ではないので覚えない
-- 最後の行: メモを 3 件まで (種類と title)。残りは `+n`
-- ボードは `hooks/board-data.ts` で session.start、TaskUpdate の後、10 秒ごとに読み直す。B の pane を開いている間は
-  B が 3 秒ごとに読み直し、band は同じ board を描く
-- メモは同じボードの `here` の行の open のメモ (この repo のもの) を新しく置かれた順に並べる。TaskUpdate の結果が
-  `completed` になったら、`park list --status open --task <task_id> --session <id> --cwd <cwd>` (そのタスクの途中で
-  このセッションが置いたメモ) を先頭に寄せる。寄せるのは並びだけで、open でなくなったメモは次の読み直しで消え、
-  辺もメモも無くなれば band ごと消える
-- band で選んだメモ (`target`) は B の pane と共有し、B でも同じものを開く
-<!-- cc-premise: 2.1.303 hooks mods の ui.render AbovePrompt (hasSurvey、bodyColumns) と、TaskUpdate の結果の statusChange -->
-<!-- cc-premise: 2.1.306 mods session.send は SendMessage tool と $.session.send の両方で起き、e.origin.kind と e.to を持つ -->
+- パスはメモの `repo` からの相対に揃えて比べる。repo の下の worktree (`.claude/worktrees/<name>/`) の中のパスは
+  worktree からの相対にする
+- 伝えたメモの id は `told` の atom に置き、同じ context で 2 度は伝えない。一覧は `update` の前に読み、選ぶのと
+  `told` に足すのは 1 回の `update` の中で行う (並列の tool の hook が同じメモを 2 回添えない)
+- main の会話が compact されたら (`session.compact` の結果が skip でなく、`precompute` でも subagent の compact でもない)
+  `told` を空にし、compact の後に触ったファイルのメモを伝え直す (#273)
+- subagent の tool (`e.agentId` がある)、エラーや deny の結果、`park list` の失敗では何も添えない
+- 手順の交錯で破れない性質 (`AtMostOnce`、`NoneMissed`、`Informed`) は `models/handoff/FileNotice.tla` が持つ
+<!-- cc-premise: 2.1.310 mods tool.call の結果の context は model だけが読み、e.agentId は subagent にだけ付く -->
+<!-- cc-premise: 2.1.310 mods session.compact の next(e) は messages か skip、precompute は会話を置き換えない -->
+
+## 渡した宛先の辺の確かめ
+
+`hooks/handoff-notice.ts` は main の model の `SendMessage` (文面のあるもの) が成功したら、
+`status --board --cwd <cwd>` (`hooks/board-data.ts` の `loadBoard`) を読み、宛先 (末尾の ` [ref]` は落とす) が
+ボードに生きていて済んでいないノードを持つセッションで、`kind: edge` の辺が端点 (そのセッションのタスクへ解決された
+端点か、記録の `session:<名前>` の参照) に 1 本も無ければ (`hooks/graph.ts` の `unlinked`)、tool の結果の `context` に
+辺の書き方を 1 つ添える (#172)。文面は
+`agents-daemon edge add --before … --after session:<名前> --after-cwd <宛先の cwd>` と
+`agents-daemon:peer-sessions` skill の「依存の辺を書く」を指し、返事や報告なら辺は要らないと添える。
+
+- 辺を書くのは渡した側の model だけなので、人ではなく model に伝える
+- subagent や teammate、cloud のセッションへの送信はボードの名前に当たらないので添えない
+- mod 自身の送信 (`$.session.send`、メモの手渡しやノードへの指示) は `tool.call` を通らないので見ない
+- 送信のエラー、subagent の送信、文面の無い送信 (`notify_when_idle` だけ、shutdown などの要求)、ボードの読み込みの失敗では
+  何も添えない
+<!-- cc-premise: 2.1.310 mods SendMessage の tool.call は e.to と e.message を持ち、context は model だけが読む -->

@@ -44,7 +44,7 @@ plugin が持つもの:
 | `agents-daemon edge add\|rm\|list` | 作業を渡す側が、セッションをまたぐ作業の依存 (辺) を `edges/` に書く・消す・一覧する (#134。使い方は `skills/agents-daemon/references/operations.md`) |
 | `park` tool (mod、`hooks/park.tsx`) | model が聞かずに脇のことをメモとしてパーキングロットへ置く tool (#121) |
 | ファイルのメモの通知 (mod、`hooks/notice.ts`) | model が Read / Edit / Write で触ったファイルを files に持つ、ほかのセッションが置いたメモを、その tool の結果に添えて model へ 1 回だけ伝える (#89) |
-| 依存の band (mod、`hooks/band.tsx`) | 入力欄の上に、依存の数と longest chain の 1 行 (`/board` を開く合図)、`SendMessage` で渡したのに辺の無いセッションの行 (#172)、その repo のパーキングのメモ (完了したタスクの途中で置いたものを先頭) を出す (#134) |
+| 渡した宛先の辺の確かめ (mod、`hooks/handoff-notice.ts`) | model が `SendMessage` で送った生きているセッションに依存の辺が無ければ、その tool の結果に辺の書き方を添えて model へ伝える (#172) |
 
 ## 前提
 

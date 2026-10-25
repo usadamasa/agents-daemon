@@ -33,7 +33,7 @@ import type { Destination, Intent } from './parking'
 // 依存の DAG (#134) の B: 辺をレーンで描いた行 (graph.rows、上流が上) を dock の pane に描き、選んだノードの詳細と
 // 操作を出す mod。中身は `agents-daemon status --board` (internal/board) の graph と rows (メモの送り先)。ここは描くことと
 // 送ることだけを持つ。
-// pane は会話の横 (dock) に置かれるときだけ出す。入力欄の上 (inline) は A の band が受け持つ。
+// pane は会話の横 (dock) に置かれるときだけ出す。入力欄の上 (inline) には出さない。
 // cc-premise: 2.1.303 mods pane の placement (dock / inline)、command.run の presentation.isFullscreen、ui.close
 // cc-premise: 2.1.302 mods pane / clock.every / process.run / session.send / session.cwd の API で書いた
 // cc-premise: 2.1.303 mods Button の plain は端末で [ ] を描かず、variant より優先される。行は plain、操作は枠付き
@@ -51,7 +51,7 @@ const STALE_DAYS = 30
 
 const board = atom({ plugin: 'agents-daemon', key: 'board' } as const, null)
 const error = atom({ plugin: 'agents-daemon', key: 'error' } as const, '')
-// target は選んだノードの Key かメモの Key (park:<id>)。A の band と共有する。
+// target は選んだノードの Key かメモの Key (park:<id>)。
 const target = atom({ plugin: 'agents-daemon', key: 'target' } as const, '')
 const notice = atom({ plugin: 'agents-daemon', key: 'notice' } as const, '')
 const showCompleted = atom({ plugin: 'agents-daemon', key: 'showCompleted' } as const, false)
@@ -97,7 +97,7 @@ export const registerBoard: Register = on => {
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const elements = $.ui.resolve(e)
     const { Box, Text, Button } = elements
-    // 端末を狭めて入力欄の上に置かれたら閉じる。入力欄の上は A の band が受け持つ。
+    // 端末を狭めて入力欄の上に置かれたら閉じる。
     if (e.props.placement === 'inline') {
       if (!closing) {
         closing = true

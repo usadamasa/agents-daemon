@@ -1,4 +1,4 @@
-// hooks/board.tsx、hooks/park.tsx、hooks/band.tsx が $.state に置く値の型。形は `agents-daemon status --board` の JSON (internal/board) に合わせる。
+// hooks/board.tsx、hooks/notice.ts などの mod が $.state に置く値の型。形は `agents-daemon status --board` の JSON (internal/board) に合わせる。
 
 export type BoardColumn = {
   id: 'pending' | 'in_progress' | 'blocked' | 'completed'
@@ -37,14 +37,6 @@ export type ParkingCard = {
   files?: string[]
   default_taken?: string
   sources: ParkingSource[]
-}
-
-// ParkedMemo はメモ 1 つを band のメモの行に出す分だけにしたもの。at は最後に置かれた時刻。
-export type ParkedMemo = {
-  id: string
-  kind: ParkingCard['kind']
-  title: string
-  at: string
 }
 
 export type BoardRow = {
@@ -120,7 +112,7 @@ export type BoardData = {
   daemon_running: boolean
   updated_at?: string
   columns: BoardColumn[]
-  // here は開いたセッションの行の鍵 (BoardRow.repo と同じ規則)。この行の parking が band のメモになる。
+  // here は開いたセッションの行の鍵 (BoardRow.repo と同じ規則)。
   here: string
   rows: BoardRow[]
   graph: BoardGraph
@@ -133,7 +125,7 @@ declare module 'claude-code' {
       board: BoardData | null
       // error は直近の読み込みの失敗理由。読めたら空にする。
       error: string
-      // target は選んだノードの key かメモの key (park:<id>)。B の pane と A の band (メモ) が共有する。未選択なら空。
+      // target は B の pane で選んだノードの key かメモの key (park:<id>)。未選択なら空。
       target: string
       // picking は B の詳細で Add blocker の候補を出しているか。
       picking: boolean
@@ -142,16 +134,8 @@ declare module 'claude-code' {
       spawning: '' | 'task' | 'issue'
       // notice は送信とメモの操作の結果。
       notice: string
-      // parked はこのセッションの repo の open のメモ。board の here の行から hooks/board-data.ts が置き、
-      // hooks/band.tsx がメモの行に出す。
-      parked: ParkedMemo[]
-      // front は band のメモの行の先頭に寄せるメモの id (completed になったタスクの途中で置いたもの、hooks/band.tsx)。
-      // 並びの指示だけで、中身は parked から取る。
-      front: string[]
-      // handed は model が SendMessage で送った宛先の名前 (届いたものだけ、hooks/band.tsx)。band はこのうちボードの
-      // 生きているセッションで辺の無いものを no edge の行に出す。名前を押すと外れる。
-      handed: string[]
       // told はファイルを触った tool の結果で model に伝えたメモの id (hooks/notice.ts)。同じメモを 2 度伝えない。
+      // main の会話が compact されたら空にする。
       told: string[]
       // showCompleted は B の pane で完了したノードを出すか (graph.rows_with_completed を描く)。既定は畳む。
       showCompleted: boolean

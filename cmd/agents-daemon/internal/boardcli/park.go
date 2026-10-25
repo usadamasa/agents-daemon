@@ -12,6 +12,7 @@ import (
 
 	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/jsonflag"
 	"github.com/usadamasa/agents-daemon/internal/apppath"
+	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 	"github.com/usadamasa/agents-daemon/internal/verify"
@@ -56,6 +57,7 @@ func newParkCmd() *cobra.Command {
 	set.Flags().StringVar(&from, "from", "", "今の status がこれのときだけ書き換える (open / handed / discarded)")
 	_ = set.MarkFlagRequired("status")
 	var repo, listStatus, task string
+	var here bool
 	list := &cobra.Command{
 		Use:   "list",
 		Short: "メモを JSON の配列で出す",
@@ -64,7 +66,10 @@ func newParkCmd() *cobra.Command {
 			if task != "" && session == "" {
 				return errors.New("--task には --session が要る")
 			}
-			return withState(cmd, cwd, func(paths apppath.Paths, _ string) (any, error) {
+			return withState(cmd, cwd, func(paths apppath.Paths, cwd string) (any, error) {
+				if here {
+					repo = gitrepo.RepoKey(cwd)
+				}
 				items, err := parking.New(paths.StateDir()).Find(repo, listStatus)
 				if err != nil || task == "" {
 					return items, err
@@ -74,6 +79,8 @@ func newParkCmd() *cobra.Command {
 		},
 	}
 	list.Flags().StringVar(&repo, "repo", "", "repo (main worktree のパス) で絞る")
+	list.Flags().BoolVar(&here, "here", false, "--cwd の repo で絞る")
+	list.MarkFlagsMutuallyExclusive("repo", "here")
 	list.Flags().StringVar(&listStatus, "status", "", "status で絞る")
 	list.Flags().StringVar(&task, "task", "", "--session のセッションがこのタスクの途中で置いたメモで絞る")
 	var days int

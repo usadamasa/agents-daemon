@@ -1,6 +1,5 @@
 import type { EngineInterface, Register } from 'claude-code'
 
-import { reloadForBand } from './board-data'
 import { daemonBin } from './daemon-bin'
 import { logEvent } from './log'
 
@@ -41,8 +40,7 @@ const FIELDS = ['kind', 'title', 'detail', 'files', 'default_taken'] as const
 
 type Added = { created: boolean; item: { id: string } }
 
-// startPark は session.start で park の tool を登録する (session.start の hook は hooks/register.ts が持つ)。メモの一覧は
-// 続けて走る hooks/band.tsx の startBand が読む。
+// startPark は session.start で park の tool を登録する (session.start の hook は hooks/register.ts が持つ)。
 // 登録の失敗は engine が画面に一度出すだけなので、理由をログに残してから投げ直す (hook を飛ばす扱いは engine に任せる)。
 export async function startPark($: EngineInterface) {
   try {
@@ -61,7 +59,7 @@ export const registerPark: Register = on => {
 }
 
 // place は model が書いた欄にこのセッションの ID を足して park add に渡し、置いた結果を model への文面にする。
-// 置いた後はボードを読み直し、band のメモをすぐ変える。読めなかったときは前の一覧が残る (band の読み直しと同じ)。
+// 置いたメモは、開いている pane の次の読み直しで出る。
 async function place($: EngineInterface, args: Record<string, unknown>): Promise<{ result: string } | { deny: string }> {
   const req: Record<string, unknown> = {}
   for (const field of FIELDS) {
@@ -71,7 +69,6 @@ async function place($: EngineInterface, args: Record<string, unknown>): Promise
 
   const argv = [await daemonBin($), 'park', 'add', '--cwd', await $.session.cwd()]
   const { exitCode, stdout, stderr } = await $.process.run(argv, { stdin: JSON.stringify(req), timeoutMs: 10000 })
-  await reloadForBand($)
   if (exitCode !== 0) return { deny: `メモを置けませんでした: ${stderr.trim() || `exit ${exitCode}`}` }
 
   const added = JSON.parse(stdout) as Added

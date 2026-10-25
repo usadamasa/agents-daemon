@@ -62,7 +62,8 @@ subagent の worktree (`claude agent` の lock) は Claude Code 本体の period
 触らない。daemon の housekeeping にしなかったのは、daemon が rex の外では起きず、対象リポジトリの一覧も cwd も
 持たないため (#97)。
 
-plugin は mod も持つ。依存のボード (B)、band (A)、パーキングのメモ、park tool は [board.md](board.md)。
+plugin は mod も持つ。依存のボード (B)、パーキングのメモ、park tool、model の tool の結果に添える通知は
+[board.md](board.md)。
 
 バイナリ自体も SessionStart hook が用意し、差し替わったら動いている daemon が自分で入れ替わる。build の条件、
 lock、入れ替わりは [binary.md](binary.md)。

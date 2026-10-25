@@ -22,9 +22,10 @@
 //	mod.board.changed         ボードの行・カード・メモの数か daemon の稼働が変わった (同上)
 //	mod.board.failed          status --board が失敗した (reason)
 //	mod.send                  ボードから指示やメモを送った (via、to、delivered、reason。新しいセッションを起こして渡したときは repo も)
-//	mod.band.failed           band のボードか、完了したタスクの途中のメモを読めなかった (reason)
 //	mod.notice                ファイルを触った tool の結果で model にメモを伝えた (tool、memos)
 //	mod.notice.failed         伝えるメモを選べなかった (reason)
+//	mod.handoff.unlinked      SendMessage の宛先に依存の辺が無いことを model に伝えた (session)
+//	mod.handoff.failed        SendMessage の宛先の辺を確かめるボードを読めなかった (reason)
 //
 // mod の出来事は同じ理由が続く間は書き直さない (hooks/log.ts)。
 package boardlog

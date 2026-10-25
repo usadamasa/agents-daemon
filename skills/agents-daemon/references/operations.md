@@ -74,7 +74,8 @@ Claude Code の sandbox の中で叩くと、`git worktree remove` は main work
 
 作業を別のセッションへ渡す側が、渡すときに「何の後か」を書く (#134、手順は `agents-daemon:peer-sessions` skill)。
 辺は「`--before` が済まないと `--after` を始められない」を表す。結果は JSON で stdout に出る。
-渡す操作から両端を自動で決めることはせず、書き忘れは band の `no edge: <名前>` で知らせる (#172)。
+渡す操作から両端を自動で決めることはせず、辺の無い生きているセッションへ `SendMessage` で送ると、
+その tool の結果で送った model に辺の書き方を伝える (#172)。
 
 ```sh
 agents-daemon edge add \
@@ -91,6 +92,17 @@ agents-daemon edge list --cwd <dir> [--here | --repo <main worktree>] [--ref <�
   書く側のセッション自身の cwd は見ない
 - 同じ参照の組 (向きを含む) は同じ辺になる。登録し直すと note と repo を書き直し、保持期間 (7 日) を数え直す
 - `list` はすべての辺を出す。`--cwd` は `--here` の基準で、`--repo` / `--here` / `--ref` はどちらかの端点で絞る
+
+### パーキングのメモを一覧する
+
+```sh
+agents-daemon park list --cwd <dir> [--here | --repo <main worktree>] [--status open|handed|discarded]
+agents-daemon park list --status open --task <task_id> --session <session_id> --cwd <dir>
+```
+
+- `--here` は `--cwd` の repo (linked worktree でも main worktree の鍵) で絞る。`--repo` とは併用できない。
+  ファイルのメモの通知 (mod) は `--status open --here` で読む
+- `--task` は `--session` のセッションがそのタスクの途中で置いたメモで絞る
 
 ### `--json`
 

@@ -1,0 +1,2 @@
+# task mod-types:sync が写す Claude Code の型。手で読む差分ではないので git diff と GitHub の PR で畳む
+ci/mod-types/*/index.d.ts -diff linguist-generated=true

@@ -18,6 +18,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/backend"
 	"github.com/usadamasa/agents-daemon/internal/config"
+	"github.com/usadamasa/agents-daemon/internal/daemonstate"
 	"github.com/usadamasa/agents-daemon/internal/detect"
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/limitlog"
@@ -137,7 +138,7 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 
 	seen := make(map[string]bool, len(panes))
 	claudeCount := 0
-	statusPanes := make([]PaneStatus, 0, len(panes))
+	statusPanes := make([]daemonstate.PaneStatus, 0, len(panes))
 
 	for _, pane := range panes {
 		if !multiplexer.IsClaudeAgent(pane) {
@@ -171,7 +172,7 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 
 	r.forgetUnseen(seen)
 
-	if err := writeStatusSnapshot(r.statusPath, os.Getpid(), r.backend, r.startedAt, now, statusPanes); err != nil {
+	if err := daemonstate.WriteStatusSnapshot(r.statusPath, os.Getpid(), r.backend, r.startedAt, now, statusPanes); err != nil {
 		r.log.Logf("status snapshot の書き込みに失敗: %v", err)
 	}
 
@@ -212,8 +213,8 @@ func (r *daemonRuntime) forgetUnseen(seen map[string]bool) {
 }
 
 // paneStatus は status.json に書く pane 1 枚ぶんのスナップショットを組む。
-func paneStatus(pane multiplexer.Pane, entry *paneEntry, outcome monitor.Outcome, now time.Time) PaneStatus {
-	return PaneStatus{
+func paneStatus(pane multiplexer.Pane, entry *paneEntry, outcome monitor.Outcome, now time.Time) daemonstate.PaneStatus {
+	return daemonstate.PaneStatus{
 		PaneID:        pane.PaneID,
 		SessionID:     pane.SessionID,
 		CWD:           pane.CWD,
@@ -226,6 +227,23 @@ func paneStatus(pane multiplexer.Pane, entry *paneEntry, outcome monitor.Outcome
 		LastOutcome:   outcome.String(),
 		LastTickAt:    now,
 	}
+}
+
+// monitorStatusString は monitor.Status を status.json 向けの識別子文字列にする。
+func monitorStatusString(s monitor.Status) string {
+	if s == monitor.StatusWaiting {
+		return "waiting"
+	}
+	return "monitoring"
+}
+
+// zeroableTime はゼロ値の time.Time を nil に変換する。PaneState.WaitUntil は
+// 監視中 (未待機) の間ゼロ値のままなので、JSON へは省略して出す。
+func zeroableTime(t time.Time) *time.Time {
+	if t.IsZero() {
+		return nil
+	}
+	return &t
 }
 
 // logOutcome は tick 1 回の結果をログへ書く。「静かな tick」(監視中で異常無し、
@@ -455,7 +473,7 @@ func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 		return fmt.Errorf("%s に到達できないため起動しません: %w", kind, reachErr)
 	}
 
-	if err := writePIDFile(p.PIDFile(), os.Getpid()); err != nil {
+	if err := daemonstate.WritePIDFile(p.PIDFile(), os.Getpid()); err != nil {
 		return err
 	}
 
@@ -489,7 +507,7 @@ func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 	defer stop()
 
 	cleanup := func(reason string) {
-		if err := removeOwnPIDFile(p.PIDFile(), os.Getpid()); err != nil {
+		if err := daemonstate.RemoveOwnPIDFile(p.PIDFile(), os.Getpid()); err != nil {
 			log.Logf("PID ファイルの削除に失敗: %v", err)
 		}
 		log.Logf("daemon 終了 (pid %d): %s", os.Getpid(), reason)

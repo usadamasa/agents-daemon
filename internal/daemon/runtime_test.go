@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/applog"
+	"github.com/usadamasa/agents-daemon/internal/daemonstate"
 	"github.com/usadamasa/agents-daemon/internal/limitlog"
 	"github.com/usadamasa/agents-daemon/internal/monitor"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
@@ -234,7 +235,7 @@ func TestDaemonRuntimeTick_RecordInStatusAndLog(t *testing.T) {
 		t.Fatalf("tick() error = %v", err)
 	}
 
-	snap, err := ReadStatusSnapshot(statusPath)
+	snap, err := daemonstate.ReadStatusSnapshot(statusPath)
 	if err != nil || snap == nil || len(snap.Panes) != 1 {
 		t.Fatalf("ReadStatusSnapshot() = %+v, %v; want pane 1 件", snap, err)
 	}

@@ -60,45 +60,6 @@ func TestAcquireLock(t *testing.T) {
 	})
 }
 
-func TestRemoveOwnPIDFile(t *testing.T) {
-	t.Run("自分の pid が書いてあれば消す", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "daemon.pid")
-		if err := writePIDFile(path, 100); err != nil {
-			t.Fatalf("セットアップに失敗: %v", err)
-		}
-		if err := removeOwnPIDFile(path, 100); err != nil {
-			t.Fatalf("removeOwnPIDFile() error = %v", err)
-		}
-		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
-			t.Errorf("ファイルが削除されていない: err = %v", err)
-		}
-	})
-
-	t.Run("別の pid が書いてあれば残す", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "daemon.pid")
-		if err := writePIDFile(path, 200); err != nil {
-			t.Fatalf("セットアップに失敗: %v", err)
-		}
-		if err := removeOwnPIDFile(path, 100); err != nil {
-			t.Fatalf("removeOwnPIDFile() error = %v", err)
-		}
-		got, err := ReadPIDFile(path)
-		if err != nil {
-			t.Fatalf("ReadPIDFile() error = %v", err)
-		}
-		if got != 200 {
-			t.Errorf("ReadPIDFile() = %d, want 200 (他の daemon の pid file を消してはいけない)", got)
-		}
-	})
-
-	t.Run("無ければエラーにしない", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "no-such-file")
-		if err := removeOwnPIDFile(path, 100); err != nil {
-			t.Errorf("removeOwnPIDFile() error = %v, want nil", err)
-		}
-	})
-}
-
 // lockedPaths は lock を取った状態の Paths を返す。lock は test の終わりに離す。
 func lockedPaths(t *testing.T) apppath.Paths {
 	t.Helper()

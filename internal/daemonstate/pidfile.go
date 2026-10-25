@@ -1,4 +1,4 @@
-package daemon
+package daemonstate
 
 import (
 	"errors"
@@ -44,8 +44,8 @@ func PIDAlive(pid int) bool {
 	return err == nil || errors.Is(err, syscall.EPERM)
 }
 
-// writePIDFile は path へ pid を原子的に書き込む (statefile)。
-func writePIDFile(path string, pid int) error {
+// WritePIDFile は path へ pid を原子的に書き込む (statefile)。
+func WritePIDFile(path string, pid int) error {
 	return statefile.WriteFileAtomic(path, ".daemon.pid.*", []byte(strconv.Itoa(pid)+"\n"))
 }
 
@@ -57,9 +57,9 @@ func removePIDFile(path string) error {
 	return nil
 }
 
-// removeOwnPIDFile は path に pid が書いてあるときだけ消す。他の daemon の pid なら残す
+// RemoveOwnPIDFile は path に pid が書いてあるときだけ消す。他の daemon の pid なら残す
 // (消すと status / doctor / stop がその daemon を見失う)。無ければ何もしない。
-func removeOwnPIDFile(path string, pid int) error {
+func RemoveOwnPIDFile(path string, pid int) error {
 	current, err := ReadPIDFile(path)
 	if err != nil {
 		return err

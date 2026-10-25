@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/usadamasa/agents-daemon/internal/daemon"
+	"github.com/usadamasa/agents-daemon/internal/daemonstate"
 	"github.com/usadamasa/agents-daemon/internal/dag"
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
@@ -142,7 +142,7 @@ type Card struct {
 	Live    bool
 	// Status はタスクの status (タスクの無いセッションは in_progress)。Pane はセッションの pane (無ければ nil)。
 	Status string
-	Pane   *daemon.PaneStatus
+	Pane   *daemonstate.PaneStatus
 }
 
 // Input はグラフを組む材料。
@@ -156,7 +156,7 @@ type Input struct {
 	Memos []parking.Item
 	Open  []parking.Item
 	// Panes はボードに載せる生きているセッションの pane (session ID ごと)。
-	Panes map[string]*daemon.PaneStatus
+	Panes map[string]*daemonstate.PaneStatus
 	// SessionNames は session ID → セッション名 (statusline の session_name)。
 	SessionNames map[string]string
 	// Elsewhere はセッションの記録がほかの domain の側にあるか。nil なら見ない。
@@ -201,7 +201,7 @@ func (g *builder) addCard(c Card) {
 
 // nodeState はタスクの status とセッションの pane からノードの状態を決める。上限待ちは agent の自己申告より
 // 先に見る (カードの印と同じ順)。
-func nodeState(status string, p *daemon.PaneStatus) (state, detail string) {
+func nodeState(status string, p *daemonstate.PaneStatus) (state, detail string) {
 	switch {
 	case status == "completed":
 		return StateCompleted, ""

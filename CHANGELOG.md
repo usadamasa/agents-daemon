@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026.1025.1](https://github.com/usadamasa/agents-daemon/compare/2026.1025.0...2026.1025.1) - 2026-10-25
+
+- バイナリに plugin の version を埋め込み、version で名乗らせる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/260
+- ボードの Show completed を枠なしで凡例の枠の中へ移す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/262
+
 ## [2026.1025.0](https://github.com/usadamasa/agents-daemon/compare/2026.1024.4...2026.1025.0) - 2026-10-25
 
 - rex preview.20 の前提を点検し marker を上げる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/249

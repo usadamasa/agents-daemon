@@ -13,7 +13,6 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/daemon/state"
 	"github.com/usadamasa/agents-daemon/internal/deps/dag"
 	"github.com/usadamasa/agents-daemon/internal/edge"
-	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/ref"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
@@ -30,8 +29,9 @@ const (
 	KindRef = "ref"
 )
 
-// ノードの状態。語は OSC 7501 の state / kind と Task 系ツールの status に合わせる (#134)。
-// cc-premise: 2.1.302 osc7501 agent_status は idle / working / blocked / done / error、blocked の kind は permission / question / auth
+// ノードの状態。語は OSC 7501 の state / kind と Task 系ツールの status に合わせる (#134)。working から unknown の
+// 7 つ (pending、completed、exited を除く) はセッションの活動 (Card.Activity) の語も兼ねる。pane から活動を導くのは
+// internal/deps の activity。
 const (
 	StateWorking    = "working"
 	StateDone       = "done"
@@ -53,8 +53,8 @@ const (
 	LinkEdge = "edge" // 渡す側が `agents-daemon edge add` で書いた辺 (internal/edge)
 )
 
-// stuck は止まっているノードの状態 (人の手か時間を待っている、または失敗した)。
-var stuck = map[string]bool{StateQuestion: true, StatePermission: true, StateLimit: true, StateError: true}
+// halted はセッション自身が止まっているノードの状態 (人の手か時間を待っている、または失敗した)。
+var halted = map[string]bool{StateQuestion: true, StatePermission: true, StateLimit: true, StateError: true}
 
 // Graph はセッションをまたぐタスクの依存の DAG (#134)。ノードはタスク 1 つで、同じセッションの blockedBy と
 // edge list の辺を 1 つにする。mod は Nodes の順に根を描き、Links から木と段を組む。
@@ -106,6 +106,10 @@ type Node struct {
 	BlockedBy []string `json:"blocked_by"`
 	// Deadlock は待ちが輪になっていて、たどると自分へ戻ってくるか。
 	Deadlock bool `json:"deadlock"`
+	// Halted はセッション自身が止まっているか (question、permission、limit、error)。Stuck は止まっているノードか
+	// (Halted か、完了していない待ちの輪)。mod はこの 2 つで数え、色を付け、規則を持たない。
+	Halted bool `json:"halted"`
+	Stuck  bool `json:"stuck"`
 }
 
 // MemoRef はタスクが扱うメモ 1 つ。
@@ -146,9 +150,12 @@ type Card struct {
 	Session string
 	CWD     string
 	Live    bool
-	// Status はタスクの status (タスクの無いセッションは in_progress)。Pane はセッションの pane (無ければ nil)。
+	// Status はタスクの status (タスクの無いセッションは in_progress)。
 	Status string
-	Pane   *state.PaneStatus
+	// Activity はセッションの活動 (StateWorking、StateDone、StateQuestion、StatePermission、StateError、StateLimit、
+	// StateUnknown のどれか)。生きていなければ空。Detail はその補足 (上限の解除時刻)。
+	Activity string
+	Detail   string
 }
 
 // Input はグラフを組む材料。
@@ -191,44 +198,34 @@ func Build(in Input) Graph {
 func (g *builder) addCard(c Card) {
 	n := &Node{Key: c.Key, Kind: c.Kind, Title: c.Title, Endpoint: c.Kind != KindTodo, CWD: c.CWD, TaskID: c.TaskID, SessionID: c.SessionID,
 		Session: c.Session, SessionName: g.in.SessionNames[c.SessionID], Live: c.Live, Memos: []MemoRef{}}
-	n.State, n.Detail = nodeState(c.Status, c.Pane)
+	n.State = nodeState(c.Status, c.Live, c.Activity)
+	if n.State == StateLimit {
+		n.Detail = c.Detail
+	}
 	g.nodes[n.Key] = n
 	g.bySession[n.SessionID] = append(g.bySession[n.SessionID], n.Key)
 }
 
-// nodeState はタスクの status とセッションの pane からノードの状態を決める。上限待ちは agent の自己申告より
-// 先に見る。上限で止まった pane は Claude Code の申告では idle や error に見えるが、利用者が一番知りたいのは
-// 「daemon が再開を待っている」ことなので。
-func nodeState(status string, p *state.PaneStatus) (state, detail string) {
+// nodeState は作業の進み (タスクの status)、セッションが生きているか、セッションの活動からノードの状態を決める。
+// 進行中の作業だけがセッションの活動をそのまま映す。
+func nodeState(progress string, live bool, activity string) string {
 	switch {
-	case status == "completed":
-		return StateCompleted, ""
-	case p == nil:
-		return StateExited, ""
-	case status != "in_progress":
-		return StatePending, ""
-	case p.MonitorStatus == "waiting":
-		if p.WaitUntil != nil {
-			detail = p.WaitUntil.Local().Format("15:04")
-		}
-		return StateLimit, detail
-	}
-	switch multiplexer.AgentStatus(p.AgentStatus) {
-	case multiplexer.AgentStatusBlocked:
-		// permission 以外の待ち (auth、kind の無い dialog) も人の手を待つものとして permission に寄せる。
-		if p.AgentKind == "question" {
-			return StateQuestion, ""
-		}
-		return StatePermission, ""
-	case multiplexer.AgentStatusError:
-		return StateError, ""
-	case multiplexer.AgentStatusDone, multiplexer.AgentStatusIdle:
-		return StateDone, ""
-	case multiplexer.AgentStatusWorking:
-		return StateWorking, ""
+	case progress == "completed":
+		return StateCompleted
+	case !live:
+		return StateExited
+	case progress != "in_progress":
+		return StatePending
 	default:
-		return StateUnknown, ""
+		return activity
 	}
+}
+
+// markStuck は止まっているかを付ける。Halted はセッション自身が人の手か時間を待っているか失敗した状態、Stuck は
+// それに完了していない待ちの輪を足したもの (輪も人が解かないと進まない)。
+func (n *Node) markStuck() {
+	n.Halted = halted[n.State]
+	n.Stuck = n.Halted || (n.Deadlock && n.State != StateCompleted)
 }
 
 // linkBlockedBy は同じセッションの blockedBy を辺にする。記録に無い blocker は描かない。
@@ -393,6 +390,7 @@ func (g *builder) finish() Graph {
 		n.Depth = a.Depth(key)
 		n.Downstream = len(down)
 		n.Deadlock = cyclic
+		n.markStuck()
 		n.BlockedBy = a.Cause(key, open, rankOf)
 		n.Parked = parked(*n, g.in.Open)
 		n.Memos = append(n.Memos, memos[key]...)
@@ -413,9 +411,8 @@ func (g *builder) finish() Graph {
 		}
 		return KeyLess(out.Links[i].After, out.Links[j].After)
 	})
-	// 待ちの輪も、人が解かないと進まないので止まっているノードとして数える。
 	for _, n := range out.Nodes {
-		if stuck[n.State] || (n.Deadlock && n.State != StateCompleted) {
+		if n.Stuck {
 			out.LongestChain = a.Longest(n.Key)
 			break
 		}
@@ -457,7 +454,7 @@ func (g *builder) rows(all *dag.Graph, nodes []Node, pairs [][2]string, open fun
 // rank は原因の鎖で先に選ぶ上流の順。止まっているもの、進行中のもの、それ以外。
 func rank(state string) int {
 	switch {
-	case stuck[state]:
+	case halted[state]:
 		return 0
 	case state == StateWorking:
 		return 1

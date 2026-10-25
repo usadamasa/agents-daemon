@@ -296,6 +296,12 @@ func TestGraph_chains(t *testing.T) {
 	if len(got["task:A/1"].BlockedBy) != 0 {
 		t.Errorf("task:A/1 blocked by = %v, want 空", got["task:A/1"].BlockedBy)
 	}
+	// 止まっているかはバイナリが決めて渡す。
+	for key, want := range map[string]bool{"task:A/1": true, "task:C/1": true, "task:B/1": false, "task:A/2": false} {
+		if n := got[key]; n.Stuck != want || n.Halted != want {
+			t.Errorf("%s halted/stuck = %v/%v, want %v", key, n.Halted, n.Stuck, want)
+		}
+	}
 	// ノードは下流の多い順 (同じなら Key の順) に並ぶ。mod はこの順で根を描く。
 	var order []string
 	for _, n := range b.Graph.Nodes {
@@ -410,6 +416,13 @@ func TestGraph_deadlock(t *testing.T) {
 	got := nodes(b.Graph)
 	if !got["task:A/1"].Deadlock || !got["task:A/2"].Deadlock || got["task:A/3"].Deadlock || got["task:A/4"].Deadlock {
 		t.Errorf("deadlock = %v / %v / %v / %v, want true / true / false / false", got["task:A/1"].Deadlock, got["task:A/2"].Deadlock, got["task:A/3"].Deadlock, got["task:A/4"].Deadlock)
+	}
+	// 待ちの輪のノードは stuck だが、セッション自身は止まっていないので halted ではない。
+	if n := got["task:A/1"]; !n.Stuck || n.Halted {
+		t.Errorf("輪のノード halted/stuck = %v/%v, want false/true", n.Halted, n.Stuck)
+	}
+	if got["task:A/3"].Stuck {
+		t.Errorf("輪の下流にいるだけのノードは stuck ではない")
 	}
 	// 待ちの輪も止まっているノードとして longest chain の起点にする (pane は輪を ■ に数える)。
 	if want := []string{"task:A/1", "task:A/2"}; !reflect.DeepEqual(b.Graph.LongestChain, want) {

@@ -62,6 +62,10 @@ export type GraphNode = {
   memos: MemoRef[]
   blocked_by: string[]
   deadlock: boolean
+  // halted はセッション自身が止まっているか (question、permission、limit、error)。stuck は止まっているノードか
+  // (halted か、完了していない待ちの輪)。どちらもバイナリが決め、mod は状態の語から決めない。
+  halted: boolean
+  stuck: boolean
 }
 
 // MemoRef はタスクが扱うメモ 1 つ。

@@ -87,6 +87,8 @@ function node(key: string, state: string, title: string, extra: Record<string, u
     memos: [] as { id: string; title: string; status: string }[],
     blocked_by: [] as string[],
     deadlock: false,
+    halted: false,
+    stuck: false,
     ...extra,
   }
 }
@@ -96,9 +98,9 @@ const ep = (ref: string) => ({ ref, cwd: CWD, repo: CWD })
 // 依存の DAG (internal/deps の graph)。Q/1 が質問で止まり、その下流に 3 つ。X/1 と X/2 は待ちの輪。
 // W/1 は進行中で、途中で置いたメモが 1 つ。D/1 はターンを終えた。issue:o/r#9 は置き場のノードで、その下流に P/1。
 const NODES = [
-  node('task:Q/1', 'question', '論点を決める', { session: 'design', downstream: 3 }),
-  node('task:X/1', 'pending', 'x を待つ', { session: 'loop', downstream: 1, blocked_by: ['task:X/2'], deadlock: true }),
-  node('task:X/2', 'pending', 'y を待つ', { session: 'loop', downstream: 1, blocked_by: ['task:X/1'], deadlock: true }),
+  node('task:Q/1', 'question', '論点を決める', { session: 'design', downstream: 3, halted: true, stuck: true }),
+  node('task:X/1', 'pending', 'x を待つ', { session: 'loop', downstream: 1, blocked_by: ['task:X/2'], deadlock: true, stuck: true }),
+  node('task:X/2', 'pending', 'y を待つ', { session: 'loop', downstream: 1, blocked_by: ['task:X/1'], deadlock: true, stuck: true }),
   node('task:Q/2', 'pending', '段5', { session: 'design', downstream: 2, blocked_by: ['task:Q/1'] }),
   node('task:W/1', 'working', 'edge の CLI', { session: 'edge-cli', downstream: 1, parked: 1 }),
   {
@@ -515,6 +517,24 @@ test('止まっているノードは title も記号と同じ色で描く (#194)
   expect(await colors('row:task:W/1')).toEqual(['suggestion', undefined, undefined])
   // 待ちの輪にいるだけのノードは記号の色が無いので、title にも付けない。
   expect(await colors('row:task:X/1')).toEqual([undefined, undefined, undefined])
+})
+
+test('止まっているかの判定は JSON の halted と stuck に従い、mod は状態の語から決めない', async ($, on) => {
+  // 状態の語だけなら止まっているノードに見えるが、バイナリが止まっていないと渡したもの。
+  const calm = node('task:K/1', 'error', '止まっていない', { session: 'calm', downstream: 1 })
+  // 進行中だが、バイナリが止まっていると渡したもの (待ちの輪に入った working)。
+  const looped = node('task:K/2', 'working', '輪の中の作業', { session: 'calm', downstream: 1, deadlock: true, stuck: true })
+  depsWorld(on, withNodes(calm, looped))
+  await $.command.run(OPEN_DEPS)
+  const ui = await mount($)
+  const colors = async (key: string) => ((await ui.find({ key }))?.children ?? []).map(c => (c as { props?: { color?: string } }).props?.color)
+  // halted でなければ title に色を付けない。stuck でなければ下流の数を出さない。
+  expect(await colors('row:task:K/1')).toEqual(['error', undefined, undefined])
+  expect(await ui.find({ key: 'row:task:K/1', text: /^✗ 止まっていない$/ })).toBeDefined()
+  expect(await colors('row:task:K/2')).toEqual(['suggestion', undefined, undefined])
+  expect(await ui.find({ key: 'row:task:K/2', text: /輪の中の作業 ↓1 ⟳$/ })).toBeDefined()
+  // ■ は Q/1、X の輪、K/2 の 3 つ。
+  expect(await ui.find({ type: 'Text', text: /^■ 3 / })).toBeDefined()
 })
 
 test('edge の辺は Unlink で edge rm に元の参照を渡す', async ($, on) => {

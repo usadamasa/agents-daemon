@@ -69,11 +69,19 @@ pane を開いたとき、数 (repo、セッション、ノード、メモ) が�
   終了したセッションは `sid:<sid>` を key にした置き場のノードにし、`exited` で下流が止まっていることを見せる。
   名前と session ID のどちらで書いた辺も同じ置き場に集まる
 
-ノードの状態は、完了なら `completed`、pane の無いセッションの未完了は `exited`、生きている pane の未着手は `pending`、
-進行中は pane の状態 (上限待ちを agent の申告より先に見る)。段・下流の数・待ちの輪・原因の鎖・最長の鎖の数え方と、
-`rows` / `rows_with_completed` (位相順の行とレーンの割り当て。行の並びは `Nodes` の順を優先の順にし、直前のノードの
-下流で上流が出揃ったものを先に出す) は `internal/deps/dag` が持つ。
-<!-- cc-premise: 2.1.302 osc7501 agent_status と blocked の kind (permission / question / auth) からノードの状態を決める -->
+pane を解釈するのは `internal/deps` の `activity` だけで、生きているセッションごとに 1 回、セッションの活動
+(`working` / `done` / `question` / `permission` / `error` / `limit` / `unknown`) を導く。上限待ちを agent の申告より
+先に見て、`limit` のときは解除時刻 (`15:04`) を `detail` に添える。ノードの状態は作業の進み、セッションの生死、活動だけで
+決まる純粋な関数 (`internal/deps/graph` の `nodeState`): 完了なら `completed`、生きていないセッションの未完了は `exited`、
+生きているセッションの未着手は `pending`、進行中は活動そのもの。
+<!-- cc-premise: 2.1.302 osc7501 agent_status と blocked の kind (permission / question / auth) からセッションの活動を決める -->
+
+止まっているかもバイナリが決めて渡し、mod は状態の語から決めない。`halted` はセッション自身が止まっている
+(`question` / `permission` / `limit` / `error`) ノードで、行の title の色と原因の鎖で先に選ぶ上流に使う。`stuck` は
+`halted` か、完了していない待ちの輪のノードで、数の行の ■、行の末尾の下流の数、longest chain の起点に使う。
+
+段・下流の数・待ちの輪・原因の鎖・最長の鎖の数え方と、`rows` / `rows_with_completed` (位相順の行とレーンの割り当て。
+行の並びは `Nodes` の順を優先の順にし、直前のノードの下流で上流が出揃ったものを先に出す) は `internal/deps/dag` が持つ。
 
 ## 渡した宛先の辺の確かめ
 

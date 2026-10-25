@@ -66,18 +66,6 @@ export function legendRows(width: number): string[] {
   })
 }
 
-const STUCK = new Set<GraphNode['state']>(['question', 'permission', 'limit', 'error'])
-
-// isStuck は人の手か時間を待っている、または失敗したノードか。
-export function isStuck(node: GraphNode): boolean {
-  return STUCK.has(node.state)
-}
-
-// isBlocked は止まっているノードか: isStuck か、待ちの輪の中にいる完了していないノード (人が解かないと進まない)。
-export function isBlocked(node: GraphNode): boolean {
-  return isStuck(node) || (node.deadlock && node.state !== 'completed')
-}
-
 // Graph は graph の JSON を Key で引けるようにしたもの。
 export class Graph {
   readonly nodes: GraphNode[]
@@ -138,14 +126,14 @@ function isIdle(node: GraphNode): boolean {
   return node.state === 'done' || node.state === 'unknown'
 }
 
-// blockedRoots は数の行の ■: 止まっているノードと、待ちの輪のノード。輪は既に数えたノードの下流にいるものを数えない
-// (輪の 1 周を 1 つに数える)。受け取った順 (下流の多い順)。
+// blockedRoots は数の行の ■: 止まっているノード (stuck)。セッション自身は止まっていない (halted でない) 待ちの輪の
+// ノードは、既に数えたノードの下流にいるものを数えない (輪の 1 周を 1 つに数える)。受け取った順 (下流の多い順)。
 export function blockedRoots(g: Graph): GraphNode[] {
   const blocked: GraphNode[] = []
   const covered = new Set<string>()
   for (const n of g.nodes) {
-    if (!isBlocked(n)) continue
-    if (!isStuck(n) && covered.has(n.key)) continue
+    if (!n.stuck) continue
+    if (!n.halted && covered.has(n.key)) continue
     blocked.push(n)
     covered.add(n.key)
     for (const k of g.reach(n.key)) covered.add(k)

@@ -29,6 +29,8 @@ function node(sid: string, tid: string, sessionName: string, extra: Record<strin
     memos: [],
     blocked_by: [],
     deadlock: false,
+    halted: false,
+    stuck: false,
     ...extra,
   }
 }

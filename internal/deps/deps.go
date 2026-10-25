@@ -166,27 +166,29 @@ func livePanes(in input) (running bool, updatedAt *time.Time, panes map[string]*
 // 呼び手が付ける。
 func collect(in input, panes map[string]*state.PaneStatus) []graph.Card {
 	var cards []graph.Card
+	acts := activities(panes)
 	withTasks := map[string]bool{}
 	for _, t := range in.Tasks {
 		withTasks[t.SessionID] = true
-		p := panes[t.SessionID]
+		a, live := acts[t.SessionID]
 		cards = append(cards, graph.Card{Key: ref.Task(t.SessionID, t.ID), Kind: graph.KindTask, TaskID: t.ID, Title: t.Subject, SessionID: t.SessionID,
-			CWD: t.CWD, Live: p != nil, Status: t.Status, Pane: p})
+			CWD: t.CWD, Live: live, Status: t.Status, Activity: a.act, Detail: a.detail})
 	}
 	for _, list := range in.Todos {
 		withTasks[list.SessionID] = true
-		p := panes[list.SessionID]
+		a, live := acts[list.SessionID]
 		for i, todo := range list.Todos {
 			cards = append(cards, graph.Card{Key: ref.Todo(list.SessionID, i), Kind: graph.KindTodo, Title: todo.Content, SessionID: list.SessionID,
-				CWD: list.CWD, Live: p != nil, Status: todo.Status, Pane: p})
+				CWD: list.CWD, Live: live, Status: todo.Status, Activity: a.act, Detail: a.detail})
 		}
 	}
 	for id, p := range panes {
 		if withTasks[id] {
 			continue
 		}
+		a := acts[id]
 		cards = append(cards, graph.Card{Key: ref.SessionID(id), Kind: graph.KindSession, Title: sessionSubject(p, in.SessionNames[id]), SessionID: id,
-			CWD: p.CWD, Live: true, Status: "in_progress", Pane: p})
+			CWD: p.CWD, Live: true, Status: "in_progress", Activity: a.act, Detail: a.detail})
 	}
 	return cards
 }

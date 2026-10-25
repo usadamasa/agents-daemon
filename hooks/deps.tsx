@@ -4,7 +4,7 @@ import type { EngineInterface, Register, Timer } from 'claude-code'
 import type { DepsData, DepsRepo, GraphLink, GraphNode, GraphRow, ParkingCard } from '../types'
 import { daemonBin } from './daemon-bin'
 import { loadDeps } from './deps-data'
-import { CHAIN_COLOR, COLOR, Graph, ICON, MEMO, candidates, cells, chain, fit, isBlocked, isStuck, legendRows, pieces, splitLanes, summary, tags } from './graph'
+import { CHAIN_COLOR, COLOR, Graph, ICON, MEMO, candidates, cells, chain, fit, legendRows, pieces, splitLanes, summary, tags } from './graph'
 import { logChange, logEvent, settle } from './log'
 import type { Fields } from './log'
 import {
@@ -180,7 +180,7 @@ export const registerDeps: Register = on => {
         )
       }
       const isSel = n.key === chosen
-      const tag = tags(n, isBlocked(n))
+      const tag = tags(n, n.stuck)
       // 行頭の印、レーン、記号と空白を除いた幅に title を収める。
       const room = Math.max(4, e.props.bodyColumns - GUTTER - cells(left) - 1 - cells(right) - 1 - cells(tag))
       return (
@@ -190,7 +190,7 @@ export const registerDeps: Register = on => {
           <Button key={`row:${n.key}`} plain onPress={() => choose(isSel ? '' : n.key)}>
             <Text color={COLOR[n.state]}>{ICON[n.state]}</Text>
             {lanes(r, left.length + 1, r.lanes.length)}
-            <Text color={isStuck(n) ? COLOR[n.state] : undefined} bold={isSel ? true : undefined}>{` ${fit(n.title, room)}${tag}`}</Text>
+            <Text color={n.halted ? COLOR[n.state] : undefined} bold={isSel ? true : undefined}>{` ${fit(n.title, room)}${tag}`}</Text>
           </Button>
         </Box>
       )

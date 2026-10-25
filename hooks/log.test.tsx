@@ -82,6 +82,8 @@ const NODE = {
   memos: [],
   blocked_by: [],
   deadlock: false,
+  halted: false,
+  stuck: false,
 }
 
 function deps(memos: unknown[]) {

@@ -36,6 +36,16 @@ tasks:
     cmds:
       - tsc -p .
 
+  typecheck:ci:
+    desc: mod を ci/mod-types/ に写した型で tsc にかける。CI は .claude-plugin/types/ を用意できないのでこちらを回す
+    cmds:
+      - tsc -p ci/mod-types
+
+  mod-types:sync:
+    desc: .claude-plugin/types/ の型を ci/mod-types/ へ写す。Claude Code を上げて mod の API を使い始めたら打つ
+    cmds:
+      - scripts/sync-mod-types.sh
+
   test-cover:
     desc: カバレッジ付きテスト
     cmds:

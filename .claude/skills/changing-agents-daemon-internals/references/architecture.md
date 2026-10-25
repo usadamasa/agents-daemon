@@ -127,6 +127,11 @@ pane ごとに次を評価する。上限側の詳細は [rate-limit.md](rate-li
 `XDG_STATE_HOME` は daemon と `statusline` / `ingest-statusline` / `ingest-task` / `park` / `edge` / `event-log` /
 `deps` (`apppath.FromEnv`) が同じ規則で解決する。
 
+消す主体の列の保持期間は、記録を書くパッケージの定数が根拠のコメントと一緒に持つ。依存図とパーキングロットが読む記録
+(tasks、edges、sessions、context、parking) の保持期間の一覧と、その間の関係 (辺は端点のタスクのノードより長く残る、台帳は
+辺より長く残る、古いメモの区切りは open のメモが消えるより前、など) は `internal/daemon/retention_test.go` が表で固定する。
+値か関係を変えるときは、そのテストとこの表を一緒に直す。
+
 | パス | 書く主体 | いつ | 中身 | 消す主体 |
 | ---- | ---- | ---- | ---- | ---- |
 | `${XDG_CONFIG_HOME:-~/.config}/agents-daemon/config.json` | 人間 | 手で編集したとき | 設定 | 消さない |

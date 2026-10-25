@@ -173,6 +173,7 @@ const DEPS = {
   daemon_running: true,
   updated_at: '2026-10-18T09:00:00Z',
   here: CWD,
+  stale_memo_days: 30,
   repos: [
     {
       repo: CWD,
@@ -739,21 +740,29 @@ test('終了したセッションから移したメモ (origin adopted) は種�
   expect(w.sent[0]?.text).toMatch(/^パーキングロットのメモ「残ったタスク」\(種類: scope・adopted\) をタスクにしてください。/)
 })
 
-test('最後に置かれてから 30 日より経ったメモがあれば、パーキングの見出しからまとめて捨てる', async ($, on) => {
-  // MEMO は 10/18 に置かれた。時計を 12/01 にすると 30 日より古い。
+test('最後に置かれてから stale_memo_days より経ったメモがあれば、パーキングの見出しからまとめて捨てる', async ($, on) => {
+  // MEMO は 10/18 に置かれた。時計を 12/01 にすると 44 日経っている。日数は deps の stale_memo_days (バイナリが渡す)。
+  const data = { ...DEPS, stale_memo_days: 40 }
   const w = world(
     on,
-    argv => (argv[1] === 'deps' ? output(JSON.stringify(DEPS)) : argv[2] === 'discard' ? output(JSON.stringify([{ id: MEMO.id }])) : output('{}')),
+    argv => (argv[1] === 'deps' ? output(JSON.stringify(data)) : argv[2] === 'discard' ? output(JSON.stringify([{ id: MEMO.id }])) : output('{}')),
     Date.parse('2026-12-01T00:00:00Z'),
   )
   await $.command.run(OPEN_DEPS)
   const ui = await mount($)
-  expect(await ui.find({ key: 'discard-stale', text: /Discard 1 older than 30d/ })).toBeDefined()
+  expect(await ui.find({ key: 'discard-stale', text: /Discard 1 older than 40d/ })).toBeDefined()
   w.ran.length = 0
   await ui.press({ key: 'discard-stale' })
-  expect(operations(w.ran)).toEqual([[BIN, 'park', 'discard', '--days', '30', ...SELF_ARGS]])
+  expect(operations(w.ran)).toEqual([[BIN, 'park', 'discard', '--days', '40', ...SELF_ARGS]])
   // 戻し方を添える (id は出来事のログに残る)。
-  expect(await ui.find({ type: 'Text', text: /30 日より前のメモ 1 つを捨てました.*park set <id> --status open/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /40 日より前のメモ 1 つを捨てました.*park set <id> --status open/ })).toBeDefined()
+})
+
+test('stale_memo_days より新しいメモだけなら、日が経っていてもまとめて捨てるボタンを出さない', async ($, on) => {
+  world(on, argv => (argv[1] === 'deps' ? output(JSON.stringify({ ...DEPS, stale_memo_days: 50 })) : output('{}')), Date.parse('2026-12-01T00:00:00Z'))
+  await $.command.run(OPEN_DEPS)
+  const ui = await mount($)
+  expect(await ui.find({ key: 'discard-stale' })).toBeUndefined()
 })
 
 test('30 日以内のメモだけなら、まとめて捨てるボタンを出さない', async ($, on) => {
@@ -857,7 +866,7 @@ test('claude が前景にならなかった (pane は残る) メモは戻さず�
 })
 
 test('ノードの無い依存図と、daemon が動いていないことを描く', async ($, on) => {
-  depsWorld(on, { daemon_running: false, here: CWD, repos: [], graph:{ nodes: [], links: [], longest_chain: [], rows: [], rows_with_completed: [] } })
+  depsWorld(on, { daemon_running: false, here: CWD, stale_memo_days: 30, repos: [], graph:{ nodes: [], links: [], longest_chain: [], rows: [], rows_with_completed: [] } })
   await $.command.run(OPEN_DEPS)
   const ui = await mount($)
   expect(await ui.find({ type: 'Text', text: /agents-daemon が動いていないため、セッションの状態は出ません/ })).toBeDefined()

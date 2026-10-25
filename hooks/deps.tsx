@@ -45,9 +45,6 @@ const TITLE = 'Tasks'
 const POLL_MS = 3000
 // 行頭の印。選んだ行だけに › を出し、ほかの行は同じ幅の空白で揃える。
 const GUTTER = 2
-// STALE_DAYS は「古い」メモの日数。週次の棚卸しを 4 回越したメモは文脈が薄れている。daemon の housekeeping は open を
-// 90 日で黙って消す (internal/parking の OpenRetention) が、その前に人が見て捨てる区切りをここに置く。
-const STALE_DAYS = 30
 
 const deps = atom({ plugin: 'agents-daemon', key: 'deps' } as const, null)
 const error = atom({ plugin: 'agents-daemon', key: 'error' } as const, '')
@@ -130,7 +127,9 @@ export const registerDeps: Register = on => {
     const g = new Graph(data.graph)
     const memos = data.repos.flatMap(repo => repo.memos)
     const now = await $.clock.now()
-    const stale = memos.filter(memo => isStale(memo, now, STALE_DAYS)).length
+    // 「古い」メモの日数はバイナリが渡す (internal/parking の StaleAfter)。
+    const staleDays = data.stale_memo_days
+    const stale = memos.filter(memo => isStale(memo, now, staleDays)).length
     const selected = g.node(chosen)
     const chosenMemo = findMemo(data.repos, chosen)
     const rows = withCompleted ? data.graph.rows_with_completed : data.graph.rows
@@ -385,8 +384,8 @@ export const registerDeps: Register = on => {
                 </Text>
                 {/* 古いメモをまとめて捨てる。該当があるときだけ出し、日数はこの mod が決める (park discard --days)。 */}
                 {stale > 0 && (
-                  <Button key="discard-stale" onPress={() => void act(() => discardStale($, STALE_DAYS))}>
-                    Discard {String(stale)} older than {String(STALE_DAYS)}d
+                  <Button key="discard-stale" onPress={() => void act(() => discardStale($, staleDays))}>
+                    Discard {String(stale)} older than {String(staleDays)}d
                   </Button>
                 )}
               </Box>

@@ -78,8 +78,11 @@ type Deps struct {
 	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 	// Here は開いたセッションの cwd の repo の鍵 (Repo.Repo と同じ規則)。mod が自分の repo を repos から引くのに
 	// 使う。その repo が無ければ repos に無い鍵になる。
-	Here  string `json:"here"`
-	Repos []Repo `json:"repos"`
+	Here string `json:"here"`
+	// StaleMemoDays は open のメモを「古い」とみなす日数 (parking.StaleAfter)。pane はこの日数より前に最後に置かれた
+	// メモをまとめて捨てるボタンを出し、`park discard --days` に渡す。
+	StaleMemoDays int    `json:"stale_memo_days"`
+	Repos         []Repo `json:"repos"`
 	// Graph はタスクの依存の DAG (#134)。repos と同じ記録から組む。
 	Graph graph.Graph `json:"graph"`
 }
@@ -105,7 +108,7 @@ type input struct {
 
 // build は依存図を組む。
 func build(in input) Deps {
-	d := Deps{Repos: []Repo{}}
+	d := Deps{Repos: []Repo{}, StaleMemoDays: int(parking.StaleAfter / (24 * time.Hour))}
 	var panes map[string]*state.PaneStatus
 	d.DaemonRunning, d.UpdatedAt, panes = livePanes(in)
 	cards := collect(in, panes)

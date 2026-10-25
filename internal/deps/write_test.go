@@ -74,6 +74,10 @@ func TestWrite_parking(t *testing.T) {
 	if home.Here != home.Repos[0].Repo {
 		t.Errorf("here = %q, want %q", home.Here, home.Repos[0].Repo)
 	}
+	// 古いメモの日数はバイナリが渡し、mod は持たない (parking.StaleAfter)。
+	if home.StaleMemoDays != 30 {
+		t.Errorf("stale_memo_days = %d, want 30", home.StaleMemoDays)
+	}
 }
 
 // タスクの description との照合には open 以外のメモも読む。

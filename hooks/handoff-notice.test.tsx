@@ -39,6 +39,7 @@ function deps(nodes: unknown[], links: unknown[] = []) {
   return {
     daemon_running: true,
     here: CWD,
+    stale_memo_days: 30,
     repos: [],
     graph: { nodes, links, longest_chain: [], rows: [], rows_with_completed: [] },
   }

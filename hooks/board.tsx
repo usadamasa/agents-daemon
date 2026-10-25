@@ -225,6 +225,9 @@ export const registerBoard: Register = on => {
             {n.state === 'limit' && n.detail ? ` (再開 ${n.detail})` : ''}
           </Text>
           <Text>blocked by: {chain(g, n)}</Text>
+          {n.memos.map(m => (
+            <Text key={`memo:${m.id}`}>{`◇ ${m.title} (${m.status})`}</Text>
+          ))}
           {links.map(link => blockerRow(n, link))}
           {!canLink && <Text dimColor>辺の端点にできないタスクです (TodoWrite の項目、名前の無いセッション)</Text>}
           {!canSend(n, self) && <Text dimColor>{whyNot(n, self)}</Text>}

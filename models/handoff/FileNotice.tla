@@ -10,17 +10,21 @@
      伝えたメモの id は told の atom に置く ($.state なので mod の読み直しでも残る)。
    - このセッションだけが置いたメモは model が自分で置いたものなので伝えない。
    - 同じターンで並列に呼ばれた tool の hook は交錯する。Atomic が TRUE なら、伝えるメモを選ぶのと told に足すのを
-     1 回の update の中で行う (選ぶ → 足すが 1 ステップ)。FALSE なら told を読んでから別のステップで書く。 *)
+     1 回の update の中で行う (選ぶ → 足すが 1 ステップ)。FALSE なら told を読んでから別のステップで書く。
+   - compact は model の context を要約に置き換える。添えたメモが要約に残るかは決まらないので、残らない側
+     (model が知っているメモが空になる) に倒す。ResetOnCompact が TRUE なら compact で told も空にする。
+     FALSE (今の hooks/notice.ts) なら told は残る。 *)
 EXTENDS Naturals, FiniteSets
 
 CONSTANTS
-  Memos,      \* メモの id
-  Files,      \* repo のファイル
-  MemoFiles,  \* メモの files ([Memos -> SUBSET Files])
-  Self,       \* mod が動いているセッション
-  Others,     \* ほかのセッション
-  Calls,      \* model の tool の呼び出し (1 つの id は 1 回だけ使う)
-  Atomic      \* 選ぶのと told に足すのを 1 回の update で行うか
+  Memos,          \* メモの id
+  Files,          \* repo のファイル
+  MemoFiles,      \* メモの files ([Memos -> SUBSET Files])
+  Self,           \* mod が動いているセッション
+  Others,         \* ほかのセッション
+  Calls,          \* model の tool の呼び出し (1 つの id は 1 回だけ使う)
+  Atomic,         \* 選ぶのと told に足すのを 1 回の update で行うか
+  ResetOnCompact  \* compact で told を空にするか
 
 Sessions == {Self} \cup Others
 
@@ -38,9 +42,11 @@ VARIABLES
   pending,  \* Atomic が FALSE のとき、told を読んで選んだメモ
   seen,     \* hook が写しを見た時点で、触ったファイルに関係したメモ
   told,     \* 伝えたメモ (told の atom)
-  said      \* メモを context に添えた回数
+  said,     \* 今の context でメモを添えた回数
+  known,    \* model が今の context で知っているメモ
+  after     \* 最後の compact より後に context を添えた (添えるメモが無かったものも含む) 呼び出し
 
-vars == <<open, placers, snap, phase, file, pending, seen, told, said>>
+vars == <<open, placers, snap, phase, file, pending, seen, told, said, known, after>>
 
 TypeOK ==
   /\ open \subseteq Memos
@@ -52,6 +58,8 @@ TypeOK ==
   /\ seen \in [Calls -> SUBSET Memos]
   /\ told \subseteq Memos
   /\ said \in [Memos -> Nat]
+  /\ known \subseteq Memos
+  /\ after \subseteq Calls
 
 Init ==
   /\ open = {}
@@ -63,6 +71,8 @@ Init ==
   /\ seen = [c \in Calls |-> {}]
   /\ told = {}
   /\ said = [m \in Memos |-> 0]
+  /\ known = {}
+  /\ after = {}
 
 \* 写しのうち、f を files に持ち、このセッション以外も置いたメモ。
 Relevant(f) == {m \in Memos : snap[m] # {} /\ f \in MemoFiles[m] /\ snap[m] # {Self}}
@@ -71,25 +81,25 @@ Relevant(f) == {m \in Memos : snap[m] # {} /\ f \in MemoFiles[m] /\ snap[m] # {S
 Place(m, s) ==
   /\ open' = open \cup {m}
   /\ placers' = [placers EXCEPT ![m] = IF m \in open THEN @ \cup {s} ELSE {s}]
-  /\ UNCHANGED <<snap, phase, file, pending, seen, told, said>>
+  /\ UNCHANGED <<snap, phase, file, pending, seen, told, said, known, after>>
 
 \* メモが手渡されるか捨てられて open でなくなる。
 Close(m) ==
   /\ m \in open
   /\ open' = open \ {m}
-  /\ UNCHANGED <<placers, snap, phase, file, pending, seen, told, said>>
+  /\ UNCHANGED <<placers, snap, phase, file, pending, seen, told, said, known, after>>
 
 \* mod がボードを読み直して写しを置き直す (hooks/board-data.ts の loadBoard)。
 Reload ==
   /\ snap' = [m \in Memos |-> IF m \in open THEN placers[m] ELSE {}]
-  /\ UNCHANGED <<open, placers, phase, file, pending, seen, told, said>>
+  /\ UNCHANGED <<open, placers, phase, file, pending, seen, told, said, known, after>>
 
 \* model の tool が f を読む・書く。hook は tool が走った後に動く。
 Touch(c, f) ==
   /\ phase[c] = "idle"
   /\ phase' = [phase EXCEPT ![c] = "ran"]
   /\ file' = [file EXCEPT ![c] = f]
-  /\ UNCHANGED <<open, placers, snap, pending, seen, told, said>>
+  /\ UNCHANGED <<open, placers, snap, pending, seen, told, said, known, after>>
 
 Say(ms) == [m \in Memos |-> IF m \in ms THEN said[m] + 1 ELSE said[m]]
 
@@ -100,8 +110,10 @@ Claim(c) ==
   /\ LET new == Relevant(file[c]) \ told IN
        /\ told' = told \cup new
        /\ said' = Say(new)
+       /\ known' = known \cup new
   /\ seen' = [seen EXCEPT ![c] = Relevant(file[c])]
   /\ phase' = [phase EXCEPT ![c] = "done"]
+  /\ after' = after \cup {c}
   /\ UNCHANGED <<open, placers, snap, file, pending>>
 
 \* Atomic でない: told を読んで選ぶ。
@@ -111,15 +123,25 @@ ReadTold(c) ==
   /\ pending' = [pending EXCEPT ![c] = Relevant(file[c]) \ told]
   /\ seen' = [seen EXCEPT ![c] = Relevant(file[c])]
   /\ phase' = [phase EXCEPT ![c] = "read"]
-  /\ UNCHANGED <<open, placers, snap, file, told, said>>
+  /\ UNCHANGED <<open, placers, snap, file, told, said, known, after>>
 
 \* Atomic でない: 選んだメモを told に足して context に添える。
 WriteTold(c) ==
   /\ phase[c] = "read"
   /\ told' = told \cup pending[c]
   /\ said' = Say(pending[c])
+  /\ known' = known \cup pending[c]
   /\ phase' = [phase EXCEPT ![c] = "done"]
+  /\ after' = after \cup {c}
   /\ UNCHANGED <<open, placers, snap, file, pending, seen>>
+
+\* Claude Code が context を compact する。model は添えられたメモを忘れる。
+Compact ==
+  /\ known' = {}
+  /\ said' = [m \in Memos |-> 0]
+  /\ after' = {}
+  /\ told' = IF ResetOnCompact THEN {} ELSE told
+  /\ UNCHANGED <<open, placers, snap, phase, file, pending, seen>>
 
 Next ==
   \/ \E m \in Memos, s \in Sessions : Place(m, s)
@@ -127,14 +149,20 @@ Next ==
   \/ Reload
   \/ \E c \in Calls, f \in Files : Touch(c, f)
   \/ \E c \in Calls : Claim(c) \/ ReadTold(c) \/ WriteTold(c)
+  \/ Compact
 
 Spec == Init /\ [][Next]_vars
 
-\* 1 つのメモを伝えるのはセッションの中で高々 1 回 (並列の Read で同じメモを 2 回添えない)
+\* 1 つのメモを添えるのは 1 つの context の中で高々 1 回 (並列の Read で同じメモを 2 回添えない)
 AtMostOnce == \A m \in Memos : said[m] <= 1
 
-\* 触ったファイルに関係するメモは、hook が済んだ時点で伝わっている (伝え漏れが無い)。
+\* 触ったファイルに関係するメモは、hook が済んだ時点で told にある (伝え漏れが無い)。
 \* 関係するかは hook が写しを見た時点 (seen) で測る。後から置かれたメモは次に触ったときに伝える。
-NoneMissed == \A c \in Calls : phase[c] = "done" => seen[c] \subseteq told
+\* compact で told を空にする形では、compact より前に済んだ呼び出しは数えない。
+NoneMissed ==
+  \A c \in Calls : phase[c] = "done" /\ (~ResetOnCompact \/ c \in after) => seen[c] \subseteq told
+
+\* 最後の compact より後に触ったファイルに関係するメモは、model が今の context で知っている。
+Informed == \A c \in after : phase[c] = "done" => seen[c] \subseteq known
 
 =============================================================================

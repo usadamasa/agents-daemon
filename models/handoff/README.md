@@ -33,8 +33,10 @@ TLC は devShell の `tlaplus` (`tlc`)。CI では回さない。`scripts/model-
 | `FileNotice.cfg` | `AtMostOnce`: 1 つのメモを添えるのはセッションの中で高々 1 回 | 添えるメモを選ぶのと told に足すのを 1 回の `update` の中で行う |
 | | `NoneMissed`: 触ったファイルに関係するメモは、hook が済んだ時点で伝わっている | 写しにあって told に無いものは全部添える。後から置かれたメモは次に触ったときに伝える |
 | `FileNoticeRace.cfg` | `AtMostOnce` が破れる (`violated` を期待) | told を読んでから別のステップで書くと、並列の 2 つの Read が同じメモを添える。上の形を選んだ根拠 |
+| `FileNoticeCompact.cfg` | `Informed` が破れる (`violated` を期待): compact の後に触ったファイルのメモを model が知っている | 今の `hooks/notice.ts` は compact の後も told を残すので、compact の前に伝えたメモを伝え直さない。添えたメモが要約に残るかは決まらないので、残らない側に倒している |
+| `FileNoticeReset.cfg` | `AtMostOnce` (1 つの context の中で) / `NoneMissed` / `Informed` | compact で told も空にする形。compact の後に触ったときに伝え直す |
 
-`FileNoticeRace.cfg` 以外の cfg は `holds` を期待する。期待と違えば `model-check.sh` は exit 1 にする。
+`FileNoticeRace.cfg` と `FileNoticeCompact.cfg` 以外の cfg は `holds` を期待する。期待と違えば `model-check.sh` は exit 1 にする。
 
 同じ不変条件を、実物の Store を goroutine で交錯させる乱択テストが実装に対して持つ (`task test` で回る)。
 モデルは設計を変えるときに先に反例を探す場所で、実装の正しさはテストが持つ。

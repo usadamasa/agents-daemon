@@ -285,10 +285,9 @@ async function spawnSession($: EngineInterface, repo: string, text: string): Pro
   }
 }
 
-// adopt は終了したセッションのタスクをパーキングへ移す。タスクの ID はノードの Key (<session_id>/<task_id>) から取る。
+// adopt は終了したセッションのタスクをパーキングへ移す。ノードの key (task: の Ref) をそのまま渡す。
 export async function adopt($: EngineInterface, node: GraphNode): Promise<string> {
-  const taskId = node.key.slice(node.key.indexOf('/') + 1)
-  const failure = await park($, ['adopt', node.session_id ?? '', taskId])
+  const failure = await park($, ['adopt', node.key])
   return failure === '' ? `タスク「${node.title}」をパーキングへ移しました` : `パーキングへ移せませんでした: ${failure}`
 }
 

@@ -28,7 +28,7 @@ func newEdgeCmd() *cobra.Command {
 				return run(edge.New(p.StateDir()))
 			})
 		}}
-		c.Flags().StringVar(&before.Ref, "before", "", "先に済ませる作業の参照 (session:<名前> / issue:<owner>/<repo>#<番号> / pr:<owner>/<repo>#<番号> / task:<session_id>/<task_id>)")
+		c.Flags().StringVar(&before.Ref, "before", "", "先に済ませる作業の参照 (session:<名前> / sid:<session_id> / issue:<owner>/<repo>#<番号> / pr:<owner>/<repo>#<番号> / task:<session_id>/<task_id>)")
 		c.Flags().StringVar(&before.CWD, "before-cwd", "", "before の作業のセッションの cwd (絶対パス)")
 		c.Flags().StringVar(&after.Ref, "after", "", "before の後に始める作業の参照")
 		c.Flags().StringVar(&after.CWD, "after-cwd", "", "after の作業のセッションの cwd (絶対パス)")

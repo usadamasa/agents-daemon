@@ -103,7 +103,7 @@ func TestWrite_edges(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "e1.json"), `{"id":"e1","before":`+ep("task:H/1", "/src/home/a")+`,"after":`+ep("task:H/2", "/src/home/a")+`,"created_at":"2026-10-18T09:00:00Z"}`)
 
 	home := writeDeps(t, p, "/src/home/a")
-	if len(home.Graph.Links) != 1 || home.Graph.Links[0].Before != "H/1" || home.Graph.Links[0].After != "H/2" || len(home.Graph.Nodes) != 2 {
+	if len(home.Graph.Links) != 1 || home.Graph.Links[0].Before != "task:H/1" || home.Graph.Links[0].After != "task:H/2" || len(home.Graph.Nodes) != 2 {
 		t.Errorf("graph = %+v", home.Graph)
 	}
 }

@@ -86,8 +86,9 @@ agents-daemon edge rm --before ... --before-cwd ... --after ... --after-cwd ... 
 agents-daemon edge list --cwd <dir> [--here | --repo <main worktree>] [--ref <参照>]
 ```
 
-- 参照は `session:<セッション名>` (`claude --name` の名前)、`issue:<owner>/<repo>#<番号>`、`pr:<owner>/<repo>#<番号>`、
-  `task:<session_id>/<task_id>` のどれか
+- 参照は `session:<セッション名>` (`claude --name` の名前)、`sid:<session_id>`、`issue:<owner>/<repo>#<番号>`、
+  `pr:<owner>/<repo>#<番号>`、`task:<session_id>/<task_id>` のどれか。依存図のノードの key はこの形なので、
+  `deps` の JSON の key をそのまま渡せる (TodoWrite の項目 `todo:` は端点にできない)
 - `--before-cwd` / `--after-cwd` は、その作業のセッションを起こしたディレクトリ (絶対パス)。端点の repo はここから決め、
   書く側のセッション自身の cwd は見ない
 - 同じ参照の組 (向きを含む) は同じ辺になる。登録し直すと note と repo を書き直し、保持期間 (7 日) を数え直す

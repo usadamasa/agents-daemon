@@ -204,15 +204,14 @@ export function splitLanes(lanes: string): { left: string; right: string } {
   return { left: lanes.slice(0, at), right: lanes.slice(at + 1) }
 }
 
-// candidates は selected の Add blocker の候補: 辺の端点にできる (ref のある) ノードのうち、自分、既にある上流、
+// candidates は selected の Add blocker の候補: 辺の端点にできる (endpoint の) ノードのうち、自分、既にある上流、
 // 下流 (足すと輪になる)、完了と終了したものを除く。
 export function candidates(g: Graph, selected: GraphNode): GraphNode[] {
   const down = g.reach(selected.key)
   const already = new Set(g.blockers(selected.key).map(l => l.before))
   return g.nodes.filter(
     n =>
-      n.ref !== undefined &&
-      n.ref !== '' &&
+      n.endpoint &&
       n.key !== selected.key &&
       !already.has(n.key) &&
       !down.has(n.key) &&

@@ -71,13 +71,13 @@ func TestGraph_nodeStates(t *testing.T) {
 	})
 	got := nodes(b.Graph)
 	want := map[string]string{
-		"W/1": graph.StateWorking, "W/2": graph.StatePending, "W/3": graph.StateCompleted,
-		"D/1": graph.StateDone, "Q/1": graph.StateQuestion, "P/1": graph.StatePermission, "E/1": graph.StateError, "L/1": graph.StateLimit,
-		"X/1": graph.StateExited, "X/2": graph.StateExited,
-		"S/session": graph.StateWorking, "U/session": graph.StateDone,
+		"task:W/1": graph.StateWorking, "task:W/2": graph.StatePending, "task:W/3": graph.StateCompleted,
+		"task:D/1": graph.StateDone, "task:Q/1": graph.StateQuestion, "task:P/1": graph.StatePermission, "task:E/1": graph.StateError, "task:L/1": graph.StateLimit,
+		"task:X/1": graph.StateExited, "task:X/2": graph.StateExited,
+		"sid:S": graph.StateWorking, "sid:U": graph.StateDone,
 		// 状態を分類できないセッション (申告の前、古い record) は working に倒さない。
-		"V/session": graph.StateUnknown, "N/1": graph.StateUnknown,
-		"T/todo-0": graph.StateCompleted, "T/todo-1": graph.StateWorking,
+		"sid:V": graph.StateUnknown, "task:N/1": graph.StateUnknown,
+		"todo:T/0": graph.StateCompleted, "todo:T/1": graph.StateWorking,
 	}
 	if len(got) != len(want) {
 		t.Errorf("nodes = %d, want %d: %+v", len(got), len(want), got)
@@ -87,28 +87,29 @@ func TestGraph_nodeStates(t *testing.T) {
 			t.Errorf("%s state = %q, want %q", key, got[key].State, state)
 		}
 	}
-	w := got["W/1"]
-	if w.Kind != graph.KindTask || w.Title != "書く" || w.Ref != "task:W/1" || w.CWD != "/w/a" || w.SessionID != "W" || w.Session != "writer" || !w.Live {
-		t.Errorf("W/1 = %+v", w)
+	w := got["task:W/1"]
+	if w.Kind != graph.KindTask || w.Title != "書く" || !w.Endpoint || w.TaskID != "1" || w.CWD != "/w/a" || w.SessionID != "W" || w.Session != "writer" || !w.Live {
+		t.Errorf("task:W/1 = %+v", w)
 	}
-	if got["L/1"].Detail != "14:30" || got["Q/1"].Detail != "" {
-		t.Errorf("detail = %q / %q, want 上限の解除時刻だけ", got["L/1"].Detail, got["Q/1"].Detail)
+	if got["task:L/1"].Detail != "14:30" || got["task:Q/1"].Detail != "" {
+		t.Errorf("detail = %q / %q, want 上限の解除時刻だけ", got["task:L/1"].Detail, got["task:Q/1"].Detail)
 	}
-	if s := got["S/session"]; s.Kind != graph.KindSession || s.Title != "調べている" || s.Ref != "" {
-		t.Errorf("S/session = %+v, want 名前の無いセッションは参照を持たない", s)
+	// タスクの無いセッションは名前の有無によらず sid: で辺の端点にできる。
+	if s := got["sid:S"]; s.Kind != graph.KindSession || s.Title != "調べている" || !s.Endpoint || s.TaskID != "" {
+		t.Errorf("sid:S = %+v", s)
 	}
 	// msg の無いセッションはセッション名、名前も無ければ cwd の末尾を title にする。
-	if u := got["U/session"]; u.Title != "waiter" {
-		t.Errorf("U/session title = %q, want waiter", u.Title)
+	if u := got["sid:U"]; u.Title != "waiter" {
+		t.Errorf("sid:U title = %q, want waiter", u.Title)
 	}
-	if v := got["V/session"]; v.Title != "dotfiles" {
-		t.Errorf("V/session title = %q, want dotfiles", v.Title)
+	if v := got["sid:V"]; v.Title != "dotfiles" {
+		t.Errorf("sid:V title = %q, want dotfiles", v.Title)
 	}
-	if got["T/todo-1"].Ref != "" {
-		t.Errorf("todo の参照 = %q, want 空 (辺の端点にできない)", got["T/todo-1"].Ref)
+	if got["todo:T/1"].Endpoint {
+		t.Errorf("todo は辺の端点にできない")
 	}
-	if got["X/1"].Live {
-		t.Errorf("X/1 は終了したセッション")
+	if got["task:X/1"].Live {
+		t.Errorf("task:X/1 は終了したセッション")
 	}
 }
 
@@ -129,12 +130,12 @@ func TestGraph_linksDepthAndDownstream(t *testing.T) {
 			{ID: "e2", Before: edge.Endpoint{Ref: "task:Z/9", CWD: cwd}, After: edge.Endpoint{Ref: "task:B/1", CWD: cwd}},
 		},
 	})
-	if want := []string{"A/1>A/2", "A/2>A/3", "A/3>B/1", "B/1>B/2"}; !reflect.DeepEqual(links(b.Graph), want) {
+	if want := []string{"task:A/1>task:A/2", "task:A/2>task:A/3", "task:A/3>task:B/1", "task:B/1>task:B/2"}; !reflect.DeepEqual(links(b.Graph), want) {
 		t.Fatalf("links = %v, want %v", links(b.Graph), want)
 	}
 	for _, l := range b.Graph.Links {
 		switch l.Before + ">" + l.After {
-		case "A/3>B/1":
+		case "task:A/3>task:B/1":
 			if l.Kind != graph.LinkEdge || l.Edge == nil || l.Edge.ID != "e1" || l.Edge.Before.Ref != "task:A/3" || l.Edge.After.CWD != cwd || l.Edge.Note != "PR の後" {
 				t.Errorf("edge の辺 = %+v", l)
 			}
@@ -145,8 +146,8 @@ func TestGraph_linksDepthAndDownstream(t *testing.T) {
 		}
 	}
 	got := nodes(b.Graph)
-	depth := map[string]int{"A/1": 0, "A/2": 1, "A/3": 2, "B/1": 3, "B/2": 4}
-	down := map[string]int{"A/1": 4, "A/2": 3, "A/3": 2, "B/1": 1, "B/2": 0}
+	depth := map[string]int{"task:A/1": 0, "task:A/2": 1, "task:A/3": 2, "task:B/1": 3, "task:B/2": 4}
+	down := map[string]int{"task:A/1": 4, "task:A/2": 3, "task:A/3": 2, "task:B/1": 1, "task:B/2": 0}
 	for key := range depth {
 		if got[key].Depth != depth[key] || got[key].Downstream != down[key] {
 			t.Errorf("%s depth/downstream = %d/%d, want %d/%d", key, got[key].Depth, got[key].Downstream, depth[key], down[key])
@@ -157,8 +158,9 @@ func TestGraph_linksDepthAndDownstream(t *testing.T) {
 // session: の端点は、after 側ならそのセッションの根のタスク (同じセッションの blockedBy が無いもの)、
 // before 側なら末端のタスク (同じセッションのどのタスクも止めていないもの) につなぐ。同じ名前のセッションが
 // 複数あれば最後に動いたもの (pane があればそれ、無ければタスクの更新が新しいもの)。タスクの無い生きている
-// セッションはそのノードへ。まだ起きていないセッションと issue: / pr: は参照を鍵にした置き場のノード (pending)、
-// 終了していてタスクを作らなかったセッションは置き場のノード (exited) にする。
+// セッションはそのノードへ。sid: の端点も同じ規則でそのセッションのノードにつなぐ。まだ起きていないセッションと
+// issue: / pr: は参照を鍵にした置き場のノード (pending)、終了していてタスクを作らなかったセッションは
+// sid: を鍵にした置き場のノード (exited) にする。名前で引いても session ID で引いても同じ置き場になる。
 func TestGraph_refEndpoints(t *testing.T) {
 	const cwd = "/w/a"
 	e := func(id, before, after string) edge.Edge {
@@ -184,52 +186,54 @@ func TestGraph_refEndpoints(t *testing.T) {
 			e("e2", "session:alpha", "pr:o/r#2"),
 			e("e3", "session:dup", "session:live"),
 			e("e4", "session:later", "session:gone"),
+			e("e5", "sid:G", "sid:A"),
+			e("e6", "sid:Z", "sid:L"),
 		},
 		SessionNames: map[string]string{"A": "alpha", "O": "dup", "N": "dup", "L": "live", "G": "gone"},
 	})
 	// 辺は before、after の Key の順に並ぶ。
 	want := []string{
-		"A/1>A/2", "A/1>A/4", "A/2>A/3",
-		"A/3>ref:pr:o/r#2", "A/4>ref:pr:o/r#2",
-		"N/1>L/session",
-		"ref:issue:o/r#1>A/1",
-		"ref:session:later>ref:session:gone",
+		"issue:o/r#1>task:A/1",
+		"session:later>sid:G",
+		"sid:G>task:A/1",
+		"sid:Z>sid:L",
+		"task:A/1>task:A/2", "task:A/1>task:A/4", "task:A/2>task:A/3",
+		"task:A/3>pr:o/r#2", "task:A/4>pr:o/r#2",
+		"task:N/1>sid:L",
 	}
 	if !reflect.DeepEqual(links(b.Graph), want) {
 		t.Errorf("links = %v, want %v", links(b.Graph), want)
 	}
 	got := nodes(b.Graph)
 	place := map[string]string{
-		"ref:issue:o/r#1":   graph.StatePending,
-		"ref:pr:o/r#2":      graph.StatePending,
-		"ref:session:later": graph.StatePending,
-		"ref:session:gone":  graph.StateExited,
+		"issue:o/r#1":   graph.StatePending,
+		"pr:o/r#2":      graph.StatePending,
+		"session:later": graph.StatePending,
+		"sid:G":         graph.StateExited,
+		"sid:Z":         graph.StateExited,
 	}
 	for key, state := range place {
 		n := got[key]
-		if n.Kind != graph.KindRef || n.State != state || n.Ref != key[len("ref:"):] || n.CWD != cwd {
+		if n.Kind != graph.KindRef || n.State != state || !n.Endpoint || n.CWD != cwd {
 			t.Errorf("%s = %+v, want 置き場のノード (%s)", key, n, state)
 		}
 	}
-	if got["ref:session:later"].Title != "later" || got["ref:issue:o/r#1"].Title != "issue:o/r#1" {
-		t.Errorf("title = %q / %q", got["ref:session:later"].Title, got["ref:issue:o/r#1"].Title)
+	if got["session:later"].Title != "later" || got["issue:o/r#1"].Title != "issue:o/r#1" || got["sid:Z"].Title != "sid:Z" {
+		t.Errorf("title = %q / %q / %q", got["session:later"].Title, got["issue:o/r#1"].Title, got["sid:Z"].Title)
 	}
-	if got["ref:session:gone"].SessionID != "G" || got["ref:session:gone"].Session != "gone" {
-		t.Errorf("終了したセッションの置き場 = %+v", got["ref:session:gone"])
+	if n := got["sid:G"]; n.SessionID != "G" || n.Session != "gone" || n.SessionName != "gone" || n.Title != "gone" {
+		t.Errorf("終了したセッションの置き場 = %+v", n)
 	}
-	// 名前のあるセッションのタスクのノードには、session: の参照ではなく task: の参照を持たせる。
-	if got["L/session"].Ref != "session:live" {
-		t.Errorf("L/session の参照 = %q", got["L/session"].Ref)
+	// 名前のあるタスクの無いセッションも sid: を鍵にする。
+	if n := got["sid:L"]; n.Kind != graph.KindSession || n.SessionName != "live" {
+		t.Errorf("sid:L = %+v", n)
 	}
 	// 同名のセッションは表示名 (Session) に session ID の先頭が付くが、SessionName は SendMessage の宛先に書く名前のまま。
-	if n := got["N/1"]; n.Session != "dup N" || n.SessionName != "dup" {
+	if n := got["task:N/1"]; n.Session != "dup N" || n.SessionName != "dup" {
 		t.Errorf("同名のセッションの名前 = %q / %q", n.Session, n.SessionName)
 	}
-	if n := got["ref:session:gone"]; n.SessionName != "gone" {
-		t.Errorf("終了したセッションの置き場の名前 = %q", n.SessionName)
-	}
 	for _, l := range b.Graph.Links {
-		if l.Before == "N/1" && (l.Edge == nil || l.Edge.Before.Ref != "session:dup") {
+		if l.Before == "task:N/1" && (l.Edge == nil || l.Edge.Before.Ref != "session:dup") {
 			t.Errorf("辺の元の参照 = %+v", l.Edge)
 		}
 	}
@@ -252,7 +256,7 @@ func TestGraph_refEndpointsEdgeCases(t *testing.T) {
 		},
 		SessionNames: map[string]string{"C": "loop", "D": "after"},
 	})
-	want := []string{"C/1>C/2", "C/1>D/1", "C/2>C/1", "C/2>D/1"}
+	want := []string{"task:C/1>task:C/2", "task:C/1>task:D/1", "task:C/2>task:C/1", "task:C/2>task:D/1"}
 	if !reflect.DeepEqual(links(b.Graph), want) {
 		t.Errorf("links = %v, want %v", links(b.Graph), want)
 	}
@@ -282,22 +286,22 @@ func TestGraph_chains(t *testing.T) {
 			{ID: "e1", Before: edge.Endpoint{Ref: "task:B/1", CWD: cwd}, After: edge.Endpoint{Ref: "task:A/2", CWD: cwd}},
 		},
 	})
-	if want := []string{"A/1", "A/2", "A/3", "A/4"}; !reflect.DeepEqual(b.Graph.LongestChain, want) {
+	if want := []string{"task:A/1", "task:A/2", "task:A/3", "task:A/4"}; !reflect.DeepEqual(b.Graph.LongestChain, want) {
 		t.Errorf("longest chain = %v, want %v", b.Graph.LongestChain, want)
 	}
 	got := nodes(b.Graph)
-	if want := []string{"A/3", "A/2", "A/1"}; !reflect.DeepEqual(got["A/4"].BlockedBy, want) {
-		t.Errorf("A/4 blocked by = %v, want %v", got["A/4"].BlockedBy, want)
+	if want := []string{"task:A/3", "task:A/2", "task:A/1"}; !reflect.DeepEqual(got["task:A/4"].BlockedBy, want) {
+		t.Errorf("task:A/4 blocked by = %v, want %v", got["task:A/4"].BlockedBy, want)
 	}
-	if len(got["A/1"].BlockedBy) != 0 {
-		t.Errorf("A/1 blocked by = %v, want 空", got["A/1"].BlockedBy)
+	if len(got["task:A/1"].BlockedBy) != 0 {
+		t.Errorf("task:A/1 blocked by = %v, want 空", got["task:A/1"].BlockedBy)
 	}
 	// ノードは下流の多い順 (同じなら Key の順) に並ぶ。mod はこの順で根を描く。
 	var order []string
 	for _, n := range b.Graph.Nodes {
 		order = append(order, n.Key)
 	}
-	if want := []string{"A/0", "A/1", "B/1", "A/2", "A/3", "A/4", "C/1"}; !reflect.DeepEqual(order, want) {
+	if want := []string{"task:A/0", "task:A/1", "task:B/1", "task:A/2", "task:A/3", "task:A/4", "task:C/1"}; !reflect.DeepEqual(order, want) {
 		t.Errorf("order = %v, want %v", order, want)
 	}
 }
@@ -339,10 +343,10 @@ func TestGraph_rows(t *testing.T) {
 			{ID: "e1", Before: edge.Endpoint{Ref: "task:B/1", CWD: cwd}, After: edge.Endpoint{Ref: "task:A/2", CWD: cwd}},
 		},
 	})
-	if got, want := drawRows(b.Graph.Rows), "* A/1\n│ * B/1\n├┄┘\n* A/2\n* A/3\n* A/4\n* C/1"; got != want {
+	if got, want := drawRows(b.Graph.Rows), "* task:A/1\n│ * task:B/1\n├┄┘\n* task:A/2\n* task:A/3\n* task:A/4\n* task:C/1"; got != want {
 		t.Errorf("rows =\n%s\nwant\n%s", got, want)
 	}
-	if got, want := drawRows(b.Graph.RowsWithCompleted), "* A/0\n│ * A/1\n│ │ * B/1\n├─┴┄┘\n* A/2\n* A/3\n* A/4\n* C/1"; got != want {
+	if got, want := drawRows(b.Graph.RowsWithCompleted), "* task:A/0\n│ * task:A/1\n│ │ * task:B/1\n├─┴┄┘\n* task:A/2\n* task:A/3\n* task:A/4\n* task:C/1"; got != want {
 		t.Errorf("rows_with_completed =\n%s\nwant\n%s", got, want)
 	}
 	// longest chain (A/1 → A/2 → A/3 → A/4) の辺の罫線に印が付く。A/1 → A/2 は B/1 の行を縦線で通り抜け、
@@ -404,17 +408,17 @@ func TestGraph_deadlock(t *testing.T) {
 		},
 	})
 	got := nodes(b.Graph)
-	if !got["A/1"].Deadlock || !got["A/2"].Deadlock || got["A/3"].Deadlock || got["A/4"].Deadlock {
-		t.Errorf("deadlock = %v / %v / %v / %v, want true / true / false / false", got["A/1"].Deadlock, got["A/2"].Deadlock, got["A/3"].Deadlock, got["A/4"].Deadlock)
+	if !got["task:A/1"].Deadlock || !got["task:A/2"].Deadlock || got["task:A/3"].Deadlock || got["task:A/4"].Deadlock {
+		t.Errorf("deadlock = %v / %v / %v / %v, want true / true / false / false", got["task:A/1"].Deadlock, got["task:A/2"].Deadlock, got["task:A/3"].Deadlock, got["task:A/4"].Deadlock)
 	}
 	// 待ちの輪も止まっているノードとして longest chain の起点にする (pane は輪を ■ に数える)。
-	if want := []string{"A/1", "A/2"}; !reflect.DeepEqual(b.Graph.LongestChain, want) {
+	if want := []string{"task:A/1", "task:A/2"}; !reflect.DeepEqual(b.Graph.LongestChain, want) {
 		t.Errorf("longest chain = %v, want %v", b.Graph.LongestChain, want)
 	}
 }
 
 // ノードの parked は、そのタスクの途中で置かれた open のメモの数。タスクの無いセッションのノードには、
-// タスクを指さずにそのセッションが置いたメモを数える。メモの source は task_id を JSON に出す。
+// タスクを指さずにそのセッションが置いたメモを数える。メモの source は置いたときのタスクをノードの key (task_ref) で出す。
 func TestGraph_parked(t *testing.T) {
 	const cwd = "/w/a"
 	memo := func(id string, sources ...parking.Source) parking.Item {
@@ -431,11 +435,11 @@ func TestGraph_parked(t *testing.T) {
 		},
 	})
 	got := nodes(b.Graph)
-	if got["A/1"].Parked != 2 || got["A/2"].Parked != 0 || got["S/session"].Parked != 1 {
-		t.Errorf("parked = %d / %d / %d, want 2 / 0 / 1", got["A/1"].Parked, got["A/2"].Parked, got["S/session"].Parked)
+	if got["task:A/1"].Parked != 2 || got["task:A/2"].Parked != 0 || got["sid:S"].Parked != 1 {
+		t.Errorf("parked = %d / %d / %d, want 2 / 0 / 1", got["task:A/1"].Parked, got["task:A/2"].Parked, got["sid:S"].Parked)
 	}
-	if b.Repos[0].Memos[0].Sources[0].TaskID != "1" {
-		t.Errorf("source の task_id = %+v", b.Repos[0].Memos[0].Sources)
+	if s := b.Repos[0].Memos[1].Sources; len(s) != 2 || s[0].TaskRef != "task:A/1" || s[1].TaskRef != "" {
+		t.Errorf("source の task_ref = %+v", s)
 	}
 }
 
@@ -471,17 +475,17 @@ func TestGraph_memos(t *testing.T) {
 		{ID: open, Title: "まだ置いてあるメモ", Status: parking.StatusOpen},
 		{ID: handed, Title: "渡したメモ", Status: parking.StatusHanded},
 	}
-	if !reflect.DeepEqual(got["A/1"].Memos, want) {
-		t.Errorf("A/1 memos = %+v, want %+v", got["A/1"].Memos, want)
+	if !reflect.DeepEqual(got["task:A/1"].Memos, want) {
+		t.Errorf("task:A/1 memos = %+v, want %+v", got["task:A/1"].Memos, want)
 	}
-	if want := []graph.MemoRef{{ID: discarded, Title: "捨てたメモ", Status: parking.StatusDiscarded}}; !reflect.DeepEqual(got["A/2"].Memos, want) {
-		t.Errorf("A/2 memos = %+v, want %+v", got["A/2"].Memos, want)
+	if want := []graph.MemoRef{{ID: discarded, Title: "捨てたメモ", Status: parking.StatusDiscarded}}; !reflect.DeepEqual(got["task:A/2"].Memos, want) {
+		t.Errorf("task:A/2 memos = %+v, want %+v", got["task:A/2"].Memos, want)
 	}
-	if got["A/3"].Memos == nil || len(got["A/3"].Memos) != 0 {
-		t.Errorf("description の無いタスクの memos は空の配列: %#v", got["A/3"].Memos)
+	if got["task:A/3"].Memos == nil || len(got["task:A/3"].Memos) != 0 {
+		t.Errorf("description の無いタスクの memos は空の配列: %#v", got["task:A/3"].Memos)
 	}
-	if got["A/1"].Parked != 1 {
-		t.Errorf("parked = %d, want 1 (open のメモだけ数える)", got["A/1"].Parked)
+	if got["task:A/1"].Parked != 1 {
+		t.Errorf("parked = %d, want 1 (open のメモだけ数える)", got["task:A/1"].Parked)
 	}
 	if len(b.Repos) != 1 || len(b.Repos[0].Memos) != 1 || b.Repos[0].Memos[0].ID != open {
 		t.Errorf("repo の memos は open のメモだけ: %+v", b.Repos)

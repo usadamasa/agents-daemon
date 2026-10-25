@@ -2,7 +2,8 @@
 
 export type ParkingSource = {
   session_id: string
-  task_id?: string
+  // task_ref は置いたときに進めていたタスクのノードの key (GraphNode.key と同じ Ref)。
+  task_ref?: string
   session: string
   live: boolean
   detail?: string
@@ -36,14 +37,18 @@ export type DepsRepo = {
 }
 
 // GraphNode は依存の DAG のノード 1 つ (タスク 1 つ、タスクの無いセッション、端点の参照だけの置き場)。
+// key は Ref (task:、todo:、sid:、session:、issue:、pr:) で、mod は切り出さずに不透明な文字列として扱う。
 export type GraphNode = {
   key: string
   kind: 'task' | 'todo' | 'session' | 'ref'
   state: 'working' | 'done' | 'unknown' | 'question' | 'permission' | 'error' | 'limit' | 'pending' | 'completed' | 'exited'
   title: string
   detail?: string
-  ref?: string
+  // endpoint は key をそのまま `edge add` の端点に書けるか (TodoWrite の項目は書けない)。
+  endpoint: boolean
   cwd?: string
+  // task_id は kind task のノードのタスクの ID (TaskUpdate に書く形)。
+  task_id?: string
   session_id?: string
   // session は表示名 (同名のセッションがあれば session ID の先頭が付く)、session_name はセッション名そのもの
   // (SendMessage の宛先に書く形)。

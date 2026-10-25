@@ -4,6 +4,7 @@ package parkcli
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -13,6 +14,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/parking"
+	"github.com/usadamasa/agents-daemon/internal/ref"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 	"github.com/usadamasa/agents-daemon/internal/verify"
 )
@@ -96,15 +98,20 @@ func newParkCmd() *cobra.Command {
 	discard.Flags().IntVar(&days, "days", 0, "この日数より前に最後に置かれたメモを捨てる (1 以上)")
 	_ = discard.MarkFlagRequired("days")
 	adopt := &cobra.Command{
-		Use:   "adopt <session_id> <task_id>",
+		Use:   "adopt task:<session_id>/<task_id>",
 		Short: "終了したセッションの未完了のタスクを kind task のメモにし、タスクの記録を消して {created, item} を出す",
-		Long: "セッションが終了したことは、動いている daemon がタスクの記録より後に書いた status.json に pane が無いことで確かめる。\n" +
+		Long: "引数は依存図のタスクのノードの key (internal/ref の Ref)。\n" +
+			"セッションが終了したことは、動いている daemon がタスクの記録より後に書いた status.json に pane が無いことで確かめる。\n" +
 			"daemon が動いていない、status.json が古い、pane がある、のどれかなら移さない。",
-		Args: cobra.ExactArgs(2),
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			sessionID, taskID, ok := ref.ParseTask(args[0])
+			if !ok {
+				return fmt.Errorf("参照 %q は task:<session_id>/<task_id> の形でない", args[0])
+			}
 			return statecmd.Run(cmd, cwd, func(paths apppath.Paths, _ string) (any, error) {
 				exited := func(sessionID string, after time.Time) error { return verify.SessionExited(paths, sessionID, after) }
-				return parkAdopt(paths.StateDir(), parking.New(paths.StateDir()), tasklog.New(paths.StateDir()), session, args[0], args[1], exited, time.Now())
+				return parkAdopt(paths.StateDir(), parking.New(paths.StateDir()), tasklog.New(paths.StateDir()), session, sessionID, taskID, exited, time.Now())
 			})
 		},
 	}

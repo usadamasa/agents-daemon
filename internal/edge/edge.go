@@ -3,13 +3,8 @@
 //
 //	edges/<id>.json   1 本 1 ファイル
 //
-// 辺は「before が済まないと after を始められない」を表す。端点は種類付きの参照と、その作業の cwd から求めた
-// repo (依存図の repo と同じ鍵) を持つ。参照の種類:
-//
-//	session:<セッション名>          `claude --name` で渡したセッション。渡す時点でタスク ID はまだ無い
-//	issue:<owner>/<repo>#<番号>     渡した issue
-//	pr:<owner>/<repo>#<番号>        渡した PR
-//	task:<session_id>/<task_id>     依存図のタスクのノードそのもの
+// 辺は「before が済まないと after を始められない」を表す。端点は参照 (internal/ref の Ref のうち todo: 以外) と、
+// その作業の cwd から求めた repo (依存図の repo と同じ鍵) を持つ。
 //
 // id は before と after の参照から決めるので、同じ辺の二重登録は同じファイルを書き直すだけになる
 // (Idempotent Receiver)。
@@ -23,12 +18,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
+	"github.com/usadamasa/agents-daemon/internal/ref"
 	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
 
@@ -36,9 +31,6 @@ import (
 // 端点が依存図に出うる最も長いタスクのノード (終了したセッションの未完了のタスク、7 日) に合わせる。
 // それを過ぎた辺は両端とも依存図に出ない。渡す側が登録し直すと数え直す。
 const Retention = 7 * 24 * time.Hour
-
-// refPattern は参照の形。issue / pr の repo は GitHub の owner/name、task は session_id と task_id の組。
-var refPattern = regexp.MustCompile(`^(?:session:\S+|(?:issue|pr):[\w.-]+/[\w.-]+#[0-9]+|task:[^\s/]+/[^\s/]+)$`)
 
 // Endpoint は辺の端点。書く側は Ref と CWD (その作業のセッションを起こしたディレクトリ) を渡し、Repo は Add が
 // CWD の main worktree のパス (git の外なら CWD) で埋める。
@@ -169,8 +161,8 @@ func (s Store) resolve(before, after *Endpoint) (string, error) {
 // normalizeEndpoint は参照の前後の空白を落とし、参照の形と cwd が絶対パスであることを確かめる。
 func normalizeEndpoint(ep *Endpoint) error {
 	ep.Ref = strings.TrimSpace(ep.Ref)
-	if !refPattern.MatchString(ep.Ref) {
-		return fmt.Errorf("参照 %q は session:<名前> / issue:<owner>/<repo>#<番号> / pr:<owner>/<repo>#<番号> / task:<session_id>/<task_id> のどれでもない", ep.Ref)
+	if !ref.Endpoint(ep.Ref) {
+		return fmt.Errorf("参照 %q は session:<名前> / sid:<session_id> / issue:<owner>/<repo>#<番号> / pr:<owner>/<repo>#<番号> / task:<session_id>/<task_id> のどれでもない", ep.Ref)
 	}
 	if !filepath.IsAbs(ep.CWD) {
 		return fmt.Errorf("%s の cwd %q が絶対パスでない", ep.Ref, ep.CWD)

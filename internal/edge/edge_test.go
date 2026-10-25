@@ -67,6 +67,7 @@ func TestAdd_invalidRefs(t *testing.T) {
 		"issue に番号が無い":    {Ref: "issue:usadamasa/agents-daemon", CWD: "/home/a"},
 		"pr の repo が無い":   {Ref: "pr:#12", CWD: "/home/a"},
 		"task に task が無い": {Ref: "task:s1", CWD: "/home/a"},
+		"todo は端点にしない":    {Ref: "todo:s1/0", CWD: "/home/a"},
 		"cwd が空":          {Ref: "session:b", CWD: ""},
 		"cwd が相対":         {Ref: "session:b", CWD: "home/a"},
 	} {
@@ -77,7 +78,7 @@ func TestAdd_invalidRefs(t *testing.T) {
 	if _, err := s.Add(ok, Endpoint{Ref: "session:a", CWD: "/home/b"}, "", testNow); err == nil {
 		t.Errorf("自分自身への辺が通った")
 	}
-	for _, ref := range []string{"session:ad-134-edges", "issue:usadamasa/agents-daemon#134", "pr:usadamasa/agents-config.x#7", "task:2e0b-11/3"} {
+	for _, ref := range []string{"session:ad-134-edges", "issue:usadamasa/agents-daemon#134", "pr:usadamasa/agents-config.x#7", "task:2e0b-11/3", "sid:2e0b-11"} {
 		if _, err := s.Add(ok, Endpoint{Ref: ref, CWD: "/home/b"}, "", testNow); err != nil {
 			t.Errorf("%s: %v", ref, err)
 		}

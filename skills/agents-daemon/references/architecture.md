@@ -240,7 +240,7 @@ handed / discarded のメモが保持期間 (7 日) で消えた後は、descrip
 
 ボードの JSON の `graph` はセッションをまたぐタスクの依存の DAG (#134)。ノードはタスク 1 つ (カードと同じ Key) で、
 辺は同じセッションの `blockedBy` (`kind: task`) と `$STATE/edges/` の辺 (`kind: edge`) を 1 つにしたもの。
-辺の記録の端点はボードを組むたびにノードへ解決し直す (`internal/board` の `graph.go`)。
+辺の記録の端点はボードを組むたびにノードへ解決し直す (`internal/board/graph`)。
 
 - `task:<sid>/<tid>` はそのタスク。記録が消えていればその辺は描かない
 - `session:<名前>` は、その名前のセッションのうち最後に動いたもの (pane があればそれ、無ければタスクの更新が新しいもの)。

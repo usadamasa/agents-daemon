@@ -155,7 +155,7 @@ export function canAdopt(node: GraphNode, self: string, data: BoardData): boolea
 }
 
 // taskText は「タスクにする」で送る文面。着手の時期は受け手の計画に任せる。ボードはタスクの description に
-// 書かれた id でメモと照合する (internal/board)。
+// 書かれた id でメモと照合する (internal/board/graph)。
 export function taskText(memo: ParkingCard): string {
   return [
     `パーキングロットのメモ「${memo.title}」(種類: ${memo.kind}) をタスクにしてください。` +

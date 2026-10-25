@@ -1,14 +1,14 @@
 # 実機の CLI の点検
 
-自分の block に打つ固定のコマンドと、コードが読む欄、突き合わせる先。`internal/rexcli` が rex に打つコマンドと
+自分の block に打つ固定のコマンドと、コードが読む欄、突き合わせる先。`internal/multiplexer/rexcli` が rex に打つコマンドと
 同じ引数にしてある。コードが打つコマンドを変えたら、この表も同じ PR で変える。
-パスは `internal/rexcli/` からの相対。実測を取り直したら `testdata/` に日付と版のディレクトリを足す
+パスは `internal/multiplexer/rexcli/` からの相対。実測を取り直したら `testdata/` に日付と版のディレクトリを足す
 (`testdata/README.md`)。
 
 ## doctor が見る行
 
 `go run ./cmd/agents-daemon doctor` の「rex CLI の前提」の節が、自分の block (`REX_BLOCK`) に打って
-欄の有無と exit code を名指しで出す (`internal/rexcli/premise.go`)。人が打ち直す必要は無い。
+欄の有無と exit code を名指しで出す (`internal/multiplexer/rexcli/premise.go`)。人が打ち直す必要は無い。
 節の `⚠` の行がずれで、`rex_version` と `built_at` と `api_revision` の行が `last-checked.md` に書く値。
 
 | doctor が打つコマンド | 見る欄 | 突き合わせる先 |
@@ -31,7 +31,7 @@ streaming の `events` と、一覧の増減 (新しい method や event) は判
 
 | コマンド | 見る欄 | 突き合わせる先 |
 | ---- | ---- | ---- |
-| `timeout 5 rex --autostart=false events --json -s "$REX_SESSION"` | `program_status_changed` の `payload.record` (`owner.pid` 付き) | #78 の本文の形 (コードが購読するようになったら `internal/rexcli`) |
+| `timeout 5 rex --autostart=false events --json -s "$REX_SESSION"` | `program_status_changed` の `payload.record` (`owner.pid` 付き) | #78 の本文の形 (コードが購読するようになったら `internal/multiplexer/rexcli`) |
 | `rex --autostart=false block inspect "$REX_BLOCK" --json` の `.api.methods` / `.api.events` の key 一覧 | 前回の実測 (`testdata/<日付>/block-inspect.json`) に無い method や event | daemon の polling や画面の読み取りを置き換えられるか (アイデアとして issue へ) |
 | `rex --autostart=false api list --json` の `.methods[].name` | 前回の実測 (`testdata/<日付>/api-list.json`) に無い server の method | 同上。`api_revision` が上がったのに block の api が同じときの手がかり |
 

@@ -17,7 +17,7 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/config"
-	"github.com/usadamasa/agents-daemon/internal/daemon"
+	"github.com/usadamasa/agents-daemon/internal/daemon/state"
 	"github.com/usadamasa/agents-daemon/internal/detect"
 	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
@@ -251,7 +251,7 @@ func (p PaneReport) recordLabel() string {
 	return multiplexer.RecordLabel(multiplexer.Pane{AgentStatus: p.AgentStatus, AgentKind: p.AgentKind, AgentMessage: p.AgentMessage})
 }
 
-// collectPremises は rex CLI の応答の形が internal/rexcli の読む形のままかを、自分の block (REX_BLOCK) に
+// collectPremises は rex CLI の応答の形が internal/multiplexer/rexcli の読む形のままかを、自分の block (REX_BLOCK) に
 // 固定のコマンドを打って集める。ずれは OK=false の finding で、doctor の exit code には響かない
 // (rex を上げた直後に全 pane が unknown になる原因を、changelog を読む前に名指しで見るため)。
 func collectPremises(ctx context.Context, checker multiplexer.PremiseChecker, getenv func(string) string) *PremisesReport {
@@ -414,16 +414,16 @@ func collectDomain(p apppath.Paths, panes []multiplexer.Pane, home string) *Doma
 // collectDaemonState は PID ファイルと status.json から daemon の稼働状況を集める。
 func collectDaemonState(p apppath.Paths, now time.Time) *DaemonReport {
 	rep := &DaemonReport{}
-	pid, err := daemon.ReadPIDFile(p.PIDFile())
+	pid, err := state.ReadPIDFile(p.PIDFile())
 	if err != nil {
 		rep.PIDError = err.Error()
 		return rep
 	}
-	if pid == 0 || !daemon.PIDAlive(pid) {
+	if pid == 0 || !state.PIDAlive(pid) {
 		return rep
 	}
 	rep.Running, rep.PID = true, pid
-	snap, err := daemon.ReadStatusSnapshot(p.StatusFile())
+	snap, err := state.ReadStatusSnapshot(p.StatusFile())
 	if err != nil {
 		rep.SnapshotError = err.Error()
 		return rep

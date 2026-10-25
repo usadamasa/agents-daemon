@@ -8,13 +8,13 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
-	"github.com/usadamasa/agents-daemon/internal/daemon"
+	"github.com/usadamasa/agents-daemon/internal/daemon/state"
 )
 
 // record の kind と msg は、あるときだけ pane の行に添える (上限で止まった pane の自己申告を status から読むため)。
 func TestPrintSnapshot_record(t *testing.T) {
 	now := time.Date(2026, 10, 18, 9, 0, 0, 0, time.UTC)
-	snap := &daemon.StatusSnapshot{PID: 42, Backend: "rex", StartedAt: now, UpdatedAt: now, Panes: []daemon.PaneStatus{
+	snap := &state.StatusSnapshot{PID: 42, Backend: "rex", StartedAt: now, UpdatedAt: now, Panes: []state.PaneStatus{
 		{PaneID: "p1", CWD: "/w", AgentStatus: "blocked", AgentKind: "permission", AgentMessage: "approve Bash: rm -rf ./tmp/junk", MonitorStatus: "waiting", LastTickAt: now},
 		{PaneID: "p2", CWD: "/w", AgentStatus: "working", MonitorStatus: "monitoring", LastTickAt: now},
 	}}
@@ -46,7 +46,7 @@ func TestCollectStatus(t *testing.T) {
 	t.Run("起動中なら pid と今の daemon の snapshot とログの末尾", func(t *testing.T) {
 		p := apppath.New(t.TempDir(), "", "")
 		writeFixturePIDFile(t, p.PIDFile(), os.Getpid())
-		writeFixtureSnapshot(t, p.StatusFile(), daemon.StatusSnapshot{PID: os.Getpid() + 1, StartedAt: now, UpdatedAt: now})
+		writeFixtureSnapshot(t, p.StatusFile(), state.StatusSnapshot{PID: os.Getpid() + 1, StartedAt: now, UpdatedAt: now})
 		writeFile(t, p.LogFile(), "a\nb\n")
 		rep, err := CollectStatus(p)
 		if err != nil {
@@ -78,7 +78,7 @@ func TestPrintSnapshot_backend(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			var buf strings.Builder
-			printSnapshot(&buf, &daemon.StatusSnapshot{PID: 42, Backend: tc.backend, StartedAt: now, UpdatedAt: now}, now)
+			printSnapshot(&buf, &state.StatusSnapshot{PID: 42, Backend: tc.backend, StartedAt: now, UpdatedAt: now}, now)
 			if !strings.Contains(buf.String(), tc.want) {
 				t.Errorf("出力に %q が無い:\n%s", tc.want, buf.String())
 			}

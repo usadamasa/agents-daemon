@@ -1,6 +1,6 @@
 # 多重化ツールの backend
 
-daemon は pane 操作を `internal/multiplexer` の `Client` interface 越しに行い、実装は rex (`internal/rexcli`)。
+daemon は pane 操作を `internal/multiplexer` の `Client` interface 越しに行い、実装は rex (`internal/multiplexer/rexcli`)。
 `internal/backend` が起動時の環境に `REX_SESSION` があることを確かめ、無ければ `daemon --ensure` は
 stderr に 1 行出して何もせずに戻る (素の端末の SessionStart で毎回 daemon を起こさない)。hook はこの判定を
 持たず、バイナリの build は常に行う。同じバイナリを `statusline` / `ingest-statusline` が使い、
@@ -41,5 +41,5 @@ rex は block の PATH に `…/RexServer/Versions/Current/…` を先に、`…
 呼び出しで rex のバイナリが見つからなければ、PATH の `Versions/` から一番新しい数字名の build の rex を引き直し、
 同じ呼び出しを 1 回やり直す。数字名の項だけを持つ PATH でその build が消えたときに起きる。このやり直しは tick の
 失敗に数えない。
-`REX_BIN_PATH` で固定しているときは引き直さない (`internal/rexcli/locate.go`)。
+`REX_BIN_PATH` で固定しているときは引き直さない (`internal/multiplexer/rexcli/locate.go`)。
 doctor の「rex CLI の前提」の節は、解決した rex のパスを版と並べて出す。

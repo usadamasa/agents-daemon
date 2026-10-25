@@ -27,7 +27,7 @@ var (
 // addFinding は点検 1 件を積む。
 type addFinding func(ok bool, format string, a ...any)
 
-// CheckPremises は自分の block に固定のコマンドを打ち、応答の形が internal/rexcli の読む形のままかを点検する。
+// CheckPremises は自分の block に固定のコマンドを打ち、応答の形が internal/multiplexer/rexcli の読む形のままかを点検する。
 // 打つコマンドの一覧は .claude/skills/catching-up-with-rex-changelog/references/cli-checks.md が持つ
 // (コマンドを足す・変えるときはそちらも同じ PR で変える)。
 func (c *execClient) CheckPremises(ctx context.Context, blockID, sessionID string) []multiplexer.PremiseFinding {

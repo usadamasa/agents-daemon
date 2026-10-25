@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/usadamasa/agents-daemon/internal/daemon"
+	"github.com/usadamasa/agents-daemon/internal/daemon/state"
 	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/parking"
@@ -32,8 +32,8 @@ func task(sid, id, subject, status, cwd string, blockedBy ...string) tasklog.Tas
 	return tasklog.Task{ID: id, Subject: subject, Status: status, SessionID: sid, CWD: cwd, BlockedBy: blockedBy, UpdatedAt: t0}
 }
 
-func snapshot(panes ...daemon.PaneStatus) *daemon.StatusSnapshot {
-	return &daemon.StatusSnapshot{PID: 42, UpdatedAt: t0, Panes: panes}
+func snapshot(panes ...state.PaneStatus) *state.StatusSnapshot {
+	return &state.StatusSnapshot{PID: 42, UpdatedAt: t0, Panes: panes}
 }
 
 // byKey はボードのカードを Key で引けるようにする。行の見出しも返す。
@@ -61,7 +61,7 @@ func TestBuild_rowsAndColumns(t *testing.T) {
 	b := build(input{
 		Domain:   domain.Home,
 		PID:      42,
-		Snapshot: snapshot(daemon.PaneStatus{PaneID: "p1", SessionID: "A", CWD: main, AgentStatus: "working"}),
+		Snapshot: snapshot(state.PaneStatus{PaneID: "p1", SessionID: "A", CWD: main, AgentStatus: "working"}),
 		Tasks: []tasklog.Task{
 			task("A", "1", "調査", "completed", main),
 			task("A", "2", "ingest-task を書く", "in_progress", main),
@@ -140,7 +140,7 @@ func TestBuild_parking(t *testing.T) {
 	b := build(input{
 		Domain:   domain.Home,
 		PID:      42,
-		Snapshot: snapshot(daemon.PaneStatus{PaneID: "p1", SessionID: "A", CWD: main}),
+		Snapshot: snapshot(state.PaneStatus{PaneID: "p1", SessionID: "A", CWD: main}),
 		Tasks:    []tasklog.Task{task("A", "1", "調査", "in_progress", main)},
 		Parking:  []parking.Item{memo, lone},
 		Classify: homeUnder("/src/home"),
@@ -185,8 +185,8 @@ func TestBuild_marks(t *testing.T) {
 		Domain: domain.Work,
 		PID:    42,
 		Snapshot: snapshot(
-			daemon.PaneStatus{PaneID: "p1", SessionID: "A", CWD: "/w/a", AgentStatus: "blocked", AgentKind: "permission"},
-			daemon.PaneStatus{PaneID: "p2", SessionID: "B", CWD: "/w/b", AgentStatus: "idle", MonitorStatus: "waiting", WaitUntil: &until},
+			state.PaneStatus{PaneID: "p1", SessionID: "A", CWD: "/w/a", AgentStatus: "blocked", AgentKind: "permission"},
+			state.PaneStatus{PaneID: "p2", SessionID: "B", CWD: "/w/b", AgentStatus: "idle", MonitorStatus: "waiting", WaitUntil: &until},
 		),
 		Tasks: []tasklog.Task{
 			task("A", "1", "書く", "in_progress", "/w/a"),
@@ -213,9 +213,9 @@ func TestBuild_sessionsWithoutTasksAndTodos(t *testing.T) {
 		Domain: domain.Work,
 		PID:    42,
 		Snapshot: snapshot(
-			daemon.PaneStatus{PaneID: "p1", SessionID: "A", CWD: "/w/a", AgentStatus: "blocked"},
-			daemon.PaneStatus{PaneID: "p2", SessionID: "T", CWD: "/w/t", AgentStatus: "working"},
-			daemon.PaneStatus{PaneID: "p3", CWD: "/w/x", AgentStatus: "working"}, // セッション不明は載せない
+			state.PaneStatus{PaneID: "p1", SessionID: "A", CWD: "/w/a", AgentStatus: "blocked"},
+			state.PaneStatus{PaneID: "p2", SessionID: "T", CWD: "/w/t", AgentStatus: "working"},
+			state.PaneStatus{PaneID: "p3", CWD: "/w/x", AgentStatus: "working"}, // セッション不明は載せない
 		),
 		Todos: []tasklog.TodoList{{SessionID: "T", CWD: "/w/t", UpdatedAt: t0, Todos: []tasklog.Todo{
 			{Content: "a", Status: "completed"}, {Content: "b", Status: "in_progress"},
@@ -241,10 +241,10 @@ func TestBuild_sessionCardShowsAgentMessage(t *testing.T) {
 		Domain: domain.Work,
 		PID:    42,
 		Snapshot: snapshot(
-			daemon.PaneStatus{PaneID: "p1", SessionID: "A", CWD: "/w/a", AgentStatus: "working", AgentMessage: "Checking the running daemon's version"},
-			daemon.PaneStatus{PaneID: "p2", SessionID: "B", CWD: "/w/b", AgentStatus: "working"},
-			daemon.PaneStatus{PaneID: "p3", SessionID: "C", CWD: "/w/c", AgentStatus: "working", AgentMessage: "別の作業"},
-			daemon.PaneStatus{PaneID: "p4", SessionID: "D", CWD: "/w/dotfiles", AgentStatus: "done"},
+			state.PaneStatus{PaneID: "p1", SessionID: "A", CWD: "/w/a", AgentStatus: "working", AgentMessage: "Checking the running daemon's version"},
+			state.PaneStatus{PaneID: "p2", SessionID: "B", CWD: "/w/b", AgentStatus: "working"},
+			state.PaneStatus{PaneID: "p3", SessionID: "C", CWD: "/w/c", AgentStatus: "working", AgentMessage: "別の作業"},
+			state.PaneStatus{PaneID: "p4", SessionID: "D", CWD: "/w/dotfiles", AgentStatus: "done"},
 		),
 		Tasks:        []tasklog.Task{task("C", "1", "書く", "in_progress", "/w/c")},
 		SessionNames: map[string]string{"B": "fix-b"},
@@ -270,9 +270,9 @@ func TestBuild_domain(t *testing.T) {
 		Domain: domain.Home,
 		PID:    42,
 		Snapshot: snapshot(
-			daemon.PaneStatus{PaneID: "p1", SessionID: "H", CWD: "/src/home/a", AgentMessage: "私用の作業"},
-			daemon.PaneStatus{PaneID: "p2", SessionID: "W", CWD: "/work/b", AgentMessage: "業務の作業"},
-			daemon.PaneStatus{PaneID: "p3", SessionID: "M", CWD: "/src/home/c", AgentMessage: "業務に倒した作業"}, // 記録が業務の側にある
+			state.PaneStatus{PaneID: "p1", SessionID: "H", CWD: "/src/home/a", AgentMessage: "私用の作業"},
+			state.PaneStatus{PaneID: "p2", SessionID: "W", CWD: "/work/b", AgentMessage: "業務の作業"},
+			state.PaneStatus{PaneID: "p3", SessionID: "M", CWD: "/src/home/c", AgentMessage: "業務に倒した作業"}, // 記録が業務の側にある
 		),
 		Classify:  homeUnder("/src/home"),
 		Elsewhere: func(id string) bool { return id == "M" },
@@ -290,11 +290,11 @@ func TestBuild_domain(t *testing.T) {
 // daemon が動いていなくてもタスクの記録は描く。前の daemon の status.json は使わない。
 func TestBuild_daemonState(t *testing.T) {
 	tasks := []tasklog.Task{task("A", "1", "書く", "in_progress", "/w/a")}
-	stopped := build(input{Domain: domain.Work, Tasks: tasks, Snapshot: snapshot(daemon.PaneStatus{SessionID: "A", CWD: "/w/a"})})
+	stopped := build(input{Domain: domain.Work, Tasks: tasks, Snapshot: snapshot(state.PaneStatus{SessionID: "A", CWD: "/w/a"})})
 	if stopped.DaemonRunning || stopped.UpdatedAt != nil || len(stopped.Rows) != 1 || stopped.Rows[0].Cards[0].Live {
 		t.Errorf("stopped = %+v", stopped)
 	}
-	stale := build(input{Domain: domain.Work, PID: 7, Tasks: tasks, Snapshot: snapshot(daemon.PaneStatus{SessionID: "A", CWD: "/w/a"})})
+	stale := build(input{Domain: domain.Work, PID: 7, Tasks: tasks, Snapshot: snapshot(state.PaneStatus{SessionID: "A", CWD: "/w/a"})})
 	if !stale.DaemonRunning || stale.UpdatedAt != nil || stale.Rows[0].Cards[0].Live {
 		t.Errorf("stale = %+v", stale)
 	}

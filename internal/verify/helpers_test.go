@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
-	"github.com/usadamasa/agents-daemon/internal/daemon"
+	"github.com/usadamasa/agents-daemon/internal/daemon/state"
 	"github.com/usadamasa/agents-daemon/internal/ratelimit"
 	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
@@ -55,7 +55,7 @@ func writeFixturePIDFile(t *testing.T, path string, pid int) {
 	writeFile(t, path, strconv.Itoa(pid)+"\n")
 }
 
-func writeFixtureSnapshot(t *testing.T, path string, snap daemon.StatusSnapshot) {
+func writeFixtureSnapshot(t *testing.T, path string, snap state.StatusSnapshot) {
 	t.Helper()
 	writeJSONFile(t, path, snap)
 }

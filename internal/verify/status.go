@@ -8,7 +8,7 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/applog"
 	"github.com/usadamasa/agents-daemon/internal/apppath"
-	"github.com/usadamasa/agents-daemon/internal/daemon"
+	"github.com/usadamasa/agents-daemon/internal/daemon/state"
 )
 
 // statusLogTailLines は `status` が末尾に表示する現行ログの行数。
@@ -19,7 +19,7 @@ type StatusReport struct {
 	Running bool `json:"running"`
 	PID     int  `json:"pid,omitempty"`
 	// Snapshot は status.json の内容。今の daemon が書いたものでなければ nil (前の daemon の残り物は見せない)。
-	Snapshot *daemon.StatusSnapshot `json:"snapshot"`
+	Snapshot *state.StatusSnapshot `json:"snapshot"`
 	// LogTail は現行ログの末尾。読めなければ LogError に理由が入る。
 	LogTail  []string `json:"log_tail"`
 	LogError string   `json:"log_error,omitempty"`
@@ -39,7 +39,7 @@ func RunStatus(w io.Writer, p apppath.Paths, now time.Time) error {
 // CollectStatus は status の結果を集める。PID ファイルと status.json を読めないときだけ error。
 func CollectStatus(p apppath.Paths) (StatusReport, error) {
 	rep := StatusReport{LogTail: []string{}}
-	pid, snap, err := daemon.Running(p)
+	pid, snap, err := state.Running(p)
 	if err != nil || pid == 0 {
 		return rep, err
 	}
@@ -75,7 +75,7 @@ func writeStatus(w io.Writer, rep StatusReport, now time.Time) {
 }
 
 // printSnapshot は status.json の内容を書く。nil は今の daemon の snapshot がまだ無い状態。
-func printSnapshot(w io.Writer, snap *daemon.StatusSnapshot, now time.Time) {
+func printSnapshot(w io.Writer, snap *state.StatusSnapshot, now time.Time) {
 	if snap == nil {
 		_, _ = fmt.Fprintln(w, "status snapshot がまだありません (起動直後の可能性があります)")
 		return
@@ -99,7 +99,7 @@ func printSnapshot(w io.Writer, snap *daemon.StatusSnapshot, now time.Time) {
 }
 
 // recordColumns は Claude Code の自己申告の kind と msg を、あるときだけ agent= の後ろに足す。
-func recordColumns(pn daemon.PaneStatus) string {
+func recordColumns(pn state.PaneStatus) string {
 	s := ""
 	if pn.AgentKind != "" {
 		s += " kind=" + pn.AgentKind

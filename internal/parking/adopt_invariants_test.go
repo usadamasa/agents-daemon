@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
-	"github.com/usadamasa/agents-daemon/internal/daemon"
+	"github.com/usadamasa/agents-daemon/internal/daemon/state"
 	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/statefile"
@@ -75,9 +75,9 @@ func (w *adoptWorld) writePID(pid int) error {
 
 // writeStatus は status.json を書く。withPane なら終了していないセッションの pane を載せる。
 func (w *adoptWorld) writeStatus(pid int, at time.Time, withPane bool) error {
-	snap := daemon.StatusSnapshot{PID: pid, UpdatedAt: at, Panes: []daemon.PaneStatus{}}
+	snap := state.StatusSnapshot{PID: pid, UpdatedAt: at, Panes: []state.PaneStatus{}}
 	if withPane {
-		snap.Panes = append(snap.Panes, daemon.PaneStatus{PaneID: "block:b1", SessionID: deadSession, CWD: w.cwd})
+		snap.Panes = append(snap.Panes, state.PaneStatus{PaneID: "block:b1", SessionID: deadSession, CWD: w.cwd})
 	}
 	return statefile.WriteJSONAtomic(w.paths.StatusFile(), ".status.json.*", snap)
 }

@@ -1,4 +1,4 @@
-package daemon
+package state
 
 import (
 	"encoding/json"
@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
-	"github.com/usadamasa/agents-daemon/internal/monitor"
 	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
 
@@ -40,26 +39,9 @@ type StatusSnapshot struct {
 	Panes     []PaneStatus `json:"panes"`
 }
 
-// monitorStatusString は monitor.Status を status.json 向けの識別子文字列にする。
-func monitorStatusString(s monitor.Status) string {
-	if s == monitor.StatusWaiting {
-		return "waiting"
-	}
-	return "monitoring"
-}
-
-// zeroableTime はゼロ値の time.Time を nil に変換する。PaneState.WaitUntil は
-// 監視中 (未待機) の間ゼロ値のままなので、JSON へは省略して出す。
-func zeroableTime(t time.Time) *time.Time {
-	if t.IsZero() {
-		return nil
-	}
-	return &t
-}
-
-// writeStatusSnapshot は status.json を原子的に書き込む (statefile)。
+// WriteStatusSnapshot は status.json を原子的に書き込む (statefile)。
 // 人が cat して読む想定なので indent 付きで書く。
-func writeStatusSnapshot(path string, pid int, backend string, startedAt, now time.Time, panes []PaneStatus) error {
+func WriteStatusSnapshot(path string, pid int, backend string, startedAt, now time.Time, panes []PaneStatus) error {
 	snap := StatusSnapshot{PID: pid, Backend: backend, StartedAt: startedAt, UpdatedAt: now, Panes: panes}
 	data, err := json.MarshalIndent(snap, "", "  ")
 	if err != nil {

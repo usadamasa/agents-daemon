@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/dream/dreamstate"
+	"github.com/usadamasa/agents-daemon/internal/dream/harvest/record"
 	"github.com/usadamasa/agents-daemon/internal/dream/jsonlscan"
 )
 
@@ -63,7 +64,7 @@ func Run(opts Opts) error {
 		lastRun:     state.LastRunTS,
 	}
 
-	var records []harvestRecord
+	var records []record.Record
 	err = jsonlscan.WalkJSONLFiles(resolvedProjects, jsonlscan.WalkOptions{Days: opts.Days}, func(path string) error {
 		if !filter.accept(path, resolvedProjects) {
 			return nil
@@ -82,7 +83,7 @@ func Run(opts Opts) error {
 		return fmt.Errorf("スキャン失敗: %w", err)
 	}
 
-	writeStats, err := writeRecords(opts.StateDir, records)
+	writeStats, err := record.Write(opts.StateDir, records)
 	if err != nil {
 		return fmt.Errorf("書き込み失敗: %w", err)
 	}

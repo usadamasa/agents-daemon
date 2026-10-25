@@ -1,4 +1,4 @@
-package daemon
+package state
 
 import (
 	"errors"
@@ -51,8 +51,8 @@ func TestPidAlive(t *testing.T) {
 func TestWriteReadPIDFile(t *testing.T) {
 	t.Run("書き込んだPIDをそのまま読み戻せる", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "nested", "daemon.pid")
-		if err := writePIDFile(path, 12345); err != nil {
-			t.Fatalf("writePIDFile() error = %v", err)
+		if err := WritePIDFile(path, 12345); err != nil {
+			t.Fatalf("WritePIDFile() error = %v", err)
 		}
 		pid, err := ReadPIDFile(path)
 		if err != nil {
@@ -106,7 +106,7 @@ func TestWriteReadPIDFile(t *testing.T) {
 func TestRemovePIDFile(t *testing.T) {
 	t.Run("存在するファイルを削除する", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "daemon.pid")
-		if err := writePIDFile(path, 1); err != nil {
+		if err := WritePIDFile(path, 1); err != nil {
 			t.Fatalf("セットアップに失敗: %v", err)
 		}
 		if err := removePIDFile(path); err != nil {
@@ -121,6 +121,45 @@ func TestRemovePIDFile(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "no-such-file")
 		if err := removePIDFile(path); err != nil {
 			t.Errorf("RemovePIDFile() error = %v, want nil", err)
+		}
+	})
+}
+
+func TestRemoveOwnPIDFile(t *testing.T) {
+	t.Run("自分の pid が書いてあれば消す", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "daemon.pid")
+		if err := WritePIDFile(path, 100); err != nil {
+			t.Fatalf("セットアップに失敗: %v", err)
+		}
+		if err := RemoveOwnPIDFile(path, 100); err != nil {
+			t.Fatalf("RemoveOwnPIDFile() error = %v", err)
+		}
+		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("ファイルが削除されていない: err = %v", err)
+		}
+	})
+
+	t.Run("別の pid が書いてあれば残す", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "daemon.pid")
+		if err := WritePIDFile(path, 200); err != nil {
+			t.Fatalf("セットアップに失敗: %v", err)
+		}
+		if err := RemoveOwnPIDFile(path, 100); err != nil {
+			t.Fatalf("RemoveOwnPIDFile() error = %v", err)
+		}
+		got, err := ReadPIDFile(path)
+		if err != nil {
+			t.Fatalf("ReadPIDFile() error = %v", err)
+		}
+		if got != 200 {
+			t.Errorf("ReadPIDFile() = %d, want 200 (他の daemon の pid file を消してはいけない)", got)
+		}
+	})
+
+	t.Run("無ければエラーにしない", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "no-such-file")
+		if err := RemoveOwnPIDFile(path, 100); err != nil {
+			t.Errorf("RemoveOwnPIDFile() error = %v, want nil", err)
 		}
 	})
 }

@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/board/graph"
-	"github.com/usadamasa/agents-daemon/internal/daemon"
+	"github.com/usadamasa/agents-daemon/internal/daemon/state"
 	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
@@ -145,7 +145,7 @@ type input struct {
 	CWD string
 	// PID は動いている daemon の pid。0 なら動いていない。
 	PID      int
-	Snapshot *daemon.StatusSnapshot
+	Snapshot *state.StatusSnapshot
 	Tasks    []tasklog.Task
 	Todos    []tasklog.TodoList
 	// Parking は domain のメモ (status を問わない)。パーキングの列には open のものだけを出し、タスクとの照合には
@@ -167,7 +167,7 @@ type input struct {
 // build はボードを組む。
 func build(in input) Board {
 	b := Board{Domain: in.Domain, Columns: columns, Rows: []Row{}}
-	var panes map[string]*daemon.PaneStatus
+	var panes map[string]*state.PaneStatus
 	b.DaemonRunning, b.UpdatedAt, panes = livePanes(in)
 	cards := collect(in, panes)
 	open := parking.Filter(in.Parking, "", parking.StatusOpen)
@@ -215,8 +215,8 @@ func sessionIDs(cards []placed, memos []parking.Item) map[string]bool {
 
 // livePanes は daemon が動いているか、status.json の更新時刻、このボードに載せる生きているセッションの
 // pane (session ID ごと) を返す。前の daemon が残した status.json は使わない (status コマンドと同じ判断)。
-func livePanes(in input) (running bool, updatedAt *time.Time, panes map[string]*daemon.PaneStatus) {
-	panes = map[string]*daemon.PaneStatus{}
+func livePanes(in input) (running bool, updatedAt *time.Time, panes map[string]*state.PaneStatus) {
+	panes = map[string]*state.PaneStatus{}
 	if in.PID == 0 {
 		return false, nil, panes
 	}
@@ -234,7 +234,7 @@ func livePanes(in input) (running bool, updatedAt *time.Time, panes map[string]*
 }
 
 // collect はタスク、TodoWrite の項目、タスクの無い生きているセッションをカードにする。
-func collect(in input, panes map[string]*daemon.PaneStatus) []placed {
+func collect(in input, panes map[string]*state.PaneStatus) []placed {
 	var cards []placed
 	withTasks := map[string]bool{}
 	for _, t := range in.Tasks {
@@ -265,7 +265,7 @@ func collect(in input, panes map[string]*daemon.PaneStatus) []placed {
 // どのセッションかが分かるよう、セッション名 (name) か cwd の末尾にする。msg はタスクの subject と同じく漏れては
 // いけない情報で、ボードに載るのは自分の domain の pane だけ (livePaneInDomain)。
 // cc-premise: 2.1.302 osc7501 msg は作業中の作業、ターン後の要約、permission 待ちの approve <tool>: <command>
-func sessionSubject(p *daemon.PaneStatus, name string) string {
+func sessionSubject(p *state.PaneStatus, name string) string {
 	switch {
 	case p.AgentMessage != "":
 		return p.AgentMessage
@@ -277,7 +277,7 @@ func sessionSubject(p *daemon.PaneStatus, name string) string {
 }
 
 // arrange はカードとメモの source にセッションの名前 (names) を付け、repo の行へ分けて並べる。
-func arrange(cards []placed, memos []parking.Item, panes map[string]*daemon.PaneStatus, names map[string]string, l locator) []Row {
+func arrange(cards []placed, memos []parking.Item, panes map[string]*state.PaneStatus, names map[string]string, l locator) []Row {
 	byRepo := map[string]*Row{}
 	rowOf := func(key, title string) *Row {
 		r, ok := byRepo[key]
@@ -311,7 +311,7 @@ func arrange(cards []placed, memos []parking.Item, panes map[string]*daemon.Pane
 }
 
 // parkingCard はメモをパーキングの列のカードにする。sources は新しい順に並べる。
-func parkingCard(m parking.Item, names map[string]string, panes map[string]*daemon.PaneStatus) ParkingCard {
+func parkingCard(m parking.Item, names map[string]string, panes map[string]*state.PaneStatus) ParkingCard {
 	c := ParkingCard{ID: m.ID, Kind: m.Kind, Title: m.Title, Detail: m.Detail, Files: m.Files, DefaultTaken: m.DefaultTaken, Sources: []ParkingSource{}}
 	for _, s := range m.Sources {
 		c.Sources = append(c.Sources, ParkingSource{SessionID: s.SessionID, TaskID: s.TaskID, Session: names[s.SessionID], Live: panes[s.SessionID] != nil, Detail: s.Detail, At: s.At})
@@ -326,12 +326,12 @@ type placed struct {
 	cwd    string
 	card   Card
 	status string
-	pane   *daemon.PaneStatus
+	pane   *state.PaneStatus
 }
 
 // livePaneInDomain は pane のセッションをこのボードに載せるかを返す。記録がほかの domain の側にあれば
 // 載せず (業務に倒したセッション)、無ければ pane の cwd で決める。
-func livePaneInDomain(in input, p *daemon.PaneStatus) bool {
+func livePaneInDomain(in input, p *state.PaneStatus) bool {
 	if in.Elsewhere != nil && in.Elsewhere(p.SessionID) {
 		return false
 	}
@@ -341,7 +341,7 @@ func livePaneInDomain(in input, p *daemon.PaneStatus) bool {
 	return in.Classify(p.CWD) == in.Domain
 }
 
-func taskCard(t tasklog.Task, all []tasklog.Task, p *daemon.PaneStatus) Card {
+func taskCard(t tasklog.Task, all []tasklog.Task, p *state.PaneStatus) Card {
 	c := Card{Key: t.SessionID + "/" + t.ID, Kind: KindTask, TaskID: t.ID, Subject: t.Subject, SessionID: t.SessionID, Live: p != nil, UpdatedAt: t.UpdatedAt}
 	c.Blockers = openBlockers(t, all)
 	c.Column = column(t.Status, c.Blockers)
@@ -351,7 +351,7 @@ func taskCard(t tasklog.Task, all []tasklog.Task, p *daemon.PaneStatus) Card {
 	return c
 }
 
-func todoCard(list tasklog.TodoList, i int, todo tasklog.Todo, p *daemon.PaneStatus) Card {
+func todoCard(list tasklog.TodoList, i int, todo tasklog.Todo, p *state.PaneStatus) Card {
 	c := Card{Key: list.SessionID + "/todo-" + strconv.Itoa(i), Kind: KindTodo, Subject: todo.Content, SessionID: list.SessionID, Live: p != nil, UpdatedAt: list.UpdatedAt}
 	c.Column = column(todo.Status, 0)
 	if c.Column == ColumnInProgress {
@@ -393,7 +393,7 @@ func openBlockers(t tasklog.Task, all []tasklog.Task) int {
 // mark はセッションの pane の状態をカードの印にする。上限待ちは agent の自己申告より先に見る。上限で
 // 止まった pane は Claude Code の申告では idle や error に見えるが、利用者にとっては「daemon が再開を
 // 待っている」が一番知りたいことなので。
-func mark(c *Card, p *daemon.PaneStatus) {
+func mark(c *Card, p *state.PaneStatus) {
 	if p == nil {
 		return
 	}

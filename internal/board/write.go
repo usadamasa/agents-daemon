@@ -5,7 +5,7 @@ import (
 	"io"
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
-	"github.com/usadamasa/agents-daemon/internal/daemon"
+	"github.com/usadamasa/agents-daemon/internal/daemon/state"
 	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
@@ -25,7 +25,7 @@ type Viewer struct {
 // Write はボードを組み、JSON で w へ書く。daemon が動いていなくてもタスクの記録は描く
 // (daemon_running が false で、カードはすべて Live でない)。
 func Write(w io.Writer, p apppath.Paths, v Viewer) error {
-	pid, snap, err := daemon.Running(p)
+	pid, snap, err := state.Running(p)
 	if err != nil {
 		return err
 	}

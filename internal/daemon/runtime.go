@@ -18,9 +18,10 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/backend"
 	"github.com/usadamasa/agents-daemon/internal/config"
+	"github.com/usadamasa/agents-daemon/internal/daemon/limitlog"
+	"github.com/usadamasa/agents-daemon/internal/daemon/state"
 	"github.com/usadamasa/agents-daemon/internal/detect"
 	"github.com/usadamasa/agents-daemon/internal/edge"
-	"github.com/usadamasa/agents-daemon/internal/limitlog"
 	"github.com/usadamasa/agents-daemon/internal/monitor"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/parking"
@@ -65,7 +66,7 @@ type daemonRuntime struct {
 	// boardLogs は CLI と mod が書くボードの経路のログ (internal/boardlog)。daemon は housekeeping で rotate 済みの
 	// ものを消すだけ。ゼロ値は何も消さない。
 	boardLogs []string
-	// limits は上限の出来事の記録 (internal/limitlog)。daemon が書き、housekeeping で消す。ゼロ値は書かない。
+	// limits は上限の出来事の記録 (internal/daemon/limitlog)。daemon が書き、housekeeping で消す。ゼロ値は書かない。
 	limits              limitlog.Store
 	sleep               func(time.Duration)
 	startedAt           time.Time
@@ -137,7 +138,7 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 
 	seen := make(map[string]bool, len(panes))
 	claudeCount := 0
-	statusPanes := make([]PaneStatus, 0, len(panes))
+	statusPanes := make([]state.PaneStatus, 0, len(panes))
 
 	for _, pane := range panes {
 		if !multiplexer.IsClaudeAgent(pane) {
@@ -171,7 +172,7 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 
 	r.forgetUnseen(seen)
 
-	if err := writeStatusSnapshot(r.statusPath, os.Getpid(), r.backend, r.startedAt, now, statusPanes); err != nil {
+	if err := state.WriteStatusSnapshot(r.statusPath, os.Getpid(), r.backend, r.startedAt, now, statusPanes); err != nil {
 		r.log.Logf("status snapshot の書き込みに失敗: %v", err)
 	}
 
@@ -212,8 +213,8 @@ func (r *daemonRuntime) forgetUnseen(seen map[string]bool) {
 }
 
 // paneStatus は status.json に書く pane 1 枚ぶんのスナップショットを組む。
-func paneStatus(pane multiplexer.Pane, entry *paneEntry, outcome monitor.Outcome, now time.Time) PaneStatus {
-	return PaneStatus{
+func paneStatus(pane multiplexer.Pane, entry *paneEntry, outcome monitor.Outcome, now time.Time) state.PaneStatus {
+	return state.PaneStatus{
 		PaneID:        pane.PaneID,
 		SessionID:     pane.SessionID,
 		CWD:           pane.CWD,
@@ -226,6 +227,23 @@ func paneStatus(pane multiplexer.Pane, entry *paneEntry, outcome monitor.Outcome
 		LastOutcome:   outcome.String(),
 		LastTickAt:    now,
 	}
+}
+
+// monitorStatusString は monitor.Status を status.json 向けの識別子文字列にする。
+func monitorStatusString(s monitor.Status) string {
+	if s == monitor.StatusWaiting {
+		return "waiting"
+	}
+	return "monitoring"
+}
+
+// zeroableTime はゼロ値の time.Time を nil に変換する。PaneState.WaitUntil は
+// 監視中 (未待機) の間ゼロ値のままなので、JSON へは省略して出す。
+func zeroableTime(t time.Time) *time.Time {
+	if t.IsZero() {
+		return nil
+	}
+	return &t
 }
 
 // logOutcome は tick 1 回の結果をログへ書く。「静かな tick」(監視中で異常無し、
@@ -378,9 +396,9 @@ func EnsureDaemon(p apppath.Paths, dryRun bool) error {
 // (os.File の fd は CLOEXEC なので子へは渡らない)。離してから子が取るまでの間に別の --ensure が入っても、
 // lock を取れた 1 つだけが daemon になる。
 func ensureDaemon(p apppath.Paths, spawn func() error) error {
-	lock, err := acquireLock(lockFile(p))
+	lock, err := state.AcquireLock(state.LockFile(p))
 	if err != nil {
-		if errors.Is(err, ErrAlreadyRunning) {
+		if errors.Is(err, state.ErrAlreadyRunning) {
 			return nil // 既に動いている。何もしない。
 		}
 		return err
@@ -429,7 +447,7 @@ func spawnDetached(exe string, dryRun bool, p apppath.Paths) error {
 func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 	// lock は設定や rex を見る前に取る。後に回すと、その間に起きた別の process と 2 つ進む。
 	// 以降のどこで戻っても、process の終了で OS が lock を解放する。
-	lock, err := acquireLock(lockFile(p))
+	lock, err := state.AcquireLock(state.LockFile(p))
 	if err != nil {
 		return err
 	}
@@ -455,7 +473,7 @@ func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 		return fmt.Errorf("%s に到達できないため起動しません: %w", kind, reachErr)
 	}
 
-	if err := writePIDFile(p.PIDFile(), os.Getpid()); err != nil {
+	if err := state.WritePIDFile(p.PIDFile(), os.Getpid()); err != nil {
 		return err
 	}
 
@@ -489,7 +507,7 @@ func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 	defer stop()
 
 	cleanup := func(reason string) {
-		if err := removeOwnPIDFile(p.PIDFile(), os.Getpid()); err != nil {
+		if err := state.RemoveOwnPIDFile(p.PIDFile(), os.Getpid()); err != nil {
 			log.Logf("PID ファイルの削除に失敗: %v", err)
 		}
 		log.Logf("daemon 終了 (pid %d): %s", os.Getpid(), reason)

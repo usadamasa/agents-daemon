@@ -1,4 +1,4 @@
-package daemon
+package state
 
 import (
 	"encoding/json"

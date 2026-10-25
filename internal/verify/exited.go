@@ -5,15 +5,15 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
-	"github.com/usadamasa/agents-daemon/internal/daemon"
+	"github.com/usadamasa/agents-daemon/internal/daemon/state"
 )
 
 // SessionExited は、動いている daemon が after より後に書いた status.json にセッションの pane が無いことを確かめる。
 // ボードの「パーキングへ移す」(parking.Adopt) の前提で、生きているセッションのタスクの記録を消さないためのもの
 // (models/handoff の LiveTaskKept)。daemon が動いていない、status.json が無いか前の daemon のもの、after (タスクの
-// 記録の時刻) より古い、pane がある、のどれかなら理由を返す。status と同じ読み方 (daemon.Running) で見る。
+// 記録の時刻) より古い、pane がある、のどれかなら理由を返す。status と同じ読み方 (state.Running) で見る。
 func SessionExited(p apppath.Paths, sessionID string, after time.Time) error {
-	pid, snap, err := daemon.Running(p)
+	pid, snap, err := state.Running(p)
 	if err != nil {
 		return err
 	}

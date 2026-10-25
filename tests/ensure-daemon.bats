@@ -52,8 +52,11 @@ teardown() {
 
   # 古いバイナリは起動されず、go build が plugin の root で cmd/agents-daemon を建てた
   [ ! -e "$TEST_TMPDIR/old-daemon.calls" ]
-  grep -q -- "build -C $REPO_ROOT -o " "$TEST_TMPDIR/go.calls"
+  grep -q -- "build -C $REPO_ROOT " "$TEST_TMPDIR/go.calls"
+  grep -q -- " -o " "$TEST_TMPDIR/go.calls"
   grep -q -- " ./cmd/agents-daemon" "$TEST_TMPDIR/go.calls"
+  # バイナリが `agents-daemon version` で名乗れるよう、plugin の version を埋め込む
+  grep -q -- " -ldflags -X main.version=$(jq -r .version "$REPO_ROOT/.claude-plugin/plugin.json") " "$TEST_TMPDIR/go.calls"
   # build 用の一時ファイルと lock は残らない
   wait_until test ! -d "$LOCK"
   [ -z "$(find "$BIN_DIR" -name '.agents-daemon.*')" ]

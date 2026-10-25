@@ -17,6 +17,7 @@
 //	park      パーキングロットのメモを parking/ に置く・書き換える・一覧する (add / set / list)
 //	dream     記憶階層の consolidation の実行系 (harvest / mine / stage / adopt / forget)。手順は agents-daemon:dream skill
 //	prune-worktrees  誰も使っていない Claude Code の worktree の回収 (SessionStart hook が --hook 付きで呼ぶ)
+//	version   建てた元の plugin の version の表示 (--version も同じ)
 //
 // グローバルオプション --json は doctor と status の出力を JSON にする (internal/jsonflag)。
 package main

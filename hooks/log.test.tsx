@@ -80,6 +80,7 @@ const NODE = {
   depth: 0,
   downstream: 0,
   parked: 0,
+  memos: [],
   blocked_by: [],
   deadlock: false,
 }

@@ -81,6 +81,7 @@ function node(key: string, state: string, title: string, extra: Record<string, u
     depth: 0,
     downstream: 0,
     parked: 0,
+    memos: [] as { id: string; title: string; status: string }[],
     blocked_by: [] as string[],
     deadlock: false,
     ...extra,
@@ -463,6 +464,23 @@ test('選んだノードの詳細に参照とセッション、上流をたど�
   await ui.press({ key: 'fold' })
   expect(await ui.find({ key: 'detail:C/1' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /選んだタスクは今の図に出ていません/ })).toBeDefined()
+})
+
+test('選んだタスクの詳細に、そのタスクが扱うメモ (description に id が書かれたもの) の title と status を出す (#213)', async ($, on) => {
+  const memos = [
+    { id: '20261025T010000-0000000a', title: '渡したメモ', status: 'handed' },
+    { id: '20261025T020000-0000000b', title: 'まだ置いてあるメモ', status: 'open' },
+  ]
+  boardWorld(on, withNodes(node('M/1', 'working', 'メモを扱う', { session: 'memo', memos })))
+  await $.command.run(OPEN_BOARD)
+  const ui = await mount($)
+  await ui.press({ key: 'row:M/1' })
+  const detail = await ui.find({ key: 'detail:M/1' })
+  expect(detail?.text).toMatch(/◇ 渡したメモ \(handed\)/)
+  expect(detail?.text).toMatch(/◇ まだ置いてあるメモ \(open\)/)
+  // メモの無いタスクには出さない。
+  await ui.press({ key: 'row:W/1' })
+  expect((await ui.find({ key: 'detail:W/1' }))?.text).not.toMatch(/\((handed|open|discarded)\)/)
 })
 
 test('セッションのノードの詳細は ref を出さず、名前と session ID の先頭 8 桁を出す (#196)', async ($, on) => {

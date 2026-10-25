@@ -30,6 +30,7 @@ function node(key: string, state: string, title: string, extra: Record<string, u
     depth: 0,
     downstream: 0,
     parked: 0,
+    memos: [] as { id: string; title: string; status: string }[],
     blocked_by: [] as string[],
     deadlock: false,
     ...extra,

@@ -17,6 +17,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"syscall"
@@ -333,6 +334,23 @@ func newID(at time.Time) (string, error) {
 		return "", fmt.Errorf("id の乱数を作れない: %w", err)
 	}
 	return at.UTC().Format("20060102T150405") + "-" + hex.EncodeToString(b), nil
+}
+
+// idPattern は newID が作る id の形。前後に英数字が続くものは別の文字列とみなす。
+var idPattern = regexp.MustCompile(`\b\d{8}T\d{6}-[0-9a-f]{8}\b`)
+
+// MentionedIDs は text に書かれたメモの id を、現れた順に重複なく返す。タスクの description からそのタスクが
+// 扱うメモを引くのに使う (メモの側にはタスクを書き戻さない)。無ければ空の配列。
+func MentionedIDs(text string) []string {
+	ids := []string{}
+	seen := map[string]bool{}
+	for _, id := range idPattern.FindAllString(text, -1) {
+		if !seen[id] {
+			seen[id] = true
+			ids = append(ids, id)
+		}
+	}
+	return ids
 }
 
 func write(dir string, item Item) error {

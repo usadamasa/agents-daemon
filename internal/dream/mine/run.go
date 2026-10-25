@@ -12,8 +12,8 @@ import (
 	"path/filepath"
 
 	"github.com/usadamasa/agents-daemon/internal/dream"
-	"github.com/usadamasa/agents-daemon/internal/dream/dreamio"
 	"github.com/usadamasa/agents-daemon/internal/dream/harvest/record"
+	"github.com/usadamasa/agents-daemon/internal/dream/mine/candidates"
 	"github.com/usadamasa/agents-daemon/internal/dream/mine/corpus"
 )
 
@@ -97,13 +97,13 @@ func Run(opts Opts) error {
 	cands := generateCandidates(mems, skills, project, sessions)
 
 	// 6. jsonl 出力
-	outFile := dreamio.CandidatesPath(opts.StateDir, project, resolvedDate)
-	if err := dreamio.WriteCandidates(outFile, cands); err != nil {
+	outFile := candidates.Path(opts.StateDir, project, resolvedDate)
+	if err := candidates.Write(outFile, cands); err != nil {
 		return fmt.Errorf("candidates 書き込み失敗: %w", err)
 	}
 
 	if opts.Verbose {
-		skillBody, memoryDedup, unhomed := dreamio.CountByKind(cands)
+		skillBody, memoryDedup, unhomed := candidates.CountByKind(cands)
 		_, _ = fmt.Fprintf(opts.Stderr,
 			"project=%s sessions=%d skills=%d memories=%d candidates=%d (skill_body=%d memory_dedup=%d unhomed=%d) out=%s\n",
 			project, len(sessions), len(skills), len(mems), len(cands), skillBody, memoryDedup, unhomed, outFile)

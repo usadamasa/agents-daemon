@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/usadamasa/agents-daemon/internal/dream/dreamio"
 	"github.com/usadamasa/agents-daemon/internal/dream/harvest/record"
+	"github.com/usadamasa/agents-daemon/internal/dream/mine/candidates"
 	"github.com/usadamasa/agents-daemon/internal/dream/mine/corpus"
 )
 
@@ -178,7 +178,7 @@ Slack 投稿は明確なアクション/タスクのみ｡つぶやきは除外�
 
 	// 6. jsonl 出力ラウンドトリップ
 	outFile := filepath.Join(fixDir, "candidates.jsonl")
-	if err := dreamio.WriteCandidates(outFile, cands); err != nil {
+	if err := candidates.Write(outFile, cands); err != nil {
 		t.Fatal(err)
 	}
 	stat, err := os.Stat(outFile)

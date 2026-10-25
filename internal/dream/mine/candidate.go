@@ -5,14 +5,14 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/usadamasa/agents-daemon/internal/dream/dreamio"
 	"github.com/usadamasa/agents-daemon/internal/dream/harvest/record"
+	"github.com/usadamasa/agents-daemon/internal/dream/mine/candidates"
 	"github.com/usadamasa/agents-daemon/internal/dream/mine/corpus"
 )
 
 // generateCandidates は memory / skill / harvest を突き合わせて candidates を生成する。
-// 出力は dreamio.Candidate (mine/stage/adopt で共有される canonical schema)。
-func generateCandidates(mems []corpus.Memory, skills map[string]corpus.Skill, project string, sessions []record.Record) []dreamio.Candidate {
+// 出力は candidates.Candidate (mine/stage/adopt で共有される canonical schema)。
+func generateCandidates(mems []corpus.Memory, skills map[string]corpus.Skill, project string, sessions []record.Record) []candidates.Candidate {
 	// skill 名リスト (findAssociatedSkill 用)
 	skillNames := make([]string, 0, len(skills))
 	for n := range skills {
@@ -28,7 +28,7 @@ func generateCandidates(mems []corpus.Memory, skills map[string]corpus.Skill, pr
 		}
 	}
 
-	var out []dreamio.Candidate
+	var out []candidates.Candidate
 	perSkillIdx := make(map[string]int)
 	for _, m := range mems {
 		skillName := findAssociatedSkill(m.Name, m.Description, skillNames)
@@ -37,13 +37,13 @@ func generateCandidates(mems []corpus.Memory, skills map[string]corpus.Skill, pr
 			// stage レポートに現れないまま memory が残り続ける。
 			slug := "unhomed-" + m.Name
 			perSkillIdx[slug]++
-			out = append(out, dreamio.Candidate{
+			out = append(out, candidates.Candidate{
 				ID:              buildCandidateID(slug, perSkillIdx[slug]),
-				Kind:            dreamio.KindUnhomed,
+				Kind:            candidates.KindUnhomed,
 				MemoryPath:      m.Path,
 				ScopedToProject: project,
 				Diagnosis:       buildUnhomedDiagnosis(m),
-				Confidence:      dreamio.ConfidenceUnknown,
+				Confidence:      candidates.ConfidenceUnknown,
 			})
 			continue
 		}
@@ -57,7 +57,7 @@ func generateCandidates(mems []corpus.Memory, skills map[string]corpus.Skill, pr
 		cls := classifyCoverage(cov)
 
 		perSkillIdx[skillName]++
-		cand := dreamio.Candidate{
+		cand := candidates.Candidate{
 			ID:               buildCandidateID(skillName, perSkillIdx[skillName]),
 			Kind:             cls.Kind,
 			AssociatedSkill:  skillName,
@@ -83,10 +83,10 @@ func buildCandidateID(skillName string, idx int) string {
 func buildDiagnosis(cls classification, m corpus.Memory, cov coverage) string {
 	pct := int(cov.ratio() * 100)
 	switch cls.Kind {
-	case dreamio.KindSkillBody:
+	case candidates.KindSkillBody:
 		return fmt.Sprintf("memory %q の %d/%d フレーズ (%d%%) しか skill 本体に反映されていない - migration 候補",
 			m.Name, cov.Covered, cov.Total, pct)
-	case dreamio.KindMemoryDedup:
+	case candidates.KindMemoryDedup:
 		return fmt.Sprintf("memory %q は skill 本体に %d%% 反映済み - memory 側の削除候補",
 			m.Name, pct)
 	}

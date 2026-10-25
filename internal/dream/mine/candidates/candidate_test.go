@@ -1,11 +1,11 @@
-package dreamio
+package candidates
 
 import (
 	"path/filepath"
 	"testing"
 )
 
-func TestCandidatesFilename(t *testing.T) {
+func TestFilename(t *testing.T) {
 	tests := []struct {
 		name    string
 		project string
@@ -33,19 +33,19 @@ func TestCandidatesFilename(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := candidatesFilename(tc.project, tc.date)
+			got := filename(tc.project, tc.date)
 			if got != tc.want {
-				t.Errorf("CandidatesFilename(%q, %q) = %q; want %q",
+				t.Errorf("filename(%q, %q) = %q; want %q",
 					tc.project, tc.date, got, tc.want)
 			}
 		})
 	}
 }
 
-func TestCandidatesPath(t *testing.T) {
-	got := CandidatesPath("/state", "-Users-x-workspace", "2026-07-20")
+func TestPath(t *testing.T) {
+	got := Path("/state", "-Users-x-workspace", "2026-07-20")
 	want := filepath.Join("/state", "candidates", "Users-x-workspace-2026-07-20.jsonl")
 	if got != want {
-		t.Errorf("CandidatesPath = %q; want %q", got, want)
+		t.Errorf("Path = %q; want %q", got, want)
 	}
 }

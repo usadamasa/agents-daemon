@@ -5,14 +5,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/usadamasa/agents-daemon/internal/dream/dreamio"
+	"github.com/usadamasa/agents-daemon/internal/dream/mine/candidates"
 )
 
 func TestRun_RejectsUnhomedCandidate(t *testing.T) {
 	// unhomed は行き先が決まっていない候補｡branch を切る前に拒否する｡
 	dir := t.TempDir()
 	candFile := filepath.Join(dir, "candidates.jsonl")
-	cands := []dreamio.Candidate{
+	cands := []candidates.Candidate{
 		{
 			ID:         "dream-candidate-unhomed-feedback-random-001",
 			Kind:       "unhomed",
@@ -20,8 +20,8 @@ func TestRun_RejectsUnhomedCandidate(t *testing.T) {
 			Confidence: "unknown",
 		},
 	}
-	if err := dreamio.WriteCandidates(candFile, cands); err != nil {
-		t.Fatalf("WriteCandidates: %v", err)
+	if err := candidates.Write(candFile, cands); err != nil {
+		t.Fatalf("candidates.Write: %v", err)
 	}
 
 	err := Run(Opts{

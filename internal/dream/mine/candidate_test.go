@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/usadamasa/agents-daemon/internal/dream/dreamio"
 	"github.com/usadamasa/agents-daemon/internal/dream/harvest/record"
+	"github.com/usadamasa/agents-daemon/internal/dream/mine/candidates"
 	"github.com/usadamasa/agents-daemon/internal/dream/mine/corpus"
 )
 
@@ -150,10 +150,10 @@ func TestGenerateCandidates_IncludesEvidenceSessions(t *testing.T) {
 	}
 }
 
-func TestWriteCandidates_JsonlFormat(t *testing.T) {
+func TestCandidatesWrite_JsonlFormat(t *testing.T) {
 	dir := t.TempDir()
 	outFile := filepath.Join(dir, "candidates.jsonl")
-	cands := []dreamio.Candidate{
+	cands := []candidates.Candidate{
 		{
 			ID:               "dream-candidate-daily-standup-001",
 			Kind:             "skill_body",
@@ -166,8 +166,8 @@ func TestWriteCandidates_JsonlFormat(t *testing.T) {
 			CoverageRatio:    0.0,
 		},
 	}
-	if err := dreamio.WriteCandidates(outFile, cands); err != nil {
-		t.Fatalf("dreamio.WriteCandidates: %v", err)
+	if err := candidates.Write(outFile, cands); err != nil {
+		t.Fatalf("candidates.Write: %v", err)
 	}
 	data, err := os.ReadFile(outFile)
 	if err != nil {
@@ -177,7 +177,7 @@ func TestWriteCandidates_JsonlFormat(t *testing.T) {
 	if len(lines) != 1 {
 		t.Fatalf("expected 1 line, got %d", len(lines))
 	}
-	var got dreamio.Candidate
+	var got candidates.Candidate
 	if err := json.Unmarshal([]byte(lines[0]), &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}

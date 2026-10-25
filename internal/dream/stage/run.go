@@ -13,7 +13,7 @@ import (
 	"path/filepath"
 
 	"github.com/usadamasa/agents-daemon/internal/dream"
-	"github.com/usadamasa/agents-daemon/internal/dream/dreamio"
+	"github.com/usadamasa/agents-daemon/internal/dream/mine/candidates"
 )
 
 // Opts は stage サブコマンドの実行パラメータ。
@@ -44,7 +44,7 @@ func Run(opts Opts) error {
 		if opts.StateDir == "" {
 			return errors.New("StateDir が未解決 (呼び出し側が apppath で決める)")
 		}
-		resolvedCandidates = dreamio.CandidatesPath(opts.StateDir, opts.Project, resolvedDate)
+		resolvedCandidates = candidates.Path(opts.StateDir, opts.Project, resolvedDate)
 	}
 	outFile := opts.OutFile
 	if outFile == "" {
@@ -54,7 +54,7 @@ func Run(opts Opts) error {
 		outFile = reportPath(opts.Cwd, opts.Project, resolvedDate)
 	}
 
-	cands, err := dreamio.ReadCandidates(resolvedCandidates)
+	cands, err := candidates.Read(resolvedCandidates)
 	if err != nil {
 		return fmt.Errorf("candidates 読み込み失敗 (%s): %w", resolvedCandidates, err)
 	}

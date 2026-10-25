@@ -1,4 +1,4 @@
-package dreamio
+package candidates
 
 import (
 	"path/filepath"
@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-func TestReadCandidates_missingFile(t *testing.T) {
-	got, err := ReadCandidates(filepath.Join(t.TempDir(), "nope.jsonl"))
+func TestRead_missingFile(t *testing.T) {
+	got, err := Read(filepath.Join(t.TempDir(), "nope.jsonl"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -44,38 +44,38 @@ func TestWriteThenRead_roundtrip(t *testing.T) {
 			CoverageRatio:   0.95,
 		},
 	}
-	if err := WriteCandidates(path, want); err != nil {
-		t.Fatalf("WriteCandidates: %v", err)
+	if err := Write(path, want); err != nil {
+		t.Fatalf("Write: %v", err)
 	}
-	got, err := ReadCandidates(path)
+	got, err := Read(path)
 	if err != nil {
-		t.Fatalf("ReadCandidates: %v", err)
+		t.Fatalf("Read: %v", err)
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("roundtrip mismatch:\n got=%+v\nwant=%+v", got, want)
 	}
 }
 
-func TestFindCandidateByID(t *testing.T) {
+func TestFindByID(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "candidates.jsonl")
 	cands := []Candidate{
 		{ID: "a", Kind: "skill_body"},
 		{ID: "b", Kind: "memory_dedup"},
 	}
-	if err := WriteCandidates(path, cands); err != nil {
-		t.Fatalf("WriteCandidates: %v", err)
+	if err := Write(path, cands); err != nil {
+		t.Fatalf("Write: %v", err)
 	}
 
-	got, err := FindCandidateByID(path, "b")
+	got, err := FindByID(path, "b")
 	if err != nil {
-		t.Fatalf("FindCandidateByID: %v", err)
+		t.Fatalf("FindByID: %v", err)
 	}
 	if got.ID != "b" || got.Kind != "memory_dedup" {
 		t.Fatalf("got=%+v", got)
 	}
 
-	if _, err := FindCandidateByID(path, "missing"); err == nil {
+	if _, err := FindByID(path, "missing"); err == nil {
 		t.Fatal("expected error for missing id")
 	}
 }

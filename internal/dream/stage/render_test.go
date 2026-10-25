@@ -4,11 +4,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/usadamasa/agents-daemon/internal/dream/dreamio"
+	"github.com/usadamasa/agents-daemon/internal/dream/mine/candidates"
 )
 
 func TestRenderReport_ContainsFrontmatterAndCandidates(t *testing.T) {
-	cands := []dreamio.Candidate{
+	cands := []candidates.Candidate{
 		{
 			ID:               "dream-candidate-daily-standup-001",
 			Kind:             "skill_body",
@@ -66,7 +66,7 @@ func TestRenderReport_ContainsFrontmatterAndCandidates(t *testing.T) {
 }
 
 func TestRenderReport_DispositionTableLeavesUnhomedBlank(t *testing.T) {
-	cands := []dreamio.Candidate{
+	cands := []candidates.Candidate{
 		{ID: "c-001", Kind: "skill_body", MemoryPath: "/mem/a.md"},
 		{ID: "c-002", Kind: "unhomed", MemoryPath: "/mem/b.md"},
 	}
@@ -102,7 +102,7 @@ func TestRenderReport_DispositionTableLeavesUnhomedBlank(t *testing.T) {
 }
 
 func TestRenderReport_NoUnhomedOmitsGuidance(t *testing.T) {
-	cands := []dreamio.Candidate{
+	cands := []candidates.Candidate{
 		{ID: "c-001", Kind: "skill_body", MemoryPath: "/mem/a.md"},
 	}
 	report := renderReport("-p", "2026-07-20", cands)

@@ -1,8 +1,8 @@
-// Package dreamio は dream 7-phase pipeline の Mine 出力 (candidates.jsonl) を
-// mine/stage/adopt サブコマンドで共有するための型と I/O を提供する。
+// Package candidates は dream 7-phase pipeline の Mine 出力 (candidates.jsonl) の書式と読み書きを持つ。
+// 書き手の mine の下に置き、読み手の stage / adopt もこのパッケージを使う。
 //
 // candidates.jsonl は 1 行 1 レコードで、各行は Candidate の JSON エンコード。
-package dreamio
+package candidates
 
 import (
 	"fmt"
@@ -41,20 +41,20 @@ type Candidate struct {
 	CoverageRatio    float64  `json:"coverage_ratio"`
 }
 
-// candidatesFilename は Mine 出力 / Stage 入力 / Adopt 入力で共通の
+// filename は Mine 出力 / Stage 入力 / Adopt 入力で共通の
 // "<project-slug>-YYYY-MM-DD.jsonl" 形式ファイル名を返す。
 //
 // project canonical name の先頭 - を除去した残りを stub として使う。
 // 例: project="-Users-x-workspace", date="2026-07-20"
 //
 //	→ "Users-x-workspace-2026-07-20.jsonl"
-func candidatesFilename(project, date string) string {
+func filename(project, date string) string {
 	stub := strings.TrimPrefix(project, "-")
 	return fmt.Sprintf("%s-%s.jsonl", stub, date)
 }
 
-// CandidatesPath は state ディレクトリ / project / date から candidates.jsonl の絶対パスを組み立てる。
+// Path は state ディレクトリ / project / date から candidates.jsonl の絶対パスを組み立てる。
 // mine が書き stage/adopt が読む共通のパス規約。
-func CandidatesPath(stateDir, project, date string) string {
-	return filepath.Join(stateDir, "candidates", candidatesFilename(project, date))
+func Path(stateDir, project, date string) string {
+	return filepath.Join(stateDir, "candidates", filename(project, date))
 }

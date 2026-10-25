@@ -4,7 +4,7 @@ package parking_test
 // verify.SessionExited (daemon の pid と status.json を読む) を goroutine で交錯させて確かめる。
 // 外部テストパッケージにするのは、verify → daemon → parking の import を parking のテストから引くため。
 // 世界 (セッションの終了、daemon の tick と停止と入れ替わり、タスクの記録の更新) は 1 本の goroutine が乱択の順で進め、
-// ボードを開いた mod が複数本、好きなときに Adopt を押す。時刻は step ごとに進む作り物で、壁時計には頼らない。
+// 依存図を開いた mod が複数本、好きなときに Adopt を押す。時刻は step ごとに進む作り物で、壁時計には頼らない。
 // 反例が出たら seed を出す。反例が出たらコードを直すか挙動を正当化する。性質を弱めて通さない。
 
 import (

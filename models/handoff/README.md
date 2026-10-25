@@ -1,4 +1,4 @@
-# ボードの受け渡しのモデル (TLA+)
+# メモの受け渡しのモデル (TLA+)
 
 パーキングのメモをセッションの間で渡す手順と、タスクの記録を hook が書く手順を TLA+ に写したもの。
 複数のプロセス (各セッションの mod、hook、daemon) がロックの無いファイル越しに 1 つの状態を書き換えるので、
@@ -48,7 +48,7 @@ TLC は devShell の `tlaplus` (`tlc`)。CI では回さない。`scripts/model-
 | `RecordsComplete` | `internal/tasklog/invariants_test.go` |
 
 mod の側 (取る → 送る → 届かなければ戻す、spawn で前景にならなければ戻さない、Discard は `--from open`) は
-`hooks/board.test.tsx` が `park` と `spawn` の呼び出しの列で固定する。`AtMostOnce` / `NoneMissed` / `Informed` は
+`hooks/deps.test.tsx` が `park` と `spawn` の呼び出しの列で固定する。`AtMostOnce` / `NoneMissed` / `Informed` は
 `hooks/notice.test.tsx` が並列の `tool.call` と `session.compact` で固定する。
 
 ## 前提

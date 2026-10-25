@@ -1,6 +1,6 @@
 // Package jsonflag は root のグローバルオプション --json の配線を持つ。対応するコマンドは Annotations で宣言し、
 // 宣言の無いコマンドに --json が付いたら RunE の前に error にする (文字の出力を JSON と思い込んで読む事故を避ける)。
-// 元から JSON を出すコマンド (status --board、park、edge) も宣言して、付けても変わらないようにする。
+// 元から JSON を出すコマンド (deps、park、edge) も宣言して、付けても変わらないようにする。
 // 残りのコマンドへの対応は #182。
 package jsonflag
 

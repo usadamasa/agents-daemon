@@ -19,11 +19,11 @@ type Tasks interface {
 }
 
 // Park は cwd のセッションが置いたメモを、置き先 (repo、そのとき進行中のタスク) を決めてから add する。
-// repo はボードの行と同じ鍵 (main worktree のパス、git の外なら cwd)。kind task は Adopt だけが置く。
+// repo は依存図の repo と同じ鍵 (main worktree のパス、git の外なら cwd)。kind task は Adopt だけが置く。
 // 外から置く入口は Park と Adopt だけにし、repo の決め方を呼び出し側に任せない。
 func (s Store) Park(req Request, cwd string, tasks Tasks, now time.Time) (Added, error) {
 	if req.Kind == KindTask {
-		return Added{}, fmt.Errorf("kind %q はボードからタスクを移すときだけ使う", KindTask)
+		return Added{}, fmt.Errorf("kind %q は pane からタスクを移すときだけ使う", KindTask)
 	}
 	src := Source{SessionID: req.SessionID, TaskID: tasks.ActiveTaskID(req.SessionID), CWD: cwd, At: now}
 	return s.add(gitrepo.RepoKey(cwd), req.Entry, src)
@@ -31,7 +31,7 @@ func (s Store) Park(req Request, cwd string, tasks Tasks, now time.Time) (Added,
 
 // Adopt は終了したセッションに残った未完了のタスクを kind task のメモにし、タスクの記録を消す。
 // exited はセッションが終了したと確かめる (verify.SessionExited。タスクの記録の時刻より後の pane の一覧に無いこと)。
-// 確かめられなければメモを書かず記録も消さない。ボードが exited と描いた後に daemon が止まっていても、
+// 確かめられなければメモを書かず記録も消さない。pane が exited と描いた後に daemon が止まっていても、
 // 生きているセッションの記録を消さないため (models/handoff の LiveTaskKept)。
 func (s Store) Adopt(sessionID, taskID string, tasks Tasks, exited func(sessionID string, after time.Time) error, now time.Time) (Added, error) {
 	t, ok := tasks.Get(sessionID, taskID)

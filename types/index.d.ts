@@ -1,24 +1,4 @@
-// hooks/board.tsx、hooks/notice.ts などの mod が $.state に置く値の型。形は `agents-daemon status --board` の JSON (internal/board) に合わせる。
-
-export type BoardColumn = {
-  id: 'pending' | 'in_progress' | 'blocked' | 'completed'
-  title: string
-}
-
-export type BoardCard = {
-  key: string
-  kind: 'task' | 'todo' | 'session'
-  task_id?: string
-  column: BoardColumn['id']
-  subject: string
-  session_id: string
-  session: string
-  live: boolean
-  blockers?: number
-  mark?: 'input' | 'limit'
-  mark_detail?: string
-  updated_at: string
-}
+// hooks/deps.tsx、hooks/notice.ts などの mod が $.state に置く値の型。形は `agents-daemon deps` の JSON (internal/deps) に合わせる。
 
 export type ParkingSource = {
   session_id: string
@@ -39,11 +19,20 @@ export type ParkingCard = {
   sources: ParkingSource[]
 }
 
-export type BoardRow = {
+// DepsSession は repo で生きているセッション 1 つ (メモを渡す宛先)。subject はそのセッションが何をしているか。
+export type DepsSession = {
+  session_id: string
+  session: string
+  subject: string
+  live: boolean
+}
+
+// DepsRepo は repo 1 つ。sessions は表示名の順、memos は open のメモを置いた順。
+export type DepsRepo = {
   repo: string
   title: string
-  cards: BoardCard[]
-  parking: ParkingCard[]
+  sessions: DepsSession[]
+  memos: ParkingCard[]
 }
 
 // GraphNode は依存の DAG のノード 1 つ (タスク 1 つ、タスクの無いセッション、端点の参照だけの置き場)。
@@ -99,7 +88,7 @@ export type GraphRow = {
   marks?: number[]
 }
 
-export type BoardGraph = {
+export type DepsGraph = {
   nodes: GraphNode[]
   links: GraphLink[]
   longest_chain: string[]
@@ -108,26 +97,25 @@ export type BoardGraph = {
   rows_with_completed: GraphRow[]
 }
 
-export type BoardData = {
+export type DepsData = {
   daemon_running: boolean
   updated_at?: string
-  columns: BoardColumn[]
-  // here は開いたセッションの行の鍵 (BoardRow.repo と同じ規則)。
+  // here は開いたセッションの repo の鍵 (DepsRepo.repo と同じ規則)。
   here: string
-  rows: BoardRow[]
-  graph: BoardGraph
+  repos: DepsRepo[]
+  graph: DepsGraph
 }
 
 declare module 'claude-code' {
   interface PluginState {
     'agents-daemon': {
-      // board は最後に読めたボード。読めていなければ null。
-      board: BoardData | null
+      // deps は最後に読めた依存図。読めていなければ null。
+      deps: DepsData | null
       // error は直近の読み込みの失敗理由。読めたら空にする。
       error: string
-      // target は B の pane で選んだノードの key かメモの key (park:<id>)。未選択なら空。
+      // target は依存図の pane で選んだノードの key かメモの key (park:<id>)。未選択なら空。
       target: string
-      // picking は B の詳細で Add blocker の候補を出しているか。
+      // picking はノードの詳細で Add blocker の候補を出しているか。
       picking: boolean
       // spawning はメモの詳細で「新しいセッションを起こして渡す」の repo の候補を出しているか。出しているなら頼むこと
       // (task / issue)、出していなければ空。
@@ -137,9 +125,9 @@ declare module 'claude-code' {
       // told はファイルを触った tool の結果で model に伝えたメモの id (hooks/notice.ts)。同じメモを 2 度伝えない。
       // main の会話が compact されたら空にする。
       told: string[]
-      // showCompleted は B の pane で完了したノードを出すか (graph.rows_with_completed を描く)。既定は畳む。
+      // showCompleted は依存図の pane で完了したノードを出すか (graph.rows_with_completed を描く)。既定は畳む。
       showCompleted: boolean
-      // logged はボードの経路のログに slot ごとに最後に書いた中身 (hooks/log.ts)。同じものを書き直さないため。
+      // logged は出来事のログに slot ごとに最後に書いた中身 (hooks/log.ts)。同じものを書き直さないため。
       logged: Record<string, string>
     }
   }

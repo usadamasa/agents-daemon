@@ -1,14 +1,13 @@
 import type { EngineInterface } from 'claude-code'
 
-import type { BoardCard, BoardData, BoardRow, GraphNode, ParkingCard, ParkingSource } from '../types'
+import type { DepsData, DepsRepo, DepsSession, GraphNode, ParkingCard, ParkingSource } from '../types'
 import { daemonBin } from './daemon-bin'
 import { fit } from './graph'
 import { logEvent, reason } from './log'
 
-// パーキングのメモの見せ方と、ボード (#121 の段 6) からの操作。行と列の描き方には依存させず、ボードの形が
-// 変わっても (#134) そのまま使えるようにする。描くのは hooks/board.tsx。
+// パーキングのメモの見せ方と、依存図の pane からの操作。DAG の描き方には依存させない。描くのは hooks/deps.tsx。
 
-// lastPlacedAt はボードのメモが最後に置かれた時刻 (ボードの sources は新しい順)。
+// lastPlacedAt はメモが最後に置かれた時刻 (sources は新しい順)。
 export function lastPlacedAt(memo: ParkingCard): string {
   return memo.sources[0]?.at ?? ''
 }
@@ -23,7 +22,7 @@ export function isStale(memo: ParkingCard, now: number, days: number): boolean {
 
 // Destination はメモを渡す先。peer は生きているほかのセッション (`$.session.send`)、self は開いたセッション自身
 // (peer メッセージではなく自分の入力へ渡す。#190)、spawn は repo で新しく起こすセッション (`agents-daemon spawn`。#162)。
-// peer の subject はそのセッションのカードの subject (タスクか今の作業)。自動で付いたセッション名だけでは
+// peer の subject はそのセッションの subject (進行中のタスクか今の作業)。自動で付いたセッション名だけでは
 // 何をしているセッションか分からないので、宛先の名前に添える (#191)。
 export type Destination =
   | { route: 'peer'; session_id: string; session: string; subject: string }
@@ -45,14 +44,14 @@ export function destinationLabel(to: Destination): string {
   return to.session
 }
 
-// SELF_LABEL は自セッションの宛先の名前。セッション名はカードに頼らず固定にする (自分が生きているのは自明で、
-// カードが無くても宛先に出す)。
+// SELF_LABEL は自セッションの宛先の名前。セッション名は sessions に頼らず固定にする (自分が生きているのは自明で、
+// sessions に無くても宛先に出す)。
 const SELF_LABEL = 'このセッション'
 
 // Intent はメモを渡した先に頼むこと。
 export type Intent = 'task' | 'issue'
 
-// memoLabel はメモのカード 1 行: 種類 (park tool の kind の語のまま)、title、置かれた回数 (2 回以上のとき)。
+// memoLabel はメモの 1 行: 種類 (park tool の kind の語のまま)、title、置かれた回数 (2 回以上のとき)。
 export function memoLabel(memo: ParkingCard): string {
   const count = memo.sources.length > 1 ? ` ×${memo.sources.length}` : ''
   return `[${memo.kind}] ${memo.title}${count}`
@@ -75,7 +74,7 @@ function sourceLine(source: ParkingSource): string {
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000
 
 // stamp は RFC 3339 の時刻を JST の「MM/DD HH:MM」にする。記録の offset にも mod の時刻帯にも頼らない
-// (board.md「時刻の書き方」)。
+// (parking.md「時刻の書き方」)。
 export function stamp(at: string): string {
   const ms = Date.parse(at)
   if (Number.isNaN(ms)) return at
@@ -84,37 +83,38 @@ export function stamp(at: string): string {
   return `${two(jst.getUTCMonth() + 1)}/${two(jst.getUTCDate())} ${two(jst.getUTCHours())}:${two(jst.getUTCMinutes())}`
 }
 
-// taskDestinations は「タスクにする」の宛先: メモの行 (row) が開いたセッションの repo (here) なら自セッションを先に、
+// taskDestinations は「タスクにする」の宛先: メモの repo が開いたセッションの repo (here) なら自セッションを先に、
 // 続けて同じ repo の生きているほかのセッション。
-export function taskDestinations(data: BoardData, row: BoardRow, self: string): Destination[] {
-  const own = row.repo === data.here ? [selfDestination(self)] : []
-  return [...own, ...uniqueLive(row.cards, self)]
+export function taskDestinations(data: DepsData, repo: DepsRepo, self: string): Destination[] {
+  const own = repo.repo === data.here ? [selfDestination(self)] : []
+  return [...own, ...uniqueLive(repo.sessions, self)]
 }
 
 // issueDestinations は「issue にするよう頼む」の宛先。自セッションを先に、同じ repo のセッション、
-// ボードに載っているほかの生きているセッションの順に並べる。
-export function issueDestinations(data: BoardData, cards: BoardCard[], self: string): Destination[] {
-  return [selfDestination(self), ...uniqueLive([...cards, ...data.rows.flatMap(row => row.cards)], self)]
+// ほかの repo の生きているセッションの順に並べる。
+export function issueDestinations(data: DepsData, sessions: DepsSession[], self: string): Destination[] {
+  return [selfDestination(self), ...uniqueLive([...sessions, ...data.repos.flatMap(repo => repo.sessions)], self)]
 }
 
 function selfDestination(self: string): Destination {
   return { route: 'self', session_id: self, session: SELF_LABEL }
 }
 
-function uniqueLive(cards: BoardCard[], self: string): Destination[] {
+// uniqueLive は sessions を受け取った順に宛先にする。自分と、同じセッションの 2 回目は除く (subject は最初のもの)。
+function uniqueLive(sessions: DepsSession[], self: string): Destination[] {
   const seen = new Set<string>()
   const out: Destination[] = []
-  for (const card of cards) {
-    if (!card.live || card.session_id === '' || card.session_id === self || seen.has(card.session_id)) continue
-    seen.add(card.session_id)
-    out.push({ route: 'peer', session_id: card.session_id, session: card.session, subject: card.subject })
+  for (const s of sessions) {
+    if (!s.live || s.session_id === '' || s.session_id === self || seen.has(s.session_id)) continue
+    seen.add(s.session_id)
+    out.push({ route: 'peer', session_id: s.session_id, session: s.session, subject: s.subject })
   }
   return out
 }
 
-// spawnDestinations は「新しいセッションを起こして渡す」の repo の候補: メモの行の repo、開いたセッションの repo (here)、
-// ボードのほかの行の repo の順 (重複は除く)。候補に無い repo は pathDestination で指定する。
-export function spawnDestinations(data: BoardData, row: BoardRow): Destination[] {
+// spawnDestinations は「新しいセッションを起こして渡す」の repo の候補: メモの repo、開いたセッションの repo (here)、
+// ほかの repo の順 (重複は除く)。候補に無い repo は pathDestination で指定する。
+export function spawnDestinations(data: DepsData, repo: DepsRepo): Destination[] {
   const seen = new Set<string>()
   const out: Destination[] = []
   const add = (repo: string, title: string) => {
@@ -122,9 +122,9 @@ export function spawnDestinations(data: BoardData, row: BoardRow): Destination[]
     seen.add(repo)
     out.push({ route: 'spawn', repo, title })
   }
-  add(row.repo, row.title)
-  add(data.here, data.rows.find(r => r.repo === data.here)?.title ?? basename(data.here))
-  for (const r of data.rows) add(r.repo, r.title)
+  add(repo.repo, repo.title)
+  add(data.here, data.repos.find(r => r.repo === data.here)?.title ?? basename(data.here))
+  for (const r of data.repos) add(r.repo, r.title)
   return out
 }
 
@@ -141,14 +141,14 @@ function basename(path: string): string {
 }
 
 // canAdopt はタスクのノードをパーキングへ移せるか。終了したセッションの未完了のタスクだけ。daemon が status.json を
-// 書いていない (daemon_running でも updated_at が無い) ボードは、生きているセッションも exited と描くので出さない。
+// 書いていない (daemon_running でも updated_at が無い) 依存図は、生きているセッションも exited と描くので出さない。
 // 押した後の判定はバイナリが status.json で改めて行う (`park adopt`)。
-export function canAdopt(node: GraphNode, self: string, data: BoardData): boolean {
+export function canAdopt(node: GraphNode, self: string, data: DepsData): boolean {
   return data.updated_at !== undefined && node.kind === 'task' && node.state === 'exited' && node.session_id !== undefined && node.session_id !== self
 }
 
-// taskText は「タスクにする」で送る文面。着手の時期は受け手の計画に任せる。ボードはタスクの description に
-// 書かれた id でメモと照合する (internal/board/graph)。
+// taskText は「タスクにする」で送る文面。着手の時期は受け手の計画に任せる。依存図はタスクの description に
+// 書かれた id でメモと照合する (internal/deps/graph)。
 export function taskText(memo: ParkingCard): string {
   return [
     `パーキングロットのメモ「${memo.title}」(種類: ${memo.kind}) をタスクにしてください。` +
@@ -193,7 +193,7 @@ export async function discard($: EngineInterface, memo: ParkingCard): Promise<st
 }
 
 // discardStale は最後に置かれてから days 日より経った open のメモをまとめて捨て、結果の文面を返す。捨てたメモは
-// 7 日残り (internal/parking の ClosedRetention)、id (`logs --board` の park.discard に残る) で戻せる。
+// 7 日残り (internal/parking の ClosedRetention)、id (`logs --events` の park.discard に残る) で戻せる。
 export async function discardStale($: EngineInterface, days: number): Promise<string> {
   const ran = await run($, ['discard', '--days', String(days)])
   if ('failure' in ran) return `古いメモを捨てられませんでした: ${ran.failure}`
@@ -203,7 +203,7 @@ export async function discardStale($: EngineInterface, days: number): Promise<st
   } catch (err) {
     return `古いメモを捨てましたが、結果を読めませんでした: ${reason(err, 'park discard')}`
   }
-  return `${days} 日より前のメモ ${count} つを捨てました (戻すには park set <id> --status open、id は logs --board に残る)`
+  return `${days} 日より前のメモ ${count} つを捨てました (戻すには park set <id> --status open、id は logs --events に残る)`
 }
 
 // handOff は text を to へ渡す。送る前にメモを取り (open のときだけ handed にする。取れるのは 1 つのセッションだけ)、

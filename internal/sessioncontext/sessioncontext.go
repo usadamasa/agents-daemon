@@ -1,7 +1,7 @@
 // Package sessioncontext は context/<session_id>.json (statusline が観測した context 使用率、
 // セッション名、Claude Code が動いている端末多重化ツールの場所) の書式を読み書き両方で持つ。
 // 書くのは statusline の stdin を受ける sessionstate.IngestStatusline、読むのは
-// block から session_id を逆引きする backend (rexcli へ渡す) と、カードにセッション名を付ける board。
+// block から session_id を逆引きする backend (rexcli へ渡す) と、ノードとメモにセッション名を付ける deps。
 package sessioncontext
 
 import (
@@ -68,7 +68,7 @@ type Record struct {
 }
 
 // contextFile は context/<session_id>.json の生の形。読むのは ListMultiplexerBlocks
-// (block から session への逆引き) と ListSessionNames (ボードのカードの名前) で、observed_at は
+// (block から session への逆引き) と ListSessionNames (依存図のノードとメモの名前) で、observed_at は
 // 同じ block の記録が複数あるときに最新を選ぶのに使う。
 type contextFile struct {
 	SessionID      string  `json:"session_id"`

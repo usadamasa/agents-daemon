@@ -1,6 +1,6 @@
 import type { Register } from 'claude-code'
 
-import { registerBoard, startBoard } from './board'
+import { registerDeps, startDeps } from './deps'
 import { registerHandoffNotice } from './handoff-notice'
 import { registerNotice } from './notice'
 import { registerPark, startPark } from './park'
@@ -9,12 +9,12 @@ import { registerPark, startPark } from './park'
 // 置けない。mod ごとの hook をここで束ね、session.start はここで持つ。
 export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
-    await startBoard($)
+    await startDeps($)
     await startPark($)
 
     return next(e)
   })
-  registerBoard(on, options)
+  registerDeps(on, options)
   registerPark(on, options)
   registerNotice(on, options)
   registerHandoffNotice(on, options)

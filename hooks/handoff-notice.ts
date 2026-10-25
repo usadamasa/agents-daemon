@@ -1,6 +1,6 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
 
-import { loadBoard } from './board-data'
+import { loadDeps } from './deps-data'
 import { daemonBin } from './daemon-bin'
 import { Graph, unlinked } from './graph'
 import { logChange, logEvent, reason, settle } from './log'
@@ -8,7 +8,7 @@ import { logChange, logEvent, reason, settle } from './log'
 // model が SendMessage で渡した宛先に依存の辺が無ければ、その tool の結果の context で辺の書き方を model に伝える (#172)。
 // 渡す側が辺を書くのは agents-daemon:peer-sessions skill の手順で、書き忘れに気付けるのは送った model だけなので、
 // 人ではなく model に伝える。
-// - 宛先はボードの生きている済んでいないセッションで、`edge add` の辺がどの端点にも無いもの (hooks/graph.ts の unlinked)
+// - 宛先は依存図の生きている済んでいないセッションで、`edge add` の辺がどの端点にも無いもの (hooks/graph.ts の unlinked)
 // - 送信がエラーになったもの、文面の無いもの (notify_when_idle だけ、shutdown などの要求)、subagent の送信は見ない
 // - mod 自身の送信 ($.session.send) は tool.call を通らないので、ここには来ない
 // cc-premise: 2.1.310 mods SendMessage の tool.call は e.to (ListAgents の名前、同名なら末尾に ` [ref]`) と e.message を持ち、結果の context は model だけが読む
@@ -29,11 +29,11 @@ function recipient(to: string): string {
   return to.replace(/\s+\[[^\]]*\]$/, '').trim()
 }
 
-// nudge は name に辺が無ければ、辺の書き方を sent の context に添える。伝えるのは補助なので、ボードを読めなくても
+// nudge は name に辺が無ければ、辺の書き方を sent の context に添える。伝えるのは補助なので、依存図を読めなくても
 // 送信の結果はそのまま返す。
 async function nudge<R extends ToolCallResult>($: EngineInterface, name: string, sent: R): Promise<R> {
   try {
-    const loaded = await loadBoard($)
+    const loaded = await loadDeps($)
     if ('failure' in loaded) {
       await logChange($, 'handoff', 'mod.handoff.failed', { reason: loaded.failure })
       return sent

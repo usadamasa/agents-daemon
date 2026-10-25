@@ -5,7 +5,7 @@ import { daemonBin } from './daemon-bin'
 import { logChange, logEvent, reason, settle } from './log'
 
 // model がファイルを読む・書いたら、そのファイルを files に持つパーキングのメモを tool の結果の context で model に
-// 伝える (#89)。人には出さない (メモの一覧は B の pane が持つ)。
+// 伝える (#89)。人には出さない (メモの一覧は依存図の pane が持つ)。
 // - メモは tool の結果のたびに `park list --status open --here` (この repo の open のメモ) を読んで選ぶ
 // - このセッションだけが置いたメモは model が自分で置いたものなので伝えない
 // - 伝えるのは 1 つの context の中で 1 回。選ぶのと told に足すのを 1 回の update で行い、並列の tool の hook が

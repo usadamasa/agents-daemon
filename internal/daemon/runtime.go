@@ -63,9 +63,9 @@ type daemonRuntime struct {
 	// parking は `park add` が書くパーキングのメモ (internal/parking)。daemon は housekeeping で消すだけ。
 	// ゼロ値は何も消さない。
 	parking parking.Store
-	// boardLog は CLI と mod が書くボードの経路のログ (internal/boardlog)。daemon は housekeeping で rotate 済みの
+	// eventLog は CLI と mod が書く出来事のログ (internal/eventlog)。daemon は housekeeping で rotate 済みの
 	// ものを消すだけ。ゼロ値は何も消さない。
-	boardLog string
+	eventLog string
 	// limits は上限の出来事の記録 (internal/daemon/limitlog)。daemon が書き、housekeeping で消す。ゼロ値は書かない。
 	limits              limitlog.Store
 	sleep               func(time.Duration)

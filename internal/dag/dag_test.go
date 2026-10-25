@@ -118,9 +118,9 @@ func TestRows(t *testing.T) {
 		},
 		{
 			name:  "合流で外れたレーンの右にレーンがあれば、ノードの行の前に詰める",
-			links: [][2]string{{"a", "d"}, {"b", "d"}, {"c", "e"}},
-			order: []string{"a", "b", "c", "d", "e"},
-			want:  "* a\n│ * b\n│ │ * c\n├─┘ │\n│ ┌─┘\n* │ d\n┌─┘\n* e",
+			links: [][2]string{{"a", "d"}, {"b", "d"}, {"b", "e"}},
+			order: []string{"a", "b", "d", "e"},
+			want:  "* a\n│ * b\n│ ├─┐\n├─┘ │\n│ ┌─┘\n* │ d\n┌─┘\n* e",
 		},
 		{
 			name:   "dashed の辺は縦を ┆、横を ┄ で描く。辺の無いノードは空きのレーンに出る",

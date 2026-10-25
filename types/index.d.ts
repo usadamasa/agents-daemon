@@ -91,10 +91,11 @@ export type GraphLink = {
 }
 
 // GraphRow はレーンの行 1 つ。lanes は行頭の罫線で、ノードの行は `*` がそのノードのレーンの位置。node が無ければ
-// 辺をつなぐだけの行。
+// 辺をつなぐだけの行。marks は longest chain の辺を描いた lanes の桁 (昇順)。
 export type GraphRow = {
   lanes: string
   node?: string
+  marks?: number[]
 }
 
 export type BoardGraph = {

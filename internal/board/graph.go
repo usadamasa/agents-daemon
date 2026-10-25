@@ -355,18 +355,23 @@ func (g *graphBuilder) finish() Graph {
 			break
 		}
 	}
-	out.Rows, out.RowsWithCompleted = g.rows(a, out.Nodes, pairs, open)
+	out.Rows, out.RowsWithCompleted = g.rows(a, out.Nodes, pairs, open, out.LongestChain)
 	return out
 }
 
 // rows はレーンの行を 2 組組む: 完了したノードとその辺を落としたものと、全部を含むもの。落とした方は辺を絞って
-// 組み直す (Depth で輪を切る位置が辺の集合で変わるので、全部の表を使い回さない)。
-func (g *graphBuilder) rows(all *dag.Graph, nodes []Node, pairs [][2]string, open func(string) bool) (opened, every []dag.Row) {
+// 組み直す (Depth で輪を切る位置が辺の集合で変わるので、全部の表を使い回さない)。longest chain の辺には印を付ける。
+func (g *graphBuilder) rows(all *dag.Graph, nodes []Node, pairs [][2]string, open func(string) bool, chain []string) (opened, every []dag.Row) {
 	kinds := map[[2]string]string{}
 	for _, l := range g.links {
 		kinds[[2]string{l.Before, l.After}] = l.Kind
 	}
 	dashed := func(before, after string) bool { return kinds[[2]string{before, after}] == LinkEdge }
+	onChain := map[[2]string]bool{}
+	for i := 1; i < len(chain); i++ {
+		onChain[[2]string{chain[i-1], chain[i]}] = true
+	}
+	highlight := func(before, after string) bool { return onChain[[2]string{before, after}] }
 	order := make([]string, 0, len(nodes))
 	openOrder := make([]string, 0, len(nodes))
 	for _, n := range nodes {
@@ -381,7 +386,7 @@ func (g *graphBuilder) rows(all *dag.Graph, nodes []Node, pairs [][2]string, ope
 			openPairs = append(openPairs, p)
 		}
 	}
-	return dag.New(openPairs, keyLess).Rows(openOrder, dashed), all.Rows(order, dashed)
+	return dag.New(openPairs, keyLess).Rows(openOrder, dashed, highlight), all.Rows(order, dashed, highlight)
 }
 
 // rank は原因の鎖で先に選ぶ上流の順。止まっているもの、進行中のもの、それ以外。

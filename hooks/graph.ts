@@ -179,6 +179,25 @@ export function summary(g: Graph, memos: number): string {
   ].join('  ')
 }
 
+// CHAIN_COLOR は longest chain の辺の罫線の色。鎖は止まっているノードから下るので、question と同じ注意の色にする。
+export const CHAIN_COLOR = 'warning'
+
+export type Piece = { text: string; marked: boolean }
+
+// pieces は lanes の [from, to) を印 (marks、internal/dag の Row.Marks) の有無で切った区間。罫線は 1 桁 1 文字
+// (BMP) なので、文字列の位置がそのまま桁になる。区間が無くても 1 つ返す (描く Text の数を行で揃える)。
+export function pieces(lanes: string, marks: readonly number[] | undefined, from: number, to: number): Piece[] {
+  const marked = new Set(marks ?? [])
+  const out: Piece[] = []
+  for (let i = from; i < to; i++) {
+    const m = marked.has(i)
+    const tail = out.at(-1)
+    if (tail !== undefined && tail.marked === m) tail.text += lanes[i]
+    else out.push({ text: lanes[i], marked: m })
+  }
+  return out.length === 0 ? [{ text: '', marked: false }] : out
+}
+
 // splitLanes はレーンの行の罫線を、ノードの記号の左右に分ける。`*` がノードの位置 (internal/dag の Rows)。
 // `*` が無い行 (辺をつなぐだけの行) は全部が left。
 export function splitLanes(lanes: string): { left: string; right: string } {

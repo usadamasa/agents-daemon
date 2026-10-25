@@ -358,7 +358,7 @@ rex の呼び出しには全部 `--autostart=false` を付け、子プロセス�
 rex の列挙は 1 tick に `ls` 1 回、session ごとに `block ls` 1 回、shell の block ごとに 2 回の fork になる。
 block が多い環境ほど tick あたりの時間が伸びる。
 
-<!-- rex-premise: preview.19 cli block の PATH は Versions/Current/… と Versions/<build>/… の順。Current は更新で中身が入れ替わり、前の build は次の更新で消える -->
+<!-- rex-premise: preview.20 cli block の PATH は Versions/Current/… と Versions/<build>/… の順。Current は更新で中身が入れ替わり、前の build は次の更新で消える -->
 
 rex のバイナリは最初の呼び出しで PATH から絶対パスに引いて覚える (`REX_BIN_PATH` があればそれで固定)。
 rex は block の PATH に `…/RexServer/Versions/Current/…` を先に、`…/RexServer/Versions/<build>/…` をその後ろに

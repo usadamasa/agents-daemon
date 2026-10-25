@@ -15,7 +15,7 @@ func TestRootCmd_registersAllCommands(t *testing.T) {
 	}
 	want := []string{
 		"board-log", "daemon", "doctor", "dream", "edge", "ingest-statusline", "ingest-task", "inspect",
-		"logs", "park", "prune-worktrees", "simulate", "spawn", "status", "statusline", "stop",
+		"logs", "park", "prune-worktrees", "simulate", "spawn", "status", "statusline", "stop", "version",
 	}
 	slices.Sort(names)
 	if !slices.Equal(names, want) {
@@ -23,6 +23,29 @@ func TestRootCmd_registersAllCommands(t *testing.T) {
 	}
 	if sub, _, err := newRootCmd().Find([]string{"dream", "harvest"}); err != nil || sub.Name() != "harvest" {
 		t.Errorf("Find(dream harvest) = %v, %v", sub, err)
+	}
+}
+
+// version と --version は build のときに埋め込んだ plugin の version だけを 1 行で出す (hooks/build-daemon.sh)。
+// 埋め込まずに建てたバイナリは dev を名乗る。
+func TestRootCmd_version(t *testing.T) {
+	saved := version
+	t.Cleanup(func() { version = saved })
+	for _, tt := range []struct{ embedded, want string }{{"2026.1025.0", "2026.1025.0\n"}, {"dev", "dev\n"}} {
+		version = tt.embedded
+		for _, args := range [][]string{{"version"}, {"--version"}} {
+			root := newRootCmd()
+			var stdout bytes.Buffer
+			root.SetOut(&stdout)
+			root.SetErr(&bytes.Buffer{})
+			root.SetArgs(args)
+			if err := root.Execute(); err != nil {
+				t.Fatalf("%v: %v", args, err)
+			}
+			if stdout.String() != tt.want {
+				t.Errorf("%v (version=%s) = %q, want %q", args, tt.embedded, stdout.String(), tt.want)
+			}
+		}
 	}
 }
 

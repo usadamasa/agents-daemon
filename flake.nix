@@ -47,6 +47,9 @@
             jq
             # models/ の TLA+ のモデル検査 (tlc)。CI では回さない
             tlaplus
+            # mod (hooks/*.ts、*.tsx) の型検査 (tsc)。nixpkgs の typescript は 7 系 (Go 実装、旧 typescript-go)。
+            # 型は Claude Code が .claude-plugin/types/ に置く
+            typescript
           ];
           env.GOTOOLCHAIN = "local";
         };

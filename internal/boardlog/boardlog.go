@@ -24,6 +24,8 @@
 //	mod.board.failed          status --board が失敗した (reason)
 //	mod.send                  ボードから指示やメモを送った (via、to、delivered、reason。新しいセッションを起こして渡したときは repo も)
 //	mod.band.failed           band のボードか、完了したタスクの途中のメモを読めなかった (reason)
+//	mod.notice                ファイルを触った tool の結果で model にメモを伝えた (tool、memos)
+//	mod.notice.failed         伝えるメモを選べなかった (reason)
 //
 // mod の出来事は同じ理由が続く間は書き直さない (hooks/log.ts)。
 package boardlog

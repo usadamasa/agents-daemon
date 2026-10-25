@@ -18,6 +18,7 @@ README の「役割」が持つ。機能を足す・外す判断はそこに照�
 | `hooks/band.tsx`, `hooks/band.test.tsx` | 入力欄の上の band に依存の DAG (A)、`SendMessage` で渡したのに辺の無いセッション、パーキングのメモの行を出す |
 | `hooks/board-data.ts` | `status --board` を読んで board に置く (B と A が使う) |
 | `hooks/parking.ts` | メモの見せ方 (時刻の JST 表示を含む) とボードからの操作 (捨てる、タスクにする、issue にするよう頼む、パーキングへ移す) |
+| `hooks/notice.ts`, `hooks/notice.test.tsx` | Read / Edit / Write の結果に、触ったファイルに関係するパーキングのメモを model 向けに添える |
 | `hooks/log.ts`, `hooks/log.test.tsx` | mod の出来事を `board-log` でボードの経路のログに残す |
 | `hooks/ensure-daemon.sh`, `hooks/build-daemon.sh` | バイナリの用意 (detach build) と `daemon --ensure` |
 | `hooks/dream-harvest.sh` | Stop で `dream harvest --detach` を exec する |
@@ -50,6 +51,7 @@ shellcheck hooks/*.sh hooks/lib/*.sh scripts/*.sh tests/lib/*.bash tests/fixture
 claude plugin validate --strict .           # plugin manifest と hooks.json
 claude plugin validate --strict skills      # skill の frontmatter
 claude plugin test .                        # mod (hooks/*.test.tsx) のテスト
+task typecheck                              # mod の型検査 (tsc)。型は Claude Code が .claude-plugin/types/ に置く
 ```
 
 `invariants_test.go` と `fuzz_test.go` は、1 場面を固定する例ではなく「どの入力でも破ってはいけないこと」を書いて乱択で

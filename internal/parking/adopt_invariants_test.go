@@ -286,8 +286,10 @@ func checkAdoptLeavesOne(w *adoptWorld, store parking.Store) string {
 		return "AdoptLeavesOne: タスクの記録もメモも無い"
 	case len(memos) > 1:
 		return fmt.Sprintf("同じタスクからメモが %d つできた", len(memos))
-	case len(memos) == 1 && (memos[0].Kind != parking.KindTask || memos[0].Title != "README を直す"):
+	case len(memos) == 1 && (memos[0].Kind != parking.KindScope || memos[0].Origin != parking.OriginAdopted || memos[0].Title != "README を直す"):
 		return fmt.Sprintf("メモの中身が違う: %+v", memos[0])
+	case len(memos) == 1 && (memos[0].Status != parking.StatusOpen || memos[0].HandedTo != ""):
+		return fmt.Sprintf("adopt したメモが open で宛先無しでない: %+v", memos[0])
 	}
 	return ""
 }

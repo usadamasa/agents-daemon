@@ -55,13 +55,13 @@ func TestParkEvents(t *testing.T) {
 	if _, err := parkAdd(dir, s, strings.NewReader(`{"kind": `), "/src/a", p, now); err == nil {
 		t.Fatal("壊れた JSON が通った")
 	}
-	if _, err := parkSet(dir, s, "viewer", added.Item.ID, parking.StatusDiscarded, "", now); err != nil {
+	if _, err := parkSet(dir, s, "viewer", added.Item.ID, parking.StatusDiscarded, "", "", now); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := parkSet(dir, s, "viewer", "missing", parking.StatusDiscarded, "", now); err == nil {
+	if _, err := parkSet(dir, s, "viewer", "missing", parking.StatusDiscarded, "", "", now); err == nil {
 		t.Fatal("無いメモを書き換えた")
 	}
-	if _, err := parkSet(dir, s, "viewer", added.Item.ID, parking.StatusHanded, parking.StatusOpen, now); err == nil {
+	if _, err := parkSet(dir, s, "viewer", added.Item.ID, parking.StatusHanded, parking.StatusOpen, parking.ToSession("S2"), now); err == nil {
 		t.Fatal("捨てたメモを --from open で取れた")
 	}
 	writeTestConfig(t, filepath.Join(dir, "tasks", "dead", "4.json"), `{"id": "4", "subject": "秘密のタスク", "status": "pending", "session_id": "dead", "cwd": "/src/a"}`)

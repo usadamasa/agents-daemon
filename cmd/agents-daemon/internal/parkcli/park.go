@@ -41,21 +41,33 @@ func newParkCmd() *cobra.Command {
 			})
 		},
 	}
-	var status, from, session string
+	var status, from, session, toSession, toRepo string
 	set := &cobra.Command{
 		Use:   "set <id>",
 		Short: "メモの status (open / handed / discarded) を書き換える",
 		Long: "--from を付けると、今の status がそれと違うときは書き換えずにエラーで返す。\n" +
-			"依存図の pane の mod はメモを渡す前に `--status handed --from open` で取り、届かなければ `--status open --from handed` で戻す。",
+			"handed にするときは宛先を --to-session (渡すセッションの ID) か --to-repo (新しく起こすセッションの repo の絶対パス) で渡し、\n" +
+			"メモの handed_to に sid:<session_id> / repo:<path> で書く。handed 以外にすると handed_to を空にする。\n" +
+			"依存図の pane の mod はメモを渡す前に `--status handed --from open --to-session <id>` で取り、届かなければ `--status open --from handed` で戻す。",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			dest := ""
+			switch {
+			case toSession != "":
+				dest = parking.ToSession(toSession)
+			case toRepo != "":
+				dest = parking.ToRepo(toRepo)
+			}
 			return statecmd.Run(cmd, cwd, func(paths apppath.Paths, _ string) (any, error) {
-				return parkSet(paths.StateDir(), parking.New(paths.StateDir()), session, args[0], status, from, time.Now())
+				return parkSet(paths.StateDir(), parking.New(paths.StateDir()), session, args[0], status, from, dest, time.Now())
 			})
 		},
 	}
 	set.Flags().StringVar(&status, "status", "", "open / handed / discarded")
 	set.Flags().StringVar(&from, "from", "", "今の status がこれのときだけ書き換える (open / handed / discarded)")
+	set.Flags().StringVar(&toSession, "to-session", "", "handed にするときの宛先のセッションの ID")
+	set.Flags().StringVar(&toRepo, "to-repo", "", "handed にするときの宛先 (新しく起こすセッションの repo の絶対パス)")
+	set.MarkFlagsMutuallyExclusive("to-session", "to-repo")
 	_ = set.MarkFlagRequired("status")
 	var repo, listStatus, task string
 	var here bool
@@ -99,7 +111,7 @@ func newParkCmd() *cobra.Command {
 	_ = discard.MarkFlagRequired("days")
 	adopt := &cobra.Command{
 		Use:   "adopt task:<session_id>/<task_id>",
-		Short: "終了したセッションの未完了のタスクを kind task のメモにし、タスクの記録を消して {created, item} を出す",
+		Short: "終了したセッションの未完了のタスクを出自 adopted (種類 scope) のメモにし、タスクの記録を消して {created, item} を出す",
 		Long: "引数は依存図のタスクのノードの key (internal/ref の Ref)。\n" +
 			"セッションが終了したことは、動いている daemon がタスクの記録より後に書いた status.json に pane が無いことで確かめる。\n" +
 			"daemon が動いていない、status.json が古い、pane がある、のどれかなら移さない。",

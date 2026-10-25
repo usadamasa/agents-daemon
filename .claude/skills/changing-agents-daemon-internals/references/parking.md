@@ -11,6 +11,16 @@
 `agents-daemon deps` の JSON は repo ごとに open のメモ (`$STATE/parking/`) を `memos` に持ち、メモだけの repo も
 repo にする。`here` は開いたセッションの repo の鍵で、pane はこの repo を自セッションの repo として扱う。
 
+メモは種類 (`kind`: aside / scope / preference) と出自 (`origin`) を別に持つ。`placed` は model が park tool で
+置いたメモ、`adopted` は終了したセッションの未完了のタスクを `park adopt` で移したメモ。adopted のメモの種類は
+`scope` にする (残ったタスクを拾うかは範囲の相談で、既定 (`default_taken`) は「未完了のまま」)。同じメモか
+(repo と正規化した title) は出自を見ずに決め、まとめたメモの出自は最初のメモのまま。mod は adopted のメモの種類に
+`・adopted` を添えて出す (`hooks/parking.ts` の `kindLabel`、メモの行、タスクにする文面、ファイルのメモの通知)。
+
+handed のメモは宛先を `handed_to` に持つ。peer と自セッションは `sid:<session_id>`、新しく起こすセッションは
+起こす先の `repo:<path>`。起こしたセッションの ID は渡した後に分かるが、宛先は repo のまま書き直さない (取ってから
+書き直すまでの間に宛先の違うメモが見え、書き直しが失敗したときの扱いも増えるため)。
+
 ### メモとタスクの照合
 
 メモの側にはタスクを書き戻さない (#213)。依存図を組むたびに、タスクの記録の description から
@@ -47,15 +57,17 @@ handed / discarded のメモが保持期間 (7 日) で消えた後は、descrip
   handed のまま残して pane を知らせる (起きたか分からないメモを戻すと、押し直しで 2 つ目が起きる)。本文は最初の
   ターンとして入るので、peer メッセージの inbox を待たない。文面は起こした経緯の 1 行に続けて peer へ送るものと同じで、
   issue はメモの repo ではなく起こした repo を起票先にする。モデルを subagent 用に揃えるのは peer-sessions skill と同じ
-- タスクにする・issue にするよう頼むは、送る前に `park set <id> --status handed --from open` でメモを取る (今の status が
-  open でなければ失敗し、送らない。2 つのセッションが同じメモを渡そうとしても取れるのは 1 つ)。`$.session.send` が
-  届かなかった、`$.prompt.submit` が drop された、`spawn` が window を作れなかったときは `--status open --from handed` で
-  戻す。Discard も `--from open` で、取られたメモは捨てない。手順の交錯で破れない性質は `models/handoff` が持ち、
+- タスクにする・issue にするよう頼むは、送る前に `park set <id> --status handed --from open` と宛先
+  (`--to-session <id>` か `--to-repo <path>`) でメモを取る (今の status が open でなければ失敗し、送らない。2 つの
+  セッションが同じメモを渡そうとしても取れるのは 1 つ)。宛先は status と同じ書き込みで書く (別の `park set` にすると
+  宛先の無い handed が見える)。`$.session.send` が届かなかった、`$.prompt.submit` が drop された、`spawn` が window を
+  作れなかったときは `--status open --from handed` で戻し、宛先も空になる。Discard も `--from open` で、取られたメモは
+  捨てない。手順の交錯で破れない性質は `models/handoff` が持ち、
   実装に対しては `internal/parking` と `internal/tasklog` の `invariants_test.go` が実物の Store の交錯で確かめる
 <!-- cc-premise: 2.1.306 mods $.prompt.submit は idle になってから自分のターンとして入り、drop で入らなかったことが分かる -->
 <!-- cc-premise: 2.1.306 cli claude [prompt] は最初のターンの本文、--session-id <uuid> でセッション ID を固定できる -->
 - パーキングへ移す (`To parking`): 終了したセッションの未完了のタスクのノードを `park adopt <ノードの key>` (`task:<sid>/<tid>`) で
-  `kind: task` のメモにし、タスクの記録を消す。`kind: task` は model の tool からは置けない。pane は daemon が
+  出自 `adopted` (種類 `scope`) のメモにし、タスクの記録を消す。model の tool は出自を書けない。pane は daemon が
   status.json を書いているとき (`updated_at` があるとき) だけこの操作を出し、バイナリは動いている daemon がタスクの
   記録より後に書いた status.json に pane が無いことを確かめてから移す (`internal/verify` の `SessionExited`)。
   daemon が止まっていると生きているセッションも exited と描かれるため

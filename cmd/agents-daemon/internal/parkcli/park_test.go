@@ -243,6 +243,42 @@ func TestParkListAndSet(t *testing.T) {
 	}
 }
 
+// handed にするときは宛先 (--to-session か --to-repo) を同じ park set で書き、open に戻すと空にする。
+func TestParkSet_destination(t *testing.T) {
+	root := parkTestEnv(t)
+	home := filepath.Join(root, "src", "home", "a")
+	if err := os.MkdirAll(home, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	out, _, err := runPark(t, parkInput, "add", "--cwd", home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := decodeAdded(t, out).Item.ID
+	for _, args := range [][]string{
+		{"--status", "handed", "--from", "open"},
+		{"--status", "handed", "--to-session", "S2", "--to-repo", "/w/r"},
+		{"--status", "handed", "--to-repo", "w/r"},
+		{"--status", "open", "--to-session", "S2"},
+	} {
+		if _, _, err := runPark(t, "", append(append([]string{"set", id}, args...), "--cwd", home)...); err == nil {
+			t.Errorf("park set %v が通った", args)
+		}
+	}
+	out, _, err = runPark(t, "", "set", id, "--status", "handed", "--from", "open", "--to-session", "S2", "--cwd", home)
+	if err != nil || decodeItem(t, out).HandedTo != "sid:S2" {
+		t.Fatalf("park set --to-session: %v\n%s", err, out)
+	}
+	out, _, err = runPark(t, "", "set", id, "--status", "open", "--from", "handed", "--cwd", home)
+	if err != nil || decodeItem(t, out).HandedTo != "" {
+		t.Fatalf("戻した park set: %v\n%s", err, out)
+	}
+	out, _, err = runPark(t, "", "set", id, "--status", "handed", "--from", "open", "--to-repo", "/w/dotfile", "--cwd", home)
+	if err != nil || decodeItem(t, out).HandedTo != "repo:/w/dotfile" {
+		t.Fatalf("park set --to-repo: %v\n%s", err, out)
+	}
+}
+
 // writeDaemonStatus は動いている daemon (このテストプロセス) の pid と、たった今書いた status.json (pane は panes) を置く。
 func writeDaemonStatus(t *testing.T, root string, panes string) {
 	t.Helper()
@@ -251,7 +287,7 @@ func writeDaemonStatus(t *testing.T, root string, panes string) {
 	writeTestConfig(t, filepath.Join(state, "status.json"), `{"pid": `+strconv.Itoa(os.Getpid())+`, "updated_at": "`+time.Now().Add(time.Minute).Format(time.RFC3339)+`", "panes": [`+panes+`]}`)
 }
 
-// adopt はタスクを kind task のメモにし、タスクの記録を消す。
+// adopt はタスクを出自 adopted のメモにし、タスクの記録を消す。
 // セッションが終了したことは daemon の status.json で確かめ、daemon が動いていなければ移さない。
 func TestParkAdopt(t *testing.T) {
 	root := parkTestEnv(t)
@@ -279,7 +315,7 @@ func TestParkAdopt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("park adopt: %v", err)
 	}
-	if item := decodeAdded(t, out).Item; item.Kind != parking.KindTask || item.Title != "README を直す" {
+	if item := decodeAdded(t, out).Item; item.Kind != parking.KindScope || item.Origin != parking.OriginAdopted || item.Title != "README を直す" {
 		t.Errorf("item = %+v", item)
 	}
 	if _, err := os.Stat(filepath.Join(root, "state", "agents-daemon", "tasks", "dead", "4.json")); !os.IsNotExist(err) {

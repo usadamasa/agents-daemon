@@ -30,6 +30,10 @@ TLC は devShell の `tlaplus` (`tlc`)。CI では回さない。`scripts/model-
 | | `LiveTaskKept`: 生きているセッションのタスクの記録は adopt で消えない | Adopt は、今の daemon がタスクの記録より後に書いた status.json に pane が無いときだけ通す |
 | | `AdoptLeavesOne`: adopt でメモかタスクの一方は残る | メモを書いてから記録を消す |
 | | `HandedWhenDelivered`: 届いたメモは handed のまま | Discard も `--from open` で、取られたメモを上書きしない |
+| | `HandedHasDestination`: handed のメモは宛先 (`handed_to`) を持つ | 取るときに宛先を同じ `park set` (`--to-session` / `--to-repo`) で書く |
+| | `OnlyHandedHasDestination`: handed でないメモは宛先を持たない | 戻す・捨てる `park set` は宛先を空にする |
+| | `DeliveredWhereRecorded`: 届いたメモの宛先は届いた先と同じ | mod は取ったときの宛先へ送り、spawn は起こす先の repo のまま書き直さない |
+| `HandoffSplit.cfg` | `HandedHasDestination` が破れる (`violated` を期待) | 取るのと宛先を書くのを別の `park set` にすると、宛先の無い handed が見える。1 回の `park set` にした根拠 |
 | `TaskLog.cfg` | `RecordsComplete`: TaskCreate の記録は失われない | TaskList の sync は、一覧の最大の id より大きい id の記録 (一覧の後に作られた) を消さない |
 | `FileNotice.cfg` | `AtMostOnce`: 1 つのメモを添えるのは 1 つの context の中で高々 1 回 | 添えるメモを選ぶのと told に足すのを 1 回の `update` の中で行う。読んだ一覧が古くても、選ぶときに told を見る |
 | | `NoneMissed`: 触ったファイルに関係するメモは、hook が済んだ時点で伝わっている | 読んだ一覧にあって told に無いものは全部添える。読んだ後に置かれたメモは次に触ったときに伝える |
@@ -41,14 +45,15 @@ TLC は devShell の `tlaplus` (`tlc`)。CI では回さない。`scripts/model-
 | `EdgeBindRaceAdd.cfg` | `BindOnce` が破れる (`violated` を期待) | ロック無しで `edge add` が読んでから書くと、間に結びついた端点を読んだ値 (名前) に戻す |
 | `EdgeBindRaceRemove.cfg` | `NoResurrect` が破れる (`violated` を期待) | ロック無しで結びつけが読んでから書くと、間に `edge rm` で消した辺を作り直す。ロックを取った根拠 |
 
-`FileNoticeRace.cfg`、`FileNoticeCompact.cfg`、`EdgeBindRaceAdd.cfg`、`EdgeBindRaceRemove.cfg` 以外の cfg は `holds` を期待する。期待と違えば `model-check.sh` は exit 1 にする。
+`HandoffSplit.cfg`、`FileNoticeRace.cfg`、`FileNoticeCompact.cfg`、`EdgeBindRaceAdd.cfg`、`EdgeBindRaceRemove.cfg` 以外の cfg は
+`holds` を期待する。期待と違えば `model-check.sh` は exit 1 にする。
 
 同じ不変条件を、実物の Store を goroutine で交錯させる乱択テストが実装に対して持つ (`task test` で回る)。
 モデルは設計を変えるときに先に反例を探す場所で、実装の正しさはテストが持つ。
 
 | 不変条件 | テスト |
 | ---- | ---- |
-| `AtMostOneDelivery` / `AtMostOneSession` / `HandedWhenDelivered` と Claim の排他 | `internal/parking/invariants_test.go` |
+| `AtMostOneDelivery` / `AtMostOneSession` / `HandedWhenDelivered` / `HandedHasDestination` / `OnlyHandedHasDestination` / `DeliveredWhereRecorded` と Claim の排他 | `internal/parking/invariants_test.go` |
 | `LiveTaskKept` / `AdoptLeavesOne` (実物の `verify.SessionExited` で daemon の pid と status.json を読む) | `internal/parking/adopt_invariants_test.go` |
 | `RecordsComplete` | `internal/tasklog/invariants_test.go` |
 | `BindOnce` / `NoResurrect` と、書いたときの参照の組・今の参照の組ごとに辺が 1 本 | `internal/edge/bind_invariants_test.go` |

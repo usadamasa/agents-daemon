@@ -30,10 +30,28 @@ const (
 	KindAside      = "aside"
 	KindScope      = "scope"
 	KindPreference = "preference"
-	// KindTask は終了したセッションに残った未完了のタスク。pane の操作 (park adopt) だけが置き、
-	// model の tool には出さない。
-	KindTask = "task"
 )
+
+// メモの出自。種類 (kind) とは別の軸。
+const (
+	// OriginPlaced は model が park tool (park add) で置いたメモ。
+	OriginPlaced = "placed"
+	// OriginAdopted は終了したセッションに残った未完了のタスクを pane の操作 (park adopt) で移したメモ。
+	OriginAdopted = "adopted"
+)
+
+// 宛先 (Item.HandedTo) の形。peer と self は sid:<session_id>、新しく起こすセッションは起こす先の repo:<絶対パス>。
+const (
+	destinationSession = "sid:"
+	destinationRepo    = "repo:"
+)
+
+// ToSession は session ID のセッションへ渡すときの宛先。
+func ToSession(sessionID string) string { return destinationSession + sessionID }
+
+// ToRepo は repo で新しく起こすセッションへ渡すときの宛先。起こしたセッションの ID は渡した後に分かるので、
+// 宛先は起こす先の repo のまま書き直さない (取ってから書き直すまでの間に宛先の違うメモが見えるのを避ける)。
+func ToRepo(path string) string { return destinationRepo + path }
 
 const (
 	StatusOpen      = "open"
@@ -81,8 +99,12 @@ type Item struct {
 	// Repo は置いたときの cwd の main worktree のパス (git の外なら cwd)。依存図の repo の鍵と同じ。
 	Repo string `json:"repo"`
 	Entry
+	// Origin は出自 (OriginPlaced / OriginAdopted)。同じメモにまとめても最初のメモのまま。
+	Origin  string   `json:"origin"`
 	Sources []Source `json:"sources"`
 	Status  string   `json:"status"`
+	// HandedTo は handed にしたときの宛先 (ToSession / ToRepo の形)。handed でなければ空。
+	HandedTo string `json:"handed_to,omitempty"`
 }
 
 // Store は parking/ の置き場所を持つ。ゼロ値は Dir が空で、書き込みはエラー、読み込みは空になる。
@@ -102,8 +124,9 @@ type Added struct {
 }
 
 // add はメモを置く。同じメモが open であれば src を sources に足し (同じ session、task、detail の組は足さない)、
-// 無ければ新しいメモを作る。書いた後のメモを返す。
-func (s Store) add(repo string, e Entry, src Source) (Added, error) {
+// 無ければ origin の出自で新しいメモを作る。同じメモかは repo と title で見て、出自は見ない (同じ脇の話題を
+// 2 つに分けない)。書いた後のメモを返す。
+func (s Store) add(repo string, e Entry, origin string, src Source) (Added, error) {
 	if s.Dir == "" {
 		return Added{}, errors.New("parking の置き場所が無い")
 	}
@@ -136,7 +159,7 @@ func (s Store) add(repo string, e Entry, src Source) (Added, error) {
 		if err != nil {
 			return err
 		}
-		added = Added{Created: true, Item: Item{ID: id, Repo: repo, Entry: e, Sources: []Source{src}, Status: StatusOpen}}
+		added = Added{Created: true, Item: Item{ID: id, Repo: repo, Entry: e, Origin: origin, Sources: []Source{src}, Status: StatusOpen}}
 		return write(dir, added.Item)
 	})
 	return added, err
@@ -145,7 +168,9 @@ func (s Store) add(repo string, e Entry, src Source) (Added, error) {
 // Set はメモ id の status を書き換え、書いた後のメモと書き換える前の status を返す。
 // from が空でなければ、ファイルの status が from のときだけ書き換える (違えばエラー)。読んでから書くまでロックの中なので、
 // 同じメモを 2 つのセッションが同時に取ろうとしても通るのは 1 つだけ (models/handoff の Claim)。
-func (s Store) Set(id, status, from string) (Item, string, error) {
+// to は宛先で、handed にするときは要り、それ以外では渡さない。宛先は status と同じ書き込みで書き、handed でなくなれば
+// 空にする (別の書き込みにすると宛先の無い handed が見える。models/handoff の HandedHasDestination)。
+func (s Store) Set(id, status, from, to string) (Item, string, error) {
 	if s.Dir == "" {
 		return Item{}, "", errors.New("parking の置き場所が無い")
 	}
@@ -156,6 +181,9 @@ func (s Store) Set(id, status, from string) (Item, string, error) {
 		if err := validStatus(from); err != nil {
 			return Item{}, "", err
 		}
+	}
+	if err := validDestination(status, to); err != nil {
+		return Item{}, "", err
 	}
 	if !statefile.ValidSessionID(id) {
 		return Item{}, "", fmt.Errorf("id %q はファイル名に使えない", id)
@@ -171,7 +199,7 @@ func (s Store) Set(id, status, from string) (Item, string, error) {
 		if from != "" && item.Status != from {
 			return fmt.Errorf("メモ %s の status は %s (期待 %s) なので書き換えない", id, item.Status, from)
 		}
-		before, item.Status = item.Status, status
+		before, item.Status, item.HandedTo = item.Status, status, to
 		return write(dir, item)
 	})
 	return item, before, err
@@ -302,10 +330,28 @@ func validStatus(status string) error {
 
 func validKind(kind string) error {
 	switch kind {
-	case KindAside, KindScope, KindPreference, KindTask:
+	case KindAside, KindScope, KindPreference:
 		return nil
 	}
-	return fmt.Errorf("kind %q は aside / scope / preference / task のどれでもない", kind)
+	return fmt.Errorf("kind %q は aside / scope / preference のどれでもない", kind)
+}
+
+// validDestination は status に合う宛先かを確かめる。handed には sid:<session_id> か repo:<絶対パス> が要り、
+// それ以外の status には宛先を渡さない。
+func validDestination(status, to string) error {
+	if status != StatusHanded {
+		if to != "" {
+			return fmt.Errorf("宛先 %q は handed にするときだけ渡す", to)
+		}
+		return nil
+	}
+	if id, ok := strings.CutPrefix(to, destinationSession); ok && statefile.ValidSessionID(id) {
+		return nil
+	}
+	if path, ok := strings.CutPrefix(to, destinationRepo); ok && filepath.IsAbs(path) {
+		return nil
+	}
+	return fmt.Errorf("handed の宛先 %q は sid:<session_id> / repo:<絶対パス> のどれでもない", to)
 }
 
 // locked は parking/ を作り、ロックを取って fn を呼ぶ。

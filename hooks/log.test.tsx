@@ -1,5 +1,6 @@
 import type { On, ProcessRunResult } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
+import type { Engine } from 'claude-code/testing'
 
 // mod の出来事を `agents-daemon board-log` でボードの経路のログに書く (hooks/log.ts、internal/boardlog)。
 
@@ -42,7 +43,7 @@ const START = { cwd: CWD, surface: 'terminal', isInteractive: true } as const
 const OPEN_BOARD = { command: 'board', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 160 } } as const
 const PANE_PROPS = { title: 'Tasks', isFocused: true, bodyColumns: 80, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} } as const
 
-const mount = ($: Parameters<Parameters<typeof test>[1]>[0]) =>
+const mount = ($: Engine) =>
   $.ui.mount({ plugin: 'agents-daemon', surface: 'terminal', component: 'Pane', props: PANE_PROPS, requestId: 'agents-daemon-board' })
 
 // engine は tool.register の失敗を session.start の呼び出し元へ返さず、plugin の session.start の hook を飛ばして
@@ -59,8 +60,8 @@ test('session.start で park の tool を登録できなかったら、理由を
 
   await $.session.start(START)
   expect(logged).toHaveLength(1)
-  expect(logged[0][0]).toBe('mod.tool-register.failed')
-  expect(logged[0][1]).toMatch(/^reason=.*tool\.register/)
+  expect(logged[0]?.[0]).toBe('mod.tool-register.failed')
+  expect(logged[0]?.[1]).toMatch(/^reason=.*tool\.register/)
 })
 
 const COLUMNS = [{ id: 'pending', title: '未着手' }]

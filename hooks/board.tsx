@@ -159,11 +159,11 @@ export const registerBoard: Register = on => {
     const lanes = (r: GraphRow, from: number, to: number) =>
       pieces(r.lanes, r.marks, from, to).map((p, k) =>
         p.marked ? (
-          <Text key={k} color={CHAIN_COLOR}>
+          <Text key={String(k)} color={CHAIN_COLOR}>
             {p.text}
           </Text>
         ) : (
-          <Text key={k} dimColor>
+          <Text key={String(k)} dimColor>
             {p.text}
           </Text>
         ),

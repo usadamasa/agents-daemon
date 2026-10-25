@@ -95,8 +95,8 @@ test('tool の呼び出しは park add に JSON を stdin で渡し、新しく�
     default_taken: 'やらない',
   } as never)
 
-  expect(w.ran[0].argv).toEqual([BIN, 'park', 'add', '--cwd', CWD])
-  expect(JSON.parse(w.ran[0].stdin ?? '')).toEqual({
+  expect(w.ran[0]?.argv).toEqual([BIN, 'park', 'add', '--cwd', CWD])
+  expect(JSON.parse(w.ran[0]?.stdin ?? '')).toEqual({
     kind: 'aside',
     title: '保持期間の根拠が無い',
     detail: 'housekeeping.go の定数',
@@ -105,7 +105,7 @@ test('tool の呼び出しは park add に JSON を stdin で渡し、新しく�
   })
   expect(String(res.result)).toMatch(/^メモを置きました \(20261019T010000-abcd1234\)。既定 \(やらない\) で進めてください/)
   // 置いた後にボードを読み直し、band のメモを更新する。
-  expect(w.ran[1].argv).toEqual(STATUS)
+  expect(w.ran[1]?.argv).toEqual(STATUS)
 })
 
 test('既に置かれていたメモにまとまったら、そう伝える', async ($, on) => {
@@ -123,7 +123,7 @@ test('model が session_id を入れてきても、このセッションの ID �
   w.ran.length = 0
 
   await $.tool.call({ tool: TOOL, kind: 'aside', title: 't', session_id: 'OTHER' } as never)
-  expect(JSON.parse(w.ran[0].stdin ?? '').session_id).toBe('SELF')
+  expect(JSON.parse(w.ran[0]?.stdin ?? '').session_id).toBe('SELF')
 })
 
 test('park add が失敗したら、置けなかった理由を model へ返す', async ($, on) => {

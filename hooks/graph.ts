@@ -198,8 +198,9 @@ export function pieces(lanes: string, marks: readonly number[] | undefined, from
   for (let i = from; i < to; i++) {
     const m = marked.has(i)
     const tail = out.at(-1)
-    if (tail !== undefined && tail.marked === m) tail.text += lanes[i]
-    else out.push({ text: lanes[i], marked: m })
+    const c = lanes.charAt(i)
+    if (tail !== undefined && tail.marked === m) tail.text += c
+    else out.push({ text: c, marked: m })
   }
   return out.length === 0 ? [{ text: '', marked: false }] : out
 }

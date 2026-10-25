@@ -1,5 +1,6 @@
 import type { On, ProcessRunResult } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
+import type { Engine } from 'claude-code/testing'
 
 import { CHAIN_COLOR, COLOR } from './graph'
 
@@ -67,7 +68,7 @@ function boardWorld(on: On, data: unknown = BOARD, now?: number, drop?: string) 
 }
 
 function node(key: string, state: string, title: string, extra: Record<string, unknown> = {}) {
-  const [sid, tid] = key.split('/')
+  const [sid = '', tid] = key.split('/')
   return {
     key,
     kind: 'task',
@@ -198,7 +199,7 @@ const PANE_PROPS = {
   view: {},
 } as const
 
-type T = Parameters<Parameters<typeof test>[1]>[0]
+type T = Engine
 
 const mount = ($: T, surface: 'terminal' | 'desktop' = 'terminal', props: object = PANE_PROPS) =>
   $.ui.mount({ plugin: 'agents-daemon', surface, component: 'Pane', props: props as typeof PANE_PROPS, requestId: 'agents-daemon-board' })
@@ -389,9 +390,11 @@ test('数の行の下にレーンの行を全部描き、完了は Show complete
   }
 
   const ui = await mount($)
-  await ui.press({ key: 'fold', text: /Show completed/ })
+  expect(await ui.find({ key: 'fold', text: /Show completed/ })).toBeDefined()
+  await ui.press({ key: 'fold' })
   expect(await ui.find({ key: 'row:C/1', text: /✓ 済んだ/ })).toBeDefined()
-  await ui.press({ key: 'fold', text: /Hide completed/ })
+  expect(await ui.find({ key: 'fold', text: /Hide completed/ })).toBeDefined()
+  await ui.press({ key: 'fold' })
   expect(await ui.find({ key: 'row:C/1' })).toBeUndefined()
 })
 
@@ -523,9 +526,9 @@ test('同じセッションの blockedBy は外せないので、そのセッシ
   expect(await ui.find({ key: 'unlink:Q/1' })).toBeUndefined()
   await ui.press({ key: 'ask:Q/1' })
   expect(w.sent).toHaveLength(1)
-  expect(w.sent[0].to).toBe('Q')
-  expect(w.sent[0].text).toMatch(/タスク #2「段5」が #1「論点を決める」の完了待ち \(blockedBy\)/)
-  expect(w.sent[0].text).toMatch(/#1 を completed か deleted にするか、#2 を blockedBy なしで作り直して/)
+  expect(w.sent[0]?.to).toBe('Q')
+  expect(w.sent[0]?.text).toMatch(/タスク #2「段5」が #1「論点を決める」の完了待ち \(blockedBy\)/)
+  expect(w.sent[0]?.text).toMatch(/#1 を completed か deleted にするか、#2 を blockedBy なしで作り直して/)
 })
 
 test('Add blocker は循環にならない候補だけを出し、edge add に参照を渡す', async ($, on) => {
@@ -609,14 +612,14 @@ test('メモを選ぶと詳細を出し、Discard / To task / Ask for issue で�
 
   w.ran.length = 0
   await ui.press({ key: 'task:W' })
-  expect(w.sent[0].to).toBe('W')
-  expect(w.sent[0].text).toMatch(/^パーキングロットのメモ「保持期間の根拠が無い」\(種類: aside\) をタスクにしてください。/)
+  expect(w.sent[0]?.to).toBe('W')
+  expect(w.sent[0]?.text).toMatch(/^パーキングロットのメモ「保持期間の根拠が無い」\(種類: aside\) をタスクにしてください。/)
   // 着手の時期は指示せず、受け手の計画に任せる。ボードはタスクの description に書かれた id でメモと照合する (#213)。
-  expect(w.sent[0].text).not.toMatch(/今の作業の区切り/)
-  expect(w.sent[0].text).toMatch(/着手の時期は今の計画 \(タスクの依存\) に従ってください。/)
-  expect(w.sent[0].text).toMatch(/タスクの description にメモの id \(20261018T090000-aaaa\) を入れてください。/)
-  expect(w.sent[0].text).toMatch(/既にこのメモを扱うタスクがあれば、新しく作らずにその description に id を書き足すだけで構いません。/)
-  expect(w.sent[0].text).toMatch(/\(メモ 20261018T090000-aaaa\)$/)
+  expect(w.sent[0]?.text).not.toMatch(/今の作業の区切り/)
+  expect(w.sent[0]?.text).toMatch(/着手の時期は今の計画 \(タスクの依存\) に従ってください。/)
+  expect(w.sent[0]?.text).toMatch(/タスクの description にメモの id \(20261018T090000-aaaa\) を入れてください。/)
+  expect(w.sent[0]?.text).toMatch(/既にこのメモを扱うタスクがあれば、新しく作らずにその description に id を書き足すだけで構いません。/)
+  expect(w.sent[0]?.text).toMatch(/\(メモ 20261018T090000-aaaa\)$/)
   // 送る前に取る (open のときだけ handed にする)。届いたら handed のまま。
   expect(operations(w.ran)).toEqual([CLAIM])
 
@@ -723,7 +726,8 @@ test('メモを別の repo の新しいセッションへ渡す: 候補はメモ
   await ui.press({ key: `park:${MEMO.id}` })
   expect(await ui.find({ key: 'spawn:/src/home/dotfile' })).toBeUndefined()
 
-  await ui.press({ key: 'spawn-task', text: /To task → new session…/ })
+  expect(await ui.find({ key: 'spawn-task', text: /To task → new session…/ })).toBeDefined()
+  await ui.press({ key: 'spawn-task' })
   expect(await ui.find({ key: 'spawn:/src/home/agents-daemon', text: /agents-daemon/ })).toBeDefined()
   expect(await ui.find({ key: 'spawn:/src/home/dotfile', text: /dotfile/ })).toBeDefined()
 
@@ -747,7 +751,8 @@ test('issue を頼む新しいセッションには、起こした repo を起�
   await $.command.run(OPEN_BOARD)
   const ui = await mount($)
   await ui.press({ key: `park:${MEMO.id}` })
-  await ui.press({ key: 'spawn-issue', text: /Ask for issue → new session…/ })
+  expect(await ui.find({ key: 'spawn-issue', text: /Ask for issue → new session…/ })).toBeDefined()
+  await ui.press({ key: 'spawn-issue' })
   await ui.press({ key: 'spawn:/src/home/dotfile' })
   expect(w.fed[0]).toMatch(/パーキングロットのメモ「保持期間の根拠が無い」を GitHub の issue にしてください。repo: dotfile。/)
 })

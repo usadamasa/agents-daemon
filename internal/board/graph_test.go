@@ -455,3 +455,53 @@ func TestGraph_parked(t *testing.T) {
 		t.Errorf("source の task_id = %+v", b.Rows[0].Parking[0].Sources)
 	}
 }
+
+// タスクの description に書かれたメモの id をメモと照合し、ノードの memos に書かれた順で付ける。open 以外のメモも
+// 照合するが、パーキングの列と parked には open のメモだけを出す。記録に無い id (消えたメモ) は付けない。
+func TestGraph_memos(t *testing.T) {
+	const cwd = "/w/a"
+	const handed, open, discarded, gone = "20261025T010000-0000000a", "20261025T020000-0000000b", "20261025T030000-0000000c", "20261025T040000-0000000d"
+	memo := func(id, title, status string) parking.Item {
+		return parking.Item{ID: id, Domain: domain.Work, Repo: cwd, Status: status, Entry: parking.Entry{Kind: parking.KindAside, Title: title},
+			Sources: []parking.Source{{SessionID: "A", TaskID: "1", CWD: cwd, At: t0}}}
+	}
+	withDescription := func(t tasklog.Task, description string) tasklog.Task {
+		t.Description = description
+		return t
+	}
+	b := build(input{
+		Domain:   domain.Work,
+		PID:      42,
+		Snapshot: snapshot(daemon.PaneStatus{PaneID: "p1", SessionID: "A", CWD: cwd, AgentStatus: "working"}),
+		Tasks: []tasklog.Task{
+			withDescription(task("A", "1", "x", "in_progress", cwd), "メモ "+open+" と "+handed+" と "+gone+" を扱う。(メモ "+handed+")"),
+			withDescription(task("A", "2", "y", "pending", cwd), "メモ "+discarded),
+			task("A", "3", "z", "pending", cwd),
+		},
+		Parking: []parking.Item{
+			memo(handed, "渡したメモ", parking.StatusHanded),
+			memo(open, "まだ置いてあるメモ", parking.StatusOpen),
+			memo(discarded, "捨てたメモ", parking.StatusDiscarded),
+		},
+	})
+	got := nodes(b.Graph)
+	want := []MemoRef{
+		{ID: open, Title: "まだ置いてあるメモ", Status: parking.StatusOpen},
+		{ID: handed, Title: "渡したメモ", Status: parking.StatusHanded},
+	}
+	if !reflect.DeepEqual(got["A/1"].Memos, want) {
+		t.Errorf("A/1 memos = %+v, want %+v", got["A/1"].Memos, want)
+	}
+	if want := []MemoRef{{ID: discarded, Title: "捨てたメモ", Status: parking.StatusDiscarded}}; !reflect.DeepEqual(got["A/2"].Memos, want) {
+		t.Errorf("A/2 memos = %+v, want %+v", got["A/2"].Memos, want)
+	}
+	if got["A/3"].Memos == nil || len(got["A/3"].Memos) != 0 {
+		t.Errorf("description の無いタスクの memos は空の配列: %#v", got["A/3"].Memos)
+	}
+	if got["A/1"].Parked != 1 {
+		t.Errorf("parked = %d, want 1 (open のメモだけ数える)", got["A/1"].Parked)
+	}
+	if len(b.Rows) != 1 || len(b.Rows[0].Parking) != 1 || b.Rows[0].Parking[0].ID != open {
+		t.Errorf("パーキングの列は open のメモだけ: %+v", b.Rows)
+	}
+}

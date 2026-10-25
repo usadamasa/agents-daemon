@@ -115,6 +115,8 @@ export type DepsData = {
   updated_at?: string
   // here は開いたセッションの repo の鍵 (DepsRepo.repo と同じ規則)。
   here: string
+  // stale_memo_days は open のメモを「古い」とみなす日数 (internal/parking の StaleAfter)。
+  stale_memo_days: number
   repos: DepsRepo[]
   graph: DepsGraph
 }

@@ -90,6 +90,7 @@ function deps(memos: unknown[]) {
   return {
     daemon_running: true,
     here: CWD,
+    stale_memo_days: 30,
     repos: [{ repo: CWD, title: 'agents-daemon', sessions: [SESSION], memos }],
     graph: { nodes: [NODE], links: [], longest_chain: [], rows: [{ lanes: '*', node: NODE.key }], rows_with_completed: [{ lanes: '*', node: NODE.key }] },
   }

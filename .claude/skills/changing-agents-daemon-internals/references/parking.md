@@ -37,9 +37,9 @@ handed / discarded のメモが保持期間 (7 日) で消えた後は、descrip
 
 - 捨てる: `park set <id> --status discarded`
 - 古いメモをまとめて捨てる (`Discard N older than 30d`): 最後に置かれてから 30 日より経った open のメモがあるときだけ
-  パーキングの見出しに出し、`park discard --days 30` で open のメモをまとめて discarded にする。30 日は mod
-  (`hooks/deps.tsx` の `STALE_DAYS`) が持ち、CLI に既定は無い。housekeeping が open を 90 日で黙って消す前に、人が見て
-  捨てる区切り。捨てたメモは 7 日残り、`logs --events` の `park.discard` に残る id を `park set <id> --status open` で戻せる
+  パーキングの見出しに出し、`park discard --days 30` で open のメモをまとめて discarded にする。30 日はバイナリ
+  (`internal/parking` の `StaleAfter`) が持ち、`deps` の `stale_memo_days` で mod に渡す。CLI に既定は無い。housekeeping が
+  open を 90 日で黙って消す前に、人が見て捨てる区切り (関係は `internal/daemon/retention_test.go`)。捨てたメモは 7 日残り、`logs --events` の `park.discard` に残る id を `park set <id> --status open` で戻せる
 - タスクにする: メモの repo が開いたセッションの repo (`here`) なら自セッション (`このセッション`) を先に、続けて同じ repo の
   `sessions` へ TaskCreate を頼む文面を送る。文面は着手の時期を指示せず受け手の計画 (タスクの依存) に
   任せ、タスクの description にメモの id を入れるよう頼む (既にこのメモを扱うタスクがあれば書き足すだけ)。

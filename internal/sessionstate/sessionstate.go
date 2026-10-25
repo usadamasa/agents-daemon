@@ -9,7 +9,7 @@
 // 読むだけの側 (daemon の判定、診断、block の逆引き) は ratelimit / sessioncontext を
 // 直接使い、このパッケージには依存しない。書式ごとにパッケージを分けたのは、読み手ごとに
 // 要る書式が 1 つだけだったため。この形から外れるもの (statusline の cost の台帳は
-// 日付で入れ子になり、日付の名前で消す) は別パッケージ (internal/spend) に置く。
+// 日付で入れ子になり、日付の名前で消す) は別パッケージ (internal/statusline/spend) に置く。
 package sessionstate
 
 import (

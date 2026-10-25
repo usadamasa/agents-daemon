@@ -18,7 +18,7 @@ statusline には出せない (#116)。
 
 - `statusLine.command` をバイナリの `statusline` に向ける (推奨)。描画 (`internal/statusline`) と state file の
   書き込みを同じプロセスで行う。月額上限の env (`CLAUDE_STATUSLINE_SPEND_CAP`) があれば cost の台帳
-  (`internal/spend`) にも記録する
+  (`internal/statusline/spend`) にも記録する
 - 利用者の statusline から stdin を `agents-daemon ingest-statusline` へ渡す 1 行を足す。state file だけを書く
 
 statusline はイベントで再実行される (新しい assistant message、`/compact` の完了、permission mode の変更など。

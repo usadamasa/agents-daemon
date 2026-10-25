@@ -5,7 +5,7 @@ import (
 	"errors"
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
-	"github.com/usadamasa/agents-daemon/internal/rexcli"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer/rexcli"
 	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
 )
 

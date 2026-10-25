@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/usadamasa/agents-daemon/internal/limitlog"
+	"github.com/usadamasa/agents-daemon/internal/daemon/limitlog"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
 )

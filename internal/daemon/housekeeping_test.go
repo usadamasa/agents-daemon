@@ -11,7 +11,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/boardlog"
 	"github.com/usadamasa/agents-daemon/internal/domain"
 	"github.com/usadamasa/agents-daemon/internal/edge"
-	"github.com/usadamasa/agents-daemon/internal/limitlog"
+	"github.com/usadamasa/agents-daemon/internal/daemon/limitlog"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
@@ -70,7 +70,7 @@ func TestHousekeep(t *testing.T) {
 		boardFresh := applog.RotatedPath(boardlog.Path(dir, domain.Home), "2026-08-27")
 		touchAged(t, boardOld, 20*24*time.Hour, now)
 		touchAged(t, boardFresh, 24*time.Hour, now)
-		// 上限の出来事の記録は 30 日で消す (internal/limitlog のテスト)。
+		// 上限の出来事の記録は 30 日で消す (internal/daemon/limitlog のテスト)。
 		r.limits = limitlog.New(dir)
 		limitFile := filepath.Join(r.limits.Dir, "2026-07-01.jsonl")
 		touchAged(t, limitFile, 31*24*time.Hour, now)

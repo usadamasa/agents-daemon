@@ -128,7 +128,7 @@ const LINKS = [
   { before: 'ref:issue:o/r#9', after: 'P/1', kind: 'edge', edge: { id: 'e3', before: ep('issue:o/r#9'), after: ep('task:P/1') } },
 ]
 
-// レーンの行 (internal/dag の Rows を Nodes の順で組んだもの)。鎖は Q → R → V と W、ref → P。輪の X は最後。
+// レーンの行 (internal/board/dag の Rows を Nodes の順で組んだもの)。鎖は Q → R → V と W、ref → P。輪の X は最後。
 const ROWS = ['Q/1', 'Q/2', 'R/1', 'V/1', 'W/1', 'W/2', 'ref:issue:o/r#9', 'P/1', 'D/1', 'G/1', 'SELF/1', 'X/1', 'X/2'].map(node => ({ lanes: '*', node }))
 const ROWS_WITH_COMPLETED = [...ROWS.slice(0, 10), { lanes: '*', node: 'C/1' }, ...ROWS.slice(10)]
 

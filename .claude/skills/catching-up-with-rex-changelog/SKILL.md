@@ -9,7 +9,7 @@ description: >-
 
 # rex の changelog に追従する
 
-agents-daemon の rex backend (`internal/rexcli`) は rex の CLI の応答の形の上に建っている。record の `owner.pid`
+agents-daemon の rex backend (`internal/multiplexer/rexcli`) は rex の CLI の応答の形の上に建っている。record の `owner.pid`
 は OSC 7501 の仕様に無い rex 独自の欄で、`block call` の exit code や `block ls` の `-s` 必須も実測。rex は数日おきに
 preview が出るので、上げたら changelog と実機の応答をこの repo の前提と突き合わせる。
 

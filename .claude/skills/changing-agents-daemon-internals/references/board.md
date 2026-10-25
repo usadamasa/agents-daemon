@@ -28,7 +28,7 @@ B は fullscreen のレイアウトで dock に置かれるときだけ出す。
 longest chain の辺の罫線 (`marks`) は色付き。同じノードは 1 回しか出ず、
 先頭の数の行 (`■ ○ ▸ ↵ ✓ ◇`) の下に全部の行を描く (pane はスクロールする)。完了したノードは既定で出さず、
 `Show completed` で `rows_with_completed` に切り替える。pane の底には記号の凡例を薄く置き、中身が pane の高さに
-満たないときも底に寄せる。記号と数の行と凡例は `hooks/graph.ts`、レーンの割り当ては `internal/dag` が持つ。
+満たないときも底に寄せる。記号と数の行と凡例は `hooks/graph.ts`、レーンの割り当ては `internal/board/dag` が持つ。
 選んだノードの詳細で辺を操作する。
 
 - `kind: edge` の辺は `Unlink` で `edge rm` に元の記録の参照を渡す
@@ -53,7 +53,7 @@ longest chain の辺の罫線 (`marks`) は色付き。同じノードは 1 回�
 ノードの状態は、完了なら `completed`、pane の無いセッションの未完了は `exited`、生きている pane の未着手は `pending`、
 進行中は pane の状態 (上限待ちを agent の申告より先に見る)。段・下流の数・待ちの輪・原因の鎖・最長の鎖の数え方と、
 `rows` / `rows_with_completed` (位相順の行とレーンの割り当て。行の並びは `Nodes` の順を優先の順にし、直前のノードの
-下流で上流が出揃ったものを先に出す) は `internal/dag` が持つ。
+下流で上流が出揃ったものを先に出す) は `internal/board/dag` が持つ。
 <!-- cc-premise: 2.1.302 osc7501 agent_status と blocked の kind (permission / question / auth) からノードの状態を決める -->
 
 ## パーキングのメモ

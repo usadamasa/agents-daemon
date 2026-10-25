@@ -31,15 +31,15 @@ README の「役割」が持つ。機能を足す・外す判断はそこに照�
 | `skills/peer-sessions/` | 別セッション (peer) へ作業を渡す手順 (`ListAgents` / `SendMessage`)。rex の block 操作は `references/rex.md` |
 | `skills/dream/` | 記憶階層の consolidation の手引き。実行系の呼び方は `references/pipeline.md` |
 | `cmd/agents-daemon/` | Go の main と root の登録。コマンドの組み立ては `internal/<family>cli` (境界は `changing-agents-daemon-internals` skill の architecture.md「CLI の組み立て」) |
-| `internal/` | daemon の本体。パス定数は `internal/apppath`。statusline の描画と実行は `internal/statusline`、cost の台帳は `internal/spend`、sidecar の原子的な書き込みは `internal/statefile`。前提条件の診断 (`doctor`) は `internal/doctor`、ほかの読むだけの診断 (`inspect` / `status` / `logs`) は `internal/verify`、使い捨て pane へ送る e2e (`simulate`) は `internal/simulate`。dream の実行系は `internal/dream`、放置 worktree の回収は `internal/worktree`、cwd から私用と業務を判定するのは `internal/domain`、cwd の repo と branch を求めるのは `internal/gitrepo`、タスクの記録は `internal/tasklog`、パーキングロットのメモは `internal/parking`、メモを渡す先の新しいセッションを rex の window に起こすのは `internal/spawn`、セッションをまたぐ辺は `internal/edge`、タスクの記録と status.json をボードに組むのは `internal/board`、ボードのカードから依存の DAG を組むのは `internal/board/graph`、依存の DAG の段・下流・輪・鎖を数え、pane のレーンの行を組むのは `internal/dag`、ボードの経路の出来事のログは `internal/boardlog`、上限の出来事の記録は `internal/limitlog`、plugin の更新と daemon の建て直し (`update`) は `internal/selfupdate` |
-| `internal/multiplexer`, `internal/rexcli`, `internal/backend` | pane 操作の interface (`multiplexer.Client`) とその rex 実装。`backend` が環境に `REX_SESSION` があることを確かめる (無ければ `daemon --ensure` は何もせず戻る) |
+| `internal/` | daemon の本体。パス定数は `internal/apppath`。statusline の描画と実行は `internal/statusline`、cost の台帳は `internal/statusline/spend`、daemon の監視ループは `internal/daemon`、daemon の起動の排他と status.json と PID ファイルは `internal/daemon/state`、sidecar の原子的な書き込みは `internal/statefile`。前提条件の診断 (`doctor`) は `internal/doctor`、ほかの読むだけの診断 (`inspect` / `status` / `logs`) は `internal/verify`、使い捨て pane へ送る e2e (`simulate`) は `internal/simulate`。dream の実行系は `internal/dream`、放置 worktree の回収は `internal/worktree`、cwd から私用と業務を判定するのは `internal/domain`、cwd の repo と branch を求めるのは `internal/gitrepo`、タスクの記録は `internal/tasklog`、パーキングロットのメモは `internal/parking`、メモを渡す先の新しいセッションを rex の window に起こすのは `internal/spawn`、セッションをまたぐ辺は `internal/edge`、タスクの記録と status.json をボードに組むのは `internal/board`、ボードのカードから依存の DAG を組むのは `internal/board/graph`、依存の DAG の段・下流・輪・鎖を数え、pane のレーンの行を組むのは `internal/board/dag`、ボードの経路の出来事のログは `internal/boardlog`、上限の出来事の記録は `internal/daemon/limitlog`、plugin の更新と daemon の建て直し (`update`) は `internal/selfupdate` |
+| `internal/multiplexer`, `internal/multiplexer/rexcli`, `internal/backend` | pane 操作の interface (`multiplexer.Client`) とその rex 実装。`backend` が環境に `REX_SESSION` があることを確かめる (無ければ `daemon --ensure` は何もせず戻る) |
 | `tests/` | hook と script の bats テスト (`tests/lib/`、`tests/fixtures/`) |
 | `ci/mod-types/` | CI の型検査に使う mod の型の写し。`task mod-types:sync` (`scripts/sync-mod-types.sh`) が `.claude-plugin/types/` から写す |
 | `models/handoff/` | ボードの受け渡しとタスクの記録の TLA+ のモデル。`task model-check` (`scripts/model-check.sh`) が TLC で回す。使い方と期待は `models/handoff/README.md` |
 | `flake.nix` | 開発ツールの devShell (版は `flake.lock` が固定する)。go-arch-metrics の CLI は go.mod の tool directive が固定する |
 | `.claude/skills/changing-agents-daemon-internals/` | 実装の仕組みとその理由 (配線、上限の検知、pane の読み書き、mod、バイナリ、出力されるファイル) と実機での検証。plugin には同梱しない保守用 skill |
 | `.claude/skills/catching-up-with-claude-code-changelog/` | Claude Code の更新後に CHANGELOG・バイナリ・docs を追い、この repo の前提 (画面の文言、hook と statusline の field、本体の新機能との重なり) を点検して issue に落とす手順。plugin には同梱しない保守用 skill |
-| `.claude/skills/catching-up-with-rex-changelog/` | rex の更新後に changelog (superlogical MCP) と自分の block への固定コマンドの応答を `rex-premise` marker と `internal/rexcli` の fixture と突き合わせ、ずれを issue に落とす手順。前回見た版は `references/last-checked.md`。plugin には同梱しない保守用 skill |
+| `.claude/skills/catching-up-with-rex-changelog/` | rex の更新後に changelog (superlogical MCP) と自分の block への固定コマンドの応答を `rex-premise` marker と `internal/multiplexer/rexcli` の fixture と突き合わせ、ずれを issue に落とす手順。前回見た版は `references/last-checked.md`。plugin には同梱しない保守用 skill |
 
 ## 検証
 
@@ -58,7 +58,7 @@ task typecheck:ci                           # CI が回す mod の型検査。�
 ```
 
 `invariants_test.go` と `fuzz_test.go` は、1 場面を固定する例ではなく「どの入力でも破ってはいけないこと」を書いて乱択で
-探す実行できる仕様 (`internal/monitor`、`internal/dag`、`internal/detect`、`internal/statefile`、`internal/parking`、
+探す実行できる仕様 (`internal/monitor`、`internal/board/dag`、`internal/detect`、`internal/statefile`、`internal/parking`、
 `internal/tasklog`、`internal/edge`)。反例が出たらコードを直すか挙動を正当化し、性質を弱めて通さない。
 `models/handoff` の不変条件は `internal/parking` と `internal/tasklog` の `invariants_test.go` が
 実物の Store の交錯で持つ。`task test` は fuzz の seed だけを回し、乱択は `task fuzz` で行う。
@@ -135,7 +135,7 @@ hook・skill・daemon は別プロセスで、ファイル越しに繋がる。�
 | ---- | ---- | ---- |
 | `hooks/lib/daemon-bin.sh` | `Taskfile.yml` の `install` | `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon` |
 | 利用者の `statusLine.command`、または自前の statusline に足す 1 行 (`skills/setup/references/statusline.md`) | `hooks/lib/daemon-bin.sh` と `Taskfile.yml` の `install` | `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon statusline` (または `ingest-statusline`)。`rate-limits/` の書式は `internal/ratelimit`、`context/` の書式は `internal/sessioncontext` が読み書き両方で持つ |
-| `statusline` / `ingest-statusline` が `context/<sid>.json` の `multiplexer` に書く場所 (環境変数 `REX_SESSION` / `REX_BLOCK` から) | `internal/sessioncontext` の `ListMultiplexerBlocks` を `internal/rexcli` が引く (`internal/backend` が配線) | rex の block から session_id への対応。書式と読み方は `internal/sessioncontext` が両方持つ |
+| `statusline` / `ingest-statusline` が `context/<sid>.json` の `multiplexer` に書く場所 (環境変数 `REX_SESSION` / `REX_BLOCK` から) | `internal/sessioncontext` の `ListMultiplexerBlocks` を `internal/multiplexer/rexcli` が引く (`internal/backend` が配線) | rex の block から session_id への対応。書式と読み方は `internal/sessioncontext` が両方持つ |
 | `hooks/daemon-bin.ts` の `daemonBin` (mod が `agents-daemon status --board` と `park` を呼ぶ) | `hooks/lib/daemon-bin.sh` と `Taskfile.yml` の `install` | `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon`。mod は `$.env.get` で `XDG_CACHE_HOME` と `HOME` を読む |
 | `hooks/board.tsx` の `BoardData` (`types/index.d.ts`) | `internal/board` の `Board` (`graph` は `internal/board/graph` の `Graph`) | `status --board` の JSON の形。片方の欄を変えたらもう片方も変える |
 | `hooks/park.tsx` の `FIELDS` と `Added` | `internal/parking` の `Request` と `Added` | `park add` の stdin と stdout の JSON の形 |
@@ -144,7 +144,7 @@ hook・skill・daemon は別プロセスで、ファイル越しに繋がる。�
 | `hooks/band.tsx` の `bringForward` が組む引数 | `cmd/agents-daemon/internal/boardcli/park.go` の `list` の `--task` | `park list --status open --task <task_id> --session <id> --cwd <cwd>` |
 | `hooks/parking.ts` の `spawnSession` が組む引数と stdin | `cmd/agents-daemon/internal/boardcli/spawn.go` と `internal/spawn` の `Result` | `spawn --repo <path> --session <id> --cwd <cwd>`、stdin は最初のターンの本文、stdout は `{session_id, pane_id, foreground, detail}` (foreground が false なら mod はメモを戻さない) |
 | `hooks/log.ts` の `logEvent` が組む引数 | `cmd/agents-daemon/internal/boardcli/board_log.go` の `board-log` と `internal/boardlog` の `Record` | `board-log --session <id> --cwd <cwd> -- <event> key=value…`。出来事の名前は `internal/boardlog` の package doc |
-| 利用者の settings の `env` の `CLAUDE_STATUSLINE_SPEND_CAP` | `internal/statusline/run.go` の `SpendCapEnv` | 月額上限 (USD)。あるときだけ `statusline` が `cost/` の台帳 (`internal/spend`) を書き、📅 / 🧾 を出す |
+| 利用者の settings の `env` の `CLAUDE_STATUSLINE_SPEND_CAP` | `internal/statusline/run.go` の `SpendCapEnv` | 月額上限 (USD)。あるときだけ `statusline` が `cost/` の台帳 (`internal/statusline/spend`) を書き、📅 / 🧾 を出す |
 
 ## リリース
 

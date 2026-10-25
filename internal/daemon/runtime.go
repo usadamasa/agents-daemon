@@ -21,7 +21,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/daemon/state"
 	"github.com/usadamasa/agents-daemon/internal/detect"
 	"github.com/usadamasa/agents-daemon/internal/edge"
-	"github.com/usadamasa/agents-daemon/internal/limitlog"
+	"github.com/usadamasa/agents-daemon/internal/daemon/limitlog"
 	"github.com/usadamasa/agents-daemon/internal/monitor"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/parking"
@@ -66,7 +66,7 @@ type daemonRuntime struct {
 	// boardLogs は CLI と mod が書くボードの経路のログ (internal/boardlog)。daemon は housekeeping で rotate 済みの
 	// ものを消すだけ。ゼロ値は何も消さない。
 	boardLogs []string
-	// limits は上限の出来事の記録 (internal/limitlog)。daemon が書き、housekeeping で消す。ゼロ値は書かない。
+	// limits は上限の出来事の記録 (internal/daemon/limitlog)。daemon が書き、housekeeping で消す。ゼロ値は書かない。
 	limits              limitlog.Store
 	sleep               func(time.Duration)
 	startedAt           time.Time

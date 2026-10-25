@@ -9,7 +9,7 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
-	"github.com/usadamasa/agents-daemon/internal/spend"
+	"github.com/usadamasa/agents-daemon/internal/statusline/spend"
 )
 
 // SpendCapEnv は月額上限 (USD) を渡す環境変数。設定したときだけ cost の合算を記録し、表示する。

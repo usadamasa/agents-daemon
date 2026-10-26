@@ -1,5 +1,23 @@
 # Changelog
 
+## [2026.1025.4](https://github.com/usadamasa/agents-daemon/compare/2026.1025.3...2026.1025.4) - 2026-10-25
+
+- CI で mod の型検査を回す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/274
+- docs: agents-daemon skill を利用者向けに絞り、実装の仕組みを保守用 skill へ移す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/276
+- refactor: internal/ のパッケージを入れ子にして責務の置き場を見直す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/277
+- mod の型検査を ci/mod-types/ の写しを使う task typecheck に一本化する by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/279
+- refactor: dream の共通部を internal/dream に統合し、mine の出力の書式を入れ子にする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/280
+- ci: pull_request の edited でも CI を走らせる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/281
+- build: go-arch-metrics を上げ、analyze-modularity を base と比べて判定する by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/282
+- ボード再設計 1: 私用と業務の区分を外す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/283
+- ボード再設計 2: band をやめ、辺の書き忘れを model へ伝える by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/284
+- ボード再設計 3: ボードの傘を外し、依存図とパーキングロットに分ける by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/285
+- ボード再設計 4: Ref を作業の唯一の識別子にする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/286
+- ボード再設計 5: 活動と状態を 1 か所で決め、止まっているかを JSON で渡す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/287
+- ボード再設計 6: セッション台帳と session:<名前> の 1 回の結びつけ by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/288
+- ボード再設計 7: メモの種類と出自を分け、渡した宛先を記録する by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/289
+- ボード再設計 8: 保持期間を 1 つの表にし、関係をテストで固定する by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/290
+
 ## [2026.1025.3](https://github.com/usadamasa/agents-daemon/compare/2026.1025.2...2026.1025.3) - 2026-10-25
 
 - fix(parking): Prune も Set と同じロックの中でメモを消す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/265

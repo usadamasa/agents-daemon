@@ -10,7 +10,7 @@ import (
 
 // dryRunClient は multiplexer.Client のうち pane を書き換える操作だけを握りつぶし、
 // 「本来なら何を送っていたか」をログに残すデコレータ。読み取り (pane list /
-// pane read / 到達性確認) はそのまま通すので、検知と判定は本番と同じ経路を通る。
+// pane read / 到達性確認 / 購読) はそのまま通すので、検知と判定は本番と同じ経路を通る。
 //
 // 実環境で初めて daemon を回すときの安全弁として用意している。稼働中の
 // Claude セッションへ誤ってプロンプトを打ち込む事故は取り返しがつかないため、
@@ -42,6 +42,16 @@ func (c dryRunClient) PaneGeometry(ctx context.Context, paneID string) (multiple
 
 func (c dryRunClient) Reachable(ctx context.Context) error {
 	return c.inner.Reachable(ctx)
+}
+
+// Watch は購読 (読み取り) なので inner へ通す。inner が購読できなければ何もせず、閉じた channel を返す。
+func (c dryRunClient) Watch(ctx context.Context, logf func(format string, args ...any)) <-chan struct{} {
+	if w, ok := c.inner.(multiplexer.Watcher); ok {
+		return w.Watch(ctx, logf)
+	}
+	done := make(chan struct{})
+	close(done)
+	return done
 }
 
 func (c dryRunClient) SendText(_ context.Context, paneID, text string) error {

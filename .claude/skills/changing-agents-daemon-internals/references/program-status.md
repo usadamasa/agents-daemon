@@ -1,12 +1,12 @@
 # rex の program_status (OSC 7501)
 
 rex では Claude Code 自身が OSC 7501 で状態を報告する。daemon は `block call -b BLOCK program_status` の
-`records` から Agent と `agent_status` を決める (`internal/multiplexer/rexcli` の `toPane`)。protocol の仕様は
+`records` から Agent と `agent_status` を決める (`internal/multiplexer/rexcli/blockstate` の `ToPane`)。protocol の仕様は
 [rex の docs](https://www.superlogical.com/rex/docs/build/program-status)。Claude Code がどの状況でどの値を出すかは
 docs に無く、2.1.302 のバイナリと実測 (2026-10-17、rex preview.15、#69) から読んだもの。版が変われば測り直す。
 
 <!-- cc-premise: 2.1.302 osc7501 state / app / kind の値と画面の状況の対応 (バイナリの builder と実測) -->
-<!-- rex-premise: preview.20 program_status rex は process 名から record を補わない。owner.pid が record に付く -->
+<!-- rex-premise: preview.21 program_status rex は process 名から record を補わない。owner.pid が record に付く -->
 
 ## 状況と record の対応
 

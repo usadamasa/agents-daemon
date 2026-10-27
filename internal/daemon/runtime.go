@@ -447,6 +447,29 @@ func spawnDetached(exe string, dryRun bool, p apppath.Paths) error {
 	return cmd.Process.Release()
 }
 
+// watchStopWait は購読を止めてから後始末 (events の子の刈り取り) を待つ上限。子は kill から 100ms で刈り取られる。
+const watchStopWait = 2 * time.Second
+
+// startWatch は client が多重化ツールの出来事を購読できれば始める。tick の pane の一覧が fork せずに取れるようになり、
+// 購読できない間は tick が全列挙する。返す stop は購読を止めて後始末を待つ。daemon は終わる前に呼び、
+// 入れ替わりのたびに events の子が多重化ツールに繋がったまま残らないようにする。
+func startWatch(ctx context.Context, client multiplexer.Client, log *applog.Logger) (stop func()) {
+	w, ok := client.(multiplexer.Watcher)
+	if !ok {
+		return func() {}
+	}
+	watchCtx, cancel := context.WithCancel(ctx)
+	done := w.Watch(watchCtx, log.Logf)
+	return func() {
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(watchStopWait):
+			log.Logf("購読の後始末が %s で終わりませんでした", watchStopWait)
+		}
+	}
+}
+
 // RunForeground は --foreground の本体。SessionStart から detach 起動された
 // 子プロセスも最終的にここへ辿り着く。
 func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
@@ -510,6 +533,8 @@ func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 
 	loopCtx, stop := context.WithCancel(ctx)
 	defer stop()
+
+	defer startWatch(loopCtx, client, log)()
 
 	cleanup := func(reason string) {
 		if err := state.RemoveOwnPIDFile(p.PIDFile(), os.Getpid()); err != nil {

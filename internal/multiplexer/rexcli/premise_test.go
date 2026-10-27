@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer/rexcli/premise"
 )
 
 // 2026-10-18 の実測で doctor を打った自分の block と session (testdata の measuredOct18 の応答はこの ID のもの)。
@@ -69,7 +70,7 @@ func TestCheckPremises_AllOK(t *testing.T) {
 	}
 	f.assertCalls(t,
 		"--autostart=false version --json",
-		"--autostart=false block call -b "+probeMissingBlock+" program_status",
+		"--autostart=false block call -b "+premise.ProbeMissingBlock+" program_status",
 		"--autostart=false block call -b "+blockSelfOct18+" program_status",
 		"--autostart=false block call -b "+blockSelfOct18+" process",
 		"--autostart=false block ls -s "+sessionSelfOct18+" --json",
@@ -87,8 +88,8 @@ func TestCheckPremises_NamesMissingField(t *testing.T) {
 	}{
 		{"version --json が失敗", func(t *testing.T, f *fakeRex) { f.put(t, "fail-version.json", "") }, "version --json"},
 		{"version --json に rex_version が無い", func(t *testing.T, f *fakeRex) { f.put(t, "version.json", `{"platform":"darwin_arm64"}`) }, "rex_version"},
-		{"存在しない block への block call が exit 1", func(t *testing.T, f *fakeRex) { f.put(t, "fail-program_status-"+probeMissingBlock+".json", "") }, "exit 3"},
-		{"存在しない block への block call が成功してしまう", func(t *testing.T, f *fakeRex) { f.put(t, "program_status-"+probeMissingBlock+".json", psEmpty) }, "exit 3"},
+		{"存在しない block への block call が exit 1", func(t *testing.T, f *fakeRex) { f.put(t, "fail-program_status-"+premise.ProbeMissingBlock+".json", "") }, "exit 3"},
+		{"存在しない block への block call が成功してしまう", func(t *testing.T, f *fakeRex) { f.put(t, "program_status-"+premise.ProbeMissingBlock+".json", psEmpty) }, "exit 3"},
 		{"root record に owner.pid が無い", func(t *testing.T, f *fakeRex) { f.put(t, "program_status-"+blockSelfOct18+".json", psNoOwner) }, "owner.pid"},
 		{"root record が無い", func(t *testing.T, f *fakeRex) { f.put(t, "program_status-"+blockSelfOct18+".json", psEmpty) }, "root record"},
 		{"process の foreground に cwd が無い", func(t *testing.T, f *fakeRex) {
@@ -102,6 +103,12 @@ func TestCheckPremises_NamesMissingField(t *testing.T) {
 		{"inspect に program_status_changed が無い", func(t *testing.T, f *fakeRex) {
 			f.put(t, "inspect-"+blockSelfOct18+".json", `{"api":{"methods":{"program_status":{},"process":{}},"events":{"process_changed":{}}}}`)
 		}, "program_status_changed"},
+		{"inspect に program_status_removed が無い", func(t *testing.T, f *fakeRex) {
+			f.put(t, "inspect-"+blockSelfOct18+".json", `{"api":{"methods":{"program_status":{},"process":{},"size":{},"modes":{}},"events":{"program_status_changed":{},"process_changed":{}}}}`)
+		}, "program_status_removed"},
+		{"inspect に process_changed が無い", func(t *testing.T, f *fakeRex) {
+			f.put(t, "inspect-"+blockSelfOct18+".json", `{"api":{"methods":{"program_status":{},"process":{},"size":{},"modes":{}},"events":{"program_status_changed":{},"program_status_removed":{}}}}`)
+		}, "process_changed"},
 		{"inspect に process の method が無い", func(t *testing.T, f *fakeRex) {
 			f.put(t, "inspect-"+blockSelfOct18+".json", `{"api":{"methods":{"program_status":{},"size":{},"modes":{}},"events":{"program_status_changed":{}}}}`)
 		}, "process"},

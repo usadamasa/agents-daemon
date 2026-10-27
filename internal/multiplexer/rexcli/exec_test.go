@@ -12,6 +12,7 @@ import (
 	"github.com/kballard/go-shellquote"
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer/rexcli/blockstate"
 )
 
 // fake の rex に渡す ID。session と Claude の block は 2026-10-10 の実測、閉じた block と shell 以外の block は作り物。
@@ -55,6 +56,7 @@ type fakeRex struct {
 
 // newFakeRex は引数で fixture を選んで返す fake の rex を書く。fixture が無ければ実機と同じく
 // `block target "…" not found` を stderr に出して exit 3 になる。`fail-<fixture 名>` を置くと exit 1 になる。
+// `events` は events.jsonl を流して終わる (server の切断)。`events-hold` を置くと流した後も stream を開けておく。
 // 呼び出しごとに引数を 1 つずつ single quote で囲って calls.log へ、環境変数を env.log へ追記する。
 // --autostart=false が先頭に無い呼び出しは拒むので、成功を確かめるテストはどれも autostart を切っていることを確かめている。
 func newFakeRex(t *testing.T) *fakeRex {
@@ -105,6 +107,9 @@ case "$1" in
   capture) emit "capture-$3.txt" "$3" ;;
   run) emit run.json run ;;
   api) emit server-status.json server ;;
+  events)
+    emit events.jsonl events
+    if [ -f "$d/events-hold" ]; then exec sleep 30; fi ;;
   send|send-key) emit "target-$3" "$3" ;;
   *) echo "Error: unknown command $1" >&2; exit 2 ;;
 esac
@@ -192,13 +197,13 @@ func TestExecClient_PaneList(t *testing.T) {
 	f := newFakeRex(t)
 	f.put(t, "ls.json", lsJSON(sessionA, sessionB))
 	f.put(t, "block-ls-"+sessionA+".json", blockLsJSON(
-		[2]string{blockClaudeWorking, shellFlavor},
+		[2]string{blockClaudeWorking, blockstate.ShellFlavor},
 		[2]string{blockNotShell, "com.superlogical.browser"},
 	))
 	f.put(t, "block-ls-"+sessionB+".json", blockLsJSON(
-		[2]string{blockClosed, shellFlavor},
-		[2]string{blockClosedMidway, shellFlavor},
-		[2]string{blockClaudeDone, shellFlavor},
+		[2]string{blockClosed, blockstate.ShellFlavor},
+		[2]string{blockClosedMidway, blockstate.ShellFlavor},
+		[2]string{blockClaudeDone, blockstate.ShellFlavor},
 	))
 	f.putBlock(t, blockClaudeWorking, measured(t, measuredOct10, "program_status-working.json"), processJSON(pidClaudeWorking, "claude", "/w/agents-daemon"))
 	f.put(t, "program_status-"+blockClosedMidway+".json", psEmpty)
@@ -250,7 +255,7 @@ func TestExecClient_PaneList_FailureIsError(t *testing.T) {
 	oneBlock := func(programStatus string) map[string]string {
 		return map[string]string{
 			"ls.json":                        lsJSON(sessionA),
-			"block-ls-" + sessionA + ".json": blockLsJSON([2]string{blockClaudeWorking, shellFlavor}),
+			"block-ls-" + sessionA + ".json": blockLsJSON([2]string{blockClaudeWorking, blockstate.ShellFlavor}),
 			"program_status-" + blockClaudeWorking + ".json": programStatus,
 		}
 	}

@@ -13,7 +13,7 @@ stderr に 1 行出して何もせずに戻る (素の端末の SessionStart で
 
 | 操作 | rex |
 | ---- | ---- |
-| PaneList | `ls --json`、session ごとに `block ls -s S --json`、flavor が `com.superlogical.terminal.shell` の block ごとに `block call -b B program_status` と `block call -b B process` |
+| PaneList | daemon では `events --all --json` の購読の cache (下の「events の購読」)。購読していない呼び手と未同期の間は全列挙: `ls --json`、session ごとに `block ls -s S --json`、flavor が `com.superlogical.terminal.shell` の block ごとに `block call -b B program_status` と `block call -b B process` |
 | PaneRead | `capture -b B --trim --unwrap` の末尾 N 行 |
 | SendText | `send -b B TEXT` |
 | SendKeys | `send-key -b B KEY...` |
@@ -27,12 +27,43 @@ rex の呼び出しには全部 `--autostart=false` を付け、子プロセス�
 `REX_SESSION` があると rex は block の解決をその session の中に閉じ、外せば完全 ID で別 session の block も
 解決する (実測)。`block ls` と `block call` の間に閉じた block (exit 3) は読み飛ばし、PaneList の失敗に数えない。
 
-rex の列挙は 1 tick に `ls` 1 回、session ごとに `block ls` 1 回、shell の block ごとに 2 回の fork になる。
-block が多い環境ほど tick あたりの時間が伸びる。
+全列挙は 1 回に `ls` 1 回、session ごとに `block ls` 1 回、shell の block ごとに 2 回の fork になる。
+block が多い環境ほど時間が伸びるので、daemon は tick ごとには打たず、購読の cache から一覧を取る。
+
+## events の購読
+
+<!-- rex-premise: preview.21 cli events --all --json は全 session の block_event を 1 行 1 event で server が切れるまで流す。plain の events には block_event が来ない -->
+<!-- rex-premise: preview.21 cli process_changed は前景の入れ替わりの瞬間に push され、block call process の問い合わせでは起きない -->
+
+daemon は起動時に `multiplexer.Watcher` の `Watch` で `rex --autostart=false events --all --json` を 1 本張る
+(`internal/multiplexer/rexcli/watch.go`)。doctor、inspect、simulate、spawn は購読せず全列挙のまま。
+
+1. 最初の行を受けて購読が始まったことを確かめる。rex の CLI の呼び出しはそれだけで `client_joined` を流すので、
+   2 秒待って来なければ `api call server.status` を 1 回打って起こす
+2. 全列挙で cache を作る。全列挙の間に届いた event は捨てずに溜め、全列挙の後に順に当てる。stream は欠けず順序を
+   保つので、snapshot より古い event が当たっても、その後の変化の event が後ろに必ずあり、cache は最新に追いつく
+3. 以降は event を当て続け、`PaneList` は rex を叩かずに cache を `ToPane` へ渡す (`internal/multiplexer/rexcli/blockstate`)
+
+| event | cache への当て方 |
+| ---- | ---- |
+| `program_status_changed` | record を `id` で置き換える (root は空の id)。report は record を丸ごと置き換える |
+| `program_status_removed` | `ids` の record を消す (`reason` は `child_exited` / `foreground` / `clear` など。理由を問わず消す) |
+| `process_changed` | 前景を置き換える。`isForeground` の突き合わせはこの前景で行う |
+| `block_created` | payload に flavor が無いので、その session に `block ls` を 1 回打ち、shell なら `program_status` と `process` で埋める |
+| `session_created` | 新しい session の最初の block には `block_created` が来ないので、その session に `block ls` を 1 回打ち、shell の block を全部埋める |
+| `block_closed` / `session_destroyed` | その block、その session の block を落とす |
+
+`client_joined` / `client_left` と session ごとの `client_connected` / `client_disconnected` は rex の CLI の呼び出しの
+たびに流れる雑音で、読む側の queue に入れる前に落とす。
+
+daemon が終わるとき (入れ替わりを含む) は購読を止め、events の子を刈り取ってから終わる (上限 2 秒)。
+stream が切れたら (EOF、壊れた行、`block_created` / `session_created` の後の `block ls` の失敗) cache を捨てて未同期に戻し、1 秒から倍、
+上限 30 秒の間隔で張り直す。1 分以上続いた購読の後は間隔を 1 秒に戻す。未同期の間の `PaneList` は全列挙で、
+server が落ちていれば今までどおり tick の失敗に数える。切れた理由と張り直しは daemon.log に 1 行ずつ出る。
 
 ## rex のバイナリの引き直し
 
-<!-- rex-premise: preview.20 cli block の PATH は Versions/Current/… と Versions/<build>/… の順。Current は更新で中身が入れ替わり、前の build は次の更新で消える -->
+<!-- rex-premise: preview.21 cli block の PATH は Versions/Current/… と Versions/<build>/… の順。Current は更新で中身が入れ替わり、前の build は次の更新で消える -->
 
 rex のバイナリは最初の呼び出しで PATH から絶対パスに引いて覚える (`REX_BIN_PATH` があればそれで固定)。
 rex は block の PATH に `…/RexServer/Versions/Current/…` を先に、`…/RexServer/Versions/<build>/…` をその後ろに

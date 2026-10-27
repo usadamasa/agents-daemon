@@ -76,10 +76,13 @@ Linux Server (`🐧 … (Linux Server)`) の `preview.N` は Mac と別の数列
 ### 3. marker の一覧を出す
 
 ```sh
-rg -n -o 'rex-premise: preview\.[0-9]+ (program_status|cli).*' --glob '!tmp/**' . | sort -t' ' -k3,3 -k2,2V
+rg -n -o --hidden 'rex-premise: preview\.[0-9]+ (program_status|cli).*' --glob '!tmp/**' --glob '!.git/**' . | sort -t' ' -k3,3 -k2,2V
 ```
 
 AGENTS.md の説明文の行は `rex-premise:` の後に版が続かないので、この pattern には当たらない。
+`--hidden` は `.claude/skills/` の references にある marker を拾うため。
+版を上げた後は、空白の欠けた marker (`preview.21cli`) が無いことを `rg -n --hidden 'rex-premise: preview\.[0-9]+[^ 0-9]' --glob '!tmp/**' .`
+で確かめる。この pattern に当たる marker は上の一覧から漏れる。
 `<version>` は Mac の版なので、範囲の始まりの Mac の版より古い marker が点検の対象。そういう marker が無ければ
 changelog 側の点検は無しで、手順 4 へ進む (実機の点検は版に関係なく行う)。
 

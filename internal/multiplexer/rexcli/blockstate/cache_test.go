@@ -112,7 +112,7 @@ func TestCache_ReplaysMeasuredStream(t *testing.T) {
 		}
 	}
 
-	if want := []Ref{{Session: sessionOwn, Block: blockProbe}};!slices.Equal(created, want) {
+	if want := []Ref{{Session: sessionOwn, Block: blockProbe}}; !slices.Equal(created, want) {
 		t.Errorf("block_created が求めた block = %+v, want %+v", created, want)
 	}
 	got := c.Panes(map[string]string{blockOwn: sidOwn})

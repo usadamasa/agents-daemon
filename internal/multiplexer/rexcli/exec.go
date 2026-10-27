@@ -335,7 +335,9 @@ func (c *execClient) CheckPremises(ctx context.Context, blockID, sessionID strin
 // premiseRunner は execClient を premise.Runner として渡す。execClient の公開の口を増やさないための包み。
 type premiseRunner struct{ c *execClient }
 
-func (r premiseRunner) Run(ctx context.Context, args ...string) ([]byte, error) { return r.c.run(ctx, args...) }
+func (r premiseRunner) Run(ctx context.Context, args ...string) ([]byte, error) {
+	return r.c.run(ctx, args...)
+}
 
 func (r premiseRunner) TargetNotFound(err error) bool { return isTargetNotFound(err) }
 

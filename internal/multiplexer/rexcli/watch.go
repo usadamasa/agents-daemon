@@ -31,6 +31,8 @@ const (
 	maxLineBytes = 1 << 20
 )
 
+var _ multiplexer.Watcher = (*execClient)(nil)
+
 // watchState は購読の cache。cache が nil なら未同期で、PaneList は全列挙する。
 type watchState struct {
 	mu    sync.Mutex

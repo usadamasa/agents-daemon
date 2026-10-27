@@ -18,10 +18,11 @@ const probeMissingBlock = "block:01a12599-0000-7000-8000-000000000001"
 var (
 	programStatusFields = []string{"state", "app", "owner.pid"}
 	processFields       = []string{"pid", "argv0", "cwd"}
-	// inspect の api.methods / api.events のうち、コードが打つ method と #78 で購読を検討している event。
+	// inspect の api.methods / api.events のうち、コードが打つ method と Watch の購読が読む block の event。
+	// block_created / block_closed は session の event で、block の inspect には載らない。
 	// rex-premise: preview.21 cli block inspect --json は api.methods と api.events を method 名 / event 名を key にした object で返す
 	inspectMethods = []string{"program_status", "process", "size", "modes"}
-	inspectEvents  = []string{"program_status_changed"}
+	inspectEvents  = []string{"program_status_changed", "program_status_removed", "process_changed"}
 )
 
 // addFinding は点検 1 件を積む。

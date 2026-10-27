@@ -103,6 +103,15 @@ type PremiseChecker interface {
 	CheckPremises(ctx context.Context, paneID, sessionID string) []PremiseFinding
 }
 
+// Watcher は多重化ツールの出来事を背後で購読し、PaneList を毎回の全列挙から購読の cache へ切り替える口。
+// daemon だけが使う。doctor や inspect のような 1 回きりの呼び手は購読せず、全列挙のまま。Client とは別にしてあるのは、
+// multiplexerfake と判定の経路に購読を持ち込まないため。実装は rexcli。
+type Watcher interface {
+	// Watch は購読を始めてすぐ戻る。ctx が終わるまで、切れるたびに張り直す。購読の失敗と張り直しは logf に書く。
+	// PaneList と並ぶ前に 1 回だけ呼ぶ。
+	Watch(ctx context.Context, logf func(format string, args ...any))
+}
+
 // Client は多重化ツールが提供する pane 操作。実装は rexcli.NewExecClient と multiplexerfake.Client の
 // 2 つで、daemon はこの interface にのみ依存し、exec.Command を直接呼ばない。
 type Client interface {

@@ -447,6 +447,14 @@ func spawnDetached(exe string, dryRun bool, p apppath.Paths) error {
 	return cmd.Process.Release()
 }
 
+// startWatch は client が多重化ツールの出来事を購読できれば始める。tick の pane の一覧が fork せずに取れるようになり、
+// 購読できない間は tick が全列挙する。
+func startWatch(ctx context.Context, client multiplexer.Client, log *applog.Logger) {
+	if w, ok := client.(multiplexer.Watcher); ok {
+		w.Watch(ctx, log.Logf)
+	}
+}
+
 // RunForeground は --foreground の本体。SessionStart から detach 起動された
 // 子プロセスも最終的にここへ辿り着く。
 func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
@@ -510,6 +518,8 @@ func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 
 	loopCtx, stop := context.WithCancel(ctx)
 	defer stop()
+
+	startWatch(loopCtx, client, log)
 
 	cleanup := func(reason string) {
 		if err := state.RemoveOwnPIDFile(p.PIDFile(), os.Getpid()); err != nil {

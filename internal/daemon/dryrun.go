@@ -44,11 +44,14 @@ func (c dryRunClient) Reachable(ctx context.Context) error {
 	return c.inner.Reachable(ctx)
 }
 
-// Watch は購読 (読み取り) なので inner へ通す。inner が購読できなければ何もしない。
-func (c dryRunClient) Watch(ctx context.Context, logf func(format string, args ...any)) {
+// Watch は購読 (読み取り) なので inner へ通す。inner が購読できなければ何もせず、閉じた channel を返す。
+func (c dryRunClient) Watch(ctx context.Context, logf func(format string, args ...any)) <-chan struct{} {
 	if w, ok := c.inner.(multiplexer.Watcher); ok {
-		w.Watch(ctx, logf)
+		return w.Watch(ctx, logf)
 	}
+	done := make(chan struct{})
+	close(done)
+	return done
 }
 
 func (c dryRunClient) SendText(_ context.Context, paneID, text string) error {

@@ -108,8 +108,9 @@ type PremiseChecker interface {
 // multiplexerfake と判定の経路に購読を持ち込まないため。実装は rexcli。
 type Watcher interface {
 	// Watch は購読を始めてすぐ戻る。ctx が終わるまで、切れるたびに張り直す。購読の失敗と張り直しは logf に書く。
+	// 返す channel は ctx が終わって購読の後始末 (子プロセスの刈り取り) が済んだら閉じる。
 	// PaneList と並ぶ前に 1 回だけ呼ぶ。
-	Watch(ctx context.Context, logf func(format string, args ...any))
+	Watch(ctx context.Context, logf func(format string, args ...any)) <-chan struct{}
 }
 
 // Client は多重化ツールが提供する pane 操作。実装は rexcli.NewExecClient と multiplexerfake.Client の

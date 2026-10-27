@@ -67,9 +67,10 @@ func (w *watchState) set(cache *blockstate.Cache) {
 // Watch は rex の events を背後で購読し、PaneList が全列挙の代わりに cache を返すようにする (multiplexer.Watcher)。
 // 呼んだらすぐ戻る。ctx が終わるまで、切れるたびに張り直す。購読の失敗と張り直しは logf に書く。
 // PaneList と並ぶ前 (daemon の最初の tick より前) に 1 回だけ呼ぶ。
-func (c *execClient) Watch(ctx context.Context, logf func(format string, args ...any)) {
+func (c *execClient) Watch(ctx context.Context, logf func(format string, args ...any)) <-chan struct{} {
 	c.watch = &watchState{}
 	go c.watchLoop(ctx, logf)
+	return make(chan struct{})
 }
 
 func (c *execClient) watchLoop(ctx context.Context, logf func(format string, args ...any)) {

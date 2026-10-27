@@ -245,6 +245,29 @@ func TestCache_PanesSorted(t *testing.T) {
 	}
 }
 
+// 新しい session の最初の block には block_created が来ない (実測)。session_created は block を空にした Ref で、
+// その session の block を全部埋めるよう求める。埋める前に届いたその block の event は読み捨てる。
+func TestCache_SessionCreated(t *testing.T) {
+	const (
+		sessionNew = "session:01a17d75-e4ee-7ee4-b406-edd2eeeab136"
+		blockNew   = "block:01a17d75-e4ef-70af-9136-32071c27666e"
+	)
+	c := NewCache(nil)
+	lines := strings.Split(strings.TrimSpace(measured(t, measuredOct27, "events-session-new.jsonl")), "\n")
+	if got := applyAll(t, c, lines[:1]); !slices.Equal(got, []Ref{{Session: sessionNew}}) {
+		t.Fatalf("session_created の Ref = %+v, want block の無い session だけの Ref", got)
+	}
+	c.Put(Ref{Session: sessionNew, Block: blockNew}, state(t, sessionNew, psEmpty, processJSON(pidShell, "/bin/zsh", "/Users/usadamasa")))
+	applyAll(t, c, lines[1:3])
+	if got := c.Panes(nil); len(got) != 1 || got[0].PaneID != blockNew {
+		t.Fatalf("panes() = %+v, want 新しい session の block", got)
+	}
+	applyAll(t, c, lines[3:])
+	if got := c.Panes(nil); len(got) != 0 {
+		t.Errorf("panes() = %+v, want block_closed で空", got)
+	}
+}
+
 // Relevant は実測の stream のうち Apply が読む行だけを通す。client の出入り、window、view の行は落とす。
 func TestRelevant(t *testing.T) {
 	var kept []string
@@ -265,7 +288,7 @@ func TestRelevant(t *testing.T) {
 	want := []string{
 		"block_event", "block_event", // 自分の block の process_changed と program_status_changed
 		"block_created", "block_event", "block_event", "block_event", "block_event", "block_event", "block_event",
-		"block_closed", "session_destroyed",
+		"block_closed", "session_created", "session_destroyed",
 	}
 	if !slices.Equal(kept, want) {
 		t.Errorf("通した行 = %v, want %v", kept, want)

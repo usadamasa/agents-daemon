@@ -7,7 +7,7 @@
 rex は `capture -b BLOCK --trim --unwrap` で読み、末尾 `readLines` 行に絞る。判定 (`detect.Classify` と
 起床時刻の読み取り) は更に末尾 `detectionTailLines` 行だけを見るので、`readLines` がそれ以上あれば判定は変わらない。
 
-<!-- rex-premise: preview.20 cli capture は alternate screen では可視の行だけ、通常の画面では scrollback も返す -->
+<!-- rex-premise: preview.21 cli capture は alternate screen では可視の行だけ、通常の画面では scrollback も返す -->
 <!-- cc-premise: 2.1.302 limit-screen Claude Code は alternate screen (?1049h) で描き、上限の文は画面の下から 10 行目に出る -->
 
 Claude Code は alternate screen で描くので、Claude の block の capture は可視の行数で頭打ちになる
@@ -32,7 +32,7 @@ daemon が踏んだ瞬間の画面と block の高さを `limit-events/` に残�
 
 ### block が alternate screen にいるかは `modes` で見える
 
-<!-- rex-premise: preview.20 cli block call modes の screen は primary か alternate。idle の terminal を起こさない (changelog。idle の定義は docs に無い) -->
+<!-- rex-premise: preview.21 cli block call modes の screen は primary か alternate。idle の terminal を起こさない (changelog。idle の定義は docs に無い) -->
 <!-- cc-premise: 2.1.304 limit-screen 起動直後の trust dialog は primary screen、本体の画面は alternate (?1049)。/exit で primary に戻す -->
 
 rex preview.16 の `block call modes` は `screen` (`primary` / `alternate`) を返す。`doctor` の「rex CLI の前提」が

@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
@@ -21,11 +22,11 @@ import (
 const defaultTimeout = 10 * time.Second
 
 // shellFlavor は terminal の block の flavor。これ以外の block は program_status を持たない。
-// rex-premise: preview.21cli block ls の flavor の値
+// rex-premise: preview.21 cli block ls の flavor の値
 const shellFlavor = "com.superlogical.terminal.shell"
 
 // exitTargetNotFound は rex が block や session を解決できなかったときの exit code (実測)。
-// rex-premise: preview.21cli 存在しない block への block call は exit 3
+// rex-premise: preview.21 cli 存在しない block への block call は exit 3
 const exitTargetNotFound = 3
 
 // SessionResolver は block の ID から Claude Code の session_id への対応を返す。
@@ -35,12 +36,16 @@ type SessionResolver func() (map[string]string, error)
 
 // execClient は rex CLI を subprocess として呼び出す multiplexer.Client 実装。
 type execClient struct {
+	// binMu は binPath を守る。Watch の購読の goroutine と daemon の tick が並んで rex を呼ぶ。
+	binMu sync.Mutex
 	// binPath は解決済みの rex の絶対パス。空なら次の呼び出しで locateBinary が埋める。
 	binPath string
 	timeout time.Duration
 	// resolve は block_id から session_id を引く (statusline が書いた sidecar)。
 	resolve SessionResolver
-	watch        *watchState
+	// watch は Watch が始めた購読の cache。nil なら購読しておらず、PaneList は毎回全列挙する。
+	watch *watchState
+	// watchBackoff は購読が切れてから張り直すまでの最初の間隔。0 なら defaultWatchBackoff。
 	watchBackoff time.Duration
 }
 
@@ -56,6 +61,8 @@ func newExecClientWithTimeout(resolve SessionResolver, timeout time.Duration) *e
 
 // bin は rex の絶対パスを返す。未解決なら PATH から引いて覚える。
 func (c *execClient) bin() (string, error) {
+	c.binMu.Lock()
+	defer c.binMu.Unlock()
 	if c.binPath == "" {
 		bin, err := locateBinary()
 		if err != nil {
@@ -64,6 +71,16 @@ func (c *execClient) bin() (string, error) {
 		c.binPath = bin
 	}
 	return c.binPath, nil
+}
+
+// forgetBin は覚えていた rex が消えたとき、次の bin で引き直させる。並んだ呼び出しが先に引き直していれば触らない。
+// REX_BIN_PATH で固定していれば引き直しても同じパスになる。
+func (c *execClient) forgetBin(stale string) {
+	c.binMu.Lock()
+	defer c.binMu.Unlock()
+	if c.binPath == stale {
+		c.binPath = ""
+	}
 }
 
 // childEnv は rex に渡す環境。REX_SESSION があると rex は block の解決をその session の中に
@@ -92,7 +109,7 @@ func (c *execClient) run(ctx context.Context, args ...string) ([]byte, error) {
 	if !binaryVanished(err) {
 		return out, err
 	}
-	c.binPath = ""
+	c.forgetBin(bin)
 	again, locateErr := c.bin()
 	if locateErr != nil || again == bin {
 		return nil, err
@@ -110,7 +127,7 @@ func (c *execClient) runWith(ctx context.Context, bin string, args ...string) ([
 	}
 
 	// server が落ちているときに CLI が起こさないよう、全呼び出しで autostart を切る。
-	// rex-premise: preview.21cli --autostart は global option で既定 true
+	// rex-premise: preview.21 cli --autostart は global option で既定 true
 	full := append([]string{"--autostart=false"}, args...)
 	// #nosec G204 -- bin は PATH か REX_BIN_PATH から引いた rex (利用者自身の環境)、args はこの
 	// パッケージ内で組み立てた固定のサブコマンドと block ID のみ。
@@ -163,30 +180,38 @@ type blockLsResult struct {
 	} `json:"blocks"`
 }
 
+// PaneList は shell の block を block ID の順に返す。Watch の購読が同期していれば cache から返し、rex を叩かない。
+// 同期していなければ (購読していない、張り直しの途中) 全列挙する。
 func (c *execClient) PaneList(ctx context.Context) ([]multiplexer.Pane, error) {
 	sessions, err := c.resolve()
 	if err != nil {
 		return nil, fmt.Errorf("block と session の対応の読み込みに失敗: %w", err)
 	}
+	if panes, ok := c.watch.panes(sessions); ok {
+		return panes, nil
+	}
+	blocks, err := c.snapshot(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return newPaneCache(blocks).panes(sessions), nil
+}
 
+// snapshot は全 session の shell の block に program_status と process を打つ。
+// 1 回で `ls` 1 回、session ごとに `block ls` 1 回、shell の block ごとに 2 回の fork になる。
+func (c *execClient) snapshot(ctx context.Context) (map[string]*blockState, error) {
 	var ls lsResult
 	if err := c.runJSON(ctx, &ls, "ls", "--json"); err != nil {
 		return nil, err
 	}
-
-	var panes []multiplexer.Pane
+	blocks := map[string]*blockState{}
 	for _, s := range ls.Sessions {
-		// block ls だけは -s が必須 (無いと exit 2)。
-		// rex-premise: preview.21cli block ls は -s 必須
-		var blocks blockLsResult
-		if err := c.runJSON(ctx, &blocks, "block", "ls", "-s", s.SessionID, "--json"); err != nil {
+		shells, err := c.shellBlocks(ctx, s.SessionID)
+		if err != nil {
 			return nil, err
 		}
-		for _, b := range blocks.Blocks {
-			if b.Flavor != shellFlavor {
-				continue
-			}
-			pane, err := c.blockPane(ctx, b.BlockID, sessions)
+		for _, id := range shells {
+			st, err := c.fetchBlock(ctx, s.SessionID, id)
 			if err != nil {
 				// block ls の後に閉じた block は読み飛ばす。ここで失敗を返すと daemon が
 				// PaneList の連続失敗に数え、block の開け閉めだけで終了しかねない。
@@ -195,10 +220,27 @@ func (c *execClient) PaneList(ctx context.Context) ([]multiplexer.Pane, error) {
 				}
 				return nil, err
 			}
-			panes = append(panes, pane)
+			blocks[id] = st
 		}
 	}
-	return panes, nil
+	return blocks, nil
+}
+
+// shellBlocks は session の shell の block の ID を返す。これ以外の block は program_status を持たない。
+func (c *execClient) shellBlocks(ctx context.Context, session string) ([]string, error) {
+	// block ls だけは -s が必須 (無いと exit 2)。
+	// rex-premise: preview.21 cli block ls は -s 必須
+	var blocks blockLsResult
+	if err := c.runJSON(ctx, &blocks, "block", "ls", "-s", session, "--json"); err != nil {
+		return nil, err
+	}
+	var ids []string
+	for _, b := range blocks.Blocks {
+		if b.Flavor == shellFlavor {
+			ids = append(ids, b.BlockID)
+		}
+	}
+	return ids, nil
 }
 
 func (c *execClient) PaneGet(ctx context.Context, paneID string) (multiplexer.Pane, error) {
@@ -206,26 +248,29 @@ func (c *execClient) PaneGet(ctx context.Context, paneID string) (multiplexer.Pa
 	if err != nil {
 		return multiplexer.Pane{}, fmt.Errorf("block と session の対応の読み込みに失敗: %w", err)
 	}
-	return c.blockPane(ctx, paneID, sessions)
+	st, err := c.fetchBlock(ctx, "", paneID)
+	if err != nil {
+		return multiplexer.Pane{}, err
+	}
+	return toPane(paneID, st.ps, st.proc, sessions[paneID]), nil
 }
 
-// blockPane は 1 block に program_status と process を打って Pane を作る。
-func (c *execClient) blockPane(ctx context.Context, blockID string, sessions map[string]string) (multiplexer.Pane, error) {
-	var ps programStatusResult
-	if err := c.runJSON(ctx, &ps, "block", "call", "-b", blockID, "program_status"); err != nil {
-		return multiplexer.Pane{}, err
+// fetchBlock は 1 block に program_status と process を打つ。
+func (c *execClient) fetchBlock(ctx context.Context, session, blockID string) (*blockState, error) {
+	st := &blockState{session: session}
+	if err := c.runJSON(ctx, &st.ps, "block", "call", "-b", blockID, "program_status"); err != nil {
+		return nil, err
 	}
-	var proc processResult
-	if err := c.runJSON(ctx, &proc, "block", "call", "-b", blockID, "process"); err != nil {
-		return multiplexer.Pane{}, err
+	if err := c.runJSON(ctx, &st.proc, "block", "call", "-b", blockID, "process"); err != nil {
+		return nil, err
 	}
-	return toPane(blockID, ps, proc, sessions[blockID]), nil
+	return st, nil
 }
 
 // PaneRead は block の画面を返す。Claude Code は alternate screen で描くので、Claude の block では
 // 可視の行数で頭打ちになる (alternate screen でない block では scrollback も返る)。
 // opts.Lines > 0 なら末尾 Lines 行に絞る。
-// rex-premise: preview.21cli capture は alternate screen では可視の行だけ、通常の画面では scrollback も返す。--trim と --unwrap がある
+// rex-premise: preview.21 cli capture は alternate screen では可視の行だけ、通常の画面では scrollback も返す。--trim と --unwrap がある
 func (c *execClient) PaneRead(ctx context.Context, paneID string, opts multiplexer.PaneReadOptions) (string, error) {
 	out, err := c.run(ctx, "capture", "-b", paneID, "--trim", "--unwrap")
 	if err != nil {
@@ -251,8 +296,8 @@ const screenAlternate = "alternate"
 
 // PaneGeometry は size と modes の 2 回で block の高さと screen を返す。modes は idle の terminal を起こさない
 // (changelog)。
-// rex-premise: preview.21cli block call size は rows と columns を返す
-// rex-premise: preview.21cli block call modes は screen (primary / alternate) を返す
+// rex-premise: preview.21 cli block call size は rows と columns を返す
+// rex-premise: preview.21 cli block call modes は screen (primary / alternate) を返す
 func (c *execClient) PaneGeometry(ctx context.Context, paneID string) (multiplexer.Geometry, error) {
 	var size sizeResult
 	if err := c.runJSON(ctx, &size, "block", "call", "-b", paneID, "size"); err != nil {

@@ -102,6 +102,12 @@ func TestCheckPremises_NamesMissingField(t *testing.T) {
 		{"inspect に program_status_changed が無い", func(t *testing.T, f *fakeRex) {
 			f.put(t, "inspect-"+blockSelfOct18+".json", `{"api":{"methods":{"program_status":{},"process":{}},"events":{"process_changed":{}}}}`)
 		}, "program_status_changed"},
+		{"inspect に program_status_removed が無い", func(t *testing.T, f *fakeRex) {
+			f.put(t, "inspect-"+blockSelfOct18+".json", `{"api":{"methods":{"program_status":{},"process":{},"size":{},"modes":{}},"events":{"program_status_changed":{},"process_changed":{}}}}`)
+		}, "program_status_removed"},
+		{"inspect に process_changed が無い", func(t *testing.T, f *fakeRex) {
+			f.put(t, "inspect-"+blockSelfOct18+".json", `{"api":{"methods":{"program_status":{},"process":{},"size":{},"modes":{}},"events":{"program_status_changed":{},"program_status_removed":{}}}}`)
+		}, "process_changed"},
 		{"inspect に process の method が無い", func(t *testing.T, f *fakeRex) {
 			f.put(t, "inspect-"+blockSelfOct18+".json", `{"api":{"methods":{"program_status":{},"size":{},"modes":{}},"events":{"program_status_changed":{}}}}`)
 		}, "process"},

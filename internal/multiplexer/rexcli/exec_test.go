@@ -55,6 +55,7 @@ type fakeRex struct {
 
 // newFakeRex は引数で fixture を選んで返す fake の rex を書く。fixture が無ければ実機と同じく
 // `block target "…" not found` を stderr に出して exit 3 になる。`fail-<fixture 名>` を置くと exit 1 になる。
+// `events` は events.jsonl を流して終わる (server の切断)。`events-hold` を置くと流した後も stream を開けておく。
 // 呼び出しごとに引数を 1 つずつ single quote で囲って calls.log へ、環境変数を env.log へ追記する。
 // --autostart=false が先頭に無い呼び出しは拒むので、成功を確かめるテストはどれも autostart を切っていることを確かめている。
 func newFakeRex(t *testing.T) *fakeRex {
@@ -105,6 +106,9 @@ case "$1" in
   capture) emit "capture-$3.txt" "$3" ;;
   run) emit run.json run ;;
   api) emit server-status.json server ;;
+  events)
+    emit events.jsonl events
+    if [ -f "$d/events-hold" ]; then exec sleep 30; fi ;;
   send|send-key) emit "target-$3" "$3" ;;
   *) echo "Error: unknown command $1" >&2; exit 2 ;;
 esac

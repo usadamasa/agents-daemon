@@ -40,6 +40,8 @@ type execClient struct {
 	timeout time.Duration
 	// resolve は block_id から session_id を引く (statusline が書いた sidecar)。
 	resolve SessionResolver
+	watch        *watchState
+	watchBackoff time.Duration
 }
 
 // NewExecClient は実 rex バイナリを叩く Client を返す。

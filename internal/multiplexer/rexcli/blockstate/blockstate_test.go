@@ -1,4 +1,4 @@
-package rexcli
+package blockstate
 
 import (
 	"encoding/json"
@@ -10,12 +10,12 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 )
 
-// testdata の実測のディレクトリ。中身の由来は testdata/README.md。
+// 実測の fixture は rexcli の testdata に 1 か所で置く (rexcli のテストも同じ応答を使う)。中身の由来は
+// ../testdata/README.md。
 const (
 	measuredOct10 = "2026-10-10_rex-0.0.1791570264_cc-2.1.296"
 	measuredOct17 = "2026-10-17_rex-preview.15_cc-2.1.302"
-	measuredOct18 = "2026-10-18_rex-preview.15_cc-2.1.302"
-	measuredOct20 = "2026-10-20_rex-preview.16_cc-2.1.304"
+	measuredOct27 = "2026-10-27_rex-preview.21_cc-2.1.311"
 )
 
 // 実測の fixture の owner.pid。foreground の process の pid と突き合わせる。
@@ -42,10 +42,10 @@ const (
 	psError = `{"records":[{"state":"error","app":"claude-code","effective_app":"claude-code","msg":"API Error: 429 rate limit","updated_at":"2026-10-17T14:00:00.000000+09:00","owner":{"pid":15470,"name":"2.1.302"}}]}`
 )
 
-// measured は testdata の実測の応答を返す。
+// measured は rexcli の testdata の実測の応答を返す。
 func measured(t *testing.T, dir, name string) string {
 	t.Helper()
-	b, err := os.ReadFile(filepath.Join("testdata", dir, name)) // #nosec G304 -- テストの fixture
+	b, err := os.ReadFile(filepath.Join("..", "testdata", dir, name)) // #nosec G304 -- テストの fixture
 	if err != nil {
 		t.Fatalf("fixture %s/%s の読み込みに失敗: %v", dir, name, err)
 	}
@@ -97,15 +97,15 @@ func TestToPane(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var ps programStatusResult
+			var ps ProgramStatus
 			if err := json.Unmarshal([]byte(tt.ps), &ps); err != nil {
 				t.Fatalf("program_status の parse に失敗: %v", err)
 			}
-			var proc processResult
+			var proc Process
 			if err := json.Unmarshal([]byte(processJSON(tt.pid, tt.argv0, "/w")), &proc); err != nil {
 				t.Fatalf("process の parse に失敗: %v", err)
 			}
-			got := toPane("block:x", ps, proc, "sid")
+			got := ToPane("block:x", ps, proc, "sid")
 			// kind と msg の写像は TestToPane_KindAndMessage で見る。
 			got.AgentKind, got.AgentMessage = "", ""
 			want := multiplexer.Pane{
@@ -113,7 +113,7 @@ func TestToPane(t *testing.T) {
 				Agent: tt.wantAgent, AgentStatus: tt.wantStatus, SessionID: "sid", UnknownReason: tt.wantReason,
 			}
 			if got != want {
-				t.Errorf("toPane() = %+v, want %+v", got, want)
+				t.Errorf("ToPane() = %+v, want %+v", got, want)
 			}
 			// daemon が Claude の pane と見て文面を打つかは IsClaudeAgent で決まる。
 			if isClaude, wantClaude := multiplexer.IsClaudeAgent(got), tt.wantAgent == "claude"; isClaude != wantClaude {
@@ -141,17 +141,17 @@ func TestToPane_KindAndMessage(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var ps programStatusResult
+			var ps ProgramStatus
 			if err := json.Unmarshal([]byte(tt.ps), &ps); err != nil {
 				t.Fatalf("program_status の parse に失敗: %v", err)
 			}
-			var proc processResult
+			var proc Process
 			if err := json.Unmarshal([]byte(processJSON(tt.pid, "claude", "/w")), &proc); err != nil {
 				t.Fatalf("process の parse に失敗: %v", err)
 			}
-			got := toPane("block:x", ps, proc, "sid")
+			got := ToPane("block:x", ps, proc, "sid")
 			if got.AgentKind != tt.wantKind || got.AgentMessage != tt.wantMessage {
-				t.Errorf("toPane() kind = %q, message = %q; want %q, %q", got.AgentKind, got.AgentMessage, tt.wantKind, tt.wantMessage)
+				t.Errorf("ToPane() kind = %q, message = %q; want %q, %q", got.AgentKind, got.AgentMessage, tt.wantKind, tt.wantMessage)
 			}
 		})
 	}

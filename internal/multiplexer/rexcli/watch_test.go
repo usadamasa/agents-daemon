@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer/rexcli/blockstate"
 )
 
 // logSink は Watch の logf が書いた行を集める。
@@ -67,7 +68,7 @@ func (f *fakeRex) clearCalls(t *testing.T) {
 func putOwnBlock(t *testing.T, f *fakeRex) {
 	t.Helper()
 	f.put(t, "ls.json", lsJSON(sessionOwn))
-	f.put(t, "block-ls-"+sessionOwn+".json", blockLsJSON([2]string{blockOwn, shellFlavor}))
+	f.put(t, "block-ls-"+sessionOwn+".json", blockLsJSON([2]string{blockOwn, blockstate.ShellFlavor}))
 	f.putBlock(t, blockOwn, psEmpty, processJSON(pidOwnShell, "-zsh", cwdOwn))
 }
 
@@ -127,12 +128,12 @@ func TestWatch_BlockCreatedInNewSession(t *testing.T) {
 	f := newFakeRex(t)
 	f.put(t, "ls.json", lsJSON(sessionA))
 	f.put(t, "block-ls-"+sessionA+".json", blockLsJSON())
-	f.put(t, "block-ls-"+sessionB+".json", blockLsJSON([2]string{blockClaudeDone, shellFlavor}))
+	f.put(t, "block-ls-"+sessionB+".json", blockLsJSON([2]string{blockClaudeDone, blockstate.ShellFlavor}))
 	f.putBlock(t, blockClaudeDone, psEmpty, processJSON(pidClaudeDone, "claude", "/b"))
 	f.put(t, "events.jsonl", strings.Join([]string{
 		`{"type":"session_created","payload":{"session":{"session_id":"` + sessionB + `","label":"new"}}}`,
 		`{"type":"session_event","payload":{"session_id":"` + sessionB + `","event":{"type":"block_created","payload":{"block_id":"` + blockClaudeDone + `"}}}}`,
-		psChangedLine(sessionB, blockClaudeDone, "", "done", "できた", pidClaudeDone),
+		psChangedLine(sessionB, blockClaudeDone, "done", "できた", pidClaudeDone),
 	}, "\n")+"\n")
 	f.put(t, "events-hold", "")
 	c := f.client(staticResolver(nil))

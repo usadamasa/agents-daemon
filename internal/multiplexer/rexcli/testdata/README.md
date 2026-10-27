@@ -7,7 +7,7 @@ CLI の hash は書かない。
 応答の取り方は `.claude/skills/catching-up-with-rex-changelog/references/cli-checks.md` にある。
 
 <!-- rex-premise: preview.21 program_status 2026-10-17 の record は Claude Code の自己申告だけ -->
-<!-- rex-premise: preview.21 cli 2026-10-18 の version / block ls / block inspect --json は doctor の点検 (premise.go) が読む形 -->
+<!-- rex-premise: preview.21 cli 2026-10-18 の version / block ls / block inspect --json は doctor の点検 (premise) が読む形 -->
 <!-- rex-premise: preview.21 cli 2026-10-20 の modes.json は preview.16 で増えた method の応答、size.json は PaneGeometry が読む rows / columns -->
 <!-- rex-premise: preview.21 cli 2026-10-20 の server_status.json は api call server.status の応答で api_revision を持つ。tailscale の object (DNS 名とアカウント) は落としてある -->
 <!-- rex-premise: preview.21 cli 2026-10-24 の block inspect --json は api.methods の一覧の基準 (次回の増減をこれと diff する)。api_revision 6 で blob_read が増え、format と selection_copied の schema が変わった -->

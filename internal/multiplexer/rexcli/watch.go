@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os/exec"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer/rexcli/blockstate"
 )
 
 const (
@@ -36,7 +36,7 @@ var _ multiplexer.Watcher = (*execClient)(nil)
 // watchState は購読の cache。cache が nil なら未同期で、PaneList は全列挙する。
 type watchState struct {
 	mu    sync.Mutex
-	cache *paneCache
+	cache *blockstate.Cache
 }
 
 func (w *watchState) synced() bool {
@@ -55,10 +55,10 @@ func (w *watchState) panes(sessions map[string]string) ([]multiplexer.Pane, bool
 	if w.cache == nil {
 		return nil, false
 	}
-	return w.cache.panes(sessions), true
+	return w.cache.Panes(sessions), true
 }
 
-func (w *watchState) set(cache *paneCache) {
+func (w *watchState) set(cache *blockstate.Cache) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.cache = cache
@@ -123,7 +123,7 @@ func (c *execClient) watchOnce(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("購読を始めるときの全列挙に失敗: %w", err)
 	}
-	cache := newPaneCache(blocks)
+	cache := blockstate.NewCache(blocks)
 	for drained := false; !drained; {
 		select {
 		case line, ok := <-stream.lines:
@@ -156,43 +156,43 @@ func (c *execClient) watchOnce(ctx context.Context) error {
 
 // applyLine は 1 行を cache に当て、block_created なら block を確かめて埋める。mu があれば cache に触る間だけ持つ
 // (rex を叩く間は離し、PaneList を待たせない)。この goroutine だけが cache を書くので、離した間に cache は変わらない。
-func (c *execClient) applyLine(ctx context.Context, cache *paneCache, mu *sync.Mutex, line []byte) error {
+func (c *execClient) applyLine(ctx context.Context, cache *blockstate.Cache, mu *sync.Mutex, line []byte) error {
 	lock := func() {}
 	unlock := func() {}
 	if mu != nil {
 		lock, unlock = mu.Lock, mu.Unlock
 	}
 	lock()
-	ref, err := cache.apply(line)
+	ref, err := cache.Apply(line)
 	unlock()
-	if err != nil || ref == (blockRef{}) {
+	if err != nil || ref == (blockstate.Ref{}) {
 		return err
 	}
 	st, err := c.fetchCreated(ctx, ref)
 	if err != nil {
-		return fmt.Errorf("作られた block %s を埋められない: %w", ref.block, err)
+		return fmt.Errorf("作られた block %s を埋められない: %w", ref.Block, err)
 	}
 	if st != nil {
 		lock()
-		cache.put(ref, st)
+		cache.Put(ref, st)
 		unlock()
 	}
 	return nil
 }
 
 // fetchCreated は作られた block が shell なら program_status と process で埋める。shell でないか、もう閉じていれば nil。
-func (c *execClient) fetchCreated(ctx context.Context, ref blockRef) (*blockState, error) {
-	shells, err := c.shellBlocks(ctx, ref.session)
+func (c *execClient) fetchCreated(ctx context.Context, ref blockstate.Ref) (*blockstate.State, error) {
+	shells, err := c.shellBlocks(ctx, ref.Session)
 	if err != nil {
 		if isTargetNotFound(err) {
 			return nil, nil
 		}
 		return nil, err
 	}
-	if !slices.Contains(shells, ref.block) {
+	if !slices.Contains(shells, ref.Block) {
 		return nil, nil
 	}
-	st, err := c.fetchBlock(ctx, ref.session, ref.block)
+	st, err := c.fetchBlock(ctx, ref.Session, ref.Block)
 	if isTargetNotFound(err) {
 		return nil, nil
 	}
@@ -267,9 +267,8 @@ func (c *execClient) startEvents(ctx context.Context) (*eventStream, error) {
 	return s, nil
 }
 
-// read は stdout を行に分け、購読に関わる行だけを lines へ送る。client の出入りのような雑音は daemon 自身の
-// 呼び出しのたびに流れるので、ここで落として queue を溢れさせない。ctx が終われば送らずに抜ける
-// (受け手が居なくなった後に queue の空きを待ち続けない)。
+// read は stdout を行に分け、cache が読む行 (blockstate.Relevant) だけを lines へ送る。雑音を溜めず queue を
+// 溢れさせない。ctx が終われば送らずに抜ける (受け手が居なくなった後に queue の空きを待ち続けない)。
 func (s *eventStream) read(ctx context.Context, stdout io.Reader) {
 	defer close(s.done)
 	defer close(s.lines)
@@ -281,7 +280,7 @@ func (s *eventStream) read(ctx context.Context, stdout io.Reader) {
 			firstSeen = true
 			close(s.first)
 		}
-		if !relevantLine(scanner.Bytes()) {
+		if !blockstate.Relevant(scanner.Bytes()) {
 			continue
 		}
 		select {
@@ -291,34 +290,6 @@ func (s *eventStream) read(ctx context.Context, stdout io.Reader) {
 		}
 	}
 	s.readErr = scanner.Err()
-}
-
-// relevantLine は cache が読む type の行か。壊れた行は通し、apply に error を出させる。
-func relevantLine(line []byte) bool {
-	var l struct {
-		Type    string `json:"type"`
-		Payload struct {
-			Event *struct {
-				Type string `json:"type"`
-			} `json:"event"`
-		} `json:"payload"`
-	}
-	if err := json.Unmarshal(line, &l); err != nil {
-		return true
-	}
-	switch l.Type {
-	case "session_destroyed":
-		return true
-	case "session_event":
-		if l.Payload.Event == nil {
-			return false
-		}
-		switch l.Payload.Event.Type {
-		case "block_event", "block_created", "block_closed":
-			return true
-		}
-	}
-	return false
 }
 
 // endErr は stream が終わった理由。stdout の読み取りの失敗か、子プロセスの終わり方と stderr。

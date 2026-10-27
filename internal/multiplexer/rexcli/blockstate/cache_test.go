@@ -1,4 +1,4 @@
-package rexcli
+package blockstate
 
 import (
 	"encoding/json"
@@ -10,7 +10,13 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 )
 
-const measuredOct27 = "2026-10-27_rex-preview.21_cc-2.1.311"
+// session と block は 2026-10-10 の実測の ID。
+const (
+	sessionA           = "session:01a12439-0839-7829-a4cb-aeac453570c1"
+	sessionB           = "session:01a1250f-c100-71e0-aed0-4a433569cf00"
+	blockClaudeWorking = "block:01a12439-083a-74f9-9827-49c3478b2469"
+	blockClaudeDone    = "block:01a12540-cd47-7943-a503-91a06c58fab5"
+)
 
 // 2026-10-27 の events.jsonl に出る ID。
 const (
@@ -57,28 +63,28 @@ func sessionDestroyedLine(session string) string {
 }
 
 // state は program_status と process の応答 (JSON) から block の cache を作る。
-func state(t *testing.T, session, programStatus, process string) *blockState {
+func state(t *testing.T, session, programStatus, process string) *State {
 	t.Helper()
-	st := &blockState{session: session}
-	if err := json.Unmarshal([]byte(programStatus), &st.ps); err != nil {
+	st := &State{Session: session}
+	if err := json.Unmarshal([]byte(programStatus), &st.ProgramStatus); err != nil {
 		t.Fatalf("program_status の parse に失敗: %v", err)
 	}
-	if err := json.Unmarshal([]byte(process), &st.proc); err != nil {
+	if err := json.Unmarshal([]byte(process), &st.Process); err != nil {
 		t.Fatalf("process の parse に失敗: %v", err)
 	}
 	return st
 }
 
 // applyAll は行を順に当て、block_created が求めた block の一覧を返す。
-func applyAll(t *testing.T, c *paneCache, lines []string) []blockRef {
+func applyAll(t *testing.T, c *Cache, lines []string) []Ref {
 	t.Helper()
-	var created []blockRef
+	var created []Ref
 	for i, line := range lines {
-		ref, err := c.apply([]byte(line))
+		ref, err := c.Apply([]byte(line))
 		if err != nil {
 			t.Fatalf("apply(%d 行目) error = %v", i+1, err)
 		}
-		if ref != (blockRef{}) {
+		if ref != (Ref{}) {
 			created = append(created, ref)
 		}
 	}
@@ -87,29 +93,29 @@ func applyAll(t *testing.T, c *paneCache, lines []string) []blockRef {
 
 // 実測の stream を頭から当てる。自分の block は shell の zsh が前景の snapshot から始まり、Claude の前景と
 // working の record が届く。使い捨ての block は作られ、record を出し、終わって閉じる。
-func TestPaneCache_ReplaysMeasuredStream(t *testing.T) {
-	c := newPaneCache(map[string]*blockState{
+func TestCache_ReplaysMeasuredStream(t *testing.T) {
+	c := NewCache(map[string]*State{
 		blockOwn: state(t, sessionOwn, psEmpty, processJSON(pidOwnShell, "-zsh", cwdOwn)),
 	})
 	lines := strings.Split(strings.TrimSpace(measured(t, measuredOct27, "events.jsonl")), "\n")
 
-	var created []blockRef
+	var created []Ref
 	for i, line := range lines {
-		ref, err := c.apply([]byte(line))
+		ref, err := c.Apply([]byte(line))
 		if err != nil {
 			t.Fatalf("apply(%d 行目) error = %v", i+1, err)
 		}
-		if ref != (blockRef{}) {
+		if ref != (Ref{}) {
 			created = append(created, ref)
 			// block ls と program_status / process で埋めた直後の形 (前景はまだ無い)。
-			c.put(ref, state(t, ref.session, psEmpty, `{"last_exit":null,"foreground":null}`))
+			c.Put(ref, state(t, ref.Session, psEmpty, `{"last_exit":null,"foreground":null}`))
 		}
 	}
 
-	if want := []blockRef{{session: sessionOwn, block: blockProbe}}; !slices.Equal(created, want) {
+	if want := []Ref{{Session: sessionOwn, Block: blockProbe}};!slices.Equal(created, want) {
 		t.Errorf("block_created が求めた block = %+v, want %+v", created, want)
 	}
-	got := c.panes(map[string]string{blockOwn: sidOwn})
+	got := c.Panes(map[string]string{blockOwn: sidOwn})
 	want := []multiplexer.Pane{{
 		PaneID: blockOwn, CWD: cwdOwn, Agent: "claude", AgentStatus: multiplexer.AgentStatusWorking,
 		AgentMessage: "Close probe block after its program exits", SessionID: sidOwn,
@@ -121,7 +127,7 @@ func TestPaneCache_ReplaysMeasuredStream(t *testing.T) {
 
 // 全列挙の snapshot が stream の途中の event より新しくても、積んだ event を順に当て直せば最新に追いつく。
 // removed がそのまま snapshot の record を消しても、その record を作った event が後ろにある。
-func TestPaneCache_ReplayOverNewerSnapshot(t *testing.T) {
+func TestCache_ReplayOverNewerSnapshot(t *testing.T) {
 	tests := []struct {
 		name     string
 		snapshot string
@@ -151,11 +157,11 @@ func TestPaneCache_ReplayOverNewerSnapshot(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := newPaneCache(map[string]*blockState{
+			c := NewCache(map[string]*State{
 				blockOwn: state(t, sessionOwn, tt.snapshot, processJSON(pidOwn, "claude", cwdOwn)),
 			})
 			applyAll(t, c, tt.lines)
-			got := c.panes(nil)
+			got := c.Panes(nil)
 			if len(got) != 1 || got[0].AgentStatus != tt.want || got[0].AgentMessage != tt.wantMsg {
 				t.Errorf("panes() = %+v, want 1 件で agent_status=%s msg=%q", got, tt.want, tt.wantMsg)
 			}
@@ -164,8 +170,8 @@ func TestPaneCache_ReplayOverNewerSnapshot(t *testing.T) {
 }
 
 // subagent の record は id で root と並び、removed の ids で個別に消える。
-func TestPaneCache_SubagentRecord(t *testing.T) {
-	c := newPaneCache(map[string]*blockState{
+func TestCache_SubagentRecord(t *testing.T) {
+	c := NewCache(map[string]*State{
 		blockOwn: state(t, sessionOwn, psEmpty, processJSON(pidOwn, "claude", cwdOwn)),
 	})
 	applyAll(t, c, []string{
@@ -173,29 +179,29 @@ func TestPaneCache_SubagentRecord(t *testing.T) {
 		psChangedLine(sessionOwn, blockOwn, "a01b73b4e3800b31f", "blocked", "subagent", pidOwn),
 		psRemovedLine(sessionOwn, blockOwn, "clear", "a01b73b4e3800b31f"),
 	})
-	got := c.panes(nil)
+	got := c.Panes(nil)
 	if len(got) != 1 || got[0].AgentStatus != multiplexer.AgentStatusWorking || got[0].AgentMessage != "本体" {
 		t.Errorf("panes() = %+v, want root の working だけが残る", got)
 	}
-	if n := len(c.blocks[blockOwn].ps.Records); n != 1 {
+	if n := len(c.blocks[blockOwn].ProgramStatus.Records); n != 1 {
 		t.Errorf("records = %d 件, want 1 (subagent の record は消える)", n)
 	}
 }
 
 // process_changed は前景を置き換える。Claude が終わって shell に戻ると、残った record は owner が合わず使わない。
-func TestPaneCache_ForegroundChange(t *testing.T) {
-	c := newPaneCache(map[string]*blockState{
+func TestCache_ForegroundChange(t *testing.T) {
+	c := NewCache(map[string]*State{
 		blockOwn: state(t, sessionOwn, psEmpty, processJSON(pidOwnShell, "-zsh", cwdOwn)),
 	})
 	applyAll(t, c, []string{
 		procChangedLine(sessionOwn, blockOwn, 1, pidOwn, "claude", cwdOwn),
 		psChangedLine(sessionOwn, blockOwn, "", "done", "終わり", pidOwn),
 	})
-	if got := c.panes(nil); len(got) != 1 || got[0].AgentStatus != multiplexer.AgentStatusDone {
+	if got := c.Panes(nil); len(got) != 1 || got[0].AgentStatus != multiplexer.AgentStatusDone {
 		t.Fatalf("panes() = %+v, want Claude の done", got)
 	}
 	applyAll(t, c, []string{procChangedLine(sessionOwn, blockOwn, 2, pidOwnShell, "-zsh", "/elsewhere")})
-	got := c.panes(nil)
+	got := c.Panes(nil)
 	want := []multiplexer.Pane{{PaneID: blockOwn, CWD: "/elsewhere", AgentStatus: multiplexer.AgentStatusUnknown}}
 	if !slices.Equal(got, want) {
 		t.Errorf("panes() = %+v, want %+v (done の record は残るが前景の shell の pane)", got, want)
@@ -203,51 +209,81 @@ func TestPaneCache_ForegroundChange(t *testing.T) {
 }
 
 // session が消えたら、その session の block だけを落とす。
-func TestPaneCache_SessionDestroyed(t *testing.T) {
-	c := newPaneCache(map[string]*blockState{
+func TestCache_SessionDestroyed(t *testing.T) {
+	c := NewCache(map[string]*State{
 		blockClaudeWorking: state(t, sessionA, psEmpty, processJSON(pidClaudeWorking, "claude", "/a")),
 		blockClaudeDone:    state(t, sessionB, psEmpty, processJSON(pidClaudeDone, "claude", "/b")),
 	})
 	applyAll(t, c, []string{sessionDestroyedLine(sessionA)})
-	got := c.panes(nil)
+	got := c.Panes(nil)
 	if len(got) != 1 || got[0].PaneID != blockClaudeDone {
 		t.Errorf("panes() = %+v, want session B の block だけ", got)
 	}
 }
 
 // cache に無い block (shell 以外、まだ埋めていない) の event は読み捨てる。
-func TestPaneCache_IgnoresUnknownBlock(t *testing.T) {
-	c := newPaneCache(nil)
+func TestCache_IgnoresUnknownBlock(t *testing.T) {
+	c := NewCache(nil)
 	applyAll(t, c, []string{
 		psChangedLine(sessionOwn, blockProbe, "", "working", "x", pidOwn),
 		procChangedLine(sessionOwn, blockProbe, 1, pidOwn, "claude", "/x"),
 	})
-	if got := c.panes(nil); len(got) != 0 {
+	if got := c.Panes(nil); len(got) != 0 {
 		t.Errorf("panes() = %+v, want 空", got)
 	}
 }
 
 // panes は block ID の順に並べる (map の順に依らない)。
-func TestPaneCache_PanesSorted(t *testing.T) {
-	c := newPaneCache(map[string]*blockState{
+func TestCache_PanesSorted(t *testing.T) {
+	c := NewCache(map[string]*State{
 		blockClaudeDone:    state(t, sessionB, psEmpty, processJSON(pidShell, "-zsh", "/b")),
 		blockClaudeWorking: state(t, sessionA, psEmpty, processJSON(pidShell, "-zsh", "/a")),
 	})
-	got := c.panes(nil)
+	got := c.Panes(nil)
 	if len(got) != 2 || got[0].PaneID != blockClaudeWorking || got[1].PaneID != blockClaudeDone {
 		t.Errorf("panes() = %+v, want block ID の順", got)
 	}
 }
 
-func TestPaneCache_BrokenLineIsError(t *testing.T) {
+// Relevant は実測の stream のうち Apply が読む行だけを通す。client の出入り、window、view の行は落とす。
+func TestRelevant(t *testing.T) {
+	var kept []string
+	for line := range strings.SplitSeq(strings.TrimSpace(measured(t, measuredOct27, "events.jsonl")), "\n") {
+		if !Relevant([]byte(line)) {
+			continue
+		}
+		var l streamLine
+		if err := json.Unmarshal([]byte(line), &l); err != nil {
+			t.Fatal(err)
+		}
+		kind := l.Type
+		if l.Payload.Event != nil {
+			kind = l.Payload.Event.Type
+		}
+		kept = append(kept, kind)
+	}
+	want := []string{
+		"block_event", "block_event", // 自分の block の process_changed と program_status_changed
+		"block_created", "block_event", "block_event", "block_event", "block_event", "block_event", "block_event",
+		"block_closed", "session_destroyed",
+	}
+	if !slices.Equal(kept, want) {
+		t.Errorf("通した行 = %v, want %v", kept, want)
+	}
+	if !Relevant([]byte("not json")) {
+		t.Error("壊れた行を落とした (Apply に error を出させるべき)")
+	}
+}
+
+func TestCache_BrokenLineIsError(t *testing.T) {
 	// payload を読むのは cache にある block の event だけなので、block を置いておく。
-	c := newPaneCache(map[string]*blockState{
+	c := NewCache(map[string]*State{
 		blockOwn: state(t, sessionOwn, psEmpty, processJSON(pidOwn, "claude", cwdOwn)),
 	})
-	if _, err := c.apply([]byte("not json")); err == nil {
+	if _, err := c.Apply([]byte("not json")); err == nil {
 		t.Error("apply(壊れた行) error = nil, want error")
 	}
-	if _, err := c.apply([]byte(blockEventLine(sessionOwn, blockOwn, "program_status_changed", `"not an object"`))); err == nil {
+	if _, err := c.Apply([]byte(blockEventLine(sessionOwn, blockOwn, "program_status_changed", `"not an object"`))); err == nil {
 		t.Error("apply(payload が object でない) error = nil, want error")
 	}
 }

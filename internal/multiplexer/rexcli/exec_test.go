@@ -12,6 +12,7 @@ import (
 	"github.com/kballard/go-shellquote"
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer/rexcli/blockstate"
 )
 
 // fake の rex に渡す ID。session と Claude の block は 2026-10-10 の実測、閉じた block と shell 以外の block は作り物。
@@ -196,13 +197,13 @@ func TestExecClient_PaneList(t *testing.T) {
 	f := newFakeRex(t)
 	f.put(t, "ls.json", lsJSON(sessionA, sessionB))
 	f.put(t, "block-ls-"+sessionA+".json", blockLsJSON(
-		[2]string{blockClaudeWorking, shellFlavor},
+		[2]string{blockClaudeWorking, blockstate.ShellFlavor},
 		[2]string{blockNotShell, "com.superlogical.browser"},
 	))
 	f.put(t, "block-ls-"+sessionB+".json", blockLsJSON(
-		[2]string{blockClosed, shellFlavor},
-		[2]string{blockClosedMidway, shellFlavor},
-		[2]string{blockClaudeDone, shellFlavor},
+		[2]string{blockClosed, blockstate.ShellFlavor},
+		[2]string{blockClosedMidway, blockstate.ShellFlavor},
+		[2]string{blockClaudeDone, blockstate.ShellFlavor},
 	))
 	f.putBlock(t, blockClaudeWorking, measured(t, measuredOct10, "program_status-working.json"), processJSON(pidClaudeWorking, "claude", "/w/agents-daemon"))
 	f.put(t, "program_status-"+blockClosedMidway+".json", psEmpty)
@@ -254,7 +255,7 @@ func TestExecClient_PaneList_FailureIsError(t *testing.T) {
 	oneBlock := func(programStatus string) map[string]string {
 		return map[string]string{
 			"ls.json":                        lsJSON(sessionA),
-			"block-ls-" + sessionA + ".json": blockLsJSON([2]string{blockClaudeWorking, shellFlavor}),
+			"block-ls-" + sessionA + ".json": blockLsJSON([2]string{blockClaudeWorking, blockstate.ShellFlavor}),
 			"program_status-" + blockClaudeWorking + ".json": programStatus,
 		}
 	}

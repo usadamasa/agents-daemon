@@ -1,6 +1,6 @@
 // Package rexcli は rex CLI を叩く multiplexer.Client の実装を提供する。
-// rex の JSON は非公開の wire 型に閉じ、multiplexer.Pane へ写して返す。
-// CLI の呼び出しは exec.go、record から Pane への写像は pane.go が持つ。
+// CLI の呼び出しは exec.go、events の購読は watch.go が持つ。応答と events の形、block の状態から
+// multiplexer.Pane への写像は blockstate、doctor の前提点検は premise にある。
 package rexcli
 
 import (
@@ -16,14 +16,12 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer/rexcli/blockstate"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer/rexcli/premise"
 )
 
 // defaultTimeout は rex コマンド 1 回あたりのタイムアウト。
 const defaultTimeout = 10 * time.Second
-
-// shellFlavor は terminal の block の flavor。これ以外の block は program_status を持たない。
-// rex-premise: preview.21 cli block ls の flavor の値
-const shellFlavor = "com.superlogical.terminal.shell"
 
 // exitTargetNotFound は rex が block や session を解決できなかったときの exit code (実測)。
 // rex-premise: preview.21 cli 存在しない block への block call は exit 3
@@ -173,13 +171,6 @@ type lsResult struct {
 	} `json:"sessions"`
 }
 
-type blockLsResult struct {
-	Blocks []struct {
-		BlockID string `json:"block_id"`
-		Flavor  string `json:"flavor"`
-	} `json:"blocks"`
-}
-
 // PaneList は shell の block を block ID の順に返す。Watch の購読が同期していれば cache から返し、rex を叩かない。
 // 同期していなければ (購読していない、張り直しの途中) 全列挙する。
 func (c *execClient) PaneList(ctx context.Context) ([]multiplexer.Pane, error) {
@@ -194,17 +185,17 @@ func (c *execClient) PaneList(ctx context.Context) ([]multiplexer.Pane, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newPaneCache(blocks).panes(sessions), nil
+	return blockstate.NewCache(blocks).Panes(sessions), nil
 }
 
 // snapshot は全 session の shell の block に program_status と process を打つ。
 // 1 回で `ls` 1 回、session ごとに `block ls` 1 回、shell の block ごとに 2 回の fork になる。
-func (c *execClient) snapshot(ctx context.Context) (map[string]*blockState, error) {
+func (c *execClient) snapshot(ctx context.Context) (map[string]*blockstate.State, error) {
 	var ls lsResult
 	if err := c.runJSON(ctx, &ls, "ls", "--json"); err != nil {
 		return nil, err
 	}
-	blocks := map[string]*blockState{}
+	blocks := map[string]*blockstate.State{}
 	for _, s := range ls.Sessions {
 		shells, err := c.shellBlocks(ctx, s.SessionID)
 		if err != nil {
@@ -230,13 +221,13 @@ func (c *execClient) snapshot(ctx context.Context) (map[string]*blockState, erro
 func (c *execClient) shellBlocks(ctx context.Context, session string) ([]string, error) {
 	// block ls だけは -s が必須 (無いと exit 2)。
 	// rex-premise: preview.21 cli block ls は -s 必須
-	var blocks blockLsResult
+	var blocks blockstate.BlockList
 	if err := c.runJSON(ctx, &blocks, "block", "ls", "-s", session, "--json"); err != nil {
 		return nil, err
 	}
 	var ids []string
 	for _, b := range blocks.Blocks {
-		if b.Flavor == shellFlavor {
+		if b.Flavor == blockstate.ShellFlavor {
 			ids = append(ids, b.BlockID)
 		}
 	}
@@ -252,16 +243,16 @@ func (c *execClient) PaneGet(ctx context.Context, paneID string) (multiplexer.Pa
 	if err != nil {
 		return multiplexer.Pane{}, err
 	}
-	return toPane(paneID, st.ps, st.proc, sessions[paneID]), nil
+	return blockstate.ToPane(paneID, st.ProgramStatus, st.Process, sessions[paneID]), nil
 }
 
 // fetchBlock は 1 block に program_status と process を打つ。
-func (c *execClient) fetchBlock(ctx context.Context, session, blockID string) (*blockState, error) {
-	st := &blockState{session: session}
-	if err := c.runJSON(ctx, &st.ps, "block", "call", "-b", blockID, "program_status"); err != nil {
+func (c *execClient) fetchBlock(ctx context.Context, session, blockID string) (*blockstate.State, error) {
+	st := &blockstate.State{Session: session}
+	if err := c.runJSON(ctx, &st.ProgramStatus, "block", "call", "-b", blockID, "program_status"); err != nil {
 		return nil, err
 	}
-	if err := c.runJSON(ctx, &st.proc, "block", "call", "-b", blockID, "process"); err != nil {
+	if err := c.runJSON(ctx, &st.Process, "block", "call", "-b", blockID, "process"); err != nil {
 		return nil, err
 	}
 	return st, nil
@@ -291,9 +282,6 @@ type modesResult struct {
 	Screen string `json:"screen"`
 }
 
-// screenAlternate は modes の screen が alternate screen を指す値。これ以外は primary と見る (output_schema の指示)。
-const screenAlternate = "alternate"
-
 // PaneGeometry は size と modes の 2 回で block の高さと screen を返す。modes は idle の terminal を起こさない
 // (changelog)。
 // rex-premise: preview.21 cli block call size は rows と columns を返す
@@ -307,7 +295,7 @@ func (c *execClient) PaneGeometry(ctx context.Context, paneID string) (multiplex
 	if err := c.runJSON(ctx, &modes, "block", "call", "-b", paneID, "modes"); err != nil {
 		return multiplexer.Geometry{}, err
 	}
-	return multiplexer.Geometry{Rows: size.Rows, Columns: size.Columns, AlternateScreen: modes.Screen == screenAlternate}, nil
+	return multiplexer.Geometry{Rows: size.Rows, Columns: size.Columns, AlternateScreen: modes.Screen == blockstate.ScreenAlternate}, nil
 }
 
 // tailLines は s の末尾 n 行を返す。末尾の改行は行に数えず、あればそのまま残す。
@@ -336,6 +324,25 @@ func (c *execClient) SendKeys(ctx context.Context, paneID string, keys ...string
 
 type serverStatusResult struct {
 	PID int `json:"pid"`
+}
+
+// CheckPremises は doctor の前提点検 (multiplexer.PremiseChecker)。点検の中身は premise が持ち、rex はこの Client と
+// 同じ呼び方で打つ。
+func (c *execClient) CheckPremises(ctx context.Context, blockID, sessionID string) []multiplexer.PremiseFinding {
+	return premise.Check(ctx, premiseRunner{c}, blockID, sessionID)
+}
+
+// premiseRunner は execClient を premise.Runner として渡す。execClient の公開の口を増やさないための包み。
+type premiseRunner struct{ c *execClient }
+
+func (r premiseRunner) Run(ctx context.Context, args ...string) ([]byte, error) { return r.c.run(ctx, args...) }
+
+func (r premiseRunner) TargetNotFound(err error) bool { return isTargetNotFound(err) }
+
+func (r premiseRunner) BinPath() string {
+	r.c.binMu.Lock()
+	defer r.c.binMu.Unlock()
+	return r.c.binPath
 }
 
 // Reachable は `api call server.status` で rex server の生死を確かめる。

@@ -88,7 +88,7 @@ func runRaw(ctx context.Context, bin string, args ...string) ([]byte, error) {
 // rexHost は rex の split / block close で使い捨て block を扱う。
 // rex には pane を外から Claude agent に登録する手段が無く、Claude の判定は Claude Code 自身が出す
 // OSC 7501 (`block call program_status` の record) に頼る。そこで使い捨て block の script に
-// 同じ OSC 7501 を printf させ、本番と同じ判定 (rexcli の toPane) を通す。
+// 同じ OSC 7501 を printf させ、本番と同じ判定 (rexcli/blockstate の ToPane) を通す。
 type rexHost struct {
 	bin      string
 	ownBlock string

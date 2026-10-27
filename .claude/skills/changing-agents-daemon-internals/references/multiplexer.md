@@ -42,7 +42,7 @@ daemon は起動時に `multiplexer.Watcher` の `Watch` で `rex --autostart=fa
    2 秒待って来なければ `api call server.status` を 1 回打って起こす
 2. 全列挙で cache を作る。全列挙の間に届いた event は捨てずに溜め、全列挙の後に順に当てる。stream は欠けず順序を
    保つので、snapshot より古い event が当たっても、その後の変化の event が後ろに必ずあり、cache は最新に追いつく
-3. 以降は event を当て続け、`PaneList` は rex を叩かずに cache を `toPane` へ渡す (`internal/multiplexer/rexcli/cache.go`)
+3. 以降は event を当て続け、`PaneList` は rex を叩かずに cache を `ToPane` へ渡す (`internal/multiplexer/rexcli/blockstate`)
 
 | event | cache への当て方 |
 | ---- | ---- |

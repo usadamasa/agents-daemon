@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026.1027.0](https://github.com/usadamasa/agents-daemon/compare/2026.1025.4...2026.1027.0) - 2026-10-27
+
+- rex preview.21 で前提を確かめ直し、rex-premise の版を上げる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/297
+- rex の events を購読し、tick の pane の一覧を fork せずに取る by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/299
+
 ## [2026.1025.4](https://github.com/usadamasa/agents-daemon/compare/2026.1025.3...2026.1025.4) - 2026-10-25
 
 - CI で mod の型検査を回す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/274

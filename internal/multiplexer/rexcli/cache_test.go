@@ -34,7 +34,7 @@ func psChangedLine(session, block, id, state, msg string, pid int) string {
 	record := `{"state":"` + state + `","app":"claude-code","effective_app":"claude-code","msg":"` + msg +
 		`","updated_at":"2026-10-27T21:19:18.848469+09:00","owner":{"pid":` + strconv.Itoa(pid) + `,"name":"2.1.311"}}`
 	if id != "" {
-		record = `{"id":"` + id + record[1:]
+		record = `{"id":"` + id + `",` + record[1:]
 	}
 	return blockEventLine(session, block, "program_status_changed", `{"id":"`+id+`","record":`+record+`,"reason":"report"}`)
 }
@@ -240,7 +240,10 @@ func TestPaneCache_PanesSorted(t *testing.T) {
 }
 
 func TestPaneCache_BrokenLineIsError(t *testing.T) {
-	c := newPaneCache(nil)
+	// payload を読むのは cache にある block の event だけなので、block を置いておく。
+	c := newPaneCache(map[string]*blockState{
+		blockOwn: state(t, sessionOwn, psEmpty, processJSON(pidOwn, "claude", cwdOwn)),
+	})
 	if _, err := c.apply([]byte("not json")); err == nil {
 		t.Error("apply(壊れた行) error = nil, want error")
 	}

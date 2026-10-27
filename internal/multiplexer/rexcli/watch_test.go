@@ -137,8 +137,8 @@ func TestWatch_Calls(t *testing.T) {
 
 	startWatch(t, c)
 	eventually(t, "同期済み", c.watch.synced)
-	eventually(t, "block_created の block ls", func() bool {
-		return len(readLines(t, filepath.Join(f.dir, "calls.log"))) >= 6
+	eventually(t, "block_created と session_created の block ls", func() bool {
+		return len(readLines(t, filepath.Join(f.dir, "calls.log"))) >= 7
 	})
 	f.assertCalls(t,
 		"--autostart=false events --all --json",
@@ -147,6 +147,8 @@ func TestWatch_Calls(t *testing.T) {
 		"--autostart=false block call -b "+blockOwn+" program_status",
 		"--autostart=false block call -b "+blockOwn+" process",
 		"--autostart=false block ls -s "+sessionOwn+" --json",
+		// 実測の stream の session_created。fake にその session は無いので exit 3 で読み飛ばす。
+		"--autostart=false block ls -s session:01a17d51-a67b-7c38-bd8e-3265c5f30a95 --json",
 	)
 }
 

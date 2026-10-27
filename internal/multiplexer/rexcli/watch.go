@@ -69,10 +69,15 @@ func (w *watchState) set(cache *blockstate.Cache) {
 // PaneList と並ぶ前 (daemon の最初の tick より前) に 1 回だけ呼ぶ。
 func (c *execClient) Watch(ctx context.Context, logf func(format string, args ...any)) <-chan struct{} {
 	c.watch = &watchState{}
-	go c.watchLoop(ctx, logf)
-	return make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		c.watchLoop(ctx, logf)
+	}()
+	return done
 }
 
+// watchLoop は ctx が終わるまで購読を張り直す。戻るのは watchOnce が events の子を刈り取った後。
 func (c *execClient) watchLoop(ctx context.Context, logf func(format string, args ...any)) {
 	first := c.watchBackoff
 	if first <= 0 {
@@ -155,7 +160,7 @@ func (c *execClient) watchOnce(ctx context.Context) error {
 	}
 }
 
-// applyLine は 1 行を cache に当て、block_created なら block を確かめて埋める。mu があれば cache に触る間だけ持つ
+// applyLine は 1 行を cache に当て、block_created / session_created なら block を確かめて埋める。mu があれば cache に触る間だけ持つ
 // (rex を叩く間は離し、PaneList を待たせない)。この goroutine だけが cache を書くので、離した間に cache は変わらない。
 func (c *execClient) applyLine(ctx context.Context, cache *blockstate.Cache, mu *sync.Mutex, line []byte) error {
 	lock := func() {}
@@ -169,20 +174,21 @@ func (c *execClient) applyLine(ctx context.Context, cache *blockstate.Cache, mu 
 	if err != nil || ref == (blockstate.Ref{}) {
 		return err
 	}
-	st, err := c.fetchCreated(ctx, ref)
+	created, err := c.fetchCreated(ctx, ref)
 	if err != nil {
-		return fmt.Errorf("作られた block %s を埋められない: %w", ref.Block, err)
+		return fmt.Errorf("作られた block (session %s、block %q) を埋められない: %w", ref.Session, ref.Block, err)
 	}
-	if st != nil {
-		lock()
-		cache.Put(ref, st)
-		unlock()
+	lock()
+	for id, st := range created {
+		cache.Put(blockstate.Ref{Session: ref.Session, Block: id}, st)
 	}
+	unlock()
 	return nil
 }
 
-// fetchCreated は作られた block が shell なら program_status と process で埋める。shell でないか、もう閉じていれば nil。
-func (c *execClient) fetchCreated(ctx context.Context, ref blockstate.Ref) (*blockstate.State, error) {
+// fetchCreated は作られた block のうち shell のものを program_status と process で埋める。ref.Block が空
+// (session_created) ならその session の shell の block を全部埋める。shell でない、もう閉じた block は入れない。
+func (c *execClient) fetchCreated(ctx context.Context, ref blockstate.Ref) (map[string]*blockstate.State, error) {
 	shells, err := c.shellBlocks(ctx, ref.Session)
 	if err != nil {
 		if isTargetNotFound(err) {
@@ -190,14 +196,24 @@ func (c *execClient) fetchCreated(ctx context.Context, ref blockstate.Ref) (*blo
 		}
 		return nil, err
 	}
-	if !slices.Contains(shells, ref.Block) {
-		return nil, nil
+	if ref.Block != "" {
+		if !slices.Contains(shells, ref.Block) {
+			return nil, nil
+		}
+		shells = []string{ref.Block}
 	}
-	st, err := c.fetchBlock(ctx, ref.Session, ref.Block)
-	if isTargetNotFound(err) {
-		return nil, nil
+	created := map[string]*blockstate.State{}
+	for _, id := range shells {
+		st, err := c.fetchBlock(ctx, ref.Session, id)
+		if isTargetNotFound(err) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		created[id] = st
 	}
-	return st, err
+	return created, nil
 }
 
 // awaitFirstLine は購読が始まった (server が event を流し始めた) ことを最初の行で確かめる。rex の CLI の呼び出しは

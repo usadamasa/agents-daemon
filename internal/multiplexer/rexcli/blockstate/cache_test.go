@@ -107,12 +107,15 @@ func TestCache_ReplaysMeasuredStream(t *testing.T) {
 		}
 		if ref != (Ref{}) {
 			created = append(created, ref)
-			// block ls と program_status / process で埋めた直後の形 (前景はまだ無い)。
-			c.Put(ref, state(t, ref.Session, psEmpty, `{"last_exit":null,"foreground":null}`))
+			// block ls と program_status / process で埋めた直後の形 (前景はまだ無い)。新しい session は block を持たない。
+			if ref.Block != "" {
+				c.Put(ref, state(t, ref.Session, psEmpty, `{"last_exit":null,"foreground":null}`))
+			}
 		}
 	}
 
-	if want := []Ref{{Session: sessionOwn, Block: blockProbe}}; !slices.Equal(created, want) {
+	wantRefs := []Ref{{Session: sessionOwn, Block: blockProbe}, {Session: "session:01a17d51-a67b-7c38-bd8e-3265c5f30a95"}}
+	if want := wantRefs; !slices.Equal(created, want) {
 		t.Errorf("block_created が求めた block = %+v, want %+v", created, want)
 	}
 	got := c.Panes(map[string]string{blockOwn: sidOwn})

@@ -50,12 +50,14 @@ daemon は起動時に `multiplexer.Watcher` の `Watch` で `rex --autostart=fa
 | `program_status_removed` | `ids` の record を消す (`reason` は `child_exited` / `foreground` / `clear` など。理由を問わず消す) |
 | `process_changed` | 前景を置き換える。`isForeground` の突き合わせはこの前景で行う |
 | `block_created` | payload に flavor が無いので、その session に `block ls` を 1 回打ち、shell なら `program_status` と `process` で埋める |
+| `session_created` | 新しい session の最初の block には `block_created` が来ないので、その session に `block ls` を 1 回打ち、shell の block を全部埋める |
 | `block_closed` / `session_destroyed` | その block、その session の block を落とす |
 
 `client_joined` / `client_left` と session ごとの `client_connected` / `client_disconnected` は rex の CLI の呼び出しの
 たびに流れる雑音で、読む側の queue に入れる前に落とす。
 
-stream が切れたら (EOF、壊れた行、`block_created` の後の `block ls` の失敗) cache を捨てて未同期に戻し、1 秒から倍、
+daemon が終わるとき (入れ替わりを含む) は購読を止め、events の子を刈り取ってから終わる (上限 2 秒)。
+stream が切れたら (EOF、壊れた行、`block_created` / `session_created` の後の `block ls` の失敗) cache を捨てて未同期に戻し、1 秒から倍、
 上限 30 秒の間隔で張り直す。1 分以上続いた購読の後は間隔を 1 秒に戻す。未同期の間の `PaneList` は全列挙で、
 server が落ちていれば今までどおり tick の失敗に数える。切れた理由と張り直しは daemon.log に 1 行ずつ出る。
 

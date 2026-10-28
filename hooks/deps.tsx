@@ -7,7 +7,7 @@ import { loadDeps } from './deps-data'
 import { CHAIN_COLOR, COLOR, Graph, ICON, MEMO, candidates, cells, chain, fit, legendRows, pieces, splitLanes, summary, tags } from './graph'
 import { logChange, logEvent, settle } from './log'
 import type { Fields } from './log'
-import { ask, handText, isOwn, spawnText as ownSpawnText, startText, statusText, toParking } from './own-task'
+import { ask, handOff as handOffTask, isOwn, spawnText as ownSpawnText, startText, statusText, toParking } from './own-task'
 import {
   adopt,
   canAdopt,
@@ -234,7 +234,7 @@ export const registerDeps: Register = on => {
                 To parking
               </Button>,
               ...peerDestinations(data, self).map(to => (
-                <Button key={`own-hand:${to.session_id}`} onPress={() => void act(() => ask($, handText(n, to)))}>
+                <Button key={`own-hand:${to.session_id}`} onPress={() => void act(() => handOffTask($, n, to))}>
                   Hand off → {destinationLabel(to)}
                 </Button>
               )),

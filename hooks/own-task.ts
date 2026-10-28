@@ -1,6 +1,7 @@
 import type { EngineInterface } from 'claude-code'
 
 import type { GraphNode } from '../types'
+import { logEvent } from './log'
 import { park, tellSelf } from './parking'
 import type { Destination } from './parking'
 
@@ -33,16 +34,30 @@ export function statusText(node: GraphNode, status: 'completed' | 'deleted'): st
   return `${ref(node)}を TaskUpdate で ${status} にしてください。`
 }
 
-// HAND_OFF は渡す文面の後半。description と進み具合は mod が知らないので、タスクを持つ自分に書かせる。
-const HAND_OFF = 'SendMessage の本文にタスクの description と今の進み具合を入れて送り、届いたら TaskUpdate で deleted にしてください。'
-
-// handText は生きているほかのセッションへ渡すよう頼む文面。同名のセッションを見分けられるよう session ID を添える。
-export function handText(node: GraphNode, to: Extract<Destination, { route: 'peer' }>): string {
-  return `${ref(node)}を ${to.session} (session ID ${to.session_id}) へ渡してください。${HAND_OFF}`
+// handOff は生きているほかのセッションへタスクを渡す。model に SendMessage で渡させると、ListAgents の名前が依存図の
+// どの欄 (表示名、session_name、session ID) とも一致しないセッションへ届かないので、mod が session ID で title と
+// description を送り、届いたら自分にタスクを消すよう頼む。進み具合は mod が知らないので送らない。
+export async function handOff($: EngineInterface, node: GraphNode, to: Extract<Destination, { route: 'peer' }>): Promise<string> {
+  const lines = [`${node.session ?? ''} (session ID ${node.session_id ?? ''}) からタスク「${node.title}」を渡します。TaskCreate で作って進めてください。`]
+  if (node.description) lines.push(`詳細: ${node.description}`)
+  const event = { via: 'hand-off', to: to.session_id }
+  let reason: string
+  try {
+    const result = await $.session.send({ to: { sessionId: to.session_id }, text: lines.join('\n') })
+    reason = result.isDelivered ? '' : result.reason
+  } catch (err) {
+    reason = String(err)
+  }
+  await logEvent($, 'mod.send', reason === '' ? { ...event, delivered: true } : { ...event, delivered: false, reason })
+  if (reason !== '') return `${to.session} へ送れませんでした: ${reason}`
+  const failure = await tellSelf($, `${ref(node)}を ${to.session} へ渡しました (title と description を送った)。TaskUpdate で deleted にしてください。`)
+  return failure === '' ? `${to.session} へ渡し、${SAID}` : `${to.session} へ渡しましたが、このセッションの入力へ渡せませんでした (タスクは残っています): ${failure}`
 }
 
+// spawnText は新しいセッションを起こして渡すよう頼む文面。起こしたセッションの名前は自分が付けるので、SendMessage で
+// 渡すのも自分に任せる。
 export function spawnText(node: GraphNode): string {
-  return `${ref(node)}を新しいセッションへ渡してください。agents-daemon:peer-sessions skill の手順で peer を立て、${HAND_OFF}`
+  return `${ref(node)}を新しいセッションへ渡してください。agents-daemon:peer-sessions skill の手順で peer を立て、SendMessage の本文にタスクの description と今の進み具合を入れて送り、届いたら TaskUpdate で deleted にしてください。`
 }
 
 // toParking はタスクをパーキングロットへ戻す。扱うメモ (捨てていないもの) があるタスクは新しいメモを作らず、

@@ -19,7 +19,7 @@
 | `block call -b "$REX_BLOCK" program_status` | root record (`id` が無いか空) の `state` / `app` / `owner.pid` | `blockstate` の `Record` と `RecordFields`、`testdata/` の `program_status-*.json` |
 | `block call -b "$REX_BLOCK" process` | `foreground.pid` / `argv0` / `cwd` | `blockstate` の `Foreground` と `ForegroundFields`、`fixtures_test.go` の `processJSON` |
 | `block ls -s "$REX_SESSION" --json` | `blocks[]` に自分の block があり `flavor` が `com.superlogical.terminal.shell` | `blockstate` の `BlockList` と `ShellFlavor` |
-| `block inspect "$REX_BLOCK" --json` | `api.methods` に `program_status` / `process` / `size` / `modes`、`api.events` に `program_status_changed` / `program_status_removed` / `process_changed` (購読が読む block の event) | `premise` の `inspectMethods` と `blockstate` の `BlockEvents`。一覧に新しい method や event が増えていないかは人が見る (下) |
+| `block inspect "$REX_BLOCK" --json` | `api.methods` に `program_status` / `process` / `size` / `modes`、`api.events` に `program_status_changed` / `program_status_removed` / `process_changed` / `child_exited` (購読が読む block の event) | `premise` の `inspectMethods` と `blockstate` の `BlockEvents`。一覧に新しい method や event が増えていないかは人が見る (下) |
 | `block call -b "$REX_BLOCK" modes` | `screen` が `alternate` (Claude Code の画面で呼んだとき) | `exec.go` の `modesResult`、`testdata/2026-10-20_…/modes.json`。pane 一覧の `rows` / `screen` は `size` (`exec.go` の `sizeResult`、`testdata/2026-10-20_…/size.json`) と合わせて `PaneGeometry` が打つ |
 
 `--autostart=false` は全呼び出しに付くので、flag が消えると節の先頭 (`version --json`) から落ちる。
@@ -31,7 +31,7 @@ streaming の `events` と、一覧の増減 (新しい method や event) は判
 
 | コマンド | 見る欄 | 突き合わせる先 |
 | ---- | ---- | ---- |
-| `timeout 10 rex --autostart=false events --all --json` | daemon の購読と同じ stream。`block_event` の `name` と payload (`program_status_changed` の `id` / `record`、`program_status_removed` の `ids`、`process_changed` の `foreground`)、`block_created` / `block_closed` の `block_id`、`session_destroyed` の `session_id` | `blockstate` の `cache.go` (`streamLine` / `blockEvent` / `programStatusChanged` / `programStatusRemoved`)、`testdata/2026-10-27_…/events.jsonl` |
+| `timeout 10 rex --autostart=false events --all --json` | daemon の購読と同じ stream。`block_event` の `name` と payload (`program_status_changed` の `id` / `record`、`program_status_removed` の `ids`、`process_changed` の `foreground`、`state=idle` で終わった block の `child_exited` の後に record が残るか)、`block_created` / `block_closed` の `block_id`、`session_destroyed` の `session_id` | `blockstate` の `cache.go` (`streamLine` / `blockEvent` / `programStatusChanged` / `programStatusRemoved`)、`testdata/2026-10-27_…/events.jsonl` |
 | `rex --autostart=false block inspect "$REX_BLOCK" --json` の `.api.methods` / `.api.events` の key 一覧 | 前回の実測 (`testdata/<日付>/block-inspect.json`) に無い method や event | daemon の polling や画面の読み取りを置き換えられるか (アイデアとして issue へ) |
 | `rex --autostart=false api list --json` の `.methods[].name` | 前回の実測 (`testdata/<日付>/api-list.json`) に無い server の method | 同上。`api_revision` が上がったのに block の api が同じときの手がかり |
 

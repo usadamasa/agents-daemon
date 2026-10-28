@@ -41,6 +41,7 @@ daemon.log の検知と送信の行に `agent_status=… kind=… msg="…"` の
   (preview.13 までの rex が process 名から補っていた `claude` は preview.15 では来ない)。
 - record の `owner.pid` が `foreground` の process の pid と一致する。仕様では `done` と `error` は process の終了と shell prompt
   を生き延びる。そのため Claude Code が SIGKILL で終わると素の shell に `done` が残る (実測。`/exit` は `state=clear` で消す)。
+  `--keep-open` の block では `idle` の record も `child_exited` の後に残り、前景は空になる (購読の cache は `child_exited` で前景を消す)。
 - 条件を満たす record が無くても、`foreground` の `argv0` (basename) が `claude` なら Claude agent として `unknown`。
   record があるのに使えなかったときは理由を daemon のログ (`agent_status を判定できません`) と `doctor` の
   pane 一覧 (`unknown の理由`) に出す。`owner` は rex 独自の欄なので、rex の版が変わって欄が消えると全 pane が

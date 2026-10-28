@@ -49,6 +49,7 @@ daemon は起動時に `multiplexer.Watcher` の `Watch` で `rex --autostart=fa
 | `program_status_changed` | record を `id` で置き換える (root は空の id)。report は record を丸ごと置き換える |
 | `program_status_removed` | `ids` の record を消す (`reason` は `child_exited` / `foreground` / `clear` など。理由を問わず消す) |
 | `process_changed` | 前景を置き換える。`isForeground` の突き合わせはこの前景で行う |
+| `child_exited` | 前景を空にする。`--keep-open` の block は終了後に `process_changed` が来ず、`idle` の record が残る |
 | `block_created` | payload に flavor が無いので、その session に `block ls` を 1 回打ち、shell なら `program_status` と `process` で埋める |
 | `session_created` | 新しい session の最初の block には `block_created` が来ないので、その session に `block ls` を 1 回打ち、shell の block を全部埋める |
 | `block_closed` / `session_destroyed` | その block、その session の block を落とす |

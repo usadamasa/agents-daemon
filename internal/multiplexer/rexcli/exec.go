@@ -24,7 +24,7 @@ import (
 const defaultTimeout = 10 * time.Second
 
 // exitTargetNotFound は rex が block や session を解決できなかったときの exit code (実測)。
-// rex-premise: preview.21 cli 存在しない block への block call は exit 3
+// rex-premise: preview.22 cli 存在しない block への block call は exit 3
 const exitTargetNotFound = 3
 
 // SessionResolver は block の ID から Claude Code の session_id への対応を返す。
@@ -125,7 +125,7 @@ func (c *execClient) runWith(ctx context.Context, bin string, args ...string) ([
 	}
 
 	// server が落ちているときに CLI が起こさないよう、全呼び出しで autostart を切る。
-	// rex-premise: preview.21 cli --autostart は global option で既定 true
+	// rex-premise: preview.22 cli --autostart は global option で既定 true
 	full := append([]string{"--autostart=false"}, args...)
 	// #nosec G204 -- bin は PATH か REX_BIN_PATH から引いた rex (利用者自身の環境)、args はこの
 	// パッケージ内で組み立てた固定のサブコマンドと block ID のみ。
@@ -220,7 +220,7 @@ func (c *execClient) snapshot(ctx context.Context) (map[string]*blockstate.State
 // shellBlocks は session の shell の block の ID を返す。これ以外の block は program_status を持たない。
 func (c *execClient) shellBlocks(ctx context.Context, session string) ([]string, error) {
 	// block ls だけは -s が必須 (無いと exit 2)。
-	// rex-premise: preview.21 cli block ls は -s 必須
+	// rex-premise: preview.22 cli block ls は -s 必須
 	var blocks blockstate.BlockList
 	if err := c.runJSON(ctx, &blocks, "block", "ls", "-s", session, "--json"); err != nil {
 		return nil, err
@@ -261,7 +261,7 @@ func (c *execClient) fetchBlock(ctx context.Context, session, blockID string) (*
 // PaneRead は block の画面を返す。Claude Code は alternate screen で描くので、Claude の block では
 // 可視の行数で頭打ちになる (alternate screen でない block では scrollback も返る)。
 // opts.Lines > 0 なら末尾 Lines 行に絞る。
-// rex-premise: preview.21 cli capture は alternate screen では可視の行だけ、通常の画面では scrollback も返す。--trim と --unwrap がある
+// rex-premise: preview.22 cli capture は alternate screen では可視の行だけ、通常の画面では scrollback も返す。--trim と --unwrap がある
 func (c *execClient) PaneRead(ctx context.Context, paneID string, opts multiplexer.PaneReadOptions) (string, error) {
 	out, err := c.run(ctx, "capture", "-b", paneID, "--trim", "--unwrap")
 	if err != nil {
@@ -284,8 +284,8 @@ type modesResult struct {
 
 // PaneGeometry は size と modes の 2 回で block の高さと screen を返す。modes は idle の terminal を起こさない
 // (changelog)。
-// rex-premise: preview.21 cli block call size は rows と columns を返す
-// rex-premise: preview.21 cli block call modes は screen (primary / alternate) を返す
+// rex-premise: preview.22 cli block call size は rows と columns を返す
+// rex-premise: preview.22 cli block call modes は screen (primary / alternate) を返す
 func (c *execClient) PaneGeometry(ctx context.Context, paneID string) (multiplexer.Geometry, error) {
 	var size sizeResult
 	if err := c.runJSON(ctx, &size, "block", "call", "-b", paneID, "size"); err != nil {

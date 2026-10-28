@@ -32,8 +32,8 @@ block が多い環境ほど時間が伸びるので、daemon は tick ごとに�
 
 ## events の購読
 
-<!-- rex-premise: preview.21 cli events --all --json は全 session の block_event を 1 行 1 event で server が切れるまで流す。plain の events には block_event が来ない -->
-<!-- rex-premise: preview.21 cli process_changed は前景の入れ替わりの瞬間に push され、block call process の問い合わせでは起きない -->
+<!-- rex-premise: preview.22 cli events --all --json は全 session の block_event を 1 行 1 event で server が切れるまで流す。plain の events には block_event が来ない -->
+<!-- rex-premise: preview.22 cli process_changed は前景の入れ替わりの瞬間に push され、block call process の問い合わせでは起きない -->
 
 daemon は起動時に `multiplexer.Watcher` の `Watch` で `rex --autostart=false events --all --json` を 1 本張る
 (`internal/multiplexer/rexcli/watch.go`)。doctor、inspect、simulate、spawn は購読せず全列挙のまま。
@@ -63,7 +63,7 @@ server が落ちていれば今までどおり tick の失敗に数える。切�
 
 ## rex のバイナリの引き直し
 
-<!-- rex-premise: preview.21 cli block の PATH は Versions/Current/… と Versions/<build>/… の順。Current は更新で中身が入れ替わり、前の build は次の更新で消える -->
+<!-- rex-premise: preview.22 cli block の PATH は Versions/Current/… と Versions/<build>/… の順。Current は更新で中身が入れ替わり、前の build は次の更新で消える -->
 
 rex のバイナリは最初の呼び出しで PATH から絶対パスに引いて覚える (`REX_BIN_PATH` があればそれで固定)。
 rex は block の PATH に `…/RexServer/Versions/Current/…` を先に、`…/RexServer/Versions/<build>/…` をその後ろに

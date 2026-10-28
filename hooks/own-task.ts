@@ -45,32 +45,33 @@ export function spawnText(node: GraphNode): string {
   return `${ref(node)}を新しいセッションへ渡してください。agents-daemon:peer-sessions skill の手順で peer を立て、${HAND_OFF}`
 }
 
-// toParking はタスクをパーキングロットへ戻す。メモから作ったタスク (handed のメモがある) は新しいメモを作らず、
-// 元のメモを open に戻してからタスクを消すよう頼む。入力へ渡せなければメモを handed に取り直す (宛先は戻らない)。
+// toParking はタスクをパーキングロットへ戻す。扱うメモ (捨てていないもの) があるタスクは新しいメモを作らず、
+// handed のメモを open に戻してからタスクを消すよう頼む。入力へ渡せなければ戻したメモを自分への handed に取り直す。
 // 扱うメモが無ければ、park tool でメモに置いてから消すよう頼む。
 export async function toParking($: EngineInterface, node: GraphNode): Promise<string> {
-  const handed = node.memos.filter(m => m.status === 'handed')
-  if (handed.length === 0) {
+  const kept = node.memos.filter(m => m.status !== 'discarded')
+  if (kept.length === 0) {
     return ask($, `${ref(node)}をパーキングロットへ戻してください。park tool でタスクの title と description をメモ (kind は scope) に置き、置けたら TaskUpdate で deleted にしてください。`)
   }
   const reopened: string[] = []
-  for (const memo of handed) {
+  for (const memo of kept.filter(m => m.status === 'handed')) {
     const failure = await park($, ['set', memo.id, '--status', 'open', '--from', 'handed'])
     if (failure !== '') return `メモ ${memo.id} を open に戻せませんでした: ${failure}${await reclaim($, reopened)}`
     reopened.push(memo.id)
   }
-  const ids = reopened.join(', ')
+  const ids = kept.map(m => m.id).join(', ')
   const failure = await tellSelf($, `${ref(node)}の元のメモ (${ids}) をパーキングロットの open に戻しました。TaskUpdate で deleted にしてください。`)
   if (failure === '') return `メモ ${ids} を open に戻し、${SAID}`
   return `このセッションの入力へ渡せませんでした: ${failure}${await reclaim($, reopened)}`
 }
 
-// reclaim は open に戻したメモを handed に取り直し、結果の文面 (前の文に続ける) を返す。
+// reclaim は open に戻したメモを自分への handed に取り直し、結果の文面 (前の文に続ける) を返す。
 async function reclaim($: EngineInterface, ids: string[]): Promise<string> {
   if (ids.length === 0) return ''
+  const self = await $.session.id()
   const failed: string[] = []
   for (const id of ids) {
-    const failure = await park($, ['set', id, '--status', 'handed', '--from', 'open'])
+    const failure = await park($, ['set', id, '--status', 'handed', '--from', 'open', '--to-session', self])
     if (failure !== '') failed.push(`${id}: ${failure}`)
   }
   return failed.length === 0 ? '。メモは handed に戻しました' : `。メモを handed に戻せませんでした (${failed.join('; ')})`

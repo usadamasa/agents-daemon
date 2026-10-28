@@ -50,9 +50,10 @@ longest chain の辺の罫線 (`marks`) は色付き。同じノードは 1 回�
 開いたセッション自身の完了していないタスクには、`Start` / `Complete` / `Delete` / `To parking` / `Hand off → <peer>` /
 `Hand off → new session` を出す (`hooks/own-task.ts`)。mod は TaskUpdate を呼べず、渡す本文に要る description も
 知らないので、どれも自分の入力 (`$.prompt.submit`) へ頼む文を渡し、タスクを動かすのは自分の model に任せる。
-渡す先の peer は repo を問わず生きているほかのセッション。`To parking` は、メモから作ったタスク (`memos` に handed が
-ある) なら新しいメモを作らず元のメモを `park set --status open --from handed` で戻してから消すよう頼み、
-入力へ渡せなければ handed に取り直す。扱うメモが無ければ park tool で置いてから消すよう頼む。
+渡す先の peer は repo を問わず生きているほかのセッション。`To parking` は、扱うメモ (`memos` のうち捨てていないもの)
+があれば新しいメモを作らず、handed のメモを `park set --status open --from handed` で戻してから消すよう頼み、
+入力へ渡せなければ自分への handed (`--to-session <自分>`) に取り直す。扱うメモが無ければ park tool で置いてから
+消すよう頼む。
 <!-- cc-premise: 2.1.303 mods pane の placement (dock / inline) と command.run の presentation.isFullscreen -->
 
 pane を開いたとき、数 (repo、セッション、ノード、メモ) が変わったとき、`deps` が失敗したときは出来事のログに

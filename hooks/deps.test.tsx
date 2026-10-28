@@ -683,7 +683,8 @@ test('ほかのセッションのタスクと、自分の完了したタスク�
 const OWN_MEMO = { id: '20261020T090000-cccc', title: 'タイトルを課題形にしない', status: 'handed' }
 const OWN_TASK = node('task:SELF/2', 'pending', 'メモから作ったタスク', { session: 'self', memos: [OWN_MEMO] })
 const REOPEN = [BIN, 'park', 'set', OWN_MEMO.id, '--status', 'open', '--from', 'handed', ...SELF_ARGS]
-const RECLAIM = [BIN, 'park', 'set', OWN_MEMO.id, '--status', 'handed', '--from', 'open', ...SELF_ARGS]
+// 取り直すときは、元の宛先 (このセッション) を書き直す。
+const RECLAIM = [BIN, 'park', 'set', OWN_MEMO.id, '--status', 'handed', '--from', 'open', '--to-session', 'SELF', ...SELF_ARGS]
 
 test('メモから作った自分のタスクを To parking で戻すと、新しいメモを作らず元のメモを open に戻してからタスクを消すよう頼む (#296)', async ($, on) => {
   const w = depsWorld(on, withNodes(OWN_TASK))
@@ -695,6 +696,18 @@ test('メモから作った自分のタスクを To parking で戻すと、新�
   expect(operations(w.ran)).toEqual([REOPEN])
   expect(w.submitted).toEqual([`タスク #2「メモから作ったタスク」の元のメモ (${OWN_MEMO.id}) をパーキングロットの open に戻しました。TaskUpdate で deleted にしてください。`])
   expect(await ui.find({ type: 'Text', text: /メモ 20261020T090000-cccc を open に戻し、このセッションの入力へ渡しました/ })).toBeDefined()
+})
+
+test('扱うメモが既に open なら、park tool で 2 つ目のメモを作らずタスクを消すよう頼むだけにする (#296)', async ($, on) => {
+  const open = { ...OWN_TASK, memos: [{ ...OWN_MEMO, status: 'open' }] }
+  const w = depsWorld(on, withNodes(open))
+  await $.command.run(OPEN_DEPS)
+  const ui = await mount($)
+  await ui.press({ key: 'row:task:SELF/2' })
+  w.ran.length = 0
+  await ui.press({ key: 'own-park' })
+  expect(operations(w.ran)).toEqual([])
+  expect(w.submitted).toEqual([`タスク #2「メモから作ったタスク」の元のメモ (${OWN_MEMO.id}) をパーキングロットの open に戻しました。TaskUpdate で deleted にしてください。`])
 })
 
 test('自分の入力へ渡せなかった (drop) ときは、open に戻したメモを handed に取り直す (#296)', async ($, on) => {

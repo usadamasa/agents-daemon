@@ -1,5 +1,11 @@
 # Changelog
 
+## [2026.1028.0](https://github.com/usadamasa/agents-daemon/compare/2026.1027.0...2026.1028.0) - 2026-10-28
+
+- rex preview.22 で確かめ直した rex-premise の版を上げる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/304
+- 依存図の pane から自分のセッションのタスクを動かせるようにする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/306
+- 購読の cache で child_exited を受けたら前景を空にする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/311
+
 ## [2026.1027.0](https://github.com/usadamasa/agents-daemon/compare/2026.1025.4...2026.1027.0) - 2026-10-27
 
 - rex preview.21 で前提を確かめ直し、rex-premise の版を上げる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/297

@@ -102,14 +102,19 @@ export function issueDestinations(data: DepsData, sessions: DepsSession[], self:
   return [selfDestination(self), ...uniqueLive([...sessions, ...data.repos.flatMap(repo => repo.sessions)], self)]
 }
 
+// peerDestinations は自分のタスクを渡す宛先: repo を問わず生きているほかのセッション (hooks/own-task.ts)。
+export function peerDestinations(data: DepsData, self: string): Extract<Destination, { route: 'peer' }>[] {
+  return uniqueLive(data.repos.flatMap(repo => repo.sessions), self)
+}
+
 function selfDestination(self: string): Destination {
   return { route: 'self', session_id: self, session: SELF_LABEL }
 }
 
 // uniqueLive は sessions を受け取った順に宛先にする。自分と、同じセッションの 2 回目は除く (subject は最初のもの)。
-function uniqueLive(sessions: DepsSession[], self: string): Destination[] {
+function uniqueLive(sessions: DepsSession[], self: string): Extract<Destination, { route: 'peer' }>[] {
   const seen = new Set<string>()
-  const out: Destination[] = []
+  const out: Extract<Destination, { route: 'peer' }>[] = []
   for (const s of sessions) {
     if (!s.live || s.session_id === '' || s.session_id === self || seen.has(s.session_id)) continue
     seen.add(s.session_id)
@@ -283,6 +288,12 @@ async function deliver($: EngineInterface, to: Destination, text: string): Promi
   }
 }
 
+// tellSelf は text を自分の入力へ渡し、入らなかった理由を返す (入れば空)。
+export async function tellSelf($: EngineInterface, text: string): Promise<string> {
+  const delivered = await deliver($, selfDestination(await $.session.id()), text)
+  return 'failure' in delivered ? delivered.failure : ''
+}
+
 // spawnSession は repo で新しいセッションを起こし、本文を最初のターンにする。claude が前景になるまでバイナリが待つので、
 // park より長い timeout にする。exit 0 で foreground が false なら window はできていて claude が前景にならなかった (unknown)。
 async function spawnSession($: EngineInterface, repo: string, text: string): Promise<Delivered> {
@@ -305,7 +316,7 @@ export async function adopt($: EngineInterface, node: GraphNode): Promise<string
 
 // park は開いたセッションの ID と cwd を添えて `agents-daemon park` を走らせ、失敗の理由を返す (成功なら空)。
 // ID は操作したセッションとしてログに残る。
-async function park($: EngineInterface, args: string[]): Promise<string> {
+export async function park($: EngineInterface, args: string[]): Promise<string> {
   const ran = await run($, args)
   return 'failure' in ran ? ran.failure : ''
 }

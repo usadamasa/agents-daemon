@@ -49,8 +49,9 @@ export type GraphNode = {
   // endpoint は key をそのまま `edge add` の端点に書けるか (TodoWrite の項目は書けない)。
   endpoint: boolean
   cwd?: string
-  // task_id は kind task のノードのタスクの ID (TaskUpdate に書く形)。
+  // task_id は kind task のノードのタスクの ID (TaskUpdate に書く形)。description はそのタスクの description。
   task_id?: string
+  description?: string
   session_id?: string
   // session は表示名 (同名のセッションがあれば session ID の先頭が付く)、session_name はセッション名そのもの
   // (SendMessage の宛先に書く形)。

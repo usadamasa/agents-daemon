@@ -83,9 +83,11 @@ type Node struct {
 	// Endpoint は Key をそのまま辺の端点に書けるか (TodoWrite の項目は書けない)。CWD はその端点の cwd。
 	Endpoint bool   `json:"endpoint"`
 	CWD      string `json:"cwd,omitempty"`
-	// TaskID は kind task のノードのタスクの ID (TaskUpdate に書く形)。
-	TaskID    string `json:"task_id,omitempty"`
-	SessionID string `json:"session_id,omitempty"`
+	// TaskID は kind task のノードのタスクの ID (TaskUpdate に書く形)。Description はそのタスクの description
+	// (pane が自分のタスクをほかのセッションへ渡す本文)。
+	TaskID      string `json:"task_id,omitempty"`
+	Description string `json:"description,omitempty"`
+	SessionID   string `json:"session_id,omitempty"`
 	// Session は表示名 (同名のセッションがあれば session ID の先頭が付く)。SessionName はセッション名
 	// そのもの (`claude --name`、SendMessage の宛先に書く形)。名前が無ければ空。
 	Session     string `json:"session,omitempty"`
@@ -140,10 +142,11 @@ type Card struct {
 	// Key は依存図で一意な識別子 (task:、todo:、sid: の Ref)。
 	Key  string
 	Kind string
-	// TaskID は kind task のタスクの ID。
-	TaskID    string
-	Title     string
-	SessionID string
+	// TaskID と Description は kind task のタスクの ID と description。
+	TaskID      string
+	Description string
+	Title       string
+	SessionID   string
 	// Session はセッションの表示名。CWD は作業の cwd (タスクの記録の cwd、無ければ pane の cwd)。
 	Session string
 	CWD     string
@@ -192,7 +195,7 @@ func Build(in Input) Graph {
 }
 
 func (g *builder) addCard(c Card) {
-	n := &Node{Key: c.Key, Kind: c.Kind, Title: c.Title, Endpoint: c.Kind != KindTodo, CWD: c.CWD, TaskID: c.TaskID, SessionID: c.SessionID,
+	n := &Node{Key: c.Key, Kind: c.Kind, Title: c.Title, Endpoint: c.Kind != KindTodo, CWD: c.CWD, TaskID: c.TaskID, Description: c.Description, SessionID: c.SessionID,
 		Session: c.Session, SessionName: g.in.SessionNames[c.SessionID], Live: c.Live, Memos: []MemoRef{}}
 	n.State = nodeState(c.Status, c.Live, c.Activity)
 	if n.State == StateLimit {

@@ -175,7 +175,7 @@ func collect(in input, panes map[string]*state.PaneStatus) []graph.Card {
 	for _, t := range in.Tasks {
 		withTasks[t.SessionID] = true
 		a, live := acts[t.SessionID]
-		cards = append(cards, graph.Card{Key: ref.Task(t.SessionID, t.ID), Kind: graph.KindTask, TaskID: t.ID, Title: t.Subject, SessionID: t.SessionID,
+		cards = append(cards, graph.Card{Key: ref.Task(t.SessionID, t.ID), Kind: graph.KindTask, TaskID: t.ID, Description: t.Description, Title: t.Subject, SessionID: t.SessionID,
 			CWD: t.CWD, Live: live, Status: t.Status, Activity: a.act, Detail: a.detail})
 	}
 	for _, list := range in.Todos {

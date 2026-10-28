@@ -20,6 +20,7 @@ README の「役割」が持つ。機能を足す・外す判断はそこに照�
 | `hooks/park.tsx`, `hooks/park.test.tsx` | model が呼べる tool `park` (パーキングロットにメモを置く) |
 | `hooks/deps-data.ts` | `agents-daemon deps` を読んで deps に置く (pane と handoff-notice が使う) |
 | `hooks/parking.ts` | メモの見せ方 (時刻の JST 表示を含む) と pane からの操作 (捨てる、タスクにする、issue にするよう頼む、パーキングへ移す) |
+| `hooks/own-task.ts` | pane から自分のセッションのタスクを動かす操作 (自分の入力へ頼む文) |
 | `hooks/notice.ts`, `hooks/notice.test.tsx` | Read / Edit / Write の結果に、触ったファイルに関係するパーキングのメモを model 向けに添える。compact で伝え直す |
 | `hooks/handoff-notice.ts`, `hooks/handoff-notice.test.tsx` | `SendMessage` の結果に、辺の無い宛先への辺の書き方を model 向けに添える |
 | `hooks/log.ts`, `hooks/log.test.tsx` | mod の出来事を `event-log` で出来事のログに残す |

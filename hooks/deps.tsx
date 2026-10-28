@@ -7,6 +7,7 @@ import { loadDeps } from './deps-data'
 import { CHAIN_COLOR, COLOR, Graph, ICON, MEMO, candidates, cells, chain, fit, legendRows, pieces, splitLanes, summary, tags } from './graph'
 import { logChange, logEvent, settle } from './log'
 import type { Fields } from './log'
+import { ask, handOff as handOffTask, isOwn, spawnText as ownSpawnText, startText, statusText, toParking } from './own-task'
 import {
   adopt,
   canAdopt,
@@ -22,6 +23,7 @@ import {
   memoLabel,
   memoLines,
   pathDestination,
+  peerDestinations,
   spawnDestinations,
   spawnText,
   stamp,
@@ -216,6 +218,31 @@ export const registerDeps: Register = on => {
             To parking
           </Button>
         ),
+        // 自分のタスクは TaskUpdate を呼べる自分の model へ頼む (#296)。
+        ...(isOwn(n, self)
+          ? [
+              <Button key="own-start" onPress={() => void act(() => ask($, startText(n)))}>
+                Start
+              </Button>,
+              <Button key="own-complete" onPress={() => void act(() => ask($, statusText(n, 'completed')))}>
+                Complete
+              </Button>,
+              <Button key="own-delete" onPress={() => void act(() => ask($, statusText(n, 'deleted')))}>
+                Delete
+              </Button>,
+              <Button key="own-park" onPress={() => void act(() => toParking($, n))}>
+                To parking
+              </Button>,
+              ...peerDestinations(data, self).map(to => (
+                <Button key={`own-hand:${to.session_id}`} onPress={() => void act(() => handOffTask($, n, to))}>
+                  Hand off → {destinationLabel(to)}
+                </Button>
+              )),
+              <Button key="own-spawn" onPress={() => void act(() => ask($, ownSpawnText(n)))}>
+                Hand off → new session
+              </Button>,
+            ]
+          : []),
       ].filter(Boolean)
       return (
         <Box key={`detail:${n.key}`} flexDirection="column" borderStyle="round" borderDimColor paddingX={1} marginLeft={GUTTER + cells(prefix)}>

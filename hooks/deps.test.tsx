@@ -12,8 +12,8 @@ const CWD = '/src/home/agents-daemon'
 // world は plugin の下にいる engine の代わりを立てる。process.run は run が答え、呼ばれた argv (バイナリの後) を
 // ran に残す。出来事のログ (hooks/log.ts) は log.test.tsx が見るので残さない。now は mod の時計の始点
 // (古いメモの判定に使う)。submitted は自セッションの入力へ渡した文面 (prompt.submit)。drop を渡すと入らなかった
-// ことにする。
-function world(on: On, run: (argv: readonly string[]) => ProcessRunResult = () => output('{}'), now = Date.parse('2026-10-19T00:00:00Z'), drop = '') {
+// ことにする。undelivered を渡すと peer へのメッセージが届かなかったことにする。
+function world(on: On, run: (argv: readonly string[]) => ProcessRunResult = () => output('{}'), now = Date.parse('2026-10-19T00:00:00Z'), drop = '', undelivered = '') {
   const ran: string[][] = []
   const opened: string[] = []
   const closed: string[] = []
@@ -40,6 +40,7 @@ function world(on: On, run: (argv: readonly string[]) => ProcessRunResult = () =
   })
   on('session.send', async (_$, e) => {
     sent.push({ to: e.to, text: e.text })
+    if (undelivered !== '') return { isDelivered: false as const, reason: undelivered }
     return { isDelivered: true as const }
   })
   on('prompt.submit', async (_$, e) => {
@@ -63,8 +64,8 @@ function operations(ran: string[][]): string[][] {
 }
 
 // depsWorld は deps に data を返し、spawn は起こしたセッションを、それ以外 (park、edge) は成功を返す。
-function depsWorld(on: On, data: unknown = DEPS, now?: number, drop?: string) {
-  return world(on, argv => (argv[1] === 'deps' ? output(JSON.stringify(data)) : argv[1] === 'spawn' ? output(SPAWNED) : output('{"created":true}')), now, drop)
+function depsWorld(on: On, data: unknown = DEPS, now?: number, drop?: string, undelivered?: string) {
+  return world(on, argv => (argv[1] === 'deps' ? output(JSON.stringify(data)) : argv[1] === 'spawn' ? output(SPAWNED) : output('{"created":true}')), now, drop, undelivered)
 }
 
 // node はタスクのノード。key は task:<sid>/<tid> の Ref で、session_id と task_id はそこから埋める。
@@ -118,7 +119,7 @@ const NODES = [
   node('task:V/1', 'pending', '確認', { session: 'verify', blocked_by: ['task:R/1', 'task:Q/2', 'task:Q/1'] }),
   node('task:G/1', 'exited', '残った作業', { session: 'gone' }),
   node('task:C/1', 'completed', '済んだ'),
-  node('task:SELF/1', 'working', 'このセッションの作業', { session: 'self' }),
+  node('task:SELF/1', 'working', 'このセッションの作業', { session: 'self', description: '作業の詳細' }),
 ]
 
 const LINKS = [
@@ -631,6 +632,122 @@ test('daemon が status.json を書いていない依存図では、exited と�
   const ui = await mount($)
   await ui.press({ key: 'row:task:G/1' })
   expect(await ui.find({ key: 'adopt' })).toBeUndefined()
+})
+
+test('自分のセッションのタスクは、着手・完了・削除・パーキング・新しいセッションへ渡すことを自分の入力へ頼む (#296)', async ($, on) => {
+  const w = depsWorld(on)
+  await $.command.run(OPEN_DEPS)
+  const ui = await mount($)
+  await ui.press({ key: 'row:task:SELF/1' })
+  // 渡す先は repo を問わず生きているほかのセッション。自分は除く。
+  expect((await ui.find({ key: 'actions:task:SELF/1' }))?.text).toMatch(
+    /\+ Add blocker.*Start.*Complete.*Delete.*To parking.*Hand off → edge-cli \(edge の CLI\).*Hand off → peer \(後続\).*Hand off → new session/,
+  )
+  expect(await ui.find({ key: 'own-hand:SELF' })).toBeUndefined()
+
+  const said = /このセッションの入力へ渡しました/
+  const cases: [string, RegExp][] = [
+    ['own-start', /^タスク #1「このセッションの作業」に着手してください。TaskUpdate で in_progress にしてから進めてください。$/],
+    ['own-complete', /^タスク #1「このセッションの作業」を TaskUpdate で completed にしてください。$/],
+    ['own-delete', /^タスク #1「このセッションの作業」を TaskUpdate で deleted にしてください。$/],
+    // 扱うメモの無いタスクは、park tool でメモに置いてから消すよう頼む。
+    ['own-park', /^タスク #1「このセッションの作業」をパーキングロットへ戻してください。park tool で.*TaskUpdate で deleted にしてください。$/],
+    // 起こしたセッションの名前は自分が付けるので、SendMessage で渡すのも自分に任せる。
+    ['own-spawn', /^タスク #1「このセッションの作業」を新しいセッションへ渡してください。agents-daemon:peer-sessions skill の手順で.*TaskUpdate で deleted にしてください。$/],
+  ]
+  for (const [key, text] of cases) {
+    w.submitted.length = 0
+    w.ran.length = 0
+    await ui.press({ key })
+    expect(w.submitted).toHaveLength(1)
+    expect(w.submitted[0]).toMatch(text)
+    expect(w.sent).toEqual([])
+    expect(operations(w.ran)).toEqual([])
+    expect(await ui.find({ type: 'Text', text: said })).toBeDefined()
+  }
+})
+
+// ListAgents の名前は deps の JSON のどの欄とも一致しないことがあるので、渡すのは model ではなく mod が session ID で送る。
+test('自分のタスクを生きているほかのセッションへ渡す: mod が title と description を送り、届いたら自分にタスクを消すよう頼む (#296)', async ($, on) => {
+  const w = depsWorld(on)
+  await $.command.run(OPEN_DEPS)
+  const ui = await mount($)
+  await ui.press({ key: 'row:task:SELF/1' })
+  await ui.press({ key: 'own-hand:W' })
+  expect(w.sent).toHaveLength(1)
+  expect(w.sent[0]?.to).toBe('W')
+  expect(w.sent[0]?.text).toBe('self (session ID SELF) からタスク「このセッションの作業」を渡します。TaskCreate で作って進めてください。\n詳細: 作業の詳細')
+  expect(w.submitted).toEqual(['タスク #1「このセッションの作業」を edge-cli へ渡しました (title と description を送った)。TaskUpdate で deleted にしてください。'])
+  expect(await ui.find({ type: 'Text', text: /edge-cli へ渡し、このセッションの入力へ渡しました/ })).toBeDefined()
+})
+
+test('ほかのセッションへ届かなかったら、自分にタスクを消すよう頼まない (#296)', async ($, on) => {
+  const w = depsWorld(on, DEPS, undefined, undefined, 'セッションが終了した')
+  await $.command.run(OPEN_DEPS)
+  const ui = await mount($)
+  await ui.press({ key: 'row:task:SELF/1' })
+  await ui.press({ key: 'own-hand:W' })
+  expect(w.submitted).toEqual([])
+  expect(await ui.find({ type: 'Text', text: /edge-cli へ送れませんでした: セッションが終了した$/ })).toBeDefined()
+})
+
+test('ほかのセッションのタスクと、自分の完了したタスクには自分へ頼む操作を出さない (#296)', async ($, on) => {
+  depsWorld(on, withNodes(node('task:SELF/3', 'completed', '済んだ自分の作業', { session: 'self' })))
+  await $.command.run(OPEN_DEPS)
+  const ui = await mount($)
+  for (const key of ['task:W/1', 'task:G/1', 'task:SELF/3']) {
+    await ui.press({ key: `row:${key}` })
+    for (const action of ['own-start', 'own-complete', 'own-delete', 'own-park', 'own-hand:W', 'own-spawn']) {
+      expect(await ui.find({ key: action })).toBeUndefined()
+    }
+  }
+})
+
+// OWN_MEMO は自分のセッションへ渡されてタスクになったメモ (handed)。
+const OWN_MEMO = { id: '20261020T090000-cccc', title: 'タイトルを課題形にしない', status: 'handed' }
+const OWN_TASK = node('task:SELF/2', 'pending', 'メモから作ったタスク', { session: 'self', memos: [OWN_MEMO] })
+const REOPEN = [BIN, 'park', 'set', OWN_MEMO.id, '--status', 'open', '--from', 'handed', ...SELF_ARGS]
+// 取り直すときは、元の宛先 (このセッション) を書き直す。
+const RECLAIM = [BIN, 'park', 'set', OWN_MEMO.id, '--status', 'handed', '--from', 'open', '--to-session', 'SELF', ...SELF_ARGS]
+
+test('メモから作った自分のタスクを To parking で戻すと、新しいメモを作らず元のメモを open に戻してからタスクを消すよう頼む (#296)', async ($, on) => {
+  const w = depsWorld(on, withNodes(OWN_TASK))
+  await $.command.run(OPEN_DEPS)
+  const ui = await mount($)
+  await ui.press({ key: 'row:task:SELF/2' })
+  w.ran.length = 0
+  await ui.press({ key: 'own-park' })
+  expect(operations(w.ran)).toEqual([REOPEN])
+  expect(w.submitted).toEqual([`タスク #2「メモから作ったタスク」の元のメモ (${OWN_MEMO.id}) をパーキングロットの open に戻しました。TaskUpdate で deleted にしてください。`])
+  expect(await ui.find({ type: 'Text', text: /メモ 20261020T090000-cccc を open に戻し、このセッションの入力へ渡しました/ })).toBeDefined()
+})
+
+test('扱うメモが既に open なら、park tool で 2 つ目のメモを作らずタスクを消すよう頼むだけにする (#296)', async ($, on) => {
+  const open = { ...OWN_TASK, memos: [{ ...OWN_MEMO, status: 'open' }] }
+  const w = depsWorld(on, withNodes(open))
+  await $.command.run(OPEN_DEPS)
+  const ui = await mount($)
+  await ui.press({ key: 'row:task:SELF/2' })
+  w.ran.length = 0
+  await ui.press({ key: 'own-park' })
+  expect(operations(w.ran)).toEqual([])
+  expect(w.submitted).toEqual([`タスク #2「メモから作ったタスク」の元のメモ (${OWN_MEMO.id}) をパーキングロットの open に戻しました。TaskUpdate で deleted にしてください。`])
+})
+
+test('自分の入力へ渡せなかった (drop) ときは、open に戻したメモを handed に取り直す (#296)', async ($, on) => {
+  const w = depsWorld(on, withNodes(OWN_TASK), undefined, 'Stop が立っている')
+  await $.command.run(OPEN_DEPS)
+  const ui = await mount($)
+  await ui.press({ key: 'row:task:SELF/2' })
+  w.ran.length = 0
+  await ui.press({ key: 'own-park' })
+  expect(operations(w.ran)).toEqual([REOPEN, RECLAIM])
+  expect(await ui.find({ type: 'Text', text: /このセッションの入力へ渡せませんでした: Stop が立っている。メモは handed に戻しました/ })).toBeDefined()
+
+  w.ran.length = 0
+  await ui.press({ key: 'own-start' })
+  expect(operations(w.ran)).toEqual([])
+  expect(await ui.find({ type: 'Text', text: /このセッションの入力へ渡せませんでした: Stop が立っている$/ })).toBeDefined()
 })
 
 test('メモを選ぶと詳細を出し、Discard / To task / Ask for issue で渡す', async ($, on) => {

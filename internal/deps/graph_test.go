@@ -470,6 +470,25 @@ func TestGraph_parked(t *testing.T) {
 	}
 }
 
+// タスクのノードは description を持つ。pane が自分のタスクをほかのセッションへ渡すときの本文になる (#296)。
+func TestGraph_description(t *testing.T) {
+	const cwd = "/w/a"
+	withDescription := task("A", "1", "x", "in_progress", cwd)
+	withDescription.Description = "渡す本文"
+	b := build(input{
+		PID:      42,
+		Snapshot: snapshot(state.PaneStatus{PaneID: "p1", SessionID: "A", CWD: cwd, AgentStatus: "working"}),
+		Tasks:    []tasklog.Task{withDescription, task("A", "2", "y", "pending", cwd)},
+	})
+	got := nodes(b.Graph)
+	if got["task:A/1"].Description != "渡す本文" {
+		t.Errorf("task:A/1 description = %q", got["task:A/1"].Description)
+	}
+	if got["task:A/2"].Description != "" {
+		t.Errorf("task:A/2 description = %q", got["task:A/2"].Description)
+	}
+}
+
 // タスクの description に書かれたメモの id をメモと照合し、ノードの memos に書かれた順で付ける。open 以外のメモも
 // 照合するが、repo の memos と parked には open のメモだけを出す。記録に無い id (消えたメモ) は付けない。
 func TestGraph_memos(t *testing.T) {

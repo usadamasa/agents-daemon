@@ -12,8 +12,8 @@ const CWD = '/src/home/agents-daemon'
 // world は plugin の下にいる engine の代わりを立てる。process.run は run が答え、呼ばれた argv (バイナリの後) を
 // ran に残す。出来事のログ (hooks/log.ts) は log.test.tsx が見るので残さない。now は mod の時計の始点
 // (古いメモの判定に使う)。submitted は自セッションの入力へ渡した文面 (prompt.submit)。drop を渡すと入らなかった
-// ことにする。
-function world(on: On, run: (argv: readonly string[]) => ProcessRunResult = () => output('{}'), now = Date.parse('2026-10-19T00:00:00Z'), drop = '') {
+// ことにする。undelivered を渡すと peer へのメッセージが届かなかったことにする。
+function world(on: On, run: (argv: readonly string[]) => ProcessRunResult = () => output('{}'), now = Date.parse('2026-10-19T00:00:00Z'), drop = '', undelivered = '') {
   const ran: string[][] = []
   const opened: string[] = []
   const closed: string[] = []
@@ -40,6 +40,7 @@ function world(on: On, run: (argv: readonly string[]) => ProcessRunResult = () =
   })
   on('session.send', async (_$, e) => {
     sent.push({ to: e.to, text: e.text })
+    if (undelivered !== '') return { isDelivered: false as const, reason: undelivered }
     return { isDelivered: true as const }
   })
   on('prompt.submit', async (_$, e) => {
@@ -63,8 +64,8 @@ function operations(ran: string[][]): string[][] {
 }
 
 // depsWorld は deps に data を返し、spawn は起こしたセッションを、それ以外 (park、edge) は成功を返す。
-function depsWorld(on: On, data: unknown = DEPS, now?: number, drop?: string) {
-  return world(on, argv => (argv[1] === 'deps' ? output(JSON.stringify(data)) : argv[1] === 'spawn' ? output(SPAWNED) : output('{"created":true}')), now, drop)
+function depsWorld(on: On, data: unknown = DEPS, now?: number, drop?: string, undelivered?: string) {
+  return world(on, argv => (argv[1] === 'deps' ? output(JSON.stringify(data)) : argv[1] === 'spawn' ? output(SPAWNED) : output('{"created":true}')), now, drop, undelivered)
 }
 
 // node はタスクのノード。key は task:<sid>/<tid> の Ref で、session_id と task_id はそこから埋める。
@@ -118,7 +119,7 @@ const NODES = [
   node('task:V/1', 'pending', '確認', { session: 'verify', blocked_by: ['task:R/1', 'task:Q/2', 'task:Q/1'] }),
   node('task:G/1', 'exited', '残った作業', { session: 'gone' }),
   node('task:C/1', 'completed', '済んだ'),
-  node('task:SELF/1', 'working', 'このセッションの作業', { session: 'self' }),
+  node('task:SELF/1', 'working', 'このセッションの作業', { session: 'self', description: '作業の詳細' }),
 ]
 
 const LINKS = [
@@ -633,7 +634,7 @@ test('daemon が status.json を書いていない依存図では、exited と�
   expect(await ui.find({ key: 'adopt' })).toBeUndefined()
 })
 
-test('自分のセッションのタスクは、着手・完了・削除・パーキング・ほかのセッションへ渡すことを自分の入力へ頼む (#296)', async ($, on) => {
+test('自分のセッションのタスクは、着手・完了・削除・パーキング・新しいセッションへ渡すことを自分の入力へ頼む (#296)', async ($, on) => {
   const w = depsWorld(on)
   await $.command.run(OPEN_DEPS)
   const ui = await mount($)
@@ -651,8 +652,7 @@ test('自分のセッションのタスクは、着手・完了・削除・パ�
     ['own-delete', /^タスク #1「このセッションの作業」を TaskUpdate で deleted にしてください。$/],
     // 扱うメモの無いタスクは、park tool でメモに置いてから消すよう頼む。
     ['own-park', /^タスク #1「このセッションの作業」をパーキングロットへ戻してください。park tool で.*TaskUpdate で deleted にしてください。$/],
-    // 本文はタスクを持つ自分が書く (mod は description も進み具合も知らない)。
-    ['own-hand:W', /^タスク #1「このセッションの作業」を edge-cli \(session ID W\) へ渡してください。SendMessage の本文に.*TaskUpdate で deleted にしてください。$/],
+    // 起こしたセッションの名前は自分が付けるので、SendMessage で渡すのも自分に任せる。
     ['own-spawn', /^タスク #1「このセッションの作業」を新しいセッションへ渡してください。agents-daemon:peer-sessions skill の手順で.*TaskUpdate で deleted にしてください。$/],
   ]
   for (const [key, text] of cases) {
@@ -665,6 +665,30 @@ test('自分のセッションのタスクは、着手・完了・削除・パ�
     expect(operations(w.ran)).toEqual([])
     expect(await ui.find({ type: 'Text', text: said })).toBeDefined()
   }
+})
+
+// ListAgents の名前は deps の JSON のどの欄とも一致しないことがあるので、渡すのは model ではなく mod が session ID で送る。
+test('自分のタスクを生きているほかのセッションへ渡す: mod が title と description を送り、届いたら自分にタスクを消すよう頼む (#296)', async ($, on) => {
+  const w = depsWorld(on)
+  await $.command.run(OPEN_DEPS)
+  const ui = await mount($)
+  await ui.press({ key: 'row:task:SELF/1' })
+  await ui.press({ key: 'own-hand:W' })
+  expect(w.sent).toHaveLength(1)
+  expect(w.sent[0]?.to).toBe('W')
+  expect(w.sent[0]?.text).toBe('self (session ID SELF) からタスク「このセッションの作業」を渡します。TaskCreate で作って進めてください。\n詳細: 作業の詳細')
+  expect(w.submitted).toEqual(['タスク #1「このセッションの作業」を edge-cli へ渡しました (title と description を送った)。TaskUpdate で deleted にしてください。'])
+  expect(await ui.find({ type: 'Text', text: /edge-cli へ渡し、このセッションの入力へ渡しました/ })).toBeDefined()
+})
+
+test('ほかのセッションへ届かなかったら、自分にタスクを消すよう頼まない (#296)', async ($, on) => {
+  const w = depsWorld(on, DEPS, undefined, undefined, 'セッションが終了した')
+  await $.command.run(OPEN_DEPS)
+  const ui = await mount($)
+  await ui.press({ key: 'row:task:SELF/1' })
+  await ui.press({ key: 'own-hand:W' })
+  expect(w.submitted).toEqual([])
+  expect(await ui.find({ type: 'Text', text: /edge-cli へ送れませんでした: セッションが終了した$/ })).toBeDefined()
 })
 
 test('ほかのセッションのタスクと、自分の完了したタスクには自分へ頼む操作を出さない (#296)', async ($, on) => {

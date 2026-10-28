@@ -64,7 +64,7 @@ type BlockList struct {
 var (
 	RecordFields     = []string{"state", "app", "owner.pid"}
 	ForegroundFields = []string{"pid", "argv0", "cwd"}
-	BlockEvents      = []string{"program_status_changed", "program_status_removed", "process_changed"}
+	BlockEvents      = []string{"program_status_changed", "program_status_removed", "process_changed", "child_exited"}
 )
 
 // claudeApp は Claude Code が OSC 7501 の app に書く値。2.1.302 のバイナリでは固定で、

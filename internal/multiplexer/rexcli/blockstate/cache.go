@@ -160,6 +160,11 @@ func (c *Cache) applyBlockEvent(raw json.RawMessage, line []byte) error {
 	case "process_changed":
 		// 前景の置き換え。stream は順序を保つので generation は見ない。
 		err = json.Unmarshal(ev.Payload, &st.Process)
+	case "child_exited":
+		// --keep-open の block は終了後に shell が前景へ戻らず process_changed が来ない。前景を空にして、
+		// 残った record を polling の経路 (終了後の応答に foreground が無い) と同じく未検証にする。
+		// rex-premise: preview.22 cli child_exited の後も idle の record は残り、process_changed は来ない
+		st.Process.Foreground = nil
 	}
 	if err != nil {
 		return fmt.Errorf("%s の parse に失敗: %w (line=%q)", ev.Name, err, line)

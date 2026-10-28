@@ -211,6 +211,30 @@ func TestCache_ForegroundChange(t *testing.T) {
 	}
 }
 
+// --keep-open の block では program が終わっても shell が前景に戻らず、process_changed が来ない。
+// idle の record は child_exited で消えずに残るので、前景を空にして polling の経路と同じく未検証にする。
+func TestCache_ChildExitedKeepsIdleRecord(t *testing.T) {
+	c := NewCache(map[string]*State{
+		blockOwn: state(t, sessionOwn, psEmpty, `{"last_exit":null,"foreground":null}`),
+	})
+	applyAll(t, c, []string{
+		procChangedLine(sessionOwn, blockOwn, 1, pidOwn, "/usr/local/bin/claude", cwdOwn),
+		psChangedLine(sessionOwn, blockOwn, "", "idle", "待ち", pidOwn),
+	})
+	if got := c.Panes(nil); len(got) != 1 || got[0].AgentStatus != multiplexer.AgentStatusIdle {
+		t.Fatalf("panes() = %+v, want Claude の idle", got)
+	}
+	applyAll(t, c, []string{blockEventLine(sessionOwn, blockOwn, "child_exited", `{"exit_code":137}`)})
+	got := c.Panes(nil)
+	want := []multiplexer.Pane{ToPane(blockOwn, c.blocks[blockOwn].ProgramStatus, Process{}, "")}
+	if !slices.Equal(got, want) {
+		t.Errorf("panes() = %+v, want %+v (前景の無い block の pane)", got, want)
+	}
+	if got[0].AgentStatus != multiplexer.AgentStatusUnknown {
+		t.Errorf("agent_status = %s, want unknown (終わった program の record は使わない)", got[0].AgentStatus)
+	}
+}
+
 // session が消えたら、その session の block だけを落とす。
 func TestCache_SessionDestroyed(t *testing.T) {
 	c := NewCache(map[string]*State{

@@ -37,8 +37,8 @@ func NewCache(blocks map[string]*State) *Cache {
 }
 
 // streamLine は `events --all --json` の 1 行のうち読む部分。
-// rex-premise: preview.21 cli events --all --json は session_event の payload.event に block_event / block_created / block_closed を、top level に session_created / session_destroyed を流す
-// rex-premise: preview.21 cli session new の最初の block には block_created が来ず、session_created の後にその block の event が流れる
+// rex-premise: preview.22 cli events --all --json は session_event の payload.event に block_event / block_created / block_closed を、top level に session_created / session_destroyed を流す
+// rex-premise: preview.22 cli session new の最初の block には block_created が来ず、session_created の後にその block の event が流れる
 type streamLine struct {
 	Type    string `json:"type"`
 	Payload struct {
@@ -60,7 +60,7 @@ type blockEvent struct {
 	Payload json.RawMessage `json:"payload"`
 }
 
-// rex-premise: preview.21 cli program_status_changed は {id, record, reason}、program_status_removed は {ids, reason}、process_changed は {generation, foreground}
+// rex-premise: preview.22 cli program_status_changed は {id, record, reason}、program_status_removed は {ids, reason}、process_changed は {generation, foreground}
 type (
 	programStatusChanged struct {
 		ID     string `json:"id"`

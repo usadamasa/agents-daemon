@@ -252,7 +252,7 @@ type eventStream struct {
 }
 
 // startEvents は events を起こす。覚えていた rex が消えていたら、次の張り直しで引き直させる。
-// rex-premise: preview.21 cli events --all --json は全 session の block_event を 1 行 1 event で server が切れるまで流す
+// rex-premise: preview.22 cli events --all --json は全 session の block_event を 1 行 1 event で server が切れるまで流す
 func (c *execClient) startEvents(ctx context.Context) (*eventStream, error) {
 	bin, err := c.bin()
 	if err != nil {

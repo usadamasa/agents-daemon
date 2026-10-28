@@ -19,7 +19,7 @@ import (
 const ProbeMissingBlock = "block:01a12599-0000-7000-8000-000000000001"
 
 // inspectMethods は rexcli が打つ block の method。
-// rex-premise: preview.21 cli block inspect --json は api.methods と api.events を method 名 / event 名を key にした object で返す
+// rex-premise: preview.22 cli block inspect --json は api.methods と api.events を method 名 / event 名を key にした object で返す
 var inspectMethods = []string{"program_status", "process", "size", "modes"}
 
 // Runner は rex を 1 回呼ぶ口。実装は rexcli の Client で、同じ呼び方 (--autostart=false、REX_SESSION を外した環境) で打つ。
@@ -82,8 +82,8 @@ func (c checker) checkModes(ctx context.Context, blockID string, add addFinding)
 // daemon が古い CLI で新しい server を叩いている (またはその逆) 状態。
 // 版と並べて解決した binary のパスも出す。rex の自動更新は Versions/ の下に複数の rex を置くので、
 // どれを引いたか (Current か数字名の build か、REX_BIN_PATH か) がパスで分かる (rexcli の locate.go)。
-// rex-premise: preview.21 cli version --json は rex_version と built_at と api_revision を返す
-// rex-premise: preview.21 cli api call server.status は api_revision を返す (CLI と同じ値)
+// rex-premise: preview.22 cli version --json は rex_version と built_at と api_revision を返す
+// rex-premise: preview.22 cli api call server.status は api_revision を返す (CLI と同じ値)
 func (c checker) checkVersion(ctx context.Context, add addFinding) {
 	m, err := c.runMap(ctx, "version", "--json")
 	if err != nil {

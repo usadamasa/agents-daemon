@@ -1,16 +1,15 @@
-package dream
+package harvest
 
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 )
 
 func TestWalkJSONLFiles(t *testing.T) {
 	t.Run("存在しないディレクトリはエラーなしで終了", func(t *testing.T) {
-		err := WalkJSONLFiles("/nonexistent/dir", WalkOptions{Days: 30}, func(path string) error {
+		err := walkJSONLFiles("/nonexistent/dir", walkOptions{Days: 30}, func(path string) error {
 			t.Error("コールバックが呼ばれてはいけない")
 			return nil
 		})
@@ -29,7 +28,7 @@ func TestWalkJSONLFiles(t *testing.T) {
 		}
 
 		var found []string
-		err := WalkJSONLFiles(tmp, WalkOptions{Days: 30}, func(path string) error {
+		err := walkJSONLFiles(tmp, walkOptions{Days: 30}, func(path string) error {
 			found = append(found, filepath.Base(path))
 			return nil
 		})
@@ -53,7 +52,7 @@ func TestWalkJSONLFiles(t *testing.T) {
 		}
 
 		var count int
-		err := WalkJSONLFiles(tmp, WalkOptions{Days: 30}, func(path string) error {
+		err := walkJSONLFiles(tmp, walkOptions{Days: 30}, func(path string) error {
 			count++
 			return nil
 		})
@@ -62,20 +61,6 @@ func TestWalkJSONLFiles(t *testing.T) {
 		}
 		if count != 0 {
 			t.Errorf("古いファイルがコールバックに渡された: count=%d", count)
-		}
-	})
-}
-
-func TestNewScanner(t *testing.T) {
-	t.Run("大きなバッファで行を読み取れる", func(t *testing.T) {
-		data := strings.Repeat("a", 5*1024*1024) + "\n"
-		r := strings.NewReader(data)
-		s := NewScanner(r)
-		if !s.Scan() {
-			t.Fatal("スキャンに失敗")
-		}
-		if len(s.Text()) != 5*1024*1024 {
-			t.Errorf("got len=%d, want %d", len(s.Text()), 5*1024*1024)
 		}
 	})
 }

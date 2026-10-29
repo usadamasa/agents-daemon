@@ -1,0 +1,2199 @@
+{
+  "project": "github.com/usadamasa/agents-daemon",
+  "golangci_lint": {
+    "Issues": [],
+    "Report": {
+      "Linters": [
+        {
+          "Name": "arangolint"
+        },
+        {
+          "Name": "asasalint"
+        },
+        {
+          "Name": "asciicheck"
+        },
+        {
+          "Name": "bidichk"
+        },
+        {
+          "Name": "bodyclose"
+        },
+        {
+          "Name": "canonicalheader"
+        },
+        {
+          "Name": "clickhouselint"
+        },
+        {
+          "Name": "containedctx"
+        },
+        {
+          "Name": "contextcheck"
+        },
+        {
+          "Name": "copyloopvar"
+        },
+        {
+          "Name": "cyclop",
+          "Enabled": true
+        },
+        {
+          "Name": "decorder"
+        },
+        {
+          "Name": "depguard"
+        },
+        {
+          "Name": "dogsled"
+        },
+        {
+          "Name": "dupl"
+        },
+        {
+          "Name": "dupword"
+        },
+        {
+          "Name": "durationcheck"
+        },
+        {
+          "Name": "embeddedstructfieldcheck"
+        },
+        {
+          "Name": "errcheck",
+          "Enabled": true
+        },
+        {
+          "Name": "errchkjson"
+        },
+        {
+          "Name": "errname"
+        },
+        {
+          "Name": "errorlint"
+        },
+        {
+          "Name": "exhaustive"
+        },
+        {
+          "Name": "exhaustruct"
+        },
+        {
+          "Name": "exhaustruct_v5"
+        },
+        {
+          "Name": "exptostd"
+        },
+        {
+          "Name": "forbidigo"
+        },
+        {
+          "Name": "forcetypeassert"
+        },
+        {
+          "Name": "funcorder"
+        },
+        {
+          "Name": "fatcontext"
+        },
+        {
+          "Name": "funlen",
+          "Enabled": true
+        },
+        {
+          "Name": "gci"
+        },
+        {
+          "Name": "ginkgolinter"
+        },
+        {
+          "Name": "gocheckcompilerdirectives"
+        },
+        {
+          "Name": "gochecknoglobals"
+        },
+        {
+          "Name": "gochecknoinits"
+        },
+        {
+          "Name": "gochecksumtype"
+        },
+        {
+          "Name": "gocognit",
+          "Enabled": true
+        },
+        {
+          "Name": "goconst"
+        },
+        {
+          "Name": "gocritic"
+        },
+        {
+          "Name": "gocyclo",
+          "Enabled": true
+        },
+        {
+          "Name": "godoclint"
+        },
+        {
+          "Name": "godot"
+        },
+        {
+          "Name": "godox"
+        },
+        {
+          "Name": "err113"
+        },
+        {
+          "Name": "gofmt",
+          "Enabled": true
+        },
+        {
+          "Name": "gofumpt"
+        },
+        {
+          "Name": "golines"
+        },
+        {
+          "Name": "goheader"
+        },
+        {
+          "Name": "goimports"
+        },
+        {
+          "Name": "mnd"
+        },
+        {
+          "Name": "modernize"
+        },
+        {
+          "Name": "gomoddirectives"
+        },
+        {
+          "Name": "gomodguard"
+        },
+        {
+          "Name": "gomodguard_v2"
+        },
+        {
+          "Name": "goprintffuncname"
+        },
+        {
+          "Name": "gosec"
+        },
+        {
+          "Name": "gosmopolitan"
+        },
+        {
+          "Name": "govet",
+          "Enabled": true
+        },
+        {
+          "Name": "grouper"
+        },
+        {
+          "Name": "iface"
+        },
+        {
+          "Name": "importas"
+        },
+        {
+          "Name": "inamedparam"
+        },
+        {
+          "Name": "ineffassign",
+          "Enabled": true
+        },
+        {
+          "Name": "interfacebloat"
+        },
+        {
+          "Name": "intrange"
+        },
+        {
+          "Name": "iotamixing"
+        },
+        {
+          "Name": "ireturn"
+        },
+        {
+          "Name": "lll"
+        },
+        {
+          "Name": "loggercheck"
+        },
+        {
+          "Name": "maintidx",
+          "Enabled": true
+        },
+        {
+          "Name": "makezero"
+        },
+        {
+          "Name": "mirror"
+        },
+        {
+          "Name": "misspell"
+        },
+        {
+          "Name": "musttag"
+        },
+        {
+          "Name": "nakedret"
+        },
+        {
+          "Name": "nestif",
+          "Enabled": true
+        },
+        {
+          "Name": "nilerr"
+        },
+        {
+          "Name": "nilnesserr"
+        },
+        {
+          "Name": "nilnil"
+        },
+        {
+          "Name": "nlreturn"
+        },
+        {
+          "Name": "noctx"
+        },
+        {
+          "Name": "noinlineerr"
+        },
+        {
+          "Name": "nonamedreturns"
+        },
+        {
+          "Name": "nosprintfhostport"
+        },
+        {
+          "Name": "paralleltest"
+        },
+        {
+          "Name": "perfsprint"
+        },
+        {
+          "Name": "prealloc"
+        },
+        {
+          "Name": "predeclared"
+        },
+        {
+          "Name": "promlinter"
+        },
+        {
+          "Name": "protogetter"
+        },
+        {
+          "Name": "reassign"
+        },
+        {
+          "Name": "recvcheck"
+        },
+        {
+          "Name": "revive"
+        },
+        {
+          "Name": "rowserrcheck"
+        },
+        {
+          "Name": "sloglint"
+        },
+        {
+          "Name": "sqlclosecheck"
+        },
+        {
+          "Name": "spancheck"
+        },
+        {
+          "Name": "staticcheck",
+          "Enabled": true
+        },
+        {
+          "Name": "swaggo"
+        },
+        {
+          "Name": "tagalign"
+        },
+        {
+          "Name": "tagliatelle"
+        },
+        {
+          "Name": "testableexamples"
+        },
+        {
+          "Name": "testifylint"
+        },
+        {
+          "Name": "testpackage"
+        },
+        {
+          "Name": "thelper"
+        },
+        {
+          "Name": "tparallel"
+        },
+        {
+          "Name": "typecheck",
+          "Enabled": true
+        },
+        {
+          "Name": "unconvert"
+        },
+        {
+          "Name": "unparam"
+        },
+        {
+          "Name": "unqueryvet"
+        },
+        {
+          "Name": "unused",
+          "Enabled": true
+        },
+        {
+          "Name": "usestdlibvars"
+        },
+        {
+          "Name": "usetesting"
+        },
+        {
+          "Name": "varnamelen"
+        },
+        {
+          "Name": "wastedassign"
+        },
+        {
+          "Name": "whitespace"
+        },
+        {
+          "Name": "wrapcheck"
+        },
+        {
+          "Name": "wsl"
+        },
+        {
+          "Name": "wsl_v5"
+        },
+        {
+          "Name": "zerologlint"
+        },
+        {
+          "Name": "nolintlint"
+        }
+      ]
+    }
+  },
+  "go_arch_lint": {
+    "Type": "models.Check",
+    "Payload": {
+      "ExecutionWarnings": [],
+      "ArchHasWarnings": false,
+      "ArchWarningsDeps": [],
+      "ArchWarningsNotMatched": [],
+      "ArchWarningsDeepScan": [],
+      "OmittedCount": 0,
+      "ModuleName": "github.com/usadamasa/agents-daemon",
+      "Qualities": [
+        {
+          "ID": "component_imports",
+          "Used": true
+        },
+        {
+          "ID": "vendor_imports",
+          "Used": true
+        },
+        {
+          "ID": "deepscan",
+          "Used": true
+        }
+      ]
+    }
+  },
+  "gosec": {
+    "Golang errors": {},
+    "Issues": [],
+    "Stats": {
+      "files": 125,
+      "lines": 15869,
+      "nosec": 47,
+      "found": 0
+    },
+    "GosecVersion": "2.29.0"
+  },
+  "modularity": {
+    "packages": [
+      {
+        "path": "cmd/agents-daemon",
+        "import_path": "github.com/usadamasa/agents-daemon/cmd/agents-daemon",
+        "exported_funcs": 0,
+        "unexported_funcs": 2,
+        "exported_methods": 0,
+        "unexported_methods": 0,
+        "exported_types": 0,
+        "unexported_types": 0,
+        "interface_types": 0,
+        "public_ratio": 0,
+        "loc": 89,
+        "files": 2,
+        "main_sequence": {
+          "zone": "excluded",
+          "distance": 0,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 1,
+          "afferent_coupling": 0,
+          "efferent_coupling": 1,
+          "recent_commit_count": 3,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "cmd/agents-daemon/internal/daemoncli",
+        "import_path": "github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/daemoncli",
+        "exported_funcs": 1,
+        "unexported_funcs": 9,
+        "exported_methods": 0,
+        "unexported_methods": 0,
+        "exported_types": 0,
+        "unexported_types": 0,
+        "interface_types": 0,
+        "public_ratio": 0.1,
+        "loc": 360,
+        "files": 8,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "main_sequence",
+          "distance": 0.11111111111111116,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 0.8888888888888888,
+          "afferent_coupling": 1,
+          "efferent_coupling": 8,
+          "recent_commit_count": 5,
+          "volatility": "volatile"
+        }
+      },
+      {
+        "path": "cmd/agents-daemon/internal/depscli",
+        "import_path": "github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/depscli",
+        "exported_funcs": 1,
+        "unexported_funcs": 7,
+        "exported_methods": 0,
+        "unexported_methods": 0,
+        "exported_types": 0,
+        "unexported_types": 0,
+        "interface_types": 0,
+        "public_ratio": 0.125,
+        "loc": 217,
+        "files": 4,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "main_sequence",
+          "distance": 0.16666666666666663,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 0.8333333333333334,
+          "afferent_coupling": 1,
+          "efferent_coupling": 5,
+          "recent_commit_count": 2,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "cmd/agents-daemon/internal/dreamcli",
+        "import_path": "github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/dreamcli",
+        "exported_funcs": 1,
+        "unexported_funcs": 8,
+        "exported_methods": 0,
+        "unexported_methods": 0,
+        "exported_types": 0,
+        "unexported_types": 1,
+        "interface_types": 0,
+        "public_ratio": 0.1,
+        "loc": 236,
+        "files": 1,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "main_sequence",
+          "distance": 0.125,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 0.875,
+          "afferent_coupling": 1,
+          "efferent_coupling": 7,
+          "recent_commit_count": 1,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "cmd/agents-daemon/internal/jsonflag",
+        "import_path": "github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/jsonflag",
+        "exported_funcs": 4,
+        "unexported_funcs": 1,
+        "exported_methods": 0,
+        "unexported_methods": 0,
+        "exported_types": 0,
+        "unexported_types": 0,
+        "interface_types": 0,
+        "public_ratio": 0.8,
+        "loc": 58,
+        "files": 1,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "zone_of_pain",
+          "distance": 1,
+          "structurally_constrained": true,
+          "abstractness": 0,
+          "instability": 0,
+          "afferent_coupling": 4,
+          "efferent_coupling": 0,
+          "recent_commit_count": 0,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "cmd/agents-daemon/internal/parkcli",
+        "import_path": "github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/parkcli",
+        "exported_funcs": 1,
+        "unexported_funcs": 8,
+        "exported_methods": 0,
+        "unexported_methods": 0,
+        "exported_types": 0,
+        "unexported_types": 0,
+        "interface_types": 0,
+        "public_ratio": 0.1111111111111111,
+        "loc": 291,
+        "files": 3,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "main_sequence",
+          "distance": 0.125,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 0.875,
+          "afferent_coupling": 1,
+          "efferent_coupling": 7,
+          "recent_commit_count": 3,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "cmd/agents-daemon/internal/statecmd",
+        "import_path": "github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/statecmd",
+        "exported_funcs": 1,
+        "unexported_funcs": 0,
+        "exported_methods": 0,
+        "unexported_methods": 0,
+        "exported_types": 0,
+        "unexported_types": 0,
+        "interface_types": 0,
+        "public_ratio": 1,
+        "loc": 29,
+        "files": 1,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "zone_of_pain",
+          "distance": 0.6666666666666667,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 0.3333333333333333,
+          "afferent_coupling": 2,
+          "efferent_coupling": 1,
+          "recent_commit_count": 1,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "cmd/agents-daemon/internal/statuslinecli",
+        "import_path": "github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/statuslinecli",
+        "exported_funcs": 1,
+        "unexported_funcs": 3,
+        "exported_methods": 0,
+        "unexported_methods": 0,
+        "exported_types": 0,
+        "unexported_types": 0,
+        "interface_types": 0,
+        "public_ratio": 0.25,
+        "loc": 103,
+        "files": 2,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "main_sequence",
+          "distance": 0.33333333333333337,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 0.6666666666666666,
+          "afferent_coupling": 1,
+          "efferent_coupling": 2,
+          "recent_commit_count": 0,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "cmd/agents-daemon/internal/worktreecli",
+        "import_path": "github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/worktreecli",
+        "exported_funcs": 1,
+        "unexported_funcs": 1,
+        "exported_methods": 0,
+        "unexported_methods": 0,
+        "exported_types": 0,
+        "unexported_types": 0,
+        "interface_types": 0,
+        "public_ratio": 0.5,
+        "loc": 66,
+        "files": 1,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "main_sequence",
+          "distance": 0.5,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 0.5,
+          "afferent_coupling": 1,
+          "efferent_coupling": 1,
+          "recent_commit_count": 0,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "internal/applog",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/applog",
+        "exported_funcs": 4,
+        "unexported_funcs": 1,
+        "exported_methods": 2,
+        "unexported_methods": 4,
+        "exported_types": 1,
+        "unexported_types": 0,
+        "interface_types": 0,
+        "public_ratio": 0.5833333333333334,
+        "loc": 218,
+        "files": 2,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "zone_of_pain",
+          "distance": 1,
+          "structurally_constrained": true,
+          "abstractness": 0,
+          "instability": 0,
+          "afferent_coupling": 3,
+          "efferent_coupling": 0,
+          "recent_commit_count": 0,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "internal/apppath",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/apppath",
+        "exported_funcs": 2,
+        "unexported_funcs": 1,
+        "exported_methods": 5,
+        "unexported_methods": 0,
+        "exported_types": 1,
+        "unexported_types": 0,
+        "interface_types": 0,
+        "public_ratio": 0.8888888888888888,
+        "loc": 88,
+        "files": 1,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "zone_of_pain",
+          "distance": 1,
+          "structurally_constrained": true,
+          "abstractness": 0,
+          "instability": 0,
+          "afferent_coupling": 13,
+          "efferent_coupling": 0,
+          "recent_commit_count": 0,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "internal/backend",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/backend",
+        "exported_funcs": 2,
+        "unexported_funcs": 0,
+        "exported_methods": 0,
+        "unexported_methods": 0,
+        "exported_types": 0,
+        "unexported_types": 0,
+        "interface_types": 0,
+        "public_ratio": 1,
+        "loc": 33,
+        "files": 1,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "zone_of_pain",
+          "distance": 0.6666666666666667,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 0.3333333333333333,
+          "afferent_coupling": 4,
+          "efferent_coupling": 2,
+          "recent_commit_count": 1,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "internal/config",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/config",
+        "exported_funcs": 2,
+        "unexported_funcs": 5,
+        "exported_methods": 0,
+        "unexported_methods": 0,
+        "exported_types": 1,
+        "unexported_types": 1,
+        "interface_types": 0,
+        "public_ratio": 0.3333333333333333,
+        "loc": 223,
+        "files": 1,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "zone_of_pain",
+          "distance": 1,
+          "structurally_constrained": true,
+          "abstractness": 0,
+          "instability": 0,
+          "afferent_coupling": 5,
+          "efferent_coupling": 0,
+          "recent_commit_count": 1,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "internal/daemon",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/daemon",
+        "exported_funcs": 2,
+        "unexported_funcs": 14,
+        "exported_methods": 8,
+        "unexported_methods": 10,
+        "exported_types": 0,
+        "unexported_types": 5,
+        "interface_types": 0,
+        "public_ratio": 0.2564102564102564,
+        "loc": 852,
+        "files": 5,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "main_sequence",
+          "distance": 0.05555555555555558,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 0.9444444444444444,
+          "afferent_coupling": 1,
+          "efferent_coupling": 17,
+          "recent_commit_count": 15,
+          "volatility": "volatile"
+        }
+      },
+      {
+        "path": "internal/daemon/ledger",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/daemon/ledger",
+        "exported_funcs": 2,
+        "unexported_funcs": 1,
+        "exported_methods": 3,
+        "unexported_methods": 0,
+        "exported_types": 3,
+        "unexported_types": 0,
+        "interface_types": 0,
+        "public_ratio": 0.8888888888888888,
+        "loc": 172,
+        "files": 1,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "main_sequence",
+          "distance": 0.33333333333333337,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 0.6666666666666666,
+          "afferent_coupling": 1,
+          "efferent_coupling": 2,
+          "recent_commit_count": 1,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "internal/daemon/limitlog",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/daemon/limitlog",
+        "exported_funcs": 1,
+        "unexported_funcs": 0,
+        "exported_methods": 2,
+        "unexported_methods": 0,
+        "exported_types": 5,
+        "unexported_types": 0,
+        "interface_types": 0,
+        "public_ratio": 1,
+        "loc": 119,
+        "files": 1,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "main_sequence",
+          "distance": 0.33333333333333337,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 0.6666666666666666,
+          "afferent_coupling": 1,
+          "efferent_coupling": 2,
+          "recent_commit_count": 1,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "internal/daemon/state",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/daemon/state",
+        "exported_funcs": 10,
+        "unexported_funcs": 1,
+        "exported_methods": 0,
+        "unexported_methods": 0,
+        "exported_types": 2,
+        "unexported_types": 0,
+        "interface_types": 0,
+        "public_ratio": 0.9230769230769231,
+        "loc": 246,
+        "files": 5,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "main_sequence",
+          "distance": 0.4545454545454546,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 0.5454545454545454,
+          "afferent_coupling": 5,
+          "efferent_coupling": 6,
+          "recent_commit_count": 1,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "internal/deps",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/deps",
+        "exported_funcs": 1,
+        "unexported_funcs": 12,
+        "exported_methods": 0,
+        "unexported_methods": 3,
+        "exported_types": 5,
+        "unexported_types": 5,
+        "interface_types": 0,
+        "public_ratio": 0.23076923076923078,
+        "loc": 497,
+        "files": 5,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "main_sequence",
+          "distance": 0.0625,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 0.9375,
+          "afferent_coupling": 1,
+          "efferent_coupling": 15,
+          "recent_commit_count": 7,
+          "volatility": "volatile"
+        }
+      },
+      {
+        "path": "internal/deps/dag",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/deps/dag",
+        "exported_funcs": 1,
+        "unexported_funcs": 1,
+        "exported_methods": 5,
+        "unexported_methods": 16,
+        "exported_types": 2,
+        "unexported_types": 3,
+        "interface_types": 0,
+        "public_ratio": 0.2857142857142857,
+        "loc": 467,
+        "files": 2,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "zone_of_pain",
+          "distance": 1,
+          "structurally_constrained": true,
+          "abstractness": 0,
+          "instability": 0,
+          "afferent_coupling": 1,
+          "efferent_coupling": 0,
+          "recent_commit_count": 1,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "internal/deps/graph",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/deps/graph",
+        "exported_funcs": 2,
+        "unexported_funcs": 3,
+        "exported_methods": 0,
+        "unexported_methods": 14,
+        "exported_types": 7,
+        "unexported_types": 1,
+        "interface_types": 0,
+        "public_ratio": 0.3333333333333333,
+        "loc": 459,
+        "files": 1,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "main_sequence",
+          "distance": 0.16666666666666663,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 0.8333333333333334,
+          "afferent_coupling": 1,
+          "efferent_coupling": 5,
+          "recent_commit_count": 5,
+          "volatility": "volatile"
+        }
+      },
+      {
+        "path": "internal/detect",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/detect",
+        "exported_funcs": 4,
+        "unexported_funcs": 9,
+        "exported_methods": 2,
+        "unexported_methods": 2,
+        "exported_types": 2,
+        "unexported_types": 0,
+        "interface_types": 0,
+        "public_ratio": 0.42105263157894735,
+        "loc": 506,
+        "files": 1,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "zone_of_pain",
+          "distance": 1,
+          "structurally_constrained": true,
+          "abstractness": 0,
+          "instability": 0,
+          "afferent_coupling": 5,
+          "efferent_coupling": 0,
+          "recent_commit_count": 3,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "internal/doctor",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/doctor",
+        "exported_funcs": 2,
+        "unexported_funcs": 23,
+        "exported_methods": 0,
+        "unexported_methods": 2,
+        "exported_types": 15,
+        "unexported_types": 0,
+        "interface_types": 0,
+        "public_ratio": 0.40476190476190477,
+        "loc": 665,
+        "files": 2,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "main_sequence",
+          "distance": 0.06666666666666665,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 0.9333333333333333,
+          "afferent_coupling": 1,
+          "efferent_coupling": 14,
+          "recent_commit_count": 5,
+          "volatility": "volatile"
+        }
+      },
+      {
+        "path": "internal/dream",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/dream",
+        "exported_funcs": 7,
+        "unexported_funcs": 0,
+        "exported_methods": 0,
+        "unexported_methods": 0,
+        "exported_types": 2,
+        "unexported_types": 0,
+        "interface_types": 0,
+        "public_ratio": 1,
+        "loc": 166,
+        "files": 3,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "zone_of_pain",
+          "distance": 0.8888888888888888,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 0.1111111111111111,
+          "afferent_coupling": 8,
+          "efferent_coupling": 1,
+          "recent_commit_count": 1,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "internal/dream/adopt",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/dream/adopt",
+        "exported_funcs": 1,
+        "unexported_funcs": 4,
+        "exported_methods": 0,
+        "unexported_methods": 0,
+        "exported_types": 1,
+        "unexported_types": 0,
+        "interface_types": 0,
+        "public_ratio": 0.3333333333333333,
+        "loc": 188,
+        "files": 2,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "main_sequence",
+          "distance": 0.33333333333333337,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 0.6666666666666666,
+          "afferent_coupling": 1,
+          "efferent_coupling": 2,
+          "recent_commit_count": 2,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "internal/dream/forget",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/dream/forget",
+        "exported_funcs": 1,
+        "unexported_funcs": 4,
+        "exported_methods": 0,
+        "unexported_methods": 0,
+        "exported_types": 1,
+        "unexported_types": 0,
+        "interface_types": 0,
+        "public_ratio": 0.3333333333333333,
+        "loc": 148,
+        "files": 1,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "main_sequence",
+          "distance": 0.5,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 0.5,
+          "afferent_coupling": 1,
+          "efferent_coupling": 1,
+          "recent_commit_count": 1,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "internal/dream/harvest",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/dream/harvest",
+        "exported_funcs": 2,
+        "unexported_funcs": 16,
+        "exported_methods": 0,
+        "unexported_methods": 5,
+        "exported_types": 1,
+        "unexported_types": 8,
+        "interface_types": 0,
+        "public_ratio": 0.09375,
+        "loc": 675,
+        "files": 7,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "main_sequence",
+          "distance": 0.09999999999999998,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 0.9,
+          "afferent_coupling": 1,
+          "efferent_coupling": 9,
+          "recent_commit_count": 5,
+          "volatility": "volatile"
+        }
+      },
+      {
+        "path": "internal/dream/harvest/record",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/dream/harvest/record",
+        "exported_funcs": 2,
+        "unexported_funcs": 5,
+        "exported_methods": 0,
+        "unexported_methods": 0,
+        "exported_types": 4,
+        "unexported_types": 0,
+        "interface_types": 0,
+        "public_ratio": 0.5454545454545454,
+        "loc": 234,
+        "files": 3,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "main_sequence",
+          "distance": 0.4,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 0.6,
+          "afferent_coupling": 2,
+          "efferent_coupling": 3,
+          "recent_commit_count": 2,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "internal/dream/mine",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/dream/mine",
+        "exported_funcs": 1,
+        "unexported_funcs": 19,
+        "exported_methods": 0,
+        "unexported_methods": 1,
+        "exported_types": 1,
+        "unexported_types": 2,
+        "interface_types": 0,
+        "public_ratio": 0.08333333333333333,
+        "loc": 600,
+        "files": 5,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "main_sequence",
+          "distance": 0.125,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 0.875,
+          "afferent_coupling": 1,
+          "efferent_coupling": 7,
+          "recent_commit_count": 6,
+          "volatility": "volatile"
+        }
+      },
+      {
+        "path": "internal/dream/mine/candidates",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/dream/mine/candidates",
+        "exported_funcs": 5,
+        "unexported_funcs": 1,
+        "exported_methods": 0,
+        "unexported_methods": 0,
+        "exported_types": 1,
+        "unexported_types": 0,
+        "interface_types": 0,
+        "public_ratio": 0.8571428571428571,
+        "loc": 157,
+        "files": 2,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "zone_of_pain",
+          "distance": 0.75,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 0.25,
+          "afferent_coupling": 3,
+          "efferent_coupling": 1,
+          "recent_commit_count": 1,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "internal/dream/mine/corpus",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/dream/mine/corpus",
+        "exported_funcs": 2,
+        "unexported_funcs": 4,
+        "exported_methods": 0,
+        "unexported_methods": 0,
+        "exported_types": 2,
+        "unexported_types": 0,
+        "interface_types": 0,
+        "public_ratio": 0.5,
+        "loc": 250,
+        "files": 4,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "zone_of_pain",
+          "distance": 1,
+          "structurally_constrained": true,
+          "abstractness": 0,
+          "instability": 0,
+          "afferent_coupling": 1,
+          "efferent_coupling": 0,
+          "recent_commit_count": 1,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "internal/dream/stage",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/dream/stage",
+        "exported_funcs": 1,
+        "unexported_funcs": 4,
+        "exported_methods": 0,
+        "unexported_methods": 0,
+        "exported_types": 1,
+        "unexported_types": 0,
+        "interface_types": 0,
+        "public_ratio": 0.3333333333333333,
+        "loc": 174,
+        "files": 2,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "main_sequence",
+          "distance": 0.25,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 0.75,
+          "afferent_coupling": 1,
+          "efferent_coupling": 3,
+          "recent_commit_count": 2,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "internal/edge",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/edge",
+        "exported_funcs": 1,
+        "unexported_funcs": 8,
+        "exported_methods": 5,
+        "unexported_methods": 5,
+        "exported_types": 6,
+        "unexported_types": 0,
+        "interface_types": 0,
+        "public_ratio": 0.48,
+        "loc": 412,
+        "files": 2,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "main_sequence",
+          "distance": 0.5,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 0.5,
+          "afferent_coupling": 4,
+          "efferent_coupling": 4,
+          "recent_commit_count": 4,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "internal/eventlog",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/eventlog",
+        "exported_funcs": 2,
+        "unexported_funcs": 6,
+        "exported_methods": 0,
+        "unexported_methods": 0,
+        "exported_types": 0,
+        "unexported_types": 1,
+        "interface_types": 0,
+        "public_ratio": 0.2222222222222222,
+        "loc": 136,
+        "files": 2,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "zone_of_pain",
+          "distance": 0.8,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 0.2,
+          "afferent_coupling": 4,
+          "efferent_coupling": 1,
+          "recent_commit_count": 1,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "internal/gitrepo",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/gitrepo",
+        "exported_funcs": 2,
+        "unexported_funcs": 0,
+        "exported_methods": 1,
+        "unexported_methods": 0,
+        "exported_types": 1,
+        "unexported_types": 0,
+        "interface_types": 0,
+        "public_ratio": 1,
+        "loc": 58,
+        "files": 1,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "zone_of_pain",
+          "distance": 1,
+          "structurally_constrained": true,
+          "abstractness": 0,
+          "instability": 0,
+          "afferent_coupling": 6,
+          "efferent_coupling": 0,
+          "recent_commit_count": 0,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "internal/monitor",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/monitor",
+        "exported_funcs": 3,
+        "unexported_funcs": 8,
+        "exported_methods": 3,
+        "unexported_methods": 1,
+        "exported_types": 6,
+        "unexported_types": 0,
+        "interface_types": 0,
+        "public_ratio": 0.5714285714285714,
+        "loc": 574,
+        "files": 1,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "main_sequence",
+          "distance": 0.2142857142857143,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 0.7857142857142857,
+          "afferent_coupling": 3,
+          "efferent_coupling": 11,
+          "recent_commit_count": 1,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "internal/multiplexer",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/multiplexer",
+        "exported_funcs": 2,
+        "unexported_funcs": 0,
+        "exported_methods": 0,
+        "unexported_methods": 0,
+        "exported_types": 8,
+        "unexported_types": 0,
+        "interface_types": 3,
+        "public_ratio": 1,
+        "loc": 134,
+        "files": 1,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "zone_of_pain",
+          "distance": 0.625,
+          "structurally_constrained": true,
+          "abstractness": 0.375,
+          "instability": 0,
+          "afferent_coupling": 14,
+          "efferent_coupling": 0,
+          "recent_commit_count": 2,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "internal/multiplexer/multiplexerfake",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake",
+        "exported_funcs": 0,
+        "unexported_funcs": 0,
+        "exported_methods": 7,
+        "unexported_methods": 0,
+        "exported_types": 1,
+        "unexported_types": 0,
+        "interface_types": 0,
+        "public_ratio": 1,
+        "loc": 91,
+        "files": 1,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "main_sequence",
+          "distance": 0,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 1,
+          "afferent_coupling": 0,
+          "efferent_coupling": 2,
+          "recent_commit_count": 0,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "internal/multiplexer/rexcli",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/multiplexer/rexcli",
+        "exported_funcs": 1,
+        "unexported_funcs": 8,
+        "exported_methods": 13,
+        "unexported_methods": 20,
+        "exported_types": 1,
+        "unexported_types": 9,
+        "interface_types": 0,
+        "public_ratio": 0.28846153846153844,
+        "loc": 818,
+        "files": 4,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "main_sequence",
+          "distance": 0.16666666666666663,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 0.8333333333333334,
+          "afferent_coupling": 1,
+          "efferent_coupling": 5,
+          "recent_commit_count": 9,
+          "volatility": "volatile"
+        }
+      },
+      {
+        "path": "internal/multiplexer/rexcli/blockstate",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/multiplexer/rexcli/blockstate",
+        "exported_funcs": 3,
+        "unexported_funcs": 5,
+        "exported_methods": 3,
+        "unexported_methods": 2,
+        "exported_types": 8,
+        "unexported_types": 4,
+        "interface_types": 0,
+        "public_ratio": 0.56,
+        "loc": 353,
+        "files": 2,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "main_sequence",
+          "distance": 0.4,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 0.6,
+          "afferent_coupling": 2,
+          "efferent_coupling": 3,
+          "recent_commit_count": 3,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "internal/multiplexer/rexcli/premise",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/multiplexer/rexcli/premise",
+        "exported_funcs": 1,
+        "unexported_funcs": 3,
+        "exported_methods": 0,
+        "unexported_methods": 10,
+        "exported_types": 1,
+        "unexported_types": 2,
+        "interface_types": 1,
+        "public_ratio": 0.11764705882352941,
+        "loc": 289,
+        "files": 1,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "main_sequence",
+          "distance": 0,
+          "structurally_constrained": false,
+          "abstractness": 0.3333333333333333,
+          "instability": 0.6666666666666666,
+          "afferent_coupling": 1,
+          "efferent_coupling": 2,
+          "recent_commit_count": 1,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "internal/parking",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/parking",
+        "exported_funcs": 7,
+        "unexported_funcs": 14,
+        "exported_methods": 6,
+        "unexported_methods": 3,
+        "exported_types": 7,
+        "unexported_types": 0,
+        "interface_types": 1,
+        "public_ratio": 0.5405405405405406,
+        "loc": 588,
+        "files": 3,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "main_sequence",
+          "distance": 0.3571428571428572,
+          "structurally_constrained": false,
+          "abstractness": 0.14285714285714285,
+          "instability": 0.5,
+          "afferent_coupling": 4,
+          "efferent_coupling": 4,
+          "recent_commit_count": 11,
+          "volatility": "volatile"
+        }
+      },
+      {
+        "path": "internal/ratelimit",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/ratelimit",
+        "exported_funcs": 1,
+        "unexported_funcs": 3,
+        "exported_methods": 6,
+        "unexported_methods": 2,
+        "exported_types": 3,
+        "unexported_types": 2,
+        "interface_types": 0,
+        "public_ratio": 0.5882352941176471,
+        "loc": 236,
+        "files": 1,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "zone_of_pain",
+          "distance": 0.8571428571428572,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 0.14285714285714285,
+          "afferent_coupling": 6,
+          "efferent_coupling": 1,
+          "recent_commit_count": 0,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "internal/ref",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/ref",
+        "exported_funcs": 5,
+        "unexported_funcs": 0,
+        "exported_methods": 0,
+        "unexported_methods": 0,
+        "exported_types": 0,
+        "unexported_types": 0,
+        "interface_types": 0,
+        "public_ratio": 1,
+        "loc": 49,
+        "files": 1,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "zone_of_pain",
+          "distance": 1,
+          "structurally_constrained": true,
+          "abstractness": 0,
+          "instability": 0,
+          "afferent_coupling": 4,
+          "efferent_coupling": 0,
+          "recent_commit_count": 1,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "internal/selfupdate",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/selfupdate",
+        "exported_funcs": 1,
+        "unexported_funcs": 1,
+        "exported_methods": 0,
+        "unexported_methods": 0,
+        "exported_types": 2,
+        "unexported_types": 0,
+        "interface_types": 0,
+        "public_ratio": 0.75,
+        "loc": 83,
+        "files": 1,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "zone_of_pain",
+          "distance": 1,
+          "structurally_constrained": true,
+          "abstractness": 0,
+          "instability": 0,
+          "afferent_coupling": 1,
+          "efferent_coupling": 0,
+          "recent_commit_count": 1,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "internal/sessioncontext",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/sessioncontext",
+        "exported_funcs": 2,
+        "unexported_funcs": 2,
+        "exported_methods": 3,
+        "unexported_methods": 3,
+        "exported_types": 3,
+        "unexported_types": 2,
+        "interface_types": 0,
+        "public_ratio": 0.5333333333333333,
+        "loc": 201,
+        "files": 1,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "zone_of_pain",
+          "distance": 0.875,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 0.125,
+          "afferent_coupling": 7,
+          "efferent_coupling": 1,
+          "recent_commit_count": 0,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "internal/sessionstate",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/sessionstate",
+        "exported_funcs": 1,
+        "unexported_funcs": 1,
+        "exported_methods": 2,
+        "unexported_methods": 3,
+        "exported_types": 1,
+        "unexported_types": 2,
+        "interface_types": 0,
+        "public_ratio": 0.4,
+        "loc": 180,
+        "files": 3,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "main_sequence",
+          "distance": 0.4285714285714286,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 0.5714285714285714,
+          "afferent_coupling": 3,
+          "efferent_coupling": 4,
+          "recent_commit_count": 2,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "internal/simulate",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/simulate",
+        "exported_funcs": 1,
+        "unexported_funcs": 12,
+        "exported_methods": 19,
+        "unexported_methods": 2,
+        "exported_types": 1,
+        "unexported_types": 4,
+        "interface_types": 1,
+        "public_ratio": 0.5384615384615384,
+        "loc": 536,
+        "files": 2,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "main_sequence",
+          "distance": 0.10000000000000009,
+          "structurally_constrained": false,
+          "abstractness": 0.2,
+          "instability": 0.9,
+          "afferent_coupling": 1,
+          "efferent_coupling": 9,
+          "recent_commit_count": 0,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "internal/spawn",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/spawn",
+        "exported_funcs": 0,
+        "unexported_funcs": 1,
+        "exported_methods": 1,
+        "unexported_methods": 2,
+        "exported_types": 4,
+        "unexported_types": 0,
+        "interface_types": 1,
+        "public_ratio": 0.625,
+        "loc": 162,
+        "files": 1,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "main_sequence",
+          "distance": 0.08333333333333337,
+          "structurally_constrained": false,
+          "abstractness": 0.25,
+          "instability": 0.6666666666666666,
+          "afferent_coupling": 1,
+          "efferent_coupling": 2,
+          "recent_commit_count": 4,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "internal/statefile",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/statefile",
+        "exported_funcs": 6,
+        "unexported_funcs": 1,
+        "exported_methods": 0,
+        "unexported_methods": 0,
+        "exported_types": 0,
+        "unexported_types": 0,
+        "interface_types": 0,
+        "public_ratio": 0.8571428571428571,
+        "loc": 157,
+        "files": 2,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "zone_of_pain",
+          "distance": 1,
+          "structurally_constrained": true,
+          "abstractness": 0,
+          "instability": 0,
+          "afferent_coupling": 13,
+          "efferent_coupling": 0,
+          "recent_commit_count": 3,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "internal/statusline",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/statusline",
+        "exported_funcs": 1,
+        "unexported_funcs": 31,
+        "exported_methods": 0,
+        "unexported_methods": 1,
+        "exported_types": 0,
+        "unexported_types": 8,
+        "interface_types": 0,
+        "public_ratio": 0.024390243902439025,
+        "loc": 609,
+        "files": 4,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "main_sequence",
+          "distance": 0.33333333333333337,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 0.6666666666666666,
+          "afferent_coupling": 1,
+          "efferent_coupling": 2,
+          "recent_commit_count": 2,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "internal/statusline/spend",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/statusline/spend",
+        "exported_funcs": 1,
+        "unexported_funcs": 2,
+        "exported_methods": 2,
+        "unexported_methods": 4,
+        "exported_types": 2,
+        "unexported_types": 1,
+        "interface_types": 0,
+        "public_ratio": 0.4166666666666667,
+        "loc": 224,
+        "files": 1,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "main_sequence",
+          "distance": 0.5,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 0.5,
+          "afferent_coupling": 1,
+          "efferent_coupling": 1,
+          "recent_commit_count": 1,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "internal/tasklog",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/tasklog",
+        "exported_funcs": 1,
+        "unexported_funcs": 9,
+        "exported_methods": 7,
+        "unexported_methods": 10,
+        "exported_types": 5,
+        "unexported_types": 2,
+        "interface_types": 0,
+        "public_ratio": 0.38235294117647056,
+        "loc": 598,
+        "files": 3,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "zone_of_pain",
+          "distance": 0.75,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 0.25,
+          "afferent_coupling": 6,
+          "efferent_coupling": 2,
+          "recent_commit_count": 2,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "internal/verify",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/verify",
+        "exported_funcs": 5,
+        "unexported_funcs": 8,
+        "exported_methods": 0,
+        "unexported_methods": 0,
+        "exported_types": 1,
+        "unexported_types": 0,
+        "interface_types": 0,
+        "public_ratio": 0.42857142857142855,
+        "loc": 376,
+        "files": 4,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "main_sequence",
+          "distance": 0.15384615384615385,
+          "structurally_constrained": false,
+          "abstractness": 0,
+          "instability": 0.8461538461538461,
+          "afferent_coupling": 2,
+          "efferent_coupling": 11,
+          "recent_commit_count": 4,
+          "volatility": "non_volatile"
+        }
+      },
+      {
+        "path": "internal/worktree",
+        "import_path": "github.com/usadamasa/agents-daemon/internal/worktree",
+        "exported_funcs": 2,
+        "unexported_funcs": 13,
+        "exported_methods": 0,
+        "unexported_methods": 3,
+        "exported_types": 1,
+        "unexported_types": 4,
+        "interface_types": 0,
+        "public_ratio": 0.13043478260869565,
+        "loc": 419,
+        "files": 3,
+        "unreferenced_exported": 0,
+        "test_only_exported": 0,
+        "main_sequence": {
+          "zone": "zone_of_pain",
+          "distance": 1,
+          "structurally_constrained": true,
+          "abstractness": 0,
+          "instability": 0,
+          "afferent_coupling": 1,
+          "efferent_coupling": 0,
+          "recent_commit_count": 1,
+          "volatility": "non_volatile"
+        }
+      }
+    ],
+    "summary": {
+      "mean_loc": 293.8703703703704,
+      "stddev_loc": 211.06072904334255,
+      "mean_public_ratio": 0.5013008124923826,
+      "total_packages": 54,
+      "total_warnings": 36,
+      "actionable_warnings": 0,
+      "main_sequence": {
+        "excluded_packages": [
+          "cmd/agents-daemon"
+        ],
+        "structurally_constrained_count": 13,
+        "baseline_not_worsened_count": 0,
+        "non_volatile_zone_of_pain_count": 8,
+        "actionable_count": 0,
+        "volatility_window_commits": 200,
+        "volatile_commit_threshold": 5
+      }
+    },
+    "warnings": [
+      {
+        "type": "zone_of_pain",
+        "package": "cmd/agents-daemon/internal/jsonflag",
+        "value": 1,
+        "limit": 0,
+        "message": "Zone of Pain: 具象的 (A=0.00) で安定 (I=0.00) (情報のみ。--strict の失敗には数えない)",
+        "actionable": false
+      },
+      {
+        "type": "structurally_constrained",
+        "package": "cmd/agents-daemon/internal/jsonflag",
+        "value": 1,
+        "limit": 0,
+        "message": "構造制約: Ce=0, Ca=4 のため D=1.00 はトポロジー由来 (情報のみ。--strict の失敗には数えない)",
+        "actionable": false
+      },
+      {
+        "type": "zone_of_pain",
+        "package": "cmd/agents-daemon/internal/statecmd",
+        "value": 0.6666666666666667,
+        "limit": 0,
+        "message": "Zone of Pain: 具象的 (A=0.00) で安定 (I=0.33) (非揮発: 直近の窓で 1 commit) (情報のみ。--strict の失敗には数えない)",
+        "actionable": false
+      },
+      {
+        "type": "zone_of_pain",
+        "package": "internal/applog",
+        "value": 1,
+        "limit": 0,
+        "message": "Zone of Pain: 具象的 (A=0.00) で安定 (I=0.00) (情報のみ。--strict の失敗には数えない)",
+        "actionable": false
+      },
+      {
+        "type": "structurally_constrained",
+        "package": "internal/applog",
+        "value": 1,
+        "limit": 0,
+        "message": "構造制約: Ce=0, Ca=3 のため D=1.00 はトポロジー由来 (情報のみ。--strict の失敗には数えない)",
+        "actionable": false
+      },
+      {
+        "type": "zone_of_pain",
+        "package": "internal/apppath",
+        "value": 1,
+        "limit": 0,
+        "message": "Zone of Pain: 具象的 (A=0.00) で安定 (I=0.00) (情報のみ。--strict の失敗には数えない)",
+        "actionable": false
+      },
+      {
+        "type": "structurally_constrained",
+        "package": "internal/apppath",
+        "value": 1,
+        "limit": 0,
+        "message": "構造制約: Ce=0, Ca=13 のため D=1.00 はトポロジー由来 (情報のみ。--strict の失敗には数えない)",
+        "actionable": false
+      },
+      {
+        "type": "zone_of_pain",
+        "package": "internal/backend",
+        "value": 0.6666666666666667,
+        "limit": 0,
+        "message": "Zone of Pain: 具象的 (A=0.00) で安定 (I=0.33) (非揮発: 直近の窓で 1 commit) (情報のみ。--strict の失敗には数えない)",
+        "actionable": false
+      },
+      {
+        "type": "zone_of_pain",
+        "package": "internal/config",
+        "value": 1,
+        "limit": 0,
+        "message": "Zone of Pain: 具象的 (A=0.00) で安定 (I=0.00) (情報のみ。--strict の失敗には数えない)",
+        "actionable": false
+      },
+      {
+        "type": "structurally_constrained",
+        "package": "internal/config",
+        "value": 1,
+        "limit": 0,
+        "message": "構造制約: Ce=0, Ca=5 のため D=1.00 はトポロジー由来 (情報のみ。--strict の失敗には数えない)",
+        "actionable": false
+      },
+      {
+        "type": "high_public_ratio",
+        "package": "internal/daemon/state",
+        "value": 0.9230769230769231,
+        "limit": 0.6,
+        "message": "public ratio が高い (0.92 > 0.60) (情報のみ。--strict の失敗には数えない)",
+        "actionable": false
+      },
+      {
+        "type": "zone_of_pain",
+        "package": "internal/deps/dag",
+        "value": 1,
+        "limit": 0,
+        "message": "Zone of Pain: 具象的 (A=0.00) で安定 (I=0.00) (情報のみ。--strict の失敗には数えない)",
+        "actionable": false
+      },
+      {
+        "type": "structurally_constrained",
+        "package": "internal/deps/dag",
+        "value": 1,
+        "limit": 0,
+        "message": "構造制約: Ce=0, Ca=1 のため D=1.00 はトポロジー由来 (情報のみ。--strict の失敗には数えない)",
+        "actionable": false
+      },
+      {
+        "type": "zone_of_pain",
+        "package": "internal/detect",
+        "value": 1,
+        "limit": 0,
+        "message": "Zone of Pain: 具象的 (A=0.00) で安定 (I=0.00) (情報のみ。--strict の失敗には数えない)",
+        "actionable": false
+      },
+      {
+        "type": "structurally_constrained",
+        "package": "internal/detect",
+        "value": 1,
+        "limit": 0,
+        "message": "構造制約: Ce=0, Ca=5 のため D=1.00 はトポロジー由来 (情報のみ。--strict の失敗には数えない)",
+        "actionable": false
+      },
+      {
+        "type": "zone_of_pain",
+        "package": "internal/dream",
+        "value": 0.8888888888888888,
+        "limit": 0,
+        "message": "Zone of Pain: 具象的 (A=0.00) で安定 (I=0.11) (非揮発: 直近の窓で 1 commit) (情報のみ。--strict の失敗には数えない)",
+        "actionable": false
+      },
+      {
+        "type": "zone_of_pain",
+        "package": "internal/dream/mine/candidates",
+        "value": 0.75,
+        "limit": 0,
+        "message": "Zone of Pain: 具象的 (A=0.00) で安定 (I=0.25) (非揮発: 直近の窓で 1 commit) (情報のみ。--strict の失敗には数えない)",
+        "actionable": false
+      },
+      {
+        "type": "zone_of_pain",
+        "package": "internal/dream/mine/corpus",
+        "value": 1,
+        "limit": 0,
+        "message": "Zone of Pain: 具象的 (A=0.00) で安定 (I=0.00) (情報のみ。--strict の失敗には数えない)",
+        "actionable": false
+      },
+      {
+        "type": "structurally_constrained",
+        "package": "internal/dream/mine/corpus",
+        "value": 1,
+        "limit": 0,
+        "message": "構造制約: Ce=0, Ca=1 のため D=1.00 はトポロジー由来 (情報のみ。--strict の失敗には数えない)",
+        "actionable": false
+      },
+      {
+        "type": "zone_of_pain",
+        "package": "internal/eventlog",
+        "value": 0.8,
+        "limit": 0,
+        "message": "Zone of Pain: 具象的 (A=0.00) で安定 (I=0.20) (非揮発: 直近の窓で 1 commit) (情報のみ。--strict の失敗には数えない)",
+        "actionable": false
+      },
+      {
+        "type": "zone_of_pain",
+        "package": "internal/gitrepo",
+        "value": 1,
+        "limit": 0,
+        "message": "Zone of Pain: 具象的 (A=0.00) で安定 (I=0.00) (情報のみ。--strict の失敗には数えない)",
+        "actionable": false
+      },
+      {
+        "type": "structurally_constrained",
+        "package": "internal/gitrepo",
+        "value": 1,
+        "limit": 0,
+        "message": "構造制約: Ce=0, Ca=6 のため D=1.00 はトポロジー由来 (情報のみ。--strict の失敗には数えない)",
+        "actionable": false
+      },
+      {
+        "type": "high_public_ratio",
+        "package": "internal/multiplexer",
+        "value": 1,
+        "limit": 0.6,
+        "message": "public ratio が高い (1.00 > 0.60) (情報のみ。--strict の失敗には数えない)",
+        "actionable": false
+      },
+      {
+        "type": "zone_of_pain",
+        "package": "internal/multiplexer",
+        "value": 0.625,
+        "limit": 0,
+        "message": "Zone of Pain: 具象的 (A=0.38) で安定 (I=0.00) (情報のみ。--strict の失敗には数えない)",
+        "actionable": false
+      },
+      {
+        "type": "structurally_constrained",
+        "package": "internal/multiplexer",
+        "value": 0.625,
+        "limit": 0,
+        "message": "構造制約: Ce=0, Ca=14 のため D=0.62 はトポロジー由来 (情報のみ。--strict の失敗には数えない)",
+        "actionable": false
+      },
+      {
+        "type": "zone_of_pain",
+        "package": "internal/ratelimit",
+        "value": 0.8571428571428572,
+        "limit": 0,
+        "message": "Zone of Pain: 具象的 (A=0.00) で安定 (I=0.14) (非揮発: 直近の窓で 0 commit) (情報のみ。--strict の失敗には数えない)",
+        "actionable": false
+      },
+      {
+        "type": "zone_of_pain",
+        "package": "internal/ref",
+        "value": 1,
+        "limit": 0,
+        "message": "Zone of Pain: 具象的 (A=0.00) で安定 (I=0.00) (情報のみ。--strict の失敗には数えない)",
+        "actionable": false
+      },
+      {
+        "type": "structurally_constrained",
+        "package": "internal/ref",
+        "value": 1,
+        "limit": 0,
+        "message": "構造制約: Ce=0, Ca=4 のため D=1.00 はトポロジー由来 (情報のみ。--strict の失敗には数えない)",
+        "actionable": false
+      },
+      {
+        "type": "zone_of_pain",
+        "package": "internal/selfupdate",
+        "value": 1,
+        "limit": 0,
+        "message": "Zone of Pain: 具象的 (A=0.00) で安定 (I=0.00) (情報のみ。--strict の失敗には数えない)",
+        "actionable": false
+      },
+      {
+        "type": "structurally_constrained",
+        "package": "internal/selfupdate",
+        "value": 1,
+        "limit": 0,
+        "message": "構造制約: Ce=0, Ca=1 のため D=1.00 はトポロジー由来 (情報のみ。--strict の失敗には数えない)",
+        "actionable": false
+      },
+      {
+        "type": "zone_of_pain",
+        "package": "internal/sessioncontext",
+        "value": 0.875,
+        "limit": 0,
+        "message": "Zone of Pain: 具象的 (A=0.00) で安定 (I=0.12) (非揮発: 直近の窓で 0 commit) (情報のみ。--strict の失敗には数えない)",
+        "actionable": false
+      },
+      {
+        "type": "zone_of_pain",
+        "package": "internal/statefile",
+        "value": 1,
+        "limit": 0,
+        "message": "Zone of Pain: 具象的 (A=0.00) で安定 (I=0.00) (情報のみ。--strict の失敗には数えない)",
+        "actionable": false
+      },
+      {
+        "type": "structurally_constrained",
+        "package": "internal/statefile",
+        "value": 1,
+        "limit": 0,
+        "message": "構造制約: Ce=0, Ca=13 のため D=1.00 はトポロジー由来 (情報のみ。--strict の失敗には数えない)",
+        "actionable": false
+      },
+      {
+        "type": "zone_of_pain",
+        "package": "internal/tasklog",
+        "value": 0.75,
+        "limit": 0,
+        "message": "Zone of Pain: 具象的 (A=0.00) で安定 (I=0.25) (非揮発: 直近の窓で 2 commit) (情報のみ。--strict の失敗には数えない)",
+        "actionable": false
+      },
+      {
+        "type": "zone_of_pain",
+        "package": "internal/worktree",
+        "value": 1,
+        "limit": 0,
+        "message": "Zone of Pain: 具象的 (A=0.00) で安定 (I=0.00) (情報のみ。--strict の失敗には数えない)",
+        "actionable": false
+      },
+      {
+        "type": "structurally_constrained",
+        "package": "internal/worktree",
+        "value": 1,
+        "limit": 0,
+        "message": "構造制約: Ce=0, Ca=1 のため D=1.00 はトポロジー由来 (情報のみ。--strict の失敗には数えない)",
+        "actionable": false
+      }
+    ]
+  },
+  "govulncheck": {
+    "status": "ok",
+    "exit_code": 0
+  }
+}

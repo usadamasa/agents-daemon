@@ -56,6 +56,13 @@ const notice = atom({ plugin: 'agents-daemon', key: 'notice' } as const, '')
 const showCompleted = atom({ plugin: 'agents-daemon', key: 'showCompleted' } as const, false)
 const picking = atom({ plugin: 'agents-daemon', key: 'picking' } as const, false)
 const spawning = atom({ plugin: 'agents-daemon', key: 'spawning' } as const, '' as '' | Intent)
+const note = atom({ plugin: 'agents-daemon', key: 'note' } as const, '')
+const menu = atom({ plugin: 'agents-daemon', key: 'menu' } as const, false)
+
+// Op は詳細の操作のメニューの 1 行。選んだらすぐ run を走らせる (#308)。value は描画の key。group のある操作
+// (宛先を選ぶ Hand off など) は、group の見出しの下に枝で並べ、label には宛先だけを書く。sub があれば group の中で
+// もう 1 段、sub の見出しの下に並べる (new session の repo)。同じ group と sub の操作は続けて並べる。
+type Op = { value: string; label: string; group?: string; sub?: string; run: () => void }
 
 // timer は依存図の読み直し。pane を開いている間だけ動かす。
 let timer: Timer | undefined
@@ -106,8 +113,10 @@ export const registerDeps: Register = on => {
       }
       return <Text dimColor>会話の横に置けないため、依存図を閉じました。</Text>
     }
-    // mobile には入力欄が無い。依存図は見せて、送信だけ出さない。
-    const Input = 'Input' in elements ? elements.Input : undefined
+    // mobile には入力欄が無い。依存図は見せて、送信と補足だけ出さない。
+    // cc-premise: 2.1.312 mods Input の onInput は打つたびに呼ばれ、同じ value で描き直しても打った字は残る
+    // cc-premise: 2.1.312 mods mobile の resolve にも Input があり、置いても描いた木に残らない (claude plugin test で確かめた)。surface で分ける
+    const Input = e.surface !== 'mobile' && 'Input' in elements ? elements.Input : undefined
     const data = await read($, deps)
     const failure = await read($, error)
     const chosen = await read($, target)
@@ -115,6 +124,8 @@ export const registerDeps: Register = on => {
     const withCompleted = await read($, showCompleted)
     const isPicking = await read($, picking)
     const isSpawning = await read($, spawning)
+    const draft = await read($, note)
+    const isMenu = await read($, menu)
     const self = await $.session.id()
 
     if (data === null) {
@@ -141,12 +152,84 @@ export const registerDeps: Register = on => {
       void update($, notice, () => '')
       void update($, picking, () => false)
       void update($, spawning, () => '')
+      void update($, note, () => '')
+      void update($, menu, () => false)
     }
     // act は操作を走らせ、結果を notice に出して依存図を読み直す。
     const act = async (run: () => Promise<string>) => {
       const message = await run()
       await update($, notice, () => message)
       await refresh($)
+    }
+    // actNoted は補足欄の文を渡して操作を走らせ、欄を空にする。押した時点の下書きを読む。
+    const actNoted = (run: (note: string) => Promise<string>) =>
+      act(async () => {
+        const message = await run(await read($, note))
+        await update($, note, () => '')
+        return message
+      })
+    // operations は詳細の操作。横に並べると pane の幅で見切れるので、▾ で開くメニューにまとめ、1 行に 1 つ出す。
+    // Select は開いた一覧を後ろの行に重ねて描き、枠の罫線と凡例が崩れるので使わない。枠なしの Button で並べれば
+    // 開いた分だけ後ろの行を押し下げる。選んだらメニューを閉じて走らせる。withNote なら ▾ の右に、次に選ぶ操作の
+    // 文面へ添える補足欄 (✎) を置く。room は操作の名前を切り詰める幅。
+    // cc-premise: 2.1.312 mods Select は開いた一覧を後ろの行に重ねて描き、場所を取らない
+    // cc-premise: 2.1.312 mods 空の Input は placeholder が無いと幅を持たず、押して入れない
+    const operations = (ops: Op[], withNote: boolean, room: number) => {
+      if (ops.length === 0) return null
+      return (
+        <Box key="ops" flexDirection="column">
+          <Box key="ops-row" flexDirection="row" columnGap={1}>
+            <Button key="menu" plain onPress={() => void update($, menu, open => !open)}>
+              {isMenu ? '▴' : '▾'}
+            </Button>
+            {withNote && Input !== undefined && <Text dimColor>✎</Text>}
+            {withNote && Input !== undefined && (
+              <Input
+                key="note"
+                placeholder="note"
+                value={draft}
+                submitLabel="keep"
+                onInput={(text: string) => void update($, note, () => text)}
+                onSubmit={(text: string) => void update($, note, () => text)}
+              />
+            )}
+          </Box>
+          {isMenu &&
+            ops.flatMap((op, i) => {
+              const { group, sub } = op
+              const prev = ops[i - 1]
+              const next = ops[i + 1]
+              const inGroup = (o: Op | undefined) => group !== undefined && o?.group === group
+              // subLast は sub の後に同じ group の別の行が無いか。sub の見出しの枝と、その下の行の縦線を決める。
+              const subLast = !ops.slice(i + 1).some(o => inGroup(o) && o.sub !== sub)
+              const indent = sub === undefined ? '' : subLast ? '  ' : '│ '
+              const branch = group === undefined ? '' : (sub === undefined ? inGroup(next) : inGroup(next) && next?.sub === sub) ? '├ ' : '└ '
+              const prefix = `${indent}${branch}`
+              return [
+                group !== undefined && !inGroup(prev) && (
+                  <Text key={`group:${group}`} dimColor>
+                    {`  ${group}`}
+                  </Text>
+                ),
+                sub !== undefined && !(inGroup(prev) && prev?.sub === sub) && (
+                  <Text key={`sub:${group}:${sub}`} dimColor>
+                    {`  ${subLast ? '└ ' : '├ '}${sub}`}
+                  </Text>
+                ),
+                <Button
+                  key={`op:${op.value}`}
+                  plain
+                  onPress={() => {
+                    void update($, menu, () => false)
+                    op.run()
+                  }}
+                >
+                  {`  ${prefix}${fit(op.label, room - 2 - cells(prefix))}`}
+                </Button>,
+              ]
+            })}
+        </Box>
+      )
     }
     const send = async (node: GraphNode, text: string) => {
       if (!canSend(node, self) || text.trim() === '') return
@@ -198,52 +281,30 @@ export const registerDeps: Register = on => {
     }
 
     // 選んだノードの詳細は、その行の下に、行のレーンの字下げに合わせた枠で出す。
-    // 操作のボタンは枠の最後の行にまとめ、どのノードでも同じ位置に出す。
+    // 操作のプルダウンは枠の最後の行に置き、どのノードでも同じ位置に出す。
     const detail = (n: GraphNode, prefix: string) => {
       const links = g.blockers(n.key)
       const canLink = n.endpoint && n.cwd !== undefined
-      const actions = [
-        canLink && !isPicking && (
-          <Button key="add-blocker" onPress={() => void update($, picking, () => true)}>
-            + Add blocker
-          </Button>
-        ),
-        isPicking && (
-          <Button key="cancel" dimColor onPress={() => void update($, picking, () => false)}>
-            Cancel
-          </Button>
-        ),
-        canAdopt(n, self, data) && (
-          <Button key="adopt" onPress={() => void act(() => adopt($, n))}>
-            To parking
-          </Button>
-        ),
-        // 自分のタスクは TaskUpdate を呼べる自分の model へ頼む (#296)。
-        ...(isOwn(n, self)
-          ? [
-              <Button key="own-start" onPress={() => void act(() => ask($, startText(n)))}>
-                Start
-              </Button>,
-              <Button key="own-complete" onPress={() => void act(() => ask($, statusText(n, 'completed')))}>
-                Complete
-              </Button>,
-              <Button key="own-delete" onPress={() => void act(() => ask($, statusText(n, 'deleted')))}>
-                Delete
-              </Button>,
-              <Button key="own-park" onPress={() => void act(() => toParking($, n))}>
-                To parking
-              </Button>,
-              ...peerDestinations(data, self).map(to => (
-                <Button key={`own-hand:${to.session_id}`} onPress={() => void act(() => handOffTask($, n, to))}>
-                  Hand off → {destinationLabel(to)}
-                </Button>
-              )),
-              <Button key="own-spawn" onPress={() => void act(() => ask($, ownSpawnText(n)))}>
-                Hand off → new session
-              </Button>,
-            ]
-          : []),
-      ].filter(Boolean)
+      const own = isOwn(n, self)
+      const blocker: Op[] = canLink && !isPicking ? [{ value: 'add-blocker', label: '+ Add blocker', run: () => void update($, picking, () => true) }] : []
+      // 自分のタスクは TaskUpdate を呼べる自分の model へ頼む (#296)。渡す先は repo を問わず生きているほかのセッション。
+      const ownOps: Op[] = [
+        { value: 'own-start', label: 'Start', run: () => void actNoted(said => ask($, startText(n, said))) },
+        { value: 'own-complete', label: 'Complete', run: () => void act(() => ask($, statusText(n, 'completed'))) },
+        ...peerDestinations(data, self).map(to => ({
+          value: `own-hand:${to.session_id}`,
+          label: destinationLabel(to),
+          group: 'Hand off',
+          run: () => void actNoted(said => handOffTask($, n, to, said)),
+        })),
+        { value: 'own-hand:new', label: 'new session', group: 'Hand off', run: () => void actNoted(said => ask($, ownSpawnText(n, said))) },
+        { value: 'own-delete', label: 'Delete', run: () => void act(() => ask($, statusText(n, 'deleted'))) },
+        { value: 'own-park', label: 'To parking', run: () => void act(() => toParking($, n)) },
+        ...blocker,
+      ]
+      const ops: Op[] = own
+        ? ownOps
+        : [...blocker, ...(canAdopt(n, self, data) ? [{ value: 'adopt', label: 'To parking', run: () => void act(() => adopt($, n)) }] : [])]
       return (
         <Box key={`detail:${n.key}`} flexDirection="column" borderStyle="round" borderDimColor paddingX={1} marginLeft={GUTTER + cells(prefix)}>
           <Text dimColor>
@@ -266,6 +327,11 @@ export const registerDeps: Register = on => {
                 {` ${c.title}`}
               </Button>
             ))}
+          {isPicking && (
+            <Button key="cancel" dimColor onPress={() => void update($, picking, () => false)}>
+              Cancel
+            </Button>
+          )}
           {canSend(n, self) && Input !== undefined && (
             <Input
               key="instruction"
@@ -275,11 +341,8 @@ export const registerDeps: Register = on => {
               onSubmit={(text: string) => void send(n, text)}
             />
           )}
-          {actions.length > 0 && (
-            <Box key={`actions:${n.key}`} flexDirection="row" flexWrap="wrap" gap={1}>
-              {actions}
-            </Box>
-          )}
+          {/* 枠の中の幅は、字下げと枠と詰めの分 (左右 2 桁ずつ) を引いた残り。 */}
+          {operations(ops, own, e.props.bodyColumns - GUTTER - cells(prefix) - 4)}
         </Box>
       )
     }
@@ -324,20 +387,40 @@ export const registerDeps: Register = on => {
       )
     }
 
-    // メモの詳細もノードと同じ枠で出し、操作のボタンを枠の最後の行にまとめる。生きているセッションの無い repo へは
-    // 「new session…」で repo の候補を開き、新しいセッションを起こして渡す (#162)。
+    // メモの詳細もノードと同じ枠で出し、操作のボタンを枠の最後の行にまとめる。宛先は生きているセッションに続けて、
+    // 新しいセッションを起こす repo を並べる (#162)。候補に無い repo は other repo… を選んで絶対パスで指定する。
     const memoDetail = ({ memo, repo }: { memo: ParkingCard; repo: DepsRepo }) => {
       const tasks = taskDestinations(data, repo, self)
-      // spawn は候補の repo で新しいセッションを起こし、渡したら候補を畳む。
-      const spawn = async (to: Destination, intent: Intent) => {
-        if (to.route !== 'spawn') return
-        await act(() => handOff($, memo, to, spawnText(memo, to, intent)))
-        await update($, spawning, () => '')
-      }
+      // handing は intent の操作: 生きているセッション、新しいセッションを起こす repo、候補に無い repo (other repo…) の順。
+      // other repo… は選ぶと絶対パスの欄を出す。text は生きているセッションへ送る文面。
+      const handing = (intent: Intent, verb: string, sessions: Destination[], text: (said: string) => string): Op[] => [
+        ...sessions.map(to => ({
+          value: `${intent}:${destinationKey(to)}`,
+          label: destinationLabel(to),
+          group: verb,
+          run: () => void actNoted(said => handOff($, memo, to, text(said))),
+        })),
+        ...spawnDestinations(data, repo).map(to => ({
+          value: `${intent}:${destinationKey(to)}`,
+          label: destinationLabel(to),
+          group: verb,
+          sub: 'new session',
+          run: () => void actNoted(said => handOff($, memo, to, spawnText(memo, to, intent, said))),
+        })),
+        ...(Input !== undefined
+          ? [{ value: `${intent}:path`, label: 'other repo…', group: verb, sub: 'new session', run: () => void update($, spawning, () => intent) }]
+          : []),
+      ]
+      const ops: Op[] = [
+        ...handing('task', 'To task', tasks, said => taskText(memo, said)),
+        ...handing('issue', 'Ask for issue', issueDestinations(data, repo.sessions, self), said => issueText(memo, repo.title, said)),
+        { value: 'discard', label: 'Discard', run: () => void act(() => discard($, memo)) },
+      ]
       const spawnAt = (path: string, intent: Intent) => {
         const to = pathDestination(path)
         if ('failure' in to) return void update($, notice, () => to.failure)
-        void spawn(to, intent)
+        if (to.route !== 'spawn') return
+        void actNoted(said => handOff($, memo, to, spawnText(memo, to, intent, said))).then(() => update($, spawning, () => ''))
       }
       return (
         <Box key="memo" flexDirection="column" borderStyle="round" borderDimColor paddingX={1} marginLeft={GUTTER}>
@@ -347,43 +430,18 @@ export const registerDeps: Register = on => {
             </Text>
           ))}
           {tasks.length === 0 && <Text dimColor>この repo に送り先のセッションがありません (タスクにするには同じ repo のセッションが要ります)</Text>}
-          <Box key="actions:memo" flexDirection="row" flexWrap="wrap" gap={1}>
-            <Button key="discard" onPress={() => void act(() => discard($, memo))}>
-              Discard
-            </Button>
-            {tasks.map(to => (
-              <Button key={`task:${destinationKey(to)}`} onPress={() => void act(() => handOff($, memo, to, taskText(memo)))}>
-                To task → {destinationLabel(to)}
-              </Button>
-            ))}
-            <Button key="spawn-task" onPress={() => void update($, spawning, () => 'task')}>
-              To task → new session…
-            </Button>
-            {issueDestinations(data, repo.sessions, self).map(to => (
-              <Button key={`issue:${destinationKey(to)}`} onPress={() => void act(() => handOff($, memo, to, issueText(memo, repo.title)))}>
-                Ask for issue → {destinationLabel(to)}
-              </Button>
-            ))}
-            <Button key="spawn-issue" onPress={() => void update($, spawning, () => 'issue')}>
-              Ask for issue → new session…
-            </Button>
-          </Box>
-          {isSpawning !== '' && (
+          {operations(ops, true, e.props.bodyColumns - GUTTER - 4)}
+          {isSpawning !== '' && Input !== undefined && (
             <Box key="spawn" flexDirection="column">
-              <Text dimColor>{isSpawning === 'task' ? 'タスクにする' : 'issue にするよう頼む'}新しいセッションを起こす repo を選ぶ:</Text>
-              <Box flexDirection="row" flexWrap="wrap" gap={1}>
-                {spawnDestinations(data, repo).map(to => (
-                  <Button key={`spawn:${destinationKey(to)}`} onPress={() => void spawn(to, isSpawning)}>
-                    {destinationLabel(to)}
-                  </Button>
-                ))}
-                <Button key="spawn-cancel" dimColor onPress={() => void update($, spawning, () => '')}>
-                  Cancel
-                </Button>
-              </Box>
-              {Input !== undefined && (
-                <Input key="spawn-path" label="別の repo の絶対パス" placeholder="/path/to/repo" submitLabel="Spawn" onSubmit={(text: string) => spawnAt(text, isSpawning)} />
-              )}
+              <Input
+                key="spawn-path"
+                placeholder={`/path/to/repo (${isSpawning === 'task' ? 'To task' : 'Ask for issue'})`}
+                submitLabel="Spawn"
+                onSubmit={(text: string) => spawnAt(text, isSpawning)}
+              />
+              <Button key="spawn-cancel" dimColor onPress={() => void update($, spawning, () => '')}>
+                Cancel
+              </Button>
             </Box>
           )}
         </Box>

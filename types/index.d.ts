@@ -133,9 +133,13 @@ declare module 'claude-code' {
       target: string
       // picking はノードの詳細で Add blocker の候補を出しているか。
       picking: boolean
-      // spawning はメモの詳細で「新しいセッションを起こして渡す」の repo の候補を出しているか。出しているなら頼むこと
-      // (task / issue)、出していなければ空。
+      // spawning はメモの詳細で、候補に無い repo の絶対パスの欄を出しているか。出しているなら頼むこと (task / issue)、
+      // 出していなければ空。
       spawning: '' | 'task' | 'issue'
+      // note は詳細の補足欄の下書き。次に選んだ操作の文面に足す。
+      note: string
+      // menu は詳細の操作のメニュー (▾) を開いているか。
+      menu: boolean
       // notice は送信とメモの操作の結果。
       notice: string
       // told はファイルを触った tool の結果で model に伝えたメモの id (hooks/notice.ts)。同じメモを 2 度伝えない。

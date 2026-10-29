@@ -132,7 +132,7 @@ const LINKS = [
   { before: 'issue:o/r#9', after: 'task:P/1', kind: 'edge', edge: { id: 'e3', before: ep('issue:o/r#9'), after: ep('task:P/1') } },
 ]
 
-// レーンの行 (internal/deps/dag の Rows を Nodes の順で組んだもの)。鎖は Q → R → V と W、issue → P。輪の X は最後。
+// レーンの行 (internal/deps/graph/dag の Rows を Nodes の順で組んだもの)。鎖は Q → R → V と W、issue → P。輪の X は最後。
 const ROWS = [
   'task:Q/1',
   'task:Q/2',

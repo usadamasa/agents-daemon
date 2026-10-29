@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/daemon/state"
-	"github.com/usadamasa/agents-daemon/internal/deps/dag"
 	"github.com/usadamasa/agents-daemon/internal/deps/graph"
+	"github.com/usadamasa/agents-daemon/internal/deps/graph/dag"
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
@@ -326,7 +326,7 @@ func TestGraph_chains(t *testing.T) {
 	}
 }
 
-// drawRows は rows を目で読める形にする (internal/deps/dag のテストと同じ形)。
+// drawRows は rows を目で読める形にする (internal/deps/graph/dag のテストと同じ形)。
 func drawRows(rows []dag.Row) string {
 	lines := make([]string, 0, len(rows))
 	for _, r := range rows {

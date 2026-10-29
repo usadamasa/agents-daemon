@@ -12,11 +12,11 @@ import (
 	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/jsonflag"
 	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/statecmd"
 	"github.com/usadamasa/agents-daemon/internal/apppath"
+	"github.com/usadamasa/agents-daemon/internal/daemon/state"
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/ref"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
-	"github.com/usadamasa/agents-daemon/internal/verify"
 )
 
 // Commands は root に登録するコマンド。
@@ -122,7 +122,7 @@ func newParkCmd() *cobra.Command {
 				return fmt.Errorf("参照 %q は task:<session_id>/<task_id> の形でない", args[0])
 			}
 			return statecmd.Run(cmd, cwd, func(paths apppath.Paths, _ string) (any, error) {
-				exited := func(sessionID string, after time.Time) error { return verify.SessionExited(paths, sessionID, after) }
+				exited := func(sessionID string, after time.Time) error { return state.SessionExited(paths, sessionID, after) }
 				return parkAdopt(paths.StateDir(), parking.New(paths.StateDir()), tasklog.New(paths.StateDir()), session, sessionID, taskID, exited, time.Now())
 			})
 		},

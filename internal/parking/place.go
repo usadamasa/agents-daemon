@@ -29,7 +29,7 @@ func (s Store) Park(req Request, cwd string, tasks Tasks, now time.Time) (Added,
 // Adopt は終了したセッションに残った未完了のタスクを、出自 adopted、種類 scope のメモにし、タスクの記録を消す。
 // 種類を scope にするのは、残ったタスクを拾うかがまさに範囲の相談で、既定 (default_taken) が「未完了のまま」
 // (やらないで進んだ) になるため。
-// exited はセッションが終了したと確かめる (verify.SessionExited。タスクの記録の時刻より後の pane の一覧に無いこと)。
+// exited はセッションが終了したと確かめる (state.SessionExited。タスクの記録の時刻より後の pane の一覧に無いこと)。
 // 確かめられなければメモを書かず記録も消さない。pane が exited と描いた後に daemon が止まっていても、
 // 生きているセッションの記録を消さないため (models/handoff の LiveTaskKept)。
 func (s Store) Adopt(sessionID, taskID string, tasks Tasks, exited func(sessionID string, after time.Time) error, now time.Time) (Added, error) {

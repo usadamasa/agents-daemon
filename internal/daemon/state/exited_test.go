@@ -1,37 +1,25 @@
-package verify
+package state
 
 import (
 	"encoding/json"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
-	"github.com/usadamasa/agents-daemon/internal/daemon/state"
 )
 
-func writeStateFile(t *testing.T, path, data string) {
-	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
-		t.Fatal(err)
-	}
-}
-
 // writeRunning は動いている daemon (このテストプロセス) の pid と、その daemon が at に書いた status.json を置く。
-func writeRunning(t *testing.T, p apppath.Paths, pid int, at time.Time, panes ...state.PaneStatus) {
+func writeRunning(t *testing.T, p apppath.Paths, pid int, at time.Time, panes ...PaneStatus) {
 	t.Helper()
-	writeStateFile(t, p.PIDFile(), strconv.Itoa(pid)+"\n")
-	data, err := json.Marshal(state.StatusSnapshot{PID: pid, UpdatedAt: at, Panes: panes})
+	writeTestFile(t, p.PIDFile(), strconv.Itoa(pid)+"\n")
+	data, err := json.Marshal(StatusSnapshot{PID: pid, UpdatedAt: at, Panes: panes})
 	if err != nil {
 		t.Fatal(err)
 	}
-	writeStateFile(t, p.StatusFile(), string(data))
+	writeTestFile(t, p.StatusFile(), string(data))
 }
 
 // SessionExited は「今の daemon が after より後に書いた status.json に、そのセッションの pane が無い」ときだけ nil。
@@ -49,8 +37,7 @@ func TestSessionExited(t *testing.T) {
 			name: "status.json が前の daemon のもの",
 			setup: func(t *testing.T, p apppath.Paths) {
 				writeRunning(t, p, me, recorded.Add(time.Minute))
-				data, _ := json.Marshal(state.StatusSnapshot{PID: me + 100000, UpdatedAt: recorded.Add(time.Minute)})
-				writeStateFile(t, p.StatusFile(), string(data))
+				writeSnapshot(t, p, me+100000, recorded.Add(time.Minute))
 			},
 			wantErr: "まだ status.json を書いていない",
 		},
@@ -62,14 +49,14 @@ func TestSessionExited(t *testing.T) {
 		{
 			name: "pane がある (生きている)",
 			setup: func(t *testing.T, p apppath.Paths) {
-				writeRunning(t, p, me, recorded.Add(time.Minute), state.PaneStatus{PaneID: "b1", SessionID: "dead", CWD: "/work/x"})
+				writeRunning(t, p, me, recorded.Add(time.Minute), PaneStatus{PaneID: "b1", SessionID: "dead", CWD: "/work/x"})
 			},
 			wantErr: "生きている",
 		},
 		{
 			name: "記録より後の status.json に pane が無い",
 			setup: func(t *testing.T, p apppath.Paths) {
-				writeRunning(t, p, me, recorded.Add(time.Minute), state.PaneStatus{PaneID: "b2", SessionID: "other"})
+				writeRunning(t, p, me, recorded.Add(time.Minute), PaneStatus{PaneID: "b2", SessionID: "other"})
 			},
 		},
 	}

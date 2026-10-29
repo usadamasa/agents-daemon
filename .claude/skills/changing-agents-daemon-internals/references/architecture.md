@@ -93,7 +93,7 @@ backend の判定と rex の呼び方は [multiplexer.md](multiplexer.md)。
 | `statecmd` | family ではなく、state を読み書きして結果を JSON で出すコマンド (park、spawn、edge) の共通の走らせ方 |
 
 cobra を import するのは `cmd/` の下だけで、`internal/` の本体は CLI を知らない。Go の internal 規則で
-`internal/` からは cli パッケージを import できず、`.go-arch-lint.yml` は cobra を `cmd_main` (`cmd/**`) にだけ許す。
+`internal/` からは cli パッケージを import できず、`.go-arch-lint.yml` は cobra を `cmd` (`cmd/**`) にだけ許す。
 コマンドを足すときは、呼ぶ本体に合う family に置き、合うものが無ければ family を足して root に 1 行登録する。
 
 ## 毎 tick の判定

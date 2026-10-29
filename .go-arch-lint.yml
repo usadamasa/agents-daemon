@@ -2,10 +2,12 @@ version: 3
 
 workdir: .
 
-# Claude Code の worktree (.claude/worktrees/<name>/) はリポジトリの丸ごとの複製で、go-arch-lint は workdir の
-# 下を全部走査してその中の .go も「component に無いファイル」として数える。.claude/ 配下は linter の対象にしない。
+# go-arch-lint は workdir の下を全部走査し、見つけた .go を「component に無いファイル」として数える。
+# Claude Code の worktree (.claude/worktrees/<name>/) はリポジトリの丸ごとの複製、tmp/ は gitignore 済みの
+# 作業領域で試し書きの .go が置かれるので、どちらも linter の対象にしない。
 exclude:
   - .claude
+  - tmp
 
 # この設定自体の健全性は `go tool analyze-arch-lint --metrics` と `--strict .` で見る。
 components:

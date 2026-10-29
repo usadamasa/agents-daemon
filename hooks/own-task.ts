@@ -2,7 +2,7 @@ import type { EngineInterface } from 'claude-code'
 
 import type { GraphNode } from '../types'
 import { logEvent } from './log'
-import { park, tellSelf } from './parking'
+import { park, tellSelf, withNote } from './parking'
 import type { Destination } from './parking'
 
 // 依存図の pane から、開いたセッション自身のタスクを動かす操作 (#296)。mod は TaskUpdate を呼べないので、どれも
@@ -26,8 +26,8 @@ function ref(node: GraphNode): string {
   return `タスク #${node.task_id ?? ''}「${node.title}」`
 }
 
-export function startText(node: GraphNode): string {
-  return `${ref(node)}に着手してください。TaskUpdate で in_progress にしてから進めてください。`
+export function startText(node: GraphNode, note = ''): string {
+  return withNote(`${ref(node)}に着手してください。TaskUpdate で in_progress にしてから進めてください。`, note)
 }
 
 export function statusText(node: GraphNode, status: 'completed' | 'deleted'): string {
@@ -36,14 +36,15 @@ export function statusText(node: GraphNode, status: 'completed' | 'deleted'): st
 
 // handOff は生きているほかのセッションへタスクを渡す。model に SendMessage で渡させると、ListAgents の名前が依存図の
 // どの欄 (表示名、session_name、session ID) とも一致しないセッションへ届かないので、mod が session ID で title と
-// description を送り、届いたら自分にタスクを消すよう頼む。進み具合は mod が知らないので送らない。
-export async function handOff($: EngineInterface, node: GraphNode, to: Extract<Destination, { route: 'peer' }>): Promise<string> {
+// description を送り、届いたら自分にタスクを消すよう頼む。進み具合は mod が知らないので送らない。補足 (note) は
+// 相手へ送る文面にだけ足す。
+export async function handOff($: EngineInterface, node: GraphNode, to: Extract<Destination, { route: 'peer' }>, note = ''): Promise<string> {
   const lines = [`${node.session ?? ''} (session ID ${node.session_id ?? ''}) からタスク「${node.title}」を渡します。TaskCreate で作って進めてください。`]
   if (node.description) lines.push(`詳細: ${node.description}`)
   const event = { via: 'hand-off', to: to.session_id }
   let reason: string
   try {
-    const result = await $.session.send({ to: { sessionId: to.session_id }, text: lines.join('\n') })
+    const result = await $.session.send({ to: { sessionId: to.session_id }, text: withNote(lines.join('\n'), note) })
     reason = result.isDelivered ? '' : result.reason
   } catch (err) {
     reason = String(err)
@@ -56,8 +57,11 @@ export async function handOff($: EngineInterface, node: GraphNode, to: Extract<D
 
 // spawnText は新しいセッションを起こして渡すよう頼む文面。起こしたセッションの名前は自分が付けるので、SendMessage で
 // 渡すのも自分に任せる。
-export function spawnText(node: GraphNode): string {
-  return `${ref(node)}を新しいセッションへ渡してください。agents-daemon:peer-sessions skill の手順で peer を立て、SendMessage の本文にタスクの description と今の進み具合を入れて送り、届いたら TaskUpdate で deleted にしてください。`
+export function spawnText(node: GraphNode, note = ''): string {
+  return withNote(
+    `${ref(node)}を新しいセッションへ渡してください。agents-daemon:peer-sessions skill の手順で peer を立て、SendMessage の本文にタスクの description と今の進み具合を入れて送り、届いたら TaskUpdate で deleted にしてください。`,
+    note,
+  )
 }
 
 // toParking はタスクをパーキングロットへ戻す。扱うメモ (捨てていないもの) があるタスクは新しいメモを作らず、

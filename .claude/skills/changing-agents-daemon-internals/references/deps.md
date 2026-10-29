@@ -47,14 +47,18 @@ longest chain の辺の罫線 (`marks`) は色付き。同じノードは 1 回�
 - `+ Add blocker` は足すと輪になる候補 (下流) と `endpoint` が false のノードを出さず、`edge add` に両端のノードの
   key と cwd を渡す
 
-開いたセッション自身の完了していないタスクには、`Start` / `Complete` / `Delete` / `To parking` / `Hand off → <peer>` /
-`Hand off → new session` を出す (`hooks/own-task.ts`)。mod は TaskUpdate を呼べないので、どの操作も自分の入力
+開いたセッション自身の完了していないタスクには、`Start` / `Complete` / `More…` を出し、`More…` で `Hand off` /
+`Delete` / `To parking` / `+ Add blocker` を出す (`hooks/own-task.ts`、#308)。渡す先は `Hand off to` の `Select` 1 つで選び、
+宛先の数が増えても行は増えない。`Select` の無い mobile では宛先ごとに `Hand off → <宛先>` のボタンを出す。
+mod は TaskUpdate を呼べないので、どの操作も自分の入力
 (`$.prompt.submit`) へ頼む文を渡し、タスクを動かすのは自分の model に任せる。
-`Hand off → <peer>` だけは mod が peer へ `$.session.send` で session ID 宛てに title とノードの `description` を送り、
+peer への `Hand off` だけは mod が peer へ `$.session.send` で session ID 宛てに title とノードの `description` を送り、
 届いてから自分にタスクを消すよう頼む。ListAgents の名前は依存図のどの欄 (表示名、`session_name`、session ID) とも
 一致しないことがあり、model に `SendMessage` で渡させると宛先を引き当てられない。渡す先は repo を問わず生きている
-ほかのセッション。`Hand off → new session` は起こしたセッションに自分が名前を付けるので、`agents-daemon:peer-sessions`
-skill の手順で渡すよう自分に頼む。`To parking` は、扱うメモ (`memos` のうち捨てていないもの)
+ほかのセッション。宛先の `new session` は起こしたセッションに自分が名前を付けるので、`agents-daemon:peer-sessions`
+skill の手順で渡すよう自分に頼む。詳細の `補足` 欄に書いた文は、`Start` と `Hand off` の文面 (peer へは相手へ送る文面) の
+末尾に `利用者からの補足: …` として足し、押したら欄を空にする (#310)。空なら文面は変わらない。`Complete` / `Delete` /
+`To parking` には足さない。`More…`、宛先の選択、補足の下書きはノードを選び直すと消える。`To parking` は、扱うメモ (`memos` のうち捨てていないもの)
 があれば新しいメモを作らず、handed のメモを `park set --status open --from handed` で戻してから消すよう頼み、
 入力へ渡せなければ自分への handed (`--to-session <自分>`) に取り直す。扱うメモが無ければ park tool で置いてから
 消すよう頼む。

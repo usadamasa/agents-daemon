@@ -48,9 +48,11 @@ handed / discarded のメモが保持期間 (7 日) で消えた後は、descrip
 - 宛先の名前には `sessions` の `subject` を添える (#191)
 - 自セッションは生きているのが自明なので、`sessions` や daemon の有無にかかわらず宛先に出す。自分へは peer メッセージを
   送れないので `$.prompt.submit` で自分の入力へ渡し、idle になってから 1 ターンとして入る (#190)
-- 新しいセッションを起こして渡す (`To task → new session…`、`Ask for issue → new session…`): 生きているセッションの
-  無い repo へ渡す経路 (#162)。押すと repo の候補 (メモの repo、開いたセッションの repo、ほかの repo) と
-  絶対パスの入力欄を出し、選んだ repo で `agents-daemon spawn --repo <path>` に本文を stdin で
+- 宛先は `To task in` と `Issue by` の `Select` で選び、`To task` / `Ask for issue` で渡す (#308)。`Select` の無い mobile では
+  宛先ごとに `To task → <宛先>` のボタンを出す。詳細の `補足` 欄に書いた文は渡す文面の末尾に足す (#310)
+- 新しいセッションを起こして渡す (宛先の `new session: <repo>`): 生きているセッションの
+  無い repo へ渡す経路 (#162)。宛先の後ろに repo の候補 (メモの repo、開いたセッションの repo、ほかの repo) を並べ、
+  候補に無い repo は `new session: other repo…` を選ぶと出る絶対パスの欄で指定する。選んだ repo で `agents-daemon spawn --repo <path>` に本文を stdin で
   渡す。バイナリが `claude --session-id <uuid> --model $CLAUDE_CODE_SUBAGENT_MODEL -- <本文>` を repo を cwd にした
   rex の window に起こし (`internal/spawn`、フォーカスは奪わず、終了後も pane を残す)、claude が前景になってから
   `{session_id, pane_id, foreground}` を返す。待ち切れたときは `foreground: false` と `detail` で返し、mod はメモを

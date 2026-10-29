@@ -215,8 +215,11 @@ const PANE_PROPS = {
 
 type T = Engine
 
-const mount = ($: T, surface: 'terminal' | 'desktop' | 'mobile' = 'terminal', props: object = PANE_PROPS) =>
+const mount = ($: T, surface: 'terminal' | 'desktop' = 'terminal', props: object = PANE_PROPS) =>
   $.ui.mount({ plugin: 'agents-daemon', surface, component: 'Pane', props: props as typeof PANE_PROPS, requestId: 'agents-daemon-deps' })
+
+// mountMobile は入力欄も Select も無い mobile の描画。
+const mountMobile = ($: T) => $.ui.mount({ plugin: 'agents-daemon', surface: 'mobile', component: 'Pane', props: PANE_PROPS, requestId: 'agents-daemon-deps' })
 
 type UI = Awaited<ReturnType<typeof mount>>
 
@@ -725,7 +728,7 @@ test('選んでいた宛先が依存図から消えたら、先頭の宛先へ�
 test('Select の無い画面 (mobile) では、宛先ごとのボタンで渡す (#308)', async ($, on) => {
   const w = depsWorld(on)
   await $.command.run(OPEN_DEPS)
-  const ui = await mount($, 'mobile')
+  const ui = await mountMobile($)
   await ui.press({ key: 'row:task:SELF/1' })
   await ui.press({ key: 'own-more' })
   expect(await ui.find({ key: 'pick:own-hand' })).toBeUndefined()

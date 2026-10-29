@@ -55,7 +55,15 @@ const target = atom({ plugin: 'agents-daemon', key: 'target' } as const, '')
 const notice = atom({ plugin: 'agents-daemon', key: 'notice' } as const, '')
 const showCompleted = atom({ plugin: 'agents-daemon', key: 'showCompleted' } as const, false)
 const picking = atom({ plugin: 'agents-daemon', key: 'picking' } as const, false)
-const spawning = atom({ plugin: 'agents-daemon', key: 'spawning' } as const, '' as '' | Intent)
+const more = atom({ plugin: 'agents-daemon', key: 'more' } as const, false)
+const picks = atom({ plugin: 'agents-daemon', key: 'picks' } as const, {} as Record<string, string>)
+const note = atom({ plugin: 'agents-daemon', key: 'note' } as const, '')
+
+// Choice は宛先の Select の選択肢 1 つと、それを選んで押したときの操作。run は補足欄の文を受ける。run が無い選択肢
+// (other repo…) はボタンを出さず、呼び手が代わりの欄を出す。
+type Choice = { value: string; label: string; run?: (note: string) => Promise<string> }
+// PATH は other repo… の選択肢の値。宛先の値 (session ID、repo の絶対パス) と重ならない。
+const PATH = 'path'
 
 // timer は依存図の読み直し。pane を開いている間だけ動かす。
 let timer: Timer | undefined
@@ -106,15 +114,22 @@ export const registerDeps: Register = on => {
       }
       return <Text dimColor>会話の横に置けないため、依存図を閉じました。</Text>
     }
-    // mobile には入力欄が無い。依存図は見せて、送信だけ出さない。
-    const Input = 'Input' in elements ? elements.Input : undefined
+    // mobile には入力欄も Select も無い。依存図は見せて、送信と補足は出さず、宛先は 1 つずつボタンにする。
+    // cc-premise: 2.1.312 mods Select は閉じると「label: 値 ▾」の 1 行、開くと選択肢を下に並べる。value が無いと none と描く
+    // cc-premise: 2.1.312 mods Input の onInput は打つたびに呼ばれ、同じ value で描き直しても打った字は残る
+    // cc-premise: 2.1.312 mods mobile の resolve にも Select があり、置いても描いた木に残らない (claude plugin test で確かめた)。surface で分ける
+    const fields = e.surface !== 'mobile'
+    const Input = fields && 'Input' in elements ? elements.Input : undefined
+    const Select = fields && 'Select' in elements ? elements.Select : undefined
     const data = await read($, deps)
     const failure = await read($, error)
     const chosen = await read($, target)
     const sent = await read($, notice)
     const withCompleted = await read($, showCompleted)
     const isPicking = await read($, picking)
-    const isSpawning = await read($, spawning)
+    const isMore = await read($, more)
+    const picked = await read($, picks)
+    const draft = await read($, note)
     const self = await $.session.id()
 
     if (data === null) {
@@ -140,13 +155,57 @@ export const registerDeps: Register = on => {
       void update($, target, () => key)
       void update($, notice, () => '')
       void update($, picking, () => false)
-      void update($, spawning, () => '')
+      void update($, more, () => false)
+      void update($, picks, () => ({}))
+      void update($, note, () => '')
     }
     // act は操作を走らせ、結果を notice に出して依存図を読み直す。
     const act = async (run: () => Promise<string>) => {
       const message = await run()
       await update($, notice, () => message)
       await refresh($)
+    }
+    // actNoted は補足欄の文を渡して操作を走らせ、欄を空にする。押した時点の下書きを読む。
+    const actNoted = (run: (note: string) => Promise<string>) =>
+      act(async () => {
+        const message = await run(await read($, note))
+        await update($, note, () => '')
+        return message
+      })
+    const noteField = () =>
+      Input !== undefined && (
+        <Input
+          key="note"
+          label="補足"
+          placeholder="操作の文面に添える (任意)"
+          value={draft}
+          submitLabel="keep"
+          onInput={(text: string) => void update($, note, () => text)}
+          onSubmit={(text: string) => void update($, note, () => text)}
+        />
+      )
+    // destinations は宛先を選ぶ部品。Select があれば Select 1 つと verb のボタン 1 つ、無ければ宛先ごとのボタン。
+    // 選んだ宛先が依存図から消えていたら先頭の宛先にする。
+    const destinations = (slot: string, label: string, verb: string, choices: Choice[]) => {
+      const button = ({ run }: Choice, key: string, text: string) =>
+        run !== undefined && (
+          <Button key={key} onPress={() => void actNoted(run)}>
+            {text}
+          </Button>
+        )
+      if (Select === undefined) return { current: undefined, select: null, buttons: choices.map(c => button(c, `${slot}:${c.value}`, `${verb} → ${c.label}`)) }
+      const current = choices.find(c => c.value === picked[slot]) ?? choices[0]
+      if (current === undefined) return { current, select: null, buttons: [] }
+      const select = (
+        <Select
+          key={`pick:${slot}`}
+          label={label}
+          options={choices.map(({ value, label }) => ({ value, label }))}
+          value={current.value}
+          onSelect={(value: string) => void update($, picks, p => ({ ...p, [slot]: value }))}
+        />
+      )
+      return { current, select, buttons: [button(current, slot, verb)] }
     }
     const send = async (node: GraphNode, text: string) => {
       if (!canSend(node, self) || text.trim() === '') return
@@ -202,7 +261,8 @@ export const registerDeps: Register = on => {
     const detail = (n: GraphNode, prefix: string) => {
       const links = g.blockers(n.key)
       const canLink = n.endpoint && n.cwd !== undefined
-      const actions = [
+      const own = isOwn(n, self)
+      const blocker = [
         canLink && !isPicking && (
           <Button key="add-blocker" onPress={() => void update($, picking, () => true)}>
             + Add blocker
@@ -213,37 +273,51 @@ export const registerDeps: Register = on => {
             Cancel
           </Button>
         ),
-        canAdopt(n, self, data) && (
-          <Button key="adopt" onPress={() => void act(() => adopt($, n))}>
-            To parking
-          </Button>
-        ),
-        // 自分のタスクは TaskUpdate を呼べる自分の model へ頼む (#296)。
-        ...(isOwn(n, self)
+      ]
+      // 自分のタスクは TaskUpdate を呼べる自分の model へ頼む (#296)。着手と完了だけを出し、残りは More… に畳む (#308)。
+      const hand = destinations('own-hand', 'Hand off to', 'Hand off', [
+        ...peerDestinations(data, self).map(to => ({ value: to.session_id, label: destinationLabel(to), run: (said: string) => handOffTask($, n, to, said) })),
+        { value: 'new', label: 'new session', run: (said: string) => ask($, ownSpawnText(n, said)) },
+      ])
+      const ownActions = [
+        <Button key="own-start" onPress={() => void actNoted(said => ask($, startText(n, said)))}>
+          Start
+        </Button>,
+        <Button key="own-complete" onPress={() => void act(() => ask($, statusText(n, 'completed')))}>
+          Complete
+        </Button>,
+        ...(isMore
           ? [
-              <Button key="own-start" onPress={() => void act(() => ask($, startText(n)))}>
-                Start
-              </Button>,
-              <Button key="own-complete" onPress={() => void act(() => ask($, statusText(n, 'completed')))}>
-                Complete
-              </Button>,
+              ...hand.buttons,
               <Button key="own-delete" onPress={() => void act(() => ask($, statusText(n, 'deleted')))}>
                 Delete
               </Button>,
               <Button key="own-park" onPress={() => void act(() => toParking($, n))}>
                 To parking
               </Button>,
-              ...peerDestinations(data, self).map(to => (
-                <Button key={`own-hand:${to.session_id}`} onPress={() => void act(() => handOffTask($, n, to))}>
-                  Hand off → {destinationLabel(to)}
-                </Button>
-              )),
-              <Button key="own-spawn" onPress={() => void act(() => ask($, ownSpawnText(n)))}>
-                Hand off → new session
+              ...blocker,
+              <Button key="own-less" dimColor onPress={() => void update($, more, () => false)}>
+                Less
               </Button>,
             ]
-          : []),
-      ].filter(Boolean)
+          : [
+              <Button key="own-more" onPress={() => void update($, more, () => true)}>
+                More…
+              </Button>,
+            ]),
+      ]
+      const actions = (
+        own
+          ? ownActions
+          : [
+              ...blocker,
+              canAdopt(n, self, data) && (
+                <Button key="adopt" onPress={() => void act(() => adopt($, n))}>
+                  To parking
+                </Button>
+              ),
+            ]
+      ).filter(Boolean)
       return (
         <Box key={`detail:${n.key}`} flexDirection="column" borderStyle="round" borderDimColor paddingX={1} marginLeft={GUTTER + cells(prefix)}>
           <Text dimColor>
@@ -275,8 +349,11 @@ export const registerDeps: Register = on => {
               onSubmit={(text: string) => void send(n, text)}
             />
           )}
+          {own && noteField()}
+          {own && isMore && hand.select}
           {actions.length > 0 && (
-            <Box key={`actions:${n.key}`} flexDirection="row" flexWrap="wrap" gap={1}>
+            // gap は折り返した行の間にも空行を入れるので、横の間だけ空ける。
+            <Box key={`actions:${n.key}`} flexDirection="row" flexWrap="wrap" columnGap={1}>
               {actions}
             </Box>
           )}
@@ -324,20 +401,32 @@ export const registerDeps: Register = on => {
       )
     }
 
-    // メモの詳細もノードと同じ枠で出し、操作のボタンを枠の最後の行にまとめる。生きているセッションの無い repo へは
-    // 「new session…」で repo の候補を開き、新しいセッションを起こして渡す (#162)。
+    // メモの詳細もノードと同じ枠で出し、操作のボタンを枠の最後の行にまとめる。宛先は生きているセッションに続けて、
+    // 新しいセッションを起こす repo を並べる (#162)。候補に無い repo は other repo… を選んで絶対パスで指定する。
     const memoDetail = ({ memo, repo }: { memo: ParkingCard; repo: DepsRepo }) => {
       const tasks = taskDestinations(data, repo, self)
-      // spawn は候補の repo で新しいセッションを起こし、渡したら候補を畳む。
-      const spawn = async (to: Destination, intent: Intent) => {
-        if (to.route !== 'spawn') return
-        await act(() => handOff($, memo, to, spawnText(memo, to, intent)))
-        await update($, spawning, () => '')
-      }
+      // choices は intent の宛先の選択肢。text は生きているセッションへ送る文面。
+      const choices = (sessions: Destination[], intent: Intent, text: (said: string) => string): Choice[] => [
+        ...sessions.map(to => ({ value: destinationKey(to), label: destinationLabel(to), run: (said: string) => handOff($, memo, to, text(said)) })),
+        ...spawnDestinations(data, repo).map(to => ({
+          value: destinationKey(to),
+          label: `new session: ${destinationLabel(to)}`,
+          run: (said: string) => handOff($, memo, to, spawnText(memo, to, intent, said)),
+        })),
+        ...(Input !== undefined ? [{ value: PATH, label: 'new session: other repo…' }] : []),
+      ]
+      const pickers = [
+        { intent: 'task' as const, ...destinations('task', 'To task in', 'To task', choices(tasks, 'task', said => taskText(memo, said))) },
+        {
+          intent: 'issue' as const,
+          ...destinations('issue', 'Issue by', 'Ask for issue', choices(issueDestinations(data, repo.sessions, self), 'issue', said => issueText(memo, repo.title, said))),
+        },
+      ]
       const spawnAt = (path: string, intent: Intent) => {
         const to = pathDestination(path)
         if ('failure' in to) return void update($, notice, () => to.failure)
-        void spawn(to, intent)
+        if (to.route !== 'spawn') return
+        void actNoted(said => handOff($, memo, to, spawnText(memo, to, intent, said)))
       }
       return (
         <Box key="memo" flexDirection="column" borderStyle="round" borderDimColor paddingX={1} marginLeft={GUTTER}>
@@ -347,45 +436,25 @@ export const registerDeps: Register = on => {
             </Text>
           ))}
           {tasks.length === 0 && <Text dimColor>この repo に送り先のセッションがありません (タスクにするには同じ repo のセッションが要ります)</Text>}
-          <Box key="actions:memo" flexDirection="row" flexWrap="wrap" gap={1}>
+          {noteField()}
+          {pickers.flatMap(p => [
+            p.select,
+            p.current?.value === PATH && Input !== undefined && (
+              <Input
+                key={`spawn-path:${p.intent}`}
+                label="別の repo の絶対パス"
+                placeholder="/path/to/repo"
+                submitLabel={p.intent === 'task' ? 'To task' : 'Ask for issue'}
+                onSubmit={(text: string) => spawnAt(text, p.intent)}
+              />
+            ),
+          ])}
+          <Box key="actions:memo" flexDirection="row" flexWrap="wrap" columnGap={1}>
             <Button key="discard" onPress={() => void act(() => discard($, memo))}>
               Discard
             </Button>
-            {tasks.map(to => (
-              <Button key={`task:${destinationKey(to)}`} onPress={() => void act(() => handOff($, memo, to, taskText(memo)))}>
-                To task → {destinationLabel(to)}
-              </Button>
-            ))}
-            <Button key="spawn-task" onPress={() => void update($, spawning, () => 'task')}>
-              To task → new session…
-            </Button>
-            {issueDestinations(data, repo.sessions, self).map(to => (
-              <Button key={`issue:${destinationKey(to)}`} onPress={() => void act(() => handOff($, memo, to, issueText(memo, repo.title)))}>
-                Ask for issue → {destinationLabel(to)}
-              </Button>
-            ))}
-            <Button key="spawn-issue" onPress={() => void update($, spawning, () => 'issue')}>
-              Ask for issue → new session…
-            </Button>
+            {pickers.flatMap(p => p.buttons)}
           </Box>
-          {isSpawning !== '' && (
-            <Box key="spawn" flexDirection="column">
-              <Text dimColor>{isSpawning === 'task' ? 'タスクにする' : 'issue にするよう頼む'}新しいセッションを起こす repo を選ぶ:</Text>
-              <Box flexDirection="row" flexWrap="wrap" gap={1}>
-                {spawnDestinations(data, repo).map(to => (
-                  <Button key={`spawn:${destinationKey(to)}`} onPress={() => void spawn(to, isSpawning)}>
-                    {destinationLabel(to)}
-                  </Button>
-                ))}
-                <Button key="spawn-cancel" dimColor onPress={() => void update($, spawning, () => '')}>
-                  Cancel
-                </Button>
-              </Box>
-              {Input !== undefined && (
-                <Input key="spawn-path" label="別の repo の絶対パス" placeholder="/path/to/repo" submitLabel="Spawn" onSubmit={(text: string) => spawnAt(text, isSpawning)} />
-              )}
-            </Box>
-          )}
         </Box>
       )
     }

@@ -125,9 +125,9 @@ function uniqueLive(sessions: DepsSession[], self: string): Extract<Destination,
 
 // spawnDestinations は「新しいセッションを起こして渡す」の repo の候補: メモの repo、開いたセッションの repo (here)、
 // ほかの repo の順 (重複は除く)。候補に無い repo は pathDestination で指定する。
-export function spawnDestinations(data: DepsData, repo: DepsRepo): Destination[] {
+export function spawnDestinations(data: DepsData, repo: DepsRepo): Extract<Destination, { route: 'spawn' }>[] {
   const seen = new Set<string>()
-  const out: Destination[] = []
+  const out: Extract<Destination, { route: 'spawn' }>[] = []
   const add = (repo: string, title: string) => {
     if (repo === '' || seen.has(repo)) return
     seen.add(repo)
@@ -158,30 +158,38 @@ export function canAdopt(node: GraphNode, self: string, data: DepsData): boolean
   return data.updated_at !== undefined && node.kind === 'task' && node.state === 'exited' && node.session_id !== undefined && node.session_id !== self
 }
 
+// withNote は利用者が pane の補足欄に書いた文を、操作の文面の末尾に足す (#310)。空なら text のまま。
+export function withNote(text: string, note: string): string {
+  const said = note.trim()
+  return said === '' ? text : `${text}\n利用者からの補足: ${said}`
+}
+
 // taskText は「タスクにする」で送る文面。着手の時期は受け手の計画に任せる。依存図はタスクの description に
 // 書かれた id でメモと照合する (internal/deps/graph)。
-export function taskText(memo: ParkingCard): string {
-  return [
+export function taskText(memo: ParkingCard, note = ''): string {
+  const text = [
     `パーキングロットのメモ「${memo.title}」(種類: ${kindLabel(memo)}) をタスクにしてください。` +
       `TaskCreate で作り、タスクの description にメモの id (${memo.id}) を入れてください。` +
       `既にこのメモを扱うタスクがあれば、新しく作らずにその description に id を書き足すだけで構いません。` +
       `着手の時期は今の計画 (タスクの依存) に従ってください。`,
     ...context(memo),
   ].join('\n')
+  return withNote(text, note)
 }
 
 // issueText は「issue にするよう頼む」で送る文面。
-export function issueText(memo: ParkingCard, repo: string): string {
-  return [
+export function issueText(memo: ParkingCard, repo: string, note = ''): string {
+  const text = [
     `パーキングロットのメモ「${memo.title}」を GitHub の issue にしてください。repo: ${repo}。起票したら URL を返してください。`,
     ...context(memo),
   ].join('\n')
+  return withNote(text, note)
 }
 
 // spawnText は新しく起こすセッションの最初のターンの文面。起こした経緯を 1 行置き、続けて peer へ送るものと同じ文面。
 // issue はメモの repo ではなく起こした repo を起票先にする (生きているセッションの無い repo へ渡すための経路なので)。
-export function spawnText(memo: ParkingCard, to: { repo: string; title: string }, intent: Intent): string {
-  const body = intent === 'task' ? taskText(memo) : issueText(memo, to.title)
+export function spawnText(memo: ParkingCard, to: { repo: string; title: string }, intent: Intent, note = ''): string {
+  const body = intent === 'task' ? taskText(memo, note) : issueText(memo, to.title, note)
   return `このメモを渡すため、${to.title} (${to.repo}) で新しいセッションとして起こしました。\n${body}`
 }
 

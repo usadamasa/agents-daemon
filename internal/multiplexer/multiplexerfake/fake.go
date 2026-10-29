@@ -1,6 +1,7 @@
 // Package multiplexerfake は multiplexer.Client のテスト用実装を提供する。multiplexer 本体から
 // 切り出しているのは、これがテスト scaffolding であり、multiplexer の公開 API (実運用で使う型・関数) とは
-// 性質が異なるため。daemon / verify / monitor いずれのテストも、実クライアントを
+// 性質が異なるため。全部の method を持つので、呼び手ごとの小さな interface (monitor.Client、doctor.Client、
+// verify.PaneClient と、daemon / simulate の非公開のもの) のどれにも差し込める。いずれのテストも、実クライアントを
 // 一切経由せずにこのパッケージだけを import すればよい。
 package multiplexerfake
 

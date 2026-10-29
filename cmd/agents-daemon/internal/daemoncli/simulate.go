@@ -22,7 +22,7 @@ func newSimulateCmd() *cobra.Command {
 			"あと cat -v で居座る script で、送った esc・文字列・enter を解釈せずそのまま画面に書く。\n" +
 			"REX_SESSION と REX_BLOCK のある rex の block 内で打つ。script が Claude Code と同じ\n" +
 			"OSC 7501 を printf して program_status に載せ、Claude agent に見せる。\n\n" +
-			"simulate は自分が作った pane 以外には構造的に一切書き込めない (multiplexer.Client を\n" +
+			"simulate は自分が作った pane 以外には構造的に一切書き込めない (pane を読む・送る操作を\n" +
 			"scopedClient で包み、作成した pane_id 以外への呼び出しを拒否する)。実 Claude\n" +
 			"セッションが乗った pane を壊さないための安全策で、テストでも確認している。\n\n" +
 			"証明すること: pane 列挙→Claude agent 判定→画面読取→分類→ゲート判定→送信内容の\n" +

@@ -9,7 +9,6 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/backend"
-	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
 	"github.com/usadamasa/agents-daemon/internal/verify"
 )
@@ -37,7 +36,7 @@ func newInspectCmd() *cobra.Command {
 				return err
 			}
 			// --file は client に触らないので、rex の外でも保存済みの画面を読める。
-			var client multiplexer.Client
+			var client verify.PaneClient
 			if paneID != "" {
 				if _, client, err = backend.Connect(os.Getenv, sessioncontext.New(p.StateDir())); err != nil {
 					return err

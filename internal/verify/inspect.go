@@ -23,9 +23,19 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/ratelimit"
 )
 
+// PaneClient は inspect が --pane で生きた pane を読むときに使う操作。pane の情報 (record と session_id) と画面テキスト
+// だけで、送らない (#301)。--file のときは使わないので nil でよい。backend.Connect が返す multiplexer.Client (全部入り) を
+// そのまま渡す。
+type PaneClient interface {
+	// PaneGet は指定 pane の情報を返す。
+	PaneGet(ctx context.Context, paneID string) (multiplexer.Pane, error)
+	// PaneRead は pane の画面テキストを返す。
+	PaneRead(ctx context.Context, paneID string, opts multiplexer.PaneReadOptions) (string, error)
+}
+
 // RunInspect は screen の分類と待機時刻の算出根拠を w へ表示する。--pane / --file の
 // どちらか一方を指定する必要があるという制約は呼び出し元 (cobra の RunE) が検証する。
-func RunInspect(ctx context.Context, w io.Writer, client multiplexer.Client, p apppath.Paths, paneID, file, sessionID string, now time.Time) error {
+func RunInspect(ctx context.Context, w io.Writer, client PaneClient, p apppath.Paths, paneID, file, sessionID string, now time.Time) error {
 	cfg, cfgErr := config.Load(p.ConfigFile())
 	if cfgErr != nil {
 		_, _ = fmt.Fprintf(w, "設定の読み込みに失敗、デフォルト値で継続します: %v\n", cfgErr)
@@ -105,7 +115,7 @@ func RunInspect(ctx context.Context, w io.Writer, client multiplexer.Client, p a
 }
 
 // loadInspectScreen は --pane / --file のどちらかから画面テキストを取得する。
-func loadInspectScreen(ctx context.Context, client multiplexer.Client, cfg config.Config, paneID, file string) (screen, source string, err error) {
+func loadInspectScreen(ctx context.Context, client PaneClient, cfg config.Config, paneID, file string) (screen, source string, err error) {
 	if file != "" {
 		data, readErr := os.ReadFile(file) // #nosec G304 -- CLI 引数で明示指定されたファイル
 		if readErr != nil {

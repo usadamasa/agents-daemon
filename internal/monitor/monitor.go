@@ -16,7 +16,7 @@
 //   - statusline 由来の 5 時間ウィンドウ使用率によるゲート (fresh かつ閾値未満なら
 //     limit 発火を見送る) は参考実装に無い、このツール独自の安全策。
 //   - 遷移結果を文字列ではなく Outcome という列挙型で返す。
-//   - multiplexer.Client の呼び出しがエラーを返しても状態機械を壊さず、型付きの Outcome と
+//   - Client の呼び出しがエラーを返しても状態機械を壊さず、型付きの Outcome と
 //     error を両方返して呼び出し元 (daemon) が連続失敗をカウントできるようにする。
 package monitor
 
@@ -139,10 +139,22 @@ const (
 	retryWaitAfterSend = 30 * time.Second
 )
 
+// Client は Tick が pane に対して使う操作。多重化ツールの全部入りの multiplexer.Client のうち、画面を読む・送る
+// の 3 つだけを要る側で切り出したもの (#301)。daemon はこれに列挙・端末の大きさ・到達性を足した自分の interface を持ち、
+// dry-run や simulate の包みは送信の 2 つを握りつぶすだけでよい。rexcli の実装と multiplexerfake.Client が満たす。
+type Client interface {
+	// PaneRead は pane の画面テキストを返す。
+	PaneRead(ctx context.Context, paneID string, opts multiplexer.PaneReadOptions) (string, error)
+	// SendText は pane へリテラルテキストを送る (Enter は押さない)。
+	SendText(ctx context.Context, paneID, text string) error
+	// SendKeys は pane へキー入力を送る (例: "esc", "enter")。
+	SendKeys(ctx context.Context, paneID string, keys ...string) error
+}
+
 // Deps は状態遷移に必要な依存をまとめたもの。テストでは Client に
 // multiplexerfake.Client を、Sleep に記録用のダミー関数を注入する。
 type Deps struct {
-	Client     multiplexer.Client
+	Client     Client
 	Classifier *detect.Classifier
 	Config     config.Config
 	// Sleep は recover 中の一時停止に使う。本番では time.Sleep を渡す想定。
@@ -166,7 +178,7 @@ type Deps struct {
 // セッションごとに別ファイルなので daemon が pane ごとに読み込んで渡す。
 // 対応する state が無い場合は nil を渡してよい。
 //
-// multiplexer.Client の呼び出しがエラーを返しても panic や状態破壊はしない。エラーは
+// Client の呼び出しがエラーを返しても panic や状態破壊はしない。エラーは
 // Outcome と共に返すので、呼び出し元は連続失敗のカウント等に使うこと。
 func Tick(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *PaneState, rateState *ratelimit.State, now time.Time) (Outcome, error) {
 	if ps.Status == StatusWaiting && now.Before(ps.WaitUntil) {

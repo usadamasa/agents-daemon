@@ -42,6 +42,15 @@ const defaultSimulateScreen = `  ⏺ Bash(task test)
 ────────────────────────────────────────────────────────────────────────────
 `
 
+// paneClient は simulate が使い捨て pane に対して使う操作。monitor.Tick へ渡す 3 つ (読む・送る) と、pane が Claude agent に
+// 見えたかを待つ PaneGet (#301)。Run が backend.Connect から受ける multiplexer.Client (全部入り) をそのまま渡し、
+// scopedClient はこの 4 つだけを所有 pane に閉じる。
+type paneClient interface {
+	monitor.Client
+	// PaneGet は指定 pane の情報を返す。
+	PaneGet(ctx context.Context, paneID string) (multiplexer.Pane, error)
+}
+
 // Options は Run の呼び出しオプション。
 type Options struct {
 	Send       bool
@@ -141,7 +150,7 @@ const markTimeout = 5 * time.Second
 
 // waitForClaudeAgent は paneID が multiplexer.IsClaudeAgent を満たすまで PaneGet をポーリングし、
 // 満たした時点の Pane を返す。
-func waitForClaudeAgent(ctx context.Context, client multiplexer.Client, paneID string, timeout time.Duration) (multiplexer.Pane, error) {
+func waitForClaudeAgent(ctx context.Context, client paneClient, paneID string, timeout time.Duration) (multiplexer.Pane, error) {
 	deadline := time.Now().Add(timeout)
 	var last multiplexer.Pane
 	var lastErr error
@@ -180,7 +189,7 @@ func lastNonEmptyLine(s string) string {
 }
 
 // waitForScreenContent は paneID の画面に substr が現れるまでポーリングする。
-func waitForScreenContent(ctx context.Context, client multiplexer.Client, paneID, substr string, timeout time.Duration) error {
+func waitForScreenContent(ctx context.Context, client paneClient, paneID, substr string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	var lastScreen string
 	for {
@@ -220,7 +229,7 @@ func cleanupSimulatePane(ctx context.Context, w io.Writer, host simulateHost, ow
 // 確認する。実時間では待たない (上限解除まで数時間かかるため)。
 // sessionIDOf は使い捨て pane に紐づく Claude セッション ID を引く。取れなければ空 (state 無しとして扱う)。
 // 利用上限 state はセッションごとに別ファイルなので、この対応付けが取れないとどの state を読むかが決まらない。
-func sessionIDOf(ctx context.Context, client multiplexer.Client, paneID string) string {
+func sessionIDOf(ctx context.Context, client paneClient, paneID string) string {
 	pane, err := client.PaneGet(ctx, paneID)
 	if err != nil {
 		return ""
@@ -228,7 +237,7 @@ func sessionIDOf(ctx context.Context, client multiplexer.Client, paneID string) 
 	return pane.SessionID
 }
 
-func runSimulateTicks(ctx context.Context, w io.Writer, p apppath.Paths, ownedPaneID string, execClient multiplexer.Client, opts Options) error {
+func runSimulateTicks(ctx context.Context, w io.Writer, p apppath.Paths, ownedPaneID string, execClient paneClient, opts Options) error {
 	cfg, cfgErr := config.Load(p.ConfigFile())
 	if cfgErr != nil {
 		_, _ = fmt.Fprintf(w, "設定の読み込みに失敗、デフォルト値で継続します: %v\n", cfgErr)
@@ -251,7 +260,7 @@ func runSimulateTicks(ctx context.Context, w io.Writer, p apppath.Paths, ownedPa
 	}
 
 	guarded := newScopedClient(execClient, ownedPaneID)
-	var tickClient multiplexer.Client = guarded
+	var tickClient monitor.Client = guarded
 	mode := "dry-run (--send を付けると実際に送信します)"
 	if opts.Send {
 		mode = "実送信 (使い捨て pane に対してのみ)"
@@ -290,18 +299,19 @@ func runSimulateTicks(ctx context.Context, w io.Writer, p apppath.Paths, ownedPa
 	return nil
 }
 
-// scopedClient は multiplexer.Client を包み、ownedPaneID 以外の pane を対象にした呼び出しを
+// scopedClient は paneClient を包み、ownedPaneID 以外の pane を対象にした呼び出しを
 // 全て拒否する。simulate は自分が作った使い捨て pane 以外に絶対に触れてはいけないので、
 // 「呼び出し側が正しい pane_id を渡す」という規律に頼るのではなく、型システムの外側で
-// 機械的に強制できるガードとして実装する。
+// 機械的に強制できるガードとして実装する。pane を特定しない操作 (PaneList、Reachable) は
+// paneClient に無いので、包む相手に出てこない。
 type scopedClient struct {
-	inner       multiplexer.Client
+	inner       paneClient
 	ownedPaneID string
 }
 
 var errPaneNotOwned = errors.New("simulate が作成した pane 以外への操作を拒否しました")
 
-func newScopedClient(inner multiplexer.Client, ownedPaneID string) *scopedClient {
+func newScopedClient(inner paneClient, ownedPaneID string) *scopedClient {
 	return &scopedClient{inner: inner, ownedPaneID: ownedPaneID}
 }
 
@@ -310,10 +320,6 @@ func (c *scopedClient) guard(paneID string) error {
 		return fmt.Errorf("%w (要求された pane=%q, 所有 pane=%q)", errPaneNotOwned, paneID, c.ownedPaneID)
 	}
 	return nil
-}
-
-func (c *scopedClient) PaneList(ctx context.Context) ([]multiplexer.Pane, error) {
-	return c.inner.PaneList(ctx) // 読み取り専用の一覧なので許可する
 }
 
 func (c *scopedClient) PaneGet(ctx context.Context, paneID string) (multiplexer.Pane, error) {
@@ -330,13 +336,6 @@ func (c *scopedClient) PaneRead(ctx context.Context, paneID string, opts multipl
 	return c.inner.PaneRead(ctx, paneID, opts)
 }
 
-func (c *scopedClient) PaneGeometry(ctx context.Context, paneID string) (multiplexer.Geometry, error) {
-	if err := c.guard(paneID); err != nil {
-		return multiplexer.Geometry{}, err
-	}
-	return c.inner.PaneGeometry(ctx, paneID)
-}
-
 func (c *scopedClient) SendText(ctx context.Context, paneID, text string) error {
 	if err := c.guard(paneID); err != nil {
 		return err
@@ -351,37 +350,17 @@ func (c *scopedClient) SendKeys(ctx context.Context, paneID string, keys ...stri
 	return c.inner.SendKeys(ctx, paneID, keys...)
 }
 
-func (c *scopedClient) Reachable(ctx context.Context) error {
-	return c.inner.Reachable(ctx)
-}
-
-// simulateDryRunClient は daemon パッケージの dryRunClient と同じ考え方の decorator。
-// dryRunClient をそのまま使わない理由は、それが daemon のログファイル
+// simulateDryRunClient は daemon パッケージの dryRunClient と同じ考え方の decorator で、monitor.Tick に渡す
+// monitor.Client (読む・送る) だけを包む。dryRunClient をそのまま使わない理由は、それが daemon のログファイル
 // (*applog.Logger) 前提であるのに対し、simulate は「何を送るはずだったか」を
 // そのままコマンドの標準出力 w に表示したいから。
 type simulateDryRunClient struct {
-	inner multiplexer.Client
+	inner monitor.Client
 	w     io.Writer
-}
-
-func (c simulateDryRunClient) PaneList(ctx context.Context) ([]multiplexer.Pane, error) {
-	return c.inner.PaneList(ctx)
-}
-
-func (c simulateDryRunClient) PaneGet(ctx context.Context, paneID string) (multiplexer.Pane, error) {
-	return c.inner.PaneGet(ctx, paneID)
 }
 
 func (c simulateDryRunClient) PaneRead(ctx context.Context, paneID string, opts multiplexer.PaneReadOptions) (string, error) {
 	return c.inner.PaneRead(ctx, paneID, opts)
-}
-
-func (c simulateDryRunClient) PaneGeometry(ctx context.Context, paneID string) (multiplexer.Geometry, error) {
-	return c.inner.PaneGeometry(ctx, paneID)
-}
-
-func (c simulateDryRunClient) Reachable(ctx context.Context) error {
-	return c.inner.Reachable(ctx)
 }
 
 func (c simulateDryRunClient) SendText(_ context.Context, paneID, text string) error {

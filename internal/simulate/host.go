@@ -13,7 +13,7 @@ import (
 )
 
 // simulateHost は使い捨て pane の一生 (作成・Claude agent に見せる・後始末) を行う。
-// multiplexer.Client (PaneList/PaneRead/SendText/SendKeys/Reachable) に無い
+// multiplexer.Client (pane を見る・読む・送る) に無い
 // pane のライフサイクル操作で、simulate だけが使うので Client には足さずこのパッケージに閉じる。
 //
 // 使い捨て pane の前景は `/bin/sh scriptPath screenPath` (simulateScript)。script が

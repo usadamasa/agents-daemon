@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026.1029.0](https://github.com/usadamasa/agents-daemon/compare/2026.1028.0...2026.1029.0) - 2026-10-29
+
+- peer-sessions: 処理済みの報告と重なる idle 通知への空振りのターンを避ける規範を足す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/312
+- 依存図の pane の操作を ▾ のメニューにまとめ、任意の補足を添えられるようにする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/314
+
 ## [2026.1028.0](https://github.com/usadamasa/agents-daemon/compare/2026.1027.0...2026.1028.0) - 2026-10-28
 
 - rex preview.22 で確かめ直した rex-premise の版を上げる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/304

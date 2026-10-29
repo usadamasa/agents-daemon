@@ -15,9 +15,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/usadamasa/agents-daemon/internal/backend/rexcli/blockstate"
+	"github.com/usadamasa/agents-daemon/internal/backend/rexcli/premise"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
-	"github.com/usadamasa/agents-daemon/internal/multiplexer/rexcli/blockstate"
-	"github.com/usadamasa/agents-daemon/internal/multiplexer/rexcli/premise"
 )
 
 // defaultTimeout は rex コマンド 1 回あたりのタイムアウト。

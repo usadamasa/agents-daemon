@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/usadamasa/agents-daemon/internal/backend/rexcli/blockstate"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
-	"github.com/usadamasa/agents-daemon/internal/multiplexer/rexcli/blockstate"
 )
 
 // logSink は Watch の logf が書いた行を集める。

@@ -15,7 +15,7 @@ Claude Code のセッションは自分が止まっている間は何もでき�
 | 止まったセッションへの働きかけ | 5 時間ウィンドウの利用上限で止まったセッションを、解除時刻に再開させる (`internal/monitor`) |
 | セッションを跨いだ状態の集約 | statusline の stdin から利用上限・context・cost をセッション別の state file に落とし、daemon とコマンドが読む (`internal/sessionstate`、`internal/ratelimit`、`internal/sessioncontext`、`internal/statusline/spend`)。Stop のたびに transcript の要約を集め、記憶の consolidation の材料にする (`internal/dream`) |
 | 時間で動く掃除 | ログと state file のうち、保持期間を過ぎたものを消す (`internal/daemon/housekeeping.go`)。foreground セッションが keep したまま 1 週間触っていない worktree を、SessionStart のたびに今開いたリポジトリの分だけ回収する (`internal/worktree`) |
-| 多重化ツールへの操作 | rex の block を列挙し、画面を読み、キーと文面を送る (`internal/multiplexer/rexcli`) |
+| 多重化ツールへの操作 | rex の block を列挙し、画面を読み、キーと文面を送る (`internal/backend/rexcli`) |
 
 境界は 1 つ。**Claude Code 本体が自分でできることは本体に任せる**。auto-continue が再開を予約している間は
 手を出さず、本体の auto-continue が降りた場面だけを拾う。context の compact と prompt cache の失効も本体

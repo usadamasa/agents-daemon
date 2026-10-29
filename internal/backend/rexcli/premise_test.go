@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/usadamasa/agents-daemon/internal/backend/rexcli/premise"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
-	"github.com/usadamasa/agents-daemon/internal/multiplexer/rexcli/premise"
 )
 
 // 2026-10-18 の実測で doctor を打った自分の block と session (testdata の measuredOct18 の応答はこの ID のもの)。

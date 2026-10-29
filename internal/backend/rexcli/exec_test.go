@@ -11,8 +11,8 @@ import (
 
 	"github.com/kballard/go-shellquote"
 
+	"github.com/usadamasa/agents-daemon/internal/backend/rexcli/blockstate"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
-	"github.com/usadamasa/agents-daemon/internal/multiplexer/rexcli/blockstate"
 )
 
 // fake の rex に渡す ID。session と Claude の block は 2026-10-10 の実測、閉じた block と shell 以外の block は作り物。

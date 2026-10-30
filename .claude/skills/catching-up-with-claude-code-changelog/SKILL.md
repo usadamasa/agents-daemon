@@ -3,7 +3,7 @@ name: catching-up-with-claude-code-changelog
 description: >-
   Claude Code (`claude` CLI) が更新されたあと、agents-daemon が Claude Code に置いている前提を CHANGELOG・バイナリ・
   公式 docs と突き合わせて追従するときに使う。daemon の機能が本体の新機能 (idle compaction、auto-continue、
-  retry watchdog など) と重なる・衝突する、`internal/detect` が拾う画面の文言が変わった、statusline や hook の
+  retry watchdog など) と重なる・衝突する、`internal/runtime/detect` が拾う画面の文言が変わった、statusline や hook の
   新しい field で daemon を簡単にできる、本体の新機能を daemon の新機能のアイデアにしたい、といった場面。
   「Claude Code の更新で daemon が陳腐化していないか」「新しい版でできるようになったことは」「CHANGELOG を
   追って」「文言が変わっていないか」で引く。
@@ -63,7 +63,7 @@ index に載る週しか存在せず、404 が普通。
 ### 3. バイナリで文言と既定値を突き合わせる
 
 CHANGELOG に該当が無くても行う。文言の変更は CHANGELOG に載らない。
-`internal/detect` の正規表現と test fixture (`native_continue_test.go` のバナー一覧、`real_sample_test.go` の実機の行、
+`internal/runtime/detect` の正規表現と test fixture (`native_continue_test.go` のバナー一覧、`real_sample_test.go` の実機の行、
 `detect_test.go` の transient) が、今のバイナリの文言を拾うかを見る。
 
 ```sh
@@ -73,8 +73,8 @@ rg -a -o -N '.{0,60}[Cc]ompacted.{0,80}' "$B" | sort -u
 rg -a -o -N '.{0,160}(<CHANGELOG で見た設定キーや env 名>).{0,200}' "$B" | sort -u
 ```
 
-- 新しい文言が出たら、`internal/detect/detect.go` のパターンに実際に当ててみる。確かめ方は fixture を一時的に足して
-  `go test ./internal/detect/` を回し、結果を見たら戻す。fixture を残すかは別の変更としてレポートに書く。
+- 新しい文言が出たら、`internal/runtime/detect/detect.go` のパターンに実際に当ててみる。確かめ方は fixture を一時的に足して
+  `go test ./internal/runtime/detect/` を回し、結果を見たら戻す。fixture を残すかは別の変更としてレポートに書く。
   レポートには「当たる / 当たらない」まで書く。
 - 新機能の既定値と flag 名 (`tengu_*`) はバイナリから読めるが、**flag の有効・無効は手元では確かめられない**
   (`~/.claude/statsig/` のキャッシュは key がハッシュ)。「on paper」と「動いている」を分けて書く。

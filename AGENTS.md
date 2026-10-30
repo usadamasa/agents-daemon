@@ -11,7 +11,8 @@ README の「役割」が持つ。機能を足す・外す判断はそこに照�
 非テストの呼び手が 1 つならその呼び手の下に入れ子にする。呼び手が `cmd/` の cli だけなら `internal/` 直下に置く。
 複数の読み手がいる書式は、書き手の下に読み書きを置く (`internal/dream/harvest/record`)。
 パッケージは依存のクラスタから読み直した家族 (handoff、runtime、dream、statusline、worktree) か、どの家族からも
-使われる共有層のどれかに属し、`.go-arch-lint.yml` の component がその境界を守る (#300)。新しいパッケージは
+使われる共有層のどれかに属し、`.go-arch-lint.yml` の component がその境界を守る (#300)。runtime の家族は
+`internal/runtime/` の下に集め、ほかの家族と共有層は `internal/` 直下に並ぶ。新しいパッケージは
 どの家族か共有層かを決めて component の `in` に足さないと、`task lint` の `analyze-arch-lint` が uncovered で落ちる。
 
 | パス | 中身 |
@@ -39,15 +40,15 @@ README の「役割」が持つ。機能を足す・外す判断はそこに照�
 | `skills/peer-sessions/` | 別セッション (peer) へ作業を渡す手順 (`ListAgents` / `SendMessage`)。rex の block 操作は `references/rex.md` |
 | `skills/dream/` | 記憶階層の consolidation の手引き。実行系の呼び方は `references/pipeline.md` |
 | `cmd/agents-daemon/` | Go の main と root の登録。コマンドの組み立ては `internal/<family>cli` (境界は `changing-agents-daemon-internals` skill の architecture.md「CLI の組み立て」) |
-| `internal/` | daemon の本体。パス定数は `internal/apppath`。statusline の描画と実行は `internal/statusline`、cost の台帳は `internal/statusline/spend`、daemon の監視ループは `internal/daemon`、daemon の起動の排他と status.json と PID ファイルと、それで確かめるセッションの終了は `internal/daemonstate`、daemon が書くセッション台帳は `internal/daemon/ledger`、sidecar の原子的な書き込みは `internal/statefile`。前提条件の診断 (`doctor`) は `internal/doctor`、ほかの読むだけの診断 (`inspect` / `status` / `logs`) は `internal/verify`、使い捨て pane へ送る e2e (`simulate`) は `internal/simulate`。dream の実行系は `internal/dream` (harvest の出力の書式は `internal/dream/harvest/record`、mine の出力の書式は `internal/dream/mine/candidates`、mine が読む memory と skill は `internal/dream/mine/corpus`)、放置 worktree の回収は `internal/worktree`、cwd の repo と branch を求めるのは `internal/gitrepo`、タスクの記録は `internal/tasklog`、パーキングロットのメモは `internal/parking`、メモを渡す先の新しいセッションを rex の window に起こすのは `internal/spawn`、セッションをまたぐ辺は `internal/edge`、依存図のノードの key と辺の端点の文法 (Ref) は `internal/ref`、タスクの記録と status.json を依存図に組むのは `internal/deps`、ノードの材料から依存の DAG を組むのは `internal/deps/graph`、依存の DAG の段・下流・輪・鎖を数え、pane のレーンの行を組むのは `internal/deps/graph/dag`、依存図とパーキングロットの経路の出来事のログは `internal/eventlog`、上限の出来事の記録は `internal/daemon/limitlog`、plugin の更新と daemon の建て直し (`update`) は `internal/selfupdate` |
-| `internal/multiplexer`, `internal/backend`, `internal/backend/rexcli` | pane 操作の interface (`multiplexer.Client`。全部入りで、呼び手は要る method だけの自分の interface で受ける) と、`backend` の下に入れ子にしたその rex 実装。daemon は rex の events を購読する (`multiplexer.Watcher`)。応答と events の形と block の状態は `rexcli/blockstate`、doctor の前提点検は `rexcli/premise`。`backend` が環境に `REX_SESSION` があることを確かめる (無ければ `daemon --ensure` は何もせず戻る) |
+| `internal/` | daemon の本体。パス定数は `internal/apppath`。statusline の描画と実行は `internal/statusline`、cost の台帳は `internal/statusline/spend`、runtime の家族は `internal/runtime/` の下に集める。daemon の監視ループは `internal/runtime/daemon`、daemon の起動の排他と status.json と PID ファイルと、それで確かめるセッションの終了は `internal/daemonstate`、daemon が書くセッション台帳は `internal/runtime/daemon/ledger`、sidecar の原子的な書き込みは `internal/statefile`。前提条件の診断 (`doctor`) は `internal/runtime/doctor`、ほかの読むだけの診断 (`inspect` / `status` / `logs`) は `internal/runtime/verify`、使い捨て pane へ送る e2e (`simulate`) は `internal/runtime/simulate`。dream の実行系は `internal/dream` (harvest の出力の書式は `internal/dream/harvest/record`、mine の出力の書式は `internal/dream/mine/candidates`、mine が読む memory と skill は `internal/dream/mine/corpus`)、放置 worktree の回収は `internal/worktree`、cwd の repo と branch を求めるのは `internal/gitrepo`、タスクの記録は `internal/tasklog`、パーキングロットのメモは `internal/parking`、メモを渡す先の新しいセッションを rex の window に起こすのは `internal/spawn`、セッションをまたぐ辺は `internal/edge`、依存図のノードの key と辺の端点の文法 (Ref) は `internal/ref`、タスクの記録と status.json を依存図に組むのは `internal/deps`、ノードの材料から依存の DAG を組むのは `internal/deps/graph`、依存の DAG の段・下流・輪・鎖を数え、pane のレーンの行を組むのは `internal/deps/graph/dag`、依存図とパーキングロットの経路の出来事のログは `internal/eventlog`、上限の出来事の記録は `internal/runtime/daemon/limitlog`、plugin の更新と daemon の建て直し (`update`) は `internal/runtime/selfupdate` |
+| `internal/multiplexer`, `internal/runtime/backend`, `internal/runtime/backend/rexcli` | pane 操作の interface (`multiplexer.Client`。全部入りで、呼び手は要る method だけの自分の interface で受ける) と、`backend` の下に入れ子にしたその rex 実装。daemon は rex の events を購読する (`multiplexer.Watcher`)。応答と events の形と block の状態は `rexcli/blockstate`、doctor の前提点検は `rexcli/premise`。`backend` が環境に `REX_SESSION` があることを確かめる (無ければ `daemon --ensure` は何もせず戻る) |
 | `tests/` | hook と script の bats テスト (`tests/lib/`、`tests/fixtures/`) |
 | `ci/mod-types/` | `task typecheck` (手元と CI) が使う mod の型の写し。`task mod-types:sync` (`scripts/sync-mod-types.sh`) が `.claude-plugin/types/` から写す |
 | `models/handoff/` | メモの受け渡しとタスクの記録の TLA+ のモデル。`task model-check` (`scripts/model-check.sh`) が TLC で回す。使い方と期待は `models/handoff/README.md` |
 | `flake.nix` | 開発ツールの devShell (版は `flake.lock` が固定する)。go-arch-metrics の CLI は go.mod の tool directive が固定する |
 | `.claude/skills/changing-agents-daemon-internals/` | 実装の仕組みとその理由 (配線、上限の検知、pane の読み書き、mod、バイナリ、出力されるファイル) と実機での検証。plugin には同梱しない保守用 skill |
 | `.claude/skills/catching-up-with-claude-code-changelog/` | Claude Code の更新後に CHANGELOG・バイナリ・docs を追い、この repo の前提 (画面の文言、hook と statusline の field、本体の新機能との重なり) を点検して issue に落とす手順。plugin には同梱しない保守用 skill |
-| `.claude/skills/catching-up-with-rex-changelog/` | rex の更新後に changelog (superlogical MCP) と自分の block への固定コマンドの応答を `rex-premise` marker と `internal/backend/rexcli` の fixture と突き合わせ、ずれを issue に落とす手順。前回見た版は `references/last-checked.md`。plugin には同梱しない保守用 skill |
+| `.claude/skills/catching-up-with-rex-changelog/` | rex の更新後に changelog (superlogical MCP) と自分の block への固定コマンドの応答を `rex-premise` marker と `internal/runtime/backend/rexcli` の fixture と突き合わせ、ずれを issue に落とす手順。前回見た版は `references/last-checked.md`。plugin には同梱しない保守用 skill |
 
 ## 検証
 
@@ -65,7 +66,7 @@ task typecheck                              # mod の型検査 (tsc)。型は ci
 ```
 
 `invariants_test.go` と `fuzz_test.go` は、1 場面を固定する例ではなく「どの入力でも破ってはいけないこと」を書いて乱択で
-探す実行できる仕様 (`internal/monitor`、`internal/deps/graph/dag`、`internal/detect`、`internal/statefile`、`internal/parking`、
+探す実行できる仕様 (`internal/runtime/monitor`、`internal/deps/graph/dag`、`internal/runtime/detect`、`internal/statefile`、`internal/parking`、
 `internal/tasklog`、`internal/edge`)。反例が出たらコードを直すか挙動を正当化し、性質を弱めて通さない。
 `models/handoff` の不変条件は `internal/parking` と `internal/tasklog` の `invariants_test.go` が
 実物の Store の交錯で持つ。`task test` は fuzz の seed だけを回し、乱択は `task fuzz` で行う。
@@ -131,7 +132,7 @@ devShell の go は `go.mod` の `go` 行と同じ系列 (`go_1_26`) にし、`G
 
 - ランタイム状態は `~/.claude/` に置かず XDG (`internal/apppath`) に置く。環境から埋める入口は `apppath.FromEnv` だけ。
 - 書くファイルを足すときは、同じ PR で消す仕組みと `changing-agents-daemon-internals` skill の architecture.md「出力されるファイル」の行 (書く主体・消す主体) を足す。
-- 削除は daemon 自身が mtime で行う (`internal/daemon/housekeeping.go`)。保持期間は定数にし、根拠をコメントに書く。
+- 削除は daemon 自身が mtime で行う (`internal/runtime/daemon/housekeeping.go`)。保持期間は定数にし、根拠をコメントに書く。
 
 ## パス定数の対
 
@@ -142,7 +143,7 @@ hook・skill・daemon は別プロセスで、ファイル越しに繋がる。�
 | ---- | ---- | ---- |
 | `hooks/lib/daemon-bin.sh` | `Taskfile.yml` の `install` | `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon` |
 | 利用者の `statusLine.command`、または自前の statusline に足す 1 行 (`skills/setup/references/statusline.md`) | `hooks/lib/daemon-bin.sh` と `Taskfile.yml` の `install` | `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon statusline` (または `ingest-statusline`)。`rate-limits/` の書式は `internal/ratelimit`、`context/` の書式は `internal/sessioncontext` が読み書き両方で持つ |
-| `statusline` / `ingest-statusline` が `context/<sid>.json` の `multiplexer` に書く場所 (環境変数 `REX_SESSION` / `REX_BLOCK` から) | `internal/sessioncontext` の `ListMultiplexerBlocks` を `internal/backend/rexcli` が引く (`internal/backend` が配線) | rex の block から session_id への対応。書式と読み方は `internal/sessioncontext` が両方持つ |
+| `statusline` / `ingest-statusline` が `context/<sid>.json` の `multiplexer` に書く場所 (環境変数 `REX_SESSION` / `REX_BLOCK` から) | `internal/sessioncontext` の `ListMultiplexerBlocks` を `internal/runtime/backend/rexcli` が引く (`internal/runtime/backend` が配線) | rex の block から session_id への対応。書式と読み方は `internal/sessioncontext` が両方持つ |
 | `hooks/daemon-bin.ts` の `daemonBin` (mod が `agents-daemon deps --cwd <cwd>` と `park` を呼ぶ) | `hooks/lib/daemon-bin.sh` と `Taskfile.yml` の `install` | `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon`。mod は `$.env.get` で `XDG_CACHE_HOME` と `HOME` を読む |
 | `hooks/deps.tsx` の `DepsData` (`types/index.d.ts`) | `internal/deps` の `Deps` (`graph` は `internal/deps/graph` の `Graph`) | `deps` の JSON の形。片方の欄を変えたらもう片方も変える |
 | `hooks/park.tsx` の `FIELDS` と `Added` | `internal/parking` の `Request` と `Added` | `park add` の stdin と stdout の JSON の形 |

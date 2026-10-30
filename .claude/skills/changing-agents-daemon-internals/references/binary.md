@@ -23,7 +23,7 @@ plugin には install 時の lifecycle hook が無いので、バイナリも Se
   次の build が持ち主の死を `kill -0` で確かめて残骸を消し、取り直す (`build.log` に `stale lock` が残る)。
   手で消す必要は無い。
 - plugin の更新後にセッションを開き直さず入れ替えるには、`agents-daemon update` が plugin を更新してから
-  更新した版の `hooks/build-daemon.sh` を叩く (`internal/selfupdate`)。使い方は [operations.md](../../../../skills/agents-daemon/references/operations.md) の
+  更新した版の `hooks/build-daemon.sh` を叩く (`internal/runtime/selfupdate`)。使い方は [operations.md](../../../../skills/agents-daemon/references/operations.md) の
   「plugin の更新後に daemon を入れ替える」。
 - 開発中は `task install` で同じパスへ建てられる。中身は `hooks/build-daemon.sh` そのもので、
   stamp には clone の plugin.json の version が書かれる。install 済み plugin と version が同じなら
@@ -36,7 +36,7 @@ Go のバイナリは起動時にメモリへ読み込まれるので、ファ�
 ため、放っておくと直したはずのコードが何日も動かないままになる。
 
 そこでデーモンは毎 tick で自分の実行ファイルの mtime とサイズを見て、差し替わっていたら
-後始末をして `daemon.lock` を離してから新しい版を detach 起動して入れ替わる (`internal/daemon/selfupdate.go`)。
+後始末をして `daemon.lock` を離してから新しい版を detach 起動して入れ替わる (`internal/runtime/daemon/selfupdate.go`)。
 build の数秒後には新しい版が動いている。hook も手動操作も停止・再起動をしない。
 `build-daemon.sh` の `daemon --ensure` と入れ替わりの spawn が重なっても、lock を取れた 1 つだけが daemon になり、
 負けた側は `daemon.log` に `agents-daemon: daemon は既に起動しています` の 1 行を残して終わる。

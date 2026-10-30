@@ -57,7 +57,7 @@ rex の外 (`REX_SESSION` なし) では exit 1 で止まる。「rex CLI の前
 ## 次に上限を踏んだとき
 
 上限は起こさないと測れない。daemon は上限の出来事 (daemon.log に行を書くのと同じ遷移) のたびに、踏んだ瞬間の
-材料を `$STATE/limit-events/<YYYY-MM-DD>.jsonl` へ 1 行の JSON で残す (`internal/daemon/limitlog`、欄は package doc)。
+材料を `$STATE/limit-events/<YYYY-MM-DD>.jsonl` へ 1 行の JSON で残す (`internal/runtime/daemon/limitlog`、欄は package doc)。
 上限を踏んだあとにこれを読んで、未測定のまま残っている次の問いに答える。
 
 | 問い | 見る欄 |
@@ -93,4 +93,4 @@ limit と判定するので、`jq` で欄を選んで読み、画面に出すな
 送信の経路と画面の読み取り元は、fake ではなく実機で 1 度は通す。多重化ツールの応答の解釈違いや
 読み取り元の範囲 ([pane-io.md](pane-io.md) の「読み取り元」) は、`--dry-run` や `simulate` だけでは踏めない。
 rex の送信が未測定なのは、まだ果たしていない箇所 (operations.md の「既知の制約」)。
-上限の文言の分類は、実機で取得した表示を `internal/detect/real_sample_test.go` に固定してある。
+上限の文言の分類は、実機で取得した表示を `internal/runtime/detect/real_sample_test.go` に固定してある。

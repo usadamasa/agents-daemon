@@ -4,7 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
-	"github.com/usadamasa/agents-daemon/internal/simulate"
+	"github.com/usadamasa/agents-daemon/internal/runtime/simulate"
 )
 
 // newSimulateCmd は `agents-daemon simulate` を組み立てる。

@@ -10,8 +10,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
-	"github.com/usadamasa/agents-daemon/internal/backend"
-	"github.com/usadamasa/agents-daemon/internal/daemon"
+	"github.com/usadamasa/agents-daemon/internal/runtime/backend"
+	"github.com/usadamasa/agents-daemon/internal/runtime/daemon"
 )
 
 // Commands は root に登録するコマンド。

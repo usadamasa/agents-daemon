@@ -70,13 +70,13 @@ const context = (res: { context?: readonly string[] }) => (res.context ?? []).jo
 test('別のセッションが置いたメモの files に当たるファイルを読むと、そのメモを結果の context で model に伝える', async ($, on) => {
   world(on, {
     [LIST.join(' ')]: [
-      memo('m1', '保持期間の根拠が無い', ['internal/daemon/housekeeping.go'], ['OTHER'], { detail: '90 日の根拠をコメントに書く', default_taken: 'やらない' }),
+      memo('m1', '保持期間の根拠が無い', ['internal/runtime/daemon/housekeeping.go'], ['OTHER'], { detail: '90 日の根拠をコメントに書く', default_taken: 'やらない' }),
       memo('m2', '関係ないメモ', ['README.md']),
     ],
   })
   await $.session.start(START)
 
-  const res = await touch($, 'Read', `${CWD}/internal/daemon/housekeeping.go`)
+  const res = await touch($, 'Read', `${CWD}/internal/runtime/daemon/housekeeping.go`)
   const text = context(res)
   expect(text).toMatch(/パーキングのメモ/)
   expect(text).toMatch(/m1/)
@@ -85,7 +85,7 @@ test('別のセッションが置いたメモの files に当たるファイル�
   expect(text).toMatch(/やらない/)
   expect(text).not.toMatch(/関係ないメモ/)
   // tool の結果そのものは変えない。
-  expect(res.result).toEqual({ filePath: `${CWD}/internal/daemon/housekeeping.go` })
+  expect(res.result).toEqual({ filePath: `${CWD}/internal/runtime/daemon/housekeeping.go` })
 })
 
 test('終了したセッションから移したメモ (origin adopted) は種類に adopted を添えて伝える', async ($, on) => {

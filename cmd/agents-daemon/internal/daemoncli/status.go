@@ -7,7 +7,7 @@ import (
 
 	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/jsonflag"
 	"github.com/usadamasa/agents-daemon/internal/apppath"
-	"github.com/usadamasa/agents-daemon/internal/verify"
+	"github.com/usadamasa/agents-daemon/internal/runtime/verify"
 )
 
 // newStatusCmd は `agents-daemon status` を組み立てる。--json は verify.StatusReport を出す。

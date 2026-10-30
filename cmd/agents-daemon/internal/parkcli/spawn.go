@@ -19,7 +19,7 @@ import (
 // 子プロセス (mod の process.run) に見える。別セッションへ渡す作業は subagent 用のモデルに揃える (peer-sessions skill)。
 const subagentModelEnv = "CLAUDE_CODE_SUBAGENT_MODEL"
 
-// newSpawnCmd は `agents-daemon spawn` を組み立てる (internal/spawn)。判定は spawn.Runner が持ち、ここは flag と環境を
+// newSpawnCmd は `agents-daemon spawn` を組み立てる (spawn)。判定は spawn.Runner が持ち、ここは flag と環境を
 // 渡すだけ。
 func newSpawnCmd() *cobra.Command {
 	var repo string

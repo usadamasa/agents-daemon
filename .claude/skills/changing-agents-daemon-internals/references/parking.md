@@ -24,7 +24,7 @@ handed のメモは宛先を `handed_to` に持つ。peer と自セッション�
 ### メモとタスクの照合
 
 メモの側にはタスクを書き戻さない (#213)。依存図を組むたびに、タスクの記録の description から
-メモの id (`internal/parking` の `Mentioned`、`newID` と同じ形) を拾い、status を問わずメモと照合して、
+メモの id (`parking` の `Mentioned`、`newID` と同じ形) を拾い、status を問わずメモと照合して、
 そのタスクのノードの `memos` (id、title、status。description に書かれた順) に付ける。mod は選んだタスクの詳細に
 `◇ <title> (<status>)` で出す。handed のメモは repo の `memos` から消え、渡した先のタスクの詳細に現れる。
 handed / discarded のメモが保持期間 (7 日) で消えた後は、description に id が残っていても照合できず、出さない。
@@ -38,8 +38,8 @@ handed / discarded のメモが保持期間 (7 日) で消えた後は、descrip
 - 捨てる: `park set <id> --status discarded`
 - 古いメモをまとめて捨てる (`Discard N older than 30d`): 最後に置かれてから 30 日より経った open のメモがあるときだけ
   パーキングの見出しに出し、`park discard --days 30` で open のメモをまとめて discarded にする。30 日はバイナリ
-  (`internal/parking` の `StaleAfter`) が持ち、`deps` の `stale_memo_days` で mod に渡す。CLI に既定は無い。housekeeping が
-  open を 90 日で黙って消す前に、人が見て捨てる区切り (関係は `internal/runtime/daemon/retention_test.go`)。捨てたメモは 7 日残り、`logs --events` の `park.discard` に残る id を `park set <id> --status open` で戻せる
+  (`parking` の `StaleAfter`) が持ち、`deps` の `stale_memo_days` で mod に渡す。CLI に既定は無い。housekeeping が
+  open を 90 日で黙って消す前に、人が見て捨てる区切り (関係は `daemon/retention_test.go`)。捨てたメモは 7 日残り、`logs --events` の `park.discard` に残る id を `park set <id> --status open` で戻せる
 - タスクにする: メモの repo が開いたセッションの repo (`here`) なら自セッション (`このセッション`) を先に、続けて同じ repo の
   `sessions` へ TaskCreate を頼む文面を送る。文面は着手の時期を指示せず受け手の計画 (タスクの依存) に
   任せ、タスクの description にメモの id を入れるよう頼む (既にこのメモを扱うタスクがあれば書き足すだけ)。
@@ -54,7 +54,7 @@ handed / discarded のメモが保持期間 (7 日) で消えた後は、descrip
   無い repo へ渡す経路 (#162)。宛先の後ろに repo の候補 (メモの repo、開いたセッションの repo、ほかの repo) を並べ、
   候補に無い repo は `new session: other repo…` を選ぶと出る絶対パスの欄で指定する。選んだ repo で `agents-daemon spawn --repo <path>` に本文を stdin で
   渡す。バイナリが `claude --session-id <uuid> --model $CLAUDE_CODE_SUBAGENT_MODEL -- <本文>` を repo を cwd にした
-  rex の window に起こし (`internal/spawn`、フォーカスは奪わず、終了後も pane を残す)、claude が前景になってから
+  rex の window に起こし (`spawn`、フォーカスは奪わず、終了後も pane を残す)、claude が前景になってから
   `{session_id, pane_id, foreground}` を返す。待ち切れたときは `foreground: false` と `detail` で返し、mod はメモを
   handed のまま残して pane を知らせる (起きたか分からないメモを戻すと、押し直しで 2 つ目が起きる)。本文は最初の
   ターンとして入るので、peer メッセージの inbox を待たない。文面は起こした経緯の 1 行に続けて peer へ送るものと同じで、
@@ -65,13 +65,13 @@ handed / discarded のメモが保持期間 (7 日) で消えた後は、descrip
   宛先の無い handed が見える)。`$.session.send` が届かなかった、`$.prompt.submit` が drop された、`spawn` が window を
   作れなかったときは `--status open --from handed` で戻し、宛先も空になる。Discard も `--from open` で、取られたメモは
   捨てない。手順の交錯で破れない性質は `models/handoff` が持ち、
-  実装に対しては `internal/parking` と `internal/tasklog` の `invariants_test.go` が実物の Store の交錯で確かめる
+  実装に対しては `parking` と `tasklog` の `invariants_test.go` が実物の Store の交錯で確かめる
 <!-- cc-premise: 2.1.306 mods $.prompt.submit は idle になってから自分のターンとして入り、drop で入らなかったことが分かる -->
 <!-- cc-premise: 2.1.306 cli claude [prompt] は最初のターンの本文、--session-id <uuid> でセッション ID を固定できる -->
 - パーキングへ移す (`To parking`): 終了したセッションの未完了のタスクのノードを `park adopt <ノードの key>` (`task:<sid>/<tid>`) で
   出自 `adopted` (種類 `scope`) のメモにし、タスクの記録を消す。model の tool は出自を書けない。pane は daemon が
   status.json を書いているとき (`updated_at` があるとき) だけこの操作を出し、バイナリは動いている daemon がタスクの
-  記録より後に書いた status.json に pane が無いことを確かめてから移す (`internal/daemonstate` の `SessionExited`)。
+  記録より後に書いた status.json に pane が無いことを確かめてから移す (`daemonstate` の `SessionExited`)。
   daemon が止まっていると生きているセッションも exited と描かれるため
 
 ### 時刻の書き方

@@ -4,7 +4,7 @@
 //	sessions/<session_id>.json   セッション 1 つ (名前、cwd、repo、最初と最後に見た時刻)
 //
 // first_seen は最初に書いた時刻のまま動かず、last_seen は pane が見えている間 tick ごとに進む。daemon は台帳を
-// 使って `edge add` の session:<名前> の端点を session ID に結びつける (Pick、internal/edge の Bind)。
+// 使って `edge add` の session:<名前> の端点を session ID に結びつける (Pick、edge の Bind)。
 // 選び方は Pick の doc。同名のセッションが辺を書く前から 2 つ動いていて古い方を待たせたかった、のような稀な
 // 取り違えは、`edge rm` してから sid:<session_id> で `edge add` し直して直す。
 package ledger
@@ -23,7 +23,7 @@ import (
 )
 
 // Retention は見えなくなったセッションを残す期間。消すのは daemon の housekeeping (Prune) で、mtime で判定する。
-// 結びつけは tick ごとなので、結びつけに要るのは生きている間とその直後だけ。それより長く、辺 (internal/edge の
+// 結びつけは tick ごとなので、結びつけに要るのは生きている間とその直後だけ。それより長く、辺 (edge の
 // Retention) と同じ 7 日にそろえ、依存図に出うる間はそのセッションを引けるようにする。
 const Retention = 7 * 24 * time.Hour
 

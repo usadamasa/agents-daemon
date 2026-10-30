@@ -1,7 +1,7 @@
 ---------------------------- MODULE FileNotice ----------------------------
 (* ファイルを触ったセッションの model へ、そのファイルに関係するパーキングのメモを伝える手順を写したモデル (#89)。
 
-   - メモは別のセッションが置く・まとめる (park add、internal/parking の Add)。置かれたメモは手渡しや捨てるで
+   - メモは別のセッションが置く・まとめる (park add、parking の Add)。置かれたメモは手渡しや捨てるで
      open でなくなる。
    - model が Read / Edit / Write を呼ぶと、tool が走った後の tool.call の hook (hooks/notice.ts の claim) が
      `park list --status open --here` でこの repo の open のメモを読む (List)。読んだ一覧は呼び出しごとの写しで、
@@ -78,7 +78,7 @@ Init ==
 \* 呼び出し c の写しのうち、c が触ったファイルを files に持ち、このセッション以外も置いたメモ。
 Relevant(c) == {m \in Memos : snap[c][m] # {} /\ file[c] \in MemoFiles[m] /\ snap[c][m] # {Self}}
 
-\* どこかのセッションがメモを置く。同じメモが open なら置いたセッションを足す (internal/parking の Add がまとめる)。
+\* どこかのセッションがメモを置く。同じメモが open なら置いたセッションを足す (parking の Add がまとめる)。
 Place(m, s) ==
   /\ open' = open \cup {m}
   /\ placers' = [placers EXCEPT ![m] = IF m \in open THEN @ \cup {s} ELSE {s}]

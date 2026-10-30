@@ -1,13 +1,13 @@
 // Package edge はセッションをまたぐ作業の依存 (DAG の辺、#134) を XDG state 配下に置く。辺の正は作業を渡す側
-// (workspace) が `agents-daemon edge add` で書いたもの。読むのは `edge list` と、依存図の DAG を組む internal/deps。
+// (workspace) が `agents-daemon edge add` で書いたもの。読むのは `edge list` と、依存図の DAG を組む deps パッケージ。
 //
 //	edges/<id>.json   1 本 1 ファイル
 //	edges/.lock       Add、Remove、Bind、Prune を直列にするロック
 //
-// 辺は「before が済まないと after を始められない」を表す。端点は参照 (internal/ref の Ref のうち todo: 以外) と、
+// 辺は「before が済まないと after を始められない」を表す。端点は参照 (ref の Ref のうち todo: 以外) と、
 // その作業の cwd から求めた repo (依存図の repo と同じ鍵) を持つ。
 //
-// session:<名前> の端点は、daemon が台帳 (internal/runtime/daemon/ledger) のセッションに 1 回だけ結びつけ (Bind)、
+// session:<名前> の端点は、daemon が台帳 (daemon/ledger) のセッションに 1 回だけ結びつけ (Bind)、
 // sid:<session_id> に書き換える。書いたときの参照は bound_from に残し、結びついた端点は二度と結び直さない。
 // どのセッションを選ぶかは呼び手の Pick が決める (daemon は ledger.Pick: 辺を書いた時点で動いていた同名のうち
 // 最も新しく起きたもの、無ければ後から最初に現れたもの)。取り違えたら `edge rm` してから sid: で書き直す。

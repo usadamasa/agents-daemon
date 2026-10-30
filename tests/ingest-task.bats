@@ -4,7 +4,7 @@
 # - cache のバイナリが無いか、stamp が plugin の version と違えば何もせず exit 0 (旧版のバイナリは
 #   このサブコマンドを知らないかもしれない)
 # - そろっていれば `ingest-task` を exec し、stdin をそのまま渡す。記録はバイナリ側の責務
-#   (internal/tasklog、cmd/agents-daemon/internal/depscli/ingest_task_test.go)
+#   (tasklog、depscli/ingest_task_test.go)
 
 bats_require_minimum_version 1.5.0
 

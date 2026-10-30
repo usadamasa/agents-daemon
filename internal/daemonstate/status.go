@@ -13,7 +13,7 @@ import (
 type PaneStatus struct {
 	PaneID string `json:"pane_id"`
 	// SessionID は pane で動いている Claude セッションの ID。紐づいていなければ省く。
-	// 依存図 (internal/deps) がタスクとセッションを突き合わせ、指示を送る宛先にする。
+	// 依存図 (deps) がタスクとセッションを突き合わせ、指示を送る宛先にする。
 	SessionID   string `json:"session_id,omitempty"`
 	CWD         string `json:"cwd"`
 	AgentStatus string `json:"agent_status"`

@@ -2,7 +2,7 @@
 # PostToolUse hook (matcher: TaskCreate|TaskUpdate|TaskList|TodoWrite): `agents-daemon ingest-task` に stdin を
 # そのまま渡す。
 #
-# セッションのタスクを XDG state の tasks/ に記録する (#121、internal/tasklog)。hook 入力の読み取り、
+# セッションのタスクを XDG state の tasks/ に記録する (#121、tasklog)。hook 入力の読み取り、
 # 判定、書き込みはバイナリ側が持つ。この hook が担うのはバイナリの場所の解決だけで、無ければ何もしない
 # (ensure-daemon.sh が build する)。stamp が plugin の version と違うときも何もしない。旧版のバイナリは
 # このサブコマンドを知らず、`unknown command` で exit 1 になるため。

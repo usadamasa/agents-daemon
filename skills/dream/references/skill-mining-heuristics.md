@@ -2,7 +2,7 @@
 
 dream 7-phase pipeline の Phase 2 Mine (`agents-daemon dream mine`) が候補分類に使う判定基準と閾値。
 
-**用途**: 実装 (agents-daemon の `internal/dream/mine/coverage.go`) が本ファイルの閾値をハードコードして反映している。
+**用途**: 実装 (agents-daemon の `mine/coverage.go`) が本ファイルの閾値をハードコードして反映している。
 本ファイルを spec/実装の single source of truth とする。数値を変更したら
 Go 定数 (`tokenMatchThreshold` / `shingleMatchThreshold` と `classify` の分岐) も同時に更新すること。
 

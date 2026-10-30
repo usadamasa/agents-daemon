@@ -8,7 +8,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/runtime/verify"
 )
 
-// newLogsCmd は `agents-daemon logs` を組み立てる。--events は出来事のログ (internal/eventlog) を読む。
+// newLogsCmd は `agents-daemon logs` を組み立てる。--events は出来事のログ (eventlog) を読む。
 func newLogsCmd() *cobra.Command {
 	var (
 		lines    int

@@ -17,7 +17,7 @@ func Commands() []*cobra.Command {
 	return []*cobra.Command{newDepsCmd(), newEdgeCmd(), newIngestTaskCmd(), newEventLogCmd()}
 }
 
-// newDepsCmd は `agents-daemon deps` を組み立てる。依存図の JSON (internal/deps) を出し、plugin の mod
+// newDepsCmd は `agents-daemon deps` を組み立てる。依存図の JSON (deps パッケージ) を出し、plugin の mod
 // (hooks/deps.tsx) が数秒ごとに読む。元から JSON なので --json を付けても変わらない。
 func newDepsCmd() *cobra.Command {
 	var cwd string

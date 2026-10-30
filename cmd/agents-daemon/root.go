@@ -40,9 +40,9 @@ func newRootCmd() *cobra.Command {
 		Args:  cobra.NoArgs,
 		Run:   func(cmd *cobra.Command, _ []string) { cmd.Println(version) },
 	})
-	// グローバルオプションは --json だけ。対応はコマンドが Annotations で宣言する (internal/jsonflag)。
+	// グローバルオプションは --json だけ。対応はコマンドが Annotations で宣言する (jsonflag)。
 	jsonflag.Add(root)
-	// コマンドの組み立ては機能ごとの internal/<family>cli が持ち、ここは登録だけにする。
+	// コマンドの組み立ては機能ごとの <family>cli が持ち、ここは登録だけにする。
 	for _, family := range [][]*cobra.Command{
 		daemoncli.Commands(), statuslinecli.Commands(), depscli.Commands(), parkcli.Commands(), dreamcli.Commands(), worktreecli.Commands(),
 	} {

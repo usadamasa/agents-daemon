@@ -45,7 +45,7 @@ run models/handoff FileNotice FileNotice.cfg holds
 run models/handoff FileNotice FileNoticeRace.cfg violated
 # compact の後も told が残ると、compact の前に伝えたメモを model が忘れたまま伝え直さない (Informed の反例)。
 run models/handoff FileNotice FileNoticeCompact.cfg violated
-# 結びつけと edge add / edge rm を edges/.lock の中で読んで書く形 (internal/edge の Bind、Add、Remove)。
+# 結びつけと edge add / edge rm を edges/.lock の中で読んで書く形 (edge パッケージの Bind、Add、Remove)。
 run models/handoff EdgeBind EdgeBind.cfg holds
 # lock 無しで edge add が読んでから書くと、間に結びついた端点を名前に戻す (BindOnce の反例)。
 run models/handoff EdgeBind EdgeBindRaceAdd.cfg violated

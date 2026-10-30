@@ -52,15 +52,15 @@ func TestHousekeep(t *testing.T) {
 		t.Cleanup(func() { _ = log.Close() })
 		r := newDaemonRuntime(&multiplexerfake.Client{}, log, filepath.Join(dir, "status.json"), store, func(time.Duration) {}, now)
 
-		// タスクの記録は 1 週間更新されなければ消える (保持期間の細部は internal/tasklog のテスト)。
+		// タスクの記録は 1 週間更新されなければ消える (保持期間の細部は tasklog のテスト)。
 		r.tasks = tasklog.New(dir)
 		taskFile := filepath.Join(r.tasks.Dir, "s1", "1.json")
 		touchAged(t, taskFile, 8*24*time.Hour, now)
-		// パーキングは 90 日更新されなければ消える (status ごとの期間は internal/parking のテスト)。
+		// パーキングは 90 日更新されなければ消える (status ごとの期間は parking のテスト)。
 		r.parking = parking.New(dir)
 		parkFile := filepath.Join(r.parking.Dir, "p1.json")
 		touchAged(t, parkFile, 91*24*time.Hour, now)
-		// 辺は 1 週間更新されなければ消える (internal/edge のテスト)。
+		// 辺は 1 週間更新されなければ消える (edge のテスト)。
 		r.edges = edge.New(dir)
 		edgeFile := filepath.Join(r.edges.Dir, "e1.json")
 		touchAged(t, edgeFile, 8*24*time.Hour, now)
@@ -70,11 +70,11 @@ func TestHousekeep(t *testing.T) {
 		eventsFresh := applog.RotatedPath(r.eventLog, "2026-08-27")
 		touchAged(t, eventsOld, 20*24*time.Hour, now)
 		touchAged(t, eventsFresh, 24*time.Hour, now)
-		// 上限の出来事の記録は 30 日で消す (internal/runtime/daemon/limitlog のテスト)。
+		// 上限の出来事の記録は 30 日で消す (daemon/limitlog のテスト)。
 		r.limits = limitlog.New(dir)
 		limitFile := filepath.Join(r.limits.Dir, "2026-07-01.jsonl")
 		touchAged(t, limitFile, 31*24*time.Hour, now)
-		// セッション台帳は 1 週間見えなければ消える (internal/runtime/daemon/ledger のテスト)。
+		// セッション台帳は 1 週間見えなければ消える (daemon/ledger のテスト)。
 		r.sessions = ledger.New(dir)
 		sessionFile := filepath.Join(r.sessions.Dir, "s-old.json")
 		touchAged(t, sessionFile, 8*24*time.Hour, now)

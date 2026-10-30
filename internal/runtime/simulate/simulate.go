@@ -1,6 +1,6 @@
 // Package simulate は `simulate` サブコマンドの実装を提供する。使い捨て pane を作り、
-// daemon (internal/runtime/daemon) と同じ検知・判定経路 (monitor パッケージ) をその pane に対してだけ
-// 実際に通す end-to-end の検証ツール。読むだけの診断 (internal/runtime/verify の doctor / inspect) とは
+// daemon パッケージと同じ検知・判定経路 (monitor パッケージ) をその pane に対してだけ
+// 実際に通す end-to-end の検証ツール。読むだけの診断 (doctor と verify の inspect) とは
 // 違い、pane の作成と送信を伴う。
 package simulate
 
@@ -30,7 +30,7 @@ const simulateMetadataSource = "agents-daemon-simulate"
 
 // defaultSimulateScreen は --screen-file を省略した場合に使う内蔵の limit 画面。
 // 2026-08-16 に実機 (Claude Code 2.1.224) で観測した文面と同じ形
-// (internal/runtime/detect/real_sample_test.go の realLimitScreen 参照)。
+// (detect/real_sample_test.go の realLimitScreen 参照)。
 const defaultSimulateScreen = `  ⏺ Bash(task test)
   ⎿  ✅ テスト完了
 

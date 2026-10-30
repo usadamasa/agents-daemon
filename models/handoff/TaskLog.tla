@@ -1,5 +1,5 @@
 ---------------------------- MODULE TaskLog ----------------------------
-(* タスクの記録 (internal/tasklog) を PostToolUse hook が書く手順を写したモデル。
+(* タスクの記録 (tasklog) を PostToolUse hook が書く手順を写したモデル。
 
    - TaskCreate の hook はそのタスクの記録を書く (tasklog.go の create)。
    - TaskList の hook は tool_response の一覧で全件を同期し直し、一覧に無い記録のうち、一覧の最大の id より小さい id

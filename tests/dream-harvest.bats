@@ -3,7 +3,7 @@
 #
 # - cache のバイナリが無ければ何もせず exit 0 (SessionStart hook が build するまで待つ)
 # - あれば `dream harvest --incremental --detach` を exec する。detach とログはバイナリ側の責務
-#   (cmd/agents-daemon/internal/dreamcli/dream_test.go、internal/dream/harvest/detach_test.go)
+#   (dreamcli/dream_test.go、harvest/detach_test.go)
 #
 # Stop hook の stdout は会話の context へ注入されるため、どの分岐でも stdout を空に保つ。
 

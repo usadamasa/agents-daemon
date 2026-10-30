@@ -2,7 +2,7 @@
 # SessionStart hook: `agents-daemon prune-worktrees --hook` に stdin をそのまま渡す。
 #
 # 誰も使っていない Claude Code の worktree (`.claude/worktrees/` 配下) を、今開いたリポジトリの分だけ回収する。
-# 判定・git 操作・hook 入力 (cwd) の読み取りはバイナリ側 (internal/worktree、cmd/agents-daemon/internal/worktreecli) が持つ。
+# 判定・git 操作・hook 入力 (cwd) の読み取りはバイナリ側 (worktree、worktreecli) が持つ。
 # この hook が担うのはバイナリの場所の解決だけで、無ければ何もしない (ensure-daemon.sh が build する)。
 # stamp が plugin の version と違うときも何もしない。plugin の更新直後は build が終わるまで旧版のバイナリが
 # 残っていて、このサブコマンドを知らない版なら `unknown command` で exit 1 になる。SessionStart の hook は

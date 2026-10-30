@@ -19,7 +19,7 @@ import { kindLabel } from './parking'
 
 const told = atom({ plugin: 'agents-daemon', key: 'told' } as const, [])
 
-// Memo は `park list` が出すメモ (internal/parking の Item) のうち、ここで読む欄。
+// Memo は `park list` が出すメモ (parking の Item) のうち、ここで読む欄。
 type Memo = {
   id: string
   repo: string

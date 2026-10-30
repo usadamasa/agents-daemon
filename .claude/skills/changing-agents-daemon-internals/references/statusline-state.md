@@ -13,12 +13,12 @@ Claude Code は statusline コマンドの stdin に JSON を渡す。その中�
 この値は statusline の stdin にしか来ないので、statusline を経由するのは避けられない。
 モデル単位の週次ウィンドウ (`/usage` の `Current week (Fable)` の行) は stdin に来ないので、
 statusline には出せない (#116)。
-配線は 2 通りで、取り出しはどちらもバイナリ (`internal/sessionstate.Store.IngestStatusline`) が持つ
+配線は 2 通りで、取り出しはどちらもバイナリ (`sessionstate.Store.IngestStatusline`) が持つ
 (`agents-daemon:setup` skill の `references/statusline.md`)。
 
-- `statusLine.command` をバイナリの `statusline` に向ける (推奨)。描画 (`internal/statusline`) と state file の
+- `statusLine.command` をバイナリの `statusline` に向ける (推奨)。描画 (`statusline` パッケージ) と state file の
   書き込みを同じプロセスで行う。月額上限の env (`CLAUDE_STATUSLINE_SPEND_CAP`) があれば cost の台帳
-  (`internal/statusline/spend`) にも記録する
+  (`statusline/spend`) にも記録する
 - 利用者の statusline から stdin を `agents-daemon ingest-statusline` へ渡す 1 行を足す。state file だけを書く
 
 statusline はイベントで再実行される (新しい assistant message、`/compact` の完了、permission mode の変更など。
@@ -44,7 +44,7 @@ statusline はイベントで再実行される (新しい assistant message、`
   (次のウィンドウで動き出した) の使用率 6% でゲート抑制された。ゲートは自セッションの
   ファイルだけを見る。他セッションのファイルは起床時刻の算出にだけ使う
   ([rate-limit.md](rate-limit.md) の「待機時刻の決め方」参照)。
-- 書き込みは同一ディレクトリの一時ファイル経由の rename で原子的に行う (`internal/statefile`)。
+- 書き込みは同一ディレクトリの一時ファイル経由の rename で原子的に行う (`statefile`)。
 - statusline の描画を壊さないよう fail-silent。失敗しても exit 0 で終わる (理由は stderr)。
   `ingest-statusline` は stdout に何も出さず、`statusline` は描画だけを出す。daemon のログにも書かない。
 
@@ -64,8 +64,8 @@ daemon が使うのは `multiplexer` (block から session_id への対応) で�
 `${XDG_STATE_HOME:-~/.local/state}/agents-daemon/`。
 どちらも同一ディレクトリの一時ファイルへ書いてから rename で置き換える。
 読み手 (daemon) と書き手 (`statusline` / `ingest-statusline`) は書式ごとのパッケージの同じ型を使うので、
-書式はここに転記した参考で、実体は `rate-limits/` が `internal/ratelimit`、`context/` が
-`internal/sessioncontext` にある。
+書式はここに転記した参考で、実体は `rate-limits/` が `ratelimit`、`context/` が
+`sessioncontext` にある。
 
 `$STATE/rate-limits/<session_id>.json` (`rate_limits.five_hour.resets_at` があるときだけ):
 
@@ -92,7 +92,7 @@ daemon が使うのは `multiplexer` (block から session_id への対応) で�
 <!-- cc-premise: 2.1.310 statusline session_name は custom title、無ければ AI の題 -->
 中身は `--name` か `/rename` で付けた名前、無ければ Claude Code が会話から付けた題になる。`ListAgents` の名前とは
 同じとは限らない (同じ名前のセッションが既にいると `ListAgents` 側だけ `workspace-dc` のような接尾辞が付く)。
-依存図 (`internal/deps`) はこの名前をノード、`repos` の `sessions`、メモの `sources` に出し、名前が無ければ
+依存図 (`deps`) はこの名前をノード、`repos` の `sessions`、メモの `sources` に出し、名前が無ければ
 session ID の先頭 8 文字、同じ名前のセッションが複数あれば名前の後ろに session ID の先頭を足す。記録は `context/` の
 保持期間 (7 日) の間残るので、終了したセッションのノードとメモにも名前が付く。
 

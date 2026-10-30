@@ -6,7 +6,7 @@ const BIN = '/home/u/.cache/agents-daemon/bin/agents-daemon'
 const CWD = '/src/home/agents-daemon'
 const LIST = [BIN, 'park', 'list', '--status', 'open', '--here', '--session', 'SELF', '--cwd', CWD]
 
-// memo は `park list` が出すメモ 1 つ (internal/parking の Item)。by はメモを置いたセッションの ID。
+// memo は `park list` が出すメモ 1 つ (parking の Item)。by はメモを置いたセッションの ID。
 function memo(id: string, title: string, files: string[], by: string[] = ['OTHER'], extra: Record<string, unknown> = {}) {
   return {
     id,

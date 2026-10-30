@@ -12,7 +12,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 )
 
-// newEdgeCmd は `agents-daemon edge add|rm|list` を組み立てる (internal/edge)。結果は JSON で stdout に出す。
+// newEdgeCmd は `agents-daemon edge add|rm|list` を組み立てる (edge)。結果は JSON で stdout に出す。
 func newEdgeCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:         "edge",

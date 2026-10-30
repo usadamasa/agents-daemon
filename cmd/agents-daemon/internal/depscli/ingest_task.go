@@ -46,7 +46,7 @@ func ingestTask(stdin io.Reader, now time.Time) error {
 	return err
 }
 
-// logIngest は ingest-task の結果を出来事のログ (internal/eventlog) に書く。記録しないツールは書かない。
+// logIngest は ingest-task の結果を出来事のログ (eventlog) に書く。記録しないツールは書かない。
 // eventlog に持たせないのは、eventlog が tasklog を import しないため (tasklog の Ca を増やさない)。
 func logIngest(stateDir string, res tasklog.Result, err error, now time.Time) {
 	if err == nil && res.Tool == "" {

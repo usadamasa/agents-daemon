@@ -33,7 +33,7 @@ import {
 import type { Destination, Intent } from './parking'
 
 // 依存図の pane: 依存の DAG (#134) の辺をレーンで描いた行 (graph.rows、上流が上) を dock の pane に描き、選んだノードの
-// 詳細と操作、repo ごとのメモの節を出す mod。中身は `agents-daemon deps` (internal/deps) の graph と repos (メモと
+// 詳細と操作、repo ごとのメモの節を出す mod。中身は `agents-daemon deps` (deps パッケージ) の graph と repos (メモと
 // その送り先)。ここは描くことと送ることだけを持つ。
 // pane は会話の横 (dock) に置かれるときだけ出す。入力欄の上 (inline) には出さない。
 // cc-premise: 2.1.303 mods pane の placement (dock / inline)、command.run の presentation.isFullscreen、ui.close
@@ -140,7 +140,7 @@ export const registerDeps: Register = on => {
     const g = new Graph(data.graph)
     const memos = data.repos.flatMap(repo => repo.memos)
     const now = await $.clock.now()
-    // 「古い」メモの日数はバイナリが渡す (internal/parking の StaleAfter)。
+    // 「古い」メモの日数はバイナリが渡す (parking の StaleAfter)。
     const staleDays = data.stale_memo_days
     const stale = memos.filter(memo => isStale(memo, now, staleDays)).length
     const selected = g.node(chosen)

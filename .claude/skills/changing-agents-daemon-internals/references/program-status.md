@@ -1,7 +1,7 @@
 # rex の program_status (OSC 7501)
 
 rex では Claude Code 自身が OSC 7501 で状態を報告する。daemon は `block call -b BLOCK program_status` の
-`records` から Agent と `agent_status` を決める (`internal/runtime/backend/rexcli/blockstate` の `ToPane`)。protocol の仕様は
+`records` から Agent と `agent_status` を決める (`rexcli/blockstate` の `ToPane`)。protocol の仕様は
 [rex の docs](https://www.superlogical.com/rex/docs/build/program-status)。Claude Code がどの状況でどの値を出すかは
 docs に無く、2.1.302 のバイナリと実測 (2026-10-17、rex preview.15、#69) から読んだもの。版が変われば測り直す。
 
@@ -30,7 +30,7 @@ daemon.log の検知と送信の行に `agent_status=… kind=… msg="…"` の
 `unknown` の pane のノードは working に倒さず、`unknown` の状態として idle の節に出す。
 
 `blocked` のうち kind が `permission` / `question` / `auth` の pane には、待機明けでも再開を送らない
-(esc は prompt を断り、Enter は承認する。`internal/runtime/monitor` の `waitingOnPrompt`)。kind の無い `blocked` (dialog 一般) は
+(esc は prompt を断り、Enter は承認する。`monitor` の `waitingOnPrompt`)。kind の無い `blocked` (dialog 一般) は
 上限の画面がこの形で来るかを実測していないので送信を止めない。上限到達時の record の実測と、
 `error` / `blocked` を画面読み取りの前段ゲートにする案は #77。
 

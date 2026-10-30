@@ -16,7 +16,7 @@ import (
 )
 
 // 2026-08-16 に実機 (Claude Code 2.1.224) で採取した通常のフッター。
-// internal/runtime/detect のテストと同じ現物 (誤検知しないことの確認が主目的)。
+// detect のテストと同じ現物 (誤検知しないことの確認が主目的)。
 const inspectSampleNormalScreen = `  Bash(rex capture -b "$REX_BLOCK" --trim --unwrap)
 
 · Tinkering… (2m 52s · ↓ 9.0k tokens · thought for 8s)
@@ -28,7 +28,7 @@ const inspectSampleNormalScreen = `  Bash(rex capture -b "$REX_BLOCK" --trim --u
   🌸 Opus 5 💎 ･ﾟ 💰 $1.60 ･ﾟ 🧠 104k (10%) ･ﾟ ⚡ high ･ﾟ 🎀 Mikawa ･ﾟ 🐣 v2.1.224
   ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents`
 
-// 2026-08-16 に実機で観測した実際の上限到達画面。internal/runtime/detect/real_sample_test.go
+// 2026-08-16 に実機で観測した実際の上限到達画面。detect/real_sample_test.go
 // の realLimitScreen と同じ現物。
 const inspectSampleLimitScreen = `  ⏺ Bash(task test)
   ⎿  ✅ テスト完了

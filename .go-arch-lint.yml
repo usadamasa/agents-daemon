@@ -11,8 +11,9 @@ exclude:
 
 # component は依存のクラスタから読み直した「家族」と、どの家族からも使われる「共有層」(#300)。
 # 共有層は共有層の中だけで閉じ、家族は共有層にだけ依存する。家族から家族へ向かう辺は無い。
-# rex の実装 (backend/rexcli/**) は呼び手の backend の下に入れ子で、runtime の一部。
-# ディレクトリは家族か共有層かを表していないので、in はパッケージの明示的なリスト。
+# rex の実装 (runtime/backend/rexcli/**) は呼び手の backend の下に入れ子で、runtime の一部。
+# runtime は internal/runtime/ の下に集めたので glob で書く。ほかの家族と共有層は internal/ 直下に並び、
+# ディレクトリが家族か共有層かを表さないので、in はパッケージの明示的なリスト。
 # 新しいパッケージは、どの家族か共有層かを決めて in に足さないと analyze-arch-lint の uncovered で落ちる。
 # この設定自体の健全性は `go tool analyze-arch-lint --metrics` と `--strict .` で見る。
 components:
@@ -40,18 +41,7 @@ components:
       - "internal/deps/**"
       - "internal/spawn"
   runtime:
-    in:
-      - "internal/daemon"
-      - "internal/daemon/ledger"
-      - "internal/daemon/limitlog"
-      - "internal/monitor"
-      - "internal/detect"
-      - "internal/config"
-      - "internal/backend/**"
-      - "internal/doctor"
-      - "internal/verify"
-      - "internal/simulate"
-      - "internal/selfupdate"
+    in: "internal/runtime/**"
   dream:
     in: "internal/dream/**"
   statusline:

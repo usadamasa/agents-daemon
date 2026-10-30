@@ -8,9 +8,9 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
-	"github.com/usadamasa/agents-daemon/internal/backend"
+	"github.com/usadamasa/agents-daemon/internal/runtime/backend"
+	"github.com/usadamasa/agents-daemon/internal/runtime/verify"
 	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
-	"github.com/usadamasa/agents-daemon/internal/verify"
 )
 
 // newInspectCmd は `agents-daemon inspect` を組み立てる。

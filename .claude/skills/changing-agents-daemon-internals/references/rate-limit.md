@@ -64,7 +64,7 @@ overage の使用有無・解除が 24 時間以内かで決まる。それら�
 上の表で 2 行目の文言を `…` で伏せてあるのは、解除時刻を伏せてあるのと同じ理由。
 そのまま書くと、この文書を画面に出した pane が「Enter 待ち」と判定され、
 **実際に Enter を打ち込まれる**。固定した本物の文言は
-`internal/detect/native_continue_test.go` にある。
+`internal/runtime/detect/native_continue_test.go` にある。
 
 `deferToNativeAutoContinue` を false にすると、バナーが出ていても通常の上限として
 自前で待機する。ネイティブを `/config` で切っている場合はバナー自体が出ないので、
@@ -79,7 +79,7 @@ overage の使用有無・解除が 24 時間以内かで決まる。それら�
 
 そのため limit が成立した画面に spend limit / usage credit limit / credit balance too low /
 out of credits のいずれかがあれば、待機に入らず `hard-cap` として記録する。判定する
-文言は `internal/detect` が持つ。上流も同じ扱いで、retry watchdog は organization
+文言は `internal/runtime/detect` が持つ。上流も同じ扱いで、retry watchdog は organization
 spend-limit と out-of-credits で即座に失敗する。
 
 ## lower-priority mode の画面は印を付けて残す
@@ -94,7 +94,7 @@ pane は作業中でも limit と判定される (#251)。実害をまだ見て�
 
 終わった通知 (`Lower-priority mode ended`、`… stopped`、`… is off` など) が同じ画面にあれば印を付けない。
 作業中の通知は scrollback に残るので、取り消しの通知と同じく終わった側を優先する。上限の画面に並ぶ案内
-(`/low-priority to continue now …`) も、まだ低優先度で動いていないので印を付けない。文言は `internal/detect` が持つ。
+(`/low-priority to continue now …`) も、まだ低優先度で動いていないので印を付けない。文言は `internal/runtime/detect` が持つ。
 
 ## `agent_status` は判定に使わない
 
@@ -122,7 +122,7 @@ You've hit your session limit · resets HH:MMpm (Asia/Tokyo)
 
 時刻を `HH:MM` に伏せてあるのは、実際の数字を書くとこの文書自身が二重シグナルを
 満たして limit と判定されるため。Claude がこのファイルを画面に表示した pane を
-誤検知する。固定した本物の文言は `internal/detect/real_sample_test.go` にある。
+誤検知する。固定した本物の文言は `internal/runtime/detect/real_sample_test.go` にある。
 
 `85% of your 5-hour limit` のような**使用率の警告行は明示的に除外する**。上限に当たる前に
 必ず出る行で、これを拾うと余裕があるうちに待機へ入ってしまう。

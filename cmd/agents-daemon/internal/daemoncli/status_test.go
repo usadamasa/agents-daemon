@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/jsonflag"
-	"github.com/usadamasa/agents-daemon/internal/verify"
+	"github.com/usadamasa/agents-daemon/internal/runtime/verify"
 )
 
 func writeFile(t *testing.T, path, content string) {

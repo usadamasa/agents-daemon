@@ -10,7 +10,7 @@ import (
 
 	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/statecmd"
 	"github.com/usadamasa/agents-daemon/internal/apppath"
-	"github.com/usadamasa/agents-daemon/internal/backend"
+	"github.com/usadamasa/agents-daemon/internal/runtime/backend"
 	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
 	"github.com/usadamasa/agents-daemon/internal/spawn"
 )

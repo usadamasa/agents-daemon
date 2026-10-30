@@ -15,7 +15,7 @@ Claude Code は alternate screen で描くので、Claude の block の capture 
 `format` method の入力にも scrollback や行数の指定が無く、block を小さく分割していると `readLines` に
 何を指定しても表示行数で頭打ちになる。上限の表示が画面から押し出された時点で検知は黙って効かなくなる。
 
-実機の上限到達画面 (`internal/detect/real_sample_test.go`、statusline 3 行) を alternate screen に出し、
+実機の上限到達画面 (`internal/runtime/detect/real_sample_test.go`、statusline 3 行) を alternate screen に出し、
 `block call resize` で高さを変えて `inspect --pane` で測った下限は次のとおり。
 
 | block の行数 | 判定 | 画面の先頭 |

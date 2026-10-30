@@ -9,7 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/usadamasa/agents-daemon/internal/selfupdate"
+	"github.com/usadamasa/agents-daemon/internal/runtime/selfupdate"
 )
 
 // newUpdateCmd は `agents-daemon update` を組み立てる。

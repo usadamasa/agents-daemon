@@ -1,10 +1,10 @@
 # 多重化ツールの backend
 
-daemon は pane 操作を `internal/multiplexer` の `Client` interface 越しに行い、実装は rex (`internal/backend/rexcli`。
+daemon は pane 操作を `internal/multiplexer` の `Client` interface 越しに行い、実装は rex (`internal/runtime/backend/rexcli`。
 呼び手が `backend` だけなので、その下に入れ子)。
 `Client` は実装が満たす全部入りで、呼び手 (`monitor`、`daemon`、`doctor`、`verify`、`simulate`、`spawn`) は要る method だけを
 自分の側で interface にして受ける。どの呼び手が何を使うかは `internal/multiplexer` の package doc が持つ。
-`internal/backend` が起動時の環境に `REX_SESSION` があることを確かめ、無ければ `daemon --ensure` は
+`internal/runtime/backend` が起動時の環境に `REX_SESSION` があることを確かめ、無ければ `daemon --ensure` は
 stderr に 1 行出して何もせずに戻る (素の端末の SessionStart で毎回 daemon を起こさない)。hook はこの判定を
 持たず、バイナリの build は常に行う。同じバイナリを `statusline` / `ingest-statusline` が使い、
 これらは多重化ツールを要らないため。backend は `status.json` の `backend` に書き、`status` が表示する。
@@ -39,13 +39,13 @@ block が多い環境ほど時間が伸びるので、daemon は tick ごとに�
 <!-- rex-premise: preview.22 cli process_changed は前景の入れ替わりの瞬間に push され、block call process の問い合わせでは起きない -->
 
 daemon は起動時に `multiplexer.Watcher` の `Watch` で `rex --autostart=false events --all --json` を 1 本張る
-(`internal/backend/rexcli/watch.go`)。doctor、inspect、simulate、spawn は購読せず全列挙のまま。
+(`internal/runtime/backend/rexcli/watch.go`)。doctor、inspect、simulate、spawn は購読せず全列挙のまま。
 
 1. 最初の行を受けて購読が始まったことを確かめる。rex の CLI の呼び出しはそれだけで `client_joined` を流すので、
    2 秒待って来なければ `api call server.status` を 1 回打って起こす
 2. 全列挙で cache を作る。全列挙の間に届いた event は捨てずに溜め、全列挙の後に順に当てる。stream は欠けず順序を
    保つので、snapshot より古い event が当たっても、その後の変化の event が後ろに必ずあり、cache は最新に追いつく
-3. 以降は event を当て続け、`PaneList` は rex を叩かずに cache を `ToPane` へ渡す (`internal/backend/rexcli/blockstate`)
+3. 以降は event を当て続け、`PaneList` は rex を叩かずに cache を `ToPane` へ渡す (`internal/runtime/backend/rexcli/blockstate`)
 
 | event | cache への当て方 |
 | ---- | ---- |
@@ -76,5 +76,5 @@ rex は block の PATH に `…/RexServer/Versions/Current/…` を先に、`…
 呼び出しで rex のバイナリが見つからなければ、PATH の `Versions/` から一番新しい数字名の build の rex を引き直し、
 同じ呼び出しを 1 回やり直す。数字名の項だけを持つ PATH でその build が消えたときに起きる。このやり直しは tick の
 失敗に数えない。
-`REX_BIN_PATH` で固定しているときは引き直さない (`internal/backend/rexcli/locate.go`)。
+`REX_BIN_PATH` で固定しているときは引き直さない (`internal/runtime/backend/rexcli/locate.go`)。
 doctor の「rex CLI の前提」の節は、解決した rex のパスを版と並べて出す。

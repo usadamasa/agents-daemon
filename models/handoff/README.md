@@ -54,7 +54,7 @@ TLC は devShell の `tlaplus` (`tlc`)。CI では回さない。`scripts/model-
 | 不変条件 | テスト |
 | ---- | ---- |
 | `AtMostOneDelivery` / `AtMostOneSession` / `HandedWhenDelivered` / `HandedHasDestination` / `OnlyHandedHasDestination` / `DeliveredWhereRecorded` と Claim の排他 | `internal/parking/invariants_test.go` |
-| `LiveTaskKept` / `AdoptLeavesOne` (実物の `verify.SessionExited` で daemon の pid と status.json を読む) | `internal/parking/adopt_invariants_test.go` |
+| `LiveTaskKept` / `AdoptLeavesOne` (実物の `state.SessionExited` で daemon の pid と status.json を読む) | `internal/parking/adopt_invariants_test.go` |
 | `RecordsComplete` | `internal/tasklog/invariants_test.go` |
 | `BindOnce` / `NoResurrect` と、書いたときの参照の組・今の参照の組ごとに辺が 1 本 | `internal/edge/bind_invariants_test.go` |
 

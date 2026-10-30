@@ -69,7 +69,7 @@ func parkDiscard(stateDir string, s parking.Store, session string, days int, now
 }
 
 // parkAdopt は s.Adopt を走らせ、移したタスクとメモを書く (park adopt)。exited はセッションが終了したと確かめる
-// (verify.SessionExited)。viewer は操作したセッションで、ログに添える。
+// (state.SessionExited)。viewer は操作したセッションで、ログに添える。
 func parkAdopt(stateDir string, s parking.Store, tasks tasklog.Store, viewer, sessionID, taskID string, exited func(string, time.Time) error, now time.Time) (parking.Added, error) {
 	added, err := s.Adopt(sessionID, taskID, tasks, exited, now)
 	if err != nil {

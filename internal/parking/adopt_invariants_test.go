@@ -1,8 +1,8 @@
 package parking_test
 
 // Adopt の不変条件 (models/handoff の Handoff.tla の LiveTaskKept と AdoptLeavesOne) を、実物の Store と
-// verify.SessionExited (daemon の pid と status.json を読む) を goroutine で交錯させて確かめる。
-// 外部テストパッケージにするのは、verify → daemon → parking の import を parking のテストから引くため。
+// state.SessionExited (daemon の pid と status.json を読む) を goroutine で交錯させて確かめる。
+// 外部テストパッケージにして、mod と同じく parking の公開 API だけで Adopt を押す。
 // 世界 (セッションの終了、daemon の tick と停止と入れ替わり、タスクの記録の更新) は 1 本の goroutine が乱択の順で進め、
 // 依存図を開いた mod が複数本、好きなときに Adopt を押す。時刻は step ごとに進む作り物で、壁時計には頼らない。
 // 反例が出たら seed を出す。反例が出たらコードを直すか挙動を正当化する。性質を弱めて通さない。
@@ -23,7 +23,6 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/statefile"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
-	"github.com/usadamasa/agents-daemon/internal/verify"
 )
 
 const (
@@ -126,7 +125,7 @@ type adoptReached struct {
 	refused map[string]int
 }
 
-// refusals は verify.SessionExited と parking.Adopt が返す理由の切れ端。全部を一度は通る。
+// refusals は state.SessionExited と parking.Adopt が返す理由の切れ端。全部を一度は通る。
 var refusals = []string{"daemon が動いていない", "まだ status.json を書いていない", "タスクの記録より古い", "で生きている", "が無い"}
 
 func (c *adoptReached) refuse(err error) {
@@ -258,10 +257,10 @@ func newAdoptWorld(t *testing.T, r *rand.Rand) *adoptWorld {
 	return w
 }
 
-// exited は Adopt に渡す「終了したと確かめる」の中身。実物の verify.SessionExited を呼び、通した直後にセッションがまだ生きていれば
+// exited は Adopt に渡す「終了したと確かめる」の中身。実物の state.SessionExited を呼び、通した直後にセッションがまだ生きていれば
 // LiveTaskKept の破れとして記録する。セッションは終了したら戻らないので、通した後に生きているなら判定の時点でも生きていた。
 func (w *adoptWorld) exited(failures chan<- string, mod int, sessionID string, after time.Time) error {
-	err := verify.SessionExited(w.paths, sessionID, after)
+	err := state.SessionExited(w.paths, sessionID, after)
 	if err != nil {
 		return err
 	}

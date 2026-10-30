@@ -71,7 +71,7 @@ handed / discarded のメモが保持期間 (7 日) で消えた後は、descrip
 - パーキングへ移す (`To parking`): 終了したセッションの未完了のタスクのノードを `park adopt <ノードの key>` (`task:<sid>/<tid>`) で
   出自 `adopted` (種類 `scope`) のメモにし、タスクの記録を消す。model の tool は出自を書けない。pane は daemon が
   status.json を書いているとき (`updated_at` があるとき) だけこの操作を出し、バイナリは動いている daemon がタスクの
-  記録より後に書いた status.json に pane が無いことを確かめてから移す (`internal/verify` の `SessionExited`)。
+  記録より後に書いた status.json に pane が無いことを確かめてから移す (`internal/daemon/state` の `SessionExited`)。
   daemon が止まっていると生きているセッションも exited と描かれるため
 
 ### 時刻の書き方

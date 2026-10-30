@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026.1030.1](https://github.com/usadamasa/agents-daemon/compare/2026.1030.0...2026.1030.1) - 2026-10-30
+
+- refactor(tasklog): タスクの記録の書式を tasklog/record に分ける by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/327
+- mod とバイナリの約束を JSON Schema で定義して型を生成し、AGENTS.md から実装の詳細を外す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/329
+
 ## [2026.1030.0](https://github.com/usadamasa/agents-daemon/compare/2026.1029.0...2026.1030.0) - 2026-10-30
 
 - go-arch-metrics の CLI を plugin の版 2026.1028.0 にそろえる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/315

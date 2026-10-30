@@ -23,9 +23,6 @@ func TestDryRunClient_ReadOperationsPassThrough(t *testing.T) {
 		PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) {
 			return []multiplexer.Pane{{PaneID: "p1"}}, nil
 		},
-		PaneGetFunc: func(context.Context, string) (multiplexer.Pane, error) {
-			return multiplexer.Pane{PaneID: "p1"}, nil
-		},
 		PaneReadFunc: func(context.Context, string, multiplexer.PaneReadOptions) (string, error) {
 			return "screen text", nil
 		},
@@ -45,13 +42,6 @@ func TestDryRunClient_ReadOperationsPassThrough(t *testing.T) {
 		}
 	})
 
-	t.Run("PaneGetはinnerへ到達する", func(t *testing.T) {
-		pane, err := c.PaneGet(ctx, "p1")
-		if err != nil || pane.PaneID != "p1" {
-			t.Errorf("PaneGet() = %v, %v, want {p1}, nil", pane, err)
-		}
-	})
-
 	t.Run("PaneReadはinnerへ到達する", func(t *testing.T) {
 		screen, err := c.PaneRead(ctx, "p1", multiplexer.PaneReadOptions{})
 		if err != nil || screen != "screen text" {
@@ -65,7 +55,7 @@ func TestDryRunClient_ReadOperationsPassThrough(t *testing.T) {
 		}
 	})
 
-	want := []string{"PaneList", "PaneGet:p1", "PaneRead:p1", "Reachable"}
+	want := []string{"PaneList", "PaneRead:p1", "Reachable"}
 	if got := inner.Calls; len(got) != len(want) {
 		t.Fatalf("inner.Calls = %v, want %v", got, want)
 	} else {

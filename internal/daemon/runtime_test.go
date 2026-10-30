@@ -21,7 +21,7 @@ import (
 
 // newTestRuntime は daemonRuntime を t.TempDir() の下だけで完結させて組み立てる。
 // statusPath はログディレクトリと同じ一時ディレクトリ内に置く。
-func newTestRuntime(t *testing.T, client multiplexer.Client, startedAt time.Time) (*daemonRuntime, string) {
+func newTestRuntime(t *testing.T, client multiplexerClient, startedAt time.Time) (*daemonRuntime, string) {
 	t.Helper()
 	dir := t.TempDir()
 	log := applog.NewLogger(filepath.Join(dir, "daemon.log"), time.Now)

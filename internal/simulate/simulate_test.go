@@ -115,17 +115,14 @@ func TestScopedClient_所有pane以外への操作を拒否する(t *testing.T) 
 		}
 	})
 
-	t.Run("PaneList と Reachable は pane を特定しない読み取りなので常に inner へ委譲する", func(t *testing.T) {
+	t.Run("PaneRead: 所有 pane は inner へ委譲する", func(t *testing.T) {
 		fake := newFake()
 		c := newScopedClient(fake, owned)
-		if _, err := c.PaneList(context.Background()); err != nil {
-			t.Fatalf("PaneList() error = %v", err)
+		if _, err := c.PaneRead(context.Background(), owned, multiplexer.PaneReadOptions{}); err != nil {
+			t.Fatalf("PaneRead(owned) error = %v", err)
 		}
-		if err := c.Reachable(context.Background()); err != nil {
-			t.Fatalf("Reachable() error = %v", err)
-		}
-		if !containsCall(fake.Calls, "PaneList") || !containsCall(fake.Calls, "Reachable") {
-			t.Errorf("PaneList/Reachable が inner へ委譲されていない: %v", fake.Calls)
+		if !containsCall(fake.Calls, "PaneRead:"+owned) {
+			t.Errorf("inner.PaneRead が呼ばれていない: %v", fake.Calls)
 		}
 	})
 }
@@ -154,29 +151,14 @@ func TestSimulateDryRunClient_送信系はinnerを呼ばずログだけ出す(t 
 }
 
 func TestSimulateDryRunClient_読み取り系はinnerへ委譲する(t *testing.T) {
-	fake := &multiplexerfake.Client{
-		PaneGetFunc: func(_ context.Context, paneID string) (multiplexer.Pane, error) {
-			return multiplexer.Pane{PaneID: paneID}, nil
-		},
-	}
+	fake := &multiplexerfake.Client{}
 	c := simulateDryRunClient{inner: fake, w: &bytes.Buffer{}}
 
-	if _, err := c.PaneList(context.Background()); err != nil {
-		t.Fatalf("PaneList() error = %v", err)
-	}
-	if _, err := c.PaneGet(context.Background(), "p1"); err != nil {
-		t.Fatalf("PaneGet() error = %v", err)
-	}
 	if _, err := c.PaneRead(context.Background(), "p1", multiplexer.PaneReadOptions{}); err != nil {
 		t.Fatalf("PaneRead() error = %v", err)
 	}
-	if err := c.Reachable(context.Background()); err != nil {
-		t.Fatalf("Reachable() error = %v", err)
-	}
-	for _, want := range []string{"PaneList", "PaneGet:p1", "PaneRead:p1", "Reachable"} {
-		if !containsCall(fake.Calls, want) {
-			t.Errorf("inner.%s が呼ばれていない: %v", want, fake.Calls)
-		}
+	if !containsCall(fake.Calls, "PaneRead:p1") {
+		t.Errorf("inner.PaneRead が呼ばれていない: %v", fake.Calls)
 	}
 }
 

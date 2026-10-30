@@ -27,7 +27,7 @@ var errFakeUnreachable = errors.New("fake: rex unreachable")
 func noEnv(string) string { return "" }
 
 // doctorInput は fixedNow と noEnv を固定した Input を組む。
-func doctorInput(client multiplexer.Client, kind string, p apppath.Paths, now time.Time) Input {
+func doctorInput(client Client, kind string, p apppath.Paths, now time.Time) Input {
 	return Input{Client: client, Kind: kind, Paths: p, Now: now, Getenv: noEnv}
 }
 

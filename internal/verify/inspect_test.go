@@ -151,7 +151,7 @@ func TestRunInspect_サンプル画面での分類(t *testing.T) {
 		}
 	})
 
-	t.Run("--pane 指定時は multiplexer.Client 経由で読み取る", func(t *testing.T) {
+	t.Run("--pane 指定時は PaneClient 経由で読み取る", func(t *testing.T) {
 		home := t.TempDir()
 		var gotOpts multiplexer.PaneReadOptions
 		client := &multiplexerfake.Client{

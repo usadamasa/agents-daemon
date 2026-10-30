@@ -45,10 +45,24 @@ type paneEntry struct {
 	loggedUnknownReason string
 }
 
+// multiplexerClient は daemon が多重化ツールに対して使う操作。monitor へ渡す 3 つ (読む・送る) に、tick の pane の列挙、
+// 上限の出来事の記録に添える端末の大きさ、起動時の到達性を足したもの (#301)。PaneGet は daemon の process からは
+// 呼ばないので持たない。backend.Connect が返す multiplexer.Client (全部入り) をそのまま渡し、dry-run の包みは
+// この 6 つだけを実装する。購読 (multiplexer.Watcher) は持つ実装だけが満たす別の口で、startWatch が型で確かめる。
+type multiplexerClient interface {
+	monitor.Client
+	// PaneList は現在の全 pane を返す。
+	PaneList(ctx context.Context) ([]multiplexer.Pane, error)
+	// PaneGeometry は pane の端末の大きさと画面を返す。上限の出来事の記録だけが呼ぶ。
+	PaneGeometry(ctx context.Context, paneID string) (multiplexer.Geometry, error)
+	// Reachable は多重化ツールの server に到達できるかを確認する。起動時に 1 回だけ呼ぶ。
+	Reachable(ctx context.Context) error
+}
+
 // daemonRuntime は 1 回の --foreground 実行に閉じたループの可変状態をまとめる。
 // pane ごとの状態機械は PaneID (rex の block ID) をキーにする。
 type daemonRuntime struct {
-	client multiplexer.Client
+	client multiplexerClient
 	// backend は client の多重化ツールの種類。status.json に書くだけで判定には使わない。
 	backend string
 	log     *applog.Logger
@@ -80,7 +94,7 @@ type daemonRuntime struct {
 	lastHousekeepAt     time.Time // ゼロ値は「まだ 1 度も掃除していない」
 }
 
-func newDaemonRuntime(client multiplexer.Client, log *applog.Logger, statusPath string, store sessionstate.Store, sleep func(time.Duration), startedAt time.Time) *daemonRuntime {
+func newDaemonRuntime(client multiplexerClient, log *applog.Logger, statusPath string, store sessionstate.Store, sleep func(time.Duration), startedAt time.Time) *daemonRuntime {
 	return &daemonRuntime{
 		client:     client,
 		store:      store,
@@ -453,7 +467,7 @@ const watchStopWait = 2 * time.Second
 // startWatch は client が多重化ツールの出来事を購読できれば始める。tick の pane の一覧が fork せずに取れるようになり、
 // 購読できない間は tick が全列挙する。返す stop は購読を止めて後始末を待つ。daemon は終わる前に呼び、
 // 入れ替わりのたびに events の子が多重化ツールに繋がったまま残らないようにする。
-func startWatch(ctx context.Context, client multiplexer.Client, log *applog.Logger) (stop func()) {
+func startWatch(ctx context.Context, client multiplexerClient, log *applog.Logger) (stop func()) {
 	w, ok := client.(multiplexer.Watcher)
 	if !ok {
 		return func() {}
@@ -468,6 +482,24 @@ func startWatch(ctx context.Context, client multiplexer.Client, log *applog.Logg
 			log.Logf("購読の後始末が %s で終わりませんでした", watchStopWait)
 		}
 	}
+}
+
+// reachTimeout は起動時に多重化ツールの server への到達を待つ上限。
+const reachTimeout = 10 * time.Second
+
+// connect は多重化ツールに繋ぎ、server に到達できることを確かめてから、daemon が使う形 (multiplexerClient) で返す。
+// 到達できなければ起動しない。
+func connect(ctx context.Context, store sessionstate.Store) (kind string, client multiplexerClient, err error) {
+	kind, execClient, err := backend.Connect(os.Getenv, store.Context)
+	if err != nil {
+		return "", nil, err
+	}
+	reachCtx, cancel := context.WithTimeout(ctx, reachTimeout)
+	defer cancel()
+	if err := execClient.Reachable(reachCtx); err != nil {
+		return "", nil, fmt.Errorf("%s に到達できないため起動しません: %w", kind, err)
+	}
+	return kind, execClient, nil
 }
 
 // RunForeground は --foreground の本体。SessionStart から detach 起動された
@@ -490,15 +522,9 @@ func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 	}
 
 	store := sessionstate.New(p.StateDir())
-	kind, client, err := backend.Connect(os.Getenv, store.Context)
+	kind, client, err := connect(ctx, store)
 	if err != nil {
 		return err
-	}
-	reachCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	reachErr := client.Reachable(reachCtx)
-	cancel()
-	if reachErr != nil {
-		return fmt.Errorf("%s に到達できないため起動しません: %w", kind, reachErr)
 	}
 
 	if err := state.WritePIDFile(p.PIDFile(), os.Getpid()); err != nil {

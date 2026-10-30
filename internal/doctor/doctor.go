@@ -23,9 +23,20 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/ratelimit"
 )
 
+// Client は doctor が多重化ツールに対して使う操作。到達性と pane の一覧と端末の大きさだけで、画面を読まず送らない (#301)。
+// backend.Connect が返す multiplexer.Client (全部入り) をそのまま渡す。
+type Client interface {
+	// Reachable は多重化ツールの server に到達できるかを確認する。到達できなければ理由を含む error を返す。
+	Reachable(ctx context.Context) error
+	// PaneList は現在の全 pane を返す。
+	PaneList(ctx context.Context) ([]multiplexer.Pane, error)
+	// PaneGeometry は pane の端末の大きさと画面を返す。
+	PaneGeometry(ctx context.Context, paneID string) (multiplexer.Geometry, error)
+}
+
 // Input は Run が診断に使う環境。
 type Input struct {
-	Client multiplexer.Client
+	Client Client
 	Kind   string // Client の多重化ツール (backend.Detect の結果)
 	Paths  apppath.Paths
 	Now    time.Time
@@ -206,7 +217,7 @@ func Collect(ctx context.Context, in Input) (Report, error) {
 
 // collectPanes は pane 一覧のうち Claude agent と判定されたものを写し、その block の高さと screen を添える
 // (小さく分割した block で検知が黙って効かなくなるのを、上限を踏む前に見るため)。
-func collectPanes(ctx context.Context, client multiplexer.Client, panes []multiplexer.Pane) *PanesReport {
+func collectPanes(ctx context.Context, client Client, panes []multiplexer.Pane) *PanesReport {
 	rep := &PanesReport{Claude: []PaneReport{}, Total: len(panes)}
 	for _, pane := range panes {
 		if !multiplexer.IsClaudeAgent(pane) {

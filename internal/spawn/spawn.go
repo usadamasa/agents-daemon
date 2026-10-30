@@ -4,8 +4,8 @@
 // 新しいセッションは repo を cwd にし、session ID をこちらで決めて `claude --session-id <id> --model <model> -- <本文>`
 // で起こす。本文は最初のターンとして入るので、peer メッセージの inbox が開くのを待たずに渡せる。
 //
-// window を起こす口 (Host) は multiplexer.Client に足さず、ここに閉じる。Client は daemon / monitor / verify が pane を
-// 見て送るための interface で、window の作成はこのコマンドだけが使う (simulate の simulateHost と同じ考え)。
+// window を起こす口 (Host) は multiplexer.Client に足さず、ここに閉じる。Client は daemon / monitor / doctor / verify が
+// pane を見て送るための全部入りで、window の作成はこのコマンドだけが使う (simulate の simulateHost と同じ考え)。
 package spawn
 
 import (

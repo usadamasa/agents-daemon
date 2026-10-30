@@ -8,28 +8,24 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 )
 
-// dryRunClient は multiplexer.Client のうち pane を書き換える操作だけを握りつぶし、
+// dryRunClient は multiplexerClient のうち pane を書き換える操作だけを握りつぶし、
 // 「本来なら何を送っていたか」をログに残すデコレータ。読み取り (pane list /
-// pane read / 到達性確認 / 購読) はそのまま通すので、検知と判定は本番と同じ経路を通る。
+// pane read / 端末の大きさ / 到達性確認 / 購読) はそのまま通すので、検知と判定は本番と同じ経路を通る。
 //
 // 実環境で初めて daemon を回すときの安全弁として用意している。稼働中の
 // Claude セッションへ誤ってプロンプトを打ち込む事故は取り返しがつかないため、
 // 「送信だけしない」状態を作れることを検証手順の入口に据えている。
 type dryRunClient struct {
-	inner multiplexer.Client
+	inner multiplexerClient
 	log   *applog.Logger
 }
 
-func newDryRunClient(inner multiplexer.Client, log *applog.Logger) multiplexer.Client {
+func newDryRunClient(inner multiplexerClient, log *applog.Logger) multiplexerClient {
 	return dryRunClient{inner: inner, log: log}
 }
 
 func (c dryRunClient) PaneList(ctx context.Context) ([]multiplexer.Pane, error) {
 	return c.inner.PaneList(ctx)
-}
-
-func (c dryRunClient) PaneGet(ctx context.Context, paneID string) (multiplexer.Pane, error) {
-	return c.inner.PaneGet(ctx, paneID)
 }
 
 func (c dryRunClient) PaneRead(ctx context.Context, paneID string, opts multiplexer.PaneReadOptions) (string, error) {

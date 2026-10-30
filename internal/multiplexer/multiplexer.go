@@ -1,8 +1,15 @@
 // Package multiplexer は端末多重化ツールの pane 操作を表す interface と型を持つ。
 //
-// 実装は rex (rexcli) の 1 つだけだが、interface は意図して残している (#73)。daemon / monitor / verify が
-// rex の CLI (exec.Command と rex 固有の JSON) に直接依存しないための境界であり、テストが
+// 実装は rex (rexcli) の 1 つだけだが、interface は意図して残している (#73)。daemon / monitor / doctor / verify /
+// simulate / spawn が rex の CLI (exec.Command と rex 固有の JSON) に直接依存しないための境界であり、テストが
 // multiplexerfake を差し込む口でもある。複数 backend を抽象する目的の層ではない。
+//
+// Client は実装が満たす全部入りで、呼び手は要る method だけを自分の側で interface にして受ける (#301):
+// monitor.Client (読む・送る)、daemon の multiplexerClient (それに列挙・端末の大きさ・到達性)、doctor.Client (到達性・
+// 列挙・端末の大きさ)、verify.PaneClient (pane の情報・読む)、simulate の paneClient (読む・送る・pane の情報)、
+// spawn.Host (window を起こす・pane の情報)。
+// 包み (daemon の dry-run、simulate の所有 pane への限定) は呼び手の interface だけを実装すればよく、
+// 使わない method の素通しを持たない。multiplexerfake.Client は全部を持つので、どの呼び手にも差し込める。
 package multiplexer
 
 import (
@@ -113,8 +120,9 @@ type Watcher interface {
 	Watch(ctx context.Context, logf func(format string, args ...any)) <-chan struct{}
 }
 
-// Client は多重化ツールが提供する pane 操作。実装は rexcli.NewExecClient と multiplexerfake.Client の
-// 2 つで、daemon はこの interface にのみ依存し、exec.Command を直接呼ばない。
+// Client は多重化ツールが提供する pane 操作の全部入り。実装は rexcli.NewExecClient と multiplexerfake.Client の
+// 2 つで、backend.Connect がこれを返す。呼び手はこの型で受けず、要る method だけの自分の interface で受ける
+// (package doc)。
 type Client interface {
 	// PaneList は現在の全 pane を返す。
 	PaneList(ctx context.Context) ([]Pane, error)

@@ -1,6 +1,8 @@
 # 多重化ツールの backend
 
 daemon は pane 操作を `internal/multiplexer` の `Client` interface 越しに行い、実装は rex (`internal/multiplexer/rexcli`)。
+`Client` は実装が満たす全部入りで、呼び手 (`monitor`、`daemon`、`doctor`、`verify`、`simulate`、`spawn`) は要る method だけを
+自分の側で interface にして受ける。どの呼び手が何を使うかは `internal/multiplexer` の package doc が持つ。
 `internal/backend` が起動時の環境に `REX_SESSION` があることを確かめ、無ければ `daemon --ensure` は
 stderr に 1 行出して何もせずに戻る (素の端末の SessionStart で毎回 daemon を起こさない)。hook はこの判定を
 持たず、バイナリの build は常に行う。同じバイナリを `statusline` / `ingest-statusline` が使い、

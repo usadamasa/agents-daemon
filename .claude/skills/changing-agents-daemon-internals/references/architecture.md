@@ -77,7 +77,7 @@ backend の判定と rex の呼び方は [multiplexer.md](multiplexer.md)。
 ## CLI の組み立て
 
 `cmd/agents-daemon` は `main` と root の登録だけを持つ。コマンドの組み立て (flag、説明文、環境を `internal/` の
-本体へ渡す配線) は機能ごとの `cmd/agents-daemon/internal/<family>cli` が持ち、公開するのは root に載せる
+本体へ渡す配線) は機能ごとの `<family>cli` パッケージが持ち、公開するのは root に載せる
 `Commands() []*cobra.Command` の 1 つだけにする。判定や組み立ての規則は `internal/` の本体に置き、cli パッケージは
 引数を読んで呼ぶだけにする。
 

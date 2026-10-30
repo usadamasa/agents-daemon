@@ -87,9 +87,9 @@ devShell の go は `go.mod` の `go` 行と同じ系列 (`go_1_26`) にし、`G
 - 句読点は全角の「。」「、」を使う。半角の「｡」「､」は使わない (md、コメント、ログとエラーの文面のどれも)。
 - 実装のパッケージは `internal/` からのパスではなくパッケージ名で指す (`detect`、`rexcli/blockstate`)。名前だけで
   一意に決まらないものは親を 1 つ添える (`daemon/ledger`、`deps/graph`)。ファイル名まで要るときはパッケージからの相対
-  (`detect/real_sample_test.go`)。置き場はこのファイルのレイアウト表が 1 箇所で持ち、skill の references、README、
-  Go と mod と hook のコメント、models のコメントはパスを写さない。パスを書くのは `.go-arch-lint.yml` とコマンド
-  (`go run ./cmd/agents-daemon`) と、置き場そのものを述べるレイアウト表だけ。
+  (`detect/real_sample_test.go`)。置き場はこのファイル (レイアウト表、検証の節、パス定数の対) が 1 箇所で持ち、
+  skill の references、README、Go と mod と hook のコメント、models のコメントはパスを写さない。パスを書くのは
+  このファイルと `.go-arch-lint.yml` とコマンド (`go run ./cmd/agents-daemon`) だけ。
 
 ## hook を書くときの決めごと
 

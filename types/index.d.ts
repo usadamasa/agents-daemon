@@ -207,7 +207,18 @@ export type DepsData = {
   // open のメモを「古い」とみなす日数。pane はこれより前に最後に置かれたメモをまとめて捨てるボタンを出す
   stale_memo_days: number
   repos: DepsRepo[]
+  // セッション台帳に載った repo。最後に見た時刻の新しい順 (新しいセッションを起こす repo の候補)
+  recent_repos: RecentRepo[]
   graph: DepsGraph
+}
+
+// 台帳のセッションが最近動いた repo 1 つ
+export type RecentRepo = {
+  // 鍵 (DepsRepo.repo と同じ規則)
+  repo: string
+  title: string
+  // その repo のセッションを最後に見た時刻
+  last_seen: string
 }
 
 // repo 1 つ。sessions は表示名の順、memos は open のメモを置いた順

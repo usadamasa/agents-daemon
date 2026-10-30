@@ -18,6 +18,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/deps/graph"
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
+	"github.com/usadamasa/agents-daemon/internal/ledger"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/protocol"
 	"github.com/usadamasa/agents-daemon/internal/ref"
@@ -45,6 +46,8 @@ type input struct {
 	Locate func(cwd string) gitrepo.Place
 	// SessionNames は session ID → セッション名 (statusline の session_name、sessioncontext.ListSessionNames)。
 	SessionNames map[string]string
+	// Sessions はセッション台帳 (ledger)。新しいセッションを起こす repo の候補 (Deps.RecentRepos) の元。
+	Sessions []ledger.Session
 }
 
 // build は依存図を組む。

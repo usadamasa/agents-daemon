@@ -569,6 +569,7 @@ export const definitions = {
       "here",
       "stale_memo_days",
       "repos",
+      "recent_repos",
       "graph"
     ],
     "properties": {
@@ -594,8 +595,39 @@ export const definitions = {
           "$ref": "#/$defs/DepsRepo"
         }
       },
+      "recent_repos": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/RecentRepo"
+        },
+        "description": "セッション台帳に載った repo。最後に見た時刻の新しい順 (新しいセッションを起こす repo の候補)"
+      },
       "graph": {
         "$ref": "#/$defs/DepsGraph"
+      }
+    }
+  },
+  "RecentRepo": {
+    "description": "台帳のセッションが最近動いた repo 1 つ",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "repo",
+      "title",
+      "last_seen"
+    ],
+    "properties": {
+      "repo": {
+        "type": "string",
+        "description": "鍵 (DepsRepo.repo と同じ規則)"
+      },
+      "title": {
+        "type": "string"
+      },
+      "last_seen": {
+        "type": "string",
+        "format": "date-time",
+        "description": "その repo のセッションを最後に見た時刻"
       }
     }
   },

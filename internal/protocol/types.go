@@ -207,7 +207,18 @@ type DepsData struct {
 	// open のメモを「古い」とみなす日数。pane はこれより前に最後に置かれたメモをまとめて捨てるボタンを出す。
 	StaleMemoDays int        `json:"stale_memo_days"`
 	Repos         []DepsRepo `json:"repos"`
-	Graph         DepsGraph  `json:"graph"`
+	// セッション台帳に載った repo。最後に見た時刻の新しい順 (新しいセッションを起こす repo の候補)。
+	RecentRepos []RecentRepo `json:"recent_repos"`
+	Graph       DepsGraph    `json:"graph"`
+}
+
+// RecentRepo は台帳のセッションが最近動いた repo 1 つ。
+type RecentRepo struct {
+	// 鍵 (DepsRepo.repo と同じ規則)。
+	Repo  string `json:"repo"`
+	Title string `json:"title"`
+	// その repo のセッションを最後に見た時刻。
+	LastSeen time.Time `json:"last_seen"`
 }
 
 // DepsRepo は repo 1 つ。sessions は表示名の順、memos は open のメモを置いた順。

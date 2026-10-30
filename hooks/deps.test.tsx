@@ -185,6 +185,7 @@ const DEPS = {
     },
     { repo: '/src/home/dotfile', title: 'dotfile', sessions: [session('P', 'peer', '後続')], memos: [] },
   ],
+  recent_repos: [] as { repo: string; title: string; last_seen: string }[],
   graph: { nodes: NODES, links: LINKS, longest_chain: ['task:Q/1', 'task:Q/2', 'task:R/1', 'task:V/1'], rows: ROWS, rows_with_completed: ROWS_WITH_COMPLETED },
 }
 
@@ -662,14 +663,15 @@ test('daemon が status.json を書いていない依存図では、exited と�
   expect(await menuText(ui)).not.toMatch(/To parking/)
 })
 
-test('自分のセッションのタスクは、着手・完了・削除・パーキング・新しいセッションへ渡すことを自分の入力へ頼む (#296)', async ($, on) => {
+test('自分のセッションのタスクは、着手・完了・削除・パーキングへ戻すことを自分の入力へ頼む (#296)', async ($, on) => {
   const w = depsWorld(on)
   await $.command.run(OPEN_DEPS)
   const ui = await mount($)
   await ui.press({ key: 'row:task:SELF/1' })
-  // 渡す先は Hand off の見出しの下に枝で並べる (#308)。repo を問わず生きているほかのセッションと、新しいセッション。自分は除く。
+  // 渡す先は Hand off の見出しの下に枝で並べる (#308)。repo を問わず生きているほかのセッションと、新しいセッションを
+  // 起こす repo (#309)。自分は除く。
   expect(await menuText(ui)).toMatch(
-    /^▴[\s\S]*?Start\s*Complete\s*Hand off\s*├ edge-cli \(edge の CLI\)\s*├ peer \(後続\)\s*└ new session\s*Delete\s*To parking\s*\+ Add blocker$/,
+    /^▴[\s\S]*?Start\s*Complete\s*Hand off\s*├ edge-cli \(edge の CLI\)\s*├ peer \(後続\)\s*└ new session\s*├ agents-daemon\s*├ dotfile\s*└ other repo…\s*Delete\s*To parking\s*\+ Add blocker$/,
   )
   expect(await ui.find({ key: 'op:own-hand:SELF' })).toBeUndefined()
 
@@ -680,8 +682,6 @@ test('自分のセッションのタスクは、着手・完了・削除・パ�
     ['own-delete', /^タスク #1「このセッションの作業」を TaskUpdate で deleted にしてください。$/],
     // 扱うメモの無いタスクは、park tool でメモに置いてから消すよう頼む。
     ['own-park', /^タスク #1「このセッションの作業」をパーキングロットへ戻してください。park tool で.*TaskUpdate で deleted にしてください。$/],
-    // 起こしたセッションの名前は自分が付けるので、SendMessage で渡すのも自分に任せる。
-    ['own-hand:new', /^タスク #1「このセッションの作業」を新しいセッションへ渡してください。agents-daemon:peer-sessions skill の手順で.*TaskUpdate で deleted にしてください。$/],
   ]
   // 最初の menuText で開いたメニューを閉じる。
   await ui.press({ key: 'menu' })
@@ -752,8 +752,9 @@ test('補足を書いてから選ぶと、着手・渡す・新しいセッシ�
 
   w.submitted.length = 0
   await ui.input({ key: 'note', text: '先にテストを足して', kind: 'change' })
-  await pick(ui, 'own-hand:new')
-  expect(w.submitted[0]).toMatch(new RegExp(`deleted にしてください。\\n${NOTE}$`))
+  await pick(ui, 'own-hand:new:/src/home/dotfile')
+  expect(w.fed[0]).toMatch(new RegExp(`\\n詳細: 作業の詳細\\n${NOTE}$`))
+  expect(w.submitted[0]).not.toMatch(/補足/)
 })
 
 test('補足は完了・削除・パーキングへ戻す文面には足さず、ノードを選び直すと消す (#310)', async ($, on) => {
@@ -797,6 +798,104 @@ test('ほかのセッションへ届かなかったら、自分にタスクを�
   expect(await ui.find({ type: 'Text', text: /edge-cli へ送れませんでした: セッションが終了した$/ })).toBeDefined()
 })
 
+// 新しいセッションも mod が spawn で起こし、title と description を最初のターンに入れる (#309)。
+test('自分のタスクを新しいセッションへ渡す: mod が repo で起こして title と description を渡し、起きたら自分にタスクを消すよう頼む (#309)', async ($, on) => {
+  const w = depsWorld(on)
+  await $.command.run(OPEN_DEPS)
+  const ui = await mount($)
+  await ui.press({ key: 'row:task:SELF/1' })
+  w.ran.length = 0
+  await pick(ui, 'own-hand:new:/src/home/dotfile')
+  expect(operations(w.ran)).toEqual([spawn('/src/home/dotfile')])
+  expect(w.fed).toEqual([
+    'このタスクを渡すため、dotfile (/src/home/dotfile) で新しいセッションとして起こしました。\n' +
+      'self (session ID SELF) からタスク「このセッションの作業」を渡します。TaskCreate で作って進めてください。\n詳細: 作業の詳細',
+  ])
+  expect(w.sent).toEqual([])
+  expect(w.submitted).toEqual(['タスク #1「このセッションの作業」を dotfile で起こした新しいセッションへ渡しました (title と description を送った)。TaskUpdate で deleted にしてください。'])
+  expect(await ui.find({ type: 'Text', text: /dotfile で新しいセッションを起こして渡し、このセッションの入力へ渡しました/ })).toBeDefined()
+})
+
+test('新しいセッションを起こせなかったら、自分にタスクを消すよう頼まない (#309)', async ($, on) => {
+  const w = world(on, argv =>
+    argv[1] === 'deps' ? output(JSON.stringify(DEPS)) : argv[1] === 'spawn' ? output('', 1, 'agents-daemon: repo が見つからない: /src/home/dotfile') : output('{}'),
+  )
+  await $.command.run(OPEN_DEPS)
+  const ui = await mount($)
+  await ui.press({ key: 'row:task:SELF/1' })
+  await pick(ui, 'own-hand:new:/src/home/dotfile')
+  expect(w.submitted).toEqual([])
+  expect(await ui.find({ type: 'Text', text: /dotfile で新しいセッションを起こせませんでした: .*repo が見つからない/ })).toBeDefined()
+})
+
+test('claude が前景にならなかった (起きたか分からない) ときは、自分にタスクを消すよう頼まず、残したことを知らせる (#309)', async ($, on) => {
+  const w = world(on, argv =>
+    argv[1] === 'deps'
+      ? output(JSON.stringify(DEPS))
+      : argv[1] === 'spawn'
+        ? output('{"session_id":"NEW","pane_id":"block:b1","foreground":false,"detail":"15s の間に pane block:b1 で claude が前景にならなかった"}')
+        : output('{}'),
+  )
+  await $.command.run(OPEN_DEPS)
+  const ui = await mount($)
+  await ui.press({ key: 'row:task:SELF/1' })
+  await pick(ui, 'own-hand:new:/src/home/dotfile')
+  expect(w.submitted).toEqual([])
+  expect(await ui.find({ type: 'Text', text: /dotfile で window を作りましたが.*前景にならなかった.*タスクは残してあります/ })).toBeDefined()
+})
+
+test('自分のタスクも候補に無い repo は other repo… から絶対パスで起こす (#309)', async ($, on) => {
+  const w = depsWorld(on)
+  await $.command.run(OPEN_DEPS)
+  const ui = await mount($)
+  await ui.press({ key: 'row:task:SELF/1' })
+  expect(await ui.find({ key: 'spawn-path' })).toBeUndefined()
+  await pick(ui, 'own-hand:new:path')
+  w.ran.length = 0
+  await ui.input({ key: 'spawn-path', text: 'src/home/other' })
+  expect(operations(w.ran)).toEqual([])
+  expect(await ui.find({ type: 'Text', text: /絶対パス/ })).toBeDefined()
+
+  await ui.input({ key: 'spawn-path', text: '/src/home/other' })
+  expect(operations(w.ran)).toEqual([spawn('/src/home/other')])
+  expect(w.fed[0]).toMatch(/^このタスクを渡すため、other \(\/src\/home\/other\) で新しいセッションとして起こしました。/)
+  expect(await ui.find({ key: 'spawn-path' })).toBeUndefined()
+})
+
+// RECENT は台帳の最近の repo (最後に見た時刻の新しい順)。今は 2026-10-19T00:00Z。
+const RECENT = [
+  { repo: CWD, title: 'agents-daemon', last_seen: '2026-10-18T23:30:00Z' },
+  { repo: '/src/home/r1', title: 'r1', last_seen: '2026-10-18T21:00:00Z' },
+  { repo: '/src/home/dotfile', title: 'dotfile', last_seen: '2026-10-17T00:00:00Z' },
+  ...[2, 3, 4, 5, 6, 7, 8].map(i => ({ repo: `/src/home/r${i}`, title: `r${i}`, last_seen: `2026-10-${String(19 - i).padStart(2, '0')}T00:00:00Z` })),
+]
+
+test('新しいセッションの候補には台帳の最近の repo を続けて並べ、最後に見た時刻を添える。8 件を超えた分は more… で出す (#309)', async ($, on) => {
+  depsWorld(on, { ...DEPS, recent_repos: RECENT })
+  await $.command.run(OPEN_DEPS)
+  const ui = await mount($)
+  await ui.press({ key: `park:${MEMO.id}` })
+  // メモの repo、依存図の repo の後に、台帳の repo を新しい順に。重なる repo は 1 つにまとめ、時刻は台帳から添える。
+  const text = await menuText(ui)
+  expect(text).toMatch(
+    /To task[\s\S]*?└ new session\s*├ agents-daemon \(1 時間以内\)\s*├ dotfile \(2 日前\)\s*├ r1 \(3 時間前\)\s*├ r2 \(2 日前\)\s*├ r3 \(3 日前\)\s*├ r4 \(4 日前\)\s*├ r5 \(5 日前\)\s*├ r6 \(6 日前\)\s*├ more… \(2\)\s*└ other repo…\s*Ask for issue/,
+  )
+  expect(text).not.toMatch(/r7/)
+
+  // more… を選ぶと残りも出し、メニューは開いたままにする。
+  await ui.press({ key: 'op:task:more' })
+  expect((await ui.find({ key: 'ops' }))?.text).toMatch(/├ r6 \(6 日前\)\s*├ r7 \(7 日前\)\s*├ r8 \(8 日前\)\s*└ other repo…/)
+  expect((await ui.find({ key: 'ops' }))?.text).not.toMatch(/more…/)
+})
+
+test('自分のタスクの Hand off にも同じ候補を並べる (#309)', async ($, on) => {
+  depsWorld(on, { ...DEPS, recent_repos: RECENT })
+  await $.command.run(OPEN_DEPS)
+  const ui = await mount($)
+  await ui.press({ key: 'row:task:SELF/1' })
+  expect(await menuText(ui)).toMatch(/Hand off[\s\S]*?└ new session\s*├ agents-daemon \(1 時間以内\)\s*├ dotfile \(2 日前\)\s*├ r1 \(3 時間前\)[\s\S]*?├ r6 \(6 日前\)\s*├ more… \(2\)\s*└ other repo…\s*Delete/)
+})
+
 test('ほかのセッションのタスクと、自分の完了したタスクには自分へ頼む操作を出さない (#296)', async ($, on) => {
   depsWorld(on, withNodes(node('task:SELF/3', 'completed', '済んだ自分の作業', { session: 'self' })))
   await $.command.run(OPEN_DEPS)
@@ -805,7 +904,7 @@ test('ほかのセッションのタスクと、自分の完了したタスク�
     await ui.press({ key: `row:${key}` })
     expect(await ui.find({ key: 'note' })).toBeUndefined()
     if (await ui.find({ key: 'menu' })) await ui.press({ key: 'menu' })
-    for (const value of ['own-start', 'own-complete', 'own-delete', 'own-park', 'own-hand:W', 'own-hand:new']) {
+    for (const value of ['own-start', 'own-complete', 'own-delete', 'own-park', 'own-hand:W', `own-hand:new:${CWD}`, 'own-hand:new:path']) {
       expect(await ui.find({ key: `op:${value}` })).toBeUndefined()
     }
   }

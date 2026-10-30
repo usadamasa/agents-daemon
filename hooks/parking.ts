@@ -28,7 +28,10 @@ export function isStale(memo: ParkingCard, now: number, days: number): boolean {
 export type Destination =
   | { route: 'peer'; session_id: string; session: string; subject: string }
   | { route: 'self'; session_id: string; session: string }
-  | { route: 'spawn'; repo: string; title: string }
+  | { route: 'spawn'; repo: string; title: string; last_seen?: string }
+
+// SpawnDestination は新しいセッションを起こす repo。last_seen はセッション台帳でその repo を最後に見た時刻 (載っていれば)。
+export type SpawnDestination = Extract<Destination, { route: 'spawn' }>
 
 // destinationKey は宛先の描画の key。セッションは ID、起こす先は repo のパス。
 export function destinationKey(to: Destination): string {
@@ -124,20 +127,43 @@ function uniqueLive(sessions: DepsSession[], self: string): Extract<Destination,
   return out
 }
 
-// spawnDestinations は「新しいセッションを起こして渡す」の repo の候補: メモの repo、開いたセッションの repo (here)、
-// ほかの repo の順 (重複は除く)。候補に無い repo は pathDestination で指定する。
-export function spawnDestinations(data: DepsData, repo: DepsRepo): Extract<Destination, { route: 'spawn' }>[] {
+// SPAWN_SHOWN は新しいセッションを起こす repo の候補を、more… を押す前に出す件数。メニューが pane の高さを
+// 食い潰さない程度にする。
+export const SPAWN_SHOWN = 8
+
+// spawnDestinations は「新しいセッションを起こして渡す」の repo の候補: first (メモの repo。自分のタスクなら無い)、
+// 開いたセッションの repo (here)、依存図に出ている repo、セッション台帳で最近動いた repo (新しい順。#309) の順
+// (重複は除く)。台帳に載った repo には最後に見た時刻を添える。候補に無い repo は pathDestination で指定する。
+export function spawnDestinations(data: DepsData, first?: { repo: string; title: string }): SpawnDestination[] {
+  const lastSeen = new Map(data.recent_repos.map(r => [r.repo, r.last_seen]))
   const seen = new Set<string>()
-  const out: Extract<Destination, { route: 'spawn' }>[] = []
+  const out: SpawnDestination[] = []
   const add = (repo: string, title: string) => {
     if (repo === '' || seen.has(repo)) return
     seen.add(repo)
-    out.push({ route: 'spawn', repo, title })
+    const at = lastSeen.get(repo)
+    out.push(at === undefined ? { route: 'spawn', repo, title } : { route: 'spawn', repo, title, last_seen: at })
   }
-  add(repo.repo, repo.title)
+  if (first !== undefined) add(first.repo, first.title)
   add(data.here, data.repos.find(r => r.repo === data.here)?.title ?? basename(data.here))
   for (const r of data.repos) add(r.repo, r.title)
+  for (const r of data.recent_repos) add(r.repo, r.title)
   return out
+}
+
+// spawnLabel は起こす repo の候補の名前。最後に見た時刻があれば now (ミリ秒) からの経過を添える。
+export function spawnLabel(to: SpawnDestination, now: number): string {
+  const at = to.last_seen === undefined ? NaN : Date.parse(to.last_seen)
+  return Number.isNaN(at) ? to.title : `${to.title} (${ago(now - at)})`
+}
+
+const HOUR_MS = 60 * 60 * 1000
+
+// ago は経過時間の語。1 時間に満たなければ「1 時間以内」、1 日に満たなければ時間、それより前は日で数える。
+function ago(ms: number): string {
+  if (ms < HOUR_MS) return '1 時間以内'
+  if (ms < DAY_MS) return `${Math.floor(ms / HOUR_MS)} 時間前`
+  return `${Math.floor(ms / DAY_MS)} 日前`
 }
 
 // pathDestination は入力されたパスを起こす先にする。絶対パスでなければ理由を返す (バイナリも同じ検査をするが、
@@ -276,7 +302,7 @@ function said(to: Destination, ok: boolean): string {
 
 // Delivered は届いた先のセッション ID か、届かなかった理由 (failure)、届いたか分からない理由 (unknown。spawn が window を
 // 作ったが claude が前景にならなかった。pane は残る)。
-type Delivered = { to: string } | { to: string; failure: string } | { to: string; unknown: string }
+export type Delivered = { to: string } | { to: string; failure: string } | { to: string; unknown: string }
 
 // deliver は text を to へ届ける。
 // - self: 自分へは peer メッセージを送れないので、自分の入力に渡す (`$.prompt.submit`)。入力はセッションが idle に
@@ -310,7 +336,8 @@ export async function tellSelf($: EngineInterface, text: string): Promise<string
 
 // spawnSession は repo で新しいセッションを起こし、本文を最初のターンにする。claude が前景になるまでバイナリが待つので、
 // park より長い timeout にする。exit 0 で foreground が false なら window はできていて claude が前景にならなかった (unknown)。
-async function spawnSession($: EngineInterface, repo: string, text: string): Promise<Delivered> {
+// 自分のタスクを渡すとき (hooks/own-task.ts) も使う。
+export async function spawnSession($: EngineInterface, repo: string, text: string): Promise<Delivered> {
   const { exitCode, stdout, stderr } = await runDaemon($, 'spawn', { repo, prompt: text }, 30000)
   if (exitCode !== 0) return { to: '', failure: stderr.trim() || `exit ${exitCode}` }
   try {

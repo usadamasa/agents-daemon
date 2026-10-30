@@ -8,7 +8,7 @@ import { loadDeps } from './deps-data'
 import { CHAIN_COLOR, COLOR, Graph, ICON, MEMO, candidates, cells, chain, fit, legendRows, pieces, splitLanes, summary, tags } from './graph'
 import { logChange, logEvent, settle } from './log'
 import type { Fields } from './log'
-import { ask, handOff as handOffTask, isOwn, spawnText as ownSpawnText, startText, statusText, toParking } from './own-task'
+import { ask, handOff as handOffTask, handOffToNew, isOwn, startText, statusText, toParking } from './own-task'
 import {
   adopt,
   canAdopt,
@@ -25,13 +25,15 @@ import {
   memoLines,
   pathDestination,
   peerDestinations,
+  SPAWN_SHOWN,
   spawnDestinations,
+  spawnLabel,
   spawnText,
   stamp,
   taskDestinations,
   taskText,
 } from './parking'
-import type { Destination, Intent } from './parking'
+import type { Destination, Intent, SpawnDestination } from './parking'
 
 // 依存図の pane: 依存の DAG (#134) の辺をレーンで描いた行 (graph.rows、上流が上) を dock の pane に描き、選んだノードの
 // 詳細と操作、repo ごとのメモの節を出す mod。中身は `agents-daemon deps` (deps パッケージ) の graph と repos (メモと
@@ -56,7 +58,12 @@ const target = atom({ plugin: 'agents-daemon', key: 'target' } as const, '')
 const notice = atom({ plugin: 'agents-daemon', key: 'notice' } as const, '')
 const showCompleted = atom({ plugin: 'agents-daemon', key: 'showCompleted' } as const, false)
 const picking = atom({ plugin: 'agents-daemon', key: 'picking' } as const, false)
-const spawning = atom({ plugin: 'agents-daemon', key: 'spawning' } as const, '' as '' | Intent)
+// OWN_SPAWN は自分のタスクを新しいセッションへ渡す操作の value の前置き。
+const OWN_SPAWN = 'own-hand:new'
+// spawning は絶対パスの欄を開いた操作 (メモの Intent か、自分のタスクの OWN_SPAWN)。空なら閉じている。
+const spawning = atom({ plugin: 'agents-daemon', key: 'spawning' } as const, '' as '' | Intent | typeof OWN_SPAWN)
+// moreRepos は起こす repo の候補を SPAWN_SHOWN 件で切らずに全部出すか。
+const moreRepos = atom({ plugin: 'agents-daemon', key: 'moreRepos' } as const, false)
 const note = atom({ plugin: 'agents-daemon', key: 'note' } as const, '')
 const menu = atom({ plugin: 'agents-daemon', key: 'menu' } as const, false)
 
@@ -127,6 +134,7 @@ export const registerDeps: Register = on => {
     const isSpawning = await read($, spawning)
     const draft = await read($, note)
     const isMenu = await read($, menu)
+    const isMore = await read($, moreRepos)
     const self = await $.session.id()
 
     if (data === null) {
@@ -155,6 +163,7 @@ export const registerDeps: Register = on => {
       void update($, spawning, () => '')
       void update($, note, () => '')
       void update($, menu, () => false)
+      void update($, moreRepos, () => false)
     }
     // act は操作を走らせ、結果を notice に出して依存図を読み直す。
     const act = async (run: () => Promise<string>) => {
@@ -232,6 +241,41 @@ export const registerDeps: Register = on => {
         </Box>
       )
     }
+
+    // spawnOps は group の new session の下に並べる、新しいセッションを起こす repo の操作 (#309): 候補を SPAWN_SHOWN 件まで、
+    // 残りを出す more…、候補に無い repo の other repo… (絶対パスの欄を開く)。value は `${key}:<repo>` の形。
+    const spawnOps = (key: Intent | typeof OWN_SPAWN, group: string, first: { repo: string; title: string } | undefined, run: (to: SpawnDestination) => void): Op[] => {
+      const all = spawnDestinations(data, first)
+      const shown = isMore ? all : all.slice(0, SPAWN_SHOWN)
+      const sub = 'new session'
+      return [
+        ...shown.map(to => ({ value: `${key}:${destinationKey(to)}`, label: spawnLabel(to, now), group, sub, run: () => run(to) })),
+        // 選ぶとメニューは閉じるので、残りを出したら開き直す。
+        ...(shown.length < all.length
+          ? [{ value: `${key}:more`, label: `more… (${all.length - shown.length})`, group, sub, run: () => void update($, moreRepos, () => true).then(() => update($, menu, () => true)) }]
+          : []),
+        ...(Input !== undefined ? [{ value: `${key}:path`, label: 'other repo…', group, sub, run: () => void update($, spawning, () => key) }] : []),
+      ]
+    }
+
+    // pathInput は other repo… で開く絶対パスの欄。相対パスは起こさずに弾いて知らせる。
+    const pathInput = (label: string, run: (to: SpawnDestination) => Promise<void>) => {
+      if (Input === undefined) return null
+      const submit = (path: string) => {
+        const to = pathDestination(path)
+        if ('failure' in to) return void update($, notice, () => to.failure)
+        if (to.route !== 'spawn') return
+        void run(to).then(() => update($, spawning, () => ''))
+      }
+      return (
+        <Box key="spawn" flexDirection="column">
+          <Input key="spawn-path" placeholder={`/path/to/repo (${label})`} submitLabel="Spawn" onSubmit={submit} />
+          <Button key="spawn-cancel" dimColor onPress={() => void update($, spawning, () => '')}>
+            Cancel
+          </Button>
+        </Box>
+      )
+    }
     const send = async (node: GraphNode, text: string) => {
       if (!canSend(node, self) || text.trim() === '') return
       await update($, notice, () => '')
@@ -288,7 +332,9 @@ export const registerDeps: Register = on => {
       const canLink = n.endpoint && n.cwd !== undefined
       const own = isOwn(n, self)
       const blocker: Op[] = canLink && !isPicking ? [{ value: 'add-blocker', label: '+ Add blocker', run: () => void update($, picking, () => true) }] : []
-      // 自分のタスクは TaskUpdate を呼べる自分の model へ頼む (#296)。渡す先は repo を問わず生きているほかのセッション。
+      // 自分のタスクは TaskUpdate を呼べる自分の model へ頼む (#296)。渡す先は repo を問わず生きているほかのセッションと、
+      // mod が新しく起こすセッション (#309)。
+      const handToNew = (to: SpawnDestination) => actNoted(said => handOffToNew($, n, to, said))
       const ownOps: Op[] = [
         { value: 'own-start', label: 'Start', run: () => void actNoted(said => ask($, startText(n, said))) },
         { value: 'own-complete', label: 'Complete', run: () => void act(() => ask($, statusText(n, 'completed'))) },
@@ -298,7 +344,7 @@ export const registerDeps: Register = on => {
           group: 'Hand off',
           run: () => void actNoted(said => handOffTask($, n, to, said)),
         })),
-        { value: 'own-hand:new', label: 'new session', group: 'Hand off', run: () => void actNoted(said => ask($, ownSpawnText(n, said))) },
+        ...spawnOps(OWN_SPAWN, 'Hand off', undefined, to => void handToNew(to)),
         { value: 'own-delete', label: 'Delete', run: () => void act(() => ask($, statusText(n, 'deleted'))) },
         { value: 'own-park', label: 'To parking', run: () => void act(() => toParking($, n)) },
         ...blocker,
@@ -344,6 +390,7 @@ export const registerDeps: Register = on => {
           )}
           {/* 枠の中の幅は、字下げと枠と詰めの分 (左右 2 桁ずつ) を引いた残り。 */}
           {operations(ops, own, e.props.bodyColumns - GUTTER - cells(prefix) - 4)}
+          {own && isSpawning === OWN_SPAWN && pathInput('Hand off', handToNew)}
         </Box>
       )
     }
@@ -392,8 +439,9 @@ export const registerDeps: Register = on => {
     // 新しいセッションを起こす repo を並べる (#162)。候補に無い repo は other repo… を選んで絶対パスで指定する。
     const memoDetail = ({ memo, repo }: { memo: ParkingCard; repo: DepsRepo }) => {
       const tasks = taskDestinations(data, repo, self)
-      // handing は intent の操作: 生きているセッション、新しいセッションを起こす repo、候補に無い repo (other repo…) の順。
-      // other repo… は選ぶと絶対パスの欄を出す。text は生きているセッションへ送る文面。
+      const spawnAt = (to: SpawnDestination, intent: Intent) => actNoted(said => handOff($, memo, to, spawnText(memo, to, intent, said)))
+      // handing は intent の操作: 生きているセッションに続けて、新しいセッションを起こす repo (spawnOps)。text は生きている
+      // セッションへ送る文面。
       const handing = (intent: Intent, verb: string, sessions: Destination[], text: (said: string) => string): Op[] => [
         ...sessions.map(to => ({
           value: `${intent}:${destinationKey(to)}`,
@@ -401,28 +449,14 @@ export const registerDeps: Register = on => {
           group: verb,
           run: () => void actNoted(said => handOff($, memo, to, text(said))),
         })),
-        ...spawnDestinations(data, repo).map(to => ({
-          value: `${intent}:${destinationKey(to)}`,
-          label: destinationLabel(to),
-          group: verb,
-          sub: 'new session',
-          run: () => void actNoted(said => handOff($, memo, to, spawnText(memo, to, intent, said))),
-        })),
-        ...(Input !== undefined
-          ? [{ value: `${intent}:path`, label: 'other repo…', group: verb, sub: 'new session', run: () => void update($, spawning, () => intent) }]
-          : []),
+        ...spawnOps(intent, verb, repo, to => void spawnAt(to, intent)),
       ]
       const ops: Op[] = [
         ...handing('task', 'To task', tasks, said => taskText(memo, said)),
         ...handing('issue', 'Ask for issue', issueDestinations(data, repo.sessions, self), said => issueText(memo, repo.title, said)),
         { value: 'discard', label: 'Discard', run: () => void act(() => discard($, memo)) },
       ]
-      const spawnAt = (path: string, intent: Intent) => {
-        const to = pathDestination(path)
-        if ('failure' in to) return void update($, notice, () => to.failure)
-        if (to.route !== 'spawn') return
-        void actNoted(said => handOff($, memo, to, spawnText(memo, to, intent, said))).then(() => update($, spawning, () => ''))
-      }
+      const intent = isSpawning === 'task' || isSpawning === 'issue' ? isSpawning : undefined
       return (
         <Box key="memo" flexDirection="column" borderStyle="round" borderDimColor paddingX={1} marginLeft={GUTTER}>
           {memoLines(memo).map((line, i) => (
@@ -432,19 +466,7 @@ export const registerDeps: Register = on => {
           ))}
           {tasks.length === 0 && <Text dimColor>この repo に送り先のセッションがありません (タスクにするには同じ repo のセッションが要ります)</Text>}
           {operations(ops, true, e.props.bodyColumns - GUTTER - 4)}
-          {isSpawning !== '' && Input !== undefined && (
-            <Box key="spawn" flexDirection="column">
-              <Input
-                key="spawn-path"
-                placeholder={`/path/to/repo (${isSpawning === 'task' ? 'To task' : 'Ask for issue'})`}
-                submitLabel="Spawn"
-                onSubmit={(text: string) => spawnAt(text, isSpawning)}
-              />
-              <Button key="spawn-cancel" dimColor onPress={() => void update($, spawning, () => '')}>
-                Cancel
-              </Button>
-            </Box>
-          )}
+          {intent !== undefined && pathInput(intent === 'task' ? 'To task' : 'Ask for issue', to => spawnAt(to, intent))}
         </Box>
       )
     }

@@ -59,8 +59,9 @@ longest chain の辺の罫線 (`marks`) は色付き。同じノードは 1 回�
 peer への `Hand off` だけは mod が peer へ `$.session.send` で session ID 宛てに title とノードの `description` を送り、
 届いてから自分にタスクを消すよう頼む。ListAgents の名前は依存図のどの欄 (表示名、`session_name`、session ID) とも
 一致しないことがあり、model に `SendMessage` で渡させると宛先を引き当てられない。渡す先は repo を問わず生きている
-ほかのセッション。宛先の `new session` は起こしたセッションに自分が名前を付けるので、`agents-daemon:peer-sessions`
-skill の手順で渡すよう自分に頼む。`▾` の右の補足欄 (`✎`) に書いた文は、`Start` と `Hand off` の文面 (peer へは相手へ送る文面) の
+ほかのセッション。宛先の `new session` の下にはメモと同じ repo の候補 ([parking.md](parking.md)) を並べ、mod が
+`agents-daemon spawn` で起こして同じ文面を最初のターンに入れ、起きてから自分にタスクを消すよう頼む (#309)。
+起きたか分からない (`foreground: false`) ときは消すよう頼まずに残す。`▾` の右の補足欄 (`✎`) に書いた文は、`Start` と `Hand off` の文面 (peer へは相手へ送る文面) の
 末尾に `利用者からの補足: …` として足し、選んだら欄を空にする (#310)。空なら文面は変わらない。`Complete` / `Delete` /
 `To parking` には足さない。開いたメニューと補足の下書きはノードを選び直すと消える。`To parking` は、扱うメモ (`memos` のうち捨てていないもの)
 があれば新しいメモを作らず、handed のメモを `park set` (status open、from handed) で戻してから消すよう頼み、

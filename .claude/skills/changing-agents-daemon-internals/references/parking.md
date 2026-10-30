@@ -52,8 +52,9 @@ handed / discarded のメモが保持期間 (7 日) で消えた後は、descrip
 - 操作は詳細の `▾` のメニューに並べ、`To task` と `Ask for issue` の見出しの下に宛先を枝で出す (#308、並べ方は
   [deps.md](deps.md))。開いてすぐ選んでも捨てないよう `Discard` は末尾に置く。補足欄 (`✎`) に書いた文は渡す文面の末尾に足す (#310)
 - 新しいセッションを起こして渡す (宛先の `new session: <repo>`): 生きているセッションの
-  無い repo へ渡す経路 (#162)。宛先の後ろに repo の候補 (メモの repo、開いたセッションの repo、ほかの repo) を並べ、
-  候補に無い repo は `new session: other repo…` を選ぶと出る絶対パスの欄で指定する。選んだ repo と本文を `agents-daemon spawn` に
+  無い repo へ渡す経路 (#162)。宛先の後ろに repo の候補 (メモの repo、開いたセッションの repo、依存図の repo、
+  セッション台帳で最近動いた repo の新しい順。#309) を並べる。台帳の repo は deps の `recent_repos` が渡し、最後に
+  見た時刻を「n 日前」で添える。先頭の 8 件 (`SPAWN_SHOWN`) を超えた分は `more…` で出す。候補に無い repo は `new session: other repo…` を選ぶと出る絶対パスの欄で指定する。選んだ repo と本文を `agents-daemon spawn` に
   stdin の `SpawnRequest` で渡す。バイナリが `claude --session-id <uuid> --model $CLAUDE_CODE_SUBAGENT_MODEL -- <本文>` を repo を cwd にした
   rex の window に起こし (`spawn`、フォーカスは奪わず、終了後も pane を残す)、claude が前景になってから
   `SpawnResult` を返す。待ち切れたときは `foreground: false` と `detail` で返し、mod はメモを

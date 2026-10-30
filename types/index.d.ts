@@ -362,9 +362,11 @@ declare module 'claude-code' {
       target: string
       // picking はノードの詳細で Add blocker の候補を出しているか。
       picking: boolean
-      // spawning はメモの詳細で、候補に無い repo の絶対パスの欄を出しているか。出しているなら頼むこと (task / issue)、
-      // 出していなければ空。
-      spawning: '' | 'task' | 'issue'
+      // spawning は詳細で、候補に無い repo の絶対パスの欄を出しているか。出しているならメモに頼むこと (task / issue) か
+      // 自分のタスクを渡すこと (own-hand:new)、出していなければ空。
+      spawning: '' | 'task' | 'issue' | 'own-hand:new'
+      // moreRepos は新しいセッションを起こす repo の候補を、上限で切らずに全部出しているか。
+      moreRepos: boolean
       // note は詳細の補足欄の下書き。次に選んだ操作の文面に足す。
       note: string
       // menu は詳細の操作のメニュー (▾) を開いているか。

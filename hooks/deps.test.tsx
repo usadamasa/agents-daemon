@@ -1198,7 +1198,7 @@ test('claude が前景にならなかった (pane は残る) メモは戻さず�
 })
 
 test('ノードの無い依存図と、daemon が動いていないことを描く', async ($, on) => {
-  depsWorld(on, { daemon_running: false, here: CWD, stale_memo_days: 30, repos: [], graph:{ nodes: [], links: [], longest_chain: [], rows: [], rows_with_completed: [] } })
+  depsWorld(on, { daemon_running: false, here: CWD, stale_memo_days: 30, repos: [], recent_repos: [], graph:{ nodes: [], links: [], longest_chain: [], rows: [], rows_with_completed: [] } })
   await $.command.run(OPEN_DEPS)
   const ui = await mount($)
   expect(await ui.find({ type: 'Text', text: /agents-daemon が動いていないため、セッションの状態は出ません/ })).toBeDefined()

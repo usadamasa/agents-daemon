@@ -7,8 +7,9 @@ README の「役割」が持つ。機能を足す・外す判断はそこに照�
 
 ## レイアウト
 
-`internal/` のパッケージは、非テストの呼び手が 1 つならその呼び手の下に入れ子にする。複数の読み手がいる書式は、
-書き手の下に読み書きを置く (`internal/dream/harvest/record`)。
+`cmd/` は `internal/` の本体を組み立てる層で、この上下は崩さない。`internal/` のパッケージは、`internal/` の中の
+非テストの呼び手が 1 つならその呼び手の下に入れ子にする。呼び手が `cmd/` の cli だけなら `internal/` 直下に置く。
+複数の読み手がいる書式は、書き手の下に読み書きを置く (`internal/dream/harvest/record`)。
 パッケージは依存のクラスタから読み直した家族 (handoff、runtime、dream、statusline、worktree) か、どの家族からも
 使われる共有層のどれかに属し、`.go-arch-lint.yml` の component がその境界を守る (#300)。新しいパッケージは
 どの家族か共有層かを決めて component の `in` に足さないと、`task lint` の `analyze-arch-lint` が uncovered で落ちる。

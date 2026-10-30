@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/usadamasa/agents-daemon/internal/daemon/state"
+	"github.com/usadamasa/agents-daemon/internal/daemonstate"
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
@@ -22,8 +22,8 @@ func task(sid, id, subject, status, cwd string, blockedBy ...string) tasklog.Tas
 	return tasklog.Task{ID: id, Subject: subject, Status: status, SessionID: sid, CWD: cwd, BlockedBy: blockedBy, UpdatedAt: t0}
 }
 
-func snapshot(panes ...state.PaneStatus) *state.StatusSnapshot {
-	return &state.StatusSnapshot{PID: 42, UpdatedAt: t0, Panes: panes}
+func snapshot(panes ...daemonstate.PaneStatus) *daemonstate.StatusSnapshot {
+	return &daemonstate.StatusSnapshot{PID: 42, UpdatedAt: t0, Panes: panes}
 }
 
 // titles は repo の見出しの並び。
@@ -51,10 +51,10 @@ func TestBuild_repoSessions(t *testing.T) {
 	d := build(input{
 		PID: 42,
 		Snapshot: snapshot(
-			state.PaneStatus{PaneID: "p1", SessionID: "A", CWD: main, AgentStatus: "working", AgentMessage: "別の作業"},
-			state.PaneStatus{PaneID: "p2", SessionID: "D", CWD: wt, AgentStatus: "working", AgentMessage: "調べている"},
-			state.PaneStatus{PaneID: "p3", SessionID: "E", CWD: other, AgentStatus: "done"},
-			state.PaneStatus{PaneID: "p4", SessionID: "T", CWD: other, AgentStatus: "working"},
+			daemonstate.PaneStatus{PaneID: "p1", SessionID: "A", CWD: main, AgentStatus: "working", AgentMessage: "別の作業"},
+			daemonstate.PaneStatus{PaneID: "p2", SessionID: "D", CWD: wt, AgentStatus: "working", AgentMessage: "調べている"},
+			daemonstate.PaneStatus{PaneID: "p3", SessionID: "E", CWD: other, AgentStatus: "done"},
+			daemonstate.PaneStatus{PaneID: "p4", SessionID: "T", CWD: other, AgentStatus: "working"},
 		),
 		Tasks: []tasklog.Task{
 			task("A", "1", "調査", "completed", main),
@@ -121,7 +121,7 @@ func TestBuild_memos(t *testing.T) {
 	}
 	d := build(input{
 		PID:      42,
-		Snapshot: snapshot(state.PaneStatus{PaneID: "p1", SessionID: "A", CWD: main}),
+		Snapshot: snapshot(daemonstate.PaneStatus{PaneID: "p1", SessionID: "A", CWD: main}),
 		Tasks:    []tasklog.Task{task("A", "1", "調査", "in_progress", main)},
 		Parking:  []parking.Item{memo, lone},
 		Locate: places(map[string]gitrepo.Place{
@@ -161,11 +161,11 @@ func TestBuild_memos(t *testing.T) {
 // daemon が動いていなくてもタスクの記録は描く。前の daemon の status.json は使わない。
 func TestBuild_daemonState(t *testing.T) {
 	tasks := []tasklog.Task{task("A", "1", "書く", "in_progress", "/w/a")}
-	stopped := build(input{Tasks: tasks, Snapshot: snapshot(state.PaneStatus{SessionID: "A", CWD: "/w/a"})})
+	stopped := build(input{Tasks: tasks, Snapshot: snapshot(daemonstate.PaneStatus{SessionID: "A", CWD: "/w/a"})})
 	if stopped.DaemonRunning || stopped.UpdatedAt != nil || len(stopped.Repos) != 1 || len(stopped.Repos[0].Sessions) != 0 || stopped.Graph.Nodes[0].Live {
 		t.Errorf("stopped = %+v", stopped)
 	}
-	stale := build(input{PID: 7, Tasks: tasks, Snapshot: snapshot(state.PaneStatus{SessionID: "A", CWD: "/w/a"})})
+	stale := build(input{PID: 7, Tasks: tasks, Snapshot: snapshot(daemonstate.PaneStatus{SessionID: "A", CWD: "/w/a"})})
 	if !stale.DaemonRunning || stale.UpdatedAt != nil || len(stale.Repos[0].Sessions) != 0 || stale.Graph.Nodes[0].Live {
 		t.Errorf("stale = %+v", stale)
 	}

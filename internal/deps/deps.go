@@ -14,7 +14,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/usadamasa/agents-daemon/internal/daemon/state"
+	"github.com/usadamasa/agents-daemon/internal/daemonstate"
 	"github.com/usadamasa/agents-daemon/internal/deps/graph"
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
@@ -93,7 +93,7 @@ type input struct {
 	CWD string
 	// PID は動いている daemon の pid。0 なら動いていない。
 	PID      int
-	Snapshot *state.StatusSnapshot
+	Snapshot *daemonstate.StatusSnapshot
 	Tasks    []tasklog.Task
 	Todos    []tasklog.TodoList
 	// Parking はメモ (status を問わない)。repo の memos には open のものだけを出し、タスクとの照合には全部を使う。
@@ -109,7 +109,7 @@ type input struct {
 // build は依存図を組む。
 func build(in input) Deps {
 	d := Deps{Repos: []Repo{}, StaleMemoDays: int(parking.StaleAfter / (24 * time.Hour))}
-	var panes map[string]*state.PaneStatus
+	var panes map[string]*daemonstate.PaneStatus
 	d.DaemonRunning, d.UpdatedAt, panes = livePanes(in)
 	cards := collect(in, panes)
 	open := parking.Filter(in.Parking, "", parking.StatusOpen)
@@ -148,8 +148,8 @@ func sessionIDs(cards []graph.Card, memos []parking.Item) map[string]bool {
 
 // livePanes は daemon が動いているか、status.json の更新時刻、生きているセッションの
 // pane (session ID ごと) を返す。前の daemon が残した status.json は使わない (status コマンドと同じ判断)。
-func livePanes(in input) (running bool, updatedAt *time.Time, panes map[string]*state.PaneStatus) {
-	panes = map[string]*state.PaneStatus{}
+func livePanes(in input) (running bool, updatedAt *time.Time, panes map[string]*daemonstate.PaneStatus) {
+	panes = map[string]*daemonstate.PaneStatus{}
 	if in.PID == 0 {
 		return false, nil, panes
 	}
@@ -168,7 +168,7 @@ func livePanes(in input) (running bool, updatedAt *time.Time, panes map[string]*
 
 // collect はタスク、TodoWrite の項目、タスクの無い生きているセッションをノードの材料にする。表示名 (Session) は
 // 呼び手が付ける。
-func collect(in input, panes map[string]*state.PaneStatus) []graph.Card {
+func collect(in input, panes map[string]*daemonstate.PaneStatus) []graph.Card {
 	var cards []graph.Card
 	acts := activities(panes)
 	withTasks := map[string]bool{}
@@ -201,7 +201,7 @@ func collect(in input, panes map[string]*state.PaneStatus) []graph.Card {
 // ターンを終えたら要約、permission 待ちなら approve <tool>: ...) を出し、申告が無ければ (起動直後、古い record)
 // どのセッションかが分かるよう、セッション名 (name) か cwd の末尾にする。
 // cc-premise: 2.1.302 osc7501 msg は作業中の作業、ターン後の要約、permission 待ちの approve <tool>: <command>
-func sessionSubject(p *state.PaneStatus, name string) string {
+func sessionSubject(p *daemonstate.PaneStatus, name string) string {
 	switch {
 	case p.AgentMessage != "":
 		return p.AgentMessage
@@ -214,7 +214,7 @@ func sessionSubject(p *state.PaneStatus, name string) string {
 
 // arrange は生きているセッションとメモを repo へ分けて並べる。セッションは作業の cwd の repo に入る (タスクの無い
 // セッションは pane の cwd)。names はセッションの表示名、sessions は session ID → セッション名。
-func arrange(cards []graph.Card, memos []parking.Item, panes map[string]*state.PaneStatus, names, sessions map[string]string, l locator) []Repo {
+func arrange(cards []graph.Card, memos []parking.Item, panes map[string]*daemonstate.PaneStatus, names, sessions map[string]string, l locator) []Repo {
 	type entry struct {
 		repo *Repo
 		// subjects はこの repo のセッションごとの見出しの候補。
@@ -310,7 +310,7 @@ func (s *subjectPick) offer(c graph.Card) {
 }
 
 // parkingCard はメモを repo の memos の 1 つにする。sources は新しい順に並べる。
-func parkingCard(m parking.Item, names map[string]string, panes map[string]*state.PaneStatus) ParkingCard {
+func parkingCard(m parking.Item, names map[string]string, panes map[string]*daemonstate.PaneStatus) ParkingCard {
 	c := ParkingCard{ID: m.ID, Kind: m.Kind, Origin: m.Origin, Title: m.Title, Detail: m.Detail, Files: m.Files, DefaultTaken: m.DefaultTaken, Sources: []ParkingSource{}}
 	for _, s := range m.Sources {
 		var task string

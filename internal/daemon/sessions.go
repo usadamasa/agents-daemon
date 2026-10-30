@@ -4,14 +4,14 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/daemon/ledger"
-	"github.com/usadamasa/agents-daemon/internal/daemon/state"
+	"github.com/usadamasa/agents-daemon/internal/daemonstate"
 )
 
 // recordSessions は tick で見えたセッションを台帳に書き、同じ tick で辺の session:<名前> の端点を台帳の
 // セッションに結びつける。結びつけを tick ごとにするのは、渡した側が `edge add` を書いてから数秒で依存図の
 // 端点がそのセッションのノードにつながり、pane が置き場のノードを描き続けないようにするため。台帳を書いた直後に
 // 読むので、同じ tick で現れたセッションにも結びつく。書けなくても tick は止めない。
-func (r *daemonRuntime) recordSessions(panes []state.PaneStatus, now time.Time) {
+func (r *daemonRuntime) recordSessions(panes []daemonstate.PaneStatus, now time.Time) {
 	if r.sessions.Dir == "" {
 		return
 	}

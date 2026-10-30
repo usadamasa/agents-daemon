@@ -17,7 +17,7 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/config"
-	"github.com/usadamasa/agents-daemon/internal/daemon/state"
+	"github.com/usadamasa/agents-daemon/internal/daemonstate"
 	"github.com/usadamasa/agents-daemon/internal/detect"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/ratelimit"
@@ -378,16 +378,16 @@ func configFields(cfg, def config.Config) []ConfigFieldReport {
 // collectDaemonState は PID ファイルと status.json から daemon の稼働状況を集める。
 func collectDaemonState(p apppath.Paths, now time.Time) *DaemonReport {
 	rep := &DaemonReport{}
-	pid, err := state.ReadPIDFile(p.PIDFile())
+	pid, err := daemonstate.ReadPIDFile(p.PIDFile())
 	if err != nil {
 		rep.PIDError = err.Error()
 		return rep
 	}
-	if pid == 0 || !state.PIDAlive(pid) {
+	if pid == 0 || !daemonstate.PIDAlive(pid) {
 		return rep
 	}
 	rep.Running, rep.PID = true, pid
-	snap, err := state.ReadStatusSnapshot(p.StatusFile())
+	snap, err := daemonstate.ReadStatusSnapshot(p.StatusFile())
 	if err != nil {
 		rep.SnapshotError = err.Error()
 		return rep

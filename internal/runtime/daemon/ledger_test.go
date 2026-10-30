@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/edge"
+	"github.com/usadamasa/agents-daemon/internal/ledger"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
-	"github.com/usadamasa/agents-daemon/internal/runtime/daemon/ledger"
 )
 
 // tick は見えたセッションを台帳に書き (名前は context/ から)、同じ tick で session:<名前> の端点を台帳の

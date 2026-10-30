@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/daemonstate"
-	"github.com/usadamasa/agents-daemon/internal/runtime/daemon/ledger"
+	"github.com/usadamasa/agents-daemon/internal/ledger"
 )
 
 // recordSessions は tick で見えたセッションを台帳に書き、同じ tick で辺の session:<名前> の端点を台帳の

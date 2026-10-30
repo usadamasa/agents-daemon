@@ -91,7 +91,7 @@ pane を開いたとき、数 (repo、セッション、ノード、メモ) が�
   key にした置き場のノードにし、`exited` で下流が止まっていることを見せる
 
 `session:<名前>` の端点は、daemon が tick ごとに status.json を書いた直後、セッション台帳 (`$STATE/sessions/`、
-`daemon/ledger`) を書いてから結びつける (`edge` の `Bind`)。候補は名前が一致し、辺の
+`ledger`) を書いてから結びつける (`edge` の `Bind`)。候補は名前が一致し、辺の
 created_at に生きていたか後から現れた (last_seen が created_at 以後の) セッション (`ledger.Pick`)。辺を書いた時点で
 動いていた候補 (first_seen が created_at 以前) があれば first_seen の最も新しいもの、無ければ created_at より後に
 最初に現れたものを選ぶ。渡す側は `claude --name` で起こしてすぐ `edge add` を書くので、直前に起きた同名のセッションが

@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
-	"github.com/usadamasa/agents-daemon/internal/tasklog"
+	"github.com/usadamasa/agents-daemon/internal/tasklog/record"
 )
 
 // AdoptedDefault は Adopt で移したメモの default_taken。
@@ -14,7 +14,7 @@ const AdoptedDefault = "セッションの終了で未完了のまま"
 // Tasks はメモを置くときと、タスクをメモへ移すときに触るタスクの記録 (tasklog.Store が満たす)。
 type Tasks interface {
 	ActiveTaskID(sessionID string) string
-	Get(sessionID, taskID string) (tasklog.Task, bool)
+	Get(sessionID, taskID string) (record.Task, bool)
 	Remove(sessionID, taskID string) error
 }
 

@@ -8,10 +8,11 @@ import (
 	"path/filepath"
 
 	"github.com/usadamasa/agents-daemon/internal/statefile"
+	"github.com/usadamasa/agents-daemon/internal/tasklog/record"
 )
 
 // ListTodos は全セッションの TodoWrite のリストを返す。壊れたファイルは読み飛ばす。
-func (s Store) ListTodos() ([]TodoList, error) {
+func (s Store) ListTodos() ([]record.TodoList, error) {
 	if s.Dir == "" {
 		return nil, nil
 	}
@@ -22,7 +23,7 @@ func (s Store) ListTodos() ([]TodoList, error) {
 		}
 		return nil, fmt.Errorf("tasks の走査に失敗: %w", err)
 	}
-	var lists []TodoList
+	var lists []record.TodoList
 	for _, session := range sessions {
 		if !session.IsDir() {
 			continue
@@ -31,7 +32,7 @@ func (s Store) ListTodos() ([]TodoList, error) {
 		if err != nil {
 			continue
 		}
-		var list TodoList
+		var list record.TodoList
 		if json.Unmarshal(data, &list) != nil || list.SessionID == "" {
 			continue
 		}
@@ -46,7 +47,7 @@ func (s Store) ActiveTaskID(sessionID string) string {
 		return ""
 	}
 	dir := filepath.Join(s.Dir, sessionID)
-	var active Task
+	var active record.Task
 	for _, name := range taskFiles(dir) {
 		t, ok := readTask(filepath.Join(dir, name))
 		if ok && t.Status == "in_progress" && (active.ID == "" || t.UpdatedAt.After(active.UpdatedAt)) {
@@ -57,10 +58,10 @@ func (s Store) ActiveTaskID(sessionID string) string {
 }
 
 // Get はセッションのタスク 1 つを返す。記録が無い、または ID がファイル名に使えなければ false。
-func (s Store) Get(sessionID, taskID string) (Task, bool) {
+func (s Store) Get(sessionID, taskID string) (record.Task, bool) {
 	path, ok := s.taskPath(sessionID, taskID)
 	if !ok {
-		return Task{}, false
+		return record.Task{}, false
 	}
 	return readTask(path)
 }

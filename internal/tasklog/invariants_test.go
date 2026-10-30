@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+
+	"github.com/usadamasa/agents-daemon/internal/tasklog/record"
 )
 
 const (
@@ -88,7 +90,7 @@ func TestIngest_TaskCreateの記録は乱択の交錯で失われない(t *testi
 	}
 }
 
-func keys(m map[string]Task) []string {
+func keys(m map[string]record.Task) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
 		out = append(out, k)

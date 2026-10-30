@@ -7,6 +7,8 @@
 // 1 タスク 1 ファイルにするのは、同じセッションの Task 系ツールが並列で走っても別のタスクなら
 // 別のファイルになり、読み直して書く処理が取り合わないため。
 //
+// 記録の書式は record が持つ。
+//
 // 本体の ~/.claude/tasks/ は読まない。単独セッションの保存先と形式が docs に無く、内部形式に依存するため。
 // 取りこぼした更新は、次に model が TaskList を呼んだときにその結果で全件を同期し直して埋める。
 package tasklog
@@ -23,6 +25,7 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/statefile"
+	"github.com/usadamasa/agents-daemon/internal/tasklog/record"
 )
 
 // 保持期間。消すのは daemon の housekeeping (Prune) で、mtime で判定する。
@@ -38,38 +41,6 @@ const (
 
 // todosFile は TodoWrite のリスト全体を置くファイル名。タスクのファイル (<task_id>.json) と区別する。
 const todosFile = "todos.json"
-
-// Task はタスク 1 つの記録。
-type Task struct {
-	ID          string   `json:"id"`
-	Subject     string   `json:"subject"`
-	Description string   `json:"description,omitempty"`
-	ActiveForm  string   `json:"active_form,omitempty"`
-	Status      string   `json:"status"`
-	BlockedBy   []string `json:"blocked_by,omitempty"`
-	Blocks      []string `json:"blocks,omitempty"`
-	Owner       string   `json:"owner,omitempty"`
-	SessionID   string   `json:"session_id"`
-	// AgentID はサブエージェントが作ったタスクのとき、そのエージェントの ID。main なら空。
-	AgentID   string    `json:"agent_id,omitempty"`
-	CWD       string    `json:"cwd"`
-	UpdatedAt time.Time `json:"updated_at"`
-}
-
-// Todo は TodoWrite の 1 項目。
-type Todo struct {
-	Content    string `json:"content"`
-	Status     string `json:"status"`
-	ActiveForm string `json:"activeForm,omitempty"`
-}
-
-// TodoList は TodoWrite のリスト全体の記録。
-type TodoList struct {
-	SessionID string    `json:"session_id"`
-	CWD       string    `json:"cwd"`
-	Todos     []Todo    `json:"todos"`
-	UpdatedAt time.Time `json:"updated_at"`
-}
 
 // Store は tasks/ の置き場所を持つ。ゼロ値は Dir が空で、書き込みはエラー、読み込みは空になる。
 type Store struct {
@@ -138,7 +109,7 @@ func (s Store) Ingest(input []byte, now time.Time) (Result, error) {
 }
 
 // List は全セッションのタスクを返す。壊れたファイルは読み飛ばす。
-func (s Store) List() ([]Task, error) {
+func (s Store) List() ([]record.Task, error) {
 	if s.Dir == "" {
 		return nil, nil
 	}
@@ -150,7 +121,7 @@ func (s Store) List() ([]Task, error) {
 		}
 		return nil, fmt.Errorf("tasks の走査に失敗: %w", err)
 	}
-	var tasks []Task
+	var tasks []record.Task
 	for _, session := range sessions {
 		if !session.IsDir() {
 			continue
@@ -306,14 +277,14 @@ func createdAfter(name string, newest int) bool {
 // todos は TodoWrite のリスト全体で todos.json を置き換える。
 func (w *writer) todos() error {
 	var input struct {
-		Todos []Todo `json:"todos"`
+		Todos []record.Todo `json:"todos"`
 	}
 	if err := json.Unmarshal(w.in.ToolInput, &input); err != nil {
 		return fmt.Errorf("TodoWrite の入力を読めない: %w", err)
 	}
-	list := TodoList{SessionID: w.in.SessionID, CWD: w.in.CWD, Todos: input.Todos, UpdatedAt: w.now}
+	list := record.TodoList{SessionID: w.in.SessionID, CWD: w.in.CWD, Todos: input.Todos, UpdatedAt: w.now}
 	if list.Todos == nil {
-		list.Todos = []Todo{}
+		list.Todos = []record.Todo{}
 	}
 	if err := statefile.WriteJSONAtomic(filepath.Join(w.dir, todosFile), ".todos.*", list); err != nil {
 		return err
@@ -323,8 +294,8 @@ func (w *writer) todos() error {
 }
 
 // base は hook 入力から埋まる欄だけを持つタスク。
-func (w *writer) base(id string) Task {
-	return Task{ID: id, SessionID: w.in.SessionID, AgentID: w.in.AgentID, CWD: w.in.CWD, UpdatedAt: w.now}
+func (w *writer) base(id string) record.Task {
+	return record.Task{ID: id, SessionID: w.in.SessionID, AgentID: w.in.AgentID, CWD: w.in.CWD, UpdatedAt: w.now}
 }
 
 func (w *writer) path(id string) (string, error) {
@@ -334,15 +305,15 @@ func (w *writer) path(id string) (string, error) {
 	return filepath.Join(w.dir, id+".json"), nil
 }
 
-func (w *writer) read(id string) (Task, bool) {
+func (w *writer) read(id string) (record.Task, bool) {
 	path, err := w.path(id)
 	if err != nil {
-		return Task{}, false
+		return record.Task{}, false
 	}
 	return readTask(path)
 }
 
-func (w *writer) write(t Task) error {
+func (w *writer) write(t record.Task) error {
 	path, err := w.path(t.ID)
 	if err != nil {
 		return err
@@ -386,14 +357,14 @@ func taskFiles(dir string) []string {
 	return names
 }
 
-func readTask(path string) (Task, bool) {
+func readTask(path string) (record.Task, bool) {
 	data, err := os.ReadFile(path) // #nosec G304 -- tasks/ 配下の検証済みのパス
 	if err != nil {
-		return Task{}, false
+		return record.Task{}, false
 	}
-	var t Task
+	var t record.Task
 	if err := json.Unmarshal(data, &t); err != nil || t.ID == "" {
-		return Task{}, false
+		return record.Task{}, false
 	}
 	return t, true
 }

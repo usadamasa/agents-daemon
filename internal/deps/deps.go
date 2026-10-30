@@ -20,7 +20,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/ref"
-	"github.com/usadamasa/agents-daemon/internal/tasklog"
+	"github.com/usadamasa/agents-daemon/internal/tasklog/record"
 )
 
 // ParkingCard は repo の open のメモ 1 つ (parking の Item)。
@@ -94,8 +94,8 @@ type input struct {
 	// PID は動いている daemon の pid。0 なら動いていない。
 	PID      int
 	Snapshot *daemonstate.StatusSnapshot
-	Tasks    []tasklog.Task
-	Todos    []tasklog.TodoList
+	Tasks    []record.Task
+	Todos    []record.TodoList
 	// Parking はメモ (status を問わない)。repo の memos には open のものだけを出し、タスクとの照合には全部を使う。
 	Parking []parking.Item
 	// Edges はセッションをまたぐ辺 (edge)。

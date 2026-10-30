@@ -1,5 +1,19 @@
 # Changelog
 
+## [2026.1030.0](https://github.com/usadamasa/agents-daemon/compare/2026.1029.0...2026.1030.0) - 2026-10-30
+
+- go-arch-metrics の CLI を plugin の版 2026.1028.0 にそろえる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/315
+- verify.SessionExited を internal/daemon/state へ移す (#300 ステップ 2) by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/317
+- .go-arch-lint.yml を家族 + 共有層の component に切り直す (#300 ステップ 1) by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/318
+- internal/deps/dag を internal/deps/graph/dag へ入れ子にする (#300 ステップ 3) by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/319
+- JSONL の走査を internal/dream から internal/dream/harvest へ移す (#300 ステップ 4) by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/320
+- multiplexer.Client を呼び手ごとの小さな interface で受ける (#301) by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/321
+- rex の実装を internal/backend/rexcli へ入れ子にする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/322
+- 入れ子の規則が internal/ の中で閉じることを AGENTS.md に書く by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/323
+- internal/daemon/state を internal/daemonstate へ出す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/324
+- runtime の家族を internal/runtime/ の下へ寄せる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/325
+- 実装のパッケージをパスではなく名前で指す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/326
+
 ## [2026.1029.0](https://github.com/usadamasa/agents-daemon/compare/2026.1028.0...2026.1029.0) - 2026-10-29
 
 - peer-sessions: 処理済みの報告と重なる idle 通知への空振りのターンを避ける規範を足す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/312

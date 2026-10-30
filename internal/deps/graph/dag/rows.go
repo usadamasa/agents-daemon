@@ -4,16 +4,13 @@ import (
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/usadamasa/agents-daemon/internal/protocol"
 )
 
-// Row は図の 1 行。Lanes は行頭の罫線で、ノードの行は `*` がそのノードのレーンの位置。Node が空なら辺をつなぐだけの行。
-// レーン 1 本は 2 桁 (記号と詰め) で、閉じたレーンには右のレーンを詰める。Marks は Lanes のうち印の付いた辺
-// (highlight) を描いた桁 (rune の位置、昇順)。
-type Row struct {
-	Lanes string `json:"lanes"`
-	Node  string `json:"node,omitempty"`
-	Marks []int  `json:"marks,omitempty"`
-}
+// Row は図の 1 行 (形は protocol の schema が持つ)。レーン 1 本は 2 桁 (記号と詰め) で、閉じたレーンには右のレーンを
+// 詰める。Marks の桁は rune の位置。
+type Row = protocol.GraphRow
 
 // Rows は order のノードを位相順に 1 行ずつ並べ、辺をレーンで描く (git log --graph の形、上流が上)。
 // dashed が true の辺は破線にし、highlight が true の辺は罫線の桁を Marks に載せる。

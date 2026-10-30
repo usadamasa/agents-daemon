@@ -2,26 +2,21 @@ package parkcli
 
 import (
 	"fmt"
-	"io"
 	"strings"
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/eventlog"
 	"github.com/usadamasa/agents-daemon/internal/parking"
+	"github.com/usadamasa/agents-daemon/internal/protocol"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
 
 // park の出来事 (eventlog の package doc の一覧) を、park の操作の結果から組んで書く。
 // eventlog に持たせないのは、eventlog が tasklog と parking を import しないため (tasklog の Ca を増やさない)。
 
-// parkAdd は stdin の Request で s.Park を走らせ、結果をログに書く (park add)。
-func parkAdd(stateDir string, s parking.Store, stdin io.Reader, cwd string, tasks tasklog.Store, now time.Time) (parking.Added, error) {
-	req, err := parking.ReadRequest(stdin)
-	if err != nil {
-		parkFailed(stateDir, now, "add", "", err)
-		return parking.Added{}, err
-	}
-	added, err := s.Park(req, cwd, tasks, now)
+// parkAdd は req で s.Park を走らせ、結果をログに書く (park add)。cwd は置いたセッションの cwd。
+func parkAdd(stateDir string, s parking.Store, req protocol.ParkAddRequest, cwd string, tasks tasklog.Store, now time.Time) (parking.Added, error) {
+	added, err := s.Park(parking.Request{Entry: req.Memo, SessionID: req.SessionID}, cwd, tasks, now)
 	if err != nil {
 		parkFailed(stateDir, now, "add", req.SessionID, err)
 		return added, err
@@ -48,10 +43,10 @@ func parkSet(stateDir string, s parking.Store, session, id, status, expect, dest
 }
 
 // parkDiscard は s.DiscardBefore を走らせ、捨てたメモの id を書く (park discard)。id を書くのは、まとめて捨てたものを
-// `park set <id> --status open` で戻せるようにするため。
+// park set で open に戻せるようにするため。
 func parkDiscard(stateDir string, s parking.Store, session string, days int, now time.Time) ([]parking.Item, error) {
 	if days < 1 {
-		err := fmt.Errorf("--days は 1 以上 (%d)", days)
+		err := fmt.Errorf("days は 1 以上 (%d)", days)
 		parkFailed(stateDir, now, "discard", session, err, kv("days", days))
 		return nil, err
 	}

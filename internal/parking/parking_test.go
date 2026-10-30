@@ -342,23 +342,23 @@ func TestSet_from(t *testing.T) {
 	item := mustAdd(t, s, testRepo, aside("t"), source("s1", ""))
 
 	if _, _, err := s.Set(item.ID, StatusHanded, StatusOpen, ToSession("S2")); err != nil {
-		t.Fatalf("open のメモを --from open で取れない: %v", err)
+		t.Fatalf("open のメモを from open で取れない: %v", err)
 	}
 	_, _, err := s.Set(item.ID, StatusHanded, StatusOpen, ToSession("S3"))
 	if err == nil {
-		t.Fatal("handed のメモを --from open で取れた")
+		t.Fatal("handed のメモを from open で取れた")
 	}
 	if !strings.Contains(err.Error(), StatusHanded) || !strings.Contains(err.Error(), StatusOpen) {
 		t.Errorf("理由に今の status と期待した status が無い: %v", err)
 	}
 	if _, _, err := s.Set(item.ID, StatusDiscarded, StatusOpen, ""); err == nil {
-		t.Error("取られたメモを --from open で捨てられた")
+		t.Error("取られたメモを from open で捨てられた")
 	}
 	if list, _ := s.list(); list[0].Status != StatusHanded || list[0].HandedTo != "sid:S2" {
 		t.Errorf("失敗した Set が書き換えた: %+v", list)
 	}
 	if _, _, err := s.Set(item.ID, StatusOpen, StatusHanded, ""); err != nil {
-		t.Errorf("届かなかったメモを --from handed で戻せない: %v", err)
+		t.Errorf("届かなかったメモを from handed で戻せない: %v", err)
 	}
 	if _, _, err := s.Set(item.ID, StatusOpen, "done", ""); err == nil {
 		t.Error("範囲外の from を通した")

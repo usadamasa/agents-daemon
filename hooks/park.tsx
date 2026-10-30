@@ -1,10 +1,12 @@
 import type { EngineInterface, Register } from 'claude-code'
 
-import { daemonBin } from './daemon-bin'
+import { runDaemon } from './daemon-bin'
 import { logEvent } from './log'
+import { definitions } from './protocol'
+import type { Memo, ParkAdded } from '../types'
 
 // パーキングロット (#89) の置く側 (#121 の段 5)。model が呼べる park の tool を登録し、呼ばれたら
-// `agents-daemon park add` に JSON を stdin で渡す。repo はバイナリが --cwd から決める。
+// `agents-daemon park add` に JSON を stdin で渡す。tool の入力の schema は protocol の Memo。repo はバイナリが cwd から決める。
 // cc-premise: 2.1.302 mods tool.register / tool.call の API で書いた
 
 const TOOL = 'park'
@@ -23,28 +25,14 @@ const DESCRIPTION = `作業の途中で見つけた脇のことを、ユーザ�
 
 default_taken には、置いたメモについて今どうしたか (「やらない」、仮に決めた内容) を書く。`
 
-const INPUT_SCHEMA = {
-  type: 'object',
-  properties: {
-    kind: { type: 'string', enum: ['aside', 'scope', 'preference'], description: 'メモの種類' },
-    title: { type: 'string', description: 'メモを 1 行で。同じ repo に同じ title の open のメモがあれば 1 つにまとまる' },
-    detail: { type: 'string', description: '後で取り出した人が文脈を復元できる説明' },
-    files: { type: 'array', items: { type: 'string' }, description: '関係するファイルのパス (repo からの相対か絶対)。別のセッションがそのファイルを触ったとき、その model に伝わる' },
-    default_taken: { type: 'string', description: '今どうしたか (「やらない」、仮に決めた内容)' },
-  },
-  required: ['kind', 'title'],
-}
-
-// model が書ける欄。session_id は model に書かせず、このセッションの ID を入れる。
-const FIELDS = ['kind', 'title', 'detail', 'files', 'default_taken'] as const
-
-type Added = { created: boolean; item: { id: string } }
+// model が書ける欄 (schema の Memo の欄)。session_id は model に書かせず、このセッションの ID を入れる。
+const FIELDS = Object.keys(definitions.Memo.properties) as (keyof Memo)[]
 
 // startPark は session.start で park の tool を登録する (session.start の hook は hooks/register.ts が持つ)。
 // 登録の失敗は engine が画面に一度出すだけなので、理由をログに残してから投げ直す (hook を飛ばす扱いは engine に任せる)。
 export async function startPark($: EngineInterface) {
   try {
-    await $.tool.register({ name: TOOL, description: DESCRIPTION, inputSchema: INPUT_SCHEMA, isDeferred: false })
+    await $.tool.register({ name: TOOL, description: DESCRIPTION, inputSchema: definitions.Memo, isDeferred: false })
   } catch (err) {
     await logEvent($, 'mod.tool-register.failed', { reason: String(err) })
     throw err
@@ -61,18 +49,18 @@ export const registerPark: Register = on => {
 // place は model が書いた欄にこのセッションの ID を足して park add に渡し、置いた結果を model への文面にする。
 // 置いたメモは、開いている pane の次の読み直しで出る。
 async function place($: EngineInterface, args: Record<string, unknown>): Promise<{ result: string } | { deny: string }> {
-  const req: Record<string, unknown> = {}
+  const memo: Record<string, unknown> = {}
   for (const field of FIELDS) {
-    if (args[field] !== undefined) req[field] = args[field]
+    if (args[field] !== undefined) memo[field] = args[field]
   }
-  req.session_id = await $.session.id()
+  // 欄の形はバイナリが schema で確かめる。
+  const req = { session_id: await $.session.id(), cwd: await $.session.cwd(), memo: memo as Memo }
 
-  const argv = [await daemonBin($), 'park', 'add', '--cwd', await $.session.cwd()]
-  const { exitCode, stdout, stderr } = await $.process.run(argv, { stdin: JSON.stringify(req), timeoutMs: 10000 })
+  const { exitCode, stdout, stderr } = await runDaemon($, 'park add', req)
   if (exitCode !== 0) return { deny: `メモを置けませんでした: ${stderr.trim() || `exit ${exitCode}`}` }
 
-  const added = JSON.parse(stdout) as Added
-  const proceed = typeof req.default_taken === 'string' && req.default_taken !== '' ? `既定 (${req.default_taken}) で進めてください。` : '既定で進めてください。'
+  const added = JSON.parse(stdout) as ParkAdded
+  const proceed = req.memo.default_taken ? `既定 (${req.memo.default_taken}) で進めてください。` : '既定で進めてください。'
   if (added.created) return { result: `メモを置きました (${added.item.id})。${proceed}` }
   return { result: `既に置かれていたメモ (${added.item.id}) にまとめました。${proceed}` }
 }

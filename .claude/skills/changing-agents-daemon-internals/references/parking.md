@@ -33,13 +33,14 @@ handed / discarded のメモが保持期間 (7 日) で消えた後は、descrip
 
 メモの見せ方と操作は `hooks/parking.ts` が持ち、DAG の描き方には依存しない。メモの行は最後に置かれた時刻 (JST) を
 先頭に出し、どのメモが古いかを列で見比べられるようにする。操作はどれも
-`agents-daemon park ... --session <id> --cwd <cwd>` を呼ぶ (session はログに残すだけで、メモの絞り込みには使わない)。
+`agents-daemon park ...` に開いたセッションの `session_id` を添えた JSON を stdin で渡す (session はログに残すだけで、
+メモの絞り込みには使わない)。入力の形は `protocol` の schema の `Park*Request` が持つ。
 
-- 捨てる: `park set <id> --status discarded`
+- 捨てる: `park set` を status discarded で
 - 古いメモをまとめて捨てる (`Discard N older than 30d`): 最後に置かれてから 30 日より経った open のメモがあるときだけ
-  パーキングの見出しに出し、`park discard --days 30` で open のメモをまとめて discarded にする。30 日はバイナリ
+  パーキングの見出しに出し、`park discard` (days 30) で open のメモをまとめて discarded にする。30 日はバイナリ
   (`parking` の `StaleAfter`) が持ち、`deps` の `stale_memo_days` で mod に渡す。CLI に既定は無い。housekeeping が
-  open を 90 日で黙って消す前に、人が見て捨てる区切り (関係は `daemon/retention_test.go`)。捨てたメモは 7 日残り、`logs --events` の `park.discard` に残る id を `park set <id> --status open` で戻せる
+  open を 90 日で黙って消す前に、人が見て捨てる区切り (関係は `daemon/retention_test.go`)。捨てたメモは 7 日残り、`logs --events` の `park.discard` に残る id を `park set` で status open に戻せる
 - タスクにする: メモの repo が開いたセッションの repo (`here`) なら自セッション (`このセッション`) を先に、続けて同じ repo の
   `sessions` へ TaskCreate を頼む文面を送る。文面は着手の時期を指示せず受け手の計画 (タスクの依存) に
   任せ、タスクの description にメモの id を入れるよう頼む (既にこのメモを扱うタスクがあれば書き足すだけ)。
@@ -52,23 +53,23 @@ handed / discarded のメモが保持期間 (7 日) で消えた後は、descrip
   [deps.md](deps.md))。開いてすぐ選んでも捨てないよう `Discard` は末尾に置く。補足欄 (`✎`) に書いた文は渡す文面の末尾に足す (#310)
 - 新しいセッションを起こして渡す (宛先の `new session: <repo>`): 生きているセッションの
   無い repo へ渡す経路 (#162)。宛先の後ろに repo の候補 (メモの repo、開いたセッションの repo、ほかの repo) を並べ、
-  候補に無い repo は `new session: other repo…` を選ぶと出る絶対パスの欄で指定する。選んだ repo で `agents-daemon spawn --repo <path>` に本文を stdin で
-  渡す。バイナリが `claude --session-id <uuid> --model $CLAUDE_CODE_SUBAGENT_MODEL -- <本文>` を repo を cwd にした
+  候補に無い repo は `new session: other repo…` を選ぶと出る絶対パスの欄で指定する。選んだ repo と本文を `agents-daemon spawn` に
+  stdin の `SpawnRequest` で渡す。バイナリが `claude --session-id <uuid> --model $CLAUDE_CODE_SUBAGENT_MODEL -- <本文>` を repo を cwd にした
   rex の window に起こし (`spawn`、フォーカスは奪わず、終了後も pane を残す)、claude が前景になってから
-  `{session_id, pane_id, foreground}` を返す。待ち切れたときは `foreground: false` と `detail` で返し、mod はメモを
+  `SpawnResult` を返す。待ち切れたときは `foreground: false` と `detail` で返し、mod はメモを
   handed のまま残して pane を知らせる (起きたか分からないメモを戻すと、押し直しで 2 つ目が起きる)。本文は最初の
   ターンとして入るので、peer メッセージの inbox を待たない。文面は起こした経緯の 1 行に続けて peer へ送るものと同じで、
   issue はメモの repo ではなく起こした repo を起票先にする。モデルを subagent 用に揃えるのは peer-sessions skill と同じ
-- タスクにする・issue にするよう頼むは、送る前に `park set <id> --status handed --from open` と宛先
-  (`--to-session <id>` か `--to-repo <path>`) でメモを取る (今の status が open でなければ失敗し、送らない。2 つの
+- タスクにする・issue にするよう頼むは、送る前に `park set` (status handed、from open) と宛先
+  (to_session か to_repo) でメモを取る (今の status が open でなければ失敗し、送らない。2 つの
   セッションが同じメモを渡そうとしても取れるのは 1 つ)。宛先は status と同じ書き込みで書く (別の `park set` にすると
   宛先の無い handed が見える)。`$.session.send` が届かなかった、`$.prompt.submit` が drop された、`spawn` が window を
-  作れなかったときは `--status open --from handed` で戻し、宛先も空になる。Discard も `--from open` で、取られたメモは
+  作れなかったときは status open、from handed で戻し、宛先も空になる。Discard も from open で、取られたメモは
   捨てない。手順の交錯で破れない性質は `models/handoff` が持ち、
   実装に対しては `parking` と `tasklog` の `invariants_test.go` が実物の Store の交錯で確かめる
 <!-- cc-premise: 2.1.306 mods $.prompt.submit は idle になってから自分のターンとして入り、drop で入らなかったことが分かる -->
 <!-- cc-premise: 2.1.306 cli claude [prompt] は最初のターンの本文、--session-id <uuid> でセッション ID を固定できる -->
-- パーキングへ移す (`To parking`): 終了したセッションの未完了のタスクのノードを `park adopt <ノードの key>` (`task:<sid>/<tid>`) で
+- パーキングへ移す (`To parking`): 終了したセッションの未完了のタスクのノードを `park adopt` (ref にノードの key `task:<sid>/<tid>`) で
   出自 `adopted` (種類 `scope`) のメモにし、タスクの記録を消す。model の tool は出自を書けない。pane は daemon が
   status.json を書いているとき (`updated_at` があるとき) だけこの操作を出し、バイナリは動いている daemon がタスクの
   記録より後に書いた status.json に pane が無いことを確かめてから移す (`daemonstate` の `SessionExited`)。
@@ -88,8 +89,8 @@ offset を揃えない。どの offset で書いても同じ瞬間に戻せる�
 ## park tool
 
 `hooks/park.tsx` は model が呼べる tool `mcp__agents-daemon__park` を登録する (パーキングロットの置く側)。
-呼ばれたら `agents-daemon park add --cwd <cwd>` に、model が書いた欄とこのセッションの `session_id` を JSON で
-stdin に渡す。`session_id` と cwd は inputSchema に無く、model は書けない。結果の `created` で「メモを置きました」と
+呼ばれたら `agents-daemon park add` に、model が書いた欄 (memo) とこのセッションの `session_id` と cwd を JSON で
+stdin に渡す。inputSchema は schema の `Memo` そのもので、`session_id` と cwd は model が書けない。結果の `created` で「メモを置きました」と
 「既に置かれていたメモにまとめました」を分けて返す。
 依存図の pane は開いている間だけ自分で読み直すので、置いたメモは次の読み直しで pane に出る。
 <!-- cc-premise: 2.1.302 hooks mods の tool.register / tool.call -->
@@ -99,7 +100,7 @@ stdin に渡す。`session_id` と cwd は inputSchema に無く、model は書�
 ## ファイルのメモの通知
 
 `hooks/notice.ts` は main の model の Read / Edit / Write が成功したら、
-`park list --status open --here --session <id> --cwd <cwd>` (この repo の open のメモ) を読み、触ったファイルを
+`park list` でこの repo の open のメモ (status open、here) を読み、触ったファイルを
 `files` に持つメモのうち、ほかのセッションも置いたものを tool の結果の `context` に添える。人には出さない。
 
 - パスはメモの `repo` からの相対に揃えて比べる。repo の下の worktree (`.claude/worktrees/<name>/`) の中のパスは

@@ -4,8 +4,9 @@ tasks:
   build:
     desc: cmd/ の全 Go バイナリを bin/ にビルド
     # -o に末尾スラッシュ付きのディレクトリを渡すと、go は main パッケージだけを選んで出力する。
+    # protocol の生成器 (internal/protocol/generate) は開発用なので含めない。
     cmds:
-      - go build -o ./bin/ ./...
+      - go build -o ./bin/ ./cmd/...
 
   install:
     desc: agents-daemon を hook と同じキャッシュ上の場所へビルドする
@@ -35,6 +36,11 @@ tasks:
     desc: mod (hooks/ と types/) を ci/mod-types/ に写した型で tsc にかける。手元と worktree と CI で同じ型を使う
     cmds:
       - tsc -p ci/mod-types
+
+  protocol:generate:
+    desc: protocol.schema.json から Go の型と mod の型 (types/index.d.ts の生成の印の間、hooks/protocol.ts) を作り直す
+    cmds:
+      - go generate ./internal/protocol
 
   mod-types:sync:
     desc: .claude-plugin/types/ の型を ci/mod-types/ へ写す。Claude Code を上げて mod の API を使い始めたら打つ

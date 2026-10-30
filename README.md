@@ -112,8 +112,11 @@ agents-daemon dream mine --project <canonical>   # memory と skill を突き合
 agents-daemon dream stage --project <canonical>  # 候補の承認レポートを ./tmp/dream/ に書く
 agents-daemon dream forget <memory-name>...      # auto memory を消す (sandbox の外で動かす)
 agents-daemon prune-worktrees --dry-run          # 回収対象の worktree を表示する (SessionStart hook が --hook 付きで呼ぶ)
-agents-daemon spawn --repo /path/to/repo < prompt.txt  # stdin を最初のターンにした Claude Code を repo の rex window に起こす (依存図の pane が呼ぶ)
+agents-daemon spawn < request.json               # prompt を最初のターンにした Claude Code を repo の rex window に起こす (依存図の pane が呼ぶ)
 ```
+
+mod が呼ぶコマンド (`deps`、`park`、`edge add` / `rm`、`spawn`、`event-log`) は入力を stdin の JSON で受ける。
+形は `protocol/protocol.schema.json` が持つ。
 
 ## 開発
 

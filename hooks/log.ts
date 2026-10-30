@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
-import { daemonBin } from './daemon-bin'
+import { runDaemon } from './daemon-bin'
 
 // mod の出来事を出来事のログ (eventlog) に残す。mod はファイルを直接書けないので
 // `agents-daemon event-log` に渡し、このセッションの ID を添える。
@@ -15,9 +15,8 @@ export type Fields = Record<string, string | number | boolean>
 // logEvent は出来事を 1 行書く。書けなくても (バイナリがまだ無いなど) 呼び出し元を止めない。
 export async function logEvent($: EngineInterface, event: string, fields: Fields = {}) {
   try {
-    const args = Object.entries(fields).map(([key, value]) => `${key}=${value}`)
-    const argv = [await daemonBin($), 'event-log', '--session', await $.session.id(), '--', event, ...args]
-    await $.process.run(argv, { timeoutMs: 10000 })
+    const entries = Object.entries(fields).map(([key, value]) => ({ key, value: String(value) }))
+    await runDaemon($, 'event-log', { session_id: await $.session.id(), event, fields: entries })
   } catch {
     // ログは補助なので、書けなかったことはどこにも出さない。
   }

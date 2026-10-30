@@ -17,6 +17,7 @@ agents-daemon dream harvest --incremental      # 直近の transcript を集め�
 agents-daemon dream mine|stage|adopt|forget    # 記憶階層の consolidation の実行系 (agents-daemon:dream skill)
 agents-daemon prune-worktrees [--dry-run]      # 放置された Claude Code の worktree を回収する (SessionStart hook が --hook 付きで呼ぶ)
 agents-daemon edge add|rm|list                 # セッションをまたぐ作業の依存を書く・消す・一覧する (下の「セッションをまたぐ辺を書く」)
+agents-daemon park list|set                    # パーキングのメモを一覧する・書き換える (stdin の JSON で受ける)
 ```
 
 ### `--dry-run`
@@ -73,23 +74,25 @@ Claude Code の sandbox の中で叩くと、`git worktree remove` は main work
 ### セッションをまたぐ辺を書く
 
 作業を別のセッションへ渡す側が、渡すときに「何の後か」を書く (#134、手順は `agents-daemon:peer-sessions` skill)。
-辺は「`--before` が済まないと `--after` を始められない」を表す。結果は JSON で stdout に出る。
+辺は「before が済まないと after を始められない」を表す。結果は JSON で stdout に出る。
 渡す操作から両端を自動で決めることはせず、辺の無い生きているセッションへ `SendMessage` で送ると、
 その tool の結果で送った model に辺の書き方を伝える (#172)。
 
+mod が呼ぶコマンド (`deps`、`park`、`edge add` / `rm`、`spawn`、`event-log`) は入力を stdin の JSON だけで受ける。
+形と欄の意味はバイナリに埋め込んだ JSON Schema (`protocol/protocol.schema.json`) の `$defs` が持ち、
+外れた入力は schema の検証の文言で弾く。人が打つときも同じ JSON を渡す。
+
 ```sh
-agents-daemon edge add \
-  --before session:ad-135 --before-cwd ~/src/github.com/usadamasa/agents-daemon \
-  --after issue:usadamasa/agents-daemon#143 --after-cwd ~/src/github.com/usadamasa/agents-daemon \
-  --note "段 4 のリリースの後"                       # {"created": true, "edge": {...}}
-agents-daemon edge rm --before ... --before-cwd ... --after ... --after-cwd ...   # {"removed": true, "id": "..."}
+printf '%s' '{"before":{"ref":"session:ad-135","cwd":"/abs/repo"},"after":{"ref":"issue:usadamasa/agents-daemon#143","cwd":"/abs/repo"},"note":"段 4 のリリースの後"}' \
+  | agents-daemon edge add                                 # EdgeAddRequest → EdgeAdded
+printf '%s' '{"before":{...},"after":{...}}' | agents-daemon edge rm   # EdgeRemoveRequest → EdgeRemoved
 agents-daemon edge list --cwd <dir> [--here | --repo <main worktree>] [--ref <参照>]
 ```
 
 - 参照は `session:<セッション名>` (`claude --name` の名前)、`sid:<session_id>`、`issue:<owner>/<repo>#<番号>`、
   `pr:<owner>/<repo>#<番号>`、`task:<session_id>/<task_id>` のどれか。依存図のノードの key はこの形なので、
   `deps` の JSON の key をそのまま渡せる (TodoWrite の項目 `todo:` は端点にできない)
-- `--before-cwd` / `--after-cwd` は、その作業のセッションを起こしたディレクトリ (絶対パス)。端点の repo はここから決め、
+- 端点の cwd は、その作業のセッションを起こしたディレクトリ (絶対パス)。端点の repo はここから決め、
   書く側のセッション自身の cwd は見ない
 - 同じ参照の組 (向きを含む) は同じ辺になる。登録し直すと note と repo を書き直し、保持期間 (7 日) を数え直す
 - `session:<名前>` の端点は、daemon が tick ごとにセッション台帳 (`sessions/`) を見て 1 回だけ session ID に結びつけ、
@@ -102,31 +105,17 @@ agents-daemon edge list --cwd <dir> [--here | --repo <main worktree>] [--ref <�
   `edge add` / `edge rm` しても同じ辺に当たる。`edge add` は結びついた端点を名前に戻さない
 - `list` はすべての辺を出す。`--ref` は今の参照 (結びついた後なら `sid:`) で絞る。`--cwd` は `--here` の基準で、`--repo` / `--here` / `--ref` はどちらかの端点で絞る
 
-### パーキングのメモを一覧する
+### パーキングのメモを一覧する・書き換える
 
 ```sh
-agents-daemon park list --cwd <dir> [--here | --repo <main worktree>] [--status open|handed|discarded]
-agents-daemon park list --status open --task <task_id> --session <session_id> --cwd <dir>
+printf '%s' '{"status":"open","here":true,"cwd":"/abs/dir"}' | agents-daemon park list   # ParkListRequest → ParkingItemList
+printf '%s' '{"id":"<id>","status":"open"}' | agents-daemon park set                      # 渡せなかったメモを手で戻す
 ```
 
-- `--here` は `--cwd` の repo (linked worktree でも main worktree の鍵) で絞る。`--repo` とは併用できない。
-  ファイルのメモの通知 (mod) は `--status open --here` で読む
-- `--task` は `--session` のセッションがそのタスクの途中で置いたメモで絞る
 - メモは種類 `kind` (aside / scope / preference) と出自 `origin` を持つ。`placed` は model が park tool で置いたメモ、
-  `adopted` は終了したセッションの未完了のタスクを依存図の pane の `To parking` (`park adopt task:<sid>/<tid>`) で
+  `adopted` は終了したセッションの未完了のタスクを依存図の pane の `To parking` (`park adopt`) で
   移したメモ (種類は scope)
 - handed のメモは宛先 `handed_to` (`sid:<session_id>` か、新しく起こしたセッションの `repo:<path>`) を持つ
-
-### パーキングのメモの status を書き換える
-
-```sh
-agents-daemon park set <id> --status open                                        # 渡せなかったメモを手で戻す
-agents-daemon park set <id> --status handed --from open --to-session <session_id> # 渡す前に取る (pane が使う)
-agents-daemon park set <id> --status handed --from open --to-repo <abs path>      # 新しく起こすセッションへ渡す前に取る
-```
-
-- handed にするときは宛先 (`--to-session` か `--to-repo`) が要り、ほかの status にすると宛先は空になる
-- `--from` を付けると、今の status がそれと違うときは書き換えずにエラーで返す
 
 ### `--json`
 

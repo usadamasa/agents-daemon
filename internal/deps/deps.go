@@ -19,73 +19,14 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/parking"
+	"github.com/usadamasa/agents-daemon/internal/protocol"
 	"github.com/usadamasa/agents-daemon/internal/ref"
 	"github.com/usadamasa/agents-daemon/internal/tasklog/record"
 )
 
-// ParkingCard は repo の open のメモ 1 つ (parking の Item)。
-type ParkingCard struct {
-	ID   string `json:"id"`
-	Kind string `json:"kind"`
-	// Origin はメモの出自 (placed / adopted、parking)。
-	Origin       string   `json:"origin"`
-	Title        string   `json:"title"`
-	Detail       string   `json:"detail,omitempty"`
-	Files        []string `json:"files,omitempty"`
-	DefaultTaken string   `json:"default_taken,omitempty"`
-	// Sources は置いたセッションの新しい順。
-	Sources []ParkingSource `json:"sources"`
-}
-
-// ParkingSource はメモを置いたセッション 1 つ。
-type ParkingSource struct {
-	SessionID string `json:"session_id"`
-	// TaskRef は置いたときに進めていたタスクのノードの key (ref の task:。無ければ省く)。
-	TaskRef string `json:"task_ref,omitempty"`
-	// Session はノードと同じ規則で付けたセッションの短い名前。
-	Session string `json:"session"`
-	Live    bool   `json:"live"`
-	// Detail はまとめたときに後から置いた側が書いた detail。
-	Detail string    `json:"detail,omitempty"`
-	At     time.Time `json:"at"`
-}
-
-// Session は repo で生きているセッション 1 つ (メモを渡す宛先)。
-type Session struct {
-	SessionID string `json:"session_id"`
-	// Session は表示名 (セッション名。同名のセッションがあれば session ID の先頭を足し、名前が無ければ session ID の先頭)。
-	Session string `json:"session"`
-	// Subject はそのセッションが何をしているか。自動で付いたセッション名だけでは分からないので、宛先の名前に添える。
-	Subject string `json:"subject"`
-	Live    bool   `json:"live"`
-}
-
-// Repo は repo 1 つ。
-type Repo struct {
-	// Repo は鍵 (main worktree のパス、git の外なら cwd)。パーキングのメモの repo と同じ規則。
-	Repo  string `json:"repo"`
-	Title string `json:"title"`
-	// Sessions はこの repo で作業している生きているセッション (表示名、session ID の順)。
-	Sessions []Session `json:"sessions"`
-	// Memos はこの repo で置かれた open のメモ (置いた順)。
-	Memos []ParkingCard `json:"memos"`
-}
-
-// Deps は `agents-daemon deps` が出す JSON の全体。
-type Deps struct {
-	DaemonRunning bool `json:"daemon_running"`
-	// UpdatedAt は status.json の更新時刻。daemon が動いていないか、まだ書いていなければ無い。
-	UpdatedAt *time.Time `json:"updated_at,omitempty"`
-	// Here は開いたセッションの cwd の repo の鍵 (Repo.Repo と同じ規則)。mod が自分の repo を repos から引くのに
-	// 使う。その repo が無ければ repos に無い鍵になる。
-	Here string `json:"here"`
-	// StaleMemoDays は open のメモを「古い」とみなす日数 (parking.StaleAfter)。pane はこの日数より前に最後に置かれた
-	// メモをまとめて捨てるボタンを出し、`park discard --days` に渡す。
-	StaleMemoDays int    `json:"stale_memo_days"`
-	Repos         []Repo `json:"repos"`
-	// Graph はタスクの依存の DAG (#134)。repos と同じ記録から組む。
-	Graph graph.Graph `json:"graph"`
-}
+// Deps は `agents-daemon deps` が出す JSON の全体。形は protocol の schema が持つ。セッションの表示名はノードと
+// 同じ規則で付け、StaleMemoDays は parking.StaleAfter の日数。
+type Deps = protocol.DepsData
 
 // input は依存図を組む材料。
 type input struct {
@@ -108,7 +49,7 @@ type input struct {
 
 // build は依存図を組む。
 func build(in input) Deps {
-	d := Deps{Repos: []Repo{}, StaleMemoDays: int(parking.StaleAfter / (24 * time.Hour))}
+	d := Deps{Repos: []protocol.DepsRepo{}, StaleMemoDays: int(parking.StaleAfter / (24 * time.Hour))}
 	var panes map[string]*daemonstate.PaneStatus
 	d.DaemonRunning, d.UpdatedAt, panes = livePanes(in)
 	cards := collect(in, panes)
@@ -214,9 +155,9 @@ func sessionSubject(p *daemonstate.PaneStatus, name string) string {
 
 // arrange は生きているセッションとメモを repo へ分けて並べる。セッションは作業の cwd の repo に入る (タスクの無い
 // セッションは pane の cwd)。names はセッションの表示名、sessions は session ID → セッション名。
-func arrange(cards []graph.Card, memos []parking.Item, panes map[string]*daemonstate.PaneStatus, names, sessions map[string]string, l locator) []Repo {
+func arrange(cards []graph.Card, memos []parking.Item, panes map[string]*daemonstate.PaneStatus, names, sessions map[string]string, l locator) []protocol.DepsRepo {
 	type entry struct {
-		repo *Repo
+		repo *protocol.DepsRepo
 		// subjects はこの repo のセッションごとの見出しの候補。
 		subjects map[string]*subjectPick
 	}
@@ -224,7 +165,7 @@ func arrange(cards []graph.Card, memos []parking.Item, panes map[string]*daemons
 	repoOf := func(key, title string) *entry {
 		e, ok := byRepo[key]
 		if !ok {
-			e = &entry{repo: &Repo{Repo: key, Title: title, Sessions: []Session{}, Memos: []ParkingCard{}}, subjects: map[string]*subjectPick{}}
+			e = &entry{repo: &protocol.DepsRepo{Repo: key, Title: title, Sessions: []protocol.DepsSession{}, Memos: []protocol.ParkingCard{}}, subjects: map[string]*subjectPick{}}
 			byRepo[key] = e
 		}
 		return e
@@ -245,14 +186,14 @@ func arrange(cards []graph.Card, memos []parking.Item, panes map[string]*daemons
 		e := repoOf(m.Repo, filepath.Base(m.Repo))
 		e.repo.Memos = append(e.repo.Memos, parkingCard(m, names, panes))
 	}
-	out := make([]Repo, 0, len(byRepo))
+	out := make([]protocol.DepsRepo, 0, len(byRepo))
 	for _, e := range byRepo {
 		for id, pick := range e.subjects {
 			subject := pick.title
 			if !pick.found {
 				subject = sessionSubject(panes[id], sessions[id])
 			}
-			e.repo.Sessions = append(e.repo.Sessions, Session{SessionID: id, Session: names[id], Subject: subject, Live: true})
+			e.repo.Sessions = append(e.repo.Sessions, protocol.DepsSession{SessionID: id, Session: names[id], Subject: subject, Live: true})
 		}
 		// tick ごとに並びが揺れないよう、表示名、session ID の順に並べる。宛先のボタンはこの順に出る。
 		sort.Slice(e.repo.Sessions, func(i, j int) bool {
@@ -310,14 +251,14 @@ func (s *subjectPick) offer(c graph.Card) {
 }
 
 // parkingCard はメモを repo の memos の 1 つにする。sources は新しい順に並べる。
-func parkingCard(m parking.Item, names map[string]string, panes map[string]*daemonstate.PaneStatus) ParkingCard {
-	c := ParkingCard{ID: m.ID, Kind: m.Kind, Origin: m.Origin, Title: m.Title, Detail: m.Detail, Files: m.Files, DefaultTaken: m.DefaultTaken, Sources: []ParkingSource{}}
+func parkingCard(m parking.Item, names map[string]string, panes map[string]*daemonstate.PaneStatus) protocol.ParkingCard {
+	c := protocol.ParkingCard{ID: m.ID, Kind: m.Kind, Origin: m.Origin, Title: m.Title, Detail: m.Detail, Files: m.Files, DefaultTaken: m.DefaultTaken, Sources: []protocol.ParkingSource{}}
 	for _, s := range m.Sources {
 		var task string
 		if s.TaskID != "" {
 			task = ref.Task(s.SessionID, s.TaskID)
 		}
-		c.Sources = append(c.Sources, ParkingSource{SessionID: s.SessionID, TaskRef: task, Session: names[s.SessionID], Live: panes[s.SessionID] != nil, Detail: s.Detail, At: s.At})
+		c.Sources = append(c.Sources, protocol.ParkingSource{SessionID: s.SessionID, TaskRef: task, Session: names[s.SessionID], Live: panes[s.SessionID] != nil, Detail: s.Detail, At: s.At})
 	}
 	sort.SliceStable(c.Sources, func(i, j int) bool { return c.Sources[i].At.After(c.Sources[j].At) })
 	return c

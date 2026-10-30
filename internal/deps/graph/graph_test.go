@@ -62,7 +62,7 @@ func TestStuck(t *testing.T) {
 		{StateCompleted, true, false, false},
 	} {
 		n := Node{State: c.state, Deadlock: c.deadlock}
-		n.markStuck()
+		markStuck(&n)
 		if n.Halted != c.halted || n.Stuck != c.stuck {
 			t.Errorf("%s deadlock=%v: halted/stuck = %v/%v, want %v/%v", c.state, c.deadlock, n.Halted, n.Stuck, c.halted, c.stuck)
 		}

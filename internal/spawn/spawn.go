@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
+	"github.com/usadamasa/agents-daemon/internal/protocol"
 )
 
 // 既定の待ち時間。claude は login shell を経て起きるので数秒かかることがある。
@@ -50,15 +51,8 @@ type Request struct {
 	MultiplexerSession string
 }
 
-// Result は起こしたセッション。JSON で stdout に出す。
-type Result struct {
-	SessionID string `json:"session_id"`
-	PaneID    string `json:"pane_id"`
-	// Foreground は pane で claude が前景になった (本文が最初のターンとして入った) か。false なら待ち切れで、pane は残り
-	// claude が起きているかもしれない。呼び出し側はメモを戻さず、Detail を人に見せる。
-	Foreground bool   `json:"foreground"`
-	Detail     string `json:"detail,omitempty"`
-}
+// Result は起こしたセッション。JSON で stdout に出す。形は protocol の schema が持つ。
+type Result = protocol.SpawnResult
 
 // Runner は起こす手段。テストは Host を差し替える。
 type Runner struct {

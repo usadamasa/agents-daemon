@@ -74,7 +74,7 @@ export async function toParking($: EngineInterface, node: GraphNode): Promise<st
   }
   const reopened: string[] = []
   for (const memo of kept.filter(m => m.status === 'handed')) {
-    const failure = await park($, ['set', memo.id, '--status', 'open', '--from', 'handed'])
+    const failure = await park($, 'park set', { id: memo.id, status: 'open', from: 'handed' })
     if (failure !== '') return `メモ ${memo.id} を open に戻せませんでした: ${failure}${await reclaim($, reopened)}`
     reopened.push(memo.id)
   }
@@ -90,7 +90,7 @@ async function reclaim($: EngineInterface, ids: string[]): Promise<string> {
   const self = await $.session.id()
   const failed: string[] = []
   for (const id of ids) {
-    const failure = await park($, ['set', id, '--status', 'handed', '--from', 'open', '--to-session', self])
+    const failure = await park($, 'park set', { id, status: 'handed', from: 'open', to_session: self })
     if (failure !== '') failed.push(`${id}: ${failure}`)
   }
   return failed.length === 0 ? '。メモは handed に戻しました' : `。メモを handed に戻せませんでした (${failed.join('; ')})`

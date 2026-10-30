@@ -164,7 +164,7 @@ func checkPairs(s Store) string {
 	}
 	written, current := map[[2]string]bool{}, map[[2]string]bool{}
 	for _, e := range got {
-		w := [2]string{e.Before.written(), e.After.written()}
+		w := [2]string{writtenRef(e.Before), writtenRef(e.After)}
 		c := [2]string{e.Before.Ref, e.After.Ref}
 		switch {
 		case e.ID != edgeID(w[0], w[1]):

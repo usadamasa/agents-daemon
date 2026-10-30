@@ -25,12 +25,12 @@ TLC は devShell の `tlaplus` (`tlc`)。CI では回さない。`scripts/model-
 
 | cfg | 不変条件 | 成り立つ理由 |
 | ---- | ---- | ---- |
-| `Handoff.cfg` | `AtMostOneDelivery`: 1 つのメモは高々 1 つの宛先に渡る | 送る前に `park set --status handed --from open` で取る。lock の中で読んでから書くので取れるのは 1 つの mod だけ |
+| `Handoff.cfg` | `AtMostOneDelivery`: 1 つのメモは高々 1 つの宛先に渡る | 送る前に `park set` (status handed、from open) で取る。lock の中で読んでから書くので取れるのは 1 つの mod だけ |
 | | `AtMostOneSession`: 1 つのメモから起きるセッションは高々 1 つ | 取ってから spawn する。claude が前景にならなかった (起きたか分からない) メモは戻さず handed のまま人に知らせる |
 | | `LiveTaskKept`: 生きているセッションのタスクの記録は adopt で消えない | Adopt は、今の daemon がタスクの記録より後に書いた status.json に pane が無いときだけ通す |
 | | `AdoptLeavesOne`: adopt でメモかタスクの一方は残る | メモを書いてから記録を消す |
-| | `HandedWhenDelivered`: 届いたメモは handed のまま | Discard も `--from open` で、取られたメモを上書きしない |
-| | `HandedHasDestination`: handed のメモは宛先 (`handed_to`) を持つ | 取るときに宛先を同じ `park set` (`--to-session` / `--to-repo`) で書く |
+| | `HandedWhenDelivered`: 届いたメモは handed のまま | Discard も from open で、取られたメモを上書きしない |
+| | `HandedHasDestination`: handed のメモは宛先 (`handed_to`) を持つ | 取るときに宛先を同じ `park set` (to_session / to_repo) で書く |
 | | `OnlyHandedHasDestination`: handed でないメモは宛先を持たない | 戻す・捨てる `park set` は宛先を空にする |
 | | `DeliveredWhereRecorded`: 届いたメモの宛先は届いた先と同じ | mod は取ったときの宛先へ送り、spawn は起こす先の repo のまま書き直さない |
 | `HandoffSplit.cfg` | `HandedHasDestination` が破れる (`violated` を期待) | 取るのと宛先を書くのを別の `park set` にすると、宛先の無い handed が見える。1 回の `park set` にした根拠 |
@@ -58,7 +58,7 @@ TLC は devShell の `tlaplus` (`tlc`)。CI では回さない。`scripts/model-
 | `RecordsComplete` | `tasklog/invariants_test.go` |
 | `BindOnce` / `NoResurrect` と、書いたときの参照の組・今の参照の組ごとに辺が 1 本 | `edge/bind_invariants_test.go` |
 
-mod の側 (取る → 送る → 届かなければ戻す、spawn で前景にならなければ戻さない、Discard は `--from open`) は
+mod の側 (取る → 送る → 届かなければ戻す、spawn で前景にならなければ戻さない、Discard は from open) は
 `hooks/deps.test.tsx` が `park` と `spawn` の呼び出しの列で固定する。`AtMostOnce` / `NoneMissed` / `Informed` は
 `hooks/notice.test.tsx` が並列の `tool.call` と `session.compact` で固定する。
 
@@ -67,7 +67,7 @@ mod の側 (取る → 送る → 届かなければ戻す、spawn で前景に�
 - ファイルの書き込みは `statefile.WriteJSONAtomic` なので、1 回の書き込みを原子的な 1 ステップにしている。
 - 送信と spawn の成否、`park set` の成否、セッションの終了、daemon の生き死には非決定。各 mod が同じメモを渡そうとする
   回数は `MaxAttempts` まで。
-- `park set` の戻しが失敗したメモは handed のまま残る (人が `park set <id> --status open` で戻す)。これは性質を破らない
+- `park set` の戻しが失敗したメモは handed のまま残る (人が `park set` で status open に戻す)。これは性質を破らない
   (届いていないメモが handed なだけ) ので、モデルでも失敗を許している。
 - 始まりの状態では daemon がそのセッションを生きていると見ている。タスクの記録より古い status.json は Adopt が受け付けない
   ので、「記録はあるのに daemon がまだそのセッションを見ていない」状態は始まりに置かない。

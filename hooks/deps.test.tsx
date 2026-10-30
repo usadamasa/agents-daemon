@@ -9,17 +9,17 @@ const BIN = '/home/u/.cache/agents-daemon/bin/agents-daemon'
 const CHAIN = 'success'
 const CWD = '/src/home/agents-daemon'
 
-// world は plugin の下にいる engine の代わりを立てる。process.run は run が答え、呼ばれた argv (バイナリの後) を
-// ran に残す。出来事のログ (hooks/log.ts) は log.test.tsx が見るので残さない。now は mod の時計の始点
+// world は plugin の下にいる engine の代わりを立てる。process.run は run が答え、呼ばれた argv の後に stdin の JSON を
+// 読んだものを並べて ran に残す。出来事のログ (hooks/log.ts) は log.test.tsx が見るので残さない。now は mod の時計の始点
 // (古いメモの判定に使う)。submitted は自セッションの入力へ渡した文面 (prompt.submit)。drop を渡すと入らなかった
 // ことにする。undelivered を渡すと peer へのメッセージが届かなかったことにする。
 function world(on: On, run: (argv: readonly string[]) => ProcessRunResult = () => output('{}'), now = Date.parse('2026-10-19T00:00:00Z'), drop = '', undelivered = '') {
-  const ran: string[][] = []
+  const ran: unknown[][] = []
   const opened: string[] = []
   const closed: string[] = []
   const sent: { to: unknown; text: string }[] = []
   const submitted: string[] = []
-  // fed は spawn の stdin に渡した本文。
+  // fed は spawn に渡した本文 (stdin の prompt)。ran の spawn には prompt を除いて残す。
   const fed: string[] = []
   mock.env(on, { HOME: '/home/u' })
   mock.clock(on, { now })
@@ -34,8 +34,9 @@ function world(on: On, run: (argv: readonly string[]) => ProcessRunResult = () =
   on('session.id', async () => ({ value: 'SELF' }))
   on('session.cwd', async () => ({ value: CWD }))
   on('process.run', async (_$, e) => {
-    if (e.argv[1] !== 'event-log') ran.push([...e.argv])
-    if (e.argv[1] === 'spawn') fed.push(e.init?.stdin ?? '')
+    const { prompt, ...req } = JSON.parse(e.init?.stdin ?? '{}') as Record<string, unknown>
+    if (typeof prompt === 'string') fed.push(prompt)
+    if (e.argv[1] !== 'event-log') ran.push([...e.argv, req])
     return { value: run(e.argv) }
   })
   on('session.send', async (_$, e) => {
@@ -59,7 +60,7 @@ function output(stdout: string, exitCode = 0, stderr = ''): ProcessRunResult {
 }
 
 // operations は ran のうち、操作の後の読み直し (deps) を除いたもの。
-function operations(ran: string[][]): string[][] {
+function operations(ran: unknown[][]): unknown[][] {
   return ran.filter(argv => argv[1] !== 'deps')
 }
 
@@ -235,13 +236,18 @@ async function pick(ui: UI, value: string) {
   await ui.press({ key: `op:${value}` })
 }
 
-const SELF_ARGS = ['--session', 'SELF', '--cwd', CWD]
+// parkSet は pane が開いたセッション (SELF) から走らせる park set。
+const parkSet = (req: Record<string, string>) => [BIN, 'park', 'set', { ...req, session_id: 'SELF' }]
 // claim は送る前にメモを取る park set (宛先を同じ park set で書く)、REVERT は届かなかったメモを戻す park set。
-const claim = (...to: string[]) => [BIN, 'park', 'set', MEMO.id, '--status', 'handed', '--from', 'open', ...to, ...SELF_ARGS]
-const CLAIM_W = claim('--to-session', 'W')
-const CLAIM_SELF = claim('--to-session', 'SELF')
-const CLAIM_DOTFILE = claim('--to-repo', '/src/home/dotfile')
-const REVERT = [BIN, 'park', 'set', MEMO.id, '--status', 'open', '--from', 'handed', ...SELF_ARGS]
+const claim = (to: Record<string, string>) => parkSet({ id: MEMO.id, status: 'handed', from: 'open', ...to })
+const CLAIM_W = claim({ to_session: 'W' })
+const CLAIM_SELF = claim({ to_session: 'SELF' })
+const CLAIM_DOTFILE = claim({ to_repo: '/src/home/dotfile' })
+const REVERT = parkSet({ id: MEMO.id, status: 'open', from: 'handed' })
+// spawn は repo で新しいセッションを起こす呼び出し (本文は fed で見る)。
+const spawn = (repo: string) => [BIN, 'spawn', { repo }]
+// endpoints は edge add / rm の stdin。
+const endpoints = (before: string, after: string) => ({ before: { ref: before, cwd: CWD }, after: { ref: after, cwd: CWD } })
 
 test('fullscreen でなければ /deps は開かず、その旨を返す', async ($, on) => {
   const w = depsWorld(on)
@@ -254,7 +260,7 @@ test('fullscreen でなければ /deps は開かず、その旨を返す', async
 test('/deps は開いたセッションの cwd で deps を読み、dock に開く', async ($, on) => {
   const w = depsWorld(on)
   await $.command.run(OPEN_DEPS)
-  expect(w.ran[0]).toEqual([BIN, 'deps', '--cwd', CWD])
+  expect(w.ran[0]).toEqual([BIN, 'deps', { cwd: CWD }])
   expect(w.opened).toEqual(['agents-daemon-deps'])
 })
 
@@ -572,7 +578,7 @@ test('edge の辺は Unlink で edge rm に元の参照を渡す', async ($, on)
   await ui.press({ key: 'row:task:R/1' })
   w.ran.length = 0
   await ui.press({ key: 'unlink:task:Q/2' })
-  expect(w.ran[0]).toEqual([BIN, 'edge', 'rm', '--before', 'session:design', '--before-cwd', CWD, '--after', 'task:R/1', '--after-cwd', CWD])
+  expect(w.ran[0]).toEqual([BIN, 'edge', 'rm', endpoints('session:design', 'task:R/1')])
 })
 
 test('同じセッションの blockedBy は外せないので、そのセッションへ解消を頼む', async ($, on) => {
@@ -602,7 +608,7 @@ test('Add blocker は循環にならない候補だけを出し、edge add に�
   expect(await ui.find({ key: 'blocker:issue:o/r#9' })).toBeDefined()
   w.ran.length = 0
   await ui.press({ key: 'blocker:task:W/1' })
-  expect(w.ran[0]).toEqual([BIN, 'edge', 'add', '--before', 'task:W/1', '--before-cwd', CWD, '--after', 'task:R/1', '--after-cwd', CWD])
+  expect(w.ran[0]).toEqual([BIN, 'edge', 'add', endpoints('task:W/1', 'task:R/1')])
 })
 
 test('タスクの無いセッションのノードも Add blocker の候補になり、sid: の key を端点に渡す', async ($, on) => {
@@ -614,7 +620,7 @@ test('タスクの無いセッションのノードも Add blocker の候補に�
   await pick(ui, 'add-blocker')
   w.ran.length = 0
   await ui.press({ key: 'blocker:sid:U' })
-  expect(w.ran[0]).toEqual([BIN, 'edge', 'add', '--before', 'sid:U', '--before-cwd', CWD, '--after', 'task:R/1', '--after-cwd', CWD])
+  expect(w.ran[0]).toEqual([BIN, 'edge', 'add', endpoints('sid:U', 'task:R/1')])
 })
 
 test('生きているほかのセッションのノードへ指示を送る。自分と終了したセッションには送らない', async ($, on) => {
@@ -644,7 +650,7 @@ test('終了したセッションの未完了のタスクは To parking でメ�
   await ui.press({ key: 'row:task:G/1' })
   w.ran.length = 0
   await pick(ui, 'adopt')
-  expect(operations(w.ran)).toEqual([[BIN, 'park', 'adopt', 'task:G/1', ...SELF_ARGS]])
+  expect(operations(w.ran)).toEqual([[BIN, 'park', 'adopt', { ref: 'task:G/1', session_id: 'SELF' }]])
 })
 
 test('daemon が status.json を書いていない依存図では、exited と描かれても To parking を出さない', async ($, on) => {
@@ -808,9 +814,9 @@ test('ほかのセッションのタスクと、自分の完了したタスク�
 // OWN_MEMO は自分のセッションへ渡されてタスクになったメモ (handed)。
 const OWN_MEMO = { id: '20261020T090000-cccc', title: 'タイトルを課題形にしない', status: 'handed' }
 const OWN_TASK = node('task:SELF/2', 'pending', 'メモから作ったタスク', { session: 'self', memos: [OWN_MEMO] })
-const REOPEN = [BIN, 'park', 'set', OWN_MEMO.id, '--status', 'open', '--from', 'handed', ...SELF_ARGS]
+const REOPEN = parkSet({ id: OWN_MEMO.id, status: 'open', from: 'handed' })
 // 取り直すときは、元の宛先 (このセッション) を書き直す。
-const RECLAIM = [BIN, 'park', 'set', OWN_MEMO.id, '--status', 'handed', '--from', 'open', '--to-session', 'SELF', ...SELF_ARGS]
+const RECLAIM = parkSet({ id: OWN_MEMO.id, status: 'handed', from: 'open', to_session: 'SELF' })
 
 test('メモから作った自分のタスクを To parking で戻すと、新しいメモを作らず元のメモを open に戻してからタスクを消すよう頼む (#296)', async ($, on) => {
   const w = depsWorld(on, withNodes(OWN_TASK))
@@ -892,7 +898,7 @@ test('メモを選ぶと詳細を出し、Discard / To task / Ask for issue で�
   // 選んだメモは操作の後も開いたまま (同じ行をもう一度押すと閉じる)。捨てるのも open のときだけ。
   w.ran.length = 0
   await pick(ui, 'discard')
-  expect(operations(w.ran)).toEqual([[BIN, 'park', 'set', MEMO.id, '--status', 'discarded', '--from', 'open', ...SELF_ARGS]])
+  expect(operations(w.ran)).toEqual([parkSet({ id: MEMO.id, status: 'discarded', from: 'open' })])
 })
 
 test('取れなかったメモ (ほかのセッションが先に渡した) は送らない', async ($, on) => {
@@ -974,9 +980,9 @@ test('最後に置かれてから stale_memo_days より経ったメモがあれ
   expect(await ui.find({ key: 'discard-stale', text: /Discard 1 older than 40d/ })).toBeDefined()
   w.ran.length = 0
   await ui.press({ key: 'discard-stale' })
-  expect(operations(w.ran)).toEqual([[BIN, 'park', 'discard', '--days', '40', ...SELF_ARGS]])
+  expect(operations(w.ran)).toEqual([[BIN, 'park', 'discard', { days: 40, session_id: 'SELF' }]])
   // 戻し方を添える (id は出来事のログに残る)。
-  expect(await ui.find({ type: 'Text', text: /40 日より前のメモ 1 つを捨てました.*park set <id> --status open/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /40 日より前のメモ 1 つを捨てました.*"id":"<id>","status":"open".*park set/ })).toBeDefined()
 })
 
 test('stale_memo_days より新しいメモだけなら、日が経っていてもまとめて捨てるボタンを出さない', async ($, on) => {
@@ -1001,7 +1007,7 @@ test('メモを別の repo の新しいセッションへ渡す: 候補はメモ
 
   w.ran.length = 0
   await pick(ui, 'task:/src/home/dotfile')
-  expect(operations(w.ran)).toEqual([CLAIM_DOTFILE, [BIN, 'spawn', '--repo', '/src/home/dotfile']])
+  expect(operations(w.ran)).toEqual([CLAIM_DOTFILE, spawn('/src/home/dotfile')])
   expect(w.fed).toHaveLength(1)
   expect(w.fed[0]).toMatch(/^このメモを渡すため、dotfile \(\/src\/home\/dotfile\) で新しいセッションとして起こしました。/)
   expect(w.fed[0]).toMatch(/パーキングロットのメモ「保持期間の根拠が無い」\(種類: aside\) をタスクにしてください。/)
@@ -1035,8 +1041,8 @@ test('候補に無い repo は other repo… を選んで絶対パスで指定�
   expect(await ui.find({ type: 'Text', text: /絶対パス/ })).toBeDefined()
 
   await ui.input({ key: 'spawn-path', text: '/src/home/other' })
-  expect(operations(w.ran)[0]).toEqual(claim('--to-repo', '/src/home/other'))
-  expect(operations(w.ran)[1]).toEqual([BIN, 'spawn', '--repo', '/src/home/other'])
+  expect(operations(w.ran)[0]).toEqual(claim({ to_repo: '/src/home/other' }))
+  expect(operations(w.ran)[1]).toEqual(spawn('/src/home/other'))
   expect(w.fed[0]).toMatch(/^このメモを渡すため、other \(\/src\/home\/other\) で新しいセッションとして起こしました。/)
   // 渡したら欄を畳む。
   expect(await ui.find({ key: 'spawn-path' })).toBeUndefined()
@@ -1071,7 +1077,7 @@ test('新しいセッションを起こせなかった (window を作ってい�
   await ui.press({ key: `park:${MEMO.id}` })
   w.ran.length = 0
   await pick(ui, 'task:/src/home/dotfile')
-  expect(operations(w.ran)).toEqual([CLAIM_DOTFILE, [BIN, 'spawn', '--repo', '/src/home/dotfile'], REVERT])
+  expect(operations(w.ran)).toEqual([CLAIM_DOTFILE, spawn('/src/home/dotfile'), REVERT])
   expect(await ui.find({ type: 'Text', text: /dotfile で新しいセッションを起こせませんでした: .*repo が見つからない.*メモは open に戻しました/ })).toBeDefined()
 })
 
@@ -1088,8 +1094,8 @@ test('claude が前景にならなかった (pane は残る) メモは戻さず�
   await ui.press({ key: `park:${MEMO.id}` })
   w.ran.length = 0
   await pick(ui, 'task:/src/home/dotfile')
-  expect(operations(w.ran)).toEqual([CLAIM_DOTFILE, [BIN, 'spawn', '--repo', '/src/home/dotfile']])
-  expect(await ui.find({ type: 'Text', text: /dotfile で window を作りましたが.*前景にならなかった.*handed のまま.*park set .* --status open/ })).toBeDefined()
+  expect(operations(w.ran)).toEqual([CLAIM_DOTFILE, spawn('/src/home/dotfile')])
+  expect(await ui.find({ type: 'Text', text: /dotfile で window を作りましたが.*前景にならなかった.*handed のまま.*"status":"open".*park set/ })).toBeDefined()
 })
 
 test('ノードの無い依存図と、daemon が動いていないことを描く', async ($, on) => {

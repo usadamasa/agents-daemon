@@ -1,0 +1,409 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "agents-daemon の mod とバイナリのあいだで受け渡す JSON",
+  "$defs": {
+    "DepsRequest": {
+      "description": "deps の stdin",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cwd": { "type": "string", "description": "pane を開いたセッションの cwd。この repo を here にする (無ければ今の cwd)" }
+      }
+    },
+    "ParkAddRequest": {
+      "description": "park add の stdin。memo を置き、ParkAdded を出す",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session_id", "memo"],
+      "properties": {
+        "cwd": { "type": "string", "description": "置いたセッションの cwd。repo をここから決める (無ければ今の cwd)" },
+        "session_id": { "type": "string", "description": "置いたセッションの ID" },
+        "memo": { "$ref": "#/$defs/Memo" }
+      }
+    },
+    "ParkSetRequest": {
+      "description": "park set の stdin。メモの status を書き換え、ParkingItem を出す。handed にするときは宛先を to_session か to_repo で渡し、handed 以外にすると宛先を空にする。依存図の pane は渡す前に status handed、from open と宛先で取り、届かなければ status open、from handed で戻す",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "status"],
+      "not": { "required": ["to_session", "to_repo"] },
+      "properties": {
+        "id": { "type": "string", "description": "メモの id" },
+        "status": { "type": "string", "enum": ["open", "handed", "discarded"] },
+        "from": { "type": "string", "enum": ["open", "handed", "discarded"], "description": "今の status がこれのときだけ書き換える。違えば書き換えずにエラーで返す" },
+        "to_session": { "type": "string", "description": "handed にするときの宛先のセッションの ID" },
+        "to_repo": { "type": "string", "description": "handed にするときの宛先 (新しく起こすセッションの repo の絶対パス)" },
+        "session_id": { "type": "string", "description": "操作したセッションの ID (ログに添える)" }
+      }
+    },
+    "ParkListRequest": {
+      "description": "park list の stdin。絞ったメモを ParkingItemList で出す",
+      "type": "object",
+      "additionalProperties": false,
+      "not": { "required": ["here", "repo"] },
+      "dependentRequired": { "task": ["session_id"] },
+      "properties": {
+        "cwd": { "type": "string", "description": "here で使う cwd (無ければ今の cwd)" },
+        "here": { "type": "boolean", "description": "cwd の repo で絞る" },
+        "repo": { "type": "string", "description": "repo (main worktree のパス) で絞る" },
+        "status": { "type": "string", "enum": ["open", "handed", "discarded"], "description": "status で絞る" },
+        "task": { "type": "string", "description": "session_id のセッションがこのタスクの途中で置いたメモで絞る" },
+        "session_id": { "type": "string", "description": "task で絞るセッションの ID" }
+      }
+    },
+    "ParkDiscardRequest": {
+      "description": "park discard の stdin。最後に置かれてから days 日より経った open のメモを discarded にし、捨てたメモを ParkingItemList で出す",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["days"],
+      "properties": {
+        "days": { "type": "integer", "minimum": 1 },
+        "session_id": { "type": "string", "description": "操作したセッションの ID (ログに添える)" }
+      }
+    },
+    "ParkAdoptRequest": {
+      "description": "park adopt の stdin。終了したセッションの未完了のタスクを出自 adopted (種類 scope) のメモにし、タスクの記録を消して ParkAdded を出す。セッションの終了は、動いている daemon がタスクの記録より後に書いた status.json に pane が無いことで確かめる",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref"],
+      "properties": {
+        "ref": { "type": "string", "description": "依存図のタスクのノードの key (task:<session_id>/<task_id>)" },
+        "session_id": { "type": "string", "description": "操作したセッションの ID (ログに添える)" }
+      }
+    },
+    "EdgeAddRequest": {
+      "description": "edge add の stdin。before が済まないと after を始められない辺を書き、EdgeAdded を出す。同じ辺の二重登録は書き直すだけ",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["before", "after"],
+      "properties": {
+        "before": { "$ref": "#/$defs/EdgeTarget" },
+        "after": { "$ref": "#/$defs/EdgeTarget" },
+        "note": { "type": "string", "description": "辺の補足 (何の後か)" }
+      }
+    },
+    "EdgeRemoveRequest": {
+      "description": "edge rm の stdin。辺を消し、EdgeRemoved を出す",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["before", "after"],
+      "properties": {
+        "before": { "$ref": "#/$defs/EdgeTarget" },
+        "after": { "$ref": "#/$defs/EdgeTarget" }
+      }
+    },
+    "EdgeTarget": {
+      "description": "書く辺の端点",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref", "cwd"],
+      "properties": {
+        "ref": { "type": "string", "description": "作業の参照 (session:<名前> / sid:<session_id> / issue:<owner>/<repo>#<番号> / pr:<owner>/<repo>#<番号> / task:<session_id>/<task_id>)" },
+        "cwd": { "type": "string", "description": "その作業のセッションの cwd (絶対パス)" }
+      }
+    },
+    "SpawnRequest": {
+      "description": "spawn の stdin。prompt を最初のターンにした Claude Code のセッションを、repo を cwd にした rex の window に起こし、SpawnResult を出す",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repo", "prompt"],
+      "properties": {
+        "repo": { "type": "string", "description": "新しいセッションの cwd (絶対パス)" },
+        "prompt": { "type": "string", "description": "最初のターンとして入る本文" }
+      }
+    },
+    "EventLogRequest": {
+      "description": "event-log の stdin。mod の出来事を出来事のログに 1 行書く。出来事の名前と欄は eventlog の package doc が持つ",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event"],
+      "properties": {
+        "session_id": { "type": "string", "description": "出来事の起きたセッションの ID" },
+        "event": { "type": "string" },
+        "fields": { "type": "array", "items": { "$ref": "#/$defs/EventLogField" }, "description": "行に添える欄 (書いた順)" }
+      }
+    },
+    "EventLogField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "value"],
+      "properties": {
+        "key": { "type": "string" },
+        "value": { "type": "string" }
+      }
+    },
+    "Memo": {
+      "description": "パーキングロットに置くメモの中身。park の tool の入力でもある",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "title"],
+      "properties": {
+        "kind": { "type": "string", "enum": ["aside", "scope", "preference"], "description": "メモの種類" },
+        "title": { "type": "string", "description": "メモを 1 行で。同じ repo に同じ title の open のメモがあれば 1 つにまとまる" },
+        "detail": { "type": "string", "description": "後で取り出した人が文脈を復元できる説明" },
+        "files": { "type": "array", "items": { "type": "string" }, "description": "関係するファイルのパス (repo からの相対か絶対)。別のセッションがそのファイルを触ったとき、その model に伝わる" },
+        "default_taken": { "type": "string", "description": "今どうしたか (「やらない」、仮に決めた内容)" }
+      }
+    },
+    "ParkingItem": {
+      "description": "置かれたメモ 1 つの記録 (park list、park set の出力)",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "repo", "kind", "title", "origin", "sources", "status"],
+      "properties": {
+        "id": { "type": "string" },
+        "repo": { "type": "string", "description": "置いたときの cwd の main worktree のパス (git の外なら cwd)。依存図の repo の鍵と同じ" },
+        "kind": { "type": "string", "enum": ["aside", "scope", "preference"] },
+        "title": { "type": "string" },
+        "detail": { "type": "string" },
+        "files": { "type": "array", "items": { "type": "string" } },
+        "default_taken": { "type": "string" },
+        "origin": { "type": "string", "enum": ["placed", "adopted"], "description": "出自。placed は park の tool で置いたメモ、adopted は終了したセッションの未完了のタスクから移したメモ" },
+        "sources": { "type": "array", "items": { "$ref": "#/$defs/ParkingItemSource" } },
+        "status": { "type": "string", "enum": ["open", "handed", "discarded"] },
+        "handed_to": { "type": "string", "description": "handed にしたときの宛先 (sid:<session_id> / repo:<path>)。handed でなければ無い" }
+      }
+    },
+    "ParkingItemSource": {
+      "description": "メモを置いたときのセッションと、そのとき進行中だったタスク",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session_id", "cwd", "at"],
+      "properties": {
+        "session_id": { "type": "string" },
+        "task_id": { "type": "string" },
+        "cwd": { "type": "string" },
+        "detail": { "type": "string", "description": "既存のメモにまとめたとき、後から置いた側が書いた detail (メモの detail と違うときだけ)" },
+        "at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "ParkingItemList": {
+      "description": "park list と park discard の出力",
+      "type": "array",
+      "items": { "$ref": "#/$defs/ParkingItem" }
+    },
+    "ParkAdded": {
+      "description": "park add と park adopt の出力。created は新しく作ったか (false なら既に置かれていたメモにまとめた)",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["created", "item"],
+      "properties": {
+        "created": { "type": "boolean" },
+        "item": { "$ref": "#/$defs/ParkingItem" }
+      }
+    },
+    "Edge": {
+      "description": "セッションをまたぐ辺の記録 1 つ",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "before", "after", "created_at"],
+      "properties": {
+        "id": { "type": "string" },
+        "before": { "$ref": "#/$defs/EdgeEndpoint" },
+        "after": { "$ref": "#/$defs/EdgeEndpoint" },
+        "note": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "EdgeEndpoint": {
+      "description": "辺の記録の端点。bound_from は daemon が session:<名前> を sid:<id> に結びつけたときの元の参照",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref", "cwd", "repo"],
+      "properties": {
+        "ref": { "type": "string" },
+        "cwd": { "type": "string" },
+        "repo": { "type": "string" },
+        "bound_from": { "type": "string" }
+      }
+    },
+    "EdgeAdded": {
+      "description": "edge add の出力。同じ辺が既にあれば created は false",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["created", "edge"],
+      "properties": {
+        "created": { "type": "boolean" },
+        "edge": { "$ref": "#/$defs/Edge" }
+      }
+    },
+    "EdgeRemoved": {
+      "description": "edge rm の出力。無い辺を消したときは removed が false",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["removed", "id"],
+      "properties": {
+        "removed": { "type": "boolean" },
+        "id": { "type": "string" }
+      }
+    },
+    "SpawnResult": {
+      "description": "spawn の出力。foreground が false なら claude が前景になるのを待ち切れず、pane は残り claude が起きているかもしれない。呼び出し側はメモを戻さず detail を人に見せる",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session_id", "pane_id", "foreground"],
+      "properties": {
+        "session_id": { "type": "string" },
+        "pane_id": { "type": "string" },
+        "foreground": { "type": "boolean" },
+        "detail": { "type": "string" }
+      }
+    },
+    "DepsData": {
+      "description": "deps の出力。依存の DAG と、repo ごとの生きているセッションと open のメモ",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["daemon_running", "here", "stale_memo_days", "repos", "graph"],
+      "properties": {
+        "daemon_running": { "type": "boolean" },
+        "updated_at": { "type": "string", "format": "date-time", "description": "status.json の更新時刻。daemon が動いていないか、まだ書いていなければ無い" },
+        "here": { "type": "string", "description": "開いたセッションの cwd の repo の鍵 (DepsRepo.repo と同じ規則)。その repo が無ければ repos に無い鍵になる" },
+        "stale_memo_days": { "type": "integer", "description": "open のメモを「古い」とみなす日数。pane はこれより前に最後に置かれたメモをまとめて捨てるボタンを出す" },
+        "repos": { "type": "array", "items": { "$ref": "#/$defs/DepsRepo" } },
+        "graph": { "$ref": "#/$defs/DepsGraph" }
+      }
+    },
+    "DepsRepo": {
+      "description": "repo 1 つ。sessions は表示名の順、memos は open のメモを置いた順",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repo", "title", "sessions", "memos"],
+      "properties": {
+        "repo": { "type": "string", "description": "鍵 (main worktree のパス、git の外なら cwd)。パーキングのメモの repo と同じ規則" },
+        "title": { "type": "string" },
+        "sessions": { "type": "array", "items": { "$ref": "#/$defs/DepsSession" } },
+        "memos": { "type": "array", "items": { "$ref": "#/$defs/ParkingCard" } }
+      }
+    },
+    "DepsSession": {
+      "description": "repo で生きているセッション 1 つ (メモを渡す宛先)",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session_id", "session", "subject", "live"],
+      "properties": {
+        "session_id": { "type": "string" },
+        "session": { "type": "string", "description": "表示名 (同名のセッションがあれば session ID の先頭が付く)" },
+        "subject": { "type": "string", "description": "そのセッションが何をしているか" },
+        "live": { "type": "boolean" }
+      }
+    },
+    "ParkingCard": {
+      "description": "repo の open のメモ 1 つ",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "origin", "title", "sources"],
+      "properties": {
+        "id": { "type": "string" },
+        "kind": { "type": "string", "enum": ["aside", "scope", "preference"] },
+        "origin": { "type": "string", "enum": ["placed", "adopted"] },
+        "title": { "type": "string" },
+        "detail": { "type": "string" },
+        "files": { "type": "array", "items": { "type": "string" } },
+        "default_taken": { "type": "string" },
+        "sources": { "type": "array", "items": { "$ref": "#/$defs/ParkingSource" }, "description": "置いたセッションの新しい順" }
+      }
+    },
+    "ParkingSource": {
+      "description": "メモを置いたセッション 1 つ",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session_id", "session", "live", "at"],
+      "properties": {
+        "session_id": { "type": "string" },
+        "task_ref": { "type": "string", "description": "置いたときに進めていたタスクのノードの key (GraphNode.key と同じ Ref)" },
+        "session": { "type": "string" },
+        "live": { "type": "boolean" },
+        "detail": { "type": "string", "description": "まとめたときに後から置いた側が書いた detail" },
+        "at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "DepsGraph": {
+      "description": "タスクの依存の DAG",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nodes", "links", "longest_chain", "rows", "rows_with_completed"],
+      "properties": {
+        "nodes": { "type": "array", "items": { "$ref": "#/$defs/GraphNode" }, "description": "下流の多い順 (同じなら key の順)" },
+        "links": { "type": "array", "items": { "$ref": "#/$defs/GraphLink" } },
+        "longest_chain": { "type": "array", "items": { "type": "string" }, "description": "下流の最も多い止まっているノードから、下流をたどった最長の鎖の key" },
+        "rows": { "type": "array", "items": { "$ref": "#/$defs/GraphRow" }, "description": "完了したノードを落として組んだレーンの行" },
+        "rows_with_completed": { "type": "array", "items": { "$ref": "#/$defs/GraphRow" }, "description": "完了したノードも含めて組んだレーンの行" }
+      }
+    },
+    "GraphNode": {
+      "description": "依存の DAG のノード 1 つ (タスク 1 つ、タスクの無いセッション、端点の参照だけの置き場)",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "kind", "state", "title", "endpoint", "live", "depth", "downstream", "parked", "memos", "blocked_by", "deadlock", "halted", "stuck"],
+      "properties": {
+        "key": { "type": "string", "description": "Ref (task:、todo:、sid:、session:、issue:、pr:)。mod は切り出さずに不透明な文字列として扱う" },
+        "kind": { "type": "string", "enum": ["task", "todo", "session", "ref"] },
+        "state": { "type": "string", "enum": ["working", "done", "unknown", "question", "permission", "error", "limit", "pending", "completed", "exited"] },
+        "title": { "type": "string" },
+        "detail": { "type": "string", "description": "状態の補足 (上限の解除時刻)" },
+        "endpoint": { "type": "boolean", "description": "key をそのまま edge add の端点に書けるか (TodoWrite の項目は書けない)" },
+        "cwd": { "type": "string" },
+        "task_id": { "type": "string", "description": "kind task のノードのタスクの ID (TaskUpdate に書く形)" },
+        "description": { "type": "string", "description": "kind task のノードのタスクの description" },
+        "session_id": { "type": "string" },
+        "session": { "type": "string", "description": "表示名 (同名のセッションがあれば session ID の先頭が付く)" },
+        "session_name": { "type": "string", "description": "セッション名そのもの (SendMessage の宛先に書く形)" },
+        "live": { "type": "boolean" },
+        "depth": { "type": "integer", "description": "段 (前提をたどった最長の深さ)" },
+        "downstream": { "type": "integer", "description": "下流 (このノードが済まないと始められないノード) の数" },
+        "parked": { "type": "integer", "description": "このタスクの途中で置かれた open のメモの数" },
+        "memos": { "type": "array", "items": { "$ref": "#/$defs/MemoRef" }, "description": "このタスクの description に id が書かれたメモ (書かれた順)。status を問わない" },
+        "blocked_by": { "type": "array", "items": { "type": "string" }, "description": "上流をたどった原因の鎖 (近い順)" },
+        "deadlock": { "type": "boolean", "description": "待ちが輪になっていて、たどると自分へ戻ってくるか" },
+        "halted": { "type": "boolean", "description": "セッション自身が止まっているか (question、permission、limit、error)" },
+        "stuck": { "type": "boolean", "description": "止まっているノードか (halted か、完了していない待ちの輪)。mod は状態の語から決めない" }
+      }
+    },
+    "MemoRef": {
+      "description": "タスクが扱うメモ 1 つ",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "status"],
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "status": { "type": "string", "enum": ["open", "handed", "discarded"] }
+      }
+    },
+    "GraphLink": {
+      "description": "辺 1 本。kind task は同じセッションの blockedBy、kind edge は edge add で書かれた辺で edge に元の記録を持つ",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["before", "after", "kind"],
+      "properties": {
+        "before": { "type": "string" },
+        "after": { "type": "string" },
+        "kind": { "type": "string", "enum": ["task", "edge"] },
+        "edge": { "$ref": "#/$defs/EdgeRecord" }
+      }
+    },
+    "EdgeRecord": {
+      "description": "kind edge の辺の元の記録。edge rm に渡す",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "before", "after"],
+      "properties": {
+        "id": { "type": "string" },
+        "before": { "$ref": "#/$defs/EdgeEndpoint" },
+        "after": { "$ref": "#/$defs/EdgeEndpoint" },
+        "note": { "type": "string" }
+      }
+    },
+    "GraphRow": {
+      "description": "レーンの行 1 つ。lanes は行頭の罫線で、ノードの行は * がそのノードのレーンの位置。node が無ければ辺をつなぐだけの行",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lanes"],
+      "properties": {
+        "lanes": { "type": "string" },
+        "node": { "type": "string" },
+        "marks": { "type": "array", "items": { "type": "integer" }, "description": "longest chain の辺を描いた lanes の桁 (昇順)" }
+      }
+    }
+  }
+}

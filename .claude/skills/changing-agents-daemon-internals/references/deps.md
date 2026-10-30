@@ -12,7 +12,7 @@ plugin の mod が描く依存図の pane と、model の `SendMessage` の結�
 
 ## 依存図の pane
 
-`/deps` コマンドで依存図を会話の横 (dock) の pane に開き、`agents-daemon deps --cwd <cwd>` の JSON を数秒ごとに
+`/deps` コマンドで依存図を会話の横 (dock) の pane に開き、`agents-daemon deps` の JSON (`DepsData`) を数秒ごとに
 読み直して描く。読み込みは `hooks/deps-data.ts` の `loadDeps` が 1 箇所で持つ。JSON は `deps` パッケージが
 `$STATE/tasks/` (PostToolUse hook の `ingest-task` が書く)、`status.json`、`$STATE/edges/`、`$STATE/parking/` から組む。
 
@@ -63,8 +63,8 @@ peer への `Hand off` だけは mod が peer へ `$.session.send` で session I
 skill の手順で渡すよう自分に頼む。`▾` の右の補足欄 (`✎`) に書いた文は、`Start` と `Hand off` の文面 (peer へは相手へ送る文面) の
 末尾に `利用者からの補足: …` として足し、選んだら欄を空にする (#310)。空なら文面は変わらない。`Complete` / `Delete` /
 `To parking` には足さない。開いたメニューと補足の下書きはノードを選び直すと消える。`To parking` は、扱うメモ (`memos` のうち捨てていないもの)
-があれば新しいメモを作らず、handed のメモを `park set --status open --from handed` で戻してから消すよう頼み、
-入力へ渡せなければ自分への handed (`--to-session <自分>`) に取り直す。扱うメモが無ければ park tool で置いてから
+があれば新しいメモを作らず、handed のメモを `park set` (status open、from handed) で戻してから消すよう頼み、
+入力へ渡せなければ自分への handed (to_session に自分) に取り直す。扱うメモが無ければ park tool で置いてから
 消すよう頼む。
 <!-- cc-premise: 2.1.303 mods pane の placement (dock / inline) と command.run の presentation.isFullscreen -->
 
@@ -125,11 +125,11 @@ pane を解釈するのは `deps` パッケージの `activity` だけで、生�
 ## 渡した宛先の辺の確かめ
 
 `hooks/handoff-notice.ts` は main の model の `SendMessage` (文面のあるもの) が成功したら、
-`deps --cwd <cwd>` (`hooks/deps-data.ts` の `loadDeps`) を読み、宛先 (末尾の ` [ref]` は落とす) が
+`deps` (`hooks/deps-data.ts` の `loadDeps`) を読み、宛先 (末尾の ` [ref]` は落とす) が
 依存図に生きていて済んでいないノードを持つセッションで、`kind: edge` の辺が端点 (そのセッションのタスクへ解決された
 端点か、記録の `session:<名前>` の参照) に 1 本も無ければ (`hooks/graph.ts` の `unlinked`)、tool の結果の `context` に
 辺の書き方を 1 つ添える (#172)。文面は
-`agents-daemon edge add --before … --after session:<名前> --after-cwd <宛先の cwd>` と
+after を `session:<名前>` と宛先の cwd にした `EdgeAddRequest` を `edge add` へ渡す形と
 `agents-daemon:peer-sessions` skill の「依存の辺を書く」を指し、返事や報告なら辺は要らないと添える。
 
 - 辺を書くのは渡した側の model だけなので、人ではなく model に伝える

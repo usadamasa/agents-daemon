@@ -10,6 +10,7 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/eventlog"
 	"github.com/usadamasa/agents-daemon/internal/parking"
+	"github.com/usadamasa/agents-daemon/internal/protocol"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
 
@@ -45,15 +46,16 @@ func TestParkEvents(t *testing.T) {
 	p := tasklog.New(dir)
 	now := time.Now()
 
-	added, err := parkAdd(dir, s, strings.NewReader(`{"kind": "aside", "title": "秘密の題", "detail": "秘密の詳細", "session_id": "s1"}`), "/src/a", p, now)
+	memo := parking.Entry{Kind: parking.KindAside, Title: "秘密の題", Detail: "秘密の詳細"}
+	added, err := parkAdd(dir, s, protocol.ParkAddRequest{SessionID: "s1", Memo: memo}, "/src/a", p, now)
 	if err != nil || !added.Created {
 		t.Fatalf("parkAdd = %+v, %v", added, err)
 	}
-	if _, err := parkAdd(dir, s, strings.NewReader(`{"kind": "aside", "title": "秘密の題", "session_id": "s2"}`), "/src/a", p, now); err != nil {
+	if _, err := parkAdd(dir, s, protocol.ParkAddRequest{SessionID: "s2", Memo: parking.Entry{Kind: parking.KindAside, Title: "秘密の題"}}, "/src/a", p, now); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := parkAdd(dir, s, strings.NewReader(`{"kind": `), "/src/a", p, now); err == nil {
-		t.Fatal("壊れた JSON が通った")
+	if _, err := parkAdd(dir, s, protocol.ParkAddRequest{SessionID: "s3", Memo: parking.Entry{Kind: parking.KindAside}}, "/src/a", p, now); err == nil {
+		t.Fatal("title の無いメモが通った")
 	}
 	if _, err := parkSet(dir, s, "viewer", added.Item.ID, parking.StatusDiscarded, "", "", now); err != nil {
 		t.Fatal(err)
@@ -62,7 +64,7 @@ func TestParkEvents(t *testing.T) {
 		t.Fatal("無いメモを書き換えた")
 	}
 	if _, err := parkSet(dir, s, "viewer", added.Item.ID, parking.StatusHanded, parking.StatusOpen, parking.ToSession("S2"), now); err == nil {
-		t.Fatal("捨てたメモを --from open で取れた")
+		t.Fatal("捨てたメモを from open で取れた")
 	}
 	writeTestConfig(t, filepath.Join(dir, "tasks", "dead", "4.json"), `{"id": "4", "subject": "秘密のタスク", "status": "pending", "session_id": "dead", "cwd": "/src/a"}`)
 	exited := func(string, time.Time) error { return nil }
@@ -76,7 +78,7 @@ func TestParkEvents(t *testing.T) {
 	equalLines(t, got, []string{
 		"park.add session=s1 memo=" + id + " kind=aside created=true",
 		"park.add session=s2 memo=" + id + " kind=aside created=false",
-		`park.failed op=add reason="stdin の JSON を読めない: unexpected EOF"`,
+		`park.failed op=add session=s3 reason="title が空"`,
 		"park.set session=viewer memo=" + id + " from=open to=discarded",
 		`park.failed op=set session=viewer memo=missing reason="メモ missing が無い"`,
 		`park.failed op=set session=viewer memo=` + id + ` reason="メモ ` + id + ` の status は discarded (期待 open) なので書き換えない"`,
@@ -87,20 +89,23 @@ func TestParkEvents(t *testing.T) {
 	}
 }
 
-// park add は置いた結果を出来事のログに書く。title は書かない。
+// park add は置いた結果と、読めなかった入力を出来事のログに書く。title は書かない。
 func TestParkWritesEventLog(t *testing.T) {
 	root := parkTestEnv(t)
 	cwd := filepath.Join(root, "src", "home", "a")
 	if err := os.MkdirAll(cwd, 0o750); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := runPark(t, parkInput, "add", "--cwd", cwd); err != nil {
-		t.Fatal(err)
+	add(t, addReq(t, "s1", cwd, memoTitle))
+	if _, _, err := runPark(t, "add", `{"memo": `); err == nil {
+		t.Fatal("壊れた JSON が通った")
 	}
 
 	log := strings.Join(eventLines(t, filepath.Join(root, "state", "agents-daemon")), "\n")
-	if want := "park.add session=s1 memo="; !strings.Contains(log, want) {
-		t.Errorf("events.log に %q が無い:\n%s", want, log)
+	for _, want := range []string{"park.add session=s1 memo=", `park.failed op=add reason="stdin の JSON を読めない: unexpected end of JSON input"`} {
+		if !strings.Contains(log, want) {
+			t.Errorf("events.log に %q が無い:\n%s", want, log)
+		}
 	}
 	if strings.Contains(log, "保持期間") {
 		t.Errorf("title を書いた:\n%s", log)

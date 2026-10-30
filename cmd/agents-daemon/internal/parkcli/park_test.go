@@ -48,16 +48,63 @@ func parkTestRepo(t *testing.T, dir string) (repo, worktree string) {
 	return dir, worktree
 }
 
-func runPark(t *testing.T, stdin string, args ...string) (stdout, stderr string, err error) {
+// runPark は `park <sub>` に stdin の JSON を渡す。
+func runPark(t *testing.T, sub, stdin string) (stdout, stderr string, err error) {
 	t.Helper()
 	cmd := newParkCmd()
 	var out, errBuf bytes.Buffer
 	cmd.SetIn(strings.NewReader(stdin))
 	cmd.SetOut(&out)
 	cmd.SetErr(&errBuf)
-	cmd.SetArgs(args)
+	cmd.SetArgs([]string{sub})
 	err = cmd.Execute()
 	return out.String(), errBuf.String(), err
+}
+
+// req は map を stdin の JSON にする。
+func req(t *testing.T, m map[string]any) string {
+	t.Helper()
+	b, err := json.Marshal(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+const memoTitle = "保持期間の根拠が無い"
+
+// addReq は session が cwd で title のメモを置く park add の stdin。title を変えると別のメモになる。
+func addReq(t *testing.T, session, cwd, title string) string {
+	t.Helper()
+	memo := map[string]any{"kind": "aside", "title": title, "detail": "d", "files": []string{"a.go"}, "default_taken": "やらない"}
+	return req(t, map[string]any{"session_id": session, "cwd": cwd, "memo": memo})
+}
+
+// add は park add を走らせ、置いたメモを返す。
+func add(t *testing.T, stdin string) parking.Added {
+	t.Helper()
+	out, _, err := runPark(t, "add", stdin)
+	if err != nil {
+		t.Fatalf("park add: %v", err)
+	}
+	var added parking.Added
+	if err := json.Unmarshal([]byte(out), &added); err != nil || added.Item.ID == "" {
+		t.Fatalf("add の JSON を読めない: %v\n%s", err, out)
+	}
+	return added
+}
+
+func listItems(t *testing.T, stdin string) []parking.Item {
+	t.Helper()
+	out, _, err := runPark(t, "list", stdin)
+	if err != nil {
+		t.Fatalf("park list %s: %v", stdin, err)
+	}
+	var items []parking.Item
+	if err := json.Unmarshal([]byte(out), &items); err != nil {
+		t.Fatalf("list の JSON を読めない: %v\n%s", err, out)
+	}
+	return items
 }
 
 func decodeItem(t *testing.T, s string) parking.Item {
@@ -67,16 +114,6 @@ func decodeItem(t *testing.T, s string) parking.Item {
 		t.Fatalf("item の JSON を読めない: %v\n%s", err, s)
 	}
 	return item
-}
-
-// decodeAdded は park add の stdout ({"created": bool, "item": {...}}) を読む。
-func decodeAdded(t *testing.T, s string) parking.Added {
-	t.Helper()
-	var added parking.Added
-	if err := json.Unmarshal([]byte(s), &added); err != nil || added.Item.ID == "" {
-		t.Fatalf("add の JSON を読めない: %v\n%s", err, s)
-	}
-	return added
 }
 
 func writeTestConfig(t *testing.T, path, content string) {
@@ -108,13 +145,22 @@ func TestParkHelpCallsItMemo(t *testing.T) {
 		if strings.Contains(c.Short, "件") {
 			t.Errorf("%s の Short が「件」と呼ぶ: %q", c.Name(), c.Short)
 		}
-		if usages := c.LocalFlags().FlagUsages() + c.PersistentFlags().FlagUsages(); strings.Contains(usages, "件") {
-			t.Errorf("%s の flag が「件」と呼ぶ:\n%s", c.Name(), usages)
-		}
 	}
 }
 
-const parkInput = `{"kind": "aside", "title": "保持期間の根拠が無い", "detail": "d", "files": ["a.go"], "default_taken": "やらない", "session_id": "s1"}`
+// park のサブコマンドは入力を stdin の JSON だけで受け、flag と引数を持たない。
+func TestParkTakesOnlyStdin(t *testing.T) {
+	park := newParkCmd()
+	for _, c := range append([]*cobra.Command{park}, park.Commands()...) {
+		if usages := c.LocalNonPersistentFlags().FlagUsages() + c.PersistentFlags().FlagUsages(); usages != "" {
+			t.Errorf("%s に flag がある:\n%s", c.Name(), usages)
+		}
+	}
+	parkTestEnv(t)
+	if _, _, err := runPark(t, "set", ""); err == nil {
+		t.Error("空の stdin を受け付けた")
+	}
+}
 
 // repo は main worktree のパス (linked worktree からでも同じ)、task_id は
 // そのセッションの進行中のタスクのうち最後に更新されたものになる。
@@ -125,11 +171,7 @@ func TestParkAdd(t *testing.T) {
 	writeTaskRecord(t, root, "s1", `{"id": "2", "subject": "b", "status": "in_progress", "session_id": "s1", "updated_at": "2026-10-19T11:00:00Z"}`)
 	writeTaskRecord(t, root, "s1", `{"id": "3", "subject": "c", "status": "pending", "session_id": "s1", "updated_at": "2026-10-19T12:00:00Z"}`)
 
-	stdout, _, err := runPark(t, parkInput, "add", "--cwd", wt)
-	if err != nil {
-		t.Fatalf("park add: %v", err)
-	}
-	added := decodeAdded(t, stdout)
+	added := add(t, addReq(t, "s1", wt, memoTitle))
 	if !added.Created {
 		t.Errorf("新しいメモなのに created = false")
 	}
@@ -142,11 +184,7 @@ func TestParkAdd(t *testing.T) {
 	}
 
 	// main worktree から同じメモを置くと同じメモにまとまる。
-	stdout, _, err = runPark(t, strings.Replace(parkInput, `"s1"`, `"s2"`, 1), "add", "--cwd", repo)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if again := decodeAdded(t, stdout); again.Created || again.Item.ID != item.ID || len(again.Item.Sources) != 2 || again.Item.Sources[1].TaskID != "" {
+	if again := add(t, addReq(t, "s2", repo, memoTitle)); again.Created || again.Item.ID != item.ID || len(again.Item.Sources) != 2 || again.Item.Sources[1].TaskID != "" {
 		t.Errorf("まとまっていない: %+v", again)
 	}
 }
@@ -158,11 +196,7 @@ func TestParkAdd_outsideGit(t *testing.T) {
 	if err := os.MkdirAll(cwd, 0o750); err != nil {
 		t.Fatal(err)
 	}
-	stdout, _, err := runPark(t, parkInput, "add", "--cwd", cwd)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if item := decodeAdded(t, stdout).Item; item.Repo != cwd {
+	if item := add(t, addReq(t, "s1", cwd, memoTitle)).Item; item.Repo != cwd {
 		t.Errorf("item = %+v", item)
 	}
 }
@@ -171,18 +205,19 @@ func TestParkAdd_invalidInput(t *testing.T) {
 	root := parkTestEnv(t)
 	cwd := filepath.Join(root, "src", "home")
 	for name, in := range map[string]string{
-		"壊れた JSON":      `{"kind": `,
-		"kind が範囲外":     `{"kind": "decision", "title": "t", "session_id": "s1"}`,
-		"kind が task":   `{"kind": "task", "title": "t", "session_id": "s1"}`,
-		"session_id 無し": `{"kind": "aside", "title": "t"}`,
+		"壊れた JSON":      `{"memo": `,
+		"kind が範囲外":     `{"session_id": "s1", "cwd": "` + cwd + `", "memo": {"kind": "decision", "title": "t"}}`,
+		"kind が task":   `{"session_id": "s1", "cwd": "` + cwd + `", "memo": {"kind": "task", "title": "t"}}`,
+		"session_id 無し": `{"cwd": "` + cwd + `", "memo": {"kind": "aside", "title": "t"}}`,
+		"平らなメモ":         `{"session_id": "s1", "cwd": "` + cwd + `", "kind": "aside", "title": "t"}`,
 	} {
-		if _, _, err := runPark(t, in, "add", "--cwd", cwd); err == nil {
+		if _, _, err := runPark(t, "add", in); err == nil {
 			t.Errorf("%s: park add が通った", name)
 		}
 	}
 }
 
-// list は --repo と --status で絞る。set は status を書き換える。
+// list は repo と status で絞る。set は status を書き換える。
 func TestParkListAndSet(t *testing.T) {
 	root := parkTestEnv(t)
 	home := filepath.Join(root, "src", "home", "a")
@@ -192,90 +227,73 @@ func TestParkListAndSet(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	out, _, err := runPark(t, parkInput, "add", "--cwd", home)
-	if err != nil {
-		t.Fatal(err)
+	first := add(t, addReq(t, "s1", home, memoTitle)).Item
+	add(t, addReq(t, "s1", other, "別のメモ"))
+
+	if got := listItems(t, `{}`); len(got) != 2 {
+		t.Errorf("数 = %d, want 2", len(got))
 	}
-	first := decodeAdded(t, out).Item
-	if _, _, err := runPark(t, strings.Replace(parkInput, "保持期間", "別の件", 1), "add", "--cwd", other); err != nil {
-		t.Fatal(err)
+	if got := listItems(t, req(t, map[string]any{"repo": home})); len(got) != 1 || got[0].ID != first.ID {
+		t.Errorf("repo で絞れていない: %+v", got)
 	}
 
-	list := func(args ...string) []parking.Item {
-		t.Helper()
-		out, _, err := runPark(t, "", append([]string{"list"}, args...)...)
-		if err != nil {
-			t.Fatalf("park list %v: %v", args, err)
-		}
-		var items []parking.Item
-		if err := json.Unmarshal([]byte(out), &items); err != nil {
-			t.Fatalf("list の JSON を読めない: %v\n%s", err, out)
-		}
-		return items
-	}
-	if got := list("--cwd", home); len(got) != 2 {
-		t.Errorf("件数 = %d, want 2", len(got))
-	}
-	if got := list("--cwd", home, "--repo", home); len(got) != 1 || got[0].ID != first.ID {
-		t.Errorf("--repo で絞れていない: %+v", got)
-	}
-
-	out, _, err = runPark(t, "", "set", first.ID, "--status", "discarded", "--cwd", home)
+	out, _, err := runPark(t, "set", req(t, map[string]any{"id": first.ID, "status": "discarded"}))
 	if err != nil || decodeItem(t, out).Status != "discarded" {
 		t.Fatalf("park set: %v\n%s", err, out)
 	}
-	if got := list("--cwd", home, "--status", "open"); len(got) != 1 || got[0].ID == first.ID {
-		t.Errorf("--status で絞れていない: %+v", got)
+	if got := listItems(t, `{"status": "open"}`); len(got) != 1 || got[0].ID == first.ID {
+		t.Errorf("status で絞れていない: %+v", got)
 	}
-	if got := list("--repo", filepath.Join(root, "none")); got == nil || len(got) != 0 {
+	if got := listItems(t, req(t, map[string]any{"repo": filepath.Join(root, "none")})); got == nil || len(got) != 0 {
 		t.Errorf("該当なしは空の配列: %+v", got)
 	}
-	if _, _, err := runPark(t, "", "list", "--cwd", home, "--status", "done"); err == nil {
-		t.Errorf("範囲外の --status が通った")
+	if _, _, err := runPark(t, "list", `{"status": "done"}`); err == nil {
+		t.Errorf("範囲外の status が通った")
 	}
-	// --from は元の status が違えば書き換えない (mod が送る前に取る)。
-	if _, _, err := runPark(t, "", "set", first.ID, "--status", "handed", "--from", "open", "--cwd", home); err == nil {
-		t.Errorf("discarded のメモを --from open で取れた")
+	// from は元の status が違えば書き換えない (mod が送る前に取る)。
+	if _, _, err := runPark(t, "set", req(t, map[string]any{"id": first.ID, "status": "handed", "from": "open", "to_session": "S2"})); err == nil {
+		t.Errorf("discarded のメモを from open で取れた")
 	}
-	out, _, err = runPark(t, "", "set", first.ID, "--status", "open", "--from", "discarded", "--cwd", home)
+	out, _, err = runPark(t, "set", req(t, map[string]any{"id": first.ID, "status": "open", "from": "discarded"}))
 	if err != nil || decodeItem(t, out).Status != "open" {
-		t.Fatalf("park set --from discarded: %v\n%s", err, out)
+		t.Fatalf("park set from discarded: %v\n%s", err, out)
 	}
 }
 
-// handed にするときは宛先 (--to-session か --to-repo) を同じ park set で書き、open に戻すと空にする。
+// handed にするときは宛先 (to_session か to_repo) を同じ park set で書き、open に戻すと空にする。
 func TestParkSet_destination(t *testing.T) {
 	root := parkTestEnv(t)
 	home := filepath.Join(root, "src", "home", "a")
 	if err := os.MkdirAll(home, 0o750); err != nil {
 		t.Fatal(err)
 	}
-	out, _, err := runPark(t, parkInput, "add", "--cwd", home)
-	if err != nil {
-		t.Fatal(err)
+	id := add(t, addReq(t, "s1", home, memoTitle)).Item.ID
+	set := func(m map[string]any) (string, error) {
+		m["id"] = id
+		out, _, err := runPark(t, "set", req(t, m))
+		return out, err
 	}
-	id := decodeAdded(t, out).Item.ID
-	for _, args := range [][]string{
-		{"--status", "handed", "--from", "open"},
-		{"--status", "handed", "--to-session", "S2", "--to-repo", "/w/r"},
-		{"--status", "handed", "--to-repo", "w/r"},
-		{"--status", "open", "--to-session", "S2"},
+	for _, m := range []map[string]any{
+		{"status": "handed", "from": "open"},
+		{"status": "handed", "to_session": "S2", "to_repo": "/w/r"},
+		{"status": "handed", "to_repo": "w/r"},
+		{"status": "open", "to_session": "S2"},
 	} {
-		if _, _, err := runPark(t, "", append(append([]string{"set", id}, args...), "--cwd", home)...); err == nil {
-			t.Errorf("park set %v が通った", args)
+		if _, err := set(m); err == nil {
+			t.Errorf("park set %v が通った", m)
 		}
 	}
-	out, _, err = runPark(t, "", "set", id, "--status", "handed", "--from", "open", "--to-session", "S2", "--cwd", home)
+	out, err := set(map[string]any{"status": "handed", "from": "open", "to_session": "S2"})
 	if err != nil || decodeItem(t, out).HandedTo != "sid:S2" {
-		t.Fatalf("park set --to-session: %v\n%s", err, out)
+		t.Fatalf("park set to_session: %v\n%s", err, out)
 	}
-	out, _, err = runPark(t, "", "set", id, "--status", "open", "--from", "handed", "--cwd", home)
+	out, err = set(map[string]any{"status": "open", "from": "handed"})
 	if err != nil || decodeItem(t, out).HandedTo != "" {
 		t.Fatalf("戻した park set: %v\n%s", err, out)
 	}
-	out, _, err = runPark(t, "", "set", id, "--status", "handed", "--from", "open", "--to-repo", "/w/dotfile", "--cwd", home)
+	out, err = set(map[string]any{"status": "handed", "from": "open", "to_repo": "/w/dotfile"})
 	if err != nil || decodeItem(t, out).HandedTo != "repo:/w/dotfile" {
-		t.Fatalf("park set --to-repo: %v\n%s", err, out)
+		t.Fatalf("park set to_repo: %v\n%s", err, out)
 	}
 }
 
@@ -296,26 +314,33 @@ func TestParkAdopt(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeTaskRecord(t, root, "dead", `{"id": "4", "subject": "README を直す", "status": "pending", "session_id": "dead", "cwd": "`+cwd+`", "updated_at": "2026-10-18T09:00:00Z"}`)
+	adopt := func(ref string) (string, string, error) {
+		return runPark(t, "adopt", req(t, map[string]any{"ref": ref, "session_id": "viewer"}))
+	}
 
 	// 参照は task: の形だけを受け付ける。
 	for _, ref := range []string{"sid:dead", "todo:dead/0", "dead/4"} {
-		if _, stderr, err := runPark(t, "", "adopt", ref, "--session", "viewer", "--cwd", cwd); err == nil || !strings.Contains(stderr, "task:<session_id>/<task_id>") {
+		if _, stderr, err := adopt(ref); err == nil || !strings.Contains(stderr, "task:<session_id>/<task_id>") {
 			t.Errorf("%s: タスクの参照でないのに受け付けた: %v %s", ref, err, stderr)
 		}
 	}
-	if _, stderr, err := runPark(t, "", "adopt", "task:dead/4", "--session", "viewer", "--cwd", cwd); err == nil || !strings.Contains(stderr, "daemon が動いていない") {
+	if _, stderr, err := adopt("task:dead/4"); err == nil || !strings.Contains(stderr, "daemon が動いていない") {
 		t.Fatalf("daemon が動いていないのに移した: %v %s", err, stderr)
 	}
 	writeDaemonStatus(t, root, `{"pane_id": "b1", "session_id": "dead", "cwd": "`+cwd+`"}`)
-	if _, stderr, err := runPark(t, "", "adopt", "task:dead/4", "--session", "viewer", "--cwd", cwd); err == nil || !strings.Contains(stderr, "生きている") {
+	if _, stderr, err := adopt("task:dead/4"); err == nil || !strings.Contains(stderr, "生きている") {
 		t.Fatalf("pane のあるセッションのタスクを移した: %v %s", err, stderr)
 	}
 	writeDaemonStatus(t, root, ``)
-	out, _, err := runPark(t, "", "adopt", "task:dead/4", "--session", "viewer", "--cwd", cwd)
+	out, _, err := adopt("task:dead/4")
 	if err != nil {
 		t.Fatalf("park adopt: %v", err)
 	}
-	if item := decodeAdded(t, out).Item; item.Kind != parking.KindScope || item.Origin != parking.OriginAdopted || item.Title != "README を直す" {
+	var added parking.Added
+	if err := json.Unmarshal([]byte(out), &added); err != nil {
+		t.Fatal(err)
+	}
+	if item := added.Item; item.Kind != parking.KindScope || item.Origin != parking.OriginAdopted || item.Title != "README を直す" {
 		t.Errorf("item = %+v", item)
 	}
 	if _, err := os.Stat(filepath.Join(root, "state", "agents-daemon", "tasks", "dead", "4.json")); !os.IsNotExist(err) {
@@ -323,7 +348,7 @@ func TestParkAdopt(t *testing.T) {
 	}
 }
 
-// --task はそのセッションがそのタスクの途中で置いたメモで絞る。--session が無ければ受け付けない。
+// task はそのセッションがそのタスクの途中で置いたメモで絞る。session_id が無ければ受け付けない。
 func TestParkList_task(t *testing.T) {
 	root := parkTestEnv(t)
 	cwd := filepath.Join(root, "src", "home", "a")
@@ -331,32 +356,18 @@ func TestParkList_task(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeTaskRecord(t, root, "s1", `{"id": "3", "subject": "a", "status": "in_progress", "session_id": "s1"}`)
-	out, _, err := runPark(t, parkInput, "add", "--cwd", cwd)
-	if err != nil {
-		t.Fatal(err)
-	}
-	during := decodeAdded(t, out).Item
-	if _, _, err := runPark(t, strings.Replace(strings.Replace(parkInput, "保持期間", "別の件", 1), `"s1"`, `"s2"`, 1), "add", "--cwd", cwd); err != nil {
-		t.Fatal(err)
-	}
+	during := add(t, addReq(t, "s1", cwd, memoTitle)).Item
+	add(t, addReq(t, "s2", cwd, "別のメモ"))
 
-	out, _, err = runPark(t, "", "list", "--status", "open", "--task", "3", "--session", "s1", "--cwd", cwd)
-	if err != nil {
-		t.Fatal(err)
+	if items := listItems(t, `{"status": "open", "task": "3", "session_id": "s1"}`); len(items) != 1 || items[0].ID != during.ID {
+		t.Errorf("task = %+v, want %s だけ", items, during.ID)
 	}
-	var items []parking.Item
-	if err := json.Unmarshal([]byte(out), &items); err != nil {
-		t.Fatalf("list の JSON を読めない: %v\n%s", err, out)
-	}
-	if len(items) != 1 || items[0].ID != during.ID {
-		t.Errorf("--task = %+v, want %s だけ", items, during.ID)
-	}
-	if _, _, err := runPark(t, "", "list", "--task", "3", "--cwd", cwd); err == nil {
-		t.Errorf("--session の無い --task を受け付けた")
+	if _, _, err := runPark(t, "list", `{"task": "3"}`); err == nil {
+		t.Errorf("session_id の無い task を受け付けた")
 	}
 }
 
-// --here は --cwd の repo (linked worktree からでも main worktree の鍵) で絞る。--repo とは併用できない。
+// here は cwd の repo (linked worktree からでも main worktree の鍵) で絞る。repo とは併用できない。
 func TestParkList_here(t *testing.T) {
 	root := parkTestEnv(t)
 	repo, wt := parkTestRepo(t, filepath.Join(root, "src", "home", "app"))
@@ -364,35 +375,21 @@ func TestParkList_here(t *testing.T) {
 	if err := os.MkdirAll(other, 0o750); err != nil {
 		t.Fatal(err)
 	}
-	out, _, err := runPark(t, parkInput, "add", "--cwd", wt)
-	if err != nil {
-		t.Fatal(err)
-	}
-	mine := decodeAdded(t, out).Item
-	if _, _, err := runPark(t, strings.Replace(parkInput, "保持期間", "別の件", 1), "add", "--cwd", other); err != nil {
-		t.Fatal(err)
-	}
+	mine := add(t, addReq(t, "s1", wt, memoTitle)).Item
+	add(t, addReq(t, "s1", other, "別のメモ"))
 
 	for _, cwd := range []string{repo, wt} {
-		out, _, err := runPark(t, "", "list", "--status", "open", "--here", "--session", "s1", "--cwd", cwd)
-		if err != nil {
-			t.Fatalf("park list --here --cwd %s: %v", cwd, err)
-		}
-		var items []parking.Item
-		if err := json.Unmarshal([]byte(out), &items); err != nil {
-			t.Fatalf("list の JSON を読めない: %v\n%s", err, out)
-		}
-		if len(items) != 1 || items[0].ID != mine.ID {
-			t.Errorf("--here --cwd %s = %+v, want %s だけ", cwd, items, mine.ID)
+		if items := listItems(t, req(t, map[string]any{"status": "open", "here": true, "cwd": cwd})); len(items) != 1 || items[0].ID != mine.ID {
+			t.Errorf("here cwd %s = %+v, want %s だけ", cwd, items, mine.ID)
 		}
 	}
-	if _, _, err := runPark(t, "", "list", "--here", "--repo", repo, "--cwd", repo); err == nil {
-		t.Errorf("--here と --repo を併用できた")
+	if _, _, err := runPark(t, "list", req(t, map[string]any{"here": true, "repo": repo, "cwd": repo})); err == nil {
+		t.Errorf("here と repo を併用できた")
 	}
 }
 
-// discard は open のメモのうち、最後に置かれてから --days 日より経ったものを
-// discarded にし、捨てたメモを出す。--days は必須で 1 以上。
+// discard は open のメモのうち、最後に置かれてから days 日より経ったものを
+// discarded にし、捨てたメモを出す。days は必須で 1 以上。
 func TestParkDiscard(t *testing.T) {
 	root := parkTestEnv(t)
 	cwd := filepath.Join(root, "src", "home", "a")
@@ -403,13 +400,9 @@ func TestParkDiscard(t *testing.T) {
 	const old = "20260901T000000-0ld0ld00"
 	writeTestConfig(t, filepath.Join(root, "state", "agents-daemon", "parking", old+".json"),
 		`{"id":"`+old+`","repo":"`+cwd+`","kind":"aside","title":"古い","status":"open","sources":[{"session_id":"s1","cwd":"`+cwd+`","at":"2026-09-01T00:00:00Z"}]}`)
-	out, _, err := runPark(t, parkInput, "add", "--cwd", cwd)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fresh := decodeAdded(t, out).Item
+	fresh := add(t, addReq(t, "s1", cwd, memoTitle)).Item
 
-	out, _, err = runPark(t, "", "discard", "--days", "30", "--session", "viewer", "--cwd", cwd)
+	out, _, err := runPark(t, "discard", `{"days": 30, "session_id": "viewer"}`)
 	if err != nil {
 		t.Fatalf("park discard: %v", err)
 	}
@@ -420,21 +413,13 @@ func TestParkDiscard(t *testing.T) {
 	if len(items) != 1 || items[0].ID != old || items[0].Status != parking.StatusDiscarded {
 		t.Errorf("discard = %+v, want %s だけ", items, old)
 	}
-	out, _, err = runPark(t, "", "list", "--status", "open", "--cwd", cwd)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var open []parking.Item
-	if err := json.Unmarshal([]byte(out), &open); err != nil {
-		t.Fatalf("list の JSON を読めない: %v\n%s", err, out)
-	}
-	if len(open) != 1 || open[0].ID != fresh.ID {
+	if open := listItems(t, `{"status": "open"}`); len(open) != 1 || open[0].ID != fresh.ID {
 		t.Errorf("open = %+v, want %s だけ", open, fresh.ID)
 	}
-	if _, _, err := runPark(t, "", "discard", "--cwd", cwd); err == nil {
-		t.Errorf("--days の無い discard を受け付けた")
+	if _, _, err := runPark(t, "discard", `{}`); err == nil {
+		t.Errorf("days の無い discard を受け付けた")
 	}
-	if _, _, err := runPark(t, "", "discard", "--days", "0", "--cwd", cwd); err == nil {
-		t.Errorf("--days 0 を受け付けた")
+	if _, _, err := runPark(t, "discard", `{"days": 0}`); err == nil {
+		t.Errorf("days 0 を受け付けた")
 	}
 }

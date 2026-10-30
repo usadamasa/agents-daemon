@@ -1,14 +1,14 @@
 # 実機の CLI の点検
 
-自分の block に打つ固定のコマンドと、コードが読む欄、突き合わせる先。`internal/runtime/backend/rexcli` が rex に打つコマンドと
+自分の block に打つ固定のコマンドと、コードが読む欄、突き合わせる先。`rexcli` が rex に打つコマンドと
 同じ引数にしてある。コードが打つコマンドを変えたら、この表も同じ PR で変える。
-パスは `internal/runtime/backend/rexcli/` からの相対。実測を取り直したら `testdata/` に日付と版のディレクトリを足す
+パスは `rexcli` パッケージのディレクトリからの相対。実測を取り直したら `testdata/` に日付と版のディレクトリを足す
 (`testdata/README.md`)。
 
 ## doctor が見る行
 
 `go run ./cmd/agents-daemon doctor` の「rex CLI の前提」の節が、自分の block (`REX_BLOCK`) に打って
-欄の有無と exit code を名指しで出す (`internal/runtime/backend/rexcli/premise`)。人が打ち直す必要は無い。
+欄の有無と exit code を名指しで出す (`rexcli/premise`)。人が打ち直す必要は無い。
 節の `⚠` の行がずれで、`rex_version` と `built_at` と `api_revision` の行が `last-checked.md` に書く値。
 
 | doctor が打つコマンド | 見る欄 | 突き合わせる先 |

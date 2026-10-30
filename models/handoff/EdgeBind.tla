@@ -1,6 +1,6 @@
 ---------------------------- MODULE EdgeBind ----------------------------
 (* セッションをまたぐ辺 1 本 (edges/<id>.json) の session:<名前> の端点を、daemon が session ID に結びつける手順を
-   写したモデル。結びつけ (internal/edge の Bind) と、CLI の `edge add` / `edge rm` (Add / Remove) が同じファイルを
+   写したモデル。結びつけ (edge の Bind) と、CLI の `edge add` / `edge rm` (Add / Remove) が同じファイルを
    交錯して書く。
 
    - 辺の id は書いたときの両端の参照 (結びつける前の session:<名前>) から決まり、結びつけても変わらない。同じ参照の組の
@@ -73,7 +73,7 @@ Write(v, who) ==
   /\ bound' = IF file = None THEN (IF v \in Sessions THEN v ELSE None)
               ELSE IF bound = None /\ v \in Sessions THEN v ELSE bound
 
-\* statusline と daemon の tick でセッションが台帳に現れる (internal/runtime/daemon/ledger の Observe)。
+\* statusline と daemon の tick でセッションが台帳に現れる (daemon/ledger の Observe)。
 Appear(s) ==
   /\ s \notin seen
   /\ seen' = seen \cup {s}

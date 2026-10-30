@@ -165,7 +165,7 @@ export function withNote(text: string, note: string): string {
 }
 
 // taskText は「タスクにする」で送る文面。着手の時期は受け手の計画に任せる。依存図はタスクの description に
-// 書かれた id でメモと照合する (internal/deps/graph)。
+// 書かれた id でメモと照合する (deps/graph)。
 export function taskText(memo: ParkingCard, note = ''): string {
   const text = [
     `パーキングロットのメモ「${memo.title}」(種類: ${kindLabel(memo)}) をタスクにしてください。` +
@@ -212,7 +212,7 @@ export async function discard($: EngineInterface, memo: ParkingCard): Promise<st
 }
 
 // discardStale は最後に置かれてから days 日より経った open のメモをまとめて捨て、結果の文面を返す。捨てたメモは
-// 7 日残り (internal/parking の ClosedRetention)、id (`logs --events` の park.discard に残る) で戻せる。
+// 7 日残り (parking の ClosedRetention)、id (`logs --events` の park.discard に残る) で戻せる。
 export async function discardStale($: EngineInterface, days: number): Promise<string> {
   const ran = await run($, ['discard', '--days', String(days)])
   if ('failure' in ran) return `古いメモを捨てられませんでした: ${ran.failure}`

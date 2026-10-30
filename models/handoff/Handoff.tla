@@ -4,15 +4,15 @@
    写しているもの:
    - handOff は「依存図を読む → 取る (park set --status handed --from open) → 送る → 届かなければ戻す
      (park set --status open --from handed)」(hooks/parking.ts の handOff)。--from は元の status が違えば失敗する
-     (internal/parking の Store.Set)。取れるのは 1 つの mod だけで、取られたメモはほかの mod の依存図に open と出ても取れない。
+     (parking の Store.Set)。取れるのは 1 つの mod だけで、取られたメモはほかの mod の依存図に open と出ても取れない。
    - spawn は window を作ってから claude が前景になるのを待ち、待ち切れなければ foreground=false で返す。pane は残り、
-     claude が起動していることもある (internal/spawn/spawn.go の waitForClaude)。mod はそのメモを戻さず handed のまま残す。
+     claude が起動していることもある (spawn/spawn.go の waitForClaude)。mod はそのメモを戻さず handed のまま残す。
    - deps は status.json が今の daemon のものでなければ pane を空として扱い、未完了のタスクを exited と描く
-     (internal/deps/deps.go の livePanes、graph.go)。Adopt は「今の daemon がタスクの記録より後に書いた status.json に
-     そのセッションの pane が無い」ときだけ通す (internal/daemonstate の SessionExited、parking/place.go の Adopt)。
+     (deps/deps.go の livePanes、graph.go)。Adopt は「今の daemon がタスクの記録より後に書いた status.json に
+     そのセッションの pane が無い」ときだけ通す (daemonstate の SessionExited、parking/place.go の Adopt)。
    - Adopt はメモを書いてからタスクの記録を消す 2 手 (place.go)。
    - 取るときは宛先 (peer と self は sid:<session_id>、spawn は起こす先の repo:<path>) を同じ park set の --to で
-     メモの handed_to に書く。戻すと handed_to を空にする (internal/parking の Store.Set)。SplitClaim が TRUE なら、
+     メモの handed_to に書く。戻すと handed_to を空にする (parking の Store.Set)。SplitClaim が TRUE なら、
      取るのと宛先を書くのを別の park set にした形を写す (宛先の無い handed が見える)。
    - どのファイルの書き込みも statefile.WriteJSONAtomic なので、1 手を原子的なステップにする。
 

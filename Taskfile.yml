@@ -11,7 +11,7 @@ tasks:
     desc: agents-daemon を hook と同じキャッシュ上の場所へビルドする
     # SessionStart hook が使うビルドスクリプトをそのまま呼ぶ。置き場所と stamp の書き方を
     # 1 箇所に閉じるため。動作中の daemon は実行ファイルの差し替えを検知して入れ替わる
-    # (internal/runtime/daemon/selfupdate.go)。
+    # (daemon/selfupdate.go)。
     cmds:
       - hooks/build-daemon.sh
 

@@ -21,7 +21,7 @@ func testRoot() *cobra.Command {
 }
 
 // pruneTestRepo は main と、過去に戻した放置 worktree 1 つ (`.claude/worktrees/stale`) を持つリポジトリを作る。
-// 判定の網羅は internal/worktree のテストが持ち、ここでは flag の配線だけを見る。
+// 判定の網羅は worktree パッケージのテストが持ち、ここでは flag の配線だけを見る。
 func pruneTestRepo(t *testing.T) (repo, stale string) {
 	t.Helper()
 	repo = filepath.Join(t.TempDir(), "repo")

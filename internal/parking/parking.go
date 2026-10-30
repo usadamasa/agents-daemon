@@ -69,7 +69,7 @@ const (
 	ClosedRetention = 7 * 24 * time.Hour
 	// StaleAfter は open のメモを「古い」とみなす、最後に置かれてからの期間。週次の棚卸しを 4 回越したメモは文脈が
 	// 薄れている。housekeeping が OpenRetention で黙って消す前に、依存図の pane で人が見て捨てる区切り
-	// (`deps` の stale_memo_days、`park discard --days`)。保持期間の間の関係は internal/runtime/daemon の retention_test.go。
+	// (`deps` の stale_memo_days、`park discard --days`)。保持期間の間の関係は `daemon/retention_test.go`。
 	StaleAfter = 30 * 24 * time.Hour
 )
 

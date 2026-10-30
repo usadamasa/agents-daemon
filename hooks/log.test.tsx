@@ -2,7 +2,7 @@ import type { On, ProcessRunResult } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
-// mod の出来事を `agents-daemon event-log` で出来事のログに書く (hooks/log.ts、internal/eventlog)。
+// mod の出来事を `agents-daemon event-log` で出来事のログに書く (hooks/log.ts、eventlog)。
 
 const BIN = '/home/u/.cache/agents-daemon/bin/agents-daemon'
 const CWD = '/src/home/agents-daemon'

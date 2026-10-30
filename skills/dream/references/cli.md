@@ -31,7 +31,7 @@ XDG の state に置き、`~/.claude/` には書かない。
 | `${XDG_STATE_HOME:-~/.local/state}/agents-daemon/logs/dream-harvest.log` | Stop hook が起こした `dream harvest` | 失敗の stderr (成功時は無音) |
 
 `harvest/` `candidates/` `replays/` `verdicts/` の 90 日より古いファイルは `dream harvest` が書き込みの前に
-mtime で消す (`internal/dream` の `Prune`)。daemon の housekeeping は rex の外では走らないので、
+mtime で消す (`dream` パッケージの `Prune`)。daemon の housekeeping は rex の外では走らないので、
 Stop のたびに起きる harvest が書き手として掃除する。
 
 ## `dream harvest`
@@ -111,7 +111,7 @@ association 先がある memory は coverage ratio で `skill_body` / `memory_de
 - それ以外 → skill_body low
 
 閾値の spec は [skill-mining-heuristics.md](skill-mining-heuristics.md) を single source of truth とする。
-閾値を変えるときは、この spec と `internal/dream/mine/coverage.go` の定数を両方更新する。
+閾値を変えるときは、この spec と `mine/coverage.go` の定数を両方更新する。
 
 ### Flags
 

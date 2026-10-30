@@ -1,5 +1,5 @@
 // Package ref は依存図の作業の識別子 (Ref) の文法を持つ。依存図のノードの key と、セッションをまたぐ辺
-// (internal/edge) の端点はこの形で書く。mod は Ref を不透明な文字列として扱い、切り出さない。
+// (edge) の端点はこの形で書く。mod は Ref を不透明な文字列として扱い、切り出さない。
 //
 //	task:<session_id>/<task_id>     TaskCreate で作られたタスク
 //	todo:<session_id>/<n>           TodoWrite のリストの n 番目 (0 始まり)。並びが変わると別の項目を指すので、辺の端点にしない

@@ -24,7 +24,7 @@ func Commands() []*cobra.Command {
 	return []*cobra.Command{newParkCmd(), newSpawnCmd()}
 }
 
-// newParkCmd は `agents-daemon park add|set|list|discard|adopt` を組み立てる (internal/parking)。
+// newParkCmd は `agents-daemon park add|set|list|discard|adopt` を組み立てる (parking)。
 // repo は --cwd (既定は今の cwd) から決め、結果は JSON で stdout に出す。
 func newParkCmd() *cobra.Command {
 	var cwd string
@@ -112,7 +112,7 @@ func newParkCmd() *cobra.Command {
 	adopt := &cobra.Command{
 		Use:   "adopt task:<session_id>/<task_id>",
 		Short: "終了したセッションの未完了のタスクを出自 adopted (種類 scope) のメモにし、タスクの記録を消して {created, item} を出す",
-		Long: "引数は依存図のタスクのノードの key (internal/ref の Ref)。\n" +
+		Long: "引数は依存図のタスクのノードの key (ref パッケージの Ref)。\n" +
 			"セッションが終了したことは、動いている daemon がタスクの記録より後に書いた status.json に pane が無いことで確かめる。\n" +
 			"daemon が動いていない、status.json が古い、pane がある、のどれかなら移さない。",
 		Args: cobra.ExactArgs(1),

@@ -2,7 +2,7 @@
 # Stop hook: `agents-daemon dream harvest --incremental --detach` を exec する。
 #
 # dream (記憶階層の consolidation) の Harvest phase を、全プロジェクト横断で Stop のたびに回す。
-# detach・ログ (logs/dream-harvest.log)・失敗の時刻付けはバイナリ側 (cmd/agents-daemon/internal/dreamcli、internal/dream/harvest) が持つ。
+# detach・ログ (logs/dream-harvest.log)・失敗の時刻付けはバイナリ側 (dreamcli、dream/harvest) が持つ。
 # この hook が担うのはバイナリの場所の解決だけで、無ければ何もしない (SessionStart hook が build する)。
 #
 # この hook は transcript を読まない。読むのは起こしたバイナリで、Stop の時点で書き切れていないセッションを

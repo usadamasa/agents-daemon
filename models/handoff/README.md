@@ -53,10 +53,10 @@ TLC は devShell の `tlaplus` (`tlc`)。CI では回さない。`scripts/model-
 
 | 不変条件 | テスト |
 | ---- | ---- |
-| `AtMostOneDelivery` / `AtMostOneSession` / `HandedWhenDelivered` / `HandedHasDestination` / `OnlyHandedHasDestination` / `DeliveredWhereRecorded` と Claim の排他 | `internal/parking/invariants_test.go` |
-| `LiveTaskKept` / `AdoptLeavesOne` (実物の `daemonstate.SessionExited` で daemon の pid と status.json を読む) | `internal/parking/adopt_invariants_test.go` |
-| `RecordsComplete` | `internal/tasklog/invariants_test.go` |
-| `BindOnce` / `NoResurrect` と、書いたときの参照の組・今の参照の組ごとに辺が 1 本 | `internal/edge/bind_invariants_test.go` |
+| `AtMostOneDelivery` / `AtMostOneSession` / `HandedWhenDelivered` / `HandedHasDestination` / `OnlyHandedHasDestination` / `DeliveredWhereRecorded` と Claim の排他 | `parking/invariants_test.go` |
+| `LiveTaskKept` / `AdoptLeavesOne` (実物の `daemonstate.SessionExited` で daemon の pid と status.json を読む) | `parking/adopt_invariants_test.go` |
+| `RecordsComplete` | `tasklog/invariants_test.go` |
+| `BindOnce` / `NoResurrect` と、書いたときの参照の組・今の参照の組ごとに辺が 1 本 | `edge/bind_invariants_test.go` |
 
 mod の側 (取る → 送る → 届かなければ戻す、spawn で前景にならなければ戻さない、Discard は `--from open`) は
 `hooks/deps.test.tsx` が `park` と `spawn` の呼び出しの列で固定する。`AtMostOnce` / `NoneMissed` / `Informed` は
@@ -74,7 +74,7 @@ mod の側 (取る → 送る → 届かなければ戻す、spawn で前景に�
 - compact はターンの間に走り、tool の hook と交錯しない。モデルは compact を 1 ステップにし、どの時点でも起きうる
   (hook の途中にも挟まる) ことにして、実際より広く探している。
 - hook は PostToolUse で、同じターンの並列の tool の hook は順序が決まらないとしている。Claude Code のタスクの id は
-  セッションの中で 1 から順に増える整数としている (`internal/tasklog` の cc-premise)。
+  セッションの中で 1 から順に増える整数としている (`tasklog` の cc-premise)。
 - housekeeping (mtime による削除) は置いていない。1 回の受け渡しの間に上の不変条件と絡まないため。
 - `EdgeBind.tla` は辺 1 本と、`edge add` と `edge rm` と結びつけを 1 つずつ置く。結びつけるセッションの選び方
   (台帳の first_seen と辺の created_at、`ledger.Pick`) は非決定にし、現れたセッションのどれでも選べることにして広く

@@ -4,7 +4,7 @@
 # - cache のバイナリが無いか、stamp が plugin の version と違えば何もせず exit 0 (ensure-daemon.sh が build するまで待つ。
 #   旧版のバイナリはこのサブコマンドを知らないかもしれない)
 # - そろっていれば `prune-worktrees --hook` を exec し、stdin をそのまま渡す。判定と systemMessage はバイナリ側の責務
-#   (internal/worktree/hook.go、cmd/agents-daemon/internal/worktreecli/prune_worktrees_test.go)
+#   (worktree/hook.go、worktreecli/prune_worktrees_test.go)
 #
 # dream-harvest.sh と違い、この hook は stdout を stderr へ寄せない。バイナリが出す {"systemMessage": ...} を
 # Claude Code に読ませるため。

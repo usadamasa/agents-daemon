@@ -1,5 +1,5 @@
 // Package tasklog は Claude Code のセッションのタスク (TaskCreate / TaskUpdate / TaskList、無効なときは
-// TodoWrite) を、PostToolUse hook の入力から XDG state 配下へ記録する (#121)。読み手は依存図 (internal/deps)。
+// TodoWrite) を、PostToolUse hook の入力から XDG state 配下へ記録する (#121)。読み手は依存図 (deps)。
 //
 //	tasks/<session_id>/<task_id>.json   タスク 1 つ (1 タスク 1 ファイル)
 //	tasks/<session_id>/todos.json       TodoWrite のリスト全体
@@ -92,7 +92,7 @@ type hookInput struct {
 	ToolResponse json.RawMessage `json:"tool_response"`
 }
 
-// Result は 1 回の Ingest で何をしたか。出来事のログ (internal/eventlog) に出す。Tool が空なら記録しない
+// Result は 1 回の Ingest で何をしたか。出来事のログ (eventlog) に出す。Tool が空なら記録しない
 // ツール。
 type Result struct {
 	Tool      string

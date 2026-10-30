@@ -13,7 +13,7 @@ plugin の mod が描く依存図の pane と、model の `SendMessage` の結�
 ## 依存図の pane
 
 `/deps` コマンドで依存図を会話の横 (dock) の pane に開き、`agents-daemon deps --cwd <cwd>` の JSON を数秒ごとに
-読み直して描く。読み込みは `hooks/deps-data.ts` の `loadDeps` が 1 箇所で持つ。JSON は `internal/deps` が
+読み直して描く。読み込みは `hooks/deps-data.ts` の `loadDeps` が 1 箇所で持つ。JSON は `deps` パッケージが
 `$STATE/tasks/` (PostToolUse hook の `ingest-task` が書く)、`status.json`、`$STATE/edges/`、`$STATE/parking/` から組む。
 
 - `graph` はタスクの依存の DAG (次の節)
@@ -36,7 +36,7 @@ pane は fullscreen のレイアウトで dock に置かれるときだけ出す
 longest chain の辺の罫線 (`marks`) は色付き。同じノードは 1 回しか出ず、
 先頭の数の行 (`■ ○ ▸ ↵ ✓ ◇`) の下に全部の行を描く (pane はスクロールする)。完了したノードは既定で出さず、
 `Show completed` で `rows_with_completed` に切り替える。pane の底には記号の凡例を薄く置き、中身が pane の高さに
-満たないときも底に寄せる。記号と数の行と凡例は `hooks/graph.ts`、レーンの割り当ては `internal/deps/graph/dag` が持つ。
+満たないときも底に寄せる。記号と数の行と凡例は `hooks/graph.ts`、レーンの割り当ては `graph/dag` が持つ。
 選んだノードの詳細で辺を操作する。
 
 - `kind: edge` の辺は `Unlink` で `edge rm` に元の記録の今の参照を渡す (`sid:` の端点がタスクへ解決された後の
@@ -69,16 +69,16 @@ skill の手順で渡すよう自分に頼む。`▾` の右の補足欄 (`✎`)
 <!-- cc-premise: 2.1.303 mods pane の placement (dock / inline) と command.run の presentation.isFullscreen -->
 
 pane を開いたとき、数 (repo、セッション、ノード、メモ) が変わったとき、`deps` が失敗したときは出来事のログに
-`mod.deps.open` / `mod.deps.changed` / `mod.deps.failed` を書く (`hooks/log.ts`、`internal/eventlog`)。
+`mod.deps.open` / `mod.deps.changed` / `mod.deps.failed` を書く (`hooks/log.ts`、`eventlog`)。
 
 ## 依存の DAG (`graph`)
 
 `graph` はセッションをまたぐタスクの依存の DAG (#134)。ノードはタスク 1 つ (`task:<sid>/<tid>`)、TodoWrite の
 項目 1 つ (`todo:<sid>/<n>`)、タスクの無い生きているセッション 1 つ (`sid:<sid>`) で、辺は同じセッションの
 `blockedBy` (`kind: task`) と `$STATE/edges/` の辺 (`kind: edge`) を 1 つにしたもの。ノードの `key` は Ref
-(`internal/ref`) そのもので、辺の端点と同じ形になる。mod は key を切り出さず、端点にできるかは `endpoint`
-(TodoWrite の項目だけ false)、タスクの ID は `task_id` で読む。ノードの材料 (`graph.Card`) は `internal/deps` が組み、
-辺の記録の端点は依存図を組むたびにノードへ解決し直す (`internal/deps/graph`)。
+(`ref`) そのもので、辺の端点と同じ形になる。mod は key を切り出さず、端点にできるかは `endpoint`
+(TodoWrite の項目だけ false)、タスクの ID は `task_id` で読む。ノードの材料 (`graph.Card`) は `deps` パッケージが組み、
+辺の記録の端点は依存図を組むたびにノードへ解決し直す (`deps/graph`)。
 
 - `task:<sid>/<tid>` はそのタスク。記録が消えていればその辺は描かない
 - `sid:<sid>` はそのセッション。after 側は根のタスク (同じセッションの blockedBy が無いもの)、before 側は
@@ -91,7 +91,7 @@ pane を開いたとき、数 (repo、セッション、ノード、メモ) が�
   key にした置き場のノードにし、`exited` で下流が止まっていることを見せる
 
 `session:<名前>` の端点は、daemon が tick ごとに status.json を書いた直後、セッション台帳 (`$STATE/sessions/`、
-`internal/runtime/daemon/ledger`) を書いてから結びつける (`internal/edge` の `Bind`)。候補は名前が一致し、辺の
+`daemon/ledger`) を書いてから結びつける (`edge` の `Bind`)。候補は名前が一致し、辺の
 created_at に生きていたか後から現れた (last_seen が created_at 以後の) セッション (`ledger.Pick`)。辺を書いた時点で
 動いていた候補 (first_seen が created_at 以前) があれば first_seen の最も新しいもの、無ければ created_at より後に
 最初に現れたものを選ぶ。渡す側は `claude --name` で起こしてすぐ `edge add` を書くので、直前に起きた同名のセッションが
@@ -106,12 +106,12 @@ tick ごとにするのは、渡した側が `edge add` を書いてから数秒
 辺と重なるときは、同じ依存なので結びつける側の辺を消して 1 本にする。`Add`、`Remove`、`Bind`、`Prune` は
 `edges/.lock` を取って読んでから書く。ロックが無いと、`edge add` が読んだ後に結びついた端点を名前に戻し
 (`BindOnce` の反例)、`Bind` が読んだ後に `edge rm` で消した辺を作り直す (`NoResurrect` の反例)。手順の交錯は
-`models/handoff/EdgeBind.tla`、実物の Store での交錯は `internal/edge/bind_invariants_test.go` が確かめる。
+`models/handoff/EdgeBind.tla`、実物の Store での交錯は `edge/bind_invariants_test.go` が確かめる。
 
-pane を解釈するのは `internal/deps` の `activity` だけで、生きているセッションごとに 1 回、セッションの活動
+pane を解釈するのは `deps` パッケージの `activity` だけで、生きているセッションごとに 1 回、セッションの活動
 (`working` / `done` / `question` / `permission` / `error` / `limit` / `unknown`) を導く。上限待ちを agent の申告より
 先に見て、`limit` のときは解除時刻 (`15:04`) を `detail` に添える。ノードの状態は作業の進み、セッションの生死、活動だけで
-決まる純粋な関数 (`internal/deps/graph` の `nodeState`): 完了なら `completed`、生きていないセッションの未完了は `exited`、
+決まる純粋な関数 (`deps/graph` の `nodeState`): 完了なら `completed`、生きていないセッションの未完了は `exited`、
 生きているセッションの未着手は `pending`、進行中は活動そのもの。
 <!-- cc-premise: 2.1.302 osc7501 agent_status と blocked の kind (permission / question / auth) からセッションの活動を決める -->
 
@@ -120,7 +120,7 @@ pane を解釈するのは `internal/deps` の `activity` だけで、生きて�
 `halted` か、完了していない待ちの輪のノードで、数の行の ■、行の末尾の下流の数、longest chain の起点に使う。
 
 段・下流の数・待ちの輪・原因の鎖・最長の鎖の数え方と、`rows` / `rows_with_completed` (位相順の行とレーンの割り当て。
-行の並びは `Nodes` の順を優先の順にし、直前のノードの下流で上流が出揃ったものを先に出す) は `internal/deps/graph/dag` が持つ。
+行の並びは `Nodes` の順を優先の順にし、直前のノードの下流で上流が出揃ったものを先に出す) は `graph/dag` が持つ。
 
 ## 渡した宛先の辺の確かめ
 

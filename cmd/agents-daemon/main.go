@@ -20,7 +20,7 @@
 //	prune-worktrees  誰も使っていない Claude Code の worktree の回収 (SessionStart hook が --hook 付きで呼ぶ)
 //	version   建てた元の plugin の version の表示 (--version も同じ)
 //
-// グローバルオプション --json は doctor と status の出力を JSON にする (internal/jsonflag)。
+// グローバルオプション --json は doctor と status の出力を JSON にする (jsonflag)。
 package main
 
 import (

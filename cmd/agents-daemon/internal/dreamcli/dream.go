@@ -1,4 +1,4 @@
-// Package dreamcli は `agents-daemon dream` の組み立て (flag と、環境を internal/dream の各 phase へ渡す配線) を持つ。
+// Package dreamcli は `agents-daemon dream` の組み立て (flag と、環境を dream パッケージの各 phase へ渡す配線) を持つ。
 package dreamcli
 
 import (

@@ -1,5 +1,5 @@
 // Package daemon は agents-daemon の監視デーモンの実体 (ポーリングループ、
-// 起動の排他 (lock) と PID ファイル、status snapshot、dry-run 経路) を提供する。cmd/agents-daemon/internal/daemoncli の
+// 起動の排他 (lock) と PID ファイル、status snapshot、dry-run 経路) を提供する。daemoncli の
 // daemon / status / stop はこのパッケージを薄く呼び出すだけの cobra 配線に徹する。
 package daemon
 
@@ -69,22 +69,22 @@ type daemonRuntime struct {
 	// statusPath と store はプロセスの生存期間で固定なのでここに置く。
 	statusPath string
 	store      sessionstate.Store
-	// tasks は hook が書くタスクの記録 (internal/tasklog)。daemon は housekeeping で消すだけ。
+	// tasks は hook が書くタスクの記録 (tasklog)。daemon は housekeeping で消すだけ。
 	// ゼロ値は何も消さない。
 	tasks tasklog.Store
-	// edges は `edge add` が書くセッションをまたぐ辺 (internal/edge)。daemon は tick ごとに session:<名前> の
+	// edges は `edge add` が書くセッションをまたぐ辺 (edge)。daemon は tick ごとに session:<名前> の
 	// 端点を台帳のセッションに結びつけ、housekeeping で消す。ゼロ値は何もしない。
 	edges edge.Store
-	// sessions はセッション台帳 (internal/runtime/daemon/ledger)。daemon だけが tick ごとに書き、housekeeping で消す。
+	// sessions はセッション台帳 (daemon/ledger)。daemon だけが tick ごとに書き、housekeeping で消す。
 	// ゼロ値は書かない。
 	sessions ledger.Store
-	// parking は `park add` が書くパーキングのメモ (internal/parking)。daemon は housekeeping で消すだけ。
+	// parking は `park add` が書くパーキングのメモ (parking)。daemon は housekeeping で消すだけ。
 	// ゼロ値は何も消さない。
 	parking parking.Store
-	// eventLog は CLI と mod が書く出来事のログ (internal/eventlog)。daemon は housekeeping で rotate 済みの
+	// eventLog は CLI と mod が書く出来事のログ (eventlog)。daemon は housekeeping で rotate 済みの
 	// ものを消すだけ。ゼロ値は何も消さない。
 	eventLog string
-	// limits は上限の出来事の記録 (internal/runtime/daemon/limitlog)。daemon が書き、housekeeping で消す。ゼロ値は書かない。
+	// limits は上限の出来事の記録 (daemon/limitlog)。daemon が書き、housekeeping で消す。ゼロ値は書かない。
 	limits              limitlog.Store
 	sleep               func(time.Duration)
 	startedAt           time.Time

@@ -326,7 +326,7 @@ func TestGraph_chains(t *testing.T) {
 	}
 }
 
-// drawRows は rows を目で読める形にする (internal/deps/graph/dag のテストと同じ形)。
+// drawRows は rows を目で読める形にする (graph/dag のテストと同じ形)。
 func drawRows(rows []dag.Row) string {
 	lines := make([]string, 0, len(rows))
 	for _, r := range rows {

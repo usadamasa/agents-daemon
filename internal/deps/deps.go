@@ -1,7 +1,7 @@
-// Package deps はタスクの記録 (internal/tasklog)、status.json のスナップショット、セッションをまたぐ辺 (internal/edge)、
-// パーキングのメモ (internal/parking) から依存図を組む (#134)。
+// Package deps はタスクの記録 (tasklog)、status.json のスナップショット、セッションをまたぐ辺 (edge)、
+// パーキングのメモ (parking) から依存図を組む (#134)。
 //
-// 依存図は 2 つを持つ。graph はタスクの依存の DAG (internal/deps/graph)。repos は repo ごとの生きているセッションと
+// 依存図は 2 つを持つ。graph はタスクの依存の DAG (deps/graph)。repos は repo ごとの生きているセッションと
 // open のメモで、pane がメモの節を描き、メモを渡す宛先を選ぶのに使う。worktree の作業は main worktree の repo に入る。
 //
 // 読み手は plugin の mod (hooks/deps.tsx) で、`agents-daemon deps` の JSON を数秒ごとに読んで pane に描く。
@@ -23,11 +23,11 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
 
-// ParkingCard は repo の open のメモ 1 つ (internal/parking の Item)。
+// ParkingCard は repo の open のメモ 1 つ (parking の Item)。
 type ParkingCard struct {
 	ID   string `json:"id"`
 	Kind string `json:"kind"`
-	// Origin はメモの出自 (placed / adopted、internal/parking)。
+	// Origin はメモの出自 (placed / adopted、parking)。
 	Origin       string   `json:"origin"`
 	Title        string   `json:"title"`
 	Detail       string   `json:"detail,omitempty"`
@@ -40,7 +40,7 @@ type ParkingCard struct {
 // ParkingSource はメモを置いたセッション 1 つ。
 type ParkingSource struct {
 	SessionID string `json:"session_id"`
-	// TaskRef は置いたときに進めていたタスクのノードの key (internal/ref の task:。無ければ省く)。
+	// TaskRef は置いたときに進めていたタスクのノードの key (ref の task:。無ければ省く)。
 	TaskRef string `json:"task_ref,omitempty"`
 	// Session はノードと同じ規則で付けたセッションの短い名前。
 	Session string `json:"session"`
@@ -98,7 +98,7 @@ type input struct {
 	Todos    []tasklog.TodoList
 	// Parking はメモ (status を問わない)。repo の memos には open のものだけを出し、タスクとの照合には全部を使う。
 	Parking []parking.Item
-	// Edges はセッションをまたぐ辺 (internal/edge)。
+	// Edges はセッションをまたぐ辺 (edge)。
 	Edges []edge.Edge
 	// Locate は cwd の repo を決める。同じ cwd では 1 回だけ呼ぶ。
 	Locate func(cwd string) gitrepo.Place

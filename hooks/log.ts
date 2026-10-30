@@ -3,9 +3,9 @@ import type { EngineInterface } from 'claude-code'
 
 import { daemonBin } from './daemon-bin'
 
-// mod の出来事を出来事のログ (internal/eventlog) に残す。mod はファイルを直接書けないので
+// mod の出来事を出来事のログ (eventlog) に残す。mod はファイルを直接書けないので
 // `agents-daemon event-log` に渡し、このセッションの ID を添える。
-// 出来事の名前と欄の一覧は internal/eventlog の package doc が持つ。subject、title、送った文面は渡さない。
+// 出来事の名前と欄の一覧は eventlog の package doc が持つ。subject、title、送った文面は渡さない。
 
 // logged は slot ごとに最後に書いた中身。同じ失敗や同じ数が続く間は書き直さない (依存図は数秒ごとに読み直す)。
 const logged = atom({ plugin: 'agents-daemon', key: 'logged' } as const, {})

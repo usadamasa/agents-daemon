@@ -11,7 +11,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
 
-// park の出来事 (internal/eventlog の package doc の一覧) を、park の操作の結果から組んで書く。
+// park の出来事 (eventlog の package doc の一覧) を、park の操作の結果から組んで書く。
 // eventlog に持たせないのは、eventlog が tasklog と parking を import しないため (tasklog の Ca を増やさない)。
 
 // parkAdd は stdin の Request で s.Park を走らせ、結果をログに書く (park add)。

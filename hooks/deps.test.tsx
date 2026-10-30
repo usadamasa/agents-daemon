@@ -96,7 +96,7 @@ function node(key: string, state: string, title: string, extra: Record<string, u
 
 const ep = (ref: string) => ({ ref, cwd: CWD, repo: CWD })
 
-// 依存の DAG (internal/deps の graph)。Q/1 が質問で止まり、その下流に 3 つ。X/1 と X/2 は待ちの輪。
+// 依存の DAG (deps パッケージの graph)。Q/1 が質問で止まり、その下流に 3 つ。X/1 と X/2 は待ちの輪。
 // W/1 は進行中で、途中で置いたメモが 1 つ。D/1 はターンを終えた。issue:o/r#9 は置き場のノードで、その下流に P/1。
 const NODES = [
   node('task:Q/1', 'question', '論点を決める', { session: 'design', downstream: 3, halted: true, stuck: true }),
@@ -132,7 +132,7 @@ const LINKS = [
   { before: 'issue:o/r#9', after: 'task:P/1', kind: 'edge', edge: { id: 'e3', before: ep('issue:o/r#9'), after: ep('task:P/1') } },
 ]
 
-// レーンの行 (internal/deps/graph/dag の Rows を Nodes の順で組んだもの)。鎖は Q → R → V と W、issue → P。輪の X は最後。
+// レーンの行 (graph/dag の Rows を Nodes の順で組んだもの)。鎖は Q → R → V と W、issue → P。輪の X は最後。
 const ROWS = [
   'task:Q/1',
   'task:Q/2',

@@ -19,7 +19,7 @@ func Commands() []*cobra.Command {
 // newPruneWorktreesCmd は `agents-daemon prune-worktrees` を組み立てる。
 //
 // 誰も使っていない Claude Code の worktree (`.claude/worktrees/` 配下) を回収する。判定・git 操作・hook 入力の
-// 読み取りは internal/worktree が持つ。--hook は SessionStart hook (hooks/prune-worktrees.sh) 用。
+// 読み取りは worktree パッケージが持つ。--hook は SessionStart hook (hooks/prune-worktrees.sh) 用。
 func newPruneWorktreesCmd() *cobra.Command {
 	var (
 		dryRun, force, hook bool

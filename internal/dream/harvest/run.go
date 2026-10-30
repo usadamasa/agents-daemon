@@ -64,7 +64,7 @@ func Run(opts Opts) error {
 	}
 
 	var records []record.Record
-	err = dream.WalkJSONLFiles(resolvedProjects, dream.WalkOptions{Days: opts.Days}, func(path string) error {
+	err = walkJSONLFiles(resolvedProjects, walkOptions{Days: opts.Days}, func(path string) error {
 		if !filter.accept(path, resolvedProjects) {
 			return nil
 		}

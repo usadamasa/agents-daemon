@@ -34,7 +34,7 @@ type userMessage struct {
 
 // assistantMessage は entry.Message (assistant 側)。
 type assistantMessage struct {
-	Content []dream.ContentBlock `json:"content"`
+	Content []contentBlock `json:"content"`
 }
 
 // skillInput は Skill tool_use の input フィールド。

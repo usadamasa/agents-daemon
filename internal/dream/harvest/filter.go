@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// walkFilter は WalkJSONLFiles のコールバックで各ファイルを採用するか判定する。
+// walkFilter は walkJSONLFiles のコールバックで各ファイルを採用するか判定する。
 type walkFilter struct {
 	projectGlob string // canonical project name の substring 一致
 	incremental bool

@@ -36,7 +36,7 @@ pane は fullscreen のレイアウトで dock に置かれるときだけ出す
 longest chain の辺の罫線 (`marks`) は色付き。同じノードは 1 回しか出ず、
 先頭の数の行 (`■ ○ ▸ ↵ ✓ ◇`) の下に全部の行を描く (pane はスクロールする)。完了したノードは既定で出さず、
 `Show completed` で `rows_with_completed` に切り替える。pane の底には記号の凡例を薄く置き、中身が pane の高さに
-満たないときも底に寄せる。記号と数の行と凡例は `hooks/graph.ts`、レーンの割り当ては `internal/deps/dag` が持つ。
+満たないときも底に寄せる。記号と数の行と凡例は `hooks/graph.ts`、レーンの割り当ては `internal/deps/graph/dag` が持つ。
 選んだノードの詳細で辺を操作する。
 
 - `kind: edge` の辺は `Unlink` で `edge rm` に元の記録の今の参照を渡す (`sid:` の端点がタスクへ解決された後の
@@ -120,7 +120,7 @@ pane を解釈するのは `internal/deps` の `activity` だけで、生きて�
 `halted` か、完了していない待ちの輪のノードで、数の行の ■、行の末尾の下流の数、longest chain の起点に使う。
 
 段・下流の数・待ちの輪・原因の鎖・最長の鎖の数え方と、`rows` / `rows_with_completed` (位相順の行とレーンの割り当て。
-行の並びは `Nodes` の順を優先の順にし、直前のノードの下流で上流が出揃ったものを先に出す) は `internal/deps/dag` が持つ。
+行の並びは `Nodes` の順を優先の順にし、直前のノードの下流で上流が出揃ったものを先に出す) は `internal/deps/graph/dag` が持つ。
 
 ## 渡した宛先の辺の確かめ
 

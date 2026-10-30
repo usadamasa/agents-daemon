@@ -1,6 +1,6 @@
 // Package graph はタスクの記録と生きているセッションから、セッションをまたぐタスクの依存の DAG を組む (#134)。
 // ノードの材料 (Card) と repo ごとのセッションを組むのは internal/deps、段・下流・待ちの輪・鎖の数え方とレーンの
-// 割り当ては internal/deps/dag が持つ。
+// 割り当ては internal/deps/graph/dag が持つ。
 package graph
 
 import (
@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/usadamasa/agents-daemon/internal/deps/dag"
+	"github.com/usadamasa/agents-daemon/internal/deps/graph/dag"
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/ref"
@@ -64,7 +64,7 @@ type Graph struct {
 	// LongestChain は下流の最も多い止まっているノード (待ちの輪を含む) から、下流をたどった最長の鎖の Key。
 	// 止まっているノードが無ければ空。
 	LongestChain []string `json:"longest_chain"`
-	// Rows は pane に描くレーンの行 (internal/deps/dag の Rows)。完了したノードとその辺を落として組む。
+	// Rows は pane に描くレーンの行 (internal/deps/graph/dag の Rows)。完了したノードとその辺を落として組む。
 	// 行の並びは Nodes の順を優先の順にした位相順。edge の辺 (セッションをまたぐ) は破線。
 	Rows []dag.Row `json:"rows"`
 	// RowsWithCompleted は完了したノードも含めて組んだ行 (Show completed)。

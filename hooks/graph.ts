@@ -1,7 +1,7 @@
 import type { DepsGraph, GraphLink, GraphNode } from '../types'
 
 // 依存の DAG (#134、`agents-daemon deps` の graph) の見せ方。記号、数の行、レーンの行の分け方、Add blocker の候補、
-// 辺の書き忘れを疑う渡し先を持つ。段・下流の数・原因の鎖・レーンの行はバイナリ (internal/deps/graph、internal/deps/dag) が
+// 辺の書き忘れを疑う渡し先を持つ。段・下流の数・原因の鎖・レーンの行はバイナリ (internal/deps/graph、internal/deps/graph/dag) が
 // 数えて渡すので、ここは並べるだけにする。描くのは hooks/deps.tsx (依存図の pane)。
 
 // 記号は絵文字を避け、端末の等幅で 1 桁に収まるもの。語は OSC 7501 の state / kind と Task 系ツールの status。
@@ -169,7 +169,7 @@ export const CHAIN_COLOR = 'success'
 
 export type Piece = { text: string; marked: boolean }
 
-// pieces は lanes の [from, to) を印 (marks、internal/deps/dag の Row.Marks) の有無で切った区間。罫線は 1 桁 1 文字
+// pieces は lanes の [from, to) を印 (marks、internal/deps/graph/dag の Row.Marks) の有無で切った区間。罫線は 1 桁 1 文字
 // (BMP) なので、文字列の位置がそのまま桁になる。区間が無くても 1 つ返す (描く Text の数を行で揃える)。
 export function pieces(lanes: string, marks: readonly number[] | undefined, from: number, to: number): Piece[] {
   const marked = new Set(marks ?? [])
@@ -184,7 +184,7 @@ export function pieces(lanes: string, marks: readonly number[] | undefined, from
   return out.length === 0 ? [{ text: '', marked: false }] : out
 }
 
-// splitLanes はレーンの行の罫線を、ノードの記号の左右に分ける。`*` がノードの位置 (internal/deps/dag の Rows)。
+// splitLanes はレーンの行の罫線を、ノードの記号の左右に分ける。`*` がノードの位置 (internal/deps/graph/dag の Rows)。
 // `*` が無い行 (辺をつなぐだけの行) は全部が left。
 export function splitLanes(lanes: string): { left: string; right: string } {
   const at = lanes.indexOf('*')

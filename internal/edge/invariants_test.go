@@ -128,8 +128,8 @@ func checkEdges(s Store, written map[string]Edge) string {
 		switch {
 		case pairs[pair]:
 			return fmt.Sprintf("参照の組 %v の辺が 2 本ある", pair)
-		case e.ID != edgeID(e.Before.written(), e.After.written()):
-			return fmt.Sprintf("辺 %s の id が参照の組から決まる値 %s でない", e.ID, edgeID(e.Before.written(), e.After.written()))
+		case e.ID != edgeID(writtenRef(e.Before), writtenRef(e.After)):
+			return fmt.Sprintf("辺 %s の id が参照の組から決まる値 %s でない", e.ID, edgeID(writtenRef(e.Before), writtenRef(e.After)))
 		case e.Before.Ref == e.After.Ref:
 			return fmt.Sprintf("自分自身への辺 %s がある", e.ID)
 		case !strings.HasPrefix(e.Note, "w"):

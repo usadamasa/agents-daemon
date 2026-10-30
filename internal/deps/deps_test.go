@@ -1,6 +1,8 @@
 package deps
 
 import (
+	"bytes"
+	"encoding/json"
 	"reflect"
 	"testing"
 	"time"
@@ -8,8 +10,34 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/daemonstate"
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/parking"
+	"github.com/usadamasa/agents-daemon/internal/protocol"
 	"github.com/usadamasa/agents-daemon/internal/tasklog/record"
 )
+
+// 型は schema から生成したものでも、空の slice を null で書くと mod が配列として読めない。空の依存図と中身のある依存図の
+// 実際の JSON を schema で確かめる。
+func TestDepsOutputIsValid(t *testing.T) {
+	for name, in := range map[string]input{
+		"空": {Locate: places(nil)},
+		"タスクあり": {
+			PID:      42,
+			Snapshot: snapshot(daemonstate.PaneStatus{PaneID: "p1", SessionID: "A", CWD: "/r"}),
+			Tasks:    []record.Task{task("A", "1", "調査", "in_progress", "/r"), task("A", "2", "PR", "pending", "/r", "1")},
+			Locate:   places(nil),
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			data, err := json.Marshal(build(in))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var v any
+			if err := protocol.Decode(bytes.NewReader(data), "DepsData", &v); err != nil {
+				t.Errorf("%v\n%s", err, data)
+			}
+		})
+	}
+}
 
 var t0 = time.Date(2026, 10, 18, 9, 0, 0, 0, time.UTC)
 
@@ -36,8 +64,8 @@ func titles(d Deps) []string {
 }
 
 // repos は repo を見出しで引けるようにする。
-func repos(d Deps) map[string]Repo {
-	m := map[string]Repo{}
+func repos(d Deps) map[string]protocol.DepsRepo {
+	m := map[string]protocol.DepsRepo{}
 	for _, r := range d.Repos {
 		m[r.Title] = r
 	}
@@ -82,7 +110,7 @@ func TestBuild_repoSessions(t *testing.T) {
 	got := repos(d)
 	// 進行中のタスクがあればその subject (Key の順で最初のもの)、無ければ今の作業 (msg)、セッション名、cwd の末尾。
 	// TodoWrite だけのセッションは進行中の項目。
-	want := map[string][]Session{
+	want := map[string][]protocol.DepsSession{
 		"agents-daemon": {
 			{SessionID: "D", Session: "alpha", Subject: "調べている", Live: true},
 			{SessionID: "A", Session: "workspace A", Subject: "ingest-task を書く", Live: true},
@@ -108,7 +136,7 @@ func TestBuild_memos(t *testing.T) {
 	const main, wt, other = "/src/home/agents-daemon", "/src/home/agents-daemon/.claude/worktrees/x", "/src/home/dotfile"
 	memo := parking.Item{
 		ID: "20261018T090000-aaaa", Repo: main, Status: parking.StatusOpen,
-		Entry: parking.Entry{Kind: parking.KindAside, Title: "保持期間の根拠が無い", Detail: "d", Files: []string{"a.go"}, DefaultTaken: "やらない"},
+		Kind: parking.KindAside, Title: "保持期間の根拠が無い", Detail: "d", Files: []string{"a.go"}, DefaultTaken: "やらない",
 		Sources: []parking.Source{
 			{SessionID: "B", TaskID: "1", CWD: wt, At: t0},
 			{SessionID: "A", CWD: main, Detail: "別の補足", At: t0.Add(time.Hour)},
@@ -116,7 +144,7 @@ func TestBuild_memos(t *testing.T) {
 	}
 	lone := parking.Item{
 		ID: "20261018T100000-bbbb", Repo: other, Status: parking.StatusOpen,
-		Entry:   parking.Entry{Kind: parking.KindPreference, Title: "alias の命名"},
+		Kind: parking.KindPreference, Title: "alias の命名",
 		Sources: []parking.Source{{SessionID: "C", CWD: other, At: t0}},
 	}
 	d := build(input{

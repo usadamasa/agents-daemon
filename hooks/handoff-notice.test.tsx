@@ -2,12 +2,14 @@ import type { On, ProcessRunResult } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
+import type { EdgeAddRequest } from '../types'
+
 // model が SendMessage で渡した宛先に依存の辺が無ければ、その tool の結果の context で辺の書き方を伝える (#172)。
 
 const BIN = '/home/u/.cache/agents-daemon/bin/agents-daemon'
 const CWD = '/src/home/agents-daemon'
 const PEER_CWD = '/src/home/agents-daemon/.claude/worktrees/edge-cli'
-const DEPS = [BIN, 'deps', '--cwd', CWD]
+const DEPS = [BIN, 'deps', { cwd: CWD }]
 
 // node はタスクのノード。sid と tid から key (task:<sid>/<tid>) を組む。
 function node(sid: string, tid: string, sessionName: string, extra: Record<string, unknown> = {}) {
@@ -49,16 +51,16 @@ function output(stdout: string, exitCode = 0, stderr = ''): ProcessRunResult {
   return { exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false }
 }
 
-// world は plugin の下の engine の代わり。deps は state.deps (Error なら失敗) を返し、呼ばれた argv を残す。
-// SendMessage は state.failing が立っていればエラーにし、そうでなければ届いたことにする。
+// world は plugin の下の engine の代わり。deps は state.deps (Error なら失敗) を返し、呼ばれた argv の後に stdin の
+// JSON を読んだものを並べて残す。SendMessage は state.failing が立っていればエラーにし、そうでなければ届いたことにする。
 function world(on: On, initial: unknown) {
-  const state = { deps: initial, failing: false, ran: [] as string[][] }
+  const state = { deps: initial, failing: false, ran: [] as unknown[][] }
   mock.env(on, { HOME: '/home/u' })
   mock.clock(on)
   on('session.id', async () => ({ value: 'SELF' }))
   on('session.cwd', async () => ({ value: CWD }))
   on('process.run', async (_$, e) => {
-    state.ran.push([...e.argv])
+    state.ran.push([...e.argv, JSON.parse(e.init?.stdin ?? '{}')])
     if (e.argv[1] !== 'deps') return { value: output('[]') }
     if (state.deps instanceof Error) return { value: output('', 1, state.deps.message) }
     return { value: output(JSON.stringify(state.deps)) }
@@ -78,7 +80,13 @@ const send = ($: Engine, to: string, extra: Record<string, unknown> = {}) => $.t
 
 const context = (res: { context?: readonly string[] }) => (res.context ?? []).join('\n')
 
-const depsCalls = (state: { ran: string[][] }) => state.ran.filter(argv => argv[1] === 'deps')
+const depsCalls = (state: { ran: unknown[][] }) => state.ran.filter(argv => argv[1] === 'deps')
+
+// edgeAdd は context の中の `printf '%s' '<JSON>' | <bin> edge add` の行から、stdin に渡す JSON を読む。
+function edgeAdd(text: string): EdgeAddRequest {
+  const line = text.split('\n').find(l => l.endsWith(`| ${BIN} edge add`)) ?? ''
+  return JSON.parse(line.replace(/^\s*printf '%s' '/, '').replace(/' \| .*$/, '')) as EdgeAddRequest
+}
 
 test('辺の無い生きているセッションへ渡したら、辺の書き方を結果の context で model に伝える', async ($, on) => {
   const w = world(on, deps([node('PEER', '1','edge-cli')]))
@@ -89,9 +97,8 @@ test('辺の無い生きているセッションへ渡したら、辺の書き�
   const text = context(res)
   expect(depsCalls(w)).toEqual([DEPS])
   expect(text).toMatch(/edge-cli/)
-  expect(text).toMatch(/edge add --before .* --before-cwd .* --after session:edge-cli --after-cwd/)
-  // 宛先の cwd は依存図のノードから埋める。
-  expect(text).toContain(`--after-cwd ${PEER_CWD}`)
+  // 宛先は session:<名前> で、cwd は依存図のノードから埋める。
+  expect(edgeAdd(text).after).toEqual({ ref: 'session:edge-cli', cwd: PEER_CWD })
   expect(text).toMatch(/agents-daemon:peer-sessions/)
   expect(text).toMatch(/返事や報告/)
   expect(res.context).toHaveLength(1)
@@ -103,7 +110,7 @@ test('同名のセッションに付く末尾の [ref] を落として宛先を�
   world(on, deps([node('PEER', '1','edge-cli')]))
   await $.session.start(START)
 
-  expect(context(await send($, 'edge-cli [ab12]'))).toMatch(/session:edge-cli /)
+  expect(edgeAdd(context(await send($, 'edge-cli [ab12]'))).after.ref).toBe('session:edge-cli')
 })
 
 test('宛先が辺の端点にあれば伝えない (ノードへ解決された端点でも、元の参照でも)', async ($, on) => {

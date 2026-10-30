@@ -4,7 +4,8 @@ import type { Engine } from 'claude-code/testing'
 
 const BIN = '/home/u/.cache/agents-daemon/bin/agents-daemon'
 const CWD = '/src/home/agents-daemon'
-const LIST = [BIN, 'park', 'list', '--status', 'open', '--here', '--session', 'SELF', '--cwd', CWD]
+// LIST は park list の argv の後に stdin を並べたもの。
+const LIST = [BIN, 'park', 'list', JSON.stringify({ status: 'open', here: true, cwd: CWD })]
 
 // memo は `park list` が出すメモ 1 つ (parking の Item)。by はメモを置いたセッションの ID。
 function memo(id: string, title: string, files: string[], by: string[] = ['OTHER'], extra: Record<string, unknown> = {}) {
@@ -34,7 +35,7 @@ function world(on: On, answers: Record<string, unknown>, failing: string[] = [])
   on('session.id', async () => ({ value: 'SELF' }))
   on('session.cwd', async () => ({ value: CWD }))
   on('process.run', async (_$, e) => {
-    const key = e.argv.join(' ')
+    const key = [...e.argv, e.init?.stdin ?? ''].join(' ')
     if (key === LIST.join(' ')) ran.list++
     const answer = answers[key]
     if (answer instanceof Error) return { value: output('', 1, answer.message) }

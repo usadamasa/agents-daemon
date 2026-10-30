@@ -37,6 +37,8 @@ components:
       - "internal/edge"
       - "internal/eventlog"
       - "internal/daemonstate"
+      - "internal/protocol"
+      - "internal/protocol/generate"
   handoff:
     in:
       - "internal/deps/**"
@@ -56,6 +58,9 @@ vendors:
   # rexcli のテストが fake の rex に渡った引数列を戻すのに使う。
   shellquote:
     in: github.com/kballard/go-shellquote
+  # protocol が mod と受け渡す JSON を schema で確かめるのに使う。
+  jsonschema:
+    in: github.com/google/jsonschema-go/jsonschema
 
 deps:
   cmd:
@@ -72,6 +77,8 @@ deps:
   shared:
     mayDependOn:
       - shared
+    canUse:
+      - jsonschema
   handoff:
     mayDependOn:
       - shared

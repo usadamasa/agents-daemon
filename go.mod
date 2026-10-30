@@ -5,6 +5,7 @@ go 1.26.3
 toolchain go1.26.10
 
 require (
+	github.com/google/jsonschema-go v0.4.3
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51
 	github.com/spf13/cobra v1.10.2
 )

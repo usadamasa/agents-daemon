@@ -2,7 +2,7 @@ import { atom, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
 import type { DepsData } from '../types'
-import { daemonBin } from './daemon-bin'
+import { runDaemon } from './daemon-bin'
 import { reason } from './log'
 
 // `agents-daemon deps` を読んで deps に置く。依存図の pane (hooks/deps.tsx) と、渡した宛先の辺を確かめる
@@ -21,8 +21,7 @@ export async function loadDeps($: EngineInterface): Promise<{ data: DepsData } |
     return { failure }
   }
   try {
-    const argv = [await daemonBin($), 'deps', '--cwd', await $.session.cwd()]
-    const { exitCode, stdout, stderr } = await $.process.run(argv, { timeoutMs: 10000 })
+    const { exitCode, stdout, stderr } = await runDaemon($, 'deps', { cwd: await $.session.cwd() })
     if (exitCode !== 0) return failed(stderr.trim() || `exit ${exitCode}`)
     const data = JSON.parse(stdout) as DepsData
     if (!Array.isArray(data.graph?.nodes)) return failed('deps の JSON に graph が無い')

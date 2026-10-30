@@ -2,17 +2,17 @@ import type { On, ProcessRunResult } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
+import type { EventLogRequest } from '../types'
+
 // mod の出来事を `agents-daemon event-log` で出来事のログに書く (hooks/log.ts、eventlog)。
 
 const BIN = '/home/u/.cache/agents-daemon/bin/agents-daemon'
 const CWD = '/src/home/agents-daemon'
-const LOG = [BIN, 'event-log', '--session', 'SELF', '--']
-
 function output(stdout: string, exitCode = 0, stderr = ''): ProcessRunResult {
   return { exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false }
 }
 
-// world は engine の代わりを立てる。event-log の呼び出しは logged に event 以降の引数で残し、ほかは run が答える。
+// world は engine の代わりを立てる。event-log の呼び出しは logged に [event, 'key=value'...] で残し、ほかは run が答える。
 function world(on: On, run: (argv: readonly string[]) => ProcessRunResult, register?: () => never) {
   const logged: string[][] = []
   mock.env(on, { HOME: '/home/u' })
@@ -21,8 +21,10 @@ function world(on: On, run: (argv: readonly string[]) => ProcessRunResult, regis
   on('session.cwd', async () => ({ value: CWD }))
   on('process.run', async (_$, e) => {
     if (e.argv[1] === 'event-log') {
-      expect([...e.argv.slice(0, LOG.length)]).toEqual(LOG)
-      logged.push([...e.argv.slice(LOG.length)])
+      expect([...e.argv]).toEqual([BIN, 'event-log'])
+      const req = JSON.parse(e.init?.stdin ?? '') as EventLogRequest
+      expect(req.session_id).toBe('SELF')
+      logged.push([req.event, ...(req.fields ?? []).map(f => `${f.key}=${f.value}`)])
       return { value: output('') }
     }
     return { value: run(e.argv) }

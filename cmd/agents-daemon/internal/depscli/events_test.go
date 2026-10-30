@@ -32,30 +32,37 @@ func TestLogIngest(t *testing.T) {
 	}
 }
 
-func runEventLog(t *testing.T, args ...string) error {
+func runEventLog(t *testing.T, stdin string) error {
 	t.Helper()
 	cmd := newEventLogCmd()
 	var out bytes.Buffer
+	cmd.SetIn(strings.NewReader(stdin))
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs(args)
+	cmd.SetArgs(nil)
 	return cmd.Execute()
 }
 
-// event-log は mod の出来事を出来事のログへ書く。
+// event-log は mod の出来事を、欄を書いた順のまま出来事のログへ書く。
 func TestEventLog(t *testing.T) {
 	root := testEnv(t)
 	state := filepath.Join(root, "state", "agents-daemon")
-	if err := runEventLog(t, "--session", "s1", "--", "mod.deps.failed", "reason=exit 1"); err != nil {
+	if err := runEventLog(t, `{"session_id": "s1", "event": "mod.deps.failed", "fields": [{"key": "reason", "value": "exit 1"}, {"key": "a", "value": "2"}]}`); err != nil {
 		t.Fatalf("event-log: %v", err)
 	}
-	if err := runEventLog(t, "--session", "s1", "--", "Bad Event"); err == nil {
-		t.Errorf("出来事の名前でないものを通した")
+	for name, in := range map[string]string{
+		"出来事の名前でない": `{"session_id": "s1", "event": "Bad Event"}`,
+		"欄の名前でない":   `{"event": "mod.x", "fields": [{"key": "Bad Key", "value": "x"}]}`,
+		"event が無い": `{"session_id": "s1"}`,
+	} {
+		if err := runEventLog(t, in); err == nil {
+			t.Errorf("%s: 通した", name)
+		}
 	}
-	if err := runEventLog(t, "--session", "s2", "--", "mod.hint.failed", "reason=x"); err != nil {
+	if err := runEventLog(t, `{"session_id": "s2", "event": "mod.hint.failed", "fields": [{"key": "reason", "value": "x"}]}`); err != nil {
 		t.Fatal(err)
 	}
-	equalLines(t, eventLines(t, state), []string{`mod.deps.failed session=s1 reason="exit 1"`, "mod.hint.failed session=s2 reason=x"})
+	equalLines(t, eventLines(t, state), []string{`mod.deps.failed session=s1 reason="exit 1" a=2`, "mod.hint.failed session=s2 reason=x"})
 }
 
 // ingest-task は記録した結果を出来事のログに書く。subject は書かない。

@@ -2,8 +2,8 @@
 (* パーキングのメモ 1 つを、複数のセッションの mod が渡す・捨てる・adopt する手順のモデル。
 
    写しているもの:
-   - handOff は「依存図を読む → 取る (park set --status handed --from open) → 送る → 届かなければ戻す
-     (park set --status open --from handed)」(hooks/parking.ts の handOff)。--from は元の status が違えば失敗する
+   - handOff は「依存図を読む → 取る (park set の status handed、from open) → 送る → 届かなければ戻す
+     (park set の status open、from handed)」(hooks/parking.ts の handOff)。from は元の status が違えば失敗する
      (parking の Store.Set)。取れるのは 1 つの mod だけで、取られたメモはほかの mod の依存図に open と出ても取れない。
    - spawn は window を作ってから claude が前景になるのを待ち、待ち切れなければ foreground=false で返す。pane は残り、
      claude が起動していることもある (spawn/spawn.go の waitForClaude)。mod はそのメモを戻さず handed のまま残す。
@@ -11,7 +11,7 @@
      (deps/deps.go の livePanes、graph.go)。Adopt は「今の daemon がタスクの記録より後に書いた status.json に
      そのセッションの pane が無い」ときだけ通す (daemonstate の SessionExited、parking/place.go の Adopt)。
    - Adopt はメモを書いてからタスクの記録を消す 2 手 (place.go)。
-   - 取るときは宛先 (peer と self は sid:<session_id>、spawn は起こす先の repo:<path>) を同じ park set の --to で
+   - 取るときは宛先 (peer と self は sid:<session_id>、spawn は起こす先の repo:<path>) を同じ park set の to_session / to_repo で
      メモの handed_to に書く。戻すと handed_to を空にする (parking の Store.Set)。SplitClaim が TRUE なら、
      取るのと宛先を書くのを別の park set にした形を写す (宛先の無い handed が見える)。
    - どのファイルの書き込みも statefile.WriteJSONAtomic なので、1 手を原子的なステップにする。
@@ -92,7 +92,7 @@ Read(m) ==
   /\ view' = [view EXCEPT ![m] = memo]
   /\ UNCHANGED <<memo, handoff, pc, attempts, deliveries, sessions, live, seen, task, taskMemo, adoptedLive>>
 
-(* 取る。mod は自分が読んだ依存図で open だったメモを、送る前に park set --status handed --from open --to <宛先> で取る。
+(* 取る。mod は自分が読んだ依存図で open だったメモを、送る前に park set (status handed、from open、宛先) で取る。
    ファイルの status が open でなければ (ほかの mod が先に取った、捨てた) 失敗し、読み直しに戻る。
    プロセスの失敗も同じ経路 (parking.ts の handOff)。SplitClaim なら宛先は次の手で書く。 *)
 Claim(m, d) ==
@@ -144,7 +144,7 @@ Spawn(m) ==
         /\ UNCHANGED <<deliveries, deliveredTo>>
   /\ UNCHANGED <<memo, to, dest, attempts, live, seen, task, taskMemo, adoptedLive>>
 
-(* 届かなかったメモを park set --status open --from handed で戻し、宛先を空にする。プロセスが失敗すれば handed のまま
+(* 届かなかったメモを park set (status open、from handed) で戻し、宛先を空にする。プロセスが失敗すれば handed のまま
    残る (人が park set で戻す)。 *)
 Revert(m) ==
   /\ pc[m] = "undelivered"
@@ -154,7 +154,7 @@ Revert(m) ==
      \/ UNCHANGED <<memo, to>>
   /\ UNCHANGED <<dest, deliveredTo, attempts, deliveries, sessions, live, seen, task, taskMemo, adoptedLive>>
 
-(* pane の Discard。読んだ依存図で open だったメモを park set --status discarded --from open で捨てる。
+(* pane の Discard。読んだ依存図で open だったメモを park set (status discarded、from open) で捨てる。
    先に取られていれば失敗する。 *)
 Discard(m) ==
   /\ pc[m] = "idle" /\ view[m] = "open"

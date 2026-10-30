@@ -4,6 +4,7 @@ import { loadDeps } from './deps-data'
 import { daemonBin } from './daemon-bin'
 import { Graph, unlinked } from './graph'
 import { logChange, logEvent, reason, settle } from './log'
+import type { EdgeAddRequest } from '../types'
 
 // model が SendMessage で渡した宛先に依存の辺が無ければ、その tool の結果の context で辺の書き方を model に伝える (#172)。
 // 渡す側が辺を書くのは agents-daemon:peer-sessions skill の手順で、書き忘れに気付けるのは送った model だけなので、
@@ -52,11 +53,16 @@ async function nudge<R extends ToolCallResult>($: EngineInterface, name: string,
 }
 
 function describe(name: string, cwd: string | undefined, bin: string): string {
+  const req: EdgeAddRequest = {
+    before: { ref: '<待つ相手の参照>', cwd: '<その cwd>' },
+    after: { ref: `session:${name}`, cwd: cwd ?? '<その cwd>' },
+    note: '<何の後か>',
+  }
   return [
     `${name} へ送りましたが、${name} を端点に持つ依存の辺がありません。`,
     `作業を渡していて、${name} がほかの作業 (別の peer の作業、マージ待ちの PR) の後でないと始められないなら、`,
     'agents-daemon:peer-sessions skill の「依存の辺を書く」に従って辺を書いてください。',
-    `  ${bin} edge add --before <待つ相手の参照> --before-cwd <その cwd> --after session:${name} --after-cwd ${cwd ?? '<その cwd>'} --note "<何の後か>"`,
+    `  printf '%s' '${JSON.stringify(req)}' | ${bin} edge add`,
     '返事や報告のように依存の無い送信なら、辺は要りません。',
   ].join('\n')
 }

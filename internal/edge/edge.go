@@ -36,6 +36,7 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
+	"github.com/usadamasa/agents-daemon/internal/protocol"
 	"github.com/usadamasa/agents-daemon/internal/ref"
 	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
@@ -51,43 +52,26 @@ const lockFile = ".lock"
 // sessionPrefix は結びつける前のセッションの参照の種類。
 const sessionPrefix = "session:"
 
-// Endpoint は辺の端点。書く側は Ref と CWD (その作業のセッションを起こしたディレクトリ) を渡し、Repo は Add が
-// CWD の main worktree のパス (git の外なら CWD) で埋める。BoundFrom は Bind が session:<名前> を sid:<id> に
-// 書き換えたときの元の参照 (結びついていなければ空)。
-type Endpoint struct {
-	Ref       string `json:"ref"`
-	CWD       string `json:"cwd"`
-	Repo      string `json:"repo"`
-	BoundFrom string `json:"bound_from,omitempty"`
-}
+// 記録の形は protocol の schema が持つ (edge の出力と同じ形)。
+type (
+	// Endpoint は辺の端点。書く側は Ref と CWD (その作業のセッションを起こしたディレクトリ) を渡し、Repo は Add が
+	// CWD の main worktree のパス (git の外なら CWD) で埋める。BoundFrom は Bind が session:<名前> を sid:<id> に
+	// 書き換えたときの元の参照 (結びついていなければ空)。
+	Endpoint = protocol.EdgeEndpoint
+	// Edge は辺 1 本の記録。
+	Edge = protocol.Edge
+	// Added は Add の結果。同じ辺が既にあったかを Created で分ける。
+	Added = protocol.EdgeAdded
+	// Removed は Remove の結果。無い辺を消したときは Removed が false になる。
+	Removed = protocol.EdgeRemoved
+)
 
-// written は書いたときの参照。id はこの値から決める。
-func (ep Endpoint) written() string {
+// writtenRef は書いたときの参照。id はこの値から決める。
+func writtenRef(ep Endpoint) string {
 	if ep.BoundFrom != "" {
 		return ep.BoundFrom
 	}
 	return ep.Ref
-}
-
-// Edge は辺 1 本の記録。
-type Edge struct {
-	ID        string    `json:"id"`
-	Before    Endpoint  `json:"before"`
-	After     Endpoint  `json:"after"`
-	Note      string    `json:"note,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
-}
-
-// Added は Add の結果。同じ辺が既にあったかを Created で分ける。
-type Added struct {
-	Created bool `json:"created"`
-	Edge    Edge `json:"edge"`
-}
-
-// Removed は Remove の結果。無い辺を消したときは Removed が false になる。
-type Removed struct {
-	Removed bool   `json:"removed"`
-	ID      string `json:"id"`
 }
 
 // Store は edges/ の置き場所を持つ。ゼロ値は Dir が空で、書き込みはエラー、読み込みは空になる。
@@ -238,7 +222,7 @@ func (s Store) Find(repo, ref string) ([]Edge, error) {
 		return nil, err
 	}
 	for _, e := range readAll(s.Dir) {
-		if e.touches(repo, ref) {
+		if touches(e, repo, ref) {
 			edges = append(edges, e)
 		}
 	}
@@ -302,7 +286,7 @@ func edgeID(before, after string) string {
 }
 
 // touches は辺のどちらかの端点が repo に、どちらかの端点が ref に一致するか。空の条件は一致とみなす。
-func (e Edge) touches(repo, ref string) bool {
+func touches(e Edge, repo, ref string) bool {
 	return (repo == "" || e.Before.Repo == repo || e.After.Repo == repo) && (ref == "" || e.Before.Ref == ref || e.After.Ref == ref)
 }
 

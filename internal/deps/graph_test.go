@@ -449,7 +449,7 @@ func TestGraph_deadlock(t *testing.T) {
 func TestGraph_parked(t *testing.T) {
 	const cwd = "/w/a"
 	memo := func(id string, sources ...parking.Source) parking.Item {
-		return parking.Item{ID: id, Repo: cwd, Status: parking.StatusOpen, Entry: parking.Entry{Kind: parking.KindAside, Title: id}, Sources: sources}
+		return parking.Item{ID: id, Repo: cwd, Status: parking.StatusOpen, Kind: parking.KindAside, Title: id, Sources: sources}
 	}
 	b := build(input{
 		PID:      42,
@@ -495,7 +495,7 @@ func TestGraph_memos(t *testing.T) {
 	const cwd = "/w/a"
 	const handed, open, discarded, gone = "20261025T010000-0000000a", "20261025T020000-0000000b", "20261025T030000-0000000c", "20261025T040000-0000000d"
 	memo := func(id, title, status string) parking.Item {
-		return parking.Item{ID: id, Repo: cwd, Status: status, Origin: parking.OriginAdopted, Entry: parking.Entry{Kind: parking.KindAside, Title: title},
+		return parking.Item{ID: id, Repo: cwd, Status: status, Origin: parking.OriginAdopted, Kind: parking.KindAside, Title: title,
 			Sources: []parking.Source{{SessionID: "A", TaskID: "1", CWD: cwd, At: t0}}}
 	}
 	withDescription := func(t record.Task, description string) record.Task {

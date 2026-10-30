@@ -4,7 +4,7 @@
    - メモは別のセッションが置く・まとめる (park add、parking の Add)。置かれたメモは手渡しや捨てるで
      open でなくなる。
    - model が Read / Edit / Write を呼ぶと、tool が走った後の tool.call の hook (hooks/notice.ts の claim) が
-     `park list --status open --here` でこの repo の open のメモを読む (List)。読んだ一覧は呼び出しごとの写しで、
+     `park list` でこの repo の open のメモを読む (List)。読んだ一覧は呼び出しごとの写しで、
      hook が update するまでの間にほかのセッションがメモを置く・閉じると古くなる。
    - hook は写しのうち触ったファイルを files に持つメモを選び、まだ伝えていないものを結果の context に添える。
      伝えたメモの id は told の atom に置く ($.state なので mod の読み直しでも残る)。

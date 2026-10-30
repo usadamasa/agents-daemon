@@ -2,7 +2,8 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { DepsData, DepsRepo, GraphLink, GraphNode, GraphRow, ParkingCard } from '../types'
-import { daemonBin } from './daemon-bin'
+import { runDaemon } from './daemon-bin'
+import type { Requests } from './daemon-bin'
 import { loadDeps } from './deps-data'
 import { CHAIN_COLOR, COLOR, Graph, ICON, MEMO, candidates, cells, chain, fit, legendRows, pieces, splitLanes, summary, tags } from './graph'
 import { logChange, logEvent, settle } from './log'
@@ -467,7 +468,7 @@ export const registerDeps: Register = on => {
                 <Text bold>
                   {MEMO} parking {String(memos.length)}
                 </Text>
-                {/* 古いメモをまとめて捨てる。該当があるときだけ出し、日数はこの mod が決める (park discard --days)。 */}
+                {/* 古いメモをまとめて捨てる。該当があるときだけ出し、日数はバイナリが渡す stale_memo_days (park discard の days)。 */}
                 {stale > 0 && (
                   <Button key="discard-stale" onPress={() => void act(() => discardStale($, staleDays))}>
                     Discard {String(stale)} older than {String(staleDays)}d
@@ -523,10 +524,10 @@ function counts(data: DepsData): Fields {
   }
 }
 
-// edge は `agents-daemon edge ...` を走らせ、失敗の理由を返す (成功なら空)。
-async function edge($: EngineInterface, args: string[]): Promise<string> {
+// edge は edge add / rm を走らせ、失敗の理由を返す (成功なら空)。
+async function edge<C extends 'edge add' | 'edge rm'>($: EngineInterface, command: C, req: Requests[C]): Promise<string> {
   try {
-    const { exitCode, stderr } = await $.process.run([await daemonBin($), 'edge', ...args], { timeoutMs: 10000 })
+    const { exitCode, stderr } = await runDaemon($, command, req)
     return exitCode === 0 ? '' : stderr.trim() || `exit ${exitCode}`
   } catch (err) {
     return String(err)
@@ -537,13 +538,13 @@ async function edge($: EngineInterface, args: string[]): Promise<string> {
 async function unlink($: EngineInterface, link: GraphLink): Promise<string> {
   const e = link.edge
   if (e === undefined) return ''
-  const failure = await edge($, ['rm', '--before', e.before.ref, '--before-cwd', e.before.cwd, '--after', e.after.ref, '--after-cwd', e.after.cwd])
+  const failure = await edge($, 'edge rm', { before: { ref: e.before.ref, cwd: e.before.cwd }, after: { ref: e.after.ref, cwd: e.after.cwd } })
   return failure === '' ? `辺を外しました: ${e.before.ref} → ${e.after.ref}` : `辺を外せませんでした: ${failure}`
 }
 
 // addBlocker は before が済まないと after を始められない辺を書く。端点はノードの key そのもの。
 async function addBlocker($: EngineInterface, before: GraphNode, after: GraphNode): Promise<string> {
-  const failure = await edge($, ['add', '--before', before.key, '--before-cwd', before.cwd ?? '', '--after', after.key, '--after-cwd', after.cwd ?? ''])
+  const failure = await edge($, 'edge add', { before: { ref: before.key, cwd: before.cwd ?? '' }, after: { ref: after.key, cwd: after.cwd ?? '' } })
   return failure === '' ? `辺を足しました: ${before.title} → ${after.title}` : `辺を足せませんでした: ${failure}`
 }
 

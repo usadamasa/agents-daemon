@@ -1,2 +1,5 @@
 # task mod-types:sync が写す Claude Code の型。手で読む差分ではないので git diff と GitHub の PR で畳む
 ci/mod-types/*/index.d.ts -diff linguist-generated=true
+# task protocol:generate が schema から生成する。mod は build を通さず読まれるので commit するが、差分は schema で読む
+hooks/protocol.ts linguist-generated=true
+internal/protocol/types.go linguist-generated=true

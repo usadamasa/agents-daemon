@@ -3,8 +3,8 @@
 package parkcli
 
 import (
-	"errors"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -15,6 +15,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/daemonstate"
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/parking"
+	"github.com/usadamasa/agents-daemon/internal/protocol"
 	"github.com/usadamasa/agents-daemon/internal/ref"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
@@ -25,113 +26,66 @@ func Commands() []*cobra.Command {
 }
 
 // newParkCmd は `agents-daemon park add|set|list|discard|adopt` を組み立てる (parking)。
-// repo は --cwd (既定は今の cwd) から決め、結果は JSON で stdout に出す。
+// 入力は stdin の JSON で受け、結果は JSON で stdout に出す。
 func newParkCmd() *cobra.Command {
-	var cwd string
 	cmd := &cobra.Command{Use: "park", Short: "パーキングロット (脇のメモ) を置く・書き換える・一覧する", Annotations: jsonflag.Supported()}
-	cmd.PersistentFlags().StringVar(&cwd, "cwd", "", "置いたセッションの cwd。repo をここから決める (既定は今の cwd)")
-
-	add := &cobra.Command{
-		Use:   "add",
-		Short: "stdin の JSON (kind、title、detail、files、default_taken、session_id) でメモを置き、{created, item} を出す",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return statecmd.Run(cmd, cwd, func(paths apppath.Paths, cwd string) (any, error) {
-				return parkAdd(paths.StateDir(), parking.New(paths.StateDir()), cmd.InOrStdin(), cwd, tasklog.New(paths.StateDir()), time.Now())
-			})
-		},
+	sub := func(use, short string, fn func(apppath.Paths, io.Reader) (any, error)) *cobra.Command {
+		return &cobra.Command{Use: use, Short: short, Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+			return statecmd.Run(cmd, fn)
+		}}
 	}
-	var status, from, session, toSession, toRepo string
-	set := &cobra.Command{
-		Use:   "set <id>",
-		Short: "メモの status (open / handed / discarded) を書き換える",
-		Long: "--from を付けると、今の status がそれと違うときは書き換えずにエラーで返す。\n" +
-			"handed にするときは宛先を --to-session (渡すセッションの ID) か --to-repo (新しく起こすセッションの repo の絶対パス) で渡し、\n" +
-			"メモの handed_to に sid:<session_id> / repo:<path> で書く。handed 以外にすると handed_to を空にする。\n" +
-			"依存図の pane の mod はメモを渡す前に `--status handed --from open --to-session <id>` で取り、届かなければ `--status open --from handed` で戻す。",
-		Args: cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			dest := ""
-			switch {
-			case toSession != "":
-				dest = parking.ToSession(toSession)
-			case toRepo != "":
-				dest = parking.ToRepo(toRepo)
+	// add は読めなかった入力も park.failed に書く (model が park の tool に書いた欄の誤りを後から追えるように)。
+	add := sub("add", "stdin の ParkAddRequest でメモを置き、ParkAdded を出す", func(p apppath.Paths, stdin io.Reader) (any, error) {
+		var req protocol.ParkAddRequest
+		if err := protocol.Decode(stdin, "ParkAddRequest", &req); err != nil {
+			parkFailed(p.StateDir(), time.Now(), "add", "", err)
+			return nil, err
+		}
+		cwd, err := statecmd.Cwd(req.CWD)
+		if err != nil {
+			return nil, err
+		}
+		return parkAdd(p.StateDir(), parking.New(p.StateDir()), req, cwd, tasklog.New(p.StateDir()), time.Now())
+	})
+	set := sub("set", "stdin の ParkSetRequest でメモの status を書き換え、ParkingItem を出す", statecmd.Decoded("ParkSetRequest", func(p apppath.Paths, req protocol.ParkSetRequest) (any, error) {
+		dest := ""
+		switch {
+		case req.ToSession != "":
+			dest = parking.ToSession(req.ToSession)
+		case req.ToRepo != "":
+			dest = parking.ToRepo(req.ToRepo)
+		}
+		return parkSet(p.StateDir(), parking.New(p.StateDir()), req.SessionID, req.ID, req.Status, req.From, dest, time.Now())
+	}))
+	list := sub("list", "stdin の ParkListRequest で絞ったメモを ParkingItemList で出す", statecmd.Decoded("ParkListRequest", func(p apppath.Paths, req protocol.ParkListRequest) (any, error) {
+		repo := req.Repo
+		if req.Here {
+			cwd, err := statecmd.Cwd(req.CWD)
+			if err != nil {
+				return nil, err
 			}
-			return statecmd.Run(cmd, cwd, func(paths apppath.Paths, _ string) (any, error) {
-				return parkSet(paths.StateDir(), parking.New(paths.StateDir()), session, args[0], status, from, dest, time.Now())
-			})
-		},
-	}
-	set.Flags().StringVar(&status, "status", "", "open / handed / discarded")
-	set.Flags().StringVar(&from, "from", "", "今の status がこれのときだけ書き換える (open / handed / discarded)")
-	set.Flags().StringVar(&toSession, "to-session", "", "handed にするときの宛先のセッションの ID")
-	set.Flags().StringVar(&toRepo, "to-repo", "", "handed にするときの宛先 (新しく起こすセッションの repo の絶対パス)")
-	set.MarkFlagsMutuallyExclusive("to-session", "to-repo")
-	_ = set.MarkFlagRequired("status")
-	var repo, listStatus, task string
-	var here bool
-	list := &cobra.Command{
-		Use:   "list",
-		Short: "メモを JSON の配列で出す",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if task != "" && session == "" {
-				return errors.New("--task には --session が要る")
-			}
-			return statecmd.Run(cmd, cwd, func(paths apppath.Paths, cwd string) (any, error) {
-				if here {
-					repo = gitrepo.RepoKey(cwd)
-				}
-				items, err := parking.New(paths.StateDir()).Find(repo, listStatus)
-				if err != nil || task == "" {
-					return items, err
-				}
-				return parking.PlacedDuring(items, session, task), nil
-			})
-		},
-	}
-	list.Flags().StringVar(&repo, "repo", "", "repo (main worktree のパス) で絞る")
-	list.Flags().BoolVar(&here, "here", false, "--cwd の repo で絞る")
-	list.MarkFlagsMutuallyExclusive("repo", "here")
-	list.Flags().StringVar(&listStatus, "status", "", "status で絞る")
-	list.Flags().StringVar(&task, "task", "", "--session のセッションがこのタスクの途中で置いたメモで絞る")
-	var days int
-	discard := &cobra.Command{
-		Use:   "discard",
-		Short: "最後に置かれてから --days 日より経った open のメモを discarded にし、捨てたメモを JSON の配列で出す",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return statecmd.Run(cmd, cwd, func(paths apppath.Paths, _ string) (any, error) {
-				return parkDiscard(paths.StateDir(), parking.New(paths.StateDir()), session, days, time.Now())
-			})
-		},
-	}
-	discard.Flags().IntVar(&days, "days", 0, "この日数より前に最後に置かれたメモを捨てる (1 以上)")
-	_ = discard.MarkFlagRequired("days")
-	adopt := &cobra.Command{
-		Use:   "adopt task:<session_id>/<task_id>",
-		Short: "終了したセッションの未完了のタスクを出自 adopted (種類 scope) のメモにし、タスクの記録を消して {created, item} を出す",
-		Long: "引数は依存図のタスクのノードの key (ref パッケージの Ref)。\n" +
-			"セッションが終了したことは、動いている daemon がタスクの記録より後に書いた status.json に pane が無いことで確かめる。\n" +
-			"daemon が動いていない、status.json が古い、pane がある、のどれかなら移さない。",
-		Args: cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			sessionID, taskID, ok := ref.ParseTask(args[0])
-			if !ok {
-				return fmt.Errorf("参照 %q は task:<session_id>/<task_id> の形でない", args[0])
-			}
-			return statecmd.Run(cmd, cwd, func(paths apppath.Paths, _ string) (any, error) {
-				exited := func(sessionID string, after time.Time) error {
-					return daemonstate.SessionExited(paths, sessionID, after)
-				}
-				return parkAdopt(paths.StateDir(), parking.New(paths.StateDir()), tasklog.New(paths.StateDir()), session, sessionID, taskID, exited, time.Now())
-			})
-		},
-	}
-	for _, c := range []*cobra.Command{set, list, discard, adopt} {
-		c.Flags().StringVar(&session, "session", "", "操作したセッションの ID (ログに添える。list では --task のセッション)")
-	}
+			repo = gitrepo.RepoKey(cwd)
+		}
+		items, err := parking.New(p.StateDir()).Find(repo, req.Status)
+		if err != nil || req.Task == "" {
+			return protocol.ParkingItemList(items), err
+		}
+		return protocol.ParkingItemList(parking.PlacedDuring(items, req.SessionID, req.Task)), nil
+	}))
+	discard := sub("discard", "stdin の ParkDiscardRequest で古い open のメモを discarded にし、捨てたメモを ParkingItemList で出す", statecmd.Decoded("ParkDiscardRequest", func(p apppath.Paths, req protocol.ParkDiscardRequest) (any, error) {
+		items, err := parkDiscard(p.StateDir(), parking.New(p.StateDir()), req.SessionID, req.Days, time.Now())
+		return protocol.ParkingItemList(items), err
+	}))
+	adopt := sub("adopt", "stdin の ParkAdoptRequest で終了したセッションの未完了のタスクをメモにし、ParkAdded を出す", statecmd.Decoded("ParkAdoptRequest", func(p apppath.Paths, req protocol.ParkAdoptRequest) (any, error) {
+		sessionID, taskID, ok := ref.ParseTask(req.Ref)
+		if !ok {
+			return nil, fmt.Errorf("参照 %q は task:<session_id>/<task_id> の形でない", req.Ref)
+		}
+		exited := func(sessionID string, after time.Time) error {
+			return daemonstate.SessionExited(p, sessionID, after)
+		}
+		return parkAdopt(p.StateDir(), parking.New(p.StateDir()), tasklog.New(p.StateDir()), req.SessionID, sessionID, taskID, exited, time.Now())
+	}))
 	cmd.AddCommand(add, set, list, discard, adopt)
 	return cmd
 }

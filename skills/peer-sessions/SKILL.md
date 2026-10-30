@@ -58,13 +58,11 @@ printenv REX_SESSION
 辺として書く。辺は依存図 (`/deps`) に出る。
 
 ```sh
-"${XDG_CACHE_HOME:-$HOME/.cache}/agents-daemon/bin/agents-daemon" edge add \
-  --before session:<待つ相手の name> --before-cwd <その window に渡した cwd> \
-  --after session:<name> --after-cwd <この window に渡した cwd> \
-  --note "<何の後か>"
+printf '%s' '{"before":{"ref":"session:<待つ相手の name>","cwd":"<その window に渡した cwd>"},"after":{"ref":"session:<name>","cwd":"<この window に渡した cwd>"},"note":"<何の後か>"}' \
+  | "${XDG_CACHE_HOME:-$HOME/.cache}/agents-daemon/bin/agents-daemon" edge add
 ```
 
-`--before` は `pr:<owner>/<repo>#<番号>` や `issue:` でもよい。`session:<name>` は、daemon が数秒のうちに
+before の ref は `pr:<owner>/<repo>#<番号>` や `issue:` でもよい。`session:<name>` は、daemon が数秒のうちに
 その名前のセッションへ 1 回だけ結びつける。辺を書いた時点で同名のセッションが動いていれば最も新しく起きたもの
 (手順 1 で起こした相手)、まだ起きていなければ後から最初に現れたもの。結びついた後に同じ名前のセッションを
 起こし直しても辺の相手は変わらないので、別のセッションを待たせたいなら `edge rm` してから `sid:<session_id>` で

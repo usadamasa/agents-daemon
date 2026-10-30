@@ -13,7 +13,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -22,6 +21,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/usadamasa/agents-daemon/internal/protocol"
 	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
 
@@ -69,7 +69,7 @@ const (
 	ClosedRetention = 7 * 24 * time.Hour
 	// StaleAfter は open のメモを「古い」とみなす、最後に置かれてからの期間。週次の棚卸しを 4 回越したメモは文脈が
 	// 薄れている。housekeeping が OpenRetention で黙って消す前に、依存図の pane で人が見て捨てる区切り
-	// (`deps` の stale_memo_days、`park discard --days`)。保持期間の間の関係は `daemon/retention_test.go`。
+	// (`deps` の stale_memo_days、park discard の days)。保持期間の間の関係は `daemon/retention_test.go`。
 	StaleAfter = 30 * 24 * time.Hour
 )
 
@@ -77,38 +77,23 @@ const (
 // 別の park add が割り込んで同じメモが 2 つできるのを防ぐ。
 const lockFile = ".lock"
 
-// Entry は置く側が決める中身。
-type Entry struct {
-	Kind string `json:"kind"`
-	// Title は人が書いた形 (前後の空白だけ落とす)。同じメモかの判定は normalize した鍵で見る。
-	Title        string   `json:"title"`
-	Detail       string   `json:"detail,omitempty"`
-	Files        []string `json:"files,omitempty"`
-	DefaultTaken string   `json:"default_taken,omitempty"`
-}
+// 記録の形は protocol の schema が持つ (park の出力と同じ形)。Title は人が書いた形 (前後の空白だけ落とす) で、
+// 同じメモかの判定は normalize した鍵で見る。Origin は同じメモにまとめても最初のメモのまま。
+type (
+	// Entry は置く側が決める中身。
+	Entry = protocol.Memo
+	// Source はメモを置いたときのセッションと、そのとき進行中だったタスク。
+	Source = protocol.ParkingItemSource
+	// Item は置かれたメモ 1 つの記録。
+	Item = protocol.ParkingItem
+)
 
-// Source はメモを置いたときのセッションと、そのとき進行中だったタスク。
-type Source struct {
-	SessionID string `json:"session_id"`
-	TaskID    string `json:"task_id,omitempty"`
-	CWD       string `json:"cwd"`
-	// Detail は既存のメモにまとめたとき、後から置いた側が書いた detail (メモの detail と違うときだけ)。
-	Detail string    `json:"detail,omitempty"`
-	At     time.Time `json:"at"`
-}
-
-// Item は置かれたメモ 1 つの記録。
-type Item struct {
-	ID string `json:"id"`
-	// Repo は置いたときの cwd の main worktree のパス (git の外なら cwd)。依存図の repo の鍵と同じ。
-	Repo string `json:"repo"`
-	Entry
-	// Origin は出自 (OriginPlaced / OriginAdopted)。同じメモにまとめても最初のメモのまま。
-	Origin  string   `json:"origin"`
-	Sources []Source `json:"sources"`
-	Status  string   `json:"status"`
-	// HandedTo は handed にしたときの宛先 (ToSession / ToRepo の形)。handed でなければ空。
-	HandedTo string `json:"handed_to,omitempty"`
+// itemOf は e の中身で新しいメモの記録を組む。
+func itemOf(id, repo string, e Entry, origin string, src Source) Item {
+	return Item{
+		ID: id, Repo: repo, Kind: e.Kind, Title: e.Title, Detail: e.Detail, Files: e.Files, DefaultTaken: e.DefaultTaken,
+		Origin: origin, Sources: []Source{src}, Status: StatusOpen,
+	}
 }
 
 // Store は parking/ の置き場所を持つ。ゼロ値は Dir が空で、書き込みはエラー、読み込みは空になる。
@@ -122,10 +107,7 @@ func New(stateDir string) Store {
 }
 
 // Added は Park と Adopt の結果。置いた側が「既に置かれていたメモ」と伝えられるよう、新しく作ったかを持つ。
-type Added struct {
-	Created bool `json:"created"`
-	Item    Item `json:"item"`
-}
+type Added = protocol.ParkAdded
 
 // add はメモを置く。同じメモが open であれば src を sources に足し (同じ session、task、detail の組は足さない)、
 // 無ければ origin の出自で新しいメモを作る。同じメモかは repo と title で見て、出自は見ない (同じ脇の話題を
@@ -163,7 +145,7 @@ func (s Store) add(repo string, e Entry, origin string, src Source) (Added, erro
 		if err != nil {
 			return err
 		}
-		added = Added{Created: true, Item: Item{ID: id, Repo: repo, Entry: e, Origin: origin, Sources: []Source{src}, Status: StatusOpen}}
+		added = Added{Created: true, Item: itemOf(id, repo, e, origin, src)}
 		return write(dir, added.Item)
 	})
 	return added, err
@@ -308,19 +290,10 @@ func PlacedDuring(items []Item, sessionID, taskID string) []Item {
 	return matched
 }
 
-// Request は `park add` の stdin。置く中身と、置いたセッションの ID。
+// Request は置く中身と、置いたセッションの ID。
 type Request struct {
 	Entry
-	SessionID string `json:"session_id"`
-}
-
-// ReadRequest は r から Request を読む。
-func ReadRequest(r io.Reader) (Request, error) {
-	var req Request
-	if err := json.NewDecoder(r).Decode(&req); err != nil {
-		return Request{}, fmt.Errorf("stdin の JSON を読めない: %w", err)
-	}
-	return req, nil
+	SessionID string
 }
 
 // validStatus は status が open / handed / discarded のどれかかを確かめる。

@@ -12,6 +12,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/deps/graph/dag"
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/parking"
+	"github.com/usadamasa/agents-daemon/internal/protocol"
 	"github.com/usadamasa/agents-daemon/internal/ref"
 	"github.com/usadamasa/agents-daemon/internal/tasklog/record"
 )
@@ -54,88 +55,21 @@ const (
 // halted はセッション自身が止まっているノードの状態 (人の手か時間を待っている、または失敗した)。
 var halted = map[string]bool{StateQuestion: true, StatePermission: true, StateLimit: true, StateError: true}
 
-// Graph はセッションをまたぐタスクの依存の DAG (#134)。ノードはタスク 1 つで、同じセッションの blockedBy と
-// edge list の辺を 1 つにする。mod は Nodes の順に根を描き、Links から木と段を組む。
-type Graph struct {
-	// Nodes は下流の多い順 (同じなら Key の順)。
-	Nodes []Node `json:"nodes"`
-	// Links は before、after の Key の順。
-	Links []Link `json:"links"`
-	// LongestChain は下流の最も多い止まっているノード (待ちの輪を含む) から、下流をたどった最長の鎖の Key。
-	// 止まっているノードが無ければ空。
-	LongestChain []string `json:"longest_chain"`
-	// Rows は pane に描くレーンの行 (graph/dag の Rows)。完了したノードとその辺を落として組む。
-	// 行の並びは Nodes の順を優先の順にした位相順。edge の辺 (セッションをまたぐ) は破線。
-	Rows []dag.Row `json:"rows"`
-	// RowsWithCompleted は完了したノードも含めて組んだ行 (Show completed)。
-	RowsWithCompleted []dag.Row `json:"rows_with_completed"`
-}
-
-// Node はノード 1 つ。
-type Node struct {
-	// Key はノードの Ref (ref)。
-	Key   string `json:"key"`
-	Kind  string `json:"kind"`
-	State string `json:"state"`
-	Title string `json:"title"`
-	// Detail は状態の補足 (上限の解除時刻)。
-	Detail string `json:"detail,omitempty"`
-	// Endpoint は Key をそのまま辺の端点に書けるか (TodoWrite の項目は書けない)。CWD はその端点の cwd。
-	Endpoint bool   `json:"endpoint"`
-	CWD      string `json:"cwd,omitempty"`
-	// TaskID は kind task のノードのタスクの ID (TaskUpdate に書く形)。Description はそのタスクの description
-	// (pane が自分のタスクをほかのセッションへ渡す本文)。
-	TaskID      string `json:"task_id,omitempty"`
-	Description string `json:"description,omitempty"`
-	SessionID   string `json:"session_id,omitempty"`
-	// Session は表示名 (同名のセッションがあれば session ID の先頭が付く)。SessionName はセッション名
-	// そのもの (`claude --name`、SendMessage の宛先に書く形)。名前が無ければ空。
-	Session     string `json:"session,omitempty"`
-	SessionName string `json:"session_name,omitempty"`
-	Live        bool   `json:"live"`
-	// Depth は段 (前提をたどった最長の深さ)。前提の無いノードは 0。
-	Depth int `json:"depth"`
-	// Downstream は下流 (このノードが済まないと始められないノード) の数。
-	Downstream int `json:"downstream"`
-	// Parked はこのタスクの途中で置かれた open のメモの数。
-	Parked int `json:"parked"`
-	// Memos はこのタスクが扱うメモ (description に id が書かれたもの、書かれた順)。status を問わず照合し、
-	// 消えたメモの id は落とす。
-	Memos []MemoRef `json:"memos"`
-	// BlockedBy は上流をたどった原因の鎖 (近い順)。完了していない上流を、止まっているもの、進行中のものの順に選ぶ。
-	BlockedBy []string `json:"blocked_by"`
-	// Deadlock は待ちが輪になっていて、たどると自分へ戻ってくるか。
-	Deadlock bool `json:"deadlock"`
-	// Halted はセッション自身が止まっているか (question、permission、limit、error)。Stuck は止まっているノードか
-	// (Halted か、完了していない待ちの輪)。mod はこの 2 つで数え、色を付け、規則を持たない。
-	Halted bool `json:"halted"`
-	Stuck  bool `json:"stuck"`
-}
-
-// MemoRef はタスクが扱うメモ 1 つ。
-type MemoRef struct {
-	ID     string `json:"id"`
-	Title  string `json:"title"`
-	Status string `json:"status"`
-}
-
-// Link は辺 1 本 (before が済まないと after を始められない)。
-type Link struct {
-	Before string `json:"before"`
-	After  string `json:"after"`
-	Kind   string `json:"kind"`
-	// Edge は kind edge の辺の元の記録。mod が `edge rm` に渡す。1 本の記録が複数の辺になることがある
-	// (session: や sid: の端点が根や末端のタスクを複数持つとき)。
-	Edge *EdgeRecord `json:"edge,omitempty"`
-}
-
-// EdgeRecord は辺の元の記録 (edge の Edge のうち mod が使う分)。
-type EdgeRecord struct {
-	ID     string        `json:"id"`
-	Before edge.Endpoint `json:"before"`
-	After  edge.Endpoint `json:"after"`
-	Note   string        `json:"note,omitempty"`
-}
+// DAG の形は protocol の schema が持つ。組み方の規則はここが持つ:
+//   - ノードはタスク 1 つで、同じセッションの blockedBy と edge list の辺を 1 つにする
+//   - Nodes は下流の多い順 (同じなら Key の順)、Links は before、after の Key の順
+//   - LongestChain は止まっているノード (待ちの輪を含む) から数え、止まっているノードが無ければ空
+//   - Rows は Nodes の順を優先の順にした位相順で、edge の辺 (セッションをまたぐ) は破線 (graph/dag の Rows)
+//   - BlockedBy は完了していない上流を、止まっているもの、進行中のものの順に選ぶ。Memos は消えたメモの id を落とす
+//   - 1 本の辺の記録 (EdgeRecord) は、session: や sid: の端点が根や末端のタスクを複数持つと複数の Link になる
+type (
+	// Graph はセッションをまたぐタスクの依存の DAG (#134)。
+	Graph = protocol.DepsGraph
+	// Node はノード 1 つ。
+	Node = protocol.GraphNode
+	// MemoRef はタスクが扱うメモ 1 つ。
+	MemoRef = protocol.MemoRef
+)
 
 // Card はノードにする作業 1 つ (タスク、TodoWrite の項目、タスクの無い生きているセッション)。
 type Card struct {
@@ -179,7 +113,7 @@ type builder struct {
 	nodes map[string]*Node
 	// bySession はセッションのタスク (と TodoWrite の項目、タスクの無いセッション) のノードの Key。
 	bySession map[string][]string
-	links     []Link
+	links     []protocol.GraphLink
 	seen      map[[2]string]bool
 }
 
@@ -222,7 +156,7 @@ func nodeState(progress string, live bool, activity string) string {
 
 // markStuck は止まっているかを付ける。Halted はセッション自身が人の手か時間を待っているか失敗した状態、Stuck は
 // それに完了していない待ちの輪を足したもの (輪も人が解かないと進まない)。
-func (n *Node) markStuck() {
+func markStuck(n *Node) {
 	n.Halted = halted[n.State]
 	n.Stuck = n.Halted || (n.Deadlock && n.State != StateCompleted)
 }
@@ -241,7 +175,7 @@ func (g *builder) linkEdges() {
 	for _, e := range g.in.Edges {
 		befores := g.resolve(e.Before, g.sinks)
 		afters := g.resolve(e.After, g.roots)
-		via := &EdgeRecord{ID: e.ID, Before: e.Before, After: e.After, Note: e.Note}
+		via := &protocol.EdgeRecord{ID: e.ID, Before: e.Before, After: e.After, Note: e.Note}
 		for _, b := range befores {
 			for _, a := range afters {
 				g.link(b, a, LinkEdge, via)
@@ -251,13 +185,13 @@ func (g *builder) linkEdges() {
 }
 
 // link は before → after を足す。どちらかのノードが無い辺、自分自身への辺、既にある辺は足さない。
-func (g *builder) link(before, after, kind string, via *EdgeRecord) {
+func (g *builder) link(before, after, kind string, via *protocol.EdgeRecord) {
 	pair := [2]string{before, after}
 	if g.nodes[before] == nil || g.nodes[after] == nil || before == after || g.seen[pair] {
 		return
 	}
 	g.seen[pair] = true
-	g.links = append(g.links, Link{Before: before, After: after, Kind: kind, Edge: via})
+	g.links = append(g.links, protocol.GraphLink{Before: before, After: after, Kind: kind, Edge: via})
 }
 
 // resolve は端点の参照をノードの Key にする。sid: はセッションのノードのうち pick (根か末端) が選んだもの。
@@ -309,15 +243,15 @@ func (g *builder) placeholder(key, cwd, title, sessionID, state string) string {
 
 // roots はセッションのノードのうち、同じセッションの blockedBy で止められていないもの。
 func (g *builder) roots(sessionID string) []string {
-	return g.sessionEnds(sessionID, func(l Link) string { return l.After })
+	return g.sessionEnds(sessionID, func(l protocol.GraphLink) string { return l.After })
 }
 
 // sinks はセッションのノードのうち、同じセッションのどのノードも止めていないもの。
 func (g *builder) sinks(sessionID string) []string {
-	return g.sessionEnds(sessionID, func(l Link) string { return l.Before })
+	return g.sessionEnds(sessionID, func(l protocol.GraphLink) string { return l.Before })
 }
 
-func (g *builder) sessionEnds(sessionID string, side func(Link) string) []string {
+func (g *builder) sessionEnds(sessionID string, side func(protocol.GraphLink) string) []string {
 	inner := map[string]bool{}
 	for _, l := range g.links {
 		if l.Kind == LinkTask {
@@ -349,7 +283,7 @@ func (g *builder) finish() Graph {
 		n.Depth = a.Depth(key)
 		n.Downstream = len(down)
 		n.Deadlock = cyclic
-		n.markStuck()
+		markStuck(n)
 		n.BlockedBy = a.Cause(key, open, rankOf)
 		n.Parked = parked(*n, g.in.Open)
 		n.Memos = append(n.Memos, memos[key]...)
@@ -362,7 +296,7 @@ func (g *builder) finish() Graph {
 		return KeyLess(out.Nodes[i].Key, out.Nodes[j].Key)
 	})
 	if out.Links == nil {
-		out.Links = []Link{}
+		out.Links = []protocol.GraphLink{}
 	}
 	sort.Slice(out.Links, func(i, j int) bool {
 		if out.Links[i].Before != out.Links[j].Before {

@@ -1,7 +1,7 @@
 package parking_test
 
 // Adopt の不変条件 (models/handoff の Handoff.tla の LiveTaskKept と AdoptLeavesOne) を、実物の Store と
-// state.SessionExited (daemon の pid と status.json を読む) を goroutine で交錯させて確かめる。
+// daemonstate.SessionExited (daemon の pid と status.json を読む) を goroutine で交錯させて確かめる。
 // 外部テストパッケージにして、mod と同じく parking の公開 API だけで Adopt を押す。
 // 世界 (セッションの終了、daemon の tick と停止と入れ替わり、タスクの記録の更新) は 1 本の goroutine が乱択の順で進め、
 // 依存図を開いた mod が複数本、好きなときに Adopt を押す。時刻は step ごとに進む作り物で、壁時計には頼らない。
@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
-	"github.com/usadamasa/agents-daemon/internal/daemon/state"
+	"github.com/usadamasa/agents-daemon/internal/daemonstate"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/statefile"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
@@ -73,9 +73,9 @@ func (w *adoptWorld) writePID(pid int) error {
 
 // writeStatus は status.json を書く。withPane なら終了していないセッションの pane を載せる。
 func (w *adoptWorld) writeStatus(pid int, at time.Time, withPane bool) error {
-	snap := state.StatusSnapshot{PID: pid, UpdatedAt: at, Panes: []state.PaneStatus{}}
+	snap := daemonstate.StatusSnapshot{PID: pid, UpdatedAt: at, Panes: []daemonstate.PaneStatus{}}
 	if withPane {
-		snap.Panes = append(snap.Panes, state.PaneStatus{PaneID: "block:b1", SessionID: deadSession, CWD: w.cwd})
+		snap.Panes = append(snap.Panes, daemonstate.PaneStatus{PaneID: "block:b1", SessionID: deadSession, CWD: w.cwd})
 	}
 	return statefile.WriteJSONAtomic(w.paths.StatusFile(), ".status.json.*", snap)
 }
@@ -125,7 +125,7 @@ type adoptReached struct {
 	refused map[string]int
 }
 
-// refusals は state.SessionExited と parking.Adopt が返す理由の切れ端。全部を一度は通る。
+// refusals は daemonstate.SessionExited と parking.Adopt が返す理由の切れ端。全部を一度は通る。
 var refusals = []string{"daemon が動いていない", "まだ status.json を書いていない", "タスクの記録より古い", "で生きている", "が無い"}
 
 func (c *adoptReached) refuse(err error) {
@@ -257,10 +257,10 @@ func newAdoptWorld(t *testing.T, r *rand.Rand) *adoptWorld {
 	return w
 }
 
-// exited は Adopt に渡す「終了したと確かめる」の中身。実物の state.SessionExited を呼び、通した直後にセッションがまだ生きていれば
+// exited は Adopt に渡す「終了したと確かめる」の中身。実物の daemonstate.SessionExited を呼び、通した直後にセッションがまだ生きていれば
 // LiveTaskKept の破れとして記録する。セッションは終了したら戻らないので、通した後に生きているなら判定の時点でも生きていた。
 func (w *adoptWorld) exited(failures chan<- string, mod int, sessionID string, after time.Time) error {
-	err := state.SessionExited(w.paths, sessionID, after)
+	err := daemonstate.SessionExited(w.paths, sessionID, after)
 	if err != nil {
 		return err
 	}

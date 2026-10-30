@@ -34,7 +34,7 @@ components:
       - "internal/parking"
       - "internal/edge"
       - "internal/eventlog"
-      - "internal/daemon/state"
+      - "internal/daemonstate"
   handoff:
     in:
       - "internal/deps/**"

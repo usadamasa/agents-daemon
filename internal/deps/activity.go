@@ -1,7 +1,7 @@
 package deps
 
 import (
-	"github.com/usadamasa/agents-daemon/internal/daemon/state"
+	"github.com/usadamasa/agents-daemon/internal/daemonstate"
 	"github.com/usadamasa/agents-daemon/internal/deps/graph"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 )
@@ -11,7 +11,7 @@ import (
 // 上限待ちは agent の自己申告より先に見る。上限で止まった pane は Claude Code の申告では idle や error に見えるが、
 // 利用者が一番知りたいのは「daemon が再開を待っている」ことなので。
 // cc-premise: 2.1.302 osc7501 agent_status は idle / working / blocked / done / error、blocked の kind は permission / question / auth
-func activity(p *state.PaneStatus) (act, detail string) {
+func activity(p *daemonstate.PaneStatus) (act, detail string) {
 	if p.MonitorStatus == "waiting" {
 		if p.WaitUntil != nil {
 			detail = p.WaitUntil.Local().Format("15:04")
@@ -42,7 +42,7 @@ type sessionActivity struct {
 }
 
 // activities は生きているセッションごとに活動を 1 回だけ導く。
-func activities(panes map[string]*state.PaneStatus) map[string]sessionActivity {
+func activities(panes map[string]*daemonstate.PaneStatus) map[string]sessionActivity {
 	out := make(map[string]sessionActivity, len(panes))
 	for id, p := range panes {
 		act, detail := activity(p)

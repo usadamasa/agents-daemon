@@ -5,7 +5,7 @@ import (
 	"io"
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
-	"github.com/usadamasa/agents-daemon/internal/daemon/state"
+	"github.com/usadamasa/agents-daemon/internal/daemonstate"
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/parking"
@@ -16,7 +16,7 @@ import (
 // Write は依存図を組み、JSON で w へ書く。cwd は開いたセッションの cwd (Deps.Here の元)。daemon が動いていなくても
 // タスクの記録は描く (daemon_running が false で、ノードはすべて Live でない)。
 func Write(w io.Writer, p apppath.Paths, cwd string) error {
-	pid, snap, err := state.Running(p)
+	pid, snap, err := daemonstate.Running(p)
 	if err != nil {
 		return err
 	}

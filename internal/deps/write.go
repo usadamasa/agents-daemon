@@ -8,6 +8,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/daemonstate"
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
+	"github.com/usadamasa/agents-daemon/internal/ledger"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
@@ -41,6 +42,10 @@ func Write(w io.Writer, p apppath.Paths, cwd string) error {
 	if err != nil {
 		return err
 	}
+	sessions, err := ledger.New(p.StateDir()).List()
+	if err != nil {
+		return err
+	}
 	b := build(input{
 		CWD:          cwd,
 		PID:          pid,
@@ -51,6 +56,7 @@ func Write(w io.Writer, p apppath.Paths, cwd string) error {
 		Edges:        edges,
 		Locate:       gitrepo.Locate,
 		SessionNames: names,
+		Sessions:     sessions,
 	})
 	return json.NewEncoder(w).Encode(b)
 }

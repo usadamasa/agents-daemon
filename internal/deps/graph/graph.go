@@ -13,7 +13,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/ref"
-	"github.com/usadamasa/agents-daemon/internal/tasklog"
+	"github.com/usadamasa/agents-daemon/internal/tasklog/record"
 )
 
 // ノードの種類。KindRef 以外は Card の種類と同じ。
@@ -162,8 +162,8 @@ type Card struct {
 // Input はグラフを組む材料。
 type Input struct {
 	Cards []Card
-	Tasks []tasklog.Task
-	Todos []tasklog.TodoList
+	Tasks []record.Task
+	Todos []record.TodoList
 	// Edges はセッションをまたぐ辺 (edge)。
 	Edges []edge.Edge
 	// Memos はメモ (status を問わない)。タスクの description との照合に使う。Open はそのうち open のもの。

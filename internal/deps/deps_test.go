@@ -8,7 +8,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/daemonstate"
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/parking"
-	"github.com/usadamasa/agents-daemon/internal/tasklog"
+	"github.com/usadamasa/agents-daemon/internal/tasklog/record"
 )
 
 var t0 = time.Date(2026, 10, 18, 9, 0, 0, 0, time.UTC)
@@ -18,8 +18,8 @@ func places(m map[string]gitrepo.Place) func(string) gitrepo.Place {
 	return func(cwd string) gitrepo.Place { return m[cwd] }
 }
 
-func task(sid, id, subject, status, cwd string, blockedBy ...string) tasklog.Task {
-	return tasklog.Task{ID: id, Subject: subject, Status: status, SessionID: sid, CWD: cwd, BlockedBy: blockedBy, UpdatedAt: t0}
+func task(sid, id, subject, status, cwd string, blockedBy ...string) record.Task {
+	return record.Task{ID: id, Subject: subject, Status: status, SessionID: sid, CWD: cwd, BlockedBy: blockedBy, UpdatedAt: t0}
 }
 
 func snapshot(panes ...daemonstate.PaneStatus) *daemonstate.StatusSnapshot {
@@ -56,7 +56,7 @@ func TestBuild_repoSessions(t *testing.T) {
 			daemonstate.PaneStatus{PaneID: "p3", SessionID: "E", CWD: other, AgentStatus: "done"},
 			daemonstate.PaneStatus{PaneID: "p4", SessionID: "T", CWD: other, AgentStatus: "working"},
 		),
-		Tasks: []tasklog.Task{
+		Tasks: []record.Task{
 			task("A", "1", "調査", "completed", main),
 			task("A", "3", "PR を出す", "pending", main, "2"),
 			task("A", "10", "後の進行中", "in_progress", main),
@@ -65,7 +65,7 @@ func TestBuild_repoSessions(t *testing.T) {
 			task("C", "1", "alias を整理", "pending", other),
 			task("D", "1", "PR を出す", "pending", wt),
 		},
-		Todos: []tasklog.TodoList{{SessionID: "T", CWD: other, UpdatedAt: t0, Todos: []tasklog.Todo{
+		Todos: []record.TodoList{{SessionID: "T", CWD: other, UpdatedAt: t0, Todos: []record.Todo{
 			{Content: "済んだ項目", Status: "completed"}, {Content: "進めている項目", Status: "in_progress"},
 		}}},
 		Locate: places(map[string]gitrepo.Place{
@@ -122,7 +122,7 @@ func TestBuild_memos(t *testing.T) {
 	d := build(input{
 		PID:      42,
 		Snapshot: snapshot(daemonstate.PaneStatus{PaneID: "p1", SessionID: "A", CWD: main}),
-		Tasks:    []tasklog.Task{task("A", "1", "調査", "in_progress", main)},
+		Tasks:    []record.Task{task("A", "1", "調査", "in_progress", main)},
 		Parking:  []parking.Item{memo, lone},
 		Locate: places(map[string]gitrepo.Place{
 			main:  {Repo: main, Branch: "main"},
@@ -160,7 +160,7 @@ func TestBuild_memos(t *testing.T) {
 
 // daemon が動いていなくてもタスクの記録は描く。前の daemon の status.json は使わない。
 func TestBuild_daemonState(t *testing.T) {
-	tasks := []tasklog.Task{task("A", "1", "書く", "in_progress", "/w/a")}
+	tasks := []record.Task{task("A", "1", "書く", "in_progress", "/w/a")}
 	stopped := build(input{Tasks: tasks, Snapshot: snapshot(daemonstate.PaneStatus{SessionID: "A", CWD: "/w/a"})})
 	if stopped.DaemonRunning || stopped.UpdatedAt != nil || len(stopped.Repos) != 1 || len(stopped.Repos[0].Sessions) != 0 || stopped.Graph.Nodes[0].Live {
 		t.Errorf("stopped = %+v", stopped)
@@ -170,7 +170,7 @@ func TestBuild_daemonState(t *testing.T) {
 		t.Errorf("stale = %+v", stale)
 	}
 	// git の外の cwd は cwd そのものを repo にする。cwd が無ければ「cwd 不明」の repo。
-	odd := build(input{Tasks: []tasklog.Task{task("A", "1", "x", "pending", "")}})
+	odd := build(input{Tasks: []record.Task{task("A", "1", "x", "pending", "")}})
 	if odd.Repos[0].Title != "(cwd 不明)" || odd.Graph.Nodes[0].Session != "A" {
 		t.Errorf("odd = %+v / %+v", odd.Repos, odd.Graph.Nodes)
 	}

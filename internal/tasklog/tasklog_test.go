@@ -7,6 +7,8 @@ import (
 	"sort"
 	"testing"
 	"time"
+
+	"github.com/usadamasa/agents-daemon/internal/tasklog/record"
 )
 
 // testdata/*.json は Claude Code 2.1.302 の PostToolUse hook に届いた入力の実測 (パスだけ置き換えた)。
@@ -32,13 +34,13 @@ func ingest(t *testing.T, s Store, names ...string) {
 	}
 }
 
-func byID(t *testing.T, s Store) map[string]Task {
+func byID(t *testing.T, s Store) map[string]record.Task {
 	t.Helper()
 	tasks, err := s.List()
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
-	m := map[string]Task{}
+	m := map[string]record.Task{}
 	for _, task := range tasks {
 		m[task.ID] = task
 	}
@@ -151,14 +153,14 @@ func TestIngest_updateCases(t *testing.T) {
 		resp  map[string]any
 		// written と removed はログに出す件数。
 		written, removed int
-		check            func(t *testing.T, got map[string]Task)
+		check            func(t *testing.T, got map[string]record.Task)
 	}{
 		{
 			name:    "deleted になったら記録を消す",
 			input:   map[string]any{"taskId": "1", "status": "deleted"},
 			resp:    map[string]any{"success": true, "taskId": "1", "updatedFields": []string{"status"}},
 			removed: 1,
-			check: func(t *testing.T, got map[string]Task) {
+			check: func(t *testing.T, got map[string]record.Task) {
 				if _, ok := got["1"]; ok {
 					t.Errorf("deleted のタスクが残っている")
 				}
@@ -168,7 +170,7 @@ func TestIngest_updateCases(t *testing.T) {
 			name:  "失敗した更新は反映しない",
 			input: map[string]any{"taskId": "1", "status": "completed"},
 			resp:  map[string]any{"success": false, "taskId": "1", "updatedFields": []string{}, "error": "Task not found"},
-			check: func(t *testing.T, got map[string]Task) {
+			check: func(t *testing.T, got map[string]record.Task) {
 				if got["1"].Status != "pending" {
 					t.Errorf("失敗した更新が反映された: %+v", got["1"])
 				}
@@ -179,7 +181,7 @@ func TestIngest_updateCases(t *testing.T) {
 			input:   map[string]any{"taskId": "9", "status": "in_progress", "subject": "late"},
 			resp:    map[string]any{"success": true, "taskId": "9", "updatedFields": []string{"status", "subject"}},
 			written: 1,
-			check: func(t *testing.T, got map[string]Task) {
+			check: func(t *testing.T, got map[string]record.Task) {
 				if got["9"].Status != "in_progress" || got["9"].Subject != "late" {
 					t.Errorf("task 9 = %+v", got["9"])
 				}
@@ -190,7 +192,7 @@ func TestIngest_updateCases(t *testing.T) {
 			input:   map[string]any{"taskId": "1", "addBlockedBy": []string{"5", "5"}, "owner": "teammate"},
 			resp:    map[string]any{"success": true, "taskId": "1", "updatedFields": []string{"blockedBy", "owner"}},
 			written: 1,
-			check: func(t *testing.T, got map[string]Task) {
+			check: func(t *testing.T, got map[string]record.Task) {
 				if len(got["1"].BlockedBy) != 1 || got["1"].Owner != "teammate" {
 					t.Errorf("task 1 = %+v", got["1"])
 				}
@@ -229,7 +231,7 @@ func TestIngest_todoWrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var list TodoList
+	var list record.TodoList
 	if err := json.Unmarshal(data, &list); err != nil || len(list.Todos) != 2 || list.Todos[1].Content != "b" {
 		t.Errorf("todos.json = %s (%v)", data, err)
 	}

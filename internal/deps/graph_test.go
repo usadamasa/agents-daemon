@@ -11,7 +11,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/deps/graph/dag"
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/parking"
-	"github.com/usadamasa/agents-daemon/internal/tasklog"
+	"github.com/usadamasa/agents-daemon/internal/tasklog/record"
 )
 
 // nodes はグラフのノードを Key で引けるようにする。
@@ -51,7 +51,7 @@ func TestGraph_nodeStates(t *testing.T) {
 			daemonstate.PaneStatus{PaneID: "p10", SessionID: "V", CWD: "/w/dotfiles", AgentStatus: "unknown"},
 			daemonstate.PaneStatus{PaneID: "p11", SessionID: "N", CWD: "/w/a", AgentStatus: "unknown"},
 		),
-		Tasks: []tasklog.Task{
+		Tasks: []record.Task{
 			task("W", "1", "書く", "in_progress", "/w/a"),
 			task("W", "2", "次", "pending", "/w/a"),
 			task("W", "3", "済んだ", "completed", "/w/a"),
@@ -64,7 +64,7 @@ func TestGraph_nodeStates(t *testing.T) {
 			task("X", "1", "残った作業", "pending", "/w/x"),
 			task("X", "2", "残った進行中", "in_progress", "/w/x"),
 		},
-		Todos: []tasklog.TodoList{{SessionID: "T", CWD: "/w/t", UpdatedAt: t0, Todos: []tasklog.Todo{
+		Todos: []record.TodoList{{SessionID: "T", CWD: "/w/t", UpdatedAt: t0, Todos: []record.Todo{
 			{Content: "a", Status: "completed"}, {Content: "b", Status: "in_progress"},
 		}}},
 		SessionNames: map[string]string{"W": "writer", "U": "waiter"},
@@ -118,7 +118,7 @@ func TestGraph_nodeStates(t *testing.T) {
 func TestGraph_linksDepthAndDownstream(t *testing.T) {
 	const cwd = "/w/a"
 	b := build(input{
-		Tasks: []tasklog.Task{
+		Tasks: []record.Task{
 			task("A", "1", "設計", "completed", cwd),
 			task("A", "2", "実装", "pending", cwd, "1"),
 			task("A", "3", "PR", "pending", cwd, "2"),
@@ -179,7 +179,7 @@ func TestGraph_refEndpoints(t *testing.T) {
 			daemonstate.PaneStatus{PaneID: "p1", SessionID: "L", CWD: cwd, AgentStatus: "working", AgentMessage: "起きたばかり"},
 			daemonstate.PaneStatus{PaneID: "p2", SessionID: "A", CWD: cwd, AgentStatus: "working"},
 		),
-		Tasks: []tasklog.Task{
+		Tasks: []record.Task{
 			task("A", "1", "根", "pending", cwd),
 			task("A", "2", "中", "pending", cwd, "1"),
 			task("A", "3", "末端 1", "pending", cwd, "2"),
@@ -260,7 +260,7 @@ func TestGraph_refEndpointsEdgeCases(t *testing.T) {
 		return edge.Edge{ID: id, Before: edge.Endpoint{Ref: before, CWD: cwd}, After: edge.Endpoint{Ref: after, CWD: cwd}}
 	}
 	b := build(input{
-		Tasks: []tasklog.Task{
+		Tasks: []record.Task{
 			task("C", "1", "x", "pending", cwd, "2"),
 			task("C", "2", "y", "pending", cwd, "1"),
 			task("D", "1", "後", "pending", cwd),
@@ -287,7 +287,7 @@ func TestGraph_chains(t *testing.T) {
 			daemonstate.PaneStatus{PaneID: "p2", SessionID: "B", CWD: cwd, AgentStatus: "working"},
 			daemonstate.PaneStatus{PaneID: "p3", SessionID: "C", CWD: cwd, AgentStatus: "blocked", AgentKind: "permission"},
 		),
-		Tasks: []tasklog.Task{
+		Tasks: []record.Task{
 			task("A", "1", "論点を決める", "in_progress", cwd),
 			task("A", "2", "段5", "pending", cwd, "1", "0"),
 			task("A", "0", "済んだ前提", "completed", cwd),
@@ -350,7 +350,7 @@ func TestGraph_rows(t *testing.T) {
 			daemonstate.PaneStatus{PaneID: "p2", SessionID: "B", CWD: cwd, AgentStatus: "working"},
 			daemonstate.PaneStatus{PaneID: "p3", SessionID: "C", CWD: cwd, AgentStatus: "blocked", AgentKind: "permission"},
 		),
-		Tasks: []tasklog.Task{
+		Tasks: []record.Task{
 			task("A", "1", "論点を決める", "in_progress", cwd),
 			task("A", "2", "段5", "pending", cwd, "1", "0"),
 			task("A", "0", "済んだ前提", "completed", cwd),
@@ -397,13 +397,13 @@ func TestGraph_rows(t *testing.T) {
 func TestGraph_noBlockedAndCycle(t *testing.T) {
 	const cwd = "/w/a"
 	calm := build(input{
-		Tasks: []tasklog.Task{task("A", "1", "x", "pending", cwd), task("A", "2", "y", "pending", cwd, "1")},
+		Tasks: []record.Task{task("A", "1", "x", "pending", cwd), task("A", "2", "y", "pending", cwd, "1")},
 	})
 	if len(calm.Graph.LongestChain) != 0 {
 		t.Errorf("longest chain = %v, want 空", calm.Graph.LongestChain)
 	}
 	b := build(input{
-		Tasks: []tasklog.Task{
+		Tasks: []record.Task{
 			task("A", "1", "x", "pending", cwd, "2"),
 			task("A", "2", "y", "pending", cwd, "1"),
 		},
@@ -417,7 +417,7 @@ func TestGraph_noBlockedAndCycle(t *testing.T) {
 func TestGraph_deadlock(t *testing.T) {
 	const cwd = "/w/a"
 	b := build(input{
-		Tasks: []tasklog.Task{
+		Tasks: []record.Task{
 			task("A", "1", "x", "pending", cwd, "2"),
 			task("A", "2", "y", "pending", cwd),
 			task("A", "3", "下流", "pending", cwd, "1"),
@@ -454,7 +454,7 @@ func TestGraph_parked(t *testing.T) {
 	b := build(input{
 		PID:      42,
 		Snapshot: snapshot(daemonstate.PaneStatus{PaneID: "p1", SessionID: "S", CWD: cwd, AgentStatus: "working"}),
-		Tasks:    []tasklog.Task{task("A", "1", "x", "in_progress", cwd), task("A", "2", "y", "pending", cwd)},
+		Tasks:    []record.Task{task("A", "1", "x", "in_progress", cwd), task("A", "2", "y", "pending", cwd)},
 		Parking: []parking.Item{
 			memo("m1", parking.Source{SessionID: "A", TaskID: "1", CWD: cwd, At: t0}),
 			memo("m2", parking.Source{SessionID: "A", TaskID: "1", CWD: cwd, At: t0}, parking.Source{SessionID: "S", CWD: cwd, At: t0}),
@@ -478,7 +478,7 @@ func TestGraph_description(t *testing.T) {
 	b := build(input{
 		PID:      42,
 		Snapshot: snapshot(daemonstate.PaneStatus{PaneID: "p1", SessionID: "A", CWD: cwd, AgentStatus: "working"}),
-		Tasks:    []tasklog.Task{withDescription, task("A", "2", "y", "pending", cwd)},
+		Tasks:    []record.Task{withDescription, task("A", "2", "y", "pending", cwd)},
 	})
 	got := nodes(b.Graph)
 	if got["task:A/1"].Description != "渡す本文" {
@@ -498,14 +498,14 @@ func TestGraph_memos(t *testing.T) {
 		return parking.Item{ID: id, Repo: cwd, Status: status, Origin: parking.OriginAdopted, Entry: parking.Entry{Kind: parking.KindAside, Title: title},
 			Sources: []parking.Source{{SessionID: "A", TaskID: "1", CWD: cwd, At: t0}}}
 	}
-	withDescription := func(t tasklog.Task, description string) tasklog.Task {
+	withDescription := func(t record.Task, description string) record.Task {
 		t.Description = description
 		return t
 	}
 	b := build(input{
 		PID:      42,
 		Snapshot: snapshot(daemonstate.PaneStatus{PaneID: "p1", SessionID: "A", CWD: cwd, AgentStatus: "working"}),
-		Tasks: []tasklog.Task{
+		Tasks: []record.Task{
 			withDescription(task("A", "1", "x", "in_progress", cwd), "メモ "+open+" と "+handed+" と "+gone+" を扱う。(メモ "+handed+")"),
 			withDescription(task("A", "2", "y", "pending", cwd), "メモ "+discarded),
 			task("A", "3", "z", "pending", cwd),

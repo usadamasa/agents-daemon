@@ -10,9 +10,10 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
+	"github.com/usadamasa/agents-daemon/internal/tasklog/record"
 )
 
-func writeTask(t *testing.T, stateDir string, task tasklog.Task) string {
+func writeTask(t *testing.T, stateDir string, task record.Task) string {
 	t.Helper()
 	dir := filepath.Join(stateDir, "tasks", task.SessionID)
 	if err := os.MkdirAll(dir, 0o750); err != nil {
@@ -36,7 +37,7 @@ func exited(string, time.Time) error { return nil }
 func TestAdopt_movesTaskToParking(t *testing.T) {
 	stateDir := t.TempDir()
 	cwd := t.TempDir()
-	path := writeTask(t, stateDir, tasklog.Task{ID: "4", Subject: "README を直す", Description: "表の列がずれている", Status: "in_progress", SessionID: "dead", CWD: cwd})
+	path := writeTask(t, stateDir, record.Task{ID: "4", Subject: "README を直す", Description: "表の列がずれている", Status: "in_progress", SessionID: "dead", CWD: cwd})
 	s := New(stateDir)
 
 	added, err := s.Adopt("dead", "4", tasklog.New(stateDir), exited, testNow)
@@ -62,7 +63,7 @@ func TestAdopt_movesTaskToParking(t *testing.T) {
 func TestAdopt_rejects(t *testing.T) {
 	stateDir := t.TempDir()
 	cwd := t.TempDir()
-	done := writeTask(t, stateDir, tasklog.Task{ID: "1", Subject: "済み", Status: "completed", SessionID: "dead", CWD: cwd})
+	done := writeTask(t, stateDir, record.Task{ID: "1", Subject: "済み", Status: "completed", SessionID: "dead", CWD: cwd})
 	s := New(stateDir)
 	p := tasklog.New(stateDir)
 
@@ -89,7 +90,7 @@ func TestAdopt_requiresExitedSession(t *testing.T) {
 	stateDir := t.TempDir()
 	cwd := t.TempDir()
 	updated := testNow.Add(-time.Hour)
-	path := writeTask(t, stateDir, tasklog.Task{ID: "4", Subject: "まだ動いている", Status: "in_progress", SessionID: "alive", CWD: cwd, UpdatedAt: updated})
+	path := writeTask(t, stateDir, record.Task{ID: "4", Subject: "まだ動いている", Status: "in_progress", SessionID: "alive", CWD: cwd, UpdatedAt: updated})
 	s := New(stateDir)
 	var askedFor string
 	var askedAfter time.Time

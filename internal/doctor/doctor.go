@@ -242,7 +242,7 @@ func (p PaneReport) recordLabel() string {
 	return multiplexer.RecordLabel(multiplexer.Pane{AgentStatus: p.AgentStatus, AgentKind: p.AgentKind, AgentMessage: p.AgentMessage})
 }
 
-// collectPremises は rex CLI の応答の形が internal/multiplexer/rexcli の読む形のままかを、自分の block (REX_BLOCK) に
+// collectPremises は rex CLI の応答の形が internal/backend/rexcli の読む形のままかを、自分の block (REX_BLOCK) に
 // 固定のコマンドを打って集める。ずれは OK=false の finding で、doctor の exit code には響かない
 // (rex を上げた直後に全 pane が unknown になる原因を、changelog を読む前に名指しで見るため)。
 func collectPremises(ctx context.Context, checker multiplexer.PremiseChecker, getenv func(string) string) *PremisesReport {

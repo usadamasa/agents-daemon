@@ -10,8 +10,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/usadamasa/agents-daemon/internal/backend/rexcli/blockstate"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
-	"github.com/usadamasa/agents-daemon/internal/multiplexer/rexcli/blockstate"
 )
 
 // ProbeMissingBlock は存在しない block の ID。exit code と stderr の形を見るためだけに打つ

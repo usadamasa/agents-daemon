@@ -4,8 +4,8 @@ package backend
 import (
 	"errors"
 
+	"github.com/usadamasa/agents-daemon/internal/backend/rexcli"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
-	"github.com/usadamasa/agents-daemon/internal/multiplexer/rexcli"
 	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
 )
 

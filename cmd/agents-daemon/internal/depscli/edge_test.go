@@ -178,8 +178,8 @@ func TestEdgeAdd_ownTaskRefused(t *testing.T) {
 	for name, m := range map[string]map[string]any{
 		"ref と task の両方":   {"before": map[string]string{"ref": "session:a", "cwd": home, "task": "1"}, "after": other},
 		"ref も task も無い":   {"before": map[string]string{"cwd": home}, "after": other},
-		"task が空":         {"before": map[string]string{"task": ""}, "after": other},
-		"task に / がある":    {"before": map[string]string{"task": "1/2"}, "after": other},
+		"task が空":          {"before": map[string]string{"task": ""}, "after": other},
+		"task に / がある":     {"before": map[string]string{"task": "1/2"}, "after": other},
 		"task の cwd が相対パス": {"before": map[string]string{"task": "1", "cwd": "rel"}, "after": other},
 	} {
 		t.Setenv("CLAUDE_CODE_SESSION_ID", "SELF")

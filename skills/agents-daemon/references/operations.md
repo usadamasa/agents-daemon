@@ -9,7 +9,7 @@
 agents-daemon daemon --ensure [--dry-run]      # 居なければ detach 起動 (hook 用)
 agents-daemon daemon --foreground [--dry-run]  # このプロセスで回す (デバッグ用)
 agents-daemon status                           # 稼働状況、監視中の pane、ログの末尾
-agents-daemon --json status                    # 同じものを JSON で出す (下の「--json」)
+agents-daemon --json status                    # 同じものを JSON で出す (--json は他のコマンドにも効く。下の「--json」)
 agents-daemon logs -n 80                       # 現行ログ (daemon.log) の末尾
 agents-daemon logs --events                    # 依存図とパーキングロットの経路 (タスクの記録、パーキング、mod) の出来事のログの末尾
 agents-daemon stop                             # SIGTERM を送って停止
@@ -124,14 +124,32 @@ printf '%s' '{"id":"<id>","status":"open"}' | agents-daemon park set            
 
 ### `--json`
 
-root のグローバルオプション。`doctor` と `status` は人が読む形の代わりに JSON を出す。
-元から JSON を出す `deps`、`park`、`edge` は付けても変わらない。
-それ以外のコマンドに付けると、文字の出力を JSON と思い込んで読む事故を避けるため error で止まる
-(残りのコマンドへの対応は #182)。
+root のグローバルオプション。付けると、人が読む形の代わりに JSON を 1 つ stdout に出す。
+元から JSON を出す `deps`、`park`、`edge`、`spawn` は付けても変わらない。
+stdout を Claude Code や mod が読む hook 用のコマンド (`statusline`、`ingest-statusline`、`ingest-task`、`event-log`) と、
+子プロセスの出力を流すだけの `update` は対応しない。付けると、文字の出力を JSON と思い込んで読む事故を避けるため
+error で止まる。flag の組み合わせで JSON にできないもの (`daemon --foreground`、`prune-worktrees --hook`、
+`dream harvest --detach`) も同じ。
+
+| コマンド | JSON の中身 |
+| -------- | ----------- |
+| `doctor` | 節ごとの診断 |
+| `status` | 稼働状況、snapshot、ログの末尾 |
+| `logs` | ログのパスと末尾の行 (`lines`) |
+| `inspect` | 判定 (`kind`)、走査した行、record、ゲート判定 (`gate`)、起床時刻と出所 (`wake`) |
+| `simulate` | 作った pane、観測した agent、各 Tick の outcome と送るはずだったもの (`ticks`)、後始末 |
+| `stop` | 止めた daemon (`was_running`、`pid`) |
+| `daemon --ensure` | 何をしたか (`action`: `started` / `already_running` / `outside_rex`) |
+| `prune-worktrees` | worktree ごとの判定 (`removed` / `would_remove` / `kept` と理由) |
+| `dream harvest` / `mine` / `stage` | `--verbose` と同じ処理のサマリ |
+| `dream adopt` | 候補と作業ブランチ、branch を作ったか |
+| `dream forget` | 消した (dry-run なら消すはずだった) パス |
+| `version` | 建てた元の plugin の version |
 
 ```sh
 agents-daemon --json doctor | jq '.premises.findings'   # rex CLI の前提の点検だけを取り出す
 agents-daemon --json status | jq '.snapshot.panes'      # 監視中の pane
+agents-daemon --json inspect --pane <block id> | jq '{kind, gate: .gate.id, wake: .wake.wake_at}'
 ```
 
 ### 診断

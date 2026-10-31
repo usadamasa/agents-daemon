@@ -30,21 +30,30 @@ type Opts struct {
 	Stderr io.Writer
 }
 
-// Run は指定された memory を削除し、MEMORY.md の索引からも除去する。
-func Run(opts Opts) error {
+// Result は forget が消した (DryRun なら消すはずだった) memory のパス。stdout の行と同じものを持ち、`--json` は
+// そのまま出す。
+type Result struct {
+	DryRun bool     `json:"dry_run"`
+	Paths  []string `json:"paths"`
+}
+
+// Run は指定された memory を削除し、MEMORY.md の索引からも除去する。途中で削除に失敗したときは、そこまでに
+// 消した分を Result に残す。
+func Run(opts Opts) (Result, error) {
 	if opts.Stdout == nil {
 		opts.Stdout = io.Discard
 	}
 	if opts.Stderr == nil {
 		opts.Stderr = io.Discard
 	}
+	res := Result{DryRun: opts.DryRun, Paths: []string{}}
 	if len(opts.Names) == 0 {
-		return errors.New("削除する memory 名を 1 つ以上指定する")
+		return res, errors.New("削除する memory 名を 1 つ以上指定する")
 	}
 
 	memDir, err := resolveMemoryDir(opts)
 	if err != nil {
-		return err
+		return res, err
 	}
 
 	// 1 件でも解決できなければ何も消さない (部分適用で索引と実体が乖離するのを避ける)。
@@ -53,10 +62,10 @@ func Run(opts Opts) error {
 	for _, name := range opts.Names {
 		path, base, err := resolveTarget(memDir, name)
 		if err != nil {
-			return err
+			return res, err
 		}
 		if _, err := os.Stat(path); err != nil {
-			return fmt.Errorf("memory %q が見つからない: %w", name, err)
+			return res, fmt.Errorf("memory %q が見つからない: %w", name, err)
 		}
 		targets = append(targets, path)
 		bases = append(bases, base)
@@ -64,18 +73,20 @@ func Run(opts Opts) error {
 
 	if opts.DryRun {
 		for _, path := range targets {
+			res.Paths = append(res.Paths, path)
 			_, _ = fmt.Fprintf(opts.Stdout, "would remove %s\n", path)
 		}
-		return nil
+		return res, nil
 	}
 
 	for _, path := range targets {
 		if err := os.Remove(path); err != nil {
-			return fmt.Errorf("削除失敗 %s: %w", path, err)
+			return res, fmt.Errorf("削除失敗 %s: %w", path, err)
 		}
+		res.Paths = append(res.Paths, path)
 		_, _ = fmt.Fprintf(opts.Stdout, "removed %s\n", path)
 	}
-	return pruneIndex(filepath.Join(memDir, "MEMORY.md"), bases)
+	return res, pruneIndex(filepath.Join(memDir, "MEMORY.md"), bases)
 }
 
 // resolveMemoryDir は削除対象の memory ディレクトリを決める。

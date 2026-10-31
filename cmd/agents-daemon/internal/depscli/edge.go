@@ -10,7 +10,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/jsonflag"
 	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/statecmd"
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/edge"
@@ -68,9 +67,8 @@ func endpoint(t protocol.EdgeTarget) (edge.Endpoint, error) {
 // 人が引く list は flag で受ける。結果は JSON で stdout に出す。
 func newEdgeCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:         "edge",
-		Short:       "セッションをまたぐ作業の依存 (before が済まないと after を始められない) を書く・消す・一覧する",
-		Annotations: jsonflag.Supported(),
+		Use:   "edge",
+		Short: "セッションをまたぐ作業の依存 (before が済まないと after を始められない) を書く・消す・一覧する",
 	}
 	sub := func(use, short string, fn func(apppath.Paths, io.Reader) (any, error)) *cobra.Command {
 		return &cobra.Command{Use: use, Short: short, Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {

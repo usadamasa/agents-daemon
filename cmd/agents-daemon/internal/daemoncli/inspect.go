@@ -7,13 +7,14 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/jsonflag"
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend"
 	"github.com/usadamasa/agents-daemon/internal/runtime/verify"
 	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
 )
 
-// newInspectCmd は `agents-daemon inspect` を組み立てる。
+// newInspectCmd は `agents-daemon inspect` を組み立てる。--json は verify.InspectReport を出す。
 func newInspectCmd() *cobra.Command {
 	var paneID string
 	var file string
@@ -42,7 +43,14 @@ func newInspectCmd() *cobra.Command {
 					return err
 				}
 			}
-			return verify.RunInspect(cmd.Context(), cmd.OutOrStdout(), client, p, paneID, file, sessionID, time.Now())
+			if !jsonflag.Enabled(cmd) {
+				return verify.RunInspect(cmd.Context(), cmd.OutOrStdout(), client, p, paneID, file, sessionID, time.Now())
+			}
+			rep, err := verify.CollectInspect(cmd.Context(), client, p, paneID, file, sessionID, time.Now())
+			if err != nil {
+				return err
+			}
+			return jsonflag.Write(cmd.OutOrStdout(), rep)
 		},
 	}
 	cmd.Flags().StringVar(&paneID, "pane", "", "rex 越しに読む block ID")

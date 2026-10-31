@@ -29,16 +29,25 @@ type Opts struct {
 	Stderr      io.Writer
 }
 
+// Summary は harvest 1 回分の処理の数。--verbose はこれを 1 行で stderr に出し、`--json` はそのまま stdout に出す。
+type Summary struct {
+	Harvested        int    `json:"harvested"`
+	Written          int    `json:"written"`
+	SkippedDuplicate int    `json:"skipped_duplicate"`
+	Pruned           int    `json:"pruned"`
+	Out              string `json:"out"`
+}
+
 // Run は harvest phase 一回分を実行する。呼び出し側は cobra Command から Opts を組み立てて呼ぶ。
 //
 // 書き込みの前に state ディレクトリの保持期間を過ぎたファイルを消す。daemon の housekeeping は
 // rex の外では走らないので、Stop のたびに起きるこのコマンドが書き手として掃除する。
-func Run(opts Opts) error {
+func Run(opts Opts) (Summary, error) {
 	if opts.Stderr == nil {
 		opts.Stderr = io.Discard
 	}
 	if opts.StateDir == "" {
-		return errors.New("StateDir が未解決 (呼び出し側が apppath で決める)")
+		return Summary{}, errors.New("StateDir が未解決 (呼び出し側が apppath で決める)")
 	}
 
 	resolvedProjects := opts.ProjectsDir
@@ -48,13 +57,13 @@ func Run(opts Opts) error {
 
 	state, err := loadState(opts.StateDir)
 	if err != nil {
-		return fmt.Errorf("state 読み込み失敗: %w", err)
+		return Summary{}, fmt.Errorf("state 読み込み失敗: %w", err)
 	}
 
 	runStart := time.Now()
 	pruned, err := dream.Prune(opts.StateDir, runStart)
 	if err != nil {
-		return fmt.Errorf("state の掃除失敗: %w", err)
+		return Summary{}, fmt.Errorf("state の掃除失敗: %w", err)
 	}
 
 	filter := &walkFilter{
@@ -79,22 +88,26 @@ func Run(opts Opts) error {
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("スキャン失敗: %w", err)
+		return Summary{}, fmt.Errorf("スキャン失敗: %w", err)
 	}
 
 	writeStats, err := record.Write(opts.StateDir, records)
 	if err != nil {
-		return fmt.Errorf("書き込み失敗: %w", err)
+		return Summary{}, fmt.Errorf("書き込み失敗: %w", err)
 	}
 
 	state.LastRunTS = runStart.Format(time.RFC3339)
 	if err := saveState(opts.StateDir, state); err != nil {
-		return fmt.Errorf("state 保存失敗: %w", err)
+		return Summary{}, fmt.Errorf("state 保存失敗: %w", err)
 	}
 
+	sum := Summary{
+		Harvested: len(records), Written: writeStats.Written, SkippedDuplicate: writeStats.SkippedDuplicate,
+		Pruned: pruned, Out: filepath.Join(opts.StateDir, "harvest"),
+	}
 	if opts.Verbose {
 		_, _ = fmt.Fprintf(opts.Stderr, "harvested=%d written=%d skipped=%d pruned=%d out=%s\n",
-			len(records), writeStats.Written, writeStats.SkippedDuplicate, pruned, filepath.Join(opts.StateDir, "harvest"))
+			sum.Harvested, sum.Written, sum.SkippedDuplicate, sum.Pruned, sum.Out)
 	}
-	return nil
+	return sum, nil
 }

@@ -58,32 +58,67 @@ type Options struct {
 	ScreenFile string
 }
 
+// Result は simulate が通した経路の記録。文字の報告と同じ中身を積み、`simulate --json` はこれをそのまま出す。
+// 途中で失敗したときは、そこまでに積んだ分だけを持つ。
+type Result struct {
+	Backend     string                  `json:"backend"`
+	PaneID      string                  `json:"pane_id,omitempty"`
+	Agent       string                  `json:"agent,omitempty"`
+	AgentStatus multiplexer.AgentStatus `json:"agent_status,omitempty"`
+	// Send は dry-run をやめて使い捨て pane へ実際に送ったか。
+	Send        bool         `json:"send"`
+	ConfigError string       `json:"config_error,omitempty"`
+	Ticks       []TickReport `json:"ticks"`
+	// Kept は --keep で pane を残したか。Closed は後始末で閉じたか。
+	Kept         bool   `json:"kept"`
+	Closed       bool   `json:"closed"`
+	CleanupError string `json:"cleanup_error,omitempty"`
+}
+
+// TickReport は 1 回の monitor.Tick の結果。
+type TickReport struct {
+	Now       time.Time  `json:"now"`
+	Outcome   string     `json:"outcome"`
+	Error     string     `json:"error,omitempty"`
+	WaitUntil *time.Time `json:"wait_until,omitempty"`
+	// WouldSend は dry-run でこの Tick が送るはずだったもの。
+	WouldSend []Sent `json:"would_send,omitempty"`
+}
+
+// Sent は pane へ送るテキストかキーの 1 回分。
+type Sent struct {
+	Text string   `json:"text,omitempty"`
+	Keys []string `json:"keys,omitempty"`
+}
+
 // Run は simulate の本体。使い捨て pane の作成から後始末まで一貫して行う。
 // backend は daemon と同じ規則 (REX_SESSION があること) で選ぶ。
-func Run(ctx context.Context, w io.Writer, p apppath.Paths, opts Options) error {
+func Run(ctx context.Context, w io.Writer, p apppath.Paths, opts Options) (res Result, err error) {
+	res = Result{Send: opts.Send, Ticks: []TickReport{}}
 	kind, execClient, err := backend.Connect(os.Getenv, sessioncontext.New(p.StateDir()))
 	if err != nil {
-		return err
+		return res, err
 	}
+	res.Backend = string(kind)
 	host, err := newSimulateHost(kind, os.Getenv)
 	if err != nil {
-		return err
+		return res, err
 	}
 	if err := execClient.Reachable(ctx); err != nil {
-		return fmt.Errorf("%s に到達できません: %w", kind, err)
+		return res, fmt.Errorf("%s に到達できません: %w", kind, err)
 	}
 
 	screenContent := defaultSimulateScreen
 	if opts.ScreenFile != "" {
 		data, readErr := os.ReadFile(opts.ScreenFile) // #nosec G304 -- CLI 引数で明示指定
 		if readErr != nil {
-			return fmt.Errorf("--screen-file の読み込みに失敗: %w", readErr)
+			return res, fmt.Errorf("--screen-file の読み込みに失敗: %w", readErr)
 		}
 		screenContent = string(data)
 	}
 	scriptPath, screenPath, removeFiles, err := writeSimulateFiles(simulateScript(host.ProgramStatusCommand()), screenContent)
 	if err != nil {
-		return err
+		return res, err
 	}
 	// script は sh が読みながら実行し、screen は script が起動直後に cat する。どちらも開いた
 	// fd があれば削除後も読めるので、pane の後始末と一緒に消してよい。
@@ -92,11 +127,22 @@ func Run(ctx context.Context, w io.Writer, p apppath.Paths, opts Options) error 
 	_, _ = fmt.Fprintf(w, "使い捨て pane を作成します (backend=%s)...\n", kind)
 	ownedPaneID, err := host.SplitPane(ctx, scriptPath, screenPath)
 	if err != nil {
-		return err
+		return res, err
 	}
+	res.PaneID = ownedPaneID
 	_, _ = fmt.Fprintf(w, "  pane %s を作成しました (前景は /bin/sh %s)\n", ownedPaneID, scriptPath)
-	defer cleanupSimulatePane(ctx, w, host, ownedPaneID, opts.Keep)
+	// res は名前付きの返り値なので、defer の後始末が書いた欄も呼び手に届く。
+	defer cleanupSimulatePane(ctx, w, host, ownedPaneID, opts.Keep, &res)
 
+	if err := prepareSimulatePane(ctx, w, host, execClient, ownedPaneID, screenContent); err != nil {
+		return res, err
+	}
+	err = runSimulateTicks(ctx, w, p, ownedPaneID, execClient, opts, &res)
+	return res, err
+}
+
+// prepareSimulatePane は使い捨て pane を Claude agent に見せかけ、limit 風の画面が出るまで待つ。
+func prepareSimulatePane(ctx context.Context, w io.Writer, host simulateHost, execClient paneClient, ownedPaneID, screenContent string) error {
 	marked, err := host.MarkAsClaudeAgent(ctx, ownedPaneID)
 	if err != nil {
 		return err
@@ -118,8 +164,7 @@ func Run(ctx context.Context, w io.Writer, p apppath.Paths, opts Options) error 
 		}
 	}
 	_, _ = fmt.Fprintln(w, "  limit 風の画面が表示されました")
-
-	return runSimulateTicks(ctx, w, p, ownedPaneID, execClient, opts)
+	return nil
 }
 
 // writeSimulateFiles は script と画面テキストを一時ディレクトリに書き、そのパスと削除関数を返す。
@@ -211,15 +256,18 @@ func waitForScreenContent(ctx context.Context, client paneClient, paneID, substr
 // host.SplitPane がこのプロセス自身で作った値であり、呼び出し元にそれ以外の
 // pane_id を渡す手段は無い。失敗しても simulate 全体は失敗させず、手動での
 // 後始末コマンドを案内するだけに留める。
-func cleanupSimulatePane(ctx context.Context, w io.Writer, host simulateHost, ownedPaneID string, keep bool) {
+func cleanupSimulatePane(ctx context.Context, w io.Writer, host simulateHost, ownedPaneID string, keep bool, res *Result) {
 	if keep {
+		res.Kept = true
 		_, _ = fmt.Fprintf(w, "--keep が指定されたため pane %s は残しています (`%s` で手動削除してください)\n", ownedPaneID, host.CloseCommand(ownedPaneID))
 		return
 	}
 	if err := host.ClosePane(ctx, ownedPaneID); err != nil {
+		res.CleanupError = err.Error()
 		_, _ = fmt.Fprintf(w, "後始末に失敗しました (`%s` で手動削除してください): %v\n", host.CloseCommand(ownedPaneID), err)
 		return
 	}
+	res.Closed = true
 	_, _ = fmt.Fprintf(w, "pane %s を閉じました\n", ownedPaneID)
 }
 
@@ -237,9 +285,10 @@ func sessionIDOf(ctx context.Context, client paneClient, paneID string) string {
 	return pane.SessionID
 }
 
-func runSimulateTicks(ctx context.Context, w io.Writer, p apppath.Paths, ownedPaneID string, execClient paneClient, opts Options) error {
+func runSimulateTicks(ctx context.Context, w io.Writer, p apppath.Paths, ownedPaneID string, execClient paneClient, opts Options, res *Result) error {
 	cfg, cfgErr := config.Load(p.ConfigFile())
 	if cfgErr != nil {
+		res.ConfigError = cfgErr.Error()
 		_, _ = fmt.Fprintf(w, "設定の読み込みに失敗、デフォルト値で継続します: %v\n", cfgErr)
 		cfg = config.Default()
 	}
@@ -261,11 +310,12 @@ func runSimulateTicks(ctx context.Context, w io.Writer, p apppath.Paths, ownedPa
 
 	guarded := newScopedClient(execClient, ownedPaneID)
 	var tickClient monitor.Client = guarded
+	var wouldSend []Sent
 	mode := "dry-run (--send を付けると実際に送信します)"
 	if opts.Send {
 		mode = "実送信 (使い捨て pane に対してのみ)"
 	} else {
-		tickClient = simulateDryRunClient{inner: guarded, w: w}
+		tickClient = simulateDryRunClient{inner: guarded, w: w, sent: &wouldSend}
 	}
 	_, _ = fmt.Fprintf(w, "\nmonitor.Tick を daemon と同じロジックで実行します (%s)\n", mode)
 
@@ -273,29 +323,36 @@ func runSimulateTicks(ctx context.Context, w io.Writer, p apppath.Paths, ownedPa
 	if err != nil {
 		return fmt.Errorf("pane %s の取得に失敗: %w", ownedPaneID, err)
 	}
+	res.Agent, res.AgentStatus = pane.Agent, pane.AgentStatus
 	_, _ = fmt.Fprintf(w, "  観測した pane: agent=%s agent_status=%s\n", pane.Agent, pane.AgentStatus)
 
 	deps := monitor.Deps{Client: tickClient, Classifier: classifier, Config: cfg, Sleep: time.Sleep, Account: account}
 	ps := &monitor.PaneState{}
-
-	outcome, tickErr := monitor.Tick(ctx, deps, pane, ps, rateState, time.Now())
-	_, _ = fmt.Fprintf(w, "  1 回目の Tick → Outcome: %s\n", outcome)
-	if tickErr != nil {
-		_, _ = fmt.Fprintf(w, "    エラー: %v\n", tickErr)
+	tick := func(n int, now time.Time) monitor.Outcome {
+		outcome, tickErr := monitor.Tick(ctx, deps, pane, ps, rateState, now)
+		report := TickReport{Now: now, Outcome: outcome.String(), WouldSend: wouldSend}
+		wouldSend = nil
+		_, _ = fmt.Fprintf(w, "  %d 回目の Tick → Outcome: %s\n", n, outcome)
+		if tickErr != nil {
+			report.Error = tickErr.Error()
+			_, _ = fmt.Fprintf(w, "    エラー: %v\n", tickErr)
+		}
+		if outcome == monitor.OutcomeWaiting {
+			until := ps.WaitUntil
+			report.WaitUntil = &until
+		}
+		res.Ticks = append(res.Ticks, report)
+		return outcome
 	}
 
-	if outcome != monitor.OutcomeWaiting {
+	if tick(1, time.Now()) != monitor.OutcomeWaiting {
 		return nil
 	}
 	_, _ = fmt.Fprintf(w, "  待機状態に入りました (起床時刻 %s)\n", ps.WaitUntil.Format(time.RFC3339))
 
 	synthNow := ps.WaitUntil.Add(time.Second)
 	_, _ = fmt.Fprintf(w, "  2 回目の Tick は起床時刻を過ぎたと仮定して発火させます (実時間は待ちません, now=%s)\n", synthNow.Format(time.RFC3339))
-	outcome2, tickErr2 := monitor.Tick(ctx, deps, pane, ps, rateState, synthNow)
-	_, _ = fmt.Fprintf(w, "  2 回目の Tick → Outcome: %s\n", outcome2)
-	if tickErr2 != nil {
-		_, _ = fmt.Fprintf(w, "    エラー: %v\n", tickErr2)
-	}
+	tick(2, synthNow)
 	return nil
 }
 
@@ -357,6 +414,8 @@ func (c *scopedClient) SendKeys(ctx context.Context, paneID string, keys ...stri
 type simulateDryRunClient struct {
 	inner monitor.Client
 	w     io.Writer
+	// sent は送るはずだったものを積む先。nil なら積まない。
+	sent *[]Sent
 }
 
 func (c simulateDryRunClient) PaneRead(ctx context.Context, paneID string, opts multiplexer.PaneReadOptions) (string, error) {
@@ -364,11 +423,19 @@ func (c simulateDryRunClient) PaneRead(ctx context.Context, paneID string, opts 
 }
 
 func (c simulateDryRunClient) SendText(_ context.Context, paneID, text string) error {
+	c.record(Sent{Text: text})
 	_, _ = fmt.Fprintf(c.w, "  [dry-run] pane %s へ送るはずだったテキスト: %q\n", paneID, text)
 	return nil
 }
 
 func (c simulateDryRunClient) SendKeys(_ context.Context, paneID string, keys ...string) error {
+	c.record(Sent{Keys: keys})
 	_, _ = fmt.Fprintf(c.w, "  [dry-run] pane %s へ送るはずだったキー: %s\n", paneID, strings.Join(keys, " "))
 	return nil
+}
+
+func (c simulateDryRunClient) record(s Sent) {
+	if c.sent != nil {
+		*c.sent = append(*c.sent, s)
+	}
 }

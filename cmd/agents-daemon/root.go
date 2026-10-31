@@ -38,9 +38,15 @@ func newRootCmd() *cobra.Command {
 		Use:   "version",
 		Short: "建てた元の plugin の version を表示する",
 		Args:  cobra.NoArgs,
-		Run:   func(cmd *cobra.Command, _ []string) { cmd.Println(version) },
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if jsonflag.Enabled(cmd) {
+				return jsonflag.Write(cmd.OutOrStdout(), map[string]string{"version": version})
+			}
+			cmd.Println(version)
+			return nil
+		},
 	})
-	// グローバルオプションは --json だけ。対応はコマンドが Annotations で宣言する (jsonflag)。
+	// グローバルオプションは --json だけ。非対応はコマンドが Annotations で宣言する (jsonflag)。
 	jsonflag.Add(root)
 	// コマンドの組み立ては機能ごとの <family>cli が持ち、ここは登録だけにする。
 	for _, family := range [][]*cobra.Command{

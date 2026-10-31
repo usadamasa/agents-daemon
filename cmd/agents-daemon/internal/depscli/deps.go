@@ -5,7 +5,6 @@ package depscli
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/jsonflag"
 	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/statecmd"
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/deps"
@@ -21,10 +20,9 @@ func Commands() []*cobra.Command {
 // (hooks/deps.tsx) が数秒ごとに読む。元から JSON なので --json を付けても変わらない。
 func newDepsCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:         "deps",
-		Short:       "stdin の DepsRequest の cwd の repo を here にした依存図 (タスクの依存の DAG、repo ごとのセッションとメモ) を DepsData で出す",
-		Args:        cobra.NoArgs,
-		Annotations: jsonflag.Supported(),
+		Use:   "deps",
+		Short: "stdin の DepsRequest の cwd の repo を here にした依存図 (タスクの依存の DAG、repo ごとのセッションとメモ) を DepsData で出す",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			p, err := apppath.FromEnv()
 			if err != nil {

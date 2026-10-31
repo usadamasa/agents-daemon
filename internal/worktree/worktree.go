@@ -39,6 +39,48 @@ const DefaultMinAge = 7 * 24 * time.Hour
 // ErrNotRepository は Cwd が git リポジトリの中でないときの Run の返り値。
 var ErrNotRepository = errors.New("git リポジトリの中で実行してください")
 
+// Action は 1 つの worktree をどうしたか。
+type Action string
+
+const (
+	// ActionRemoved は回収したことを表す。
+	ActionRemoved Action = "removed"
+	// ActionWouldRemove は DryRun で回収対象と判定したことを表す。
+	ActionWouldRemove Action = "would_remove"
+	// ActionKept は回収の条件を満たさず残したことを表す。
+	ActionKept Action = "kept"
+)
+
+// Reason は Action の理由。
+type Reason string
+
+const (
+	// ReasonStale は最終更新から MinAge 以上経っていることを表す。
+	ReasonStale Reason = "stale"
+	// ReasonMissing は実体が無く登録だけ残っていることを表す。
+	ReasonMissing Reason = "missing"
+	// ReasonDirty は未コミットの変更があることを表す (Force で無視)。
+	ReasonDirty Reason = "dirty"
+	// ReasonForeignLock は Claude Code 以外の lock があることを表す。
+	ReasonForeignLock Reason = "foreign_lock"
+)
+
+// Decision は文字で報告した 1 つの worktree の判定。黙って飛ばすもの (新しい、生きているセッションの lock、
+// subagent の lock、範囲外) は載らない。
+type Decision struct {
+	Path    string `json:"path"`
+	Action  Action `json:"action"`
+	Reason  Reason `json:"reason"`
+	AgeDays int    `json:"age_days,omitempty"`
+	// Lock は ReasonForeignLock のときの lock の理由。
+	Lock string `json:"lock,omitempty"`
+}
+
+// Result は 1 回の Run の判定。`prune-worktrees --json` はこれをそのまま出す。
+type Result struct {
+	Worktrees []Decision `json:"worktrees"`
+}
+
 // Opts は Run の入力。
 type Opts struct {
 	Cwd    string             // 起点。ここから main worktree と「自分がいる worktree」を解決する
@@ -65,24 +107,26 @@ type pruner struct {
 	root   string // <main>/.claude/worktrees
 	now    time.Time
 	cutoff time.Time
+	result Result
 }
 
-// Run は opts.Cwd のリポジトリで回収を 1 回行う。個々の worktree の git 操作の失敗はその場で返す。
-func Run(opts Opts) error {
+// Run は opts.Cwd のリポジトリで回収を 1 回行う。個々の worktree の git 操作の失敗はその場で返し、そこまでの判定は
+// Result に残す。
+func Run(opts Opts) (Result, error) {
 	p, err := newPruner(opts)
 	if err != nil {
-		return err
+		return Result{Worktrees: []Decision{}}, err
 	}
 	entries, err := listWorktrees(p.main)
 	if err != nil {
-		return err
+		return p.result, err
 	}
 	for _, e := range entries {
 		if err := p.handle(e); err != nil {
-			return err
+			return p.result, err
 		}
 	}
-	return nil
+	return p.result, nil
 }
 
 func newPruner(opts Opts) (*pruner, error) {
@@ -111,6 +155,7 @@ func newPruner(opts Opts) (*pruner, error) {
 		root:   filepath.Join(main, ".claude", "worktrees"),
 		now:    opts.Now,
 		cutoff: opts.Now.Add(-opts.MinAge),
+		result: Result{Worktrees: []Decision{}},
 	}, nil
 }
 
@@ -128,7 +173,7 @@ func (p *pruner) handle(e entry) error {
 			// subagent の worktree は本体の sweep が消す。毎セッション報告しないよう黙って飛ばす。
 			return nil
 		case LockForeign:
-			p.printf("⏭️  %s\n    Claude Code 以外の lock なので触りません: %s\n", path, reasonLabel(e.Reason))
+			p.record(Decision{Path: path, Action: ActionKept, Reason: ReasonForeignLock, Lock: e.Reason})
 			return nil
 		case LockSession:
 			if p.opts.Alive(lock.PID) {
@@ -146,7 +191,7 @@ func (p *pruner) handle(e entry) error {
 		}
 		age = p.now.Sub(touched)
 		if !p.opts.Force && isDirty(path) {
-			p.printf("⚠️  %s\n    未コミットの変更があるので残します (--force で削除)\n", path)
+			p.record(Decision{Path: path, Action: ActionKept, Reason: ReasonDirty, AgeDays: int(age.Hours() / 24)})
 			return nil
 		}
 	}
@@ -155,13 +200,13 @@ func (p *pruner) handle(e entry) error {
 
 // reclaim は判定済みの worktree を消す (DryRun なら表示だけ)。
 func (p *pruner) reclaim(path string, missing, locked bool, age time.Duration) error {
-	days := int(age.Hours() / 24)
+	d := Decision{Path: path, Action: ActionRemoved, Reason: ReasonStale, AgeDays: int(age.Hours() / 24)}
+	if missing {
+		d.Reason, d.AgeDays = ReasonMissing, 0
+	}
 	if p.opts.DryRun {
-		if missing {
-			p.printf("🔍 %s\n    回収対象 (実体が無く登録だけ残っています)\n", path)
-		} else {
-			p.printf("🔍 %s\n    回収対象 (最終更新から %d 日)\n", path, days)
-		}
+		d.Action = ActionWouldRemove
+		p.record(d)
 		return nil
 	}
 	if locked {
@@ -175,7 +220,7 @@ func (p *pruner) reclaim(path string, missing, locked bool, age time.Duration) e
 		if _, err := runGit(p.main, "worktree", "prune"); err != nil {
 			return err
 		}
-		p.printf("🗑️  %s\n    回収しました (実体が無く登録だけ残っていました)\n", path)
+		p.record(d)
 		return nil
 	}
 	args := []string{"worktree", "remove"}
@@ -185,12 +230,34 @@ func (p *pruner) reclaim(path string, missing, locked bool, age time.Duration) e
 	if _, err := runGit(p.main, append(args, path)...); err != nil {
 		return err
 	}
-	p.printf("🗑️  %s\n    回収しました (最終更新から %d 日。ブランチは残しています)\n", path, days)
+	p.record(d)
 	return nil
 }
 
-func (p *pruner) printf(format string, args ...any) {
-	_, _ = fmt.Fprintf(p.opts.Stdout, format, args...)
+// record は判定を Result に積み、同じものを文字で Stdout に書く。
+func (p *pruner) record(d Decision) {
+	p.result.Worktrees = append(p.result.Worktrees, d)
+	writeDecision(p.opts.Stdout, d)
+}
+
+// writeDecision は 1 つの判定を人が読む 2 行で w に書く。
+func writeDecision(w io.Writer, d Decision) {
+	var mark, msg string
+	switch {
+	case d.Reason == ReasonForeignLock:
+		mark, msg = "⏭️ ", "Claude Code 以外の lock なので触りません: "+reasonLabel(d.Lock)
+	case d.Reason == ReasonDirty:
+		mark, msg = "⚠️ ", "未コミットの変更があるので残します (--force で削除)"
+	case d.Action == ActionWouldRemove && d.Reason == ReasonMissing:
+		mark, msg = "🔍", "回収対象 (実体が無く登録だけ残っています)"
+	case d.Action == ActionWouldRemove:
+		mark, msg = "🔍", fmt.Sprintf("回収対象 (最終更新から %d 日)", d.AgeDays)
+	case d.Reason == ReasonMissing:
+		mark, msg = "🗑️ ", "回収しました (実体が無く登録だけ残っていました)"
+	default:
+		mark, msg = "🗑️ ", fmt.Sprintf("回収しました (最終更新から %d 日。ブランチは残しています)", d.AgeDays)
+	}
+	_, _ = fmt.Fprintf(w, "%s %s\n    %s\n", mark, d.Path, msg)
 }
 
 func reasonLabel(reason string) string {

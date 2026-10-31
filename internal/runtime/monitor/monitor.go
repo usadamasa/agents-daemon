@@ -332,6 +332,23 @@ func (g Gate) String() string {
 	}
 }
 
+// gateIDs は Gate の JSON 向けの識別子。
+var gateIDs = map[Gate]string{
+	GateNoState:        "no-state",
+	GateNoFiveHour:     "no-five-hour",
+	GateStale:          "stale",
+	GateAboveThreshold: "above-threshold",
+	GateBelowThreshold: "below-threshold",
+}
+
+// ID は Gate を JSON 向けの識別子にする (`inspect --json`)。String は日本語の説明。
+func (g Gate) ID() string {
+	if id, ok := gateIDs[g]; ok {
+		return id
+	}
+	return "unknown"
+}
+
 // LimitGate は statusline state による limit 検知のゲートを判定する。
 // 抑制するのは fresh な観測が使用率閾値未満のときだけで、state が無い、
 // five_hour が null で書かれている、または古い場合は判断材料が無いので
@@ -547,6 +564,25 @@ func (s WakeSource) String() string {
 	default:
 		return "不明"
 	}
+}
+
+// wakeSourceIDs は WakeSource の JSON 向けの識別子。
+var wakeSourceIDs = map[WakeSource]string{
+	WakeFromResetsAt:       "resets-at",
+	WakeAlreadyReset:       "already-reset",
+	WakeFromScreenAbsolute: "screen-absolute",
+	WakeScreenAlreadyReset: "screen-already-reset",
+	WakeFromAccount:        "account",
+	WakeFromRelative:       "relative",
+	WakeFromFallback:       "fallback",
+}
+
+// ID は WakeSource を JSON 向けの識別子にする (`inspect --json`)。String は日本語の説明。
+func (s WakeSource) ID() string {
+	if id, ok := wakeSourceIDs[s]; ok {
+		return id
+	}
+	return "unknown"
 }
 
 // transientBackoff は transient エラーの指数バックオフを計算する

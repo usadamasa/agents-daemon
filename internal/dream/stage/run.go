@@ -29,47 +29,54 @@ type Opts struct {
 	Stderr io.Writer
 }
 
+// Summary は stage 1 回分の処理の数。--verbose はこれを 1 行で stderr に出し、`--json` はそのまま stdout に出す。
+type Summary struct {
+	Project    string `json:"project"`
+	Candidates int    `json:"candidates"`
+	Report     string `json:"report"`
+}
+
 // Run は stage phase 一回分を実行する。
-func Run(opts Opts) error {
+func Run(opts Opts) (Summary, error) {
 	if opts.Stderr == nil {
 		opts.Stderr = io.Discard
 	}
 	if opts.Project == "" {
-		return errors.New("--project は必須 (canonical name を指定)")
+		return Summary{}, errors.New("--project は必須 (canonical name を指定)")
 	}
 
 	resolvedDate := dream.ResolveDate(opts.Date)
 	resolvedCandidates := opts.CandidatesFile
 	if resolvedCandidates == "" {
 		if opts.StateDir == "" {
-			return errors.New("StateDir が未解決 (呼び出し側が apppath で決める)")
+			return Summary{}, errors.New("StateDir が未解決 (呼び出し側が apppath で決める)")
 		}
 		resolvedCandidates = candidates.Path(opts.StateDir, opts.Project, resolvedDate)
 	}
 	outFile := opts.OutFile
 	if outFile == "" {
 		if opts.Cwd == "" {
-			return errors.New("--out 未指定かつ cwd も不明")
+			return Summary{}, errors.New("--out 未指定かつ cwd も不明")
 		}
 		outFile = reportPath(opts.Cwd, opts.Project, resolvedDate)
 	}
 
 	cands, err := candidates.Read(resolvedCandidates)
 	if err != nil {
-		return fmt.Errorf("candidates 読み込み失敗 (%s): %w", resolvedCandidates, err)
+		return Summary{}, fmt.Errorf("candidates 読み込み失敗 (%s): %w", resolvedCandidates, err)
 	}
 
 	report := renderReport(opts.Project, resolvedDate, cands)
 	if err := os.MkdirAll(filepath.Dir(outFile), 0o750); err != nil {
-		return fmt.Errorf("出力ディレクトリ作成失敗: %w", err)
+		return Summary{}, fmt.Errorf("出力ディレクトリ作成失敗: %w", err)
 	}
 	if err := os.WriteFile(outFile, []byte(report), 0o600); err != nil {
-		return fmt.Errorf("レポート書き込み失敗: %w", err)
+		return Summary{}, fmt.Errorf("レポート書き込み失敗: %w", err)
 	}
 
+	sum := Summary{Project: opts.Project, Candidates: len(cands), Report: outFile}
 	if opts.Verbose {
-		_, _ = fmt.Fprintf(opts.Stderr, "project=%s candidates=%d report=%s\n",
-			opts.Project, len(cands), outFile)
+		_, _ = fmt.Fprintf(opts.Stderr, "project=%s candidates=%d report=%s\n", sum.Project, sum.Candidates, sum.Report)
 	}
-	return nil
+	return sum, nil
 }

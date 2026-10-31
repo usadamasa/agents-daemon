@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/jsonflag"
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/statusline"
 )
@@ -23,10 +24,12 @@ func Commands() []*cobra.Command {
 // 同じプロセスで ingest-statusline と同じ state file (context/ と rate-limits/) と cost の記録も
 // 書くので、描画ごとの fork は 1 つで済む。失敗しても nil を返して exit 0 にするのは statusline が
 // fail-silent でなければならないため (非 0 は status バーを汚す)。理由は stderr に出す。
+// stdout は Claude Code が描く文字なので --json には対応しない。
 func newStatuslineCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "statusline",
-		Short: "Claude Code の statusline を描画し、同じプロセスで daemon が読む state file を書く",
+		Use:         "statusline",
+		Short:       "Claude Code の statusline を描画し、同じプロセスで daemon が読む state file を書く",
+		Annotations: jsonflag.Unsupported(),
 		Long: "Claude Code が statusline コマンドへ渡す JSON を stdin で受け取り、3 行 (幅が足りなければ 1 行、\n" +
 			"さらに狭ければ何も出さない) の statusline を stdout に出す。描画の前に ingest-statusline と同じ\n" +
 			"state file を書き、" + statusline.SpendCapEnv + " があれば cost の合算も記録する。\n" +

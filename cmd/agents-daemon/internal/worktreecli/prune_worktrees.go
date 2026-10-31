@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/jsonflag"
 	"github.com/usadamasa/agents-daemon/internal/worktree"
 )
 
@@ -32,7 +33,8 @@ func newPruneWorktreesCmd() *cobra.Command {
 			"最終更新から --min-age-days 日以上経ち、未コミットの変更が無い worktree を `git worktree remove` する。\n" +
 			"ブランチは残す。subagent の lock (`claude agent`) は Claude Code 本体の sweep の担当なので触らない。\n" +
 			"--hook は SessionStart hook 用で、stdin の hook 入力の cwd を起点にし、常に 0 で戻り、\n" +
-			"回収したときだけ {\"systemMessage\": ...} を出す。\n" +
+			"回収したときだけ {\"systemMessage\": ...} を出す。stdout を Claude Code が読むので --json とは併用できない。\n" +
+			"--json は worktree ごとの判定 (removed、would_remove、kept と理由) を出す。\n" +
 			"sandbox の中から手で叩くときは、main worktree の .git とその配下の worktree へ書けることが要る\n" +
 			"(agents-daemon:agents-daemon skill の operations.md)。",
 		Args: cobra.NoArgs,
@@ -46,6 +48,9 @@ func newPruneWorktreesCmd() *cobra.Command {
 				DryRun: dryRun,
 			}
 			if hook {
+				if jsonflag.Enabled(cmd) {
+					return jsonflag.Reject(cmd, "--hook")
+				}
 				return worktree.RunHook(cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr(), opts)
 			}
 			cwd, err := os.Getwd()
@@ -53,8 +58,17 @@ func newPruneWorktreesCmd() *cobra.Command {
 				return err
 			}
 			opts.Cwd = cwd
-			opts.Stdout = cmd.OutOrStdout()
-			return worktree.Run(opts)
+			if !jsonflag.Enabled(cmd) {
+				opts.Stdout = cmd.OutOrStdout()
+				_, err = worktree.Run(opts)
+				return err
+			}
+			// 途中で git が失敗しても、そこまでの判定は出す。
+			res, err := worktree.Run(opts)
+			if writeErr := jsonflag.Write(cmd.OutOrStdout(), res); writeErr != nil {
+				return writeErr
+			}
+			return err
 		},
 	}
 	f := cmd.Flags()

@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/jsonflag"
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 )
@@ -17,11 +18,13 @@ import (
 // exit 0 にするのは、statusline は fail-silent でなければならず (非 0 や stdout への
 // 出力は status バーを汚す)、呼び出し側の 1 行 (`... ingest-statusline 2>/dev/null || :`)
 // も失敗を捨てる前提だから。理由は stderr に 1 行だけ出し、手で実行したときに追える
-// ようにする。daemon のログには書かない (daemon が動いているかに依存しない)。
+// ようにする。daemon のログには書かない (daemon が動いているかに依存しない)。stdout に何も出さないので --json には
+// 対応しない。
 func newIngestStatuslineCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "ingest-statusline",
-		Short: "statusline の stdin から context/ と rate-limits/ の state file を書く",
+		Use:         "ingest-statusline",
+		Short:       "statusline の stdin から context/ と rate-limits/ の state file を書く",
+		Annotations: jsonflag.Unsupported(),
 		Long: "Claude Code が statusline コマンドへ渡す JSON を stdin で受け取り、daemon が読む\n" +
 			"context/<session_id>.json (毎回) と rate-limits/<session_id>.json\n" +
 			"(rate_limits.five_hour.resets_at があるときだけ) を書く。\n" +

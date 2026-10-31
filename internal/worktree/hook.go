@@ -18,7 +18,7 @@ func RunHook(stdin io.Reader, stdout, stderr io.Writer, opts Opts) error {
 	opts.Cwd = hookCwd(stdin)
 	var report bytes.Buffer
 	opts.Stdout = &report
-	if err := Run(opts); err != nil && !errors.Is(err, ErrNotRepository) {
+	if _, err := Run(opts); err != nil && !errors.Is(err, ErrNotRepository) {
 		_, _ = fmt.Fprintf(stderr, "%s prune-worktrees: %v\n", time.Now().Format(time.RFC3339), err)
 	}
 	if report.Len() == 0 {

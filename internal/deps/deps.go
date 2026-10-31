@@ -3,6 +3,8 @@
 //
 // 依存図は 2 つを持つ。graph はタスクの依存の DAG (deps/graph)。repos は repo ごとの生きているセッションと
 // open のメモで、pane がメモの節を描き、メモを渡す宛先を選ぶのに使う。worktree の作業は main worktree の repo に入る。
+// ほかに、セッション台帳 (ledger) から最近動いた repo (recent_repos) を添え、pane は新しいセッションを起こす repo の
+// 候補にする (#309)。
 //
 // 読み手は plugin の mod (hooks/deps.tsx) で、`agents-daemon deps` の JSON を数秒ごとに読んで pane に描く。
 // 並び順はここが持ち、mod は受け取った順に描くだけにする (JSON を加工する処理はバイナリに持たせる、という
@@ -18,6 +20,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/deps/graph"
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
+	"github.com/usadamasa/agents-daemon/internal/ledger"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/protocol"
 	"github.com/usadamasa/agents-daemon/internal/ref"
@@ -45,6 +48,8 @@ type input struct {
 	Locate func(cwd string) gitrepo.Place
 	// SessionNames は session ID → セッション名 (statusline の session_name、sessioncontext.ListSessionNames)。
 	SessionNames map[string]string
+	// Sessions はセッション台帳 (ledger)。新しいセッションを起こす repo の候補 (Deps.RecentRepos) の元。
+	Sessions []ledger.Session
 }
 
 // build は依存図を組む。
@@ -61,6 +66,7 @@ func build(in input) Deps {
 	l := locator{locate: in.Locate, cache: map[string]gitrepo.Place{}}
 	d.Here, _ = l.row(in.CWD)
 	d.Repos = arrange(cards, open, panes, names, in.SessionNames, l)
+	d.RecentRepos = recentRepos(in.Sessions)
 	d.Graph = graph.Build(graph.Input{
 		Cards:        cards,
 		Tasks:        in.Tasks,

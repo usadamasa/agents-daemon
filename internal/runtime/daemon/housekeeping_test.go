@@ -10,9 +10,9 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/applog"
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/eventlog"
+	"github.com/usadamasa/agents-daemon/internal/ledger"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
 	"github.com/usadamasa/agents-daemon/internal/parking"
-	"github.com/usadamasa/agents-daemon/internal/runtime/daemon/ledger"
 	"github.com/usadamasa/agents-daemon/internal/runtime/daemon/limitlog"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
@@ -74,7 +74,7 @@ func TestHousekeep(t *testing.T) {
 		r.limits = limitlog.New(dir)
 		limitFile := filepath.Join(r.limits.Dir, "2026-07-01.jsonl")
 		touchAged(t, limitFile, 31*24*time.Hour, now)
-		// セッション台帳は 1 週間見えなければ消える (daemon/ledger のテスト)。
+		// セッション台帳は 1 週間見えなければ消える (ledger のテスト)。
 		r.sessions = ledger.New(dir)
 		sessionFile := filepath.Join(r.sessions.Dir, "s-old.json")
 		touchAged(t, sessionFile, 8*24*time.Hour, now)

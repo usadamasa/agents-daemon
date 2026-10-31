@@ -73,7 +73,7 @@ Write(v, who) ==
   /\ bound' = IF file = None THEN (IF v \in Sessions THEN v ELSE None)
               ELSE IF bound = None /\ v \in Sessions THEN v ELSE bound
 
-\* statusline と daemon の tick でセッションが台帳に現れる (daemon/ledger の Observe)。
+\* statusline と daemon の tick でセッションが台帳に現れる (ledger の Observe)。
 Appear(s) ==
   /\ s \notin seen
   /\ seen' = seen \cup {s}

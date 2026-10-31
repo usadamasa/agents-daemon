@@ -18,12 +18,12 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/daemonstate"
 	"github.com/usadamasa/agents-daemon/internal/edge"
+	"github.com/usadamasa/agents-daemon/internal/ledger"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/ratelimit"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend"
 	"github.com/usadamasa/agents-daemon/internal/runtime/config"
-	"github.com/usadamasa/agents-daemon/internal/runtime/daemon/ledger"
 	"github.com/usadamasa/agents-daemon/internal/runtime/daemon/limitlog"
 	"github.com/usadamasa/agents-daemon/internal/runtime/detect"
 	"github.com/usadamasa/agents-daemon/internal/runtime/monitor"
@@ -75,7 +75,7 @@ type daemonRuntime struct {
 	// edges は `edge add` が書くセッションをまたぐ辺 (edge)。daemon は tick ごとに session:<名前> の
 	// 端点を台帳のセッションに結びつけ、housekeeping で消す。ゼロ値は何もしない。
 	edges edge.Store
-	// sessions はセッション台帳 (daemon/ledger)。daemon だけが tick ごとに書き、housekeeping で消す。
+	// sessions はセッション台帳 (ledger)。daemon だけが tick ごとに書き、housekeeping で消す。
 	// ゼロ値は書かない。
 	sessions ledger.Store
 	// parking は `park add` が書くパーキングのメモ (parking)。daemon は housekeeping で消すだけ。

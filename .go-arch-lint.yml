@@ -35,6 +35,7 @@ components:
       - "internal/tasklog/record"
       - "internal/parking"
       - "internal/edge"
+      - "internal/ledger"
       - "internal/eventlog"
       - "internal/daemonstate"
       - "internal/protocol"

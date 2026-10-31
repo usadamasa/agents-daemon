@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/edge"
+	"github.com/usadamasa/agents-daemon/internal/ledger"
 	"github.com/usadamasa/agents-daemon/internal/parking"
-	"github.com/usadamasa/agents-daemon/internal/runtime/daemon/ledger"
 	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )

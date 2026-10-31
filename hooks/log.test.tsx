@@ -94,6 +94,7 @@ function deps(memos: unknown[]) {
     here: CWD,
     stale_memo_days: 30,
     repos: [{ repo: CWD, title: 'agents-daemon', sessions: [SESSION], memos }],
+    recent_repos: [],
     graph: { nodes: [NODE], links: [], longest_chain: [], rows: [{ lanes: '*', node: NODE.key }], rows_with_completed: [{ lanes: '*', node: NODE.key }] },
   }
 }

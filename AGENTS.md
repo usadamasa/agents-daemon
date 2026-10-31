@@ -67,7 +67,7 @@ mod が呼ぶコマンドは入力を stdin の JSON で受け、出力を JSON 
 
 - 句読点は全角の「。」「、」を使う。半角の「｡」「､」は使わない (md、コメント、ログとエラーの文面のどれも)。
 - 実装のパッケージは `internal/` からのパスではなくパッケージ名で指す (`detect`、`rexcli/blockstate`)。名前だけで
-  一意に決まらないものは親を 1 つ添える (`daemon/ledger`、`deps/graph`)。ファイル名まで要るときはパッケージからの相対
+  一意に決まらないものは親を 1 つ添える (`tasklog/record`、`deps/graph`)。ファイル名まで要るときはパッケージからの相対
   (`detect/real_sample_test.go`)。パスを書くのはこのファイルと `.go-arch-lint.yml` とコマンド
   (`go run ./cmd/agents-daemon`) だけ。
 

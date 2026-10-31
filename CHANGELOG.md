@@ -1,5 +1,9 @@
 # Changelog
 
+## [2026.1031.1](https://github.com/usadamasa/agents-daemon/compare/2026.1031.0...2026.1031.1) - 2026-10-31
+
+- --json を全コマンドに効かせ、非対応だけを宣言する形にする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/335
+
 ## [2026.1031.0](https://github.com/usadamasa/agents-daemon/compare/2026.1030.1...2026.1031.0) - 2026-10-31
 
 - 新しいセッションを起こす repo を最近動かした repo から選べるようにする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/330

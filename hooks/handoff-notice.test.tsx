@@ -83,13 +83,16 @@ const context = (res: { context?: readonly string[] }) => (res.context ?? []).jo
 
 const depsCalls = (state: { ran: unknown[][] }) => state.ran.filter(argv => argv[1] === 'deps')
 
-// edgeAdd は context の中の `printf '%s' '<JSON>' | <bin> edge add` の行から、stdin に渡す JSON を読む。
-function edgeAdd(text: string): EdgeAddRequest {
-  const line = text.split('\n').find(l => l.endsWith(`| ${BIN} edge add`)) ?? ''
-  return JSON.parse(line.replace(/^\s*printf '%s' '/, '').replace(/' \| .*$/, '')) as EdgeAddRequest
+// edgeAdds は context の中の `printf '%s' '<JSON>' | <bin> edge add` の行 (向きごとに 1 行) から、stdin に渡す JSON を
+// 並びの順に読む。
+function edgeAdds(text: string): EdgeAddRequest[] {
+  return text
+    .split('\n')
+    .filter(l => l.endsWith(`| ${BIN} edge add`))
+    .map(l => JSON.parse(l.replace(/^\s*printf '%s' '/, '').replace(/' \| .*$/, '')) as EdgeAddRequest)
 }
 
-test('辺の無い生きているセッションへ渡したら、辺の書き方を結果の context で model に伝える', async ($, on) => {
+test('辺の無い生きているセッションへ渡したら、辺の書き方を両方の向きで結果の context で model に伝える', async ($, on) => {
   const w = world(on, deps([node('PEER', '1','edge-cli')]))
   await $.session.start(START)
   w.ran.length = 0
@@ -98,8 +101,13 @@ test('辺の無い生きているセッションへ渡したら、辺の書き�
   const text = context(res)
   expect(depsCalls(w)).toEqual([DEPS])
   expect(text).toMatch(/edge-cli/)
-  // 宛先は session:<名前> で、cwd は依存図のノードから埋める。
-  expect(edgeAdd(text).after).toEqual({ ref: 'session:edge-cli', cwd: PEER_CWD })
+  const [peerWaits, selfWaits] = edgeAdds(text)
+  // 渡した peer がほかの作業を待つ向き。宛先は session:<名前> で、cwd は依存図のノードから埋める。
+  expect(peerWaits.after).toEqual({ ref: 'session:edge-cli', cwd: PEER_CWD })
+  expect(peerWaits.before.ref).not.toMatch(/^session:edge-cli$/)
+  // 自分のタスクが peer の完了を待つ向き。自分のタスクは task 欄の id だけで指し、session_id と cwd はバイナリが埋める。
+  expect(selfWaits.before).toEqual({ ref: 'session:edge-cli', cwd: PEER_CWD })
+  expect(Object.keys(selfWaits.after)).toEqual(['task'])
   expect(text).toMatch(/agents-daemon:peer-sessions/)
   expect(text).toMatch(/返事や報告/)
   expect(res.context).toHaveLength(1)
@@ -111,7 +119,9 @@ test('同名のセッションに付く末尾の [ref] を落として宛先を�
   world(on, deps([node('PEER', '1','edge-cli')]))
   await $.session.start(START)
 
-  expect(edgeAdd(context(await send($, 'edge-cli [ab12]'))).after.ref).toBe('session:edge-cli')
+  const [peerWaits, selfWaits] = edgeAdds(context(await send($, 'edge-cli [ab12]')))
+  expect(peerWaits.after.ref).toBe('session:edge-cli')
+  expect(selfWaits.before.ref).toBe('session:edge-cli')
 })
 
 test('宛先が辺の端点にあれば伝えない (ノードへ解決された端点でも、元の参照でも)', async ($, on) => {

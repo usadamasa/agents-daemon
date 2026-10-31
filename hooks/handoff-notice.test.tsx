@@ -84,12 +84,15 @@ const context = (res: { context?: readonly string[] }) => (res.context ?? []).jo
 const depsCalls = (state: { ran: unknown[][] }) => state.ran.filter(argv => argv[1] === 'deps')
 
 // edgeAdds は context の中の `printf '%s' '<JSON>' | <bin> edge add` の行 (向きごとに 1 行) から、stdin に渡す JSON を
-// 並びの順に読む。
-function edgeAdds(text: string): EdgeAddRequest[] {
-  return text
+// 並びの順 (peer が待つ向き、自分のタスクが待つ向き) に読む。2 行でなければ落とす。
+function edgeAdds(text: string): [EdgeAddRequest, EdgeAddRequest] {
+  const reqs = text
     .split('\n')
     .filter(l => l.endsWith(`| ${BIN} edge add`))
     .map(l => JSON.parse(l.replace(/^\s*printf '%s' '/, '').replace(/' \| .*$/, '')) as EdgeAddRequest)
+  const [peerWaits, selfWaits] = reqs
+  if (reqs.length !== 2 || peerWaits === undefined || selfWaits === undefined) throw new Error(`edge add の行が ${reqs.length} 行`)
+  return [peerWaits, selfWaits]
 }
 
 test('辺の無い生きているセッションへ渡したら、辺の書き方を両方の向きで結果の context で model に伝える', async ($, on) => {

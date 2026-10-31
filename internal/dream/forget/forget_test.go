@@ -30,8 +30,13 @@ func TestRunDeletesNamedMemoryFile(t *testing.T) {
 		"keeper.md":   "body",
 	})
 
-	if err := Run(Opts{MemoryDir: dir, Names: []string{"obsolete"}}); err != nil {
+	res, err := Run(Opts{MemoryDir: dir, Names: []string{"obsolete"}})
+	if err != nil {
 		t.Fatalf("Run() = %v; want nil", err)
+	}
+	// 返り値は stdout の removed 行と同じパス (--json が出す)。
+	if res.DryRun || len(res.Paths) != 1 || res.Paths[0] != filepath.Join(dir, "obsolete.md") {
+		t.Errorf("result = %+v; want obsolete.md を消した 1 件", res)
 	}
 
 	if _, err := os.Stat(filepath.Join(dir, "obsolete.md")); !os.IsNotExist(err) {
@@ -55,7 +60,7 @@ func TestRunRemovesIndexEntryFromMemoryMd(t *testing.T) {
 		"keeper.md":   "body",
 	})
 
-	if err := Run(Opts{MemoryDir: dir, Names: []string{"obsolete"}}); err != nil {
+	if _, err := Run(Opts{MemoryDir: dir, Names: []string{"obsolete"}}); err != nil {
 		t.Fatalf("Run() = %v; want nil", err)
 	}
 
@@ -81,7 +86,7 @@ func TestRunRejectsNameEscapingMemoryDir(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := Run(Opts{MemoryDir: dir, Names: []string{"../outside"}})
+	_, err := Run(Opts{MemoryDir: dir, Names: []string{"../outside"}})
 	if err == nil {
 		t.Fatal("Run() = nil; want error for a name escaping the memory dir")
 	}
@@ -96,7 +101,7 @@ func TestRunRejectsNameEscapingMemoryDir(t *testing.T) {
 func TestRunRefusesToDeleteTheIndexItself(t *testing.T) {
 	dir := newMemoryDir(t, "- [keeper.md](keeper.md) — 残る知見\n", map[string]string{"keeper.md": "body"})
 
-	err := Run(Opts{MemoryDir: dir, Names: []string{"MEMORY"}})
+	_, err := Run(Opts{MemoryDir: dir, Names: []string{"MEMORY"}})
 	if err == nil {
 		t.Fatal("Run() = nil; want error when asked to delete the index itself")
 	}
@@ -108,7 +113,7 @@ func TestRunRefusesToDeleteTheIndexItself(t *testing.T) {
 func TestRunErrorsWhenMemoryFileMissing(t *testing.T) {
 	dir := newMemoryDir(t, "", map[string]string{"keeper.md": "body"})
 
-	err := Run(Opts{MemoryDir: dir, Names: []string{"nosuch"}})
+	_, err := Run(Opts{MemoryDir: dir, Names: []string{"nosuch"}})
 	if err == nil {
 		t.Fatal("Run() = nil; want error for a missing memory file")
 	}
@@ -127,7 +132,7 @@ func TestRunResolvesMemoryDirFromCwdWhenNotGiven(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := Run(Opts{Home: home, Cwd: "/tmp/proj", Names: []string{"obsolete"}}); err != nil {
+	if _, err := Run(Opts{Home: home, Cwd: "/tmp/proj", Names: []string{"obsolete"}}); err != nil {
 		t.Fatalf("Run() = %v; want nil", err)
 	}
 
@@ -140,8 +145,12 @@ func TestRunDryRunLeavesEverythingIntact(t *testing.T) {
 	index := "- [obsolete.md](obsolete.md) — 消える知見\n"
 	dir := newMemoryDir(t, index, map[string]string{"obsolete.md": "body"})
 
-	if err := Run(Opts{MemoryDir: dir, Names: []string{"obsolete"}, DryRun: true}); err != nil {
+	res, err := Run(Opts{MemoryDir: dir, Names: []string{"obsolete"}, DryRun: true})
+	if err != nil {
 		t.Fatalf("Run() = %v; want nil", err)
+	}
+	if !res.DryRun || len(res.Paths) != 1 {
+		t.Errorf("result = %+v; want dry_run で 1 件", res)
 	}
 
 	if _, err := os.Stat(filepath.Join(dir, "obsolete.md")); err != nil {

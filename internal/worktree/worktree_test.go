@@ -117,10 +117,57 @@ func run(t *testing.T, cwd string, mod func(*Opts)) string {
 	if mod != nil {
 		mod(&opts)
 	}
-	if err := Run(opts); err != nil {
+	if _, err := Run(opts); err != nil {
 		t.Fatalf("Run: %v\n%s", err, out.String())
 	}
 	return out.String()
+}
+
+// Run の返り値は、文字で報告した worktree ごとの判定と同じものを持つ (--json が出す)。
+// 黙って飛ばすもの (新しい、subagent の lock) は文字と同じく載らない。
+func TestRun_ReturnsDecisions(t *testing.T) {
+	repo := newRepo(t)
+	stale := addWorktree(t, repo, "stale", "wt-stale")
+	backdate(t, repo, "stale")
+	dirty := addWorktree(t, repo, "dirty", "wt-dirty")
+	if err := os.WriteFile(filepath.Join(dirty, "untracked.txt"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	backdate(t, repo, "dirty")
+	manual := addWorktree(t, repo, "manual", "wt-manual")
+	git(t, repo, "worktree", "lock", "--reason", "作業中につき保護", manual)
+	backdate(t, repo, "manual")
+	addWorktree(t, repo, "fresh", "wt-fresh")
+
+	for _, tt := range []struct {
+		dryRun     bool
+		wantStale  Action
+		wantRemove bool
+	}{{true, ActionWouldRemove, false}, {false, ActionRemoved, true}} {
+		res, err := Run(Opts{Cwd: repo, MinAge: DefaultMinAge, DryRun: tt.dryRun, Alive: func(int) bool { return false }})
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := map[string]Decision{}
+		for _, d := range res.Worktrees {
+			got[filepath.Base(d.Path)] = d
+		}
+		if len(got) != 3 {
+			t.Errorf("dryRun=%v: worktrees = %+v, want stale・dirty・manual の 3 つ", tt.dryRun, res.Worktrees)
+		}
+		if d := got["stale"]; d.Action != tt.wantStale || d.Reason != ReasonStale || d.AgeDays < 7 {
+			t.Errorf("dryRun=%v: stale = %+v", tt.dryRun, d)
+		}
+		if d := got["dirty"]; d.Action != ActionKept || d.Reason != ReasonDirty {
+			t.Errorf("dryRun=%v: dirty = %+v", tt.dryRun, d)
+		}
+		if d := got["manual"]; d.Action != ActionKept || d.Reason != ReasonForeignLock || d.Lock != "作業中につき保護" {
+			t.Errorf("dryRun=%v: manual = %+v", tt.dryRun, d)
+		}
+		if exists(stale) == tt.wantRemove {
+			t.Errorf("dryRun=%v: stale の有無 = %v", tt.dryRun, exists(stale))
+		}
+	}
 }
 
 // ---- 回収するケース ----
@@ -420,7 +467,7 @@ func TestRun_QuietWhenNothingToDo(t *testing.T) {
 // ---- 入力の扱い ----
 
 func TestRun_OutsideRepositoryIsError(t *testing.T) {
-	err := Run(Opts{Cwd: t.TempDir(), MinAge: DefaultMinAge, Stdout: &bytes.Buffer{}})
+	_, err := Run(Opts{Cwd: t.TempDir(), MinAge: DefaultMinAge, Stdout: &bytes.Buffer{}})
 	if !errors.Is(err, ErrNotRepository) {
 		t.Errorf("err = %v; want ErrNotRepository", err)
 	}

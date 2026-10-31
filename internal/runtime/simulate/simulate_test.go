@@ -162,6 +162,38 @@ func TestSimulateDryRunClient_読み取り系はinnerへ委譲する(t *testing.
 	}
 }
 
+// runSimulateTicks は文字の報告と同じ中身を Result に積む (--json が出す)。dry-run では各 Tick が送るはずだったものを
+// その Tick に載せ、inner へは送らない。
+func TestRunSimulateTicks_Resultに積む(t *testing.T) {
+	const owned = "wH:pOwned"
+	fake := &multiplexerfake.Client{
+		PaneGetFunc: func(_ context.Context, paneID string) (multiplexer.Pane, error) {
+			return multiplexer.Pane{PaneID: paneID, Agent: "claude", AgentStatus: multiplexer.AgentStatusIdle}, nil
+		},
+		PaneReadFunc: func(context.Context, string, multiplexer.PaneReadOptions) (string, error) {
+			return defaultSimulateScreen, nil
+		},
+	}
+	var res Result
+	if err := runSimulateTicks(context.Background(), &bytes.Buffer{}, apppath.New(t.TempDir(), "", ""), owned, fake, Options{}, &res); err != nil {
+		t.Fatal(err)
+	}
+	if res.Send || res.Agent != "claude" || res.AgentStatus != multiplexer.AgentStatusIdle {
+		t.Errorf("result = %+v", res)
+	}
+	if len(res.Ticks) != 2 || res.Ticks[0].Outcome != "waiting" || res.Ticks[0].WaitUntil == nil {
+		t.Fatalf("ticks = %+v, want waiting から 2 回目へ", res.Ticks)
+	}
+	if len(res.Ticks[0].WouldSend) != 0 || len(res.Ticks[1].WouldSend) == 0 {
+		t.Errorf("would_send = %+v / %+v, want 2 回目だけ", res.Ticks[0].WouldSend, res.Ticks[1].WouldSend)
+	}
+	for _, c := range fake.Calls {
+		if strings.HasPrefix(c, "Send") {
+			t.Errorf("dry-run なのに inner へ送った: %v", fake.Calls)
+		}
+	}
+}
+
 func containsCall(calls []string, want string) bool {
 	for _, c := range calls {
 		if c == want {

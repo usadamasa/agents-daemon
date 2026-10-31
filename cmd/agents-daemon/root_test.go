@@ -2,9 +2,12 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/spf13/cobra"
 )
 
 // root には全サブコマンドが載る。名前を変えると hook や skill、mod の呼び出しが黙って壊れる。
@@ -56,7 +59,7 @@ func TestRootCmd_doesNotPrintErrorsItself(t *testing.T) {
 	var stderr bytes.Buffer
 	root.SetOut(&bytes.Buffer{})
 	root.SetErr(&stderr)
-	root.SetArgs([]string{"--json", "stop"})
+	root.SetArgs([]string{"--json", "update"})
 	if err := root.Execute(); err == nil {
 		t.Fatal("Execute() error = nil, want error")
 	}
@@ -65,23 +68,117 @@ func TestRootCmd_doesNotPrintErrorsItself(t *testing.T) {
 	}
 }
 
-// --json は root のグローバルオプション。対応するのは読むだけの診断の doctor と status と、元から JSON を出す
-// park / edge。それ以外に付けると RunE の前に error で止まる (#182 で残りに広げる)。
+// --json は root のグローバルオプションで、既定で全コマンドに効く。stdout を Claude Code や mod が読む hook 用の
+// コマンドと、子プロセスの出力を流すだけの update は Unsupported を宣言して error にする。
+// 新しいコマンドはこの表に足すまで落ちる (既定が対応なので、JSON を出し忘れたまま黙って通さない)。
 func TestRootCmd_jsonFlag(t *testing.T) {
-	root := newRootCmd()
-	root.SetOut(&bytes.Buffer{})
-	root.SetErr(&bytes.Buffer{})
-	root.SetArgs([]string{"--json", "stop"})
-	if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "--json") {
-		t.Errorf("--json stop: error = %v, want --json に対応していない error", err)
+	unsupported := map[string]bool{
+		"agents-daemon event-log":         true,
+		"agents-daemon ingest-statusline": true,
+		"agents-daemon ingest-task":       true,
+		"agents-daemon statusline":        true,
+		"agents-daemon update":            true,
 	}
-	for _, name := range []string{"doctor", "status", "park", "edge"} {
-		sub, _, err := newRootCmd().Find([]string{name})
+	supported := map[string]bool{
+		"agents-daemon daemon":          true,
+		"agents-daemon deps":            true,
+		"agents-daemon doctor":          true,
+		"agents-daemon dream adopt":     true,
+		"agents-daemon dream forget":    true,
+		"agents-daemon dream harvest":   true,
+		"agents-daemon dream mine":      true,
+		"agents-daemon dream stage":     true,
+		"agents-daemon edge add":        true,
+		"agents-daemon edge list":       true,
+		"agents-daemon edge rm":         true,
+		"agents-daemon inspect":         true,
+		"agents-daemon logs":            true,
+		"agents-daemon park add":        true,
+		"agents-daemon park adopt":      true,
+		"agents-daemon park discard":    true,
+		"agents-daemon park list":       true,
+		"agents-daemon park set":        true,
+		"agents-daemon prune-worktrees": true,
+		"agents-daemon simulate":        true,
+		"agents-daemon spawn":           true,
+		"agents-daemon status":          true,
+		"agents-daemon stop":            true,
+		"agents-daemon version":         true,
+	}
+	var leaves []string
+	var walk func(c *cobra.Command)
+	walk = func(c *cobra.Command) {
+		if !c.HasSubCommands() {
+			leaves = append(leaves, c.CommandPath())
+		}
+		for _, sub := range c.Commands() {
+			if sub.Name() != "help" && sub.Name() != "completion" {
+				walk(sub)
+			}
+		}
+	}
+	walk(newRootCmd())
+	slices.Sort(leaves)
+	var want []string
+	for path := range unsupported {
+		want = append(want, path)
+	}
+	for path := range supported {
+		want = append(want, path)
+	}
+	slices.Sort(want)
+	if !slices.Equal(leaves, want) {
+		t.Fatalf("leaf commands = %v, want %v (--json の対応を決めて表に足す)", leaves, want)
+	}
+
+	for _, path := range leaves {
+		args := append([]string{"--json"}, strings.Fields(path)[1:]...)
+		sub, _, err := newRootCmd().Find(args[1:])
 		if err != nil {
-			t.Fatalf("Find(%s): %v", name, err)
+			t.Fatalf("Find(%v): %v", args[1:], err)
 		}
-		if sub.Annotations["jsonflag.supported"] != "true" {
-			t.Errorf("%s が --json の対応を宣言していない", name)
+		if got := rejectsJSON(sub); got != unsupported[path] {
+			t.Errorf("%s: --json を拒むか = %v, want %v", path, got, unsupported[path])
 		}
+	}
+	for path := range unsupported {
+		root := newRootCmd()
+		root.SetOut(&bytes.Buffer{})
+		root.SetErr(&bytes.Buffer{})
+		root.SetArgs(append([]string{"--json"}, strings.Fields(path)[1:]...))
+		if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "--json") {
+			t.Errorf("--json %s: error = %v, want --json に対応していない error", path, err)
+		}
+	}
+}
+
+// rejectsJSON は cmd かその親に Unsupported の宣言があるかを返す。
+func rejectsJSON(cmd *cobra.Command) bool {
+	for c := cmd; c != nil; c = c.Parent() {
+		if c.Annotations["jsonflag.unsupported"] == "true" {
+			return true
+		}
+	}
+	return false
+}
+
+// version の --json は {"version": ...} を出す。
+func TestRootCmd_versionJSON(t *testing.T) {
+	saved := version
+	t.Cleanup(func() { version = saved })
+	version = "2026.1031.0"
+	root := newRootCmd()
+	var stdout bytes.Buffer
+	root.SetOut(&stdout)
+	root.SetErr(&bytes.Buffer{})
+	root.SetArgs([]string{"--json", "version"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		Version string `json:"version"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil || got.Version != "2026.1031.0" {
+		t.Errorf("--json version = %q (%v), want {\"version\": \"2026.1031.0\"}", stdout.String(), err)
 	}
 }

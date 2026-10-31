@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// root に Add した --json は、宣言のあるコマンド (親の宣言を含む) では通り、無いコマンドでは RunE の前に error。
+// root に Add した --json は既定で通り、Unsupported を宣言したコマンド (親の宣言を含む) では RunE の前に error。
 func TestAdd(t *testing.T) {
 	newRoot := func(ran *[]string) *cobra.Command {
 		root := &cobra.Command{Use: "agents-daemon", SilenceUsage: true, SilenceErrors: true}
@@ -17,11 +17,11 @@ func TestAdd(t *testing.T) {
 			*ran = append(*ran, cmd.Name())
 			return nil
 		}
-		parent := &cobra.Command{Use: "park", Annotations: Supported()}
-		parent.AddCommand(&cobra.Command{Use: "list", RunE: run})
+		parent := &cobra.Command{Use: "hooks", Annotations: Unsupported()}
+		parent.AddCommand(&cobra.Command{Use: "ingest", RunE: run})
 		root.AddCommand(
-			&cobra.Command{Use: "doctor", Annotations: Supported(), RunE: run},
-			&cobra.Command{Use: "stop", RunE: run},
+			&cobra.Command{Use: "doctor", RunE: run},
+			&cobra.Command{Use: "statusline", Annotations: Unsupported(), RunE: run},
 			parent,
 		)
 		return root
@@ -34,9 +34,10 @@ func TestAdd(t *testing.T) {
 		{[]string{"doctor"}, true},
 		{[]string{"--json", "doctor"}, true},
 		{[]string{"doctor", "--json"}, true},
-		{[]string{"--json", "park", "list"}, true},
-		{[]string{"stop"}, true},
-		{[]string{"--json", "stop"}, false},
+		{[]string{"statusline"}, true},
+		{[]string{"--json", "statusline"}, false},
+		{[]string{"hooks", "ingest"}, true},
+		{[]string{"--json", "hooks", "ingest"}, false},
 	}
 	for _, tt := range tests {
 		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
@@ -55,6 +56,17 @@ func TestAdd(t *testing.T) {
 				t.Fatalf("Execute() error = %v, ran = %v, want --json の error で RunE が動かない", err, ran)
 			}
 		})
+	}
+}
+
+// Reject は flag の組み合わせで JSON にできないとき (daemon --foreground など) に、宣言の error と同じ形で返す。
+func TestReject(t *testing.T) {
+	root := &cobra.Command{Use: "agents-daemon"}
+	daemon := &cobra.Command{Use: "daemon"}
+	root.AddCommand(daemon)
+	err := Reject(daemon, "--foreground")
+	if err == nil || !strings.Contains(err.Error(), "agents-daemon daemon --foreground") || !strings.Contains(err.Error(), "--json") {
+		t.Errorf("Reject() = %v, want コマンドと flag を名指しした --json の error", err)
 	}
 }
 

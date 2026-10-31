@@ -11,6 +11,9 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+
+	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/jsonflag"
+	"github.com/usadamasa/agents-daemon/internal/worktree"
 )
 
 // testRoot は main の root と同じく SilenceUsage を立てた親にコマンドを載せる。
@@ -127,6 +130,43 @@ func TestPruneWorktreesCmd_HookReadsCwdFromStdin(t *testing.T) {
 	}
 	if !strings.Contains(out, `"systemMessage"`) {
 		t.Errorf("systemMessage が無い: %q", out)
+	}
+}
+
+// --json は worktree.Result を出し、文字の報告は混ぜない。--hook の stdout は Claude Code が読む systemMessage なので
+// --json と併用すると error。
+func TestPruneWorktreesCmd_JSON(t *testing.T) {
+	repo, stale := pruneTestRepo(t)
+	t.Chdir(repo)
+
+	execJSON := func(args ...string) (string, error) {
+		var out bytes.Buffer
+		root := testRoot()
+		jsonflag.Add(root)
+		root.SetOut(&out)
+		root.SetIn(strings.NewReader(""))
+		root.SetArgs(append([]string{"--json", "prune-worktrees"}, args...))
+		err := root.Execute()
+		return out.String(), err
+	}
+
+	out, err := execJSON("--dry-run")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	var res worktree.Result
+	if err := json.Unmarshal([]byte(out), &res); err != nil {
+		t.Fatalf("JSON = %q: %v", out, err)
+	}
+	if len(res.Worktrees) != 1 || res.Worktrees[0].Action != worktree.ActionWouldRemove || !strings.HasSuffix(res.Worktrees[0].Path, "stale") {
+		t.Errorf("worktrees = %+v, want stale の would_remove 1 つ", res.Worktrees)
+	}
+	if _, err := os.Stat(stale); err != nil {
+		t.Error("--dry-run で消している")
+	}
+
+	if _, err := execJSON("--hook"); err == nil || !strings.Contains(err.Error(), "--json") {
+		t.Errorf("--hook: error = %v, want --json に対応していない error", err)
 	}
 }
 

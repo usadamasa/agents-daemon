@@ -79,12 +79,14 @@ type EdgeRemoveRequest struct {
 	After  EdgeTarget `json:"after"`
 }
 
-// EdgeTarget は書く辺の端点。
+// EdgeTarget は書く辺の端点。ref (cwd も要る) か task のどちらか 1 つで指す。
 type EdgeTarget struct {
 	// 作業の参照 (session:<名前> / sid:<session_id> / issue:<owner>/<repo>#<番号> / pr:<owner>/<repo>#<番号> / task:<session_id>/<task_id>)。
-	Ref string `json:"ref"`
-	// その作業のセッションの cwd (絶対パス)。
-	CWD string `json:"cwd"`
+	Ref string `json:"ref,omitempty"`
+	// 書く側のセッション自身のタスクの id。参照はバイナリが task:<CLAUDE_CODE_SESSION_ID>/<id> に組む。
+	Task string `json:"task,omitempty"`
+	// その作業のセッションの cwd (絶対パス)。task の端点では省くとバイナリの cwd。
+	CWD string `json:"cwd,omitempty"`
 }
 
 // SpawnRequest は spawn の stdin。prompt を最初のターンにした Claude Code のセッションを、repo を cwd にした rex の window に起こし、SpawnResult を出す。

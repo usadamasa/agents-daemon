@@ -79,12 +79,14 @@ export type EdgeRemoveRequest = {
   after: EdgeTarget
 }
 
-// 書く辺の端点
+// 書く辺の端点。ref (cwd も要る) か task のどちらか 1 つで指す
 export type EdgeTarget = {
   // 作業の参照 (session:<名前> / sid:<session_id> / issue:<owner>/<repo>#<番号> / pr:<owner>/<repo>#<番号> / task:<session_id>/<task_id>)
-  ref: string
-  // その作業のセッションの cwd (絶対パス)
-  cwd: string
+  ref?: string
+  // 書く側のセッション自身のタスクの id。参照はバイナリが task:<CLAUDE_CODE_SESSION_ID>/<id> に組む
+  task?: string
+  // その作業のセッションの cwd (絶対パス)。task の端点では省くとバイナリの cwd
+  cwd?: string
 }
 
 // spawn の stdin。prompt を最初のターンにした Claude Code のセッションを、repo を cwd にした rex の window に起こし、SpawnResult を出す

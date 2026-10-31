@@ -52,17 +52,20 @@ async function nudge<R extends ToolCallResult>($: EngineInterface, name: string,
   }
 }
 
+// describe は辺の書き方を両方の向きで示す。peer の端点は session:<名前> で、cwd は依存図のノードから埋める。自分の
+// タスクの端点は task 欄の id だけで、参照と cwd はバイナリが埋める (mod は自分のどのタスクかを知らない)。
 function describe(name: string, cwd: string | undefined, bin: string): string {
-  const req: EdgeAddRequest = {
-    before: { ref: '<待つ相手の参照>', cwd: '<その cwd>' },
-    after: { ref: `session:${name}`, cwd: cwd ?? '<その cwd>' },
-    note: '<何の後か>',
-  }
+  const peer = { ref: `session:${name}`, cwd: cwd ?? '<その cwd>' }
+  const peerWaits: EdgeAddRequest = { before: { ref: '<待つ相手の参照>', cwd: '<その cwd>' }, after: peer, note: '<何の後か>' }
+  const selfWaits: EdgeAddRequest = { before: peer, after: { task: '<自分のタスクの id>' }, note: '<何の後か>' }
+  const line = (req: EdgeAddRequest) => `  printf '%s' '${JSON.stringify(req)}' | ${bin} edge add`
   return [
     `${name} へ送りましたが、${name} を端点に持つ依存の辺がありません。`,
-    `作業を渡していて、${name} がほかの作業 (別の peer の作業、マージ待ちの PR) の後でないと始められないなら、`,
-    'agents-daemon:peer-sessions skill の「依存の辺を書く」に従って辺を書いてください。',
-    `  printf '%s' '${JSON.stringify(req)}' | ${bin} edge add`,
+    'agents-daemon:peer-sessions skill の「依存の辺を書く」に従って、当たる向きの辺を書いてください。',
+    `作業を渡していて、${name} がほかの作業 (別の peer の作業、マージ待ちの PR) の後でないと始められないなら:`,
+    line(peerWaits),
+    `自分のタスクが ${name} の完了を待つなら (自分のタスクは id だけで指し、session_id と cwd はバイナリが埋める):`,
+    line(selfWaits),
     '返事や報告のように依存の無い送信なら、辺は要りません。',
   ].join('\n')
 }

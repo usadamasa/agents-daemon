@@ -113,6 +113,90 @@ func TestEdgeAddListRm(t *testing.T) {
 	}
 }
 
+// task 欄の端点は書く側のセッション自身のタスク。参照は task:<CLAUDE_CODE_SESSION_ID>/<id> をバイナリが組み、cwd を
+// 省くとバイナリの cwd になる。rm は task 欄でも組んだ参照でも同じ辺に当たる。
+func TestEdgeAdd_ownTask(t *testing.T) {
+	root := testEnv(t)
+	t.Setenv("CLAUDE_CODE_SESSION_ID", "SELF")
+	peer := filepath.Join(root, "src", "home", "peer")
+	mkdirs(t, peer)
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	add := func(m map[string]any) edge.Added {
+		t.Helper()
+		out, err := runEdge(t, edgeReq(t, m), "add")
+		if err != nil {
+			t.Fatalf("edge add %v: %v", m, err)
+		}
+		var added edge.Added
+		if err := json.Unmarshal([]byte(out), &added); err != nil {
+			t.Fatalf("add の JSON を読めない: %v\n%s", err, out)
+		}
+		return added
+	}
+	rm := func(m map[string]any) edge.Removed {
+		t.Helper()
+		out, err := runEdge(t, edgeReq(t, m), "rm")
+		if err != nil {
+			t.Fatalf("edge rm %v: %v", m, err)
+		}
+		var removed edge.Removed
+		if err := json.Unmarshal([]byte(out), &removed); err != nil {
+			t.Fatalf("rm の JSON を読めない: %v\n%s", err, out)
+		}
+		return removed
+	}
+
+	// 自分のタスクが peer を待つ向き。cwd を省く。
+	waits := map[string]any{"before": target("session:peer-b", peer), "after": map[string]string{"task": "3"}, "note": "peer-b の PR の後"}
+	got := add(waits).Edge
+	if got.After.Ref != "task:SELF/3" || got.After.CWD != wd || got.After.Repo != gitrepo.RepoKey(wd) || got.Before.Ref != "session:peer-b" {
+		t.Errorf("task 欄の端点 = %+v", got)
+	}
+	// cwd を明示すればそれを使う。
+	explicit := map[string]any{"before": map[string]string{"task": "4", "cwd": peer}, "after": target("pr:usadamasa/agents-daemon#1", peer)}
+	if e := add(explicit).Edge; e.Before.Ref != "task:SELF/4" || e.Before.CWD != peer {
+		t.Errorf("cwd を明示した task 欄の端点 = %+v", e)
+	}
+
+	if r := rm(map[string]any{"before": target("session:peer-b", peer), "after": map[string]string{"task": "3"}}); !r.Removed || r.ID != got.ID {
+		t.Errorf("task 欄で rm = %+v", r)
+	}
+	if r := rm(map[string]any{"before": target("task:SELF/4", peer), "after": target("pr:usadamasa/agents-daemon#1", peer)}); !r.Removed {
+		t.Errorf("組んだ参照で rm = %+v", r)
+	}
+}
+
+// task 欄は ref と同時に書けず、どちらかは要る。CLAUDE_CODE_SESSION_ID が無ければ組めない。
+func TestEdgeAdd_ownTaskRefused(t *testing.T) {
+	root := testEnv(t)
+	home := filepath.Join(root, "src", "home", "a")
+	mkdirs(t, home)
+	other := target("session:b", home)
+	for name, m := range map[string]map[string]any{
+		"ref と task の両方":   {"before": map[string]string{"ref": "session:a", "cwd": home, "task": "1"}, "after": other},
+		"ref も task も無い":   {"before": map[string]string{"cwd": home}, "after": other},
+		"task が空":          {"before": map[string]string{"task": ""}, "after": other},
+		"task に / がある":     {"before": map[string]string{"task": "1/2"}, "after": other},
+		"task の cwd が相対パス": {"before": map[string]string{"task": "1", "cwd": "rel"}, "after": other},
+	} {
+		t.Setenv("CLAUDE_CODE_SESSION_ID", "SELF")
+		if _, err := runEdge(t, edgeReq(t, m), "add"); err == nil {
+			t.Errorf("%s: edge add が通った", name)
+		}
+	}
+	t.Setenv("CLAUDE_CODE_SESSION_ID", "")
+	m := map[string]any{"before": map[string]string{"task": "1"}, "after": other}
+	if _, err := runEdge(t, edgeReq(t, m), "add"); err == nil || !strings.Contains(err.Error(), "CLAUDE_CODE_SESSION_ID") {
+		t.Errorf("env 無し: err = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "state", "agents-daemon", "edges")); !os.IsNotExist(err) {
+		t.Errorf("何か書かれた (err=%v)", err)
+	}
+}
+
 // 端点の cwd は両方要る。
 func TestEdgeAdd_refused(t *testing.T) {
 	root := testEnv(t)

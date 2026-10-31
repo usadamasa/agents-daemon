@@ -171,6 +171,7 @@ rg -n -o 'cc-premise: [0-9.]+ [a-z0-9-]+.*' --glob '!tmp/**' . | sort -t' ' -k3,
 | `mods` | 依存図とパーキングロットの mod (`hooks/deps.tsx` ほか): pane、slash command、`$.session.send` | mods, plugin modules, pane, ui.render, session.send, --plugin-dir |
 | `tools` | タスクの記録 (`ingest-task`) が拾う Task 系ツールと TodoWrite の有無と入出力 | TaskCreate, TaskUpdate, TaskList, TodoWrite, CLAUDE_CODE_ENABLE_TODO_TOOLS, tasks |
 | `worktrees` | 放置 worktree の回収 (`prune-worktrees`): 本体の sweep の範囲と lock reason の書式 | worktree, worktrees, cleanupPeriodDays, EnterWorktree, --worktree, worktree lock, sweep |
+| `bash-env` | Bash ツールの環境から自分の session_id を引く (`edge add` の task 欄、`scripts/get-session-id.sh`) | CLAUDE_CODE_SESSION_ID, Bash tool, environment variable, env |
 
 ## やらないこと
 

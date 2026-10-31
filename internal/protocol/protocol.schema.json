@@ -93,13 +93,13 @@
       }
     },
     "EdgeTarget": {
-      "description": "書く辺の端点",
+      "description": "書く辺の端点。ref (cwd も要る) か task のどちらか 1 つで指す",
       "type": "object",
       "additionalProperties": false,
-      "required": ["ref", "cwd"],
       "properties": {
         "ref": { "type": "string", "description": "作業の参照 (session:<名前> / sid:<session_id> / issue:<owner>/<repo>#<番号> / pr:<owner>/<repo>#<番号> / task:<session_id>/<task_id>)" },
-        "cwd": { "type": "string", "description": "その作業のセッションの cwd (絶対パス)" }
+        "task": { "type": "string", "description": "書く側のセッション自身のタスクの id。参照はバイナリが task:<CLAUDE_CODE_SESSION_ID>/<id> に組む" },
+        "cwd": { "type": "string", "description": "その作業のセッションの cwd (絶対パス)。task の端点では省くとバイナリの cwd" }
       }
     },
     "SpawnRequest": {

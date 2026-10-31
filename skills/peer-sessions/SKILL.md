@@ -55,12 +55,24 @@ printenv REX_SESSION
 ### 依存の辺を書く
 
 セッションをまたぐ依存は Task 系ツールの `blockedBy` では張れないので、渡す側が agents-daemon の
-辺として書く。辺は依存図 (`/deps`) に出る。
+辺として書く。辺は依存図 (`/deps`) に出る。向きは 2 つあり、当たる方を書く (両方なら 2 本)。
+
+渡した peer が、ほかの作業の後でないと始められない向き:
 
 ```sh
 printf '%s' '{"before":{"ref":"session:<待つ相手の name>","cwd":"<その window に渡した cwd>"},"after":{"ref":"session:<name>","cwd":"<この window に渡した cwd>"},"note":"<何の後か>"}' \
   | "${XDG_CACHE_HOME:-$HOME/.cache}/agents-daemon/bin/agents-daemon" edge add
 ```
+
+自分のタスクが、渡した peer の完了を待つ向き (報告を受けてから進める、peer の PR のマージが要る):
+
+```sh
+printf '%s' '{"before":{"ref":"session:<name>","cwd":"<この window に渡した cwd>"},"after":{"task":"<自分のタスクの id>"},"note":"<何の後か>"}' \
+  | "${XDG_CACHE_HOME:-$HOME/.cache}/agents-daemon/bin/agents-daemon" edge add
+```
+
+`task` の端点は自分のセッションのタスク (`TaskList` の id) で、参照 `task:<session_id>/<id>` と cwd は
+バイナリが埋める (`CLAUDE_CODE_SESSION_ID` と今の cwd)。`ref` で指す相手側の端点には cwd が要る。
 
 before の ref は `pr:<owner>/<repo>#<番号>` や `issue:` でもよい。`session:<name>` は、daemon が数秒のうちに
 その名前のセッションへ 1 回だけ結びつける。辺を書いた時点で同名のセッションが動いていれば最も新しく起きたもの

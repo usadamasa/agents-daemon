@@ -85,14 +85,19 @@ mod が呼ぶコマンド (`deps`、`park`、`edge add` / `rm`、`spawn`、`even
 ```sh
 printf '%s' '{"before":{"ref":"session:ad-135","cwd":"/abs/repo"},"after":{"ref":"issue:usadamasa/agents-daemon#143","cwd":"/abs/repo"},"note":"段 4 のリリースの後"}' \
   | agents-daemon edge add                                 # EdgeAddRequest → EdgeAdded
+printf '%s' '{"before":{"ref":"session:ad-135","cwd":"/abs/repo"},"after":{"task":"3"}}' \
+  | agents-daemon edge add                                 # 自分のセッションのタスク 3 が ad-135 の後
 printf '%s' '{"before":{...},"after":{...}}' | agents-daemon edge rm   # EdgeRemoveRequest → EdgeRemoved
 agents-daemon edge list --cwd <dir> [--here | --repo <main worktree>] [--ref <参照>]
 ```
 
-- 参照は `session:<セッション名>` (`claude --name` の名前)、`sid:<session_id>`、`issue:<owner>/<repo>#<番号>`、
+- 端点は `ref` (cwd も要る) か `task` のどちらか 1 つで指す
+- 参照 (`ref`) は `session:<セッション名>` (`claude --name` の名前)、`sid:<session_id>`、`issue:<owner>/<repo>#<番号>`、
   `pr:<owner>/<repo>#<番号>`、`task:<session_id>/<task_id>` のどれか。依存図のノードの key はこの形なので、
   `deps` の JSON の key をそのまま渡せる (TodoWrite の項目 `todo:` は端点にできない)
-- 端点の cwd は、その作業のセッションを起こしたディレクトリ (絶対パス)。端点の repo はここから決め、
+- `task` は書く側のセッション自身のタスクの id。参照 `task:<session_id>/<id>` はバイナリが環境の
+  `CLAUDE_CODE_SESSION_ID` から組み (無ければエラー)、cwd を省くとバイナリの cwd になる。`edge rm` も同じ形で当たる
+- `ref` の端点の cwd は、その作業のセッションを起こしたディレクトリ (絶対パス)。端点の repo はここから決め、
   書く側のセッション自身の cwd は見ない
 - 同じ参照の組 (向きを含む) は同じ辺になる。登録し直すと note と repo を書き直し、保持期間 (7 日) を数え直す
 - `session:<名前>` の端点は、daemon が tick ごとにセッション台帳 (`sessions/`) を見て 1 回だけ session ID に結びつけ、

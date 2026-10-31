@@ -129,9 +129,10 @@ pane を解釈するのは `deps` パッケージの `activity` だけで、生�
 `deps` (`hooks/deps-data.ts` の `loadDeps`) を読み、宛先 (末尾の ` [ref]` は落とす) が
 依存図に生きていて済んでいないノードを持つセッションで、`kind: edge` の辺が端点 (そのセッションのタスクへ解決された
 端点か、記録の `session:<名前>` の参照) に 1 本も無ければ (`hooks/graph.ts` の `unlinked`)、tool の結果の `context` に
-辺の書き方を 1 つ添える (#172)。文面は
-after を `session:<名前>` と宛先の cwd にした `EdgeAddRequest` を `edge add` へ渡す形と
-`agents-daemon:peer-sessions` skill の「依存の辺を書く」を指し、返事や報告なら辺は要らないと添える。
+辺の書き方を添える (#172)。文面は `edge add` へ渡す `EdgeAddRequest` を両方の向きで示す。宛先が待つ向きは
+after を `session:<名前>` と宛先の cwd にし、自分のタスクが宛先を待つ向きは before をその端点、after を `task` 欄
+(自分のタスクの id だけ。参照と cwd はバイナリが埋める、#293) にする。`agents-daemon:peer-sessions` skill の
+「依存の辺を書く」を指し、返事や報告なら辺は要らないと添える。
 
 - 辺を書くのは渡した側の model だけなので、人ではなく model に伝える
 - subagent や teammate、cloud のセッションへの送信は依存図の名前に当たらないので添えない

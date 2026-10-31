@@ -25,12 +25,15 @@ func lockedPaths(t *testing.T) apppath.Paths {
 func TestEnsureDaemon_LockHeldDoesNotSpawn(t *testing.T) {
 	p := lockedPaths(t)
 	spawned := 0
-	err := ensureDaemon(p, func() error {
+	action, err := ensureDaemon(p, func() error {
 		spawned++
 		return nil
 	})
 	if err != nil {
 		t.Fatalf("ensureDaemon() error = %v, want nil (動いている daemon があれば何もしない)", err)
+	}
+	if action != EnsureAlreadyRunning {
+		t.Errorf("action = %q, want %q", action, EnsureAlreadyRunning)
 	}
 	if spawned != 0 {
 		t.Errorf("spawn が %d 回呼ばれた, want 0", spawned)
@@ -40,7 +43,7 @@ func TestEnsureDaemon_LockHeldDoesNotSpawn(t *testing.T) {
 func TestEnsureDaemon_LockFreeSpawnsAndReleases(t *testing.T) {
 	p := apppath.New(t.TempDir(), "", "")
 	spawned := 0
-	err := ensureDaemon(p, func() error {
+	action, err := ensureDaemon(p, func() error {
 		spawned++
 		// 子はこの後で lock を取り直す。親が握ったままだと子は ErrAlreadyRunning で終わり、daemon が 0 になる。
 		f, err := daemonstate.AcquireLock(daemonstate.LockFile(p))
@@ -51,6 +54,9 @@ func TestEnsureDaemon_LockFreeSpawnsAndReleases(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("ensureDaemon() error = %v", err)
+	}
+	if action != EnsureStarted {
+		t.Errorf("action = %q, want %q", action, EnsureStarted)
 	}
 	if spawned != 1 {
 		t.Errorf("spawn が %d 回呼ばれた, want 1", spawned)

@@ -9,7 +9,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/jsonflag"
 	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/statecmd"
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/daemonstate"
@@ -28,7 +27,7 @@ func Commands() []*cobra.Command {
 // newParkCmd は `agents-daemon park add|set|list|discard|adopt` を組み立てる (parking)。
 // 入力は stdin の JSON で受け、結果は JSON で stdout に出す。
 func newParkCmd() *cobra.Command {
-	cmd := &cobra.Command{Use: "park", Short: "パーキングロット (脇のメモ) を置く・書き換える・一覧する", Annotations: jsonflag.Supported()}
+	cmd := &cobra.Command{Use: "park", Short: "パーキングロット (脇のメモ) を置く・書き換える・一覧する"}
 	sub := func(use, short string, fn func(apppath.Paths, io.Reader) (any, error)) *cobra.Command {
 		return &cobra.Command{Use: use, Short: short, Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 			return statecmd.Run(cmd, fn)

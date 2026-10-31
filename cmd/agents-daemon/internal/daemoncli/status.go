@@ -13,9 +13,8 @@ import (
 // newStatusCmd は `agents-daemon status` を組み立てる。--json は verify.StatusReport を出す。
 func newStatusCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:         "status",
-		Short:       "daemon の稼働状況と監視中の pane 一覧を表示する",
-		Annotations: jsonflag.Supported(),
+		Use:   "status",
+		Short: "daemon の稼働状況と監視中の pane 一覧を表示する",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			p, err := apppath.FromEnv()
 			if err != nil {

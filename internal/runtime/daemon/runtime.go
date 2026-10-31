@@ -399,13 +399,30 @@ func logKey(outcome monitor.Outcome, err error, entry *paneEntry) string {
 	return key
 }
 
+// EnsureAction は `daemon --ensure` が何をしたか。
+type EnsureAction string
+
+const (
+	// EnsureStarted は daemon を detach 起動したことを表す。
+	EnsureStarted EnsureAction = "started"
+	// EnsureAlreadyRunning は生きている daemon が既に居たので何もしなかったことを表す。
+	EnsureAlreadyRunning EnsureAction = "already_running"
+	// EnsureOutsideRex は rex の外 (監視する block が無い) なので何もしなかったことを表す。
+	EnsureOutsideRex EnsureAction = "outside_rex"
+)
+
+// EnsureReport は `daemon --ensure --json` が出す形。
+type EnsureReport struct {
+	Action EnsureAction `json:"action"`
+}
+
 // EnsureDaemon は生存している daemon が無ければこのバイナリを detach 起動する。
 // SessionStart hook から呼ばれる想定なので、常に高速に戻り、hook を絶対に
 // ブロック/失敗させない設計にする。
-func EnsureDaemon(p apppath.Paths, dryRun bool) error {
+func EnsureDaemon(p apppath.Paths, dryRun bool) (EnsureAction, error) {
 	exe, err := os.Executable()
 	if err != nil {
-		return fmt.Errorf("実行ファイルパスの取得に失敗: %w", err)
+		return "", fmt.Errorf("実行ファイルパスの取得に失敗: %w", err)
 	}
 	return ensureDaemon(p, func() error { return spawnDetached(exe, dryRun, p) })
 }
@@ -414,18 +431,21 @@ func EnsureDaemon(p apppath.Paths, dryRun bool) error {
 // 子は RunForeground で lock を取り直す。親が握ったまま起こすと子は ErrAlreadyRunning で終わり、daemon が 0 になる
 // (os.File の fd は CLOEXEC なので子へは渡らない)。離してから子が取るまでの間に別の --ensure が入っても、
 // lock を取れた 1 つだけが daemon になる。
-func ensureDaemon(p apppath.Paths, spawn func() error) error {
+func ensureDaemon(p apppath.Paths, spawn func() error) (EnsureAction, error) {
 	lock, err := daemonstate.AcquireLock(daemonstate.LockFile(p))
 	if err != nil {
 		if errors.Is(err, daemonstate.ErrAlreadyRunning) {
-			return nil // 既に動いている。何もしない。
+			return EnsureAlreadyRunning, nil
 		}
-		return err
+		return "", err
 	}
 	if err := lock.Close(); err != nil {
-		return fmt.Errorf("lock を離せません: %w", err)
+		return "", fmt.Errorf("lock を離せません: %w", err)
 	}
-	return spawn()
+	if err := spawn(); err != nil {
+		return "", err
+	}
+	return EnsureStarted, nil
 }
 
 // spawnDetached は exe を `daemon --foreground` として detach 起動する。

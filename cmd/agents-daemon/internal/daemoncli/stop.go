@@ -3,11 +3,12 @@ package daemoncli
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/jsonflag"
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/daemonstate"
 )
 
-// newStopCmd は `agents-daemon stop` を組み立てる。
+// newStopCmd は `agents-daemon stop` を組み立てる。--json は daemonstate.StopResult を出す。
 func newStopCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "stop",
@@ -17,7 +18,15 @@ func newStopCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return daemonstate.Stop(cmd.OutOrStdout(), p, daemonstate.StopTimeout)
+			res, err := daemonstate.Stop(p, daemonstate.StopTimeout)
+			if err != nil {
+				return err
+			}
+			if jsonflag.Enabled(cmd) {
+				return jsonflag.Write(cmd.OutOrStdout(), res)
+			}
+			daemonstate.WriteStop(cmd.OutOrStdout(), res)
+			return nil
 		},
 	}
 }

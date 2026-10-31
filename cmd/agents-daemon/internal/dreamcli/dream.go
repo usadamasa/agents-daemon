@@ -3,6 +3,7 @@ package dreamcli
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/jsonflag"
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/dream"
 	"github.com/usadamasa/agents-daemon/internal/dream/adopt"
@@ -36,6 +38,8 @@ func newDreamCmd() *cobra.Command {
 		Long: "Claude Code の記憶階層と skill 群を Harvest → Mine → Stage → Adopt の順に再編するための\n" +
 			"サブコマンド群。forget は Consolidate で役目を終えた auto memory を消す。\n" +
 			"いつ・何のために回すかは agents-daemon:dream skill が持つ。\n" +
+			"--json は各 phase の結果 (harvest・mine・stage は --verbose と同じサマリ、adopt は手順の中身、\n" +
+			"forget は消したパス) を stdout に出す。\n" +
 			"state は ${XDG_STATE_HOME:-~/.local/state}/agents-daemon/dream/ に置く。",
 	}
 	cmd.AddCommand(newDreamHarvestCmd())
@@ -85,10 +89,14 @@ func newDreamHarvestCmd() *cobra.Command {
 		// cobra の "Error: " は出さず、main が返り値を 1 行だけ印字する。
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := runDreamHarvest(opts, detach); err != nil {
+			if detach && jsonflag.Enabled(cmd) {
+				return jsonflag.Reject(cmd, harvest.DetachFlag)
+			}
+			sum, err := runDreamHarvest(opts, detach)
+			if err != nil {
 				return fmt.Errorf("%s dream harvest: %w", time.Now().Format(time.RFC3339), err)
 			}
-			return nil
+			return writeJSON(cmd, sum)
 		},
 	}
 	f := cmd.Flags()
@@ -102,18 +110,35 @@ func newDreamHarvestCmd() *cobra.Command {
 }
 
 // runDreamHarvest は detach なら自分を再起動して戻り、そうでなければこのプロセスで harvest を回す。
-func runDreamHarvest(opts harvest.Opts, detach bool) error {
+func runDreamHarvest(opts harvest.Opts, detach bool) (harvest.Summary, error) {
 	env, err := resolveDreamEnv()
 	if err != nil {
-		return err
+		return harvest.Summary{}, err
 	}
 	if detach {
-		return harvest.Detach(os.Args[1:], env.logDir)
+		return harvest.Summary{}, harvest.Detach(os.Args[1:], env.logDir)
 	}
 	opts.Home = env.home
 	opts.StateDir = env.stateDir
 	opts.Stderr = os.Stderr
 	return harvest.Run(opts)
+}
+
+// writeJSON は --json のときだけ v を stdout に書く。文字の出力は各 phase が自分で書く (--verbose の stderr、
+// adopt と forget の stdout)。
+func writeJSON(cmd *cobra.Command, v any) error {
+	if !jsonflag.Enabled(cmd) {
+		return nil
+	}
+	return jsonflag.Write(cmd.OutOrStdout(), v)
+}
+
+// textOut は phase が文字を書く stdout。--json のときは JSON だけを出すので捨てる。
+func textOut(cmd *cobra.Command) io.Writer {
+	if jsonflag.Enabled(cmd) {
+		return io.Discard
+	}
+	return cmd.OutOrStdout()
 }
 
 func newDreamMineCmd() *cobra.Command {
@@ -133,7 +158,11 @@ func newDreamMineCmd() *cobra.Command {
 			opts.Cwd = env.cwd
 			opts.StateDir = env.stateDir
 			opts.Stderr = cmd.ErrOrStderr()
-			return mine.Run(opts)
+			sum, err := mine.Run(opts)
+			if err != nil {
+				return err
+			}
+			return writeJSON(cmd, sum)
 		},
 	}
 	f := cmd.Flags()
@@ -162,7 +191,11 @@ func newDreamStageCmd() *cobra.Command {
 			opts.Cwd = env.cwd
 			opts.StateDir = env.stateDir
 			opts.Stderr = cmd.ErrOrStderr()
-			return stage.Run(opts)
+			sum, err := stage.Run(opts)
+			if err != nil {
+				return err
+			}
+			return writeJSON(cmd, sum)
 		},
 	}
 	f := cmd.Flags()
@@ -190,9 +223,13 @@ func newDreamAdoptCmd() *cobra.Command {
 			}
 			opts.Home = env.home
 			opts.StateDir = env.stateDir
-			opts.Stdout = cmd.OutOrStdout()
+			opts.Stdout = textOut(cmd)
 			opts.Stderr = cmd.ErrOrStderr()
-			return adopt.Run(opts)
+			plan, err := adopt.Run(opts)
+			if err != nil {
+				return err
+			}
+			return writeJSON(cmd, plan)
 		},
 	}
 	f := cmd.Flags()
@@ -223,9 +260,13 @@ func newDreamForgetCmd() *cobra.Command {
 			opts.Names = args
 			opts.Home = env.home
 			opts.Cwd = env.cwd
-			opts.Stdout = cmd.OutOrStdout()
+			opts.Stdout = textOut(cmd)
 			opts.Stderr = cmd.ErrOrStderr()
-			return forget.Run(opts)
+			res, err := forget.Run(opts)
+			if err != nil {
+				return err
+			}
+			return writeJSON(cmd, res)
 		},
 	}
 	f := cmd.Flags()

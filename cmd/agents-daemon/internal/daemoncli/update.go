@@ -9,14 +9,17 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/jsonflag"
 	"github.com/usadamasa/agents-daemon/internal/runtime/selfupdate"
 )
 
-// newUpdateCmd は `agents-daemon update` を組み立てる。
+// newUpdateCmd は `agents-daemon update` を組み立てる。stdout は子プロセス (claude、build-daemon.sh) の出力を
+// 流すだけなので --json には対応しない。
 func newUpdateCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "update",
-		Short: "plugin を更新し、更新した版で daemon を建て直す",
+		Use:         "update",
+		Short:       "plugin を更新し、更新した版で daemon を建て直す",
+		Annotations: jsonflag.Unsupported(),
 		Long: "claude plugin marketplace update、claude plugin update を走らせ、更新した版の\n" +
 			"hooks/build-daemon.sh で daemon を建て直す。動いている daemon は次の tick で入れ替わる。\n" +
 			"Claude Code の sandbox は ~/.claude/plugins と ~/.cache/agents-daemon に書けないので、\n" +

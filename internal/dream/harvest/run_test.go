@@ -23,9 +23,13 @@ func TestRun_PrunesExpiredStateBeforeWriting(t *testing.T) {
 	}
 
 	// projects が空でも Run は成功し、掃除と state の保存だけが起きる。
-	err := Run(Opts{ProjectsDir: t.TempDir(), StateDir: stateDir, Days: 14, Home: t.TempDir()})
+	sum, err := Run(Opts{ProjectsDir: t.TempDir(), StateDir: stateDir, Days: 14, Home: t.TempDir()})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
+	}
+	// 返り値は --verbose が出すサマリと同じ数 (--json が出す)。
+	if sum.Pruned != 1 || sum.Harvested != 0 || sum.Out != harvestDir {
+		t.Errorf("summary = %+v, want pruned=1 harvested=0 out=%s", sum, harvestDir)
 	}
 	if _, err := os.Stat(old); !os.IsNotExist(err) {
 		t.Errorf("保持期間を過ぎた %s が残っている", old)
@@ -36,7 +40,7 @@ func TestRun_PrunesExpiredStateBeforeWriting(t *testing.T) {
 }
 
 func TestRun_RequiresStateDir(t *testing.T) {
-	if err := Run(Opts{ProjectsDir: t.TempDir(), Home: t.TempDir()}); err == nil {
+	if _, err := Run(Opts{ProjectsDir: t.TempDir(), Home: t.TempDir()}); err == nil {
 		t.Fatal("StateDir 未指定で Run が成功した; 呼び出し側の解決漏れを拾うべき")
 	}
 }

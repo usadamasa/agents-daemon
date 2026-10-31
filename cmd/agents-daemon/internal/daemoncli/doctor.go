@@ -17,9 +17,8 @@ import (
 // newDoctorCmd は `agents-daemon doctor` を組み立てる。--json は doctor.Report をそのまま出す。
 func newDoctorCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:         "doctor",
-		Short:       "daemon が動作するための前提条件を診断する",
-		Annotations: jsonflag.Supported(),
+		Use:   "doctor",
+		Short: "daemon が動作するための前提条件を診断する",
 		Long: "多重化ツール (rex) の到達性、Claude pane の見え方、rex CLI の応答の形 (自分の block に固定の\n" +
 			"コマンドを打ち、コードが読む欄と exit code が変わっていないか)、statusline state の鮮度、\n" +
 			"設定ファイルの状態、daemon の稼働状況、peer messaging の socket (CLAUDE_CODE_MESSAGING_SOCKET)、\n" +

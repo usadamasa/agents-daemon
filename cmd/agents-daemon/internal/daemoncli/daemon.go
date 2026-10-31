@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/jsonflag"
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend"
 	"github.com/usadamasa/agents-daemon/internal/runtime/daemon"
@@ -35,15 +36,25 @@ func newDaemonCmd() *cobra.Command {
 			"hook を絶対にブロックしないための挙動。rex の外 (REX_SESSION なし) では\n" +
 			"監視する block が無いので、stderr に 1 行出して何もせずに戻る。\n" +
 			"--foreground はこのプロセス自身でループを回す (デバッグ・テスト用)。\n" +
-			"どちらか一方を必ず指定する。",
+			"どちらか一方を必ず指定する。--json は --ensure が何をしたか (started、already_running、\n" +
+			"outside_rex) を出す。--foreground は出力を持たないので --json と併用できない。",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if ensure == foreground {
 				return errors.New("--ensure か --foreground のどちらか一方を指定してください")
 			}
+			if foreground && jsonflag.Enabled(cmd) {
+				return jsonflag.Reject(cmd, "--foreground")
+			}
+			report := func(action daemon.EnsureAction) error {
+				if !jsonflag.Enabled(cmd) {
+					return nil
+				}
+				return jsonflag.Write(cmd.OutOrStdout(), daemon.EnsureReport{Action: action})
+			}
 			if _, err := backend.Detect(os.Getenv); err != nil {
 				if ensure && errors.Is(err, backend.ErrNoRexSession) {
 					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "agents-daemon: %v。daemon は起動しません\n", err)
-					return nil
+					return report(daemon.EnsureOutsideRex)
 				}
 				return err
 			}
@@ -56,7 +67,11 @@ func newDaemonCmd() *cobra.Command {
 			if foreground {
 				return daemon.RunForeground(cmd.Context(), p, dryRun)
 			}
-			return daemon.EnsureDaemon(p, dryRun)
+			action, err := daemon.EnsureDaemon(p, dryRun)
+			if err != nil {
+				return err
+			}
+			return report(action)
 		},
 	}
 	cmd.Flags().BoolVar(&ensure, "ensure", false, "生存している daemon が無ければ detach 起動する")

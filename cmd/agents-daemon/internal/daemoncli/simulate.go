@@ -1,13 +1,16 @@
 package daemoncli
 
 import (
+	"io"
+
 	"github.com/spf13/cobra"
 
+	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/jsonflag"
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/runtime/simulate"
 )
 
-// newSimulateCmd は `agents-daemon simulate` を組み立てる。
+// newSimulateCmd は `agents-daemon simulate` を組み立てる。--json は simulate.Result を出す。
 func newSimulateCmd() *cobra.Command {
 	var send bool
 	var keep bool
@@ -35,7 +38,17 @@ func newSimulateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return simulate.Run(cmd.Context(), cmd.OutOrStdout(), p, simulate.Options{Send: send, Keep: keep, ScreenFile: screenFile})
+			opts := simulate.Options{Send: send, Keep: keep, ScreenFile: screenFile}
+			if !jsonflag.Enabled(cmd) {
+				_, err := simulate.Run(cmd.Context(), cmd.OutOrStdout(), p, opts)
+				return err
+			}
+			// 途中で失敗しても、そこまでに通った経路 (作った pane と後始末) は出す。
+			res, err := simulate.Run(cmd.Context(), io.Discard, p, opts)
+			if writeErr := jsonflag.Write(cmd.OutOrStdout(), res); writeErr != nil {
+				return writeErr
+			}
+			return err
 		},
 	}
 	cmd.Flags().BoolVar(&send, "send", false, "dry-run をやめ、使い捨て pane へ実際に再開メッセージを送信する")

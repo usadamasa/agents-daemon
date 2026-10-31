@@ -2,6 +2,7 @@ package dreamcli
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
@@ -10,6 +11,10 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+
+	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/jsonflag"
+	"github.com/usadamasa/agents-daemon/internal/dream/forget"
+	"github.com/usadamasa/agents-daemon/internal/dream/harvest"
 )
 
 // testRoot は main の root と同じく SilenceUsage を立てた親にコマンドを載せる。
@@ -59,6 +64,48 @@ func TestDreamHarvestCmd_FailureLineIsTimestamped(t *testing.T) {
 	}
 	if _, err := time.Parse(time.RFC3339, strings.SplitN(line, " ", 2)[0]); err != nil {
 		t.Errorf("先頭が RFC3339 の時刻でない: %q", line)
+	}
+}
+
+// --json は各 phase の返り値を stdout に出す。harvest --detach は子の結果を待たないので --json と併用すると error。
+func TestDreamCmd_JSON(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	execJSON := func(args ...string) (string, error) {
+		var out bytes.Buffer
+		root := testRoot()
+		jsonflag.Add(root)
+		root.SetOut(&out)
+		root.SetErr(&bytes.Buffer{})
+		root.SetArgs(append([]string{"--json", "dream"}, args...))
+		err := root.Execute()
+		return out.String(), err
+	}
+
+	memDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(memDir, "obsolete.md"), []byte("body"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, err := execJSON("forget", "--memory-dir", memDir, "--dry-run", "obsolete")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var res forget.Result
+	if err := json.Unmarshal([]byte(out), &res); err != nil || !res.DryRun || len(res.Paths) != 1 {
+		t.Errorf("forget --json = %q (%v)", out, err)
+	}
+
+	out, err = execJSON("harvest", "--projects-dir", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sum harvest.Summary
+	if err := json.Unmarshal([]byte(out), &sum); err != nil || sum.Out == "" {
+		t.Errorf("harvest --json = %q (%v)", out, err)
+	}
+
+	if _, err := execJSON("harvest", "--detach"); err == nil || !strings.Contains(err.Error(), "--json") {
+		t.Errorf("harvest --detach: error = %v, want --json に対応していない error", err)
 	}
 }
 

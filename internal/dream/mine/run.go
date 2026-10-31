@@ -34,18 +34,31 @@ type Opts struct {
 	Stderr io.Writer
 }
 
+// Summary は mine 1 回分の処理の数。--verbose はこれを 1 行で stderr に出し、`--json` はそのまま stdout に出す。
+type Summary struct {
+	Project     string `json:"project"`
+	Sessions    int    `json:"sessions"`
+	Skills      int    `json:"skills"`
+	Memories    int    `json:"memories"`
+	Candidates  int    `json:"candidates"`
+	SkillBody   int    `json:"skill_body"`
+	MemoryDedup int    `json:"memory_dedup"`
+	Unhomed     int    `json:"unhomed"`
+	Out         string `json:"out"`
+}
+
 // Run は mine phase 一回分を実行する。
-func Run(opts Opts) error {
+func Run(opts Opts) (Summary, error) {
 	if opts.Stderr == nil {
 		opts.Stderr = io.Discard
 	}
 	if opts.StateDir == "" {
-		return errors.New("StateDir が未解決 (呼び出し側が apppath で決める)")
+		return Summary{}, errors.New("StateDir が未解決 (呼び出し側が apppath で決める)")
 	}
 
 	project, err := dream.ResolveProject(opts.Project, opts.Cwd)
 	if err != nil {
-		return fmt.Errorf("project 解決失敗: %w", err)
+		return Summary{}, fmt.Errorf("project 解決失敗: %w", err)
 	}
 
 	resolvedHarvest := opts.HarvestDir
@@ -65,7 +78,7 @@ func Run(opts Opts) error {
 	// 1. harvest: 対象 project のセッション
 	sessions, err := record.LoadForProject(resolvedHarvest, project)
 	if err != nil {
-		return fmt.Errorf("harvest 読み込み失敗: %w", err)
+		return Summary{}, fmt.Errorf("harvest 読み込み失敗: %w", err)
 	}
 
 	// 2. 対象 skill セット: セッションで invoked された skill をベースに
@@ -90,7 +103,7 @@ func Run(opts Opts) error {
 	// 4. memory: 対象 project の feedback memory
 	mems, err := corpus.LoadMemories(resolvedMemory)
 	if err != nil {
-		return fmt.Errorf("memory 読み込み失敗: %w", err)
+		return Summary{}, fmt.Errorf("memory 読み込み失敗: %w", err)
 	}
 
 	// 5. candidate 生成
@@ -99,14 +112,15 @@ func Run(opts Opts) error {
 	// 6. jsonl 出力
 	outFile := candidates.Path(opts.StateDir, project, resolvedDate)
 	if err := candidates.Write(outFile, cands); err != nil {
-		return fmt.Errorf("candidates 書き込み失敗: %w", err)
+		return Summary{}, fmt.Errorf("candidates 書き込み失敗: %w", err)
 	}
 
+	sum := Summary{Project: project, Sessions: len(sessions), Skills: len(skills), Memories: len(mems), Candidates: len(cands), Out: outFile}
+	sum.SkillBody, sum.MemoryDedup, sum.Unhomed = candidates.CountByKind(cands)
 	if opts.Verbose {
-		skillBody, memoryDedup, unhomed := candidates.CountByKind(cands)
 		_, _ = fmt.Fprintf(opts.Stderr,
 			"project=%s sessions=%d skills=%d memories=%d candidates=%d (skill_body=%d memory_dedup=%d unhomed=%d) out=%s\n",
-			project, len(sessions), len(skills), len(mems), len(cands), skillBody, memoryDedup, unhomed, outFile)
+			sum.Project, sum.Sessions, sum.Skills, sum.Memories, sum.Candidates, sum.SkillBody, sum.MemoryDedup, sum.Unhomed, sum.Out)
 	}
-	return nil
+	return sum, nil
 }

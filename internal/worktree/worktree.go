@@ -300,10 +300,22 @@ func listWorktrees(repo string) ([]entry, error) {
 			cur.Locked = true
 		case strings.HasPrefix(line, "locked "):
 			cur.Locked = true
-			cur.Reason = strings.TrimPrefix(line, "locked ")
+			cur.Reason = unquoteReason(strings.TrimPrefix(line, "locked "))
 		}
 	}
 	return entries, nil
+}
+
+// unquoteReason は porcelain の lock の理由を元の文字列に戻す。git は改行や (core.quotePath の既定で) 非 ASCII を含む
+// 理由を C 形式の引用 ("\344\275..." の 8 進) で出す。引用を解けなければそのまま返す。
+func unquoteReason(s string) string {
+	if len(s) < 2 || s[0] != '"' || s[len(s)-1] != '"' {
+		return s
+	}
+	if u, err := strconv.Unquote(s); err == nil {
+		return u
+	}
+	return s
 }
 
 // lastTouched は worktree の最終更新。ルートの mtime・HEAD のコミット日時・管理 index の mtime の最大を採る。

@@ -475,6 +475,23 @@ func TestRun_OutsideRepositoryIsError(t *testing.T) {
 
 // ---- lock reason の解釈 ----
 
+// git は core.quotePath の既定で非 ASCII を含む lock の理由を C 形式で引用して出す (Linux の CI の git で実測)。
+// macOS の git は引用しないことがあるので、引用の形を直に渡して確かめる。
+func TestUnquoteReason(t *testing.T) {
+	cases := map[string]string{
+		`"\344\275\234\346\245\255\344\270\255\343\201\253\343\201\244\343\201\215\344\277\235\350\255\267"`: "作業中につき保護",
+		"作業中につき保護":                 "作業中につき保護",
+		"claude session x (pid 1)": "claude session x (pid 1)",
+		`"line1\nline2"`:           "line1\nline2",
+		`"`:                        `"`,
+	}
+	for in, want := range cases {
+		if got := unquoteReason(in); got != want {
+			t.Errorf("unquoteReason(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 // cc-premise: 2.1.302 worktrees lock reason は `claude <session|agent> <name> (pid N[ start <procStart>])`。start は省かれることがある
 func TestParseLockReason(t *testing.T) {
 	cases := []struct {

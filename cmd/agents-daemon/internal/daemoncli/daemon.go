@@ -19,6 +19,7 @@ import (
 func Commands() []*cobra.Command {
 	return []*cobra.Command{
 		newDaemonCmd(), newStatusCmd(), newLogsCmd(), newStopCmd(), newUpdateCmd(), newDoctorCmd(), newInspectCmd(), newSimulateCmd(),
+		newIngestStopFailureCmd(),
 	}
 }
 

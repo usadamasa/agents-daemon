@@ -149,6 +149,45 @@ func TestDaemonRuntimeTick_LimitEventWithoutLowerPriority(t *testing.T) {
 	}
 }
 
+// pane のセッションに StopFailure の記録があれば、出来事に turn_failure として添える (#77)。無ければ欄ごと出さない。
+func TestDaemonRuntimeTick_LimitEventAttachesTurnFailure(t *testing.T) {
+	now := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
+	const screen = "⏺ You've hit your session limit · resets 5:00pm (Asia/Tokyo)\n❯ \n"
+	panes := []multiplexer.Pane{claudePane("p1", multiplexer.AgentStatusError), claudePane("p2", multiplexer.AgentStatusError)}
+	panes[0].SessionID = "sid-1"
+	panes[1].SessionID = "sid-2"
+	client := &multiplexerfake.Client{
+		PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) { return panes, nil },
+		PaneReadFunc: func(context.Context, string, multiplexer.PaneReadOptions) (string, error) { return screen, nil },
+	}
+	r, _ := newTestRuntime(t, client, now)
+	failedAt := now.Add(-time.Minute)
+	input := `{"session_id": "sid-1", "hook_event_name": "StopFailure", "error": "rate_limit",` +
+		` "last_assistant_message": "You've hit your session limit"}`
+	if err := r.turnFailures.Ingest([]byte(input), failedAt); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := r.tick(context.Background(), missingConfigPath(t), now); err != nil {
+		t.Fatalf("tick() error = %v", err)
+	}
+	events := readLimitEvents(t, r)
+	if len(events) != 2 {
+		t.Fatalf("events = %d 件, want 2: %+v", len(events), events)
+	}
+	byPane := map[string]limitlog.Event{}
+	for _, ev := range events {
+		byPane[ev.PaneID] = ev
+	}
+	got := byPane["p1"].TurnFailure
+	if got == nil || got.Error != "rate_limit" || got.Message != "You've hit your session limit" || !got.ObservedAt.Equal(failedAt) {
+		t.Errorf("p1 の turn_failure = %+v, want rate_limit at %v", got, failedAt)
+	}
+	if got := byPane["p2"].TurnFailure; got != nil {
+		t.Errorf("p2 の turn_failure = %+v, want 無し (記録の無いセッション)", got)
+	}
+}
+
 // geometry が取れなくても出来事は残し、理由を geometry_error に書く。通常の画面では何も書かない。
 func TestDaemonRuntimeTick_LimitEventWithoutGeometry(t *testing.T) {
 	now := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)

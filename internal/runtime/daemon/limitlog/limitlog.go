@@ -61,6 +61,9 @@ type Event struct {
 	// ゲートと起床時刻の判断を再現するために残す。
 	RateLimit *Window `json:"rate_limit,omitempty"`
 	Account   *Window `json:"account,omitempty"`
+	// TurnFailure はその pane のセッションの最後の turn を終わらせた API error (turnfailure.Record の写し)。
+	// 記録は次の turn で消えるので、あれば「最後の turn が API error で終わり、まだ次が始まっていない」(#77)。
+	TurnFailure *TurnFailure `json:"turn_failure,omitempty"`
 	// Settings は判定に効いた設定値。
 	Settings Settings `json:"settings"`
 	// LowerPriority は画面に lower-priority mode の作業中の通知があった印 (detect.LowerPriorityActive)。
@@ -83,6 +86,14 @@ type Window struct {
 	ResetsAt       time.Time `json:"resets_at"`
 	ObservedAt     time.Time `json:"observed_at"`
 	SessionID      string    `json:"session_id,omitempty"`
+}
+
+// TurnFailure は StopFailure hook が受けた error。欄の名前は hook の入力に揃える。
+type TurnFailure struct {
+	Error        string    `json:"error"`
+	ErrorDetails string    `json:"error_details,omitempty"`
+	Message      string    `json:"last_assistant_message,omitempty"`
+	ObservedAt   time.Time `json:"observed_at"`
 }
 
 // Settings は判定に効いた config の値。

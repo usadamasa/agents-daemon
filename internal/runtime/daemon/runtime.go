@@ -29,6 +29,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/runtime/monitor"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
+	"github.com/usadamasa/agents-daemon/internal/turnfailure"
 )
 
 // maxConsecutiveTickFailures は PaneList の取得にこの回数だけ連続で
@@ -85,7 +86,10 @@ type daemonRuntime struct {
 	// ものを消すだけ。ゼロ値は何も消さない。
 	eventLog string
 	// limits は上限の出来事の記録 (daemon/limitlog)。daemon が書き、housekeeping で消す。ゼロ値は書かない。
-	limits              limitlog.Store
+	limits limitlog.Store
+	// turnFailures は hook が書く turn の失敗の記録 (turnfailure)。daemon は上限の出来事に添えて読み、
+	// housekeeping で消す。ゼロ値は「無い」を返し、何も消さない。
+	turnFailures        turnfailure.Store
 	sleep               func(time.Duration)
 	startedAt           time.Time
 	panes               map[string]*paneEntry

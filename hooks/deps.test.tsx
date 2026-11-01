@@ -1102,6 +1102,9 @@ test('メモを選ぶと詳細を出し、Discard / To task / Ask for issue で�
   expect(w.sent[0]?.text).toMatch(/タスクの description にメモの id \(20261018T090000-aaaa\) を入れてください。/)
   expect(w.sent[0]?.text).toMatch(/既にこのメモを扱うタスクがあれば、新しく作らずにその description に id を書き足すだけで構いません。/)
   expect(w.sent[0]?.text).toMatch(/\(メモ 20261018T090000-aaaa\)$/)
+  // 置いた時点の前提のまま依頼にしない。受け手が今のコードで確かめ、成り立たなければ理由を返して終える。
+  expect(w.sent[0]?.text).toMatch(/先に、メモの前提 \(詳細と関係するファイル\) が今のコードと計画で成り立つかを確かめてください。/)
+  expect(w.sent[0]?.text).toMatch(/前提が成り立たないとき .*は、その理由を 1 行で返して終えてください。/)
   // 送る前に取る (open のときだけ handed にし、宛先のセッションを同じ park set で書く)。届いたら handed のまま。
   expect(operations(w.ran)).toEqual([CLAIM_W])
 
@@ -1136,6 +1139,9 @@ test('自セッションへは peer メッセージではなく自分の入力�
   expect(w.sent).toEqual([])
   expect(w.submitted).toHaveLength(1)
   expect(w.submitted[0]).toMatch(/^パーキングロットのメモ「保持期間の根拠が無い」を GitHub の issue にしてください。repo: agents-daemon。/)
+  // 自分の入力へ渡した文面はユーザーの手番として入るので、前提が成り立たない理由の 1 行はユーザーへの応答になる。
+  expect(w.submitted[0]).toMatch(/先に、メモの前提 \(詳細と関係するファイル\) が今のコードと計画で成り立つかを確かめてください。/)
+  expect(w.submitted[0]).toMatch(/前提が成り立たないとき .*は、その理由を 1 行で返して終えてください。/)
   expect(operations(w.ran)).toEqual([CLAIM_SELF])
   expect(await ui.find({ type: 'Text', text: /このセッション へ送り、メモを渡しました/ })).toBeDefined()
 })

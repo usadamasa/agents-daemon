@@ -140,7 +140,7 @@ var (
 		regexp.MustCompile(`(?i)out of credits\b`),
 		// Fable のモデル単位の週次上限は 5 時間ウィンドウの解除では解けない。上限のダイアログは Enter が
 		// 使用クレジットで続ける選択肢を選ぶ。使用率の警告 (`85% of your Fable limit`) は拾わない。
-		// cc-premise: 2.1.316 limit-screen Fable の上限の行とダイアログの文言 (fable_limit_test.go)
+		// cc-premise: 2.1.316 limit-screen Fable の上限の行とダイアログの文言 (バイナリのテンプレート、実機未確認。fable_limit_test.go)
 		regexp.MustCompile(`(?i)(?:hit|reached) your fable limit|\bfable limit reached\b`),
 	}
 

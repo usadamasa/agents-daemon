@@ -82,7 +82,7 @@ out of credits のいずれかがあれば、待機に入らず `hard-cap` と�
 文言は `detect` が持つ。上流も同じ扱いで、retry watchdog は organization
 spend-limit と out-of-credits で即座に失敗する。
 
-<!-- cc-premise: 2.1.316 limit-screen Fable の上限の行とダイアログの文言 -->
+<!-- cc-premise: 2.1.316 limit-screen Fable の上限の行とダイアログの文言 (バイナリのテンプレート、実機未確認) -->
 
 Fable のモデル単位の週次上限 (`/usage` の `Current week (Fable)` の行) も同じ扱いにする。上限の行は
 `You've hit your Fable … · resets …` の形で、解除が 24 時間以内なら時刻だけが付いて二重シグナルを満たす。

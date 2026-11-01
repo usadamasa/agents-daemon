@@ -5,10 +5,11 @@ import (
 	"testing"
 )
 
-// Fable のモデル単位の週次上限 (内部名 seven_day_overage_included) に当たったときの文言。2.1.316 のバイナリから採取した。
+// Fable のモデル単位の週次上限 (内部名 seven_day_overage_included) に当たったときの文言。2.1.316 のバイナリの
+// テンプレートから組み立てた (実機の画面では未確認。モデル名と残高は埋めた値)。
 // 上限の行は「You've hit your Fable limit · resets <時刻>」で、解除が 24 時間以内なら時刻だけ、それより先なら
 // 日付付きになる。ダイアログは別モデルかクレジットで続けるかを聞き、既定の選択肢はクレジットを使う側にある。
-// cc-premise: 2.1.316 limit-screen Fable の上限の行とダイアログの文言
+// cc-premise: 2.1.316 limit-screen Fable の上限の行とダイアログの文言 (バイナリのテンプレート、実機未確認)
 const (
 	fableHitWithinDay = "⏺ You've hit your Fable limit · resets 3pm (Asia/Tokyo)"
 	fableHitBeyondDay = "⏺ You've hit your Fable limit · resets Nov 7, 3pm (Asia/Tokyo)"
@@ -48,11 +49,13 @@ func TestClassify_Fableの上限は待機に入らせない(t *testing.T) {
 	}
 }
 
-func TestClassify_解除が1日より先のFableの上限は待機に入らない(t *testing.T) {
+func TestClassify_解除が1日より先のFableの上限は検知されない(t *testing.T) {
 	c := newTestClassifier(t)
 
-	if got := c.Classify(fableHitBeyondDay, 0); got == KindLimit {
-		t.Errorf("Classify() = %v, want limit 以外", got)
+	// 日付付きの解除時刻は resetPatterns に当たらず、二重シグナルを満たさない。全モデル共通の週次上限も同じ。
+	// 何も送らないので害は無いが、hard-cap としても記録されない。
+	if got := c.Classify(fableHitBeyondDay, 0); got != KindNone {
+		t.Errorf("Classify() = %v, want %v", got, KindNone)
 	}
 }
 

@@ -214,7 +214,7 @@ func writeInspect(w io.Writer, rep InspectReport) {
 	case detect.KindResumeReady:
 		_, _ = fmt.Fprintln(w, "\n上限は解除済みで Enter 待ちです。Enter だけを送ります (テキストは打ちません)。")
 	case detect.KindSpendLimit:
-		_, _ = fmt.Fprintln(w, "\n待っても解除されない上限 (spend limit / usage credit) です。待機に入りません。")
+		_, _ = fmt.Fprintln(w, "\n待っても解除されない上限 (spend limit / usage credit / Fable の週次上限) です。待機に入りません。")
 	case detect.KindNone:
 		_, _ = fmt.Fprintln(w, "\n上限でも一時エラーでもない画面です。daemon は何もしません。")
 	}

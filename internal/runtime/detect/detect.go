@@ -29,8 +29,8 @@ const (
 	// KindResumeReady は上限が解除済みで、Claude Code が Enter だけを待っている状態。
 	// テキストを打ち込むと中断された turn ではなく新しい依頼になるため、Enter だけを送る。
 	KindResumeReady
-	// KindSpendLimit は待っても解除されない上限 (月次 spend limit / usage credit) に
-	// 当たっている状態。待機に入ってはいけない。
+	// KindSpendLimit は 5 時間ウィンドウの解除を待っても解けない上限 (月次 spend limit / usage credit、
+	// Fable の週次上限) に当たっている状態。待機に入ってはいけない。
 	KindSpendLimit
 )
 
@@ -138,6 +138,10 @@ var (
 		regexp.MustCompile(`(?i)usage credit limit`),
 		regexp.MustCompile(`(?i)credit balance (?:is )?too low`),
 		regexp.MustCompile(`(?i)out of credits\b`),
+		// Fable のモデル単位の週次上限は 5 時間ウィンドウの解除では解けない。上限のダイアログは Enter が
+		// 使用クレジットで続ける選択肢を選ぶ。使用率の警告 (`85% of your Fable limit`) は拾わない。
+		// cc-premise: 2.1.316 limit-screen Fable の上限の行とダイアログの文言 (fable_limit_test.go)
+		regexp.MustCompile(`(?i)(?:hit|reached) your fable limit|\bfable limit reached\b`),
 	}
 
 	// resetPatterns は limitPatterns の近傍にあることで「上限に達した」の裏取りになる。

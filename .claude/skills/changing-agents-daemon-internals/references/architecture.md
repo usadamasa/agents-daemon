@@ -107,7 +107,7 @@ pane ごとに次を評価する。上限側の詳細は [rate-limit.md](rate-li
 | 上記以外 | 画面を読んで分類する (`agent_status` は見ない) |
 | ネイティブの auto-continue が再開を予約している | 手を引く (待機中なら監視へ戻す) |
 | 上限が解除済みで Enter 待ち | 通常の待機に入り、送信では Enter だけを送る |
-| 待っても解除されない上限 (spend limit / usage credit) | 待機に入らない |
+| 待っても解除されない上限 (spend limit / usage credit / Fable の週次上限) | 待機に入らない |
 | 画面が limit と判定され、ゲートを通過した | 待機に入る |
 | 待機中に limit が消えた | 監視に戻る (ユーザーが自分で再開した。プロンプトは送らない) |
 | 待機期限に達したが、Claude Code が `blocked` で kind が `permission` / `question` / `auth` | 送らず待機を延長する (利用者が答える prompt を esc / Enter で代行しない。[program-status.md](program-status.md)) |

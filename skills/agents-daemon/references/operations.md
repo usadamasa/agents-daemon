@@ -233,6 +233,8 @@ Claude Code の画面の文言は安定した API ではない。変わって検
   (`deferToNativeAutoContinue`)。ネイティブが降りた画面から改めて拾う。
 - **spend limit / usage credit では待機に入らない。** 待っても解除されないため。
   `/usage-credits` での引き上げは人間の操作なので、このツールは何もしない。
+- **Fable の週次上限でも待機に入らない。** 5 時間ウィンドウの解除では解けず、続きを別モデルにするか
+  使用クレジットで続けるかは利用者が選ぶため。上限のダイアログには何も送らない。
 - **pane の中で tmux が動いていると送信が入力行へ届かない。** agent teams
   (`tmux -L claude-swarm-*`) を開いたセッションの pane に `send-text` すると、
   文字列は tmux 側でフォーカスを持つペイン (teammate 一覧など) に吸われ、Claude の

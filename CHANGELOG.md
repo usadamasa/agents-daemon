@@ -1,5 +1,13 @@
 # Changelog
 
+## [2026.1101.1](https://github.com/usadamasa/agents-daemon/compare/2026.1101.0...2026.1101.1) - 2026-11-01
+
+- build(deps): bump nixpkgs from `02c087f` to `3ec6363` by @dependabot[bot] in https://github.com/usadamasa/agents-daemon/pull/334
+- build(deps): bump Songmu/tagpr from 1.21.3 to 1.21.4 by @dependabot[bot] in https://github.com/usadamasa/agents-daemon/pull/333
+- Fable の週次上限では待機に入らず手を引く by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/342
+- StopFailure の error を記録し、上限の出来事に OSC 7501 の record と並べて残す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/343
+- 依存図で終了したセッションのタスクを一覧から外せるようにする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/344
+
 ## [2026.1101.0](https://github.com/usadamasa/agents-daemon/compare/2026.1031.1...2026.1101.0) - 2026-11-01
 
 - statusline: five_hour が無いプランでも 7d の使用率を出す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/339

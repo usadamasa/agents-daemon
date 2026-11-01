@@ -362,6 +362,11 @@ func (r *daemonRuntime) recordLimitEvent(ctx context.Context, pane multiplexer.P
 		Settings:  limitlog.Settings{ReadLines: cfg.ReadLines, DetectionTailLines: cfg.DetectionTailLines},
 		Screen:    observed.screen,
 	}
+	if failure, err := r.turnFailures.Load(pane.SessionID); err != nil {
+		r.log.Logf("pane %s: turn の失敗の記録の読み込みに失敗、無しとして残します: %v", pane.PaneID, err)
+	} else {
+		ev.TurnFailure = limitTurnFailure(failure)
+	}
 	if detect.LowerPriorityActive(observed.screen, cfg.DetectionTailLines) {
 		ev.LowerPriority = true
 		r.log.Logf("pane %s: lower-priority mode の作業中の通知がある画面を %s と判定した (作業中の pane を待機に入れている可能性、#251)",
@@ -387,6 +392,19 @@ func limitWindow(state *ratelimit.State) *limitlog.Window {
 		ResetsAt:       state.FiveHourResetsAt,
 		ObservedAt:     state.ObservedAt,
 		SessionID:      state.SessionID,
+	}
+}
+
+// limitTurnFailure は turn の失敗の記録を出来事の形に写す。無ければ nil (欄ごと出さない)。
+func limitTurnFailure(rec *turnfailure.Record) *limitlog.TurnFailure {
+	if rec == nil {
+		return nil
+	}
+	return &limitlog.TurnFailure{
+		Error:        rec.Error,
+		ErrorDetails: rec.ErrorDetails,
+		Message:      rec.Message,
+		ObservedAt:   rec.ObservedAt,
 	}
 }
 

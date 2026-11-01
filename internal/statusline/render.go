@@ -175,11 +175,17 @@ func contextSegment(v view, _ time.Time) (segment, bool) {
 	return segment{levelColor(v.ContextPercent), fmt.Sprintf("🧠 %dk (%d%%)", v.ContextTokens/1000, v.ContextPercent)}, true
 }
 
-// rateLimitSegment は 5 時間 / 7 日ウィンドウの使用率。rate_limits が届いたセッションにだけ出す。
-// 色は 5 時間ウィンドウの使用率に従う (詰まるのは常にこちらが先)。
+// cc-premise: 2.1.316 statusline rate_limits は five_hour と seven_day を個別に省く
+//
+// rateLimitSegment は 5 時間 / 7 日ウィンドウの使用率。どちらかが届いたセッションにだけ出す。
+// 5 時間ウィンドウの無いプラン (認証済みの Ultra) では seven_day だけが届く。
+// 色は 5 時間ウィンドウがあればその使用率 (先に詰まるのはこちら)、無ければ 7 日ウィンドウの使用率に従う。
 func rateLimitSegment(v view, now time.Time) (segment, bool) {
 	if v.FiveHourPercent == nil {
-		return segment{}, false
+		if v.SevenDayPercent == nil {
+			return segment{}, false
+		}
+		return segment{levelColor(*v.SevenDayPercent), fmt.Sprintf("⏳ 7d %d%%", *v.SevenDayPercent)}, true
 	}
 	text := fmt.Sprintf("⏳ 5h %d%%", *v.FiveHourPercent)
 	if v.FiveHourResetsAt != nil {

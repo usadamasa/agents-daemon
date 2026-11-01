@@ -22,9 +22,9 @@ export async function dismissOne($: EngineInterface, node: GraphNode): Promise<s
   return failure === undefined ? `タスク「${node.title}」を一覧から外しました` : `一覧から外せませんでした: ${failure.reason}`
 }
 
-// dismissAll はノードをまとめて外し、外した数と、外せなかった数と最初の理由を返す。
-export async function dismissAll($: EngineInterface, nodes: GraphNode[]): Promise<string> {
-  const ran = await dismiss($, nodes.map(n => n.key))
+// dismissAll はノードの key をまとめて外し、外した数と、外せなかった数と最初の理由を返す。
+export async function dismissAll($: EngineInterface, refs: string[]): Promise<string> {
+  const ran = await dismiss($, refs)
   if ('failure' in ran) return `一覧から外せませんでした: ${ran.failure}`
   const { dismissed, failures } = ran.result
   const failed = failures[0] === undefined ? '' : ` (${failures.length} つは外せませんでした: ${failures[0].reason})`

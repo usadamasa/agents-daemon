@@ -67,6 +67,8 @@ const spawning = atom({ plugin: 'agents-daemon', key: 'spawning' } as const, '' 
 const moreRepos = atom({ plugin: 'agents-daemon', key: 'moreRepos' } as const, false)
 const note = atom({ plugin: 'agents-daemon', key: 'note' } as const, '')
 const menu = atom({ plugin: 'agents-daemon', key: 'menu' } as const, false)
+// dismissing はまとめて外す確かめの最中に、押したときに見えていた行の key。確かめている間に見えた行は消さない。
+const dismissing = atom({ plugin: 'agents-daemon', key: 'dismissing' } as const, [] as string[])
 
 // Op は詳細の操作のメニューの 1 行。選んだらすぐ run を走らせる (#308)。value は描画の key。group のある操作
 // (宛先を選ぶ Hand off など) は、group の見出しの下に枝で並べ、label には宛先だけを書く。sub があれば group の中で
@@ -136,6 +138,7 @@ export const registerDeps: Register = on => {
     const draft = await read($, note)
     const isMenu = await read($, menu)
     const isMore = await read($, moreRepos)
+    const toDismiss = await read($, dismissing)
     const self = await $.session.id()
 
     if (data === null) {
@@ -527,11 +530,27 @@ export const registerDeps: Register = on => {
               <Text dimColor>{withCompleted ? '› Hide completed' : '› Show completed'}</Text>
             </Button>
           )}
-          {/* 一覧の見せ方の操作なので、完了の出し入れと並べて置く。 */}
-          {ended.length > 0 && (
-            <Button key="dismiss-ended" plain onPress={() => void act(() => dismissAll($, ended))}>
+          {/* 一覧の見せ方の操作なので、完了の出し入れと並べて置く。記録は戻せないので、押したら確かめの行に替える。 */}
+          {toDismiss.length === 0 && ended.length > 0 && (
+            <Button key="dismiss-ended" plain onPress={() => void update($, dismissing, () => ended.map(n => n.key))}>
               <Text dimColor>{`› Dismiss ${ended.length} ended`}</Text>
             </Button>
+          )}
+          {toDismiss.length > 0 && (
+            <Box key="dismiss-confirm-row" flexDirection="row" columnGap={1}>
+              <Text>{`${toDismiss.length} つの記録を消します (戻せません)`}</Text>
+              <Button
+                key="dismiss-confirm"
+                onPress={() =>
+                  void update($, dismissing, () => []).then(() => act(() => dismissAll($, toDismiss)))
+                }
+              >
+                Dismiss
+              </Button>
+              <Button key="dismiss-cancel" dimColor onPress={() => void update($, dismissing, () => [])}>
+                Cancel
+              </Button>
+            </Box>
           )}
         </Box>
       </Box>

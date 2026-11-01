@@ -400,6 +400,8 @@ declare module 'claude-code' {
       told: string[]
       // showCompleted は依存図の pane で完了したノードを出すか (graph.rows_with_completed を描く)。既定は畳む。
       showCompleted: boolean
+      // dismissing はまとめて外す確かめの最中に、押したときに見えていた終了したセッションのタスクの key。空なら確かめていない。
+      dismissing: string[]
       // logged は出来事のログに slot ごとに最後に書いた中身 (hooks/log.ts)。同じものを書き直さないため。
       logged: Record<string, string>
     }

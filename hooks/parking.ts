@@ -3,6 +3,7 @@ import type { EngineInterface } from 'claude-code'
 import type { DepsData, DepsRepo, DepsSession, GraphNode, ParkingCard, ParkingSource, ParkSetRequest, SpawnResult } from '../types'
 import { runDaemon } from './daemon-bin'
 import type { Requests } from './daemon-bin'
+import { canDismiss } from './dismiss'
 import { fit } from './graph'
 import { logEvent, reason } from './log'
 
@@ -178,11 +179,10 @@ function basename(path: string): string {
   return path.replace(/\/+$/, '').split('/').pop() ?? path
 }
 
-// canAdopt はタスクのノードをパーキングへ移せるか。終了したセッションの未完了のタスクだけ。daemon が status.json を
-// 書いていない (daemon_running でも updated_at が無い) 依存図は、生きているセッションも exited と描くので出さない。
+// canAdopt はタスクのノードをパーキングへ移せるか。一覧から外せるタスク (canDismiss) のうち未完了のものだけ。
 // 押した後の判定はバイナリが status.json で改めて行う (`park adopt`)。
 export function canAdopt(node: GraphNode, self: string, data: DepsData): boolean {
-  return data.updated_at !== undefined && node.kind === 'task' && node.state === 'exited' && node.session_id !== undefined && node.session_id !== self
+  return canDismiss(node, self, data) && node.state !== 'completed'
 }
 
 // withNote は利用者が pane の補足欄に書いた文を、操作の文面の末尾に足す (#310)。空なら text のまま。

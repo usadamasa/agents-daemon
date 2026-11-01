@@ -1,6 +1,6 @@
 import type { EngineInterface } from 'claude-code'
 
-import type { DepsData, GraphNode, TaskDismissed } from '../types'
+import type { DepsData, GraphNode } from '../types'
 import { runDaemon } from './daemon-bin'
 import { reason } from './log'
 
@@ -9,34 +9,34 @@ import { reason } from './log'
 
 // canDismiss はノードを一覧から外せるか。終了したセッションのタスク (完了しているかを問わない) だけ。TodoWrite の
 // 項目はセッションの 1 リストなので 1 項目では消せず、置き場のノードには消す記録が無い。daemon が status.json を
-// 書いていない依存図は生きているセッションも live でないと描くので出さない (canAdopt と同じ)。
+// 書いていない依存図は生きているセッションも live でないと描くので出さない。
 export function canDismiss(node: GraphNode, self: string, data: DepsData): boolean {
   return data.updated_at !== undefined && node.kind === 'task' && !node.live && node.session_id !== undefined && node.session_id !== self
 }
 
 // dismissOne はノード 1 つを外し、結果の文面を返す。
 export async function dismissOne($: EngineInterface, node: GraphNode): Promise<string> {
-  const ran = await dismiss($, [node.key])
-  if ('failure' in ran) return `一覧から外せませんでした: ${ran.failure}`
-  const failure = ran.result.failures[0]
-  return failure === undefined ? `タスク「${node.title}」を一覧から外しました` : `一覧から外せませんでした: ${failure.reason}`
+  const failure = await dismiss($, node.key)
+  return failure === '' ? `タスク「${node.title}」を一覧から外しました` : `一覧から外せませんでした: ${failure}`
 }
 
-// dismissAll はノードの key をまとめて外し、外した数と、外せなかった数と最初の理由を返す。
+// dismissAll は key を 1 つずつ外し、外した数と、外せなかった数と最初の理由を返す。1 つが外せなくても残りは続ける。
 export async function dismissAll($: EngineInterface, refs: string[]): Promise<string> {
-  const ran = await dismiss($, refs)
-  if ('failure' in ran) return `一覧から外せませんでした: ${ran.failure}`
-  const { dismissed, failures } = ran.result
-  const failed = failures[0] === undefined ? '' : ` (${failures.length} つは外せませんでした: ${failures[0].reason})`
-  return `終了したセッションのタスク ${dismissed.length} つを一覧から外しました${failed}`
+  const failures: string[] = []
+  for (const ref of refs) {
+    const failure = await dismiss($, ref)
+    if (failure !== '') failures.push(failure)
+  }
+  const failed = failures[0] === undefined ? '' : ` (${failures.length} つは外せませんでした: ${failures[0]})`
+  return `終了したセッションのタスク ${refs.length - failures.length} つを一覧から外しました${failed}`
 }
 
-async function dismiss($: EngineInterface, refs: string[]): Promise<{ result: TaskDismissed } | { failure: string }> {
+// dismiss は ref を外し、失敗の理由を返す (外せたら空)。
+async function dismiss($: EngineInterface, ref: string): Promise<string> {
   try {
-    const { exitCode, stdout, stderr } = await runDaemon($, 'task dismiss', { refs, session_id: await $.session.id() })
-    if (exitCode !== 0) return { failure: stderr.trim() || `exit ${exitCode}` }
-    return { result: JSON.parse(stdout) as TaskDismissed }
+    const { exitCode, stderr } = await runDaemon($, 'task dismiss', { ref, session_id: await $.session.id() })
+    return exitCode === 0 ? '' : stderr.trim() || `exit ${exitCode}`
   } catch (err) {
-    return { failure: reason(err, 'task dismiss') }
+    return reason(err, 'task dismiss')
   }
 }

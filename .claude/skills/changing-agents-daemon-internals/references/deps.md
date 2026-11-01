@@ -42,7 +42,7 @@ longest chain の辺の罫線 (`marks`) は色付き。同じノードは 1 回�
 `Dismiss N ended` (いま行に出ている分だけ。畳んだ完了は `Show completed` のときだけ数える) で一覧から外す (#337)。
 `Dismiss N ended` は記録を戻せないので、押すと確かめの行 (`Dismiss` / `Cancel`) に替わり、押したときに見えていた
 行の key だけを消す。
-どちらも `task dismiss` に参照を渡し、バイナリが `park adopt` と同じく status.json でセッションの終了を確かめてから
+どちらも `task dismiss` に参照を 1 つずつ渡し (一括の数え上げは mod が持つ)、バイナリが `park adopt` と同じく status.json でセッションの終了を確かめてから
 `tasks/` の記録を消す。生きているセッションの記録は次の TaskList で戻るので対象にしない。TodoWrite の項目
 (記録はセッションの 1 リスト) と置き場のノード (記録が無い) も対象外。辺の記録は残り、相手の記録が無い辺は描かない
 (`sid:` の端点はセッションのタスクが無くなると `exited` の置き場のノードになるので、`Unlink` で外す)。

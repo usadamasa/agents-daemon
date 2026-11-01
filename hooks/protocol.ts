@@ -170,64 +170,20 @@ export const definitions = {
     }
   },
   "TaskDismissRequest": {
-    "description": "task dismiss の stdin。終了したセッションのタスク (完了しているかを問わない) の記録を消して依存図から外し、TaskDismissed を出す。セッションの終了は park adopt と同じく status.json で確かめ、確かめられないタスクは消さない",
+    "description": "task dismiss の stdin。終了したセッションのタスク (完了しているかを問わない) の記録を消して依存図から外し、{} を出す。セッションの終了は park adopt と同じく status.json で確かめ、確かめられなければ消さずに exit 1 で理由を返す",
     "type": "object",
     "additionalProperties": false,
     "required": [
-      "refs"
+      "ref"
     ],
     "properties": {
-      "refs": {
-        "type": "array",
-        "minItems": 1,
-        "items": {
-          "type": "string"
-        },
+      "ref": {
+        "type": "string",
         "description": "依存図のタスクのノードの key (task:<session_id>/<task_id>)"
       },
       "session_id": {
         "type": "string",
         "description": "操作したセッションの ID (ログに添える)"
-      }
-    }
-  },
-  "TaskDismissed": {
-    "description": "task dismiss の出力。dismissed は記録を消したタスク、failures は消さなかったタスクとその理由",
-    "type": "object",
-    "additionalProperties": false,
-    "required": [
-      "dismissed",
-      "failures"
-    ],
-    "properties": {
-      "dismissed": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        }
-      },
-      "failures": {
-        "type": "array",
-        "items": {
-          "$ref": "#/$defs/TaskDismissFailure"
-        }
-      }
-    }
-  },
-  "TaskDismissFailure": {
-    "description": "task dismiss で消さなかったタスク 1 つ",
-    "type": "object",
-    "additionalProperties": false,
-    "required": [
-      "ref",
-      "reason"
-    ],
-    "properties": {
-      "ref": {
-        "type": "string"
-      },
-      "reason": {
-        "type": "string"
       }
     }
   },

@@ -65,24 +65,12 @@ type ParkAdoptRequest struct {
 	SessionID string `json:"session_id,omitempty"`
 }
 
-// TaskDismissRequest は task dismiss の stdin。終了したセッションのタスク (完了しているかを問わない) の記録を消して依存図から外し、TaskDismissed を出す。セッションの終了は park adopt と同じく status.json で確かめ、確かめられないタスクは消さない。
+// TaskDismissRequest は task dismiss の stdin。終了したセッションのタスク (完了しているかを問わない) の記録を消して依存図から外し、{} を出す。セッションの終了は park adopt と同じく status.json で確かめ、確かめられなければ消さずに exit 1 で理由を返す。
 type TaskDismissRequest struct {
 	// 依存図のタスクのノードの key (task:<session_id>/<task_id>)。
-	Refs []string `json:"refs"`
+	Ref string `json:"ref"`
 	// 操作したセッションの ID (ログに添える)。
 	SessionID string `json:"session_id,omitempty"`
-}
-
-// TaskDismissed は task dismiss の出力。dismissed は記録を消したタスク、failures は消さなかったタスクとその理由。
-type TaskDismissed struct {
-	Dismissed []string             `json:"dismissed"`
-	Failures  []TaskDismissFailure `json:"failures"`
-}
-
-// TaskDismissFailure は task dismiss で消さなかったタスク 1 つ。
-type TaskDismissFailure struct {
-	Ref    string `json:"ref"`
-	Reason string `json:"reason"`
 }
 
 // EdgeAddRequest は edge add の stdin。before が済まないと after を始められない辺を書き、EdgeAdded を出す。同じ辺の二重登録は書き直すだけ。

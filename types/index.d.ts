@@ -65,24 +65,12 @@ export type ParkAdoptRequest = {
   session_id?: string
 }
 
-// task dismiss の stdin。終了したセッションのタスク (完了しているかを問わない) の記録を消して依存図から外し、TaskDismissed を出す。セッションの終了は park adopt と同じく status.json で確かめ、確かめられないタスクは消さない
+// task dismiss の stdin。終了したセッションのタスク (完了しているかを問わない) の記録を消して依存図から外し、{} を出す。セッションの終了は park adopt と同じく status.json で確かめ、確かめられなければ消さずに exit 1 で理由を返す
 export type TaskDismissRequest = {
   // 依存図のタスクのノードの key (task:<session_id>/<task_id>)
-  refs: string[]
+  ref: string
   // 操作したセッションの ID (ログに添える)
   session_id?: string
-}
-
-// task dismiss の出力。dismissed は記録を消したタスク、failures は消さなかったタスクとその理由
-export type TaskDismissed = {
-  dismissed: string[]
-  failures: TaskDismissFailure[]
-}
-
-// task dismiss で消さなかったタスク 1 つ
-export type TaskDismissFailure = {
-  ref: string
-  reason: string
 }
 
 // edge add の stdin。before が済まないと after を始められない辺を書き、EdgeAdded を出す。同じ辺の二重登録は書き直すだけ

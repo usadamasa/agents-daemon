@@ -125,11 +125,12 @@ printf '%s' '{"id":"<id>","status":"open"}' | agents-daemon park set            
 ### 終了したセッションのタスクを一覧から外す
 
 ```sh
-printf '%s' '{"refs":["task:<session_id>/<task_id>"]}' | agents-daemon task dismiss   # TaskDismissRequest → TaskDismissed
+printf '%s' '{"ref":"task:<session_id>/<task_id>"}' | agents-daemon task dismiss   # TaskDismissRequest → {}
 ```
 
-- 依存図の pane の `Dismiss` と `Dismiss N ended` が呼ぶ。終了したセッションのタスクの記録を、完了しているかを問わず消す
-- セッションの終了は動いている daemon の status.json で確かめ、確かめられない参照は消さずに `failures` へ理由を返す
+- 依存図の pane の `Dismiss` と `Dismiss N ended` (1 つずつ呼ぶ) が使う。終了したセッションのタスクの記録を、
+  完了しているかを問わず消す
+- セッションの終了は動いている daemon の status.json で確かめ、確かめられなければ消さずに exit 1 で理由を出す
 - 消した記録は戻せない。メモとして残すなら `To parking` (`park adopt`) を使う
 
 ### `--json`

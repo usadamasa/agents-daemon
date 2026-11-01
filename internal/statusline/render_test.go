@@ -210,6 +210,13 @@ func TestRender_rateLimits(t *testing.T) {
 		assertContains(t, out, "⏳ 5h 42%")
 		assertNotContains(t, out, "↻")
 	})
+	t.Run("five_hour が無く seven_day だけなら 7d を出し、色は 7d の使用率に従う", func(t *testing.T) {
+		v := fullView("Opus", "/tmp")
+		v.SevenDayPercent = intp(63)
+		out := render(t, v)
+		assertContains(t, out, orange+"⏳ 7d 63%")
+		assertNotContains(t, out, "5h")
+	})
 	t.Run("rate_limits が無ければ ⏳ を出さない", func(t *testing.T) {
 		assertNotContains(t, render(t, fullView("Opus", "/tmp")), "⏳")
 	})

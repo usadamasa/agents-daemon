@@ -42,6 +42,17 @@ func parkSet(stateDir string, s parking.Store, session, id, status, expect, dest
 	return item, nil
 }
 
+// parkWithdraw は s.Withdraw を走らせ、取り下げたメモを書く (park withdraw)。
+func parkWithdraw(stateDir string, s parking.Store, session, id string, now time.Time) (parking.Item, error) {
+	item, err := s.Withdraw(id, session)
+	if err != nil {
+		parkFailed(stateDir, now, "withdraw", session, err, kv("memo", id))
+		return item, err
+	}
+	_ = eventlog.Record(stateDir, session, "park.withdraw", []string{kv("memo", id)}, now)
+	return item, nil
+}
+
 // parkDiscard は s.DiscardBefore を走らせ、捨てたメモの id を書く (park discard)。id を書くのは、まとめて捨てたものを
 // park set で open に戻せるようにするため。
 func parkDiscard(stateDir string, s parking.Store, session string, days int, now time.Time) ([]parking.Item, error) {

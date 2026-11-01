@@ -89,6 +89,29 @@ func TestParkEvents(t *testing.T) {
 	}
 }
 
+// park withdraw は取り下げたメモと、取り下げられなかった理由を書く。
+func TestParkWithdrawEvents(t *testing.T) {
+	dir := t.TempDir()
+	s := parking.New(dir)
+	now := time.Now()
+	added, err := parkAdd(dir, s, protocol.ParkAddRequest{SessionID: "s1", Memo: parking.Entry{Kind: parking.KindScope, Title: "秘密の題"}}, "/src/a", tasklog.New(dir), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := added.Item.ID
+	if _, err := parkWithdraw(dir, s, "s2", id, now); err == nil {
+		t.Fatal("置いていないセッションが取り下げた")
+	}
+	if _, err := parkWithdraw(dir, s, "s1", id, now); err != nil {
+		t.Fatal(err)
+	}
+	got := eventLines(t, dir)
+	equalLines(t, got[1:], []string{
+		`park.failed op=withdraw session=s2 memo=` + id + ` reason="メモ ` + id + ` はこのセッションだけが置いたメモではないので取り下げない。依存図の pane の Discard で捨てる"`,
+		"park.withdraw session=s1 memo=" + id,
+	})
+}
+
 // park add は置いた結果と、読めなかった入力を出来事のログに書く。title は書かない。
 func TestParkWritesEventLog(t *testing.T) {
 	root := parkTestEnv(t)

@@ -260,6 +260,32 @@ func TestParkListAndSet(t *testing.T) {
 	}
 }
 
+// withdraw は置いたセッションだけが自分の open のメモを discarded にする。通らないときは pane で捨てるよう案内する。
+func TestParkWithdraw(t *testing.T) {
+	root := parkTestEnv(t)
+	home := filepath.Join(root, "src", "home", "a")
+	if err := os.MkdirAll(home, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	id := add(t, addReq(t, "s1", home, memoTitle)).Item.ID
+
+	if _, stderr, err := runPark(t, "withdraw", req(t, map[string]any{"id": id, "session_id": "s2"})); err == nil || !strings.Contains(stderr, "pane") {
+		t.Errorf("置いていないセッションが取り下げた、または pane を案内しない: %v %s", err, stderr)
+	}
+	for name, in := range map[string]string{
+		"session_id 無し": req(t, map[string]any{"id": id}),
+		"id 無し":         req(t, map[string]any{"session_id": "s1"}),
+	} {
+		if _, _, err := runPark(t, "withdraw", in); err == nil {
+			t.Errorf("%s: park withdraw が通った", name)
+		}
+	}
+	out, _, err := runPark(t, "withdraw", req(t, map[string]any{"id": id, "session_id": "s1"}))
+	if err != nil || decodeItem(t, out).Status != "discarded" {
+		t.Fatalf("park withdraw: %v\n%s", err, out)
+	}
+}
+
 // handed にするときは宛先 (to_session か to_repo) を同じ park set で書き、open に戻すと空にする。
 func TestParkSet_destination(t *testing.T) {
 	root := parkTestEnv(t)

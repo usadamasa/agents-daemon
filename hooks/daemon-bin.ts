@@ -10,6 +10,7 @@ import type {
   ParkDiscardRequest,
   ParkListRequest,
   ParkSetRequest,
+  ParkWithdrawRequest,
   SpawnRequest,
   TaskDismissRequest,
 } from '../types'
@@ -28,6 +29,7 @@ export type Requests = {
   'park set': ParkSetRequest
   'park list': ParkListRequest
   'park discard': ParkDiscardRequest
+  'park withdraw': ParkWithdrawRequest
   'park adopt': ParkAdoptRequest
   'edge add': EdgeAddRequest
   'edge rm': EdgeRemoveRequest

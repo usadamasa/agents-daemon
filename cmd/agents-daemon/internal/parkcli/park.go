@@ -24,7 +24,7 @@ func Commands() []*cobra.Command {
 	return []*cobra.Command{newParkCmd(), newSpawnCmd()}
 }
 
-// newParkCmd は `agents-daemon park add|set|list|discard|adopt` を組み立てる (parking)。
+// newParkCmd は `agents-daemon park add|set|list|discard|withdraw|adopt` を組み立てる (parking)。
 // 入力は stdin の JSON で受け、結果は JSON で stdout に出す。
 func newParkCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "park", Short: "パーキングロット (脇のメモ) を置く・書き換える・一覧する"}
@@ -75,6 +75,9 @@ func newParkCmd() *cobra.Command {
 		items, err := parkDiscard(p.StateDir(), parking.New(p.StateDir()), req.SessionID, req.Days, time.Now())
 		return protocol.ParkingItemList(items), err
 	}))
+	withdraw := sub("withdraw", "stdin の ParkWithdrawRequest で、そのセッションだけが置いた open のメモを discarded にし、ParkingItem を出す", statecmd.Decoded("ParkWithdrawRequest", func(p apppath.Paths, req protocol.ParkWithdrawRequest) (any, error) {
+		return parkWithdraw(p.StateDir(), parking.New(p.StateDir()), req.SessionID, req.ID, time.Now())
+	}))
 	adopt := sub("adopt", "stdin の ParkAdoptRequest で終了したセッションの未完了のタスクをメモにし、ParkAdded を出す", statecmd.Decoded("ParkAdoptRequest", func(p apppath.Paths, req protocol.ParkAdoptRequest) (any, error) {
 		sessionID, taskID, ok := ref.ParseTask(req.Ref)
 		if !ok {
@@ -85,6 +88,6 @@ func newParkCmd() *cobra.Command {
 		}
 		return parkAdopt(p.StateDir(), parking.New(p.StateDir()), tasklog.New(p.StateDir()), req.SessionID, sessionID, taskID, exited, time.Now())
 	}))
-	cmd.AddCommand(add, set, list, discard, adopt)
+	cmd.AddCommand(add, set, list, discard, withdraw, adopt)
 	return cmd
 }

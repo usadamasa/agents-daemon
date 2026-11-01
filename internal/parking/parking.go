@@ -191,6 +191,46 @@ func (s Store) Set(id, status, from, to string) (Item, string, error) {
 	return item, before, err
 }
 
+// Withdraw は sessionID のセッションが置いた open のメモ id を discarded にし、書いた後のメモを返す。置いた本人が
+// 前提の消えたメモを取り下げる経路 (park tool の unpark)。sources のどれかがほかのセッションなら、そのセッションの
+// 前提はまだ残りうるので書き換えない。open だけを書き換えるので、pane の Discard と同じ遷移になる (models/handoff の
+// Discard)。
+func (s Store) Withdraw(id, sessionID string) (Item, error) {
+	if s.Dir == "" {
+		return Item{}, errors.New("parking の置き場所が無い")
+	}
+	if !statefile.ValidSessionID(id) {
+		return Item{}, fmt.Errorf("id %q はファイル名に使えない", id)
+	}
+	if sessionID == "" {
+		return Item{}, errors.New("session ID が空")
+	}
+	var item Item
+	err := s.locked(func(dir string) error {
+		var ok bool
+		item, ok = readItem(filepath.Join(dir, id+".json"))
+		if !ok {
+			return fmt.Errorf("メモ %s が無い", id)
+		}
+		switch item.Status {
+		case StatusOpen:
+		case StatusHanded:
+			// handed のメモは pane の一覧に出ず、渡した先のタスクの詳細にだけ出る。タスクを閉じればどこにも出なくなる。
+			return fmt.Errorf("メモ %s は渡した後 (handed) なので書き換えない。このメモからタスクを作っていれば、そのタスクを TaskUpdate で閉じる", id)
+		default:
+			return fmt.Errorf("メモ %s の status は %s なので取り下げない (取り下げられるのは open だけ)", id, item.Status)
+		}
+		for _, src := range item.Sources {
+			if src.SessionID != sessionID {
+				return fmt.Errorf("メモ %s はこのセッションだけが置いたメモではないので取り下げない。依存図の pane の Discard で捨てる", id)
+			}
+		}
+		item.Status = StatusDiscarded
+		return write(dir, item)
+	})
+	return item, err
+}
+
 // DiscardBefore は open のメモのうち、最後に置かれた時刻 (sources の最大の at) が before より前の
 // ものを discarded にし、捨てたメモを id の順に返す。該当なしは空の配列。pane の「古いメモをまとめて捨てる」が
 // 呼び、「古い」の日数は呼び出し側 (mod) が持つ。

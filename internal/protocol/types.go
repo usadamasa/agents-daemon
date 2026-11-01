@@ -57,6 +57,14 @@ type ParkDiscardRequest struct {
 	SessionID string `json:"session_id,omitempty"`
 }
 
+// ParkWithdrawRequest は park withdraw の stdin。session_id のセッションだけが置いた open のメモを discarded にし、ParkingItem を出す。park tool の unpark が呼ぶ。ほかのセッションも置いたメモと open でないメモは書き換えずに exit 1 で理由を返す。
+type ParkWithdrawRequest struct {
+	// メモの id。
+	ID string `json:"id"`
+	// 取り下げるセッションの ID。メモの sources のセッションがすべてこれのときだけ通す。
+	SessionID string `json:"session_id"`
+}
+
 // ParkAdoptRequest は park adopt の stdin。終了したセッションの未完了のタスクを出自 adopted (種類 scope) のメモにし、タスクの記録を消して ParkAdded を出す。セッションの終了は、動いている daemon がタスクの記録より後に書いた status.json に pane が無いことで確かめる。
 type ParkAdoptRequest struct {
 	// 依存図のタスクのノードの key (task:<session_id>/<task_id>)。

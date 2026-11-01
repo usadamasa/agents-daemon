@@ -365,6 +365,47 @@ func TestSet_from(t *testing.T) {
 	}
 }
 
+// Withdraw は置いたセッションが自分の open のメモを discarded にする。ほかのセッションも置いたメモ、渡した後のメモは
+// 書き換えない。
+func TestWithdraw(t *testing.T) {
+	s := New(t.TempDir())
+	own := mustAdd(t, s, testRepo, aside("own"), source("s1", ""))
+	shared := mustAdd(t, s, testRepo, aside("shared"), source("s1", ""))
+	mustAdd(t, s, testRepo, aside("shared"), source("s2", ""))
+	handed := mustAdd(t, s, testRepo, aside("handed"), source("s1", ""))
+	if _, _, err := s.Set(handed.ID, StatusHanded, StatusOpen, ToSession("S2")); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.Withdraw(own.ID, "s2"); err == nil {
+		t.Error("置いていないセッションが取り下げた")
+	}
+	if _, err := s.Withdraw(shared.ID, "s1"); err == nil {
+		t.Error("ほかのセッションも置いたメモを取り下げた")
+	}
+	// 渡した後のメモは pane の一覧に出ないので、pane ではなく、作ったタスクを閉じるよう案内する。
+	if _, err := s.Withdraw(handed.ID, "s1"); err == nil || !strings.Contains(err.Error(), "TaskUpdate") {
+		t.Errorf("渡した後のメモを取り下げた、またはタスクを閉じるよう案内しない: %v", err)
+	}
+	if _, err := s.Withdraw("../x", "s1"); err == nil {
+		t.Error("ファイル名に使えない id を通した")
+	}
+	if _, err := s.Withdraw(own.ID, ""); err == nil {
+		t.Error("session ID が空なのに通した")
+	}
+	got, err := s.Withdraw(own.ID, "s1")
+	if err != nil || got.Status != StatusDiscarded {
+		t.Fatalf("Withdraw() = %+v, %v", got, err)
+	}
+	open, _ := s.Find("", StatusOpen)
+	if len(open) != 1 || open[0].ID != shared.ID {
+		t.Errorf("open = %+v, want shared だけ", open)
+	}
+	if list, _ := s.Find("", StatusHanded); len(list) != 1 || list[0].HandedTo != "sid:S2" {
+		t.Errorf("handed が変わった: %+v", list)
+	}
+}
+
 // DiscardBefore は最後に置かれた時刻が before より前の open のメモを discarded にし、捨てたメモを返す。
 // 置き直されたメモは最後の source の時刻で見る。open でないメモは触らない。
 func TestDiscardBefore(t *testing.T) {

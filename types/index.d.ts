@@ -57,6 +57,14 @@ export type ParkDiscardRequest = {
   session_id?: string
 }
 
+// park withdraw の stdin。session_id のセッションだけが置いた open のメモを discarded にし、ParkingItem を出す。park tool の unpark が呼ぶ。ほかのセッションも置いたメモと open でないメモは書き換えずに exit 1 で理由を返す
+export type ParkWithdrawRequest = {
+  // メモの id
+  id: string
+  // 取り下げるセッションの ID。メモの sources のセッションがすべてこれのときだけ通す
+  session_id: string
+}
+
 // park adopt の stdin。終了したセッションの未完了のタスクを出自 adopted (種類 scope) のメモにし、タスクの記録を消して ParkAdded を出す。セッションの終了は、動いている daemon がタスクの記録より後に書いた status.json に pane が無いことで確かめる
 export type ParkAdoptRequest = {
   // 依存図のタスクのノードの key (task:<session_id>/<task_id>)

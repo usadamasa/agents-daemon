@@ -15,6 +15,7 @@
 //	park.add                  メモを置いた (memo、kind、created、task)
 //	park.set                  メモの status を書き換えた (memo、from、to)
 //	park.discard              古い open のメモをまとめて捨てた (days、memos、ids)
+//	park.withdraw             置いたセッションが自分の open のメモを取り下げた (memo)
 //	park.adopt                終了したセッションのタスクをメモにした (from_session、task、memo、created)
 //	park.failed               park の操作が失敗した (op、reason)
 //	task.dismiss              終了したセッションのタスクの記録を消した (from_session、task)

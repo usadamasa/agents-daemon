@@ -99,6 +99,7 @@ func TestRootCmd_jsonFlag(t *testing.T) {
 		"agents-daemon park discard":    true,
 		"agents-daemon park list":       true,
 		"agents-daemon park set":        true,
+		"agents-daemon park withdraw":   true,
 		"agents-daemon prune-worktrees": true,
 		"agents-daemon simulate":        true,
 		"agents-daemon spawn":           true,

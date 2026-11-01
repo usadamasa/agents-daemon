@@ -732,9 +732,39 @@ test('終了したセッションのタスクのうち、いま見えている�
   await ui.press({ key: 'fold' })
   expect(await ui.find({ key: 'dismiss-ended', text: /Dismiss 2 ended/ })).toBeDefined()
   w.ran.length = 0
+  // 戻せない削除なので、押しただけでは消さずに確かめる。
   await ui.press({ key: 'dismiss-ended' })
+  expect(operations(w.ran)).toEqual([])
+  expect((await ui.find({ key: 'dismiss-confirm-row' }))?.text).toMatch(/2 つの記録を消します \(戻せません\)/)
+  expect(await ui.find({ key: 'dismiss-ended' })).toBeUndefined()
+  await ui.press({ key: 'dismiss-confirm' })
   expect(operations(w.ran)).toEqual([[BIN, 'task', 'dismiss', { refs: ['task:G/1', 'task:G/2'], session_id: 'SELF' }]])
   expect(await ui.find({ type: 'Text', text: /終了したセッションのタスク 2 つを一覧から外しました/ })).toBeDefined()
+  expect(await ui.find({ key: 'dismiss-confirm-row' })).toBeUndefined()
+})
+
+test('まとめて外す確かめで Cancel を選ぶと、何も消さずにボタンへ戻る (#337)', async ($, on) => {
+  const w = dismissWorld(on, DEPS, { dismissed: ['task:G/1'], failures: [] })
+  await $.command.run(OPEN_DEPS)
+  const ui = await mount($)
+  w.ran.length = 0
+  await ui.press({ key: 'dismiss-ended' })
+  await ui.press({ key: 'dismiss-cancel' })
+  expect(operations(w.ran)).toEqual([])
+  expect(await ui.find({ key: 'dismiss-confirm-row' })).toBeUndefined()
+  expect(await ui.find({ key: 'dismiss-ended', text: /Dismiss 1 ended/ })).toBeDefined()
+})
+
+test('確かめで消すのは押したときに見えていた行だけで、その後に増えた行は消さない (#337)', async ($, on) => {
+  const w = dismissWorld(on, DEPS, { dismissed: ['task:G/1'], failures: [] })
+  await $.command.run(OPEN_DEPS)
+  const ui = await mount($)
+  await ui.press({ key: 'dismiss-ended' })
+  // 確かめている間に Show completed で終了したセッションの完了が見えても、押したときの 1 つだけを渡す。
+  await ui.press({ key: 'fold' })
+  w.ran.length = 0
+  await ui.press({ key: 'dismiss-confirm' })
+  expect(operations(w.ran)).toEqual([[BIN, 'task', 'dismiss', { refs: ['task:G/1'], session_id: 'SELF' }]])
 })
 
 test('まとめて外すときに外せなかったタスクがあれば、数と最初の理由を添える (#337)', async ($, on) => {
@@ -743,6 +773,7 @@ test('まとめて外すときに外せなかったタスクがあれば、数�
   const ui = await mount($)
   await ui.press({ key: 'fold' })
   await ui.press({ key: 'dismiss-ended' })
+  await ui.press({ key: 'dismiss-confirm' })
   expect(await ui.find({ type: 'Text', text: /タスク 1 つを一覧から外しました \(1 つは外せませんでした: 理由\)/ })).toBeDefined()
 })
 

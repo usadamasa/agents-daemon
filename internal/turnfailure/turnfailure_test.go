@@ -137,3 +137,10 @@ func TestPrune(t *testing.T) {
 		t.Errorf("ゼロ値の Prune() = %d, %v, want 0, nil", n, err)
 	}
 }
+
+// ゼロ値の Store (state を持たない daemon のテスト) は読みで「無い」を返す。
+func TestLoad_zeroStore(t *testing.T) {
+	if got, err := (Store{}).Load("s1"); got != nil || err != nil {
+		t.Errorf("ゼロ値の Load() = %v, %v, want nil, nil", got, err)
+	}
+}

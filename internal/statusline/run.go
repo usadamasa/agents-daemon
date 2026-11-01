@@ -14,7 +14,7 @@ import (
 
 // SpendCapEnv は月額上限 (USD) を渡す環境変数。設定したときだけ cost の合算を記録し、表示する。
 // rate_limits が届かない契約 (Enterprise の seat) 向けで、届くプロファイルでは設定しない。
-// 上限は人ごとに決まる固定値なので settings の env で渡す (claude-config の work profile)。
+// 上限は人ごとに決まる固定値なので settings の env で渡す (agents-config の work profile)。
 const SpendCapEnv = "CLAUDE_STATUSLINE_SPEND_CAP"
 
 // Run は `agents-daemon statusline` の本体。stdin を読み切り、state file を書いてから描画を組む。

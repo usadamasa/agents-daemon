@@ -113,8 +113,8 @@ func TestIngest_clearIsPerSession(t *testing.T) {
 
 func TestIngest_rejects(t *testing.T) {
 	tests := map[string]string{
-		"壊れた JSON":          `{"session_id": `,
-		"扱わない hook の入力":     `{"session_id": "s1", "hook_event_name": "PostToolUse"}`,
+		"壊れた JSON":           `{"session_id": `,
+		"扱わない hook の入力":      `{"session_id": "s1", "hook_event_name": "PostToolUse"}`,
 		"ファイル名に使えない session": `{"session_id": "../x", "hook_event_name": "StopFailure", "error": "rate_limit"}`,
 	}
 	for name, input := range tests {

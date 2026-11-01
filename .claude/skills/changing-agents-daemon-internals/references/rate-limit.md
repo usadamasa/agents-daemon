@@ -82,6 +82,16 @@ out of credits のいずれかがあれば、待機に入らず `hard-cap` と�
 文言は `detect` が持つ。上流も同じ扱いで、retry watchdog は organization
 spend-limit と out-of-credits で即座に失敗する。
 
+<!-- cc-premise: 2.1.316 limit-screen Fable の上限の行とダイアログの文言 (バイナリのテンプレート、実機未確認) -->
+
+Fable のモデル単位の週次上限 (`/usage` の `Current week (Fable)` の行) も同じ扱いにする。上限の行は
+`You've hit your Fable … · resets …` の形で、解除が 24 時間以内なら時刻だけが付いて二重シグナルを満たす。
+待機に入ると 5 時間ウィンドウの解除で起き、週次の上限にまた弾かれる。続けて出るダイアログは別モデルか
+使用クレジットで続けるかを聞き、Enter が選ぶ既定の選択肢はクレジットで続ける側にある。解除時刻は statusline の
+stdin に来ず ([statusline-state.md](statusline-state.md))、モデルを切り替えるのは本体と利用者の判断なので、
+daemon は待たずに `hard-cap` として手を引く。Opus / Sonnet 単位の週次上限はクレジットを聞くダイアログを出さず、
+全モデル共通の週次上限と同じく「待機時刻の決め方」の末尾の制約の中に残る。
+
 ## lower-priority mode の画面は印を付けて残す
 
 <!-- cc-premise: 2.1.310 limit-screen lower-priority mode の作業中と終わりの通知 -->
@@ -203,7 +213,8 @@ own が過去で画面が未来のときは、own が前ウィンドウの残骸
 起床時刻が 5 時間先と算出されていた。
 
 見ているのは 5 時間ウィンドウだけ。週次上限で止まった pane はこの計算では正しく扱えず、
-送信 → 再度上限 → 再試行を `maxRetries` まで繰り返してクールダウンに入る。
+送信 → 再度上限 → 再試行を `maxRetries` まで繰り返してクールダウンに入る。Fable の週次上限だけは待機に入らない
+(「待っても解除されない上限では待機に入らない」)。
 
 **1 と 4 には鮮度 (`stateMaxAgeSeconds`) を要求しない。** `resets_at` は絶対時刻で、使用率の
 ように時間で腐る値ではない。むしろ上限で止まったセッションには新しい数値が届かない

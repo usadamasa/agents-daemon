@@ -168,6 +168,31 @@ func TestTick_恒久的な上限では待機に入らない(t *testing.T) {
 	assertNoSend(t, client)
 }
 
+func TestTick_待機中にFableの上限へ変わったら送らず監視へ戻る(t *testing.T) {
+	// 5 時間ウィンドウの解除で起きても Fable の上限は週次なので解除されていない。送ると再び弾かれ、
+	// 開いたダイアログでは Enter がクレジットを使う選択肢を選びうる。
+	screen := "⏺ You've hit your Fable limit · resets 3pm (Asia/Tokyo)\n\n" +
+		"You've reached your Fable limit\n" +
+		"❯ 1. Continue with Opus 5.5"
+	client := &multiplexerfake.Client{PaneReadFunc: readReturning(screen, nil)}
+	deps := newTestDeps(t, config.Default(), client)
+	pane := newTestPane(multiplexer.AgentStatusIdle, true)
+	now := time.Now()
+	ps := &PaneState{Status: StatusWaiting, WaitUntil: now.Add(-time.Second), Attempts: 1}
+
+	outcome, err := Tick(context.Background(), deps, pane, ps, nil, now)
+	if err != nil {
+		t.Fatalf("Tick() error = %v", err)
+	}
+	if outcome != OutcomeHardCap {
+		t.Errorf("Outcome = %v, want %v", outcome, OutcomeHardCap)
+	}
+	if ps.Status != StatusMonitoring || ps.Attempts != 0 {
+		t.Errorf("Status = %v Attempts = %d, want monitoring / 0", ps.Status, ps.Attempts)
+	}
+	assertNoSend(t, client)
+}
+
 func assertNoSend(t *testing.T, client *multiplexerfake.Client) {
 	t.Helper()
 	for _, call := range client.Calls {

@@ -1,5 +1,9 @@
 # Changelog
 
+## [2026.1101.3](https://github.com/usadamasa/agents-daemon/compare/2026.1101.2...2026.1101.3) - 2026-11-01
+
+- dream skill の参照を改名した agents-config-management へ直す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/350
+
 ## [2026.1101.2](https://github.com/usadamasa/agents-daemon/compare/2026.1101.1...2026.1101.2) - 2026-11-01
 
 - パーキングロットのメモを渡す文面で、先に前提を確かめさせる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/347

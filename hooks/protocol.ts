@@ -169,6 +169,24 @@ export const definitions = {
       }
     }
   },
+  "TaskDismissRequest": {
+    "description": "task dismiss の stdin。終了したセッションのタスク (完了しているかを問わない) の記録を消して依存図から外し、{} を出す。セッションの終了は park adopt と同じく status.json で確かめ、確かめられなければ消さずに exit 1 で理由を返す",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "ref"
+    ],
+    "properties": {
+      "ref": {
+        "type": "string",
+        "description": "依存図のタスクのノードの key (task:<session_id>/<task_id>)"
+      },
+      "session_id": {
+        "type": "string",
+        "description": "操作したセッションの ID (ログに添える)"
+      }
+    }
+  },
   "EdgeAddRequest": {
     "description": "edge add の stdin。before が済まないと after を始められない辺を書き、EdgeAdded を出す。同じ辺の二重登録は書き直すだけ",
     "type": "object",

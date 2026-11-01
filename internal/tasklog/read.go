@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/statefile"
 	"github.com/usadamasa/agents-daemon/internal/tasklog/record"
@@ -76,6 +77,20 @@ func (s Store) Remove(sessionID, taskID string) error {
 		return fmt.Errorf("タスクの記録を消せない: %w", err)
 	}
 	return nil
+}
+
+// Dismiss は終了したセッションのタスク 1 つの記録を、完了しているかを問わず消す (依存図の Dismiss、#337)。
+// exited はセッションが記録の時刻より後に終了したと確かめる (daemonstate.SessionExited)。確かめられなければ消さない。
+// 生きているセッションの記録は次の TaskList で戻るうえ、未完了のものを消すと LiveTaskKept を破るため。
+func (s Store) Dismiss(sessionID, taskID string, exited func(sessionID string, after time.Time) error) error {
+	t, ok := s.Get(sessionID, taskID)
+	if !ok {
+		return fmt.Errorf("タスク %s/%s が無い", sessionID, taskID)
+	}
+	if err := exited(sessionID, t.UpdatedAt); err != nil {
+		return fmt.Errorf("タスク %s/%s は消さない: %w", sessionID, taskID, err)
+	}
+	return s.Remove(sessionID, taskID)
 }
 
 func (s Store) taskPath(sessionID, taskID string) (string, bool) {

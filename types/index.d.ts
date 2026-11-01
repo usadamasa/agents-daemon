@@ -65,6 +65,14 @@ export type ParkAdoptRequest = {
   session_id?: string
 }
 
+// task dismiss の stdin。終了したセッションのタスク (完了しているかを問わない) の記録を消して依存図から外し、{} を出す。セッションの終了は park adopt と同じく status.json で確かめ、確かめられなければ消さずに exit 1 で理由を返す
+export type TaskDismissRequest = {
+  // 依存図のタスクのノードの key (task:<session_id>/<task_id>)
+  ref: string
+  // 操作したセッションの ID (ログに添える)
+  session_id?: string
+}
+
 // edge add の stdin。before が済まないと after を始められない辺を書き、EdgeAdded を出す。同じ辺の二重登録は書き直すだけ
 export type EdgeAddRequest = {
   before: EdgeTarget
@@ -380,6 +388,8 @@ declare module 'claude-code' {
       told: string[]
       // showCompleted は依存図の pane で完了したノードを出すか (graph.rows_with_completed を描く)。既定は畳む。
       showCompleted: boolean
+      // dismissing はまとめて外す確かめの最中に、押したときに見えていた終了したセッションのタスクの key。空なら確かめていない。
+      dismissing: string[]
       // logged は出来事のログに slot ごとに最後に書いた中身 (hooks/log.ts)。同じものを書き直さないため。
       logged: Record<string, string>
     }

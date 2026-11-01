@@ -122,10 +122,21 @@ printf '%s' '{"id":"<id>","status":"open"}' | agents-daemon park set            
   移したメモ (種類は scope)
 - handed のメモは宛先 `handed_to` (`sid:<session_id>` か、新しく起こしたセッションの `repo:<path>`) を持つ
 
+### 終了したセッションのタスクを一覧から外す
+
+```sh
+printf '%s' '{"ref":"task:<session_id>/<task_id>"}' | agents-daemon task dismiss   # TaskDismissRequest → {}
+```
+
+- 依存図の pane の `Dismiss` と `Dismiss N ended` (1 つずつ呼ぶ) が使う。終了したセッションのタスクの記録を、
+  完了しているかを問わず消す
+- セッションの終了は動いている daemon の status.json で確かめ、確かめられなければ消さずに exit 1 で理由を出す
+- 消した記録は戻せない。メモとして残すなら `To parking` (`park adopt`) を使う
+
 ### `--json`
 
 root のグローバルオプション。付けると、人が読む形の代わりに JSON を 1 つ stdout に出す。
-元から JSON を出す `deps`、`park`、`edge`、`spawn` は付けても変わらない。
+元から JSON を出す `deps`、`park`、`edge`、`task`、`spawn` は付けても変わらない。
 stdout を Claude Code や mod が読む hook 用のコマンド (`statusline`、`ingest-statusline`、`ingest-task`、`ingest-turn-failure`、`event-log`) と、
 子プロセスの出力を流すだけの `update` は対応しない。付けると、文字の出力を JSON と思い込んで読む事故を避けるため
 error で止まる。flag の組み合わせで JSON にできないもの (`daemon --foreground`、`prune-worktrees --hook`、

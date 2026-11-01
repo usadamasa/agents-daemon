@@ -11,6 +11,7 @@ import type {
   ParkListRequest,
   ParkSetRequest,
   SpawnRequest,
+  TaskDismissRequest,
 } from '../types'
 
 // daemonBin は hooks/lib/daemon-bin.sh と同じ規則でバイナリの置き場を返す。
@@ -30,6 +31,7 @@ export type Requests = {
   'park adopt': ParkAdoptRequest
   'edge add': EdgeAddRequest
   'edge rm': EdgeRemoveRequest
+  'task dismiss': TaskDismissRequest
   spawn: SpawnRequest
   'event-log': EventLogRequest
 }

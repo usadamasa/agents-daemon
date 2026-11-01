@@ -17,6 +17,8 @@
 //	park.discard              古い open のメモをまとめて捨てた (days、memos、ids)
 //	park.adopt                終了したセッションのタスクをメモにした (from_session、task、memo、created)
 //	park.failed               park の操作が失敗した (op、reason)
+//	task.dismiss              終了したセッションのタスクの記録を消した (tasks、refs)
+//	task.dismiss.failed       タスクの記録を消さなかった (ref、reason)
 //	mod.tool-register.failed  session.start で park の tool を登録できなかった (reason)
 //	mod.deps.open             依存図の pane を開いた (repos、sessions、nodes、memos、daemon_running)
 //	mod.deps.changed          repo・セッション・ノード・メモの数か daemon の稼働が変わった (同上)

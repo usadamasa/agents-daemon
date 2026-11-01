@@ -67,10 +67,54 @@ func TestIngest_missingErrorIsUnknown(t *testing.T) {
 	}
 }
 
+// turn が成功で終わった (Stop) か、次の turn が始まった (UserPromptSubmit) ら記録を消す。記録が残るのは
+// 「最後の turn が API error で終わり、次の turn がまだ始まっていない」間だけになる。
+func TestIngest_clearsOnStopAndPrompt(t *testing.T) {
+	for _, event := range []string{"Stop", "UserPromptSubmit"} {
+		t.Run(event, func(t *testing.T) {
+			s := New(t.TempDir())
+			if err := s.Ingest([]byte(rateLimitInput), now); err != nil {
+				t.Fatal(err)
+			}
+			if err := s.Ingest([]byte(`{"session_id": "s1", "hook_event_name": "`+event+`"}`), now.Add(time.Minute)); err != nil {
+				t.Fatalf("Ingest(%s) error = %v", event, err)
+			}
+			if got, err := s.Load("s1"); got != nil || err != nil {
+				t.Errorf("Load() = %+v, %v, want 消えている", got, err)
+			}
+		})
+	}
+}
+
+// 記録が無いセッションの Stop は何もしない (失敗しない、ディレクトリも作らない)。
+func TestIngest_clearWithoutRecord(t *testing.T) {
+	dir := t.TempDir()
+	if err := New(dir).Ingest([]byte(`{"session_id": "s1", "hook_event_name": "Stop"}`), now); err != nil {
+		t.Fatalf("Ingest() error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "turn-failures")); !os.IsNotExist(err) {
+		t.Errorf("turn-failures が作られた: %v", err)
+	}
+}
+
+// 別のセッションの Stop は消さない。
+func TestIngest_clearIsPerSession(t *testing.T) {
+	s := New(t.TempDir())
+	if err := s.Ingest([]byte(rateLimitInput), now); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Ingest([]byte(`{"session_id": "s2", "hook_event_name": "Stop"}`), now); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := s.Load("s1"); got == nil || err != nil {
+		t.Errorf("Load(s1) = %v, %v, want 残っている", got, err)
+	}
+}
+
 func TestIngest_rejects(t *testing.T) {
 	tests := map[string]string{
 		"壊れた JSON":          `{"session_id": `,
-		"別の hook の入力":       `{"session_id": "s1", "hook_event_name": "Stop"}`,
+		"扱わない hook の入力":     `{"session_id": "s1", "hook_event_name": "PostToolUse"}`,
 		"ファイル名に使えない session": `{"session_id": "../x", "hook_event_name": "StopFailure", "error": "rate_limit"}`,
 	}
 	for name, input := range tests {

@@ -44,12 +44,14 @@ function answer(created: boolean) {
 
 const START = { cwd: CWD, surface: 'terminal', isInteractive: true } as const
 
+type Registered = { name: string; description: string; isDeferred: boolean; inputSchema: any }
+
 test('session.start で park の tool を登録する', async ($, on) => {
   const w = world(on, answer(true))
   await $.session.start(START)
 
-  expect(w.tools.length).toBe(1)
-  const tool = w.tools[0] as { name: string; description: string; isDeferred: boolean; inputSchema: any }
+  expect(w.tools.map(t => t.name)).toEqual(['park', 'unpark'])
+  const tool = w.tools[0] as Registered
   expect(tool.name).toBe('park')
   // 「聞く」の代わりとして prompt の tool 一覧に並べる。ToolSearch の裏に回さない。
   expect(tool.isDeferred).toBe(false)
@@ -60,6 +62,14 @@ test('session.start で park の tool を登録する', async ($, on) => {
   expect(tool.inputSchema.properties.cwd).toBeUndefined()
   expect(tool.description).toMatch(/進めるのに要る判断/)
   expect(tool.description).toMatch(/危ない操作の確認/)
+  // 置いたメモの前提が作業の中で消えたら、unpark で取り下げる。
+  expect(tool.description).toMatch(/前提が.*消えたら.*unpark/)
+
+  // unpark はメモの id だけを受ける。
+  const unpark = w.tools[1] as Registered
+  expect(unpark.isDeferred).toBe(false)
+  expect(unpark.inputSchema.required).toEqual(['id'])
+  expect(Object.keys(unpark.inputSchema.properties)).toEqual(['id'])
 
   // session.start ではメモの一覧も依存図も読まない。
   expect(w.ran.map(r => r.argv)).toEqual([])
@@ -116,4 +126,28 @@ test('park add が失敗したら、置けなかった理由を model へ返す'
   const res = await $.tool.call({ tool: TOOL, kind: 'decision', title: 't' } as never)
   // deny の文面は model にエラーの結果として届く。
   expect(res.deny).toMatch(/^メモを置けませんでした: kind "decision"/)
+})
+
+const UNPARK = 'mcp__agents-daemon__unpark'
+const ID = '20261019T010000-abcd1234'
+
+test('unpark はメモの id とこのセッションの ID を park withdraw に渡す', async ($, on) => {
+  const w = world(on, () => output(JSON.stringify({ ...item(ID), status: 'discarded' })))
+  await $.session.start(START)
+  w.ran.length = 0
+
+  const res = await $.tool.call({ tool: UNPARK, id: ID, session_id: 'OTHER' } as never)
+
+  // 置いたセッションかと open かの判定はバイナリが持つ。session_id は model に書かせない。
+  expect(w.ran[0]?.argv).toEqual([BIN, 'park', 'withdraw'])
+  expect(JSON.parse(w.ran[0]?.stdin ?? '')).toEqual({ id: ID, session_id: 'SELF' })
+  expect(String(res.result)).toMatch(new RegExp(`^メモ ${ID} を取り下げました`))
+})
+
+test('unpark が失敗したら、取り下げられなかった理由を model へ返す', async ($, on) => {
+  world(on, () => output('', 1, `メモ ${ID} はほかのセッションも置いたので取り下げない。pane の Discard で捨てる`))
+  await $.session.start(START)
+
+  const res = await $.tool.call({ tool: UNPARK, id: ID } as never)
+  expect(res.deny).toMatch(/^メモを取り下げられませんでした: .*pane の Discard/)
 })

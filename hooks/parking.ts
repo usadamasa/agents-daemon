@@ -191,14 +191,22 @@ export function withNote(text: string, note: string): string {
   return said === '' ? text : `${text}\n利用者からの補足: ${said}`
 }
 
+// PREMISE_CHECK は渡す文面で依頼の前に置く確かめ。メモは置いた時点の前提で書かれていて、渡すまでにレビューや別の
+// 変更で前提が消えていることがある。理由の 1 行は渡した先の応答になる (自セッションならユーザーの手番への応答)。
+// 渡したメモは handed になり pane の一覧から消えるので、受け手はメモの status を触らずに終えてよい。
+const PREMISE_CHECK = '先に、メモの前提 (詳細と関係するファイル) が今のコードと計画で成り立つかを確かめてください。'
+const PREMISE_GONE = '前提が成り立たないとき (該当箇所が無くなった、別の変更で直った) は、その理由を 1 行で返して終えてください。'
+
 // taskText は「タスクにする」で送る文面。着手の時期は受け手の計画に任せる。依存図はタスクの description に
 // 書かれた id でメモと照合する (deps/graph)。
 export function taskText(memo: ParkingCard, note = ''): string {
   const text = [
     `パーキングロットのメモ「${memo.title}」(種類: ${kindLabel(memo)}) をタスクにしてください。` +
-      `TaskCreate で作り、タスクの description にメモの id (${memo.id}) を入れてください。` +
+      PREMISE_CHECK +
+      `成り立つときは TaskCreate で作り、タスクの description にメモの id (${memo.id}) を入れてください。` +
       `既にこのメモを扱うタスクがあれば、新しく作らずにその description に id を書き足すだけで構いません。` +
-      `着手の時期は今の計画 (タスクの依存) に従ってください。`,
+      `着手の時期は今の計画 (タスクの依存) に従ってください。` +
+      PREMISE_GONE,
     ...context(memo),
   ].join('\n')
   return withNote(text, note)
@@ -207,7 +215,10 @@ export function taskText(memo: ParkingCard, note = ''): string {
 // issueText は「issue にするよう頼む」で送る文面。
 export function issueText(memo: ParkingCard, repo: string, note = ''): string {
   const text = [
-    `パーキングロットのメモ「${memo.title}」を GitHub の issue にしてください。repo: ${repo}。起票したら URL を返してください。`,
+    `パーキングロットのメモ「${memo.title}」を GitHub の issue にしてください。repo: ${repo}。` +
+      PREMISE_CHECK +
+      '成り立つときは起票し、URL を返してください。' +
+      PREMISE_GONE,
     ...context(memo),
   ].join('\n')
   return withNote(text, note)

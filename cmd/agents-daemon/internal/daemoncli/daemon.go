@@ -1,5 +1,5 @@
 // Package daemoncli は daemon のライフサイクル (daemon、stop、update) と、読むだけの診断 (status、logs、doctor、inspect、
-// simulate) のコマンドの組み立てを持つ。
+// simulate)、daemon が上限の出来事に添える記録を書く hook 用のコマンド (ingest-stop-failure) の組み立てを持つ。
 package daemoncli
 
 import (

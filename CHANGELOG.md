@@ -1,5 +1,9 @@
 # Changelog
 
+## [2026.1101.0](https://github.com/usadamasa/agents-daemon/compare/2026.1031.1...2026.1101.0) - 2026-11-01
+
+- statusline: five_hour が無いプランでも 7d の使用率を出す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/339
+
 ## [2026.1031.1](https://github.com/usadamasa/agents-daemon/compare/2026.1031.0...2026.1031.1) - 2026-10-31
 
 - --json を全コマンドに効かせ、非対応だけを宣言する形にする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/335

@@ -379,8 +379,8 @@ test('選んだノードの詳細は枠で囲み、操作は枠の最後の行�
   // 閉じているときは ▾ だけで、操作は出さない。横に並べると pane の幅で見切れる。
   expect((await ui.find({ key: 'menu' }))?.text).toBe('▾')
   expect(await ui.find({ key: 'op:add-blocker' })).toBeUndefined()
-  expect(await menuText(ui)).toMatch(/^▴\s*\+ Add blocker\s*To parking$/)
-  for (const key of ['menu', 'op:add-blocker', 'op:adopt']) {
+  expect(await menuText(ui)).toMatch(/^▴\s*\+ Add blocker\s*To parking\s*Dismiss$/)
+  for (const key of ['menu', 'op:add-blocker', 'op:adopt', 'op:dismiss']) {
     expect((await ui.find({ key }))?.props.plain).toBe(true)
   }
   // ほかのセッションのタスクには補足欄を出さない (指示の欄がある)。
@@ -661,6 +661,92 @@ test('daemon が status.json を書いていない依存図では、exited と�
   const ui = await mount($)
   await ui.press({ key: 'row:task:G/1' })
   expect(await menuText(ui)).not.toMatch(/To parking/)
+})
+
+// dismissWorld は deps に data を返し、task dismiss に result (TaskDismissed) を返す。
+function dismissWorld(on: On, data: unknown, result: { dismissed: string[]; failures: { ref: string; reason: string }[] }) {
+  return world(on, argv => (argv[1] === 'deps' ? output(JSON.stringify(data)) : argv[1] === 'task' ? output(JSON.stringify(result)) : output('{}')))
+}
+
+// GONE_DONE は終了したセッションで完了したタスク。完了は既定で畳むので、Show completed のときだけ行に出る。
+const GONE_DONE = node('task:G/2', 'completed', '済んだ残り', { session: 'gone', live: false })
+
+test('終了したセッションのタスクは Dismiss で記録ごと一覧から外せる (#337)', async ($, on) => {
+  const w = dismissWorld(on, DEPS, { dismissed: ['task:G/1'], failures: [] })
+  await $.command.run(OPEN_DEPS)
+  const ui = await mount($)
+  await ui.press({ key: 'row:task:G/1' })
+  w.ran.length = 0
+  await pick(ui, 'dismiss')
+  expect(operations(w.ran)).toEqual([[BIN, 'task', 'dismiss', { refs: ['task:G/1'], session_id: 'SELF' }]])
+  expect(await ui.find({ type: 'Text', text: /タスク「残った作業」を一覧から外しました/ })).toBeDefined()
+})
+
+test('Dismiss で外せなかったときは、バイナリが返した理由を出す (#337)', async ($, on) => {
+  dismissWorld(on, DEPS, { dismissed: [], failures: [{ ref: 'task:G/1', reason: 'セッション G は pane b1 で生きている' }] })
+  await $.command.run(OPEN_DEPS)
+  const ui = await mount($)
+  await ui.press({ key: 'row:task:G/1' })
+  await pick(ui, 'dismiss')
+  expect(await ui.find({ type: 'Text', text: /一覧から外せませんでした: セッション G は pane b1 で生きている/ })).toBeDefined()
+})
+
+test('Dismiss は終了したセッションのタスクだけに出す: 生きているセッション、TodoWrite の項目、置き場のノードには出さない (#337)', async ($, on) => {
+  const todo = { ...node('todo:T/0', 'exited', '終わった todo', { session: 'todo' }), kind: 'todo', endpoint: false, task_id: undefined, session_id: 'T' }
+  depsWorld(on, withNodes(todo))
+  await $.command.run(OPEN_DEPS)
+  const ui = await mount($)
+  for (const key of ['row:task:W/1', 'row:task:D/1', 'row:issue:o/r#9']) {
+    await ui.press({ key })
+    expect(await ui.find({ key: 'op:dismiss' })).toBeUndefined()
+    if (await ui.find({ key: 'menu' })) expect(await menuText(ui)).not.toMatch(/Dismiss/)
+  }
+  await ui.press({ key: 'row:todo:T/0' })
+  expect(await ui.find({ key: 'menu' })).toBeUndefined()
+  await ui.press({ key: 'fold' })
+  await ui.press({ key: 'row:task:C/1' })
+  expect(await menuText(ui)).not.toMatch(/Dismiss/)
+})
+
+test('daemon が status.json を書いていない依存図では Dismiss もまとめて外すボタンも出さない (#337)', async ($, on) => {
+  const { updated_at: _, ...stale } = DEPS
+  depsWorld(on, { ...stale, daemon_running: false })
+  await $.command.run(OPEN_DEPS)
+  const ui = await mount($)
+  await ui.press({ key: 'row:task:G/1' })
+  expect(await menuText(ui)).not.toMatch(/Dismiss/)
+  expect(await ui.find({ key: 'dismiss-ended' })).toBeUndefined()
+})
+
+test('終了したセッションのタスクのうち、いま見えている行をまとめて外す。完了は Show completed のときだけ数える (#337)', async ($, on) => {
+  const w = dismissWorld(on, withNodes(GONE_DONE), { dismissed: ['task:G/1', 'task:G/2'], failures: [] })
+  await $.command.run(OPEN_DEPS)
+  const ui = await mount($)
+  expect(await ui.find({ key: 'dismiss-ended', text: /Dismiss 1 ended/ })).toBeDefined()
+  expect((await ui.find({ key: 'dismiss-ended' }))?.props.plain).toBe(true)
+  expect((await ui.find({ key: 'legend' }))?.text).toMatch(/Dismiss 1 ended/)
+  await ui.press({ key: 'fold' })
+  expect(await ui.find({ key: 'dismiss-ended', text: /Dismiss 2 ended/ })).toBeDefined()
+  w.ran.length = 0
+  await ui.press({ key: 'dismiss-ended' })
+  expect(operations(w.ran)).toEqual([[BIN, 'task', 'dismiss', { refs: ['task:G/1', 'task:G/2'], session_id: 'SELF' }]])
+  expect(await ui.find({ type: 'Text', text: /終了したセッションのタスク 2 つを一覧から外しました/ })).toBeDefined()
+})
+
+test('まとめて外すときに外せなかったタスクがあれば、数と最初の理由を添える (#337)', async ($, on) => {
+  dismissWorld(on, withNodes(GONE_DONE), { dismissed: ['task:G/1'], failures: [{ ref: 'task:G/2', reason: '理由' }] })
+  await $.command.run(OPEN_DEPS)
+  const ui = await mount($)
+  await ui.press({ key: 'fold' })
+  await ui.press({ key: 'dismiss-ended' })
+  expect(await ui.find({ type: 'Text', text: /タスク 1 つを一覧から外しました \(1 つは外せませんでした: 理由\)/ })).toBeDefined()
+})
+
+test('終了したセッションのタスクが見えていなければ、まとめて外すボタンを出さない (#337)', async ($, on) => {
+  depsWorld(on, { ...DEPS, graph: { ...DEPS.graph, nodes: NODES.filter(n => n.state !== 'exited'), rows: ROWS.filter(r => r.node !== 'task:G/1') } })
+  await $.command.run(OPEN_DEPS)
+  const ui = await mount($)
+  expect(await ui.find({ key: 'dismiss-ended' })).toBeUndefined()
 })
 
 test('自分のセッションのタスクは、着手・完了・削除・パーキングへ戻すことを自分の入力へ頼む (#296)', async ($, on) => {

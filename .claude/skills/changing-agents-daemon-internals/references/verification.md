@@ -63,7 +63,7 @@ rex の外 (`REX_SESSION` なし) では exit 1 で止まる。「rex CLI の前
 | 問い | 見る欄 |
 | ---- | ---- |
 | 上限到達時に Claude Code は record を何と申告するか (#77) | `record` (`agent_status` / `kind` / `msg`)。`working` のままか、`error` に msg が付くか |
-| 上限到達時に StopFailure が走ったか、record と食い違うか (#77) | `turn_failure` (`error` / `last_assistant_message` / `observed_at`)。欄が無ければ、最後の turn は API error で終わっていないか、hook が走っていない |
+| 上限到達時に StopFailure が走ったか、record と食い違うか (#77) | `turn_failure` (`error` / `last_assistant_message` / `observed_at`)。欄が無ければ、最後の turn は API error で終わっていないか、hook が走っていないか、検知が hook の書き込みより先だった (同じ pane の次の出来事を見る) |
 | 小さい block で上限の文と `❯` の行が同時に見えるか、`/rate-limit-options` のメニューが出た状態の下限 (#39) | `geometry.rows` / `geometry.alternate_screen` と `screen` (判定した画面そのもの。上限の文が下から何行目か、メニューと入力行が入っているか) |
 | ゲートと起床時刻の判断は正しかったか | `rate_limit` (own)、`account`、`wait_until`、`outcome` |
 | 設定を変えたら判定が変わるか | `screen` を `inspect --file` に渡す (下) |

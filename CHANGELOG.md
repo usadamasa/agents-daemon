@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026.1101.2](https://github.com/usadamasa/agents-daemon/compare/2026.1101.1...2026.1101.2) - 2026-11-01
+
+- パーキングロットのメモを渡す文面で、先に前提を確かめさせる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/347
+- 置いたセッションが前提の消えたパーキングロットのメモを unpark で取り下げる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/348
+
 ## [2026.1101.1](https://github.com/usadamasa/agents-daemon/compare/2026.1101.0...2026.1101.1) - 2026-11-01
 
 - build(deps): bump nixpkgs from `02c087f` to `3ec6363` by @dependabot[bot] in https://github.com/usadamasa/agents-daemon/pull/334

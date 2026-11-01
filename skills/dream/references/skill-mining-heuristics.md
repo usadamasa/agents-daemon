@@ -13,7 +13,7 @@ feedback memory の内容を反映するとき、対象 skill を絞り込む。
 | 状況 | 判定 |
 |------|-----|
 | memory 名や description に既存 skill 名 (フル or key) が含まれる | 既存 skill body 変更 (`kind: skill_body`) |
-| memory が hook / settings 系 | dream の対象外 (`claude-config-management` 等の下位 skill が担当) |
+| memory が hook / settings 系 | dream の対象外 (`agents-config-management` 等の下位 skill が担当) |
 | 上記いずれにも該当しない | 行き先未定 (`kind: unhomed`) |
 
 `findAssociatedSkill` (`coverage.go`) は語境界つきの一致 (`containsAsToken`) で最長の skill 名を返す。

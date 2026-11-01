@@ -53,7 +53,7 @@ consolidation は fine-tune ではなく記憶の再編。モデルや skill の
 呼び方、実体パスの解決) は [pipeline](references/pipeline.md)。背景は
 [why-consolidate](references/why-consolidate.md)。
 
-設定 (`settings.json`)・hook・エージェントは dream の対象外。`claude-config-management` と
+設定 (`settings.json`)・hook・エージェントは dream の対象外。`agents-config-management` と
 `permission-optimizer` が担う。
 
 ## 進め方

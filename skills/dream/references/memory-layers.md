@@ -15,7 +15,7 @@
 ただし `description` 行の trigger 文言と、SKILL.md と auto memory の間で重複している知見の刈り取りは扱う。
 
 設定 (`~/.claude/settings.json` および `<repo>/.claude/settings.json`)、hook、エージェントは dream の対象外。
-これらは別 skill (`claude-config-management`, `permission-optimizer`, 組み込み `/update-config` 等) が担う。
+これらは別 skill (`agents-config-management`, `permission-optimizer`, 組み込み `/update-config` 等) が担う。
 
 グローバル階層 (1, 3, 4, 5) は、どのリポジトリで作業していても共通の dream 対象になる。
 プロジェクト階層 (2, 6) は作業中のリポジトリのものだけが対象。

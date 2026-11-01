@@ -1,5 +1,5 @@
 // Package statusline は Claude Code の statusline コマンドの描画を持つ。
-// claude-config の dotclaude/statusline.sh (bash + jq) を移したもので、絵文字・色・閾値・
+// agents-config の dotclaude/statusline.sh (bash + jq) を移したもので、絵文字・色・閾値・
 // 行構成はそのまま。stdin の JSON の取り出し (input)、幅モード (mode)、描画 (view.render) に
 // 分かれる。state の書き込み (sessionstate)、cost の台帳 (spend)、git / settings の参照 (resolve.go) を
 // 組み立てて view に渡すのは Run (run.go) で、cmd は環境とパスを渡すだけにする。

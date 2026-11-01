@@ -16,6 +16,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/runtime/daemon/limitlog"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
+	"github.com/usadamasa/agents-daemon/internal/turnfailure"
 )
 
 func touchAged(t *testing.T, path string, age time.Duration, now time.Time) {
@@ -78,8 +79,16 @@ func TestHousekeep(t *testing.T) {
 		r.sessions = ledger.New(dir)
 		sessionFile := filepath.Join(r.sessions.Dir, "s-old.json")
 		touchAged(t, sessionFile, 8*24*time.Hour, now)
+		// turn の失敗の記録は 24 時間で消す (turnfailure のテスト)。
+		r.turnFailures = turnfailure.New(dir)
+		turnFailureFile := filepath.Join(r.turnFailures.Dir, "s-old.json")
+		touchAged(t, turnFailureFile, 25*time.Hour, now)
 
 		r.housekeep(logPath, now)
+
+		if _, err := os.Stat(turnFailureFile); !os.IsNotExist(err) {
+			t.Errorf("25 時間前の turn の失敗の記録は消えるべき (err=%v)", err)
+		}
 
 		if _, err := os.Stat(sessionFile); !os.IsNotExist(err) {
 			t.Errorf("8 日前のセッション台帳は消えるべき (err=%v)", err)

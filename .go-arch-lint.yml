@@ -30,6 +30,7 @@ components:
       - "internal/multiplexer/multiplexerfake"
       - "internal/sessioncontext"
       - "internal/ratelimit"
+      - "internal/turnfailure"
       - "internal/sessionstate"
       - "internal/tasklog"
       - "internal/tasklog/record"

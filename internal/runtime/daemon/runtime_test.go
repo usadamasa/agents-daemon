@@ -17,6 +17,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/runtime/daemon/limitlog"
 	"github.com/usadamasa/agents-daemon/internal/runtime/monitor"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
+	"github.com/usadamasa/agents-daemon/internal/turnfailure"
 )
 
 // newTestRuntime は daemonRuntime を t.TempDir() の下だけで完結させて組み立てる。
@@ -32,6 +33,7 @@ func newTestRuntime(t *testing.T, client multiplexerClient, startedAt time.Time)
 	// 利用上限 state が要るテストは r.store.RateLimits.Dir へ書く。
 	r := newDaemonRuntime(client, log, statusPath, sessionstate.New(dir), func(time.Duration) {}, startedAt)
 	r.limits = limitlog.New(dir)
+	r.turnFailures = turnfailure.New(dir)
 	return r, statusPath
 }
 

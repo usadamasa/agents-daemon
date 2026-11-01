@@ -85,7 +85,7 @@ backend の判定と rex の呼び方は [multiplexer.md](multiplexer.md)。
 | ---- | ---- |
 | `depscli` | deps (依存図の JSON)、edge、ingest-task (依存図に載る記録を書く・読む)、event-log (出来事のログに mod の出来事を書く) |
 | `parkcli` | park、spawn (パーキングロットのメモと、メモを渡す先のセッションを起こす) |
-| `daemoncli` | daemon、stop、status、logs、doctor、inspect、simulate (daemon のライフサイクルと読むだけの診断) |
+| `daemoncli` | daemon、stop、status、logs、doctor、inspect、simulate (daemon のライフサイクルと読むだけの診断)、ingest-turn-failure (daemon が上限の出来事に添える記録を書く) |
 | `dreamcli` | dream |
 | `statuslinecli` | statusline、ingest-statusline |
 | `worktreecli` | prune-worktrees |
@@ -124,7 +124,7 @@ pane ごとに次を評価する。上限側の詳細は [rate-limit.md](rate-li
 設定は利用者が書くものなので XDG の config ディレクトリに置く。ランタイム状態は揮発物なので
 ハーネスの `~/.claude/` に混ぜず、XDG Base Directory の state ディレクトリ
 `${XDG_STATE_HOME:-~/.local/state}/agents-daemon/` (以下 `$STATE`) に置く。
-`XDG_STATE_HOME` は daemon と `statusline` / `ingest-statusline` / `ingest-task` / `park` / `edge` / `event-log` /
+`XDG_STATE_HOME` は daemon と `statusline` / `ingest-statusline` / `ingest-task` / `ingest-turn-failure` / `park` / `edge` / `event-log` /
 `deps` (`apppath.FromEnv`) が同じ規則で解決する。
 
 消す主体の列の保持期間は、記録を書くパッケージの定数が根拠のコメントと一緒に持つ。依存図とパーキングロットが読む記録
@@ -147,7 +147,8 @@ pane ごとに次を評価する。上限側の詳細は [rate-limit.md](rate-li
 | `$STATE/status.json` | daemon | 毎 tick (既定 5 秒) | backend (rex)、監視中の pane 一覧と各 pane の自己申告 (`agent_status` と、あれば `agent_kind` / `agent_message`)・監視状態・試行回数・待機期限・直近の判定 | 上書き |
 | `$STATE/logs/daemon.log` | daemon | 報告に値する出来事があったときだけ | 上限検知と待ち時間、再開送信、ユーザーの自己再開、ゲート抑制、ネイティブへの譲り、エラー | rotate |
 | `$STATE/logs/daemon.log.YYYY-MM-DD` | daemon | 日付が変わって最初に書くとき | 前日までの `daemon.log` をそのまま退避したもの | daemon が 7 日で消す |
-| `$STATE/limit-events/<YYYY-MM-DD>.jsonl` | daemon | 上限の出来事 (検知して待機に入った、送った、抑制した、ネイティブに譲った、Enter 待ち、hard cap、prompt で見送り) で daemon.log に行を書くのと同じ遷移のとき | 1 出来事 1 行の JSON (`daemon/limitlog`): 判定した画面そのもの (末尾 `readLines` 行)、分類 (kind)、outcome、Claude Code の自己申告 (record)、block の高さと screen (`size` / `modes`)、own と account の利用上限 state、`readLines` / `detectionTailLines`。読み方は verification.md「次に上限を踏んだとき」 | daemon が 30 日で消す |
+| `$STATE/limit-events/<YYYY-MM-DD>.jsonl` | daemon | 上限の出来事 (検知して待機に入った、送った、抑制した、ネイティブに譲った、Enter 待ち、hard cap、prompt で見送り) で daemon.log に行を書くのと同じ遷移のとき | 1 出来事 1 行の JSON (`daemon/limitlog`): 判定した画面そのもの (末尾 `readLines` 行)、分類 (kind)、outcome、Claude Code の自己申告 (record)、block の高さと screen (`size` / `modes`)、own と account の利用上限 state、`readLines` / `detectionTailLines`、そのセッションの turn の失敗 (`turn_failure`、あるときだけ)。読み方は verification.md「次に上限を踏んだとき」 | daemon が 30 日で消す |
+| `$STATE/turn-failures/<session_id>.json` | `agents-daemon ingest-turn-failure` (StopFailure / Stop / UserPromptSubmit hook `hooks/ingest-turn-failure.sh` が呼ぶ) | StopFailure で書き、Stop と UserPromptSubmit で消す | そのセッションの最後の turn を終わらせた API error (`error`、`error_details`、`last_assistant_message`、観測時刻。`turnfailure`)。あるのは「最後の turn が API error で終わり、次の turn がまだ始まっていない」間だけ。読み手は daemon の上限の出来事の記録 | 次の turn の hook が消す。閉じたセッションの残りは daemon が 24 時間で消す |
 | `$STATE/logs/events.log` | `agents-daemon ingest-task` / `park add` / `park set` / `park discard` / `park adopt` と、mod (`hooks/log.ts`) が呼ぶ `agents-daemon event-log` | タスクの記録、メモの操作、mod の出来事 (tool の登録の失敗、依存図の数と読み込みの失敗、送信の結果) があったとき。mod は同じ失敗と同じ数を書き直さない | 依存図とパーキングロットの経路の出来事を 1 行 1 件 (`eventlog`、出来事の一覧は package doc)。session ID、task ID、メモの id、件数、失敗の理由だけで、subject、title、detail、送った文面は書かない。`logs --events` が読む | rotate |
 | `$STATE/logs/events.log.YYYY-MM-DD` | 上と同じ | 日付が変わって最初に書くとき | 前日までの `events.log` をそのまま退避したもの | daemon が 7 日で消す |
 | `$STATE/logs/build.log` | `hooks/build-daemon.sh` | SessionStart が build を起こしたとき | build の開始・完了・失敗 | 消さない (追記) |

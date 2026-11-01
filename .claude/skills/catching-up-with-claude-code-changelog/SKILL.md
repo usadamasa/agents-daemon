@@ -164,7 +164,7 @@ rg -n -o 'cc-premise: [0-9.]+ [a-z0-9-]+.*' --glob '!tmp/**' . | sort -t' ' -k3,
 | `limit-screen` | 上限の検知と再開 | usage limit, rate limit, auto-continue, continuing automatically, press enter, spend limit, usage credits, autoContinueAtUsageLimit, rate-limit-options |
 | `transient` | transient の引き取り | API Error, overloaded, 529, retry, backoff, RETRY_WATCHDOG |
 | `statusline` | statusline の sidecar | status line, statusline, rate_limits, context_window |
-| `hooks` | hook の配線 | UserPromptSubmit, Stop hook, SessionStart, onFailure, hook timeout |
+| `hooks` | hook の配線 | UserPromptSubmit, Stop hook, StopFailure, SessionStart, onFailure, hook timeout |
 | `osc7501` | 多重化ツールへの状態の報告 | OSC 7501, Program Status, terminal, title |
 | `peer-messaging` | 別セッションへの送受信 | ListAgents, SendMessage, messaging socket, cross-session |
 | `sandbox` | `dream forget` を sandbox の外で動かす設定 (setup skill) | excludedCommands, sandbox, excluded command, allowUnsandboxedCommands, Strict sandbox |

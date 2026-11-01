@@ -29,6 +29,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/runtime/monitor"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
+	"github.com/usadamasa/agents-daemon/internal/turnfailure"
 )
 
 // maxConsecutiveTickFailures は PaneList の取得にこの回数だけ連続で
@@ -85,7 +86,10 @@ type daemonRuntime struct {
 	// ものを消すだけ。ゼロ値は何も消さない。
 	eventLog string
 	// limits は上限の出来事の記録 (daemon/limitlog)。daemon が書き、housekeeping で消す。ゼロ値は書かない。
-	limits              limitlog.Store
+	limits limitlog.Store
+	// turnFailures は hook が書く turn の失敗の記録 (turnfailure)。daemon は上限の出来事に添えて読み、
+	// housekeeping で消す。ゼロ値は「無い」を返し、何も消さない。
+	turnFailures        turnfailure.Store
 	sleep               func(time.Duration)
 	startedAt           time.Time
 	panes               map[string]*paneEntry
@@ -358,6 +362,11 @@ func (r *daemonRuntime) recordLimitEvent(ctx context.Context, pane multiplexer.P
 		Settings:  limitlog.Settings{ReadLines: cfg.ReadLines, DetectionTailLines: cfg.DetectionTailLines},
 		Screen:    observed.screen,
 	}
+	if failure, err := r.turnFailures.Load(pane.SessionID); err != nil {
+		r.log.Logf("pane %s: turn の失敗の記録の読み込みに失敗、無しとして残します: %v", pane.PaneID, err)
+	} else {
+		ev.TurnFailure = limitTurnFailure(failure)
+	}
 	if detect.LowerPriorityActive(observed.screen, cfg.DetectionTailLines) {
 		ev.LowerPriority = true
 		r.log.Logf("pane %s: lower-priority mode の作業中の通知がある画面を %s と判定した (作業中の pane を待機に入れている可能性、#251)",
@@ -383,6 +392,19 @@ func limitWindow(state *ratelimit.State) *limitlog.Window {
 		ResetsAt:       state.FiveHourResetsAt,
 		ObservedAt:     state.ObservedAt,
 		SessionID:      state.SessionID,
+	}
+}
+
+// limitTurnFailure は turn の失敗の記録を出来事の形に写す。無ければ nil (欄ごと出さない)。
+func limitTurnFailure(rec *turnfailure.Record) *limitlog.TurnFailure {
+	if rec == nil {
+		return nil
+	}
+	return &limitlog.TurnFailure{
+		Error:        rec.Error,
+		ErrorDetails: rec.ErrorDetails,
+		Message:      rec.Message,
+		ObservedAt:   rec.ObservedAt,
 	}
 }
 

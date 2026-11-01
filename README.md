@@ -27,7 +27,8 @@ plugin が持つもの:
 | 部品 | 役目 |
 | ---- | ---- |
 | SessionStart hook | daemon のバイナリを用意し、`daemon --ensure` で起こす。続けて `prune-worktrees --hook` で放置 worktree を回収する |
-| Stop hook | `dream harvest` を起こす |
+| Stop hook | `dream harvest` を起こす。turn の失敗の記録を `ingest-turn-failure` で消す |
+| StopFailure / UserPromptSubmit hook | turn を終わらせた API error を `ingest-turn-failure` で記録し、次の turn で消す (#77) |
 | PostToolUse hook | Task 系ツール (TaskCreate / TaskUpdate / TaskList) と TodoWrite の呼び出しを `ingest-task` に渡し、セッションのタスクを記録する (#121) |
 | `agents-daemon:agents-daemon` skill | 運用と切り分けの手引き (症状から引く) |
 | `agents-daemon:setup` skill | 前提の確認と statusline の配線、peer messaging の切り分け |
@@ -40,6 +41,7 @@ plugin が持つもの:
 | `/deps` コマンド (mod、`hooks/deps.tsx`) | 依存図: セッションをまたぐタスクの依存を、辺をレーンで描いた行 (`git log --graph` の形、上流が上) で会話の横の pane に描く。fullscreen のレイアウトでだけ開く。生きているセッションとタスクをすべて描き、ノードを選ぶと辺を外す・足す、そのタスクのセッションへ指示を送れる (#134) |
 | `agents-daemon deps` | mod が読む依存図の JSON (タスクの記録、status.json、辺、メモを組み直したもの) を出す |
 | `agents-daemon ingest-task` | PostToolUse hook の stdin からタスクを `tasks/<session_id>/` に記録する |
+| `agents-daemon ingest-turn-failure` | hook の stdin から turn の失敗を `turn-failures/<session_id>.json` に記録し、消す |
 | `agents-daemon park add\|set\|list\|discard\|adopt` | パーキングロット (タスクの途中で見つけた脇のメモ) を `parking/` に置く・status を書き換える・一覧する・古い open のメモをまとめて捨てる・終了したセッションのタスクをメモへ移す。同じメモは 1 つにまとめる (#121) |
 | `agents-daemon edge add\|rm\|list` | 作業を渡す側が、セッションをまたぐ作業の依存 (辺) を `edges/` に書く・消す・一覧する (#134。使い方は `skills/agents-daemon/references/operations.md`) |
 | `park` tool (mod、`hooks/park.tsx`) | model が聞かずに脇のことをメモとしてパーキングロットへ置く tool (#121) |

@@ -17,7 +17,7 @@ func TestRootCmd_registersAllCommands(t *testing.T) {
 		names = append(names, c.Name())
 	}
 	want := []string{
-		"daemon", "deps", "doctor", "dream", "edge", "event-log", "ingest-statusline", "ingest-task", "inspect",
+		"daemon", "deps", "doctor", "dream", "edge", "event-log", "ingest-statusline", "ingest-task", "ingest-turn-failure", "inspect",
 		"logs", "park", "prune-worktrees", "simulate", "spawn", "status", "statusline", "stop", "update", "version",
 	}
 	slices.Sort(names)
@@ -73,11 +73,12 @@ func TestRootCmd_doesNotPrintErrorsItself(t *testing.T) {
 // 新しいコマンドはこの表に足すまで落ちる (既定が対応なので、JSON を出し忘れたまま黙って通さない)。
 func TestRootCmd_jsonFlag(t *testing.T) {
 	unsupported := map[string]bool{
-		"agents-daemon event-log":         true,
-		"agents-daemon ingest-statusline": true,
-		"agents-daemon ingest-task":       true,
-		"agents-daemon statusline":        true,
-		"agents-daemon update":            true,
+		"agents-daemon event-log":           true,
+		"agents-daemon ingest-statusline":   true,
+		"agents-daemon ingest-task":         true,
+		"agents-daemon ingest-turn-failure": true,
+		"agents-daemon statusline":          true,
+		"agents-daemon update":              true,
 	}
 	supported := map[string]bool{
 		"agents-daemon daemon":          true,

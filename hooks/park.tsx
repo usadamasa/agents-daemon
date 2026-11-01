@@ -7,6 +7,7 @@ import type { Memo, ParkAdded } from '../types'
 
 // パーキングロット (#89) の置く側 (#121 の段 5)。model が呼べる park の tool を登録し、呼ばれたら
 // `agents-daemon park add` に JSON を stdin で渡す。tool の入力の schema は protocol の Memo。repo はバイナリが cwd から決める。
+// 置いたセッションが前提の消えたメモを取り下げる unpark の tool も持つ (`park withdraw`)。
 // cc-premise: 2.1.302 mods tool.register / tool.call の API で書いた
 
 const TOOL = 'park'
@@ -23,16 +24,35 @@ const DESCRIPTION = `作業の途中で見つけた脇のことを、ユーザ�
 - 進めるのに要る判断。例「この API の仕様がわからない」。答えが無いと今の作業が正しく終わらないもの
 - 危ない操作の確認。例「削除してよいか」「force push してよいか」
 
-default_taken には、置いたメモについて今どうしたか (「やらない」、仮に決めた内容) を書く。`
+default_taken には、置いたメモについて今どうしたか (「やらない」、仮に決めた内容) を書く。
+
+置いたメモの前提が自分の作業の中で消えたら (該当箇所を消した、別の変更で直した)、置いたときに返った id を unpark に渡して取り下げる。`
+
+const UNPARK = 'unpark'
+
+const UNPARK_DESCRIPTION = `このセッションが park で置いたメモを、前提が消えたときに取り下げる tool。
+取り下げたメモは依存図の pane から消え、タスクや issue にする依頼が来なくなる。
+取り下げられるのは、このセッションだけが置いた、まだ渡していない (open の) メモ。
+- ほかのセッションも置いたメモは理由が返る。そのまま作業を続ける (人が pane で捨てる)
+- 渡した後のメモは、そのメモから作ったタスクを TaskUpdate で閉じる`
+
+// unpark の入力。session_id は model に書かせず、このセッションの ID を入れる。
+const UNPARK_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['id'],
+  properties: { id: { type: 'string', description: '取り下げるメモの id (park が返した id)' } },
+} as const
 
 // model が書ける欄 (schema の Memo の欄)。session_id は model に書かせず、このセッションの ID を入れる。
 const FIELDS = Object.keys(definitions.Memo.properties) as (keyof Memo)[]
 
-// startPark は session.start で park の tool を登録する (session.start の hook は hooks/register.ts が持つ)。
+// startPark は session.start で park と unpark の tool を登録する (session.start の hook は hooks/register.ts が持つ)。
 // 登録の失敗は engine が画面に一度出すだけなので、理由をログに残してから投げ直す (hook を飛ばす扱いは engine に任せる)。
 export async function startPark($: EngineInterface) {
   try {
     await $.tool.register({ name: TOOL, description: DESCRIPTION, inputSchema: definitions.Memo, isDeferred: false })
+    await $.tool.register({ name: UNPARK, description: UNPARK_DESCRIPTION, inputSchema: UNPARK_SCHEMA, isDeferred: false })
   } catch (err) {
     await logEvent($, 'mod.tool-register.failed', { reason: String(err) })
     throw err
@@ -44,6 +64,18 @@ export const registerPark: Register = on => {
   on('tool.call', { tool: 'mcp__agents-daemon__park' }, ($, e) =>
     place($, e as unknown as Record<string, unknown>).catch(err => ({ deny: `メモを置けませんでした: ${String(err)}` })),
   )
+  on('tool.call', { tool: 'mcp__agents-daemon__unpark' }, ($, e) =>
+    withdraw($, e as unknown as Record<string, unknown>).catch(err => ({ deny: `メモを取り下げられませんでした: ${String(err)}` })),
+  )
+}
+
+// withdraw は model が書いた id とこのセッションの ID を park withdraw に渡す。置いたセッションかと open かはバイナリが
+// 確かめる。
+async function withdraw($: EngineInterface, args: Record<string, unknown>): Promise<{ result: string } | { deny: string }> {
+  const id = String(args.id ?? '')
+  const { exitCode, stderr } = await runDaemon($, 'park withdraw', { id, session_id: await $.session.id() })
+  if (exitCode !== 0) return { deny: `メモを取り下げられませんでした: ${stderr.trim() || `exit ${exitCode}`}` }
+  return { result: `メモ ${id} を取り下げました。` }
 }
 
 // place は model が書いた欄にこのセッションの ID を足して park add に渡し、置いた結果を model への文面にする。

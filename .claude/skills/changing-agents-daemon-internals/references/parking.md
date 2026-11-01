@@ -98,6 +98,13 @@ offset を揃えない。どの offset で書いても同じ瞬間に戻せる�
 stdin に渡す。inputSchema は schema の `Memo` そのもので、`session_id` と cwd は model が書けない。結果の `created` で「メモを置きました」と
 「既に置かれていたメモにまとめました」を分けて返す。
 依存図の pane は開いている間だけ自分で読み直すので、置いたメモは次の読み直しで pane に出る。
+
+同じ mod は tool `mcp__agents-daemon__unpark` も登録する。置いたメモの前提が自分の作業の中で消えたとき (該当箇所を
+消した、別の変更で直した) に、model が id を渡して取り下げる。mod は id とこのセッションの `session_id` を
+`park withdraw` に渡し、バイナリ (`parking` の `Withdraw`) は sources のセッションがすべて呼んだセッションで、status が
+open のときだけ discarded にする。ほかのセッションも置いたメモはそのセッションの前提が残りうるので、理由と pane の
+Discard を返す。handed のメモは pane の一覧に出ないので、作ったタスクを TaskUpdate で閉じるよう返す。open だけを書き換えるので pane の Discard と同じ遷移で、handed から discarded への遷移は無い
+(`models/handoff` の `HandedWhenDelivered`)。
 <!-- cc-premise: 2.1.302 hooks mods の tool.register / tool.call -->
 <!-- cc-premise: 2.1.302 hooks modules は 1 つ、matcher の無い hook は event ごとに 1 つ -->
 <!-- cc-premise: 2.1.302 hooks tool.register は local の port を開く (sandbox の中の claude -p では落ちる) -->

@@ -42,7 +42,7 @@ plugin が持つもの:
 | `agents-daemon deps` | mod が読む依存図の JSON (タスクの記録、status.json、辺、メモを組み直したもの) を出す |
 | `agents-daemon ingest-task` | PostToolUse hook の stdin からタスクを `tasks/<session_id>/` に記録する |
 | `agents-daemon ingest-turn-failure` | hook の stdin から turn の失敗を `turn-failures/<session_id>.json` に記録し、消す |
-| `agents-daemon park add\|set\|list\|discard\|adopt` | パーキングロット (タスクの途中で見つけた脇のメモ) を `parking/` に置く・status を書き換える・一覧する・古い open のメモをまとめて捨てる・終了したセッションのタスクをメモへ移す。同じメモは 1 つにまとめる (#121) |
+| `agents-daemon park add\|set\|list\|discard\|withdraw\|adopt` | パーキングロット (タスクの途中で見つけた脇のメモ) を `parking/` に置く・status を書き換える・一覧する・古い open のメモをまとめて捨てる・置いたセッションが取り下げる・終了したセッションのタスクをメモへ移す。同じメモは 1 つにまとめる (#121) |
 | `agents-daemon edge add\|rm\|list` | 作業を渡す側が、セッションをまたぐ作業の依存 (辺) を `edges/` に書く・消す・一覧する (#134。使い方は `skills/agents-daemon/references/operations.md`) |
 | `park` tool (mod、`hooks/park.tsx`) | model が聞かずに脇のことをメモとしてパーキングロットへ置く tool (#121) |
 | ファイルのメモの通知 (mod、`hooks/notice.ts`) | model が Read / Edit / Write で触ったファイルを files に持つ、ほかのセッションが置いたメモを、その tool の結果に添えて model へ 1 回だけ伝える (#89) |

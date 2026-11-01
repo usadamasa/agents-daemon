@@ -155,7 +155,8 @@ Revert(m) ==
   /\ UNCHANGED <<dest, deliveredTo, attempts, deliveries, sessions, live, seen, task, taskMemo, adoptedLive>>
 
 (* pane の Discard。読んだ依存図で open だったメモを park set (status discarded、from open) で捨てる。
-   先に取られていれば失敗する。 *)
+   先に取られていれば失敗する。置いたセッションの unpark (park withdraw) も open のときだけ discarded にするので、
+   同じ遷移として扱う。 *)
 Discard(m) ==
   /\ pc[m] = "idle" /\ view[m] = "open"
   /\ view' = [view EXCEPT ![m] = "none"]

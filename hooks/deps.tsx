@@ -5,6 +5,7 @@ import type { DepsData, DepsRepo, GraphLink, GraphNode, GraphRow, ParkingCard } 
 import { runDaemon } from './daemon-bin'
 import type { Requests } from './daemon-bin'
 import { loadDeps } from './deps-data'
+import { canDismiss, dismissAll, dismissOne } from './dismiss'
 import { CHAIN_COLOR, COLOR, Graph, ICON, MEMO, candidates, cells, chain, fit, legendRows, pieces, splitLanes, summary, tags } from './graph'
 import { logChange, logEvent, settle } from './log'
 import type { Fields } from './log'
@@ -155,6 +156,11 @@ export const registerDeps: Register = on => {
     const selected = g.node(chosen)
     const chosenMemo = findMemo(data.repos, chosen)
     const rows = withCompleted ? data.graph.rows_with_completed : data.graph.rows
+    // ended はまとめて外せる終了したセッションのタスクのうち、いま行に出ているもの (畳んだ完了は数えない)。
+    const ended = rows.flatMap(r => {
+      const n = r.node === undefined ? undefined : g.node(r.node)
+      return n !== undefined && canDismiss(n, self, data) ? [n] : []
+    })
 
     const choose = (key: string) => {
       void update($, target, () => key)
@@ -351,7 +357,11 @@ export const registerDeps: Register = on => {
       ]
       const ops: Op[] = own
         ? ownOps
-        : [...blocker, ...(canAdopt(n, self, data) ? [{ value: 'adopt', label: 'To parking', run: () => void act(() => adopt($, n)) }] : [])]
+        : [
+            ...blocker,
+            ...(canAdopt(n, self, data) ? [{ value: 'adopt', label: 'To parking', run: () => void act(() => adopt($, n)) }] : []),
+            ...(canDismiss(n, self, data) ? [{ value: 'dismiss', label: 'Dismiss', run: () => void act(() => dismissOne($, n)) }] : []),
+          ]
       return (
         <Box key={`detail:${n.key}`} flexDirection="column" borderStyle="round" borderDimColor paddingX={1} marginLeft={GUTTER + cells(prefix)}>
           <Text dimColor>
@@ -515,6 +525,12 @@ export const registerDeps: Register = on => {
           {g.nodes.some(n => n.state === 'completed') && (
             <Button key="fold" plain onPress={() => void update($, showCompleted, () => !withCompleted)}>
               <Text dimColor>{withCompleted ? '› Hide completed' : '› Show completed'}</Text>
+            </Button>
+          )}
+          {/* 一覧の見せ方の操作なので、完了の出し入れと並べて置く。 */}
+          {ended.length > 0 && (
+            <Button key="dismiss-ended" plain onPress={() => void act(() => dismissAll($, ended))}>
+              <Text dimColor>{`› Dismiss ${ended.length} ended`}</Text>
             </Button>
           )}
         </Box>

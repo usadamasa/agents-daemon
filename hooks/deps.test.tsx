@@ -670,6 +670,10 @@ function dismissWorld(on: On, data: unknown, result: { dismissed: string[]; fail
 
 // GONE_DONE は終了したセッションで完了したタスク。完了は既定で畳むので、Show completed のときだけ行に出る。
 const GONE_DONE = node('task:G/2', 'completed', '済んだ残り', { session: 'gone', live: false })
+const WITH_GONE_DONE = {
+  ...DEPS,
+  graph: { ...DEPS.graph, nodes: [...NODES, GONE_DONE], rows_with_completed: [...ROWS_WITH_COMPLETED, { lanes: '*', node: GONE_DONE.key }] },
+}
 
 test('終了したセッションのタスクは Dismiss で記録ごと一覧から外せる (#337)', async ($, on) => {
   const w = dismissWorld(on, DEPS, { dismissed: ['task:G/1'], failures: [] })
@@ -719,7 +723,7 @@ test('daemon が status.json を書いていない依存図では Dismiss もま
 })
 
 test('終了したセッションのタスクのうち、いま見えている行をまとめて外す。完了は Show completed のときだけ数える (#337)', async ($, on) => {
-  const w = dismissWorld(on, withNodes(GONE_DONE), { dismissed: ['task:G/1', 'task:G/2'], failures: [] })
+  const w = dismissWorld(on, WITH_GONE_DONE, { dismissed: ['task:G/1', 'task:G/2'], failures: [] })
   await $.command.run(OPEN_DEPS)
   const ui = await mount($)
   expect(await ui.find({ key: 'dismiss-ended', text: /Dismiss 1 ended/ })).toBeDefined()
@@ -734,7 +738,7 @@ test('終了したセッションのタスクのうち、いま見えている�
 })
 
 test('まとめて外すときに外せなかったタスクがあれば、数と最初の理由を添える (#337)', async ($, on) => {
-  dismissWorld(on, withNodes(GONE_DONE), { dismissed: ['task:G/1'], failures: [{ ref: 'task:G/2', reason: '理由' }] })
+  dismissWorld(on, WITH_GONE_DONE, { dismissed: ['task:G/1'], failures: [{ ref: 'task:G/2', reason: '理由' }] })
   await $.command.run(OPEN_DEPS)
   const ui = await mount($)
   await ui.press({ key: 'fold' })

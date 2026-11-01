@@ -1,5 +1,5 @@
 // Package turnfailure は turn-failures/<session_id>.json (StopFailure hook が受けた、turn を終わらせた API error)
-// の書式を読み書き両方で持つ。書くのは `agents-daemon ingest-stop-failure`、読むのは daemon の上限の出来事の記録。
+// の書式を読み書き両方で持つ。書き、消すのは `agents-daemon ingest-turn-failure`、読むのは daemon の上限の出来事の記録。
 //
 // 判定にはまだ使わない。上限で止まった pane の OSC 7501 の record と並べて残し、上限検知の前段のゲートに
 // どちらが使えるかを比べる材料にする (#77)。
@@ -7,15 +7,17 @@ package turnfailure
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
 
-// Retention は記録を残す期間。読むのは pane が上限で止まっている間だけで、5 時間ウィンドウの解除を待つ
-// 間に消えなければ足りる。ratelimit.Retention と揃える。
+// Retention は記録を残す期間。ふつうは次の turn で消えるので、これが消すのは閉じたセッションの残りだけ。
+// 読むのは pane が上限で止まっている間で、5 時間ウィンドウの解除を待つ間に消えなければ足りる。ratelimit.Retention と揃える。
 const Retention = 24 * time.Hour
 
 // Store は turn-failures/ の置き場所を持つ。ゼロ値は書かず、読みは「無い」、消さない。
@@ -52,18 +54,31 @@ type hookInput struct {
 // unknownError は error が無い入力に付ける語。Claude Code 自身も分類できない error をこの語で渡す。
 const unknownError = "unknown"
 
-// Ingest は StopFailure hook の入力から、そのセッションの記録を上書きする。session_id が無ければ書かない。
+// Ingest は hook の入力からセッションの記録を更新する。StopFailure で上書きし、Stop (turn が成功で終わった) と
+// UserPromptSubmit (次の turn が始まった) で消す。記録が残るのは「最後の turn が API error で終わり、
+// 次の turn がまだ始まっていない」間だけになり、上限の出来事に無関係な古い失敗が添えられない。
+// Stop だけでは利用者が Esc で止めた turn (Stop が走らない) の後に古い失敗が残る。session_id が無ければ何もしない。
+//
+// cc-premise: 2.1.316 hooks StopFailure は Stop の代わりに走り、Stop は API error の turn では走らない
 func (s Store) Ingest(input []byte, now time.Time) error {
 	var in hookInput
 	if err := json.Unmarshal(input, &in); err != nil {
-		return fmt.Errorf("StopFailure の入力のパースに失敗: %w", err)
+		return fmt.Errorf("hook の入力のパースに失敗: %w", err)
 	}
-	if in.HookEventName != "StopFailure" {
-		return fmt.Errorf("StopFailure 以外の hook の入力 (%q)", in.HookEventName)
+	switch in.HookEventName {
+	case "StopFailure", "Stop", "UserPromptSubmit":
+	default:
+		return fmt.Errorf("扱わない hook の入力 (%q)", in.HookEventName)
 	}
 	path, err := s.file(in.SessionID)
 	if err != nil || path == "" {
 		return err
+	}
+	if in.HookEventName != "StopFailure" {
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("%s の削除に失敗: %w", path, err)
+		}
+		return nil
 	}
 	if in.Error == "" {
 		in.Error = unknownError

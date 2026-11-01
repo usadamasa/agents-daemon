@@ -26,6 +26,33 @@
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/dream-harvest.sh\"",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/ingest-turn-failure.sh\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/ingest-turn-failure.sh\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/ingest-turn-failure.sh\"",
+            "timeout": 5
           }
         ]
       }

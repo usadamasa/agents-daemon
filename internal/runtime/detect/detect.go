@@ -115,6 +115,14 @@ var (
 	// 作業中の通知は scrollback に残るので、同じ画面にあればこちらを優先する。
 	lowerPriorityEndedPattern = regexp.MustCompile(`(?i)lower-priority mode (?:ended|stopped|is off|is no longer available|isn't available|is taking a break)`)
 
+	// nativeRetry* は Claude Code が request の中でリトライしている間のスピナー行 (`⚠ … · Retrying in 3h 12m (5pm) ·
+	// attempt 4/10`)。unattended retry mode (`CLAUDE_CODE_RETRY_WATCHDOG`) は usage limit の解除もこの形で待ち、
+	// Escape で待機ごと取り消される。上限の呼び名と時刻の書式に頼らず、2 つの区切りだけを見る。狭い pane では
+	// attempt が次の行へ折り返される。tool の出力に同じ形の引用があると上限を見逃すが、手を出さない側に倒れる。
+	// cc-premise: 2.1.316 limit-screen retry のスピナー行 (バイナリのテンプレート、実機未確認。native_retry_test.go)
+	nativeRetryPattern        = regexp.MustCompile(`(?i)·\s*retrying in\b`)
+	nativeRetryAttemptPattern = regexp.MustCompile(`(?i)\battempt \d+/\S+`)
+
 	// resumeReadyPattern は上限が解除済みで Enter だけを待っている状態を示す。
 	// ネイティブが解除まで待ったものの継続の窓を過ぎた (phase=stale) ときに出る。
 	resumeReadyPattern = regexp.MustCompile(`(?i)usage limit has reset.*press enter to continue`)
@@ -294,6 +302,7 @@ func compilePatterns(patterns []string) ([]*regexp.Regexp, error) {
 // のような文字列自体での誤爆を防ぐ)。
 // 優先順位は次のとおり。上のものほど「このツールが手を出してはいけない」度合いが高い:
 //
+//  0. Claude Code が request の中でリトライ中 (KindNone)。本体が待っているので、ほかの何よりも優先する
 //  1. ネイティブ auto-continue がカウントダウン中 (KindAutoContinueArmed)
 //  2. 解除済みで Enter 待ち (KindResumeReady)
 //  3. 二重シグナルが揃っており、かつ恒久的な上限 (KindSpendLimit)
@@ -301,6 +310,11 @@ func compilePatterns(patterns []string) ([]*regexp.Regexp, error) {
 //  5. 直近出力ブロックの `API Error` 行にある一時エラー (KindTransient)
 func (c *Classifier) Classify(screen string, n int) Kind {
 	lines := tailLines(splitScreen(screen), n)
+
+	// deferToNativeAutoContinue には従わない。watchdog は env の opt-in で、auto-continue とは別の経路になる。
+	if nativeRetrying(lines) {
+		return KindNone
+	}
 
 	stoodDown := slices.ContainsFunc(lines, nativeStoodDownPattern.MatchString)
 	armed := slices.ContainsFunc(lines, autoContinueArmedPattern.MatchString) ||
@@ -340,6 +354,21 @@ func hasFooterPair(lines []string, status, next *regexp.Regexp) bool {
 		}
 		end := min(i+1+footerPairWindow, len(lines))
 		if slices.ContainsFunc(lines[i+1:end], next.MatchString) {
+			return true
+		}
+	}
+	return false
+}
+
+// nativeRetrying は `· Retrying in` の後ろ (同じ行か、折り返した次の行) に `attempt n/m` があるかを返す。
+func nativeRetrying(lines []string) bool {
+	for i, line := range lines {
+		loc := nativeRetryPattern.FindStringIndex(line)
+		if loc == nil {
+			continue
+		}
+		if nativeRetryAttemptPattern.MatchString(line[loc[1]:]) ||
+			(i+1 < len(lines) && nativeRetryAttemptPattern.MatchString(lines[i+1])) {
 			return true
 		}
 	}

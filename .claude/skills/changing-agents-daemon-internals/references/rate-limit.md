@@ -70,6 +70,23 @@ overage の使用有無・解除が 24 時間以内かで決まる。それら�
 自前で待機する。ネイティブを `/config` で切っている場合はバナー自体が出ないので、
 この設定を触る必要は無い。
 
+## Claude Code が request の中でリトライしている間は手を出さない
+
+<!-- cc-premise: 2.1.316 limit-screen retry のスピナー行 (バイナリのテンプレート、実機未確認) -->
+
+unattended retry mode (`CLAUDE_CODE_RETRY_WATCHDOG`、env の opt-in) は、usage limit に当たった request を終わらせず、
+解除まで request の中で待つ。待っている間、スピナー行は `⚠ Session limit reached · Retrying in 3h 12m (5pm)` の後ろに
+試行回数を添えた形になる。Escape はこの待機ごと request を取り消す。上限の文言は待機が尽きて request が
+失敗するまで出ないが、前の request の上限の行が transcript に残っていれば、そのままでは待機に入って Escape を送る。
+
+そのため、スピナーの `Retrying in` の後ろ (同じ行か、折り返した次の行) に試行回数があれば、ほかの判定より先に
+`none` を返す。5xx や overloaded のリトライも同じ行になり、どれも本体が待っているので区別しない。
+`deferToNativeAutoContinue` には従わない。watchdog は auto-continue とは別の opt-in で、この設定を切っても
+watchdog の待機を潰してよい理由にならない。待機が尽きたら通常の上限の画面になり、そこからはこのツールの担当に戻る。
+
+上の文でスピナーの試行回数を伏せてあるのは、auto-continue の表と同じ理由。固定した文言は
+`detect/native_retry_test.go` にある。
+
 ## 待っても解除されない上限では待機に入らない
 
 月次 spend limit を使い切ったときの上限メッセージにも、session / weekly の

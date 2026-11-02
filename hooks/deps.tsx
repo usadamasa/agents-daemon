@@ -171,7 +171,8 @@ export const registerDeps: Register = on => {
       void update($, picking, () => false)
       void update($, spawning, () => '')
       void update($, note, () => '')
-      void update($, menu, () => false)
+      // 選んだら操作のメニューを開いておく。選び直しで閉じると、操作のたびに ▾ を押すことになる。
+      void update($, menu, () => key !== '')
       void update($, moreRepos, () => false)
     }
     // act は操作を走らせ、結果を notice に出して依存図を読み直す。
@@ -187,7 +188,7 @@ export const registerDeps: Register = on => {
         await update($, note, () => '')
         return message
       })
-    // operations は詳細の操作。横に並べると pane の幅で見切れるので、▾ で開くメニューにまとめ、1 行に 1 つ出す。
+    // operations は詳細の操作。横に並べると pane の幅で見切れるので、▴ / ▾ で開け閉めするメニューにまとめ、1 行に 1 つ出す。
     // Select は開いた一覧を後ろの行に重ねて描き、枠の罫線と凡例が崩れるので使わない。枠なしの Button で並べれば
     // 開いた分だけ後ろの行を押し下げる。選んだらメニューを閉じて走らせる。withNote なら ▾ の右に、次に選ぶ操作の
     // 文面へ添える補足欄 (✎) を置く。room は操作の名前を切り詰める幅。

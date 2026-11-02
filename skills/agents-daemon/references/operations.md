@@ -92,7 +92,7 @@ agents-daemon edge list --cwd <dir> [--here | --repo <main worktree>] [--ref <�
 ```
 
 - 端点は `ref` (cwd も要る) か `task` のどちらか 1 つで指す
-- 参照 (`ref`) は `session:<セッション名>` (`claude --name` の名前)、`sid:<session_id>`、`issue:<owner>/<repo>#<番号>`、
+- 参照 (`ref`) は `session:<セッション名>` (ListAgents の名前。`claude --name` で起こしたならその名前)、`sid:<session_id>`、`issue:<owner>/<repo>#<番号>`、
   `pr:<owner>/<repo>#<番号>`、`task:<session_id>/<task_id>` のどれか。依存図のノードの key はこの形なので、
   `deps` の JSON の key をそのまま渡せる (TodoWrite の項目 `todo:` は端点にできない)
 - `task` は書く側のセッション自身のタスクの id。参照 `task:<session_id>/<id>` はバイナリが環境の

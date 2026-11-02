@@ -91,7 +91,8 @@ daemon が使うのは `multiplexer` (block から session_id への対応) で�
 `session_name` は statusline の stdin の `session_name` をそのまま写し、入力に無ければ付けない。
 <!-- cc-premise: 2.1.310 statusline session_name は custom title、無ければ AI の題 -->
 中身は `--name` か `/rename` で付けた名前、無ければ Claude Code が会話から付けた題になる。`ListAgents` の名前とは
-同じとは限らない (同じ名前のセッションが既にいると `ListAgents` 側だけ `workspace-dc` のような接尾辞が付く)。
+同じとは限らない (名前を付けずに起動すると `agents-daemon-71` のような cwd 由来の名前になり、同じ名前のセッションが
+既にいると `ListAgents` 側だけ `workspace-dc` のような接尾辞が付く)。宛先に使う名前は台帳が持つ ([deps.md](deps.md))。
 依存図 (`deps`) はこの名前をノード、`repos` の `sessions`、メモの `sources` に出し、名前が無ければ
 session ID の先頭 8 文字、同じ名前のセッションが複数あれば名前の後ろに session ID の先頭を足す。記録は `context/` の
 保持期間 (7 日) の間残るので、終了したセッションのノードとメモにも名前が付く。

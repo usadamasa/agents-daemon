@@ -52,6 +52,19 @@ func FromEnv() (Paths, error) {
 	return New(home, os.Getenv("XDG_STATE_HOME"), os.Getenv("XDG_CONFIG_HOME")), nil
 }
 
+// ClaudeConfigDir は Claude Code の設定ディレクトリ。$CLAUDE_CONFIG_DIR があればそれ、無ければ ~/.claude。
+// daemon はここを読むだけで、書かない。
+func ClaudeConfigDir() (string, error) {
+	if dir := strings.TrimSpace(os.Getenv("CLAUDE_CONFIG_DIR")); dir != "" {
+		return dir, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("ホームディレクトリの取得に失敗: %w", err)
+	}
+	return filepath.Join(home, ".claude"), nil
+}
+
 // ConfigFile は設定ファイル (<XDG config>/agents-daemon/config.json) のパス。
 // 無くてもよく、その場合は既定値で動く (config.Load)。
 func (p Paths) ConfigFile() string {

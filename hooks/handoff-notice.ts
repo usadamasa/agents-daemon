@@ -12,7 +12,8 @@ import type { EdgeAddRequest } from '../types'
 // - 宛先は依存図の生きている済んでいないセッションで、`edge add` の辺がどの端点にも無いもの (hooks/graph.ts の unlinked)
 // - 送信がエラーになったもの、文面の無いもの (notify_when_idle だけ、shutdown などの要求)、subagent の送信は見ない
 // - mod 自身の送信 ($.session.send) は tool.call を通らないので、ここには来ない
-// cc-premise: 2.1.310 mods SendMessage の tool.call は e.to (ListAgents の名前、同名なら末尾に ` [ref]`) と e.message を持ち、結果の context は model だけが読む
+// - 宛先はノードの session_name (daemon が Claude Code の登録簿から引いた ListAgents の名前) で当てる
+// cc-premise: 2.1.316 mods SendMessage の tool.call は e.to (ListAgents の名前、同名なら末尾に ` [ref]`) と e.message を持ち、結果の context は model だけが読む
 // cc-premise: 2.1.310 mods 届かなかった SendMessage は isError の結果になるとみなす (型は result を unknown とし、確かめていない)
 
 export const registerHandoffNotice: Register = on => {

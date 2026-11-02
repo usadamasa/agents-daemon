@@ -35,8 +35,7 @@ export function statusText(node: GraphNode, status: 'completed' | 'deleted'): st
   return `${ref(node)}を TaskUpdate で ${status} にしてください。`
 }
 
-// handOff は生きているほかのセッションへタスクを渡す。model に SendMessage で渡させると、ListAgents の名前が依存図の
-// どの欄 (表示名、session_name、session ID) とも一致しないセッションへ届かないので、mod が session ID で title と
+// handOff は生きているほかのセッションへタスクを渡す。宛先は名前を介さず、mod が session ID で title と
 // description を送り、届いたら自分にタスクを消すよう頼む。進み具合は mod が知らないので送らない。補足 (note) は
 // 相手へ送る文面にだけ足す。
 export async function handOff($: EngineInterface, node: GraphNode, to: Extract<Destination, { route: 'peer' }>, note = ''): Promise<string> {

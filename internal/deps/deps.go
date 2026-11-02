@@ -48,7 +48,8 @@ type input struct {
 	Locate func(cwd string) gitrepo.Place
 	// SessionNames は session ID → セッション名 (statusline の session_name、sessioncontext.ListSessionNames)。
 	SessionNames map[string]string
-	// Sessions はセッション台帳 (ledger)。新しいセッションを起こす repo の候補 (Deps.RecentRepos) の元。
+	// Sessions はセッション台帳 (ledger)。新しいセッションを起こす repo の候補 (Deps.RecentRepos) と、ノードの
+	// session_name (ListAgents の名前) の元。
 	Sessions []ledger.Session
 }
 
@@ -75,8 +76,20 @@ func build(in input) Deps {
 		Memos:        in.Parking,
 		Open:         open,
 		SessionNames: in.SessionNames,
+		PeerNames:    peerNames(in.Sessions),
 	})
 	return d
+}
+
+// peerNames は台帳から session ID → ListAgents の名前を引く。名前の無いセッションは載せない。
+func peerNames(sessions []ledger.Session) map[string]string {
+	names := map[string]string{}
+	for _, s := range sessions {
+		if s.Name != "" {
+			names[s.SessionID] = s.Name
+		}
+	}
+	return names
 }
 
 // sessionIDs は作業とメモの source に出てくるセッション。

@@ -24,6 +24,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/ratelimit"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend"
 	"github.com/usadamasa/agents-daemon/internal/runtime/config"
+	"github.com/usadamasa/agents-daemon/internal/runtime/daemon/claudesessions"
 	"github.com/usadamasa/agents-daemon/internal/runtime/daemon/limitlog"
 	"github.com/usadamasa/agents-daemon/internal/runtime/detect"
 	"github.com/usadamasa/agents-daemon/internal/runtime/monitor"
@@ -79,6 +80,9 @@ type daemonRuntime struct {
 	// sessions はセッション台帳 (ledger)。daemon だけが tick ごとに書き、housekeeping で消す。
 	// ゼロ値は書かない。
 	sessions ledger.Store
+	// claudeSessions は Claude Code のセッションの登録簿 (claudesessions)。台帳に書く名前 (ListAgents の名前) を
+	// ここから引く。ゼロ値は名前無しで台帳を書く。
+	claudeSessions claudesessions.Store
 	// parking は `park add` が書くパーキングのメモ (parking)。daemon は housekeeping で消すだけ。
 	// ゼロ値は何も消さない。
 	parking parking.Store
@@ -588,6 +592,11 @@ func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 	runtime := newDaemonRuntime(client, log, p.StatusFile(), store, time.Sleep, now)
 	runtime.backend = kind
 	runtime.attachStateDir(p.StateDir())
+	if claudeConfig, err := apppath.ClaudeConfigDir(); err != nil {
+		log.Logf("Claude Code の設定ディレクトリを決められないため、台帳にセッション名を書きません: %v", err)
+	} else {
+		runtime.attachClaudeConfigDir(claudeConfig)
+	}
 	runtime.housekeep(p.LogFile(), now)
 
 	sigCh := make(chan os.Signal, 1)

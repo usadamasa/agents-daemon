@@ -379,7 +379,7 @@
         "description": { "type": "string", "description": "kind task のノードのタスクの description" },
         "session_id": { "type": "string" },
         "session": { "type": "string", "description": "表示名 (同名のセッションがあれば session ID の先頭が付く)" },
-        "session_name": { "type": "string", "description": "セッション名そのもの (SendMessage の宛先に書く形)" },
+        "session_name": { "type": "string", "description": "ListAgents の名前 (SendMessage の宛先に書く形)。表示名とは別" },
         "live": { "type": "boolean" },
         "depth": { "type": "integer", "description": "段 (前提をたどった最長の深さ)" },
         "downstream": { "type": "integer", "description": "下流 (このノードが済まないと始められないノード) の数" },

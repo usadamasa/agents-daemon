@@ -315,7 +315,7 @@ type GraphNode struct {
 	SessionID   string `json:"session_id,omitempty"`
 	// 表示名 (同名のセッションがあれば session ID の先頭が付く)。
 	Session string `json:"session,omitempty"`
-	// セッション名そのもの (SendMessage の宛先に書く形)。
+	// ListAgents の名前 (SendMessage の宛先に書く形)。表示名とは別。
 	SessionName string `json:"session_name,omitempty"`
 	Live        bool   `json:"live"`
 	// 段 (前提をたどった最長の深さ)。

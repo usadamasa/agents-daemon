@@ -1,5 +1,5 @@
 // Package ledger はセッション台帳を XDG state 配下に置く。書くのは daemon だけで、tick ごとに status.json に
-// 書いた pane と context/ のセッション名から、見えたセッションを書く。
+// 書いた pane と Claude Code の登録簿の名前 (ListAgents の名前) から、見えたセッションを書く。
 //
 //	sessions/<session_id>.json   セッション 1 つ (名前、cwd、repo、最初と最後に見た時刻)
 //
@@ -30,7 +30,7 @@ const Retention = 7 * 24 * time.Hour
 // Session は台帳のセッション 1 つ。
 type Session struct {
 	SessionID string `json:"session_id"`
-	// Name はセッション名 (`claude --name`、statusline の session_name)。名前が無ければ空。
+	// Name は ListAgents の名前 (SendMessage の宛先に書く形)。名前が無ければ空。
 	Name string `json:"name,omitempty"`
 	CWD  string `json:"cwd"`
 	// Repo は cwd の repo の鍵 (gitrepo.RepoKey)。

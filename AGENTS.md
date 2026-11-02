@@ -112,6 +112,7 @@ mod が呼ぶコマンドは入力を stdin の JSON で受け、出力を JSON 
 ## state を書くときの決めごと
 
 - ランタイム状態は `~/.claude/` に置かず XDG (`internal/apppath`) に置く。環境から埋める入口は `apppath.FromEnv` だけ。
+  読むだけの Claude Code の設定ディレクトリは `apppath.ClaudeConfigDir` で決める。
 - 書くファイルを足すときは、同じ PR で消す仕組みと `changing-agents-daemon-internals` skill の architecture.md「出力されるファイル」の行 (書く主体・消す主体) を足す。
 - 削除は daemon 自身が mtime で行う (`internal/runtime/daemon/housekeeping.go`)。保持期間は定数にし、根拠をコメントに書く。
 

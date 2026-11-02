@@ -1,15 +1,14 @@
 package daemoncli
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/jsonflag"
+	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/runtime/selfupdate"
 )
 
@@ -26,7 +25,7 @@ func newUpdateCmd() *cobra.Command {
 			"セッションの中からは `! ~/.cache/agents-daemon/bin/agents-daemon update` で打つ。",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			config, err := claudeConfigDir()
+			config, err := apppath.ClaudeConfigDir()
 			if err != nil {
 				return err
 			}
@@ -39,16 +38,4 @@ func newUpdateCmd() *cobra.Command {
 			return selfupdate.Update(selfupdate.Options{ConfigDir: config, Run: run})
 		},
 	}
-}
-
-// claudeConfigDir は Claude Code の設定ディレクトリ。$CLAUDE_CONFIG_DIR があればそれ、無ければ ~/.claude。
-func claudeConfigDir() (string, error) {
-	if dir := strings.TrimSpace(os.Getenv("CLAUDE_CONFIG_DIR")); dir != "" {
-		return dir, nil
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("ホームディレクトリの取得に失敗: %w", err)
-	}
-	return filepath.Join(home, ".claude"), nil
 }

@@ -212,7 +212,7 @@ export function candidates(g: Graph, selected: GraphNode): GraphNode[] {
 // 疑うもの: 依存図に生きていて済んでいないノードを持つセッションで、`edge add` の辺 (kind edge) がどの端点にも
 // 無いもの。辺はノードへ解決された端点 (そのセッションのタスク) と、元の記録の参照 (`session:<名前>`) のどちらで
 // 当たってもよい。handed の順を保つ。
-// 名前は表示名 (session、同名なら ID の先頭が付く) ではなく session_name (SendMessage の宛先に書く形) で当てる。
+// 名前は表示名 (session、statusline の題) ではなく session_name (ListAgents の名前、SendMessage の宛先に書く形) で当てる。
 export function unlinked(g: Graph, handed: string[]): string[] {
   const sessionOf = (key: string) => g.node(key)?.session_name ?? ''
   return handed.filter(name => {

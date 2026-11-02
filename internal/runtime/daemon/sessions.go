@@ -5,17 +5,24 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/daemonstate"
 	"github.com/usadamasa/agents-daemon/internal/ledger"
+	"github.com/usadamasa/agents-daemon/internal/runtime/daemon/claudesessions"
 )
 
+// attachClaudeConfigDir は台帳に書く名前を引く Claude Code のセッションの登録簿を配線する。
+func (r *daemonRuntime) attachClaudeConfigDir(dir string) {
+	r.claudeSessions = claudesessions.New(dir)
+}
+
 // recordSessions は tick で見えたセッションを台帳に書き、同じ tick で辺の session:<名前> の端点を台帳の
-// セッションに結びつける。結びつけを tick ごとにするのは、渡した側が `edge add` を書いてから数秒で依存図の
-// 端点がそのセッションのノードにつながり、pane が置き場のノードを描き続けないようにするため。台帳を書いた直後に
-// 読むので、同じ tick で現れたセッションにも結びつく。書けなくても tick は止めない。
+// セッションに結びつける。名前は ListAgents の名前 (Claude Code の登録簿) で、session:<名前> は model が
+// SendMessage の宛先と同じ名前で書く。結びつけを tick ごとにするのは、渡した側が `edge add` を書いてから数秒で
+// 依存図の端点がそのセッションのノードにつながり、pane が置き場のノードを描き続けないようにするため。台帳を
+// 書いた直後に読むので、同じ tick で現れたセッションにも結びつく。書けなくても tick は止めない。
 func (r *daemonRuntime) recordSessions(panes []daemonstate.PaneStatus, now time.Time) {
 	if r.sessions.Dir == "" {
 		return
 	}
-	names, err := r.store.Context.ListSessionNames()
+	names, err := r.claudeSessions.Names()
 	if err != nil {
 		r.log.Logf("セッション名の読み込みに失敗、名前無しで台帳を書きます: %v", err)
 	}

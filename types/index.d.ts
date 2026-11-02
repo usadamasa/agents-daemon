@@ -315,7 +315,7 @@ export type GraphNode = {
   session_id?: string
   // 表示名 (同名のセッションがあれば session ID の先頭が付く)
   session?: string
-  // セッション名そのもの (SendMessage の宛先に書く形)
+  // ListAgents の名前 (SendMessage の宛先に書く形)。表示名とは別
   session_name?: string
   live: boolean
   // 段 (前提をたどった最長の深さ)

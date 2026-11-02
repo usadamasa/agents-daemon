@@ -103,8 +103,10 @@ type Input struct {
 	// Memos はメモ (status を問わない)。タスクの description との照合に使う。Open はそのうち open のもの。
 	Memos []parking.Item
 	Open  []parking.Item
-	// SessionNames は session ID → セッション名 (statusline の session_name)。
+	// SessionNames は session ID → セッション名 (statusline の session_name)。ノードの表示名と題に使う。
 	SessionNames map[string]string
+	// PeerNames は session ID → ListAgents の名前 (台帳)。ノードの SessionName (SendMessage の宛先に書く形) に使う。
+	PeerNames map[string]string
 }
 
 // builder はグラフを組む途中の状態。
@@ -130,7 +132,7 @@ func Build(in Input) Graph {
 
 func (g *builder) addCard(c Card) {
 	n := &Node{Key: c.Key, Kind: c.Kind, Title: c.Title, Endpoint: c.Kind != KindTodo, CWD: c.CWD, TaskID: c.TaskID, Description: c.Description, SessionID: c.SessionID,
-		Session: c.Session, SessionName: g.in.SessionNames[c.SessionID], Live: c.Live, Memos: []MemoRef{}}
+		Session: c.Session, SessionName: g.in.PeerNames[c.SessionID], Live: c.Live, Memos: []MemoRef{}}
 	n.State = nodeState(c.Status, c.Live, c.Activity)
 	if n.State == StateLimit {
 		n.Detail = c.Detail
@@ -233,8 +235,8 @@ func (g *builder) sessionKeys(sessionID, cwd string, pick func(sessionID string)
 func (g *builder) placeholder(key, cwd, title, sessionID, state string) string {
 	if g.nodes[key] == nil {
 		n := &Node{Key: key, Kind: KindRef, State: state, Title: title, Endpoint: true, CWD: cwd, SessionID: sessionID, Memos: []MemoRef{}}
-		if name := g.in.SessionNames[sessionID]; sessionID != "" && name != "" {
-			n.Session, n.SessionName = name, name
+		if sessionID != "" {
+			n.Session, n.SessionName = g.in.SessionNames[sessionID], g.in.PeerNames[sessionID]
 		}
 		g.nodes[key] = n
 	}

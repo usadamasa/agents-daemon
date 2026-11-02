@@ -943,7 +943,7 @@ export const definitions = {
       },
       "session_name": {
         "type": "string",
-        "description": "セッション名そのもの (SendMessage の宛先に書く形)"
+        "description": "ListAgents の名前 (SendMessage の宛先に書く形)。表示名とは別"
       },
       "live": {
         "type": "boolean"

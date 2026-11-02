@@ -7,8 +7,7 @@ import (
 )
 
 // session limit に当たった後に `/low-priority` で低優先度の作業を続けている間の通知。2.1.310 のバイナリから採取した
-// (flag `tengu_toasty_breeze`)。上限の行と並ぶと limit と判定される (#251)。挙動はまだ変えず、気付けるように
-// LowerPriorityActive で印を付けるだけにする。
+// (flag `tengu_toasty_breeze`)。pane は作業中なので、上限の行が画面に残っていても待機に入ってはいけない (#251)。
 var lowerPriorityActiveLines = []string{
 	"Continuing now at lower priority until your limit resets at 5pm. Your weekly limit still applies, and responses may pause while waiting for spare capacity. Run /low-priority to stop.",
 	"Continuing now at lower priority until your limit resets at 5:00pm. Your weekly limit still applies, and responses may pause while waiting for spare capacity. Run /low-priority to stop.",
@@ -17,7 +16,7 @@ var lowerPriorityActiveLines = []string{
 	"Working at lower priority · waiting for capacity",
 }
 
-// lower-priority mode が終わったことを伝える通知。
+// lower-priority mode が終わったことを伝える通知。ここから先は通常の上限に戻る。
 var lowerPriorityEndedLines = []string{
 	"Lower-priority mode ended · you have reached your weekly usage limit",
 	"You've used this week's lower-priority allowance · lower-priority mode ended; it is offered again after your weekly limit resets",
@@ -30,17 +29,29 @@ var lowerPriorityEndedLines = []string{
 
 const sessionLimitLine = "⏺ You've hit your session limit · resets 5:00pm (Asia/Tokyo)"
 
-func TestLowerPriorityActive_作業中の通知があればtrue(t *testing.T) {
+func TestClassify_lower_priority_modeで作業中なら上限として扱わない(t *testing.T) {
 	c := newTestClassifier(t)
 
 	for i, active := range lowerPriorityActiveLines {
 		t.Run(fmt.Sprintf("active-%d", i), func(t *testing.T) {
+			// 上限に当たった元の行は通知の上に残っている。
 			screen := strings.Join([]string{sessionLimitLine, "", active}, "\n")
 
-			if !LowerPriorityActive(screen, 15) {
-				t.Errorf("LowerPriorityActive() = false, want true")
+			if got := c.Classify(screen, 15); got != KindNone {
+				t.Errorf("Classify() = %v, want %v", got, KindNone)
 			}
-			// 判定はまだ変えない。上限として扱ったうえで、印だけが付く。
+		})
+	}
+}
+
+func TestClassify_lower_priority_modeが終わった画面は通常のlimitとして扱う(t *testing.T) {
+	c := newTestClassifier(t)
+
+	// 作業中の通知は scrollback に残ることがある。終わった通知が同じ画面にあれば、そちらを優先する。
+	for i, ended := range lowerPriorityEndedLines {
+		t.Run(fmt.Sprintf("ended-%d", i), func(t *testing.T) {
+			screen := strings.Join([]string{sessionLimitLine, lowerPriorityActiveLines[0], "", ended}, "\n")
+
 			if got := c.Classify(screen, 15); got != KindLimit {
 				t.Errorf("Classify() = %v, want %v", got, KindLimit)
 			}
@@ -48,36 +59,27 @@ func TestLowerPriorityActive_作業中の通知があればtrue(t *testing.T) {
 	}
 }
 
-func TestLowerPriorityActive_終わった通知が同じ画面にあればfalse(t *testing.T) {
-	// 作業中の通知は scrollback に残ることがある。終わった通知が同じ画面にあれば、そちらを優先する。
-	for i, ended := range lowerPriorityEndedLines {
-		t.Run(fmt.Sprintf("ended-%d", i), func(t *testing.T) {
-			screen := strings.Join([]string{sessionLimitLine, lowerPriorityActiveLines[0], "", ended}, "\n")
+func TestClassify_lower_priority_modeの案内だけなら通常のlimitとして扱う(t *testing.T) {
+	c := newTestClassifier(t)
 
-			if LowerPriorityActive(screen, 15) {
-				t.Errorf("LowerPriorityActive() = true, want false")
-			}
-		})
-	}
-}
-
-func TestLowerPriorityActive_案内だけならfalse(t *testing.T) {
-	// 上限の画面に並ぶ案内。まだ低優先度で動いていない。
+	// 上限の画面に並ぶ案内。まだ低優先度で動いていないので、本当に上限で止まっている。
 	screen := strings.Join([]string{
 		sessionLimitLine,
 		"/low-priority to continue now at lower priority · uses your weekly limit",
 	}, "\n")
 
-	if LowerPriorityActive(screen, 15) {
-		t.Errorf("LowerPriorityActive() = true, want false")
+	if got := c.Classify(screen, 15); got != KindLimit {
+		t.Errorf("Classify() = %v, want %v", got, KindLimit)
 	}
 }
 
-func TestLowerPriorityActive_走査範囲の外の通知は見ない(t *testing.T) {
-	// Classify と同じく末尾 n 行だけを見る。
-	screen := strings.Join([]string{lowerPriorityActiveLines[0], "a", "b", "c"}, "\n")
+func TestClassify_走査範囲の外のlower_priorityの通知は見ない(t *testing.T) {
+	c := newTestClassifier(t)
 
-	if LowerPriorityActive(screen, 3) {
-		t.Errorf("LowerPriorityActive() = true, want false (範囲の外)")
+	// 末尾 n 行の外へ出た通知は、上限の判定を取り消さない。
+	screen := strings.Join([]string{lowerPriorityActiveLines[0], "a", sessionLimitLine}, "\n")
+
+	if got := c.Classify(screen, 2); got != KindLimit {
+		t.Errorf("Classify() = %v, want %v", got, KindLimit)
 	}
 }

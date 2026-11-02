@@ -225,15 +225,20 @@ const mountMobile = ($: T) => $.ui.mount({ plugin: 'agents-daemon', surface: 'mo
 
 type UI = Awaited<ReturnType<typeof mount>> | Awaited<ReturnType<typeof mountMobile>>
 
-// menuText は詳細の操作のメニュー (▾) を開き、並んだ操作の名前をつないだ文字列を返す。開いたままにする。
+// openMenu は詳細の操作のメニューが閉じていれば (▾) 開く。選んだ直後は開いているので押さない。
+async function openMenu(ui: UI) {
+  if ((await ui.find({ key: 'menu' }))?.text === '▾') await ui.press({ key: 'menu' })
+}
+
+// menuText は詳細の操作のメニューを開き、並んだ操作の名前をつないだ文字列を返す。開いたままにする。
 async function menuText(ui: UI): Promise<string> {
-  await ui.press({ key: 'menu' })
+  await openMenu(ui)
   return (await ui.find({ key: 'ops' }))?.text ?? ''
 }
 
 // pick はメニューを開いて操作 (op:<value>) を選ぶ。選ぶとメニューは閉じる。
 async function pick(ui: UI, value: string) {
-  await ui.press({ key: 'menu' })
+  await openMenu(ui)
   await ui.press({ key: `op:${value}` })
 }
 
@@ -370,19 +375,20 @@ test('行は枠なしで描き、選んだ行は行頭の › と太字で示す
   expect(await hasBold('row:task:W/1')).toBe(false)
 })
 
-test('選んだノードの詳細は枠で囲み、操作は枠の最後の行の ▾ で開くメニューに 1 行ずつ並べる (#308)', async ($, on) => {
+test('選んだノードの詳細は枠で囲み、操作は枠の最後の行のメニューを開いた状態で 1 行ずつ並べる (#308)', async ($, on) => {
   depsWorld(on)
   await $.command.run(OPEN_DEPS)
   const ui = await mount($)
   await ui.press({ key: 'row:task:G/1' })
   expect((await ui.find({ key: 'detail:task:G/1' }))?.props.borderStyle).toBe('round')
-  // 閉じているときは ▾ だけで、操作は出さない。横に並べると pane の幅で見切れる。
-  expect((await ui.find({ key: 'menu' }))?.text).toBe('▾')
-  expect(await ui.find({ key: 'op:add-blocker' })).toBeUndefined()
-  expect(await menuText(ui)).toMatch(/^▴\s*\+ Add blocker\s*To parking\s*Dismiss$/)
+  // 選んだ時点でメニューは開いている。▴ で閉じると ▾ だけになり、操作は出さない。
+  expect((await ui.find({ key: 'ops' }))?.text).toMatch(/^▴\s*\+ Add blocker\s*To parking\s*Dismiss$/)
   for (const key of ['menu', 'op:add-blocker', 'op:adopt', 'op:dismiss']) {
     expect((await ui.find({ key }))?.props.plain).toBe(true)
   }
+  await ui.press({ key: 'menu' })
+  expect((await ui.find({ key: 'menu' }))?.text).toBe('▾')
+  expect(await ui.find({ key: 'op:add-blocker' })).toBeUndefined()
   // ほかのセッションのタスクには補足欄を出さない (指示の欄がある)。
   expect(await ui.find({ key: 'note' })).toBeUndefined()
 })
@@ -794,8 +800,6 @@ test('自分のセッションのタスクは、着手・完了・削除・パ�
     // 扱うメモの無いタスクは、park tool でメモに置いてから消すよう頼む。
     ['own-park', /^タスク #1「このセッションの作業」をパーキングロットへ戻してください。park tool で.*TaskUpdate で deleted にしてください。$/],
   ]
-  // 最初の menuText で開いたメニューを閉じる。
-  await ui.press({ key: 'menu' })
   for (const [value, text] of cases) {
     w.submitted.length = 0
     w.ran.length = 0
@@ -810,17 +814,20 @@ test('自分のセッションのタスクは、着手・完了・削除・パ�
   }
 })
 
-test('開いたメニューはノードを選び直すと閉じる (#308)', async ($, on) => {
+test('閉じたメニューもノードやメモを選び直すと開いて出す', async ($, on) => {
   depsWorld(on)
   await $.command.run(OPEN_DEPS)
   const ui = await mount($)
   await ui.press({ key: 'row:task:SELF/1' })
-  await ui.press({ key: 'menu' })
   expect((await ui.find({ key: 'menu' }))?.text).toBe('▴')
+  await ui.press({ key: 'menu' })
+  expect(await ui.find({ key: 'op:own-start' })).toBeUndefined()
   await ui.press({ key: 'row:task:W/1' })
   await ui.press({ key: 'row:task:SELF/1' })
-  expect((await ui.find({ key: 'menu' }))?.text).toBe('▾')
-  expect(await ui.find({ key: 'op:own-start' })).toBeUndefined()
+  expect((await ui.find({ key: 'menu' }))?.text).toBe('▴')
+  expect(await ui.find({ key: 'op:own-start' })).toBeDefined()
+  await ui.press({ key: `park:${MEMO.id}` })
+  expect(await ui.find({ key: 'op:discard' })).toBeDefined()
 })
 
 test('入力欄の無い画面 (mobile) でも同じメニューで操作し、補足欄だけ出さない (#308)', async ($, on) => {
@@ -1083,14 +1090,12 @@ test('メモを選ぶと詳細を出し、Discard / To task / Ask for issue で�
   // 宛先は自セッション (#190) と、同じ repo の生きているほかのセッション。issue はすべての repo のセッション。
   // 続けて新しいセッションを起こす repo (#162) を並べる。宛先のセッション名には subject を添える (#191)。
   // 並びはメニューのテスト (メモの操作もメニューに並べ…) が持つので、ここは key だけ見る。
-  await ui.press({ key: 'menu' })
   for (const value of ['task:SELF', 'task:W', `task:${CWD}`, 'task:/src/home/dotfile', 'task:path', 'issue:SELF', 'issue:W', 'issue:P']) {
     expect(await ui.find({ key: `op:${value}` })).toBeDefined()
   }
   for (const value of ['task:G', 'task:P']) {
     expect(await ui.find({ key: `op:${value}` })).toBeUndefined()
   }
-  await ui.press({ key: 'menu' })
 
   w.ran.length = 0
   await pick(ui, 'task:W')

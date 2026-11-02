@@ -1,5 +1,9 @@
 # Changelog
 
+## [2026.1102.1](https://github.com/usadamasa/agents-daemon/compare/2026.1102.0...2026.1102.1) - 2026-11-02
+
+- 依存図の pane で選んだ時点で操作のメニューを開く by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/357
+
 ## [2026.1102.0](https://github.com/usadamasa/agents-daemon/compare/2026.1101.3...2026.1102.0) - 2026-11-02
 
 - lower-priority mode で作業中の pane を上限として扱わない by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/352

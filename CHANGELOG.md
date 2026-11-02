@@ -1,5 +1,12 @@
 # Changelog
 
+## [2026.1102.0](https://github.com/usadamasa/agents-daemon/compare/2026.1101.3...2026.1102.0) - 2026-11-02
+
+- lower-priority mode で作業中の pane を上限として扱わない by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/352
+- Claude Code が request の中でリトライ中なら手を出さない by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/355
+- ci: actions-lock の検証を gh-manage の共有 composite に任せる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/354
+- 依存図のセッション名を ListAgents の名前で埋める by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/356
+
 ## [2026.1101.3](https://github.com/usadamasa/agents-daemon/compare/2026.1101.2...2026.1101.3) - 2026-11-01
 
 - dream skill の参照を改名した agents-config-management へ直す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/350

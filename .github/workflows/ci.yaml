@@ -120,15 +120,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
 
-      - name: Install gh-actions-lock
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh extension install github/gh-actions-lock --pin v0.2.0
-
-      - name: Verify actions are locked
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh actions-lock --verify
+      - uses: usadamasa/gh-manage/actions/verify-actions-lock@main
 
   ci-status-check:
     needs: [go-test, go-lint, bats, shellcheck, plugin-validate, mod-typecheck, actions-lock]

@@ -10,6 +10,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/deps/graph"
 	"github.com/usadamasa/agents-daemon/internal/deps/graph/dag"
 	"github.com/usadamasa/agents-daemon/internal/edge"
+	"github.com/usadamasa/agents-daemon/internal/ledger"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/tasklog/record"
 )
@@ -197,6 +198,11 @@ func TestGraph_refEndpoints(t *testing.T) {
 			e("e7", "session:alpha", "issue:o/r#3"),
 		},
 		SessionNames: map[string]string{"A": "alpha", "O": "dup", "N": "dup", "L": "live", "G": "gone"},
+		// 台帳の名前は ListAgents の名前。名前を付けずに起動したセッションでは statusline の題と違う。
+		Sessions: []ledger.Session{
+			{SessionID: "A", Name: "alpha"}, {SessionID: "N", Name: "dup"}, {SessionID: "O", Name: "dup-2c"},
+			{SessionID: "L", Name: "w-3d"}, {SessionID: "G", Name: "w-7f"},
+		},
 	})
 	// 辺は before、after の Key の順に並ぶ。
 	want := []string{
@@ -234,15 +240,19 @@ func TestGraph_refEndpoints(t *testing.T) {
 	if n := got["session:alpha"]; n.SessionID != "" || n.Live {
 		t.Errorf("結びつく前の名前の置き場はセッションを持たない: %+v", n)
 	}
-	if n := got["sid:G"]; n.SessionID != "G" || n.Session != "gone" || n.SessionName != "gone" || n.Title != "gone" {
+	// 表示名 (Session、Title) は statusline の題、SessionName は台帳の ListAgents の名前。
+	if n := got["sid:G"]; n.SessionID != "G" || n.Session != "gone" || n.SessionName != "w-7f" || n.Title != "gone" {
 		t.Errorf("終了したセッションの置き場 = %+v", n)
 	}
 	// 名前のあるタスクの無いセッションも sid: を key にする。
-	if n := got["sid:L"]; n.Kind != graph.KindSession || n.SessionName != "live" {
+	if n := got["sid:L"]; n.Kind != graph.KindSession || n.Session != "live" || n.SessionName != "w-3d" {
 		t.Errorf("sid:L = %+v", n)
 	}
 	// 同名のセッションは表示名 (Session) に session ID の先頭が付くが、SessionName は SendMessage の宛先に書く名前のまま。
 	if n := got["task:N/1"]; n.Session != "dup N" || n.SessionName != "dup" {
+		t.Errorf("同名のセッションの名前 = %q / %q", n.Session, n.SessionName)
+	}
+	if n := got["task:O/1"]; n.Session != "dup O" || n.SessionName != "dup-2c" {
 		t.Errorf("同名のセッションの名前 = %q / %q", n.Session, n.SessionName)
 	}
 	// 辺の元の記録は結びつけた後の参照と、書いたときの参照を持つ。

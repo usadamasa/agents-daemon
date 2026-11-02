@@ -127,6 +127,15 @@ test('同名のセッションに付く末尾の [ref] を落として宛先を�
   expect(selfWaits.before.ref).toBe('session:edge-cli')
 })
 
+test('名前を付けずに起動したセッションは、表示名 (題) ではなく session_name (ListAgents の名前) で宛先を当てる', async ($, on) => {
+  world(on, deps([node('PEER', '1', 'agents-daemon-71', { session: 'agents-daemon Issue #296' })]))
+  await $.session.start(START)
+
+  const [peerWaits] = edgeAdds(context(await send($, 'agents-daemon-71')))
+  expect(peerWaits.after).toEqual({ ref: 'session:agents-daemon-71', cwd: PEER_CWD })
+  expect(context(await send($, 'agents-daemon Issue #296'))).toBe('')
+})
+
 test('宛先が辺の端点にあれば伝えない (ノードへ解決された端点でも、元の参照でも)', async ($, on) => {
   const resolved = { before: 'task:OTHER/1', after: 'task:PEER/1', kind: 'edge', edge: { id: 'e1', before: { ref: 'task:OTHER/1', cwd: CWD, repo: CWD }, after: { ref: 'session:edge-cli', cwd: PEER_CWD, repo: CWD } } }
   const w = world(on, deps([node('PEER', '1','edge-cli'), node('OTHER', '1', 'other')], [resolved]))

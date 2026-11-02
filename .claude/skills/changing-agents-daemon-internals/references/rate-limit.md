@@ -92,19 +92,18 @@ stdin に来ず ([statusline-state.md](statusline-state.md))、モデルを切�
 daemon は待たずに `hard-cap` として手を引く。Opus / Sonnet 単位の週次上限はクレジットを聞くダイアログを出さず、
 全モデル共通の週次上限と同じく「待機時刻の決め方」の末尾の制約の中に残る。
 
-## lower-priority mode の画面は印を付けて残す
+## lower-priority mode で作業中は待機に入らない
 
 <!-- cc-premise: 2.1.310 limit-screen lower-priority mode の作業中と終わりの通知 -->
 
 session limit に当たった後、`/low-priority` で上限を越えて低優先度の作業を続けられる (flag 付き)。その間の通知
-(`Continuing now at lower priority until your limit resets at …`) は上限の行と並び、二重シグナルを満たすので、
-pane は作業中でも limit と判定される (#251)。実害をまだ見ていないので判定は変えず、気付けるようにだけしてある。
-その画面を上限の出来事として記録するとき、`limit-events/` の行に `lower_priority: true` を付け、daemon.log に
-1 行残す。
+(`Continuing now at lower priority until your limit resets at …`) は上限の行と並び、二重シグナルを満たす。
+pane は作業中なので、この通知があれば上限として扱わず `none` を返す (#251)。新しい Kind は足さない。daemon の
+出番が無く、待機中にこの画面を見たら監視へ戻るのが正しいため。
 
-終わった通知 (`Lower-priority mode ended`、`… stopped`、`… is off` など) が同じ画面にあれば印を付けない。
+終わった通知 (`Lower-priority mode ended`、`… stopped`、`… is off` など) が同じ画面にあれば、通常の上限に戻す。
 作業中の通知は scrollback に残るので、取り消しの通知と同じく終わった側を優先する。上限の画面に並ぶ案内
-(`/low-priority to continue now …`) も、まだ低優先度で動いていないので印を付けない。文言は `detect` が持つ。
+(`/low-priority to continue now …`) はまだ低優先度で動いていないので、上限のまま扱う。文言は `detect` が持つ。
 
 ## `agent_status` は判定に使わない
 

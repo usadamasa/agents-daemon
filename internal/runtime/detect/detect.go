@@ -107,7 +107,7 @@ var (
 	nativeStoodDownPattern = regexp.MustCompile(`(?i)automatic continue (?:cancelled|stopped|was turned off|did not run)`)
 
 	// lowerPriorityActivePattern は session limit の後に `/low-priority` で低優先度の作業を続けていることを示す。
-	// 通知は「limit resets at 5pm」と「weekly limit」を含み二重シグナルを満たすので、pane は作業中でも limit になる。
+	// 通知は「limit resets at 5pm」と「weekly limit」を含み二重シグナルを満たすが、pane は作業中なので待機に入らない。
 	// cc-premise: 2.1.310 limit-screen lower-priority mode の作業中と終わりの通知 (lower_priority_test.go)
 	lowerPriorityActivePattern = regexp.MustCompile(`(?i)continuing now at lower priority|lower-priority mode is back on|^\s*lower priority until\b|working at lower priority`)
 
@@ -297,7 +297,7 @@ func compilePatterns(patterns []string) ([]*regexp.Regexp, error) {
 //  1. ネイティブ auto-continue がカウントダウン中 (KindAutoContinueArmed)
 //  2. 解除済みで Enter 待ち (KindResumeReady)
 //  3. 二重シグナルが揃っており、かつ恒久的な上限 (KindSpendLimit)
-//  4. 二重シグナルが揃った通常の上限 (KindLimit)
+//  4. 二重シグナルが揃った通常の上限 (KindLimit)。lower-priority mode で作業中なら上限として扱わない
 //  5. 直近出力ブロックの `API Error` 行にある一時エラー (KindTransient)
 func (c *Classifier) Classify(screen string, n int) Kind {
 	lines := tailLines(splitScreen(screen), n)
@@ -313,7 +313,7 @@ func (c *Classifier) Classify(screen string, n int) Kind {
 		return KindResumeReady
 	}
 
-	if c.isLimit(lines) {
+	if c.isLimit(lines) && !lowerPriorityActive(lines) {
 		// 恒久的な上限の判定は「limit が成立した画面」に限る。単に spend limit の
 		// 語を含むだけの画面まで拾うと、transient の検知まで巻き込んで潰してしまう。
 		for _, line := range lines {
@@ -346,10 +346,8 @@ func hasFooterPair(lines []string, status, next *regexp.Regexp) bool {
 	return false
 }
 
-// LowerPriorityActive は画面の末尾 n 行 (Classify と同じ範囲) に lower-priority mode の作業中の通知があり、
-// 終わった通知が無いかを返す。判定には使わず、上限の出来事に印を付けるためだけに使う (#251)。
-func LowerPriorityActive(screen string, n int) bool {
-	lines := tailLines(splitScreen(screen), n)
+// lowerPriorityActive は lower-priority mode の作業中の通知があり、終わった通知が無いかを返す。
+func lowerPriorityActive(lines []string) bool {
 	return slices.ContainsFunc(lines, lowerPriorityActivePattern.MatchString) &&
 		!slices.ContainsFunc(lines, lowerPriorityEndedPattern.MatchString)
 }

@@ -110,7 +110,9 @@ guard が拒否する。先に `printenv REX_BLOCK REX_SESSION` で値を取り�
 
 ### 5. レポートを書いて issue にする
 
-`./tmp/rex-drift/<YYYY-MM-DD>.md`。節は次の順。空の節も見出しだけ残す (「確認したが無かった」が伝わる)。
+`./tmp/rex-drift/<YYYY-MM-DD>.md`。PR 用の worktree に入る前に、main の checkout の `./tmp` へ書く。
+worktree の `./tmp` は `ExitWorktree` の remove で一緒に消え、worktree の中からは main の checkout へ書けない。
+節は次の順。空の節も見出しだけ残す (「確認したが無かった」が伝わる)。
 
 1. 前提が崩れた: どの marker (ファイル:行) が、changelog のどの項目か実機のどの応答で崩れたか。daemon への影響
    (全 pane が unknown、PaneList が落ちる、など)

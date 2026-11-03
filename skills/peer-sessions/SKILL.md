@@ -107,8 +107,9 @@ before の ref は `pr:<owner>/<repo>#<番号>` や `issue:` でもよい。`ses
 
 ### モデルの指定
 
-モデルは起動時に明示する。指定しなければ peer はメインと同じモデルで立つ。渡すのは調査や
-定型作業なので、subagent と同じモデルへ揃える。
+モデルは起動時に明示する。指定しなければ peer はメインと同じモデルで立つ。既定は subagent と同じモデル
+(`$CLAUDE_CODE_SUBAGENT_MODEL`) に揃える。判断や調査が要る作業に、それより軽いモデルを指定しない。
+workflow の 1 行を消すような定型の横展開だけ、`--model sonnet` を明示してよい。
 
 自分で起動するときは `$CLAUDE_CODE_SUBAGENT_MODEL` を読む。この変数はハーネスの settings の
 `env` が定義しており、Claude Code セッションの中からは環境変数として見える。
@@ -121,16 +122,18 @@ claude --name peer-b --model "${CLAUDE_CODE_SUBAGENT_MODEL:?}"
 シングルクォートで囲む。
 
 ```sh
-claude --name peer-b --model 'claude-sonnet-5[1m]'
+claude --name peer-b --model 'opus'
 ```
 
 settings の `env` は Claude Code のプロセスにだけ注入されるので、ユーザーのログインシェルに
-この変数は無い。変数のまま渡すと `:?` が起動前に落とす。クォートを外すと zsh が `[1m]` を
-glob と見て `no matches found` になる。
+この変数は無い。変数のまま渡すと `:?` が起動前に落とす。値が `claude-opus-5-5[1m]` のような形のとき、
+クォートを外すと zsh が `[1m]` を glob と見て `no matches found` になる。
 
 `--model` はそのプロセスの argv で、settings の `model` と `env.ANTHROPIC_MODEL` の両方に勝つ。
 他のセッションには影響しない。逆にモデルを変えるために settings を書き換える経路は取らない。
-設定は全セッションで共有され、次に起動するセッションを巻き込む。
+設定は全セッションで共有され、次に起動するセッションを巻き込む。起動済みの peer の中で `/model` を
+打つのも同じ経路で、ユーザーの settings の `model` を書き換える (`claude-opus-5-5[1m]` が `opus` になり
+1M context が外れる)。モデルを替えたいなら peer を立て直す。
 
 ## 宛先の指定
 

@@ -37,8 +37,8 @@ func NewCache(blocks map[string]*State) *Cache {
 }
 
 // streamLine は `events --all --json` の 1 行のうち読む部分。
-// rex-premise: preview.22 cli events --all --json は session_event の payload.event に block_event / block_created / block_closed を、top level に session_created / session_destroyed を流す
-// rex-premise: preview.22 cli session new の最初の block には block_created が来ず、session_created の後にその block の event が流れる
+// rex-premise: preview.25 cli events --all --json は session_event の payload.event に block_event / block_created / block_closed を、top level に session_created / session_destroyed を流す
+// rex-premise: preview.25 cli session new の最初の block には block_created が来ず、session_created の後にその block の event が流れる
 type streamLine struct {
 	Type    string `json:"type"`
 	Payload struct {
@@ -60,7 +60,7 @@ type blockEvent struct {
 	Payload json.RawMessage `json:"payload"`
 }
 
-// rex-premise: preview.22 cli program_status_changed は {id, record, reason}、program_status_removed は {ids, reason}、process_changed は {generation, foreground}
+// rex-premise: preview.25 cli program_status_changed は {id, record, reason}、program_status_removed は {ids, reason}、process_changed は {generation, foreground}
 type (
 	programStatusChanged struct {
 		ID     string `json:"id"`
@@ -163,7 +163,7 @@ func (c *Cache) applyBlockEvent(raw json.RawMessage, line []byte) error {
 	case "child_exited":
 		// --keep-open の block は終了後に shell が前景へ戻らず process_changed が来ない。前景を空にして、
 		// 残った record を polling の経路 (終了後の応答に foreground が無い) と同じく未検証にする。
-		// rex-premise: preview.22 cli child_exited の後も idle の record は残り、process_changed は来ない
+		// rex-premise: preview.25 cli child_exited の後も idle の record は残る。process_changed は来ないか、来ても foreground は null
 		st.Process.Foreground = nil
 	}
 	if err != nil {

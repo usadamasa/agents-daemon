@@ -81,6 +81,8 @@ rg -n -o --hidden 'rex-premise: preview\.[0-9]+ (program_status|cli).*' --glob '
 
 AGENTS.md の説明文の行は `rex-premise:` の後に版が続かないので、この pattern には当たらない。
 `--hidden` は `.claude/skills/` の references にある marker を拾うため。
+版を上げる置き換えは topic の語まで含めて打つ (`preview.22 cli` → `preview.25 cli`、`program_status` も同じ)。
+`preview.22 ` のように空白で終わる文字列で置き換えると、Edit の new_string の末尾の空白が落ちて `preview.25cli` になる。
 版を上げた後は、空白の欠けた marker (`preview.21cli`) が無いことを `rg -n --hidden 'rex-premise: preview\.[0-9]+[^ 0-9]' --glob '!tmp/**' .`
 で確かめる。この pattern に当たる marker は上の一覧から漏れる。
 `<version>` は Mac の版なので、範囲の始まりの Mac の版より古い marker が点検の対象。そういう marker が無ければ

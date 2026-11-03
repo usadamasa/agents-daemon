@@ -7,7 +7,7 @@ docs に無く、2.1.302 のバイナリと実測 (2026-10-17、rex preview.15�
 版が変われば測り直す。
 
 <!-- cc-premise: 2.1.316 osc7501 state / app / kind の値と画面の状況の対応 (バイナリの builder と実測) -->
-<!-- rex-premise: preview.22 program_status rex は process 名から record を補わない。owner.pid が record に付く -->
+<!-- rex-premise: preview.25 program_status rex は process 名から record を補わない。owner.pid が record に付く -->
 
 ## 状況と record の対応
 

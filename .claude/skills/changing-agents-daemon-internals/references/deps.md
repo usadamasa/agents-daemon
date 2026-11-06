@@ -53,14 +53,18 @@ exec して stdout を返すだけで、JSON はフロントエンド (`gui/fron
 - 宛先の block は statusline の記録 (`context/<sid>.json`) を逆引きし、claude が前景のものを選ぶ (複数なら新しい block)
 - 送る前に pane を読み、利用者の答えを待つ prompt (`multiplexer.WaitingOnPrompt`、permission / question / auth)、
   上限の画面 (`detect` の分類。cmd が注入する)、入力欄の打ちかけの文のどれかに当たれば送らずに exit 1 で理由を返す。
-  入力欄は `❯` で始まる最後の行で、空のときは `❯` の後に NBSP だけ。`❯` の行が無ければ送らない
-- 文面と Enter は別々に送る (monitor の再開と同じ作法)。複数行の文面は bracketed paste (`\x1b[200~` … `\x1b[201~`)
-  で囲み、改行が Enter にならないようにする (実測: 3 行が 1 つの prompt として入る)
+  入力欄は `❯` で始まる最後の行で、空のときは `❯` の後に NBSP だけ。`❯` の行が無ければ送らない。残りがあるときは
+  制御シーケンス付き (`rex capture --format=vt`、`PaneReadOptions.Styled`) で読み直し、薄字 (SGR 2) だけなら Claude Code の
+  次の prompt の提案とみなして送る (提案は打つと消える。実測)。素の字が 1 文字でもあれば打ちかけの文として拒む
+- 文面の制御文字 (改行とタブ以外の C0、DEL、C1) は落としてから打つ。文面はメモ (セッションが書いたもの) や利用者の入力で、
+  ESC が混じると pane ではキーとして読まれる (ターンの中断、埋め込まれた paste の終わりの印)
+- 文面と Enter は別々に送る (monitor の再開と同じ作法)。改行かタブを含む文面は bracketed paste (`\x1b[200~` … `\x1b[201~`)
+  で囲み、改行が Enter に、タブがキーにならないようにする (実測: 3 行が 1 つの prompt として入る)
 - monitor と違って Escape は送らない。Escape は `/rate-limit-options` のメニューを閉じるためのもので、ターンの途中の
   セッションに送ると中断になる。ターンの途中の pane には送り、文面は入力欄に溜まって次のターンになる
 - 文面が上限の検知語を含むときは送ったうえで `warning` を返す (入力欄に残る間は daemon が上限と取り違えうる。#257)
 - 結果は `tell` の出来事 (to、pane、delivered、reason) に書く
-<!-- cc-premise: 2.1.319 input-line 入力欄は ❯ で始まる行で、空のときは NBSP。複数行は bracketed paste で 1 つの貼り付けになる -->
+<!-- cc-premise: 2.1.319 input-line 入力欄は ❯ で始まる行で、空のときは NBSP。複数行は bracketed paste で 1 つの貼り付けになる。次の prompt の提案は薄字で打つと消える -->
 
 アプリは rex の外で起きるので、`spawn` / `tell` / `park hand` は REX_SESSION を要求しない (`backend.ConnectRex`)。
 `spawn` が window を置く rex の session は、REX_SESSION が無ければ statusline の記録で最後に見た session

@@ -5,7 +5,8 @@
 // 属さず engine の送信を持たないので、多重化ツールへの操作は mod や hook から叩かない決めごとどおり daemon のバイナリが担う。
 //
 // 送る前に pane を読み、利用者の答えを待つ prompt が開いている (Enter が承認になる)、上限の画面 (monitor の再開の経路と
-// 取り違える)、入力欄に打ちかけの文がある (後ろに連結される) のどれかなら送らない。上限からの再開 (monitor) と違って
+// 取り違える)、入力欄に打ちかけの文がある (後ろに連結される) のどれかなら送らない。Claude Code が入力欄に出す次の prompt の
+// 提案 (薄字) は打つと消えるので、打ちかけの文には数えない。上限からの再開 (monitor) と違って
 // Escape は送らない。Escape は `/rate-limit-options` のメニューを閉じるためのもので、ターンの途中のセッションに送ると
 // 中断になる。ターンの途中の pane には送り、文面は入力欄に溜まって次のターンになる。
 //
@@ -80,6 +81,7 @@ type Runner struct {
 
 // Run は req の文面を宛先のセッションの pane に打つ。送らなかったときは理由を error で返し、pane には何も送っていない。
 func (r Runner) Run(ctx context.Context, req Request) (Result, error) {
+	req.Text = stripControls(req.Text)
 	if strings.TrimSpace(req.Text) == "" {
 		return Result{}, errors.New("文面が空なので送らない")
 	}
@@ -106,8 +108,15 @@ func (r Runner) Run(ctx context.Context, req Request) (Result, error) {
 		return Result{}, fmt.Errorf("pane %s の画面に入力欄 (❯ の行) が見つからないので送らない", pane.PaneID)
 	}
 	if rest != "" {
-		// 打ちかけの文は相手のセッションの中身なので、理由 (ログにも残る) には長さだけを書く。
-		return Result{}, fmt.Errorf("pane %s の入力欄に打ちかけの文 (%d 文字) があるので送らない", pane.PaneID, utf8.RuneCountInString(rest))
+		// 素の画面では次の prompt の提案と打ちかけの文が同じに見えるので、制御シーケンス付きで読み直して薄字を除く。
+		styled, err := r.Host.PaneRead(ctx, pane.PaneID, multiplexer.PaneReadOptions{Lines: lines, Styled: true})
+		if err != nil {
+			return Result{}, fmt.Errorf("pane %s の画面を読めない: %w", pane.PaneID, err)
+		}
+		if typed := typedRemainder(styled); typed != "" {
+			// 打ちかけの文は相手のセッションの中身なので、理由 (ログにも残る) には長さだけを書く。
+			return Result{}, fmt.Errorf("pane %s の入力欄に打ちかけの文 (%d 文字) があるので送らない", pane.PaneID, utf8.RuneCountInString(typed))
+		}
 	}
 	res := Result{PaneID: pane.PaneID}
 	if kind := r.classify(req.Text); kind != "" {
@@ -159,10 +168,24 @@ func (r Runner) classify(text string) string {
 	return r.Screen(text)
 }
 
+// stripControls は文面の制御文字 (改行とタブ以外の C0、DEL、C1) を落とす。文面はメモ (セッションが park tool で書いた
+// もの) や利用者の入力で、ESC が混じると pane ではキー (ターンの中断、paste の終わり) として読まれる。
+func stripControls(text string) string {
+	return strings.Map(func(c rune) rune {
+		if c == '\n' || c == '\t' {
+			return c
+		}
+		if c < 0x20 || (c >= 0x7f && c < 0xa0) {
+			return -1
+		}
+		return c
+	}, text)
+}
+
 // submit は文面と Enter を別々のキーストロークで送る (monitor の再開と同じ作法。まとめて送ると Claude のペースト検知に
-// 引っかかる)。複数行の文面は bracketed paste で囲む。
+// 引っかかる)。改行かタブを含む文面は bracketed paste で囲む (タブはそのまま打つと Claude Code のキーになる)。
 func (r Runner) submit(ctx context.Context, paneID, text string) error {
-	if strings.Contains(text, "\n") {
+	if strings.ContainsAny(text, "\n\t") {
 		text = pasteBegin + text + pasteEnd
 	}
 	if err := r.Host.SendText(ctx, paneID, text); err != nil {
@@ -199,4 +222,55 @@ func inputRemainder(screen string) (rest string, found bool) {
 		return strings.Trim(after, " \t "), true
 	}
 	return "", false
+}
+
+// typedRemainder は制御シーケンス付きの画面から、入力欄に利用者が打った文を返す。Claude Code は次の prompt の提案を
+// 入力欄に薄字 (SGR 2) で出し、何か打つと消える (打った文の後ろに連結はされない) ので、薄字の文字は数えない。
+// 提案の見た目が変わって薄字でなくなれば、打ちかけの文として拒む側に倒れる。
+// cc-premise: 2.1.319 input-line 次の prompt の提案は入力欄に SGR 2 (薄字) で出て、打つと消える
+func typedRemainder(styled string) string {
+	var line string
+	for _, l := range strings.Split(styled, "\n") {
+		if strings.Contains(l, promptMark) {
+			line = l
+		}
+	}
+	var typed strings.Builder
+	dim := false
+	for len(line) > 0 {
+		if strings.HasPrefix(line, "\x1b[") {
+			end := strings.IndexFunc(line[2:], func(c rune) bool { return c >= 0x40 && c <= 0x7e })
+			if end < 0 {
+				break
+			}
+			if line[2+end] == 'm' {
+				dim = dimAfter(dim, line[2:2+end])
+			}
+			line = line[3+end:]
+			continue
+		}
+		c, size := utf8.DecodeRuneInString(line)
+		if !dim && c >= 0x20 && c != 0x7f {
+			typed.WriteRune(c)
+		}
+		line = line[size:]
+	}
+	after, ok := strings.CutPrefix(strings.TrimLeft(typed.String(), " "), promptMark)
+	if !ok {
+		return ""
+	}
+	return strings.Trim(after, " \t ")
+}
+
+// dimAfter は SGR の引数 (ESC [ と m の間) を読んだ後の薄字の状態。2 で始まり、0 (空も同じ) か 22 で終わる。
+func dimAfter(dim bool, params string) bool {
+	for _, p := range strings.Split(params, ";") {
+		switch p {
+		case "2":
+			dim = true
+		case "", "0", "22":
+			dim = false
+		}
+	}
+	return dim
 }

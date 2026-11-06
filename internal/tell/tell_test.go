@@ -32,10 +32,19 @@ const typingScreen = "───────────────────�
 	"❯ ここまで打った\n" +
 	"────────────────────────────────────────\n" + statusEnd
 
+// 入力欄の行を制御シーケンス付き (rex capture --format=vt) で読んだもの。Claude Code の次の prompt の提案は
+// SGR 2 (薄字) で描かれ、打ちかけの文は素の文字で描かれる。
+const (
+	emptyStyled      = "❯ \r\n"
+	suggestionStyled = "❯ \x1b[0m\x1b[2mここまで打った\x1b[0m\r\n"
+	typedStyled      = "❯ ここまで打った\r\n"
+)
+
 type fixture struct {
 	host   *multiplexerfake.Client
 	panes  map[string]multiplexer.Pane
 	screen string
+	styled string
 	kinds  map[string]string
 	slept  []time.Duration
 }
@@ -48,6 +57,7 @@ func newFixture() *fixture {
 			otherID:  {PaneID: otherID, Agent: "claude-code", AgentStatus: multiplexer.AgentStatusWorking, SessionID: otherSID},
 		},
 		screen: idleScreen,
+		styled: emptyStyled,
 		kinds:  map[string]string{},
 	}
 	f.host = &multiplexerfake.Client{
@@ -58,7 +68,12 @@ func newFixture() *fixture {
 			}
 			return p, nil
 		},
-		PaneReadFunc: func(_ context.Context, _ string, _ multiplexer.PaneReadOptions) (string, error) { return f.screen, nil },
+		PaneReadFunc: func(_ context.Context, _ string, opts multiplexer.PaneReadOptions) (string, error) {
+			if opts.Styled {
+				return f.styled, nil
+			}
+			return f.screen, nil
+		},
 	}
 	return f
 }
@@ -112,6 +127,36 @@ func TestRunner_Run_multilineIsPasted(t *testing.T) {
 	}
 }
 
+// 文面の制御文字 (ESC、DEL、C1) は落として打つ。埋め込まれた bracketed paste の終わりの印も ESC が落ちて文字列になり、
+// paste を途中で閉じない。改行とタブは残し、タブも paste で囲む (タブは Claude Code のキーになる)。
+func TestRunner_Run_stripsControlCharacters(t *testing.T) {
+	cases := []struct {
+		name string
+		text string
+		sent string
+	}{
+		{"paste の終わりの印と DEL と C1", "a\x1b[201~\nb\x7fc\u0085d", "\x1b[200~a[201~\nbcd\x1b[201~"},
+		{"ESC と CR だけの 1 行", "\x1bOA\rx", "OAx"},
+		{"タブを含む 1 行", "x\ty", "\x1b[200~x\ty\x1b[201~"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFixture()
+			if _, err := f.runner().Run(context.Background(), request(tc.text)); err != nil {
+				t.Fatal(err)
+			}
+			if got := f.host.SentTexts[0]; got != tc.sent {
+				t.Fatalf("sent = %q, want %q", got, tc.sent)
+			}
+		})
+	}
+	// 制御文字しか無い文面は空として送らない。
+	f := newFixture()
+	if _, err := f.runner().Run(context.Background(), request("\x1b\x07\r\x7f")); err == nil || !strings.Contains(err.Error(), "空") || len(f.host.Calls) != 0 {
+		t.Fatalf("err = %v, calls = %v", err, f.host.Calls)
+	}
+}
+
 // 文面が上限の検知語に当たるときは送ったうえで注意を返す。
 func TestRunner_Run_warnsOnDetectionWords(t *testing.T) {
 	f := newFixture()
@@ -139,7 +184,10 @@ func TestRunner_Run_refuses(t *testing.T) {
 			f.panes[claudeID] = multiplexer.Pane{PaneID: claudeID, Agent: "claude-code", AgentStatus: multiplexer.AgentStatusBlocked, AgentKind: multiplexer.AgentKindPermission, AgentMessage: "approve Bash?", SessionID: sid}
 		}, "prompt"},
 		{"上限の画面", func(f *fixture, _ *Request) { f.kinds[idleScreen] = "limit" }, "上限"},
-		{"入力欄に打ちかけの文", func(f *fixture, _ *Request) { f.screen = typingScreen }, "打ちかけ"},
+		{"入力欄に打ちかけの文", func(f *fixture, _ *Request) { f.screen, f.styled = typingScreen, typedStyled }, "打ちかけ"},
+		{"提案の後に打ちかけの文", func(f *fixture, _ *Request) {
+			f.screen, f.styled = typingScreen, "❯ \x1b[0m\x1b[2mここまで\x1b[0m打った\r\n"
+		}, "打ちかけの文 (3 文字)"},
 		{"入力欄が見つからない", func(f *fixture, _ *Request) { f.screen = "何も無い画面\n" }, "入力欄"},
 		{"文面が空", func(_ *fixture, req *Request) { req.Text = " \n" }, "空"},
 	}
@@ -162,6 +210,47 @@ func TestRunner_Run_refuses(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// 入力欄の残りが次の prompt の提案 (薄字) だけなら、打つと消えるので空とみなして送る。素の画面で残りがあるときだけ
+// 制御シーケンス付きで読み直す (PaneRead が 2 回)。
+func TestRunner_Run_ignoresSuggestion(t *testing.T) {
+	f := newFixture()
+	f.screen, f.styled = typingScreen, suggestionStyled
+	if _, err := f.runner().Run(context.Background(), request("hello")); err != nil {
+		t.Fatal(err)
+	}
+	reads := 0
+	for _, c := range f.host.Calls {
+		if strings.HasPrefix(c, "PaneRead") {
+			reads++
+		}
+	}
+	if reads != 2 || len(f.host.SentTexts) != 1 {
+		t.Fatalf("reads = %d, sent = %v (calls %v)", reads, f.host.SentTexts, f.host.Calls)
+	}
+}
+
+// 実機の vt の行 (rex capture --format=vt)。提案の行、打った行、送った prompt の echo (入力欄より上) の順。
+func TestTypedRemainder(t *testing.T) {
+	cases := []struct {
+		styled string
+		want   string
+	}{
+		{"❯ \x1b[0m\x1b[2mタスク「tell の検証」を TaskUpdate で completed にして\x1b[0m\r\n", ""},
+		{"❯ x\r\n", "x"},
+		{emptyStyled, ""},
+		// 薄字の途中で色だけ変わっても薄字のまま。22 で薄字が終わる。
+		{"❯ \x1b[2m提案\x1b[31m赤い提案\x1b[22m打った\x1b[0m\r\n", "打った"},
+		// 入力欄より上の echo の行 (背景色付き) は見ない。
+		{"❯ \x1b[0m\x1b[48;2;240;240;240m送った文\x1b[0m\r\n────\r\n❯ \x1b[2m提案\x1b[0m\r\n", ""},
+		{"no prompt\r\n", ""},
+	}
+	for _, tc := range cases {
+		if got := typedRemainder(tc.styled); got != tc.want {
+			t.Errorf("typedRemainder(%q) = %q, want %q", tc.styled, got, tc.want)
+		}
 	}
 }
 

@@ -16,6 +16,53 @@ tasks:
     cmds:
       - hooks/build-daemon.sh
 
+  gui:frontend:
+    desc: gui/frontend/src と npm の dagre から gui/frontend/dist (main.go が embed する) を組む
+    # bundler は使わない。src をそのまま写し、配置の library だけ node_modules から vendor/ に写す。
+    dir: gui/frontend
+    cmds:
+      - npm ci --no-audit --no-fund
+      - rm -rf dist
+      - mkdir -p dist/vendor
+      - cp -R src/. dist/
+      - cp node_modules/@dagrejs/dagre/dist/dagre.esm.js dist/vendor/dagre.esm.js
+
+  gui:build:
+    desc: タスクの依存図のアプリ (gui/、別 module) を bin/agent-tasks にビルドする。macOS だけ
+    # root の module に Wails を混ぜない (cgo と WebKit の link が SessionStart hook の go build と Linux の CI に
+    # 載らない) ので、-C で gui/ の module に入ってビルドする。deployment target は wails3 CLI の darwin の
+    # build task と同じ 12.0 に揃える (揃えないと ld が object ごとに版の食い違いを警告する)。
+    deps: [gui:frontend]
+    env: &gui-env
+      CGO_CFLAGS: -mmacosx-version-min=12.0
+      CGO_LDFLAGS: -mmacosx-version-min=12.0
+      MACOSX_DEPLOYMENT_TARGET: "12.0"
+    cmds:
+      - go build -C gui -o ../bin/agent-tasks .
+
+  gui:test:
+    desc: gui/ の module のテスト (Wails の link が要るので macOS だけ。CI には載せない)
+    # main.go が embed する frontend/dist は生成物なので、先に組まないと vet が落ちる
+    deps: [gui:frontend]
+    dir: gui
+    env: *gui-env
+    cmds:
+      - go vet ./...
+      - gosec -quiet ./...
+      - go test ./...
+      # フロントエンドの DOM に依らない部分 (graph.js、memo.js) は frontend/test を node --test で回す
+      - npm --prefix frontend test
+
+  gui:install:
+    desc: bin/agent-tasks を ~/Applications/agent-tasks.app に置く (ad hoc 署名、手元でだけ動く)
+    deps: [gui:build]
+    cmds:
+      - mkdir -p ~/Applications/agent-tasks.app/Contents/MacOS
+      - cp bin/agent-tasks ~/Applications/agent-tasks.app/Contents/MacOS/agent-tasks
+      # build/ は global の gitignore に当たるので darwin/ に置く
+      - cp gui/darwin/Info.plist ~/Applications/agent-tasks.app/Contents/Info.plist
+      - codesign --force --sign - ~/Applications/agent-tasks.app
+
   test:
     desc: Go テストと bats テストを実行
     cmds:
@@ -68,7 +115,8 @@ tasks:
       # `go tool analyze-arch-lint --metrics`。
       - go tool analyze-arch-lint --strict .
       - task: vulncheck
-      - gosec ./...
+      # gui/ は別 module (Wails のアプリ) で、gui:test が自分で gosec を回す。./... は入れ子の module の .go も拾うので外す
+      - gosec -exclude-dir=gui ./...
       # 揮発性を git の履歴から測り、base の commit と比べる。CI の checkout は fetch-depth: 0 にする
       - scripts/analyze-modularity.sh
 

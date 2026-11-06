@@ -1,0 +1,205 @@
+/* 色は 1 つの鍵に 1 つの意味: 緑 進行中と longest chain / 橙 人の返事待ち / 紫 上限待ち / 赤 失敗 / 灰 それ以外 */
+:root {
+  --ink: #1c211e;
+  --ink-soft: #3f4642;
+  --muted: #6a716c;
+  --bg: #eef0ee;
+  --panel: #ffffff;
+  --panel-soft: #f6f7f5;
+  --hover: #eef1ee;
+  --line: #d8dcd8;
+  --line-strong: #a9b0ab;
+  --border: #c9cfca;
+  --green: #2f6b4f;
+  --green-ink: #1f4a36;
+  --green-soft: #e3eee7;
+  --orange: #c9841f;
+  --orange-soft: #f6ead3;
+  --orange-ink: #7a4d10;
+  --purple: #6b4ea1;
+  --purple-soft: #ebe4f5;
+  --purple-ink: #4f3a7a;
+  --red: #a4343a;
+  --gray-dot: #9aa49e;
+  --exited: #b4bbb6;
+}
+html, body { height: 100%; }
+body {
+  margin: 0;
+  font: 13px/1.3 "Hiragino Sans", "Noto Sans JP", -apple-system, sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  -webkit-user-select: none;
+  user-select: none;
+}
+/* display を指定した要素でも hidden 属性を効かせる */
+[hidden] { display: none !important; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+button:disabled { cursor: default; opacity: 0.55; }
+select { font: inherit; color: inherit; }
+.grow { flex: 1 1 0; }
+.ph { font-size: 12px; color: var(--muted); letter-spacing: 0.04em; }
+
+.bar {
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: 14px;
+  height: 52px; padding: 0 20px; box-sizing: border-box;
+  background: var(--panel); border-bottom: 1px solid var(--line);
+}
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg button { min-height: 30px; padding: 0 12px; font-size: 12.5px; color: var(--ink-soft); }
+.seg button.on { background: var(--green-soft); color: var(--green-ink); font-weight: 500; }
+.tb {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 34px; padding: 0 14px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--panel); font-size: 13px;
+}
+.tb:hover { background: var(--hover); }
+.tb.sm { min-height: 28px; padding: 0 10px; font-size: 12px; }
+.sw { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-soft); cursor: pointer; }
+.sw input { margin: 0; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; padding: 3px 10px; border-radius: 999px;
+  background: #e8eae8; color: #4f5652; max-width: 100%; box-sizing: border-box;
+}
+.chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip.ok { background: var(--green-soft); color: var(--green-ink); }
+.chip.warn { background: var(--orange-soft); color: var(--orange-ink); }
+.chip.limit { background: var(--purple-soft); color: var(--purple-ink); }
+.chip.err { background: #f3e0e1; color: #6e2328; }
+.chip.link { cursor: pointer; }
+.chip.link:hover { text-decoration: underline; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; background: var(--green); flex: 0 0 auto; }
+.dot.off { background: var(--gray-dot); }
+.dot.warn { background: var(--orange); }
+.dot.limit { background: var(--purple); }
+.dot.err { background: var(--red); }
+
+.graph { flex: 1 1 0; min-height: 160px; position: relative; overflow: auto; }
+.graph .canvas { position: relative; }
+.graph svg.edges { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+.graph svg.edges path { fill: none; stroke: var(--line-strong); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.graph svg.edges path.edge { stroke-dasharray: 6 6; }
+.graph svg.edges path.chain { stroke: var(--green); }
+.graph svg.edges marker path { fill: var(--line-strong); stroke: none; }
+.graph svg.edges marker.chain path { fill: var(--green); }
+.empty { position: absolute; left: 24px; top: 24px; color: var(--muted); }
+
+.node {
+  position: absolute; width: 240px; height: 72px; box-sizing: border-box;
+  display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  text-align: left; font-size: 13px; line-height: 1.3;
+  box-shadow: 0 1px 2px rgba(28, 33, 30, 0.05); overflow: hidden;
+}
+.node:hover { border-color: var(--gray-dot); }
+.node.halt { border-color: #d9a85c; }
+.node.gone { color: var(--muted); }
+.node.sel { border: 2px solid var(--green); box-shadow: 0 0 0 4px var(--green-soft); padding: 7px 11px; }
+.node.dim { opacity: 0.45; }
+.node .lb { flex: 1 1 auto; min-width: 0; }
+.node b { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.node small {
+  display: block; color: var(--muted); font-size: 11px; font-weight: 400; margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.st { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; background: var(--gray-dot); }
+.st.working { background: var(--green); }
+.st.warn { background: var(--orange); }
+.st.limit { background: var(--purple); }
+.st.err { background: var(--red); }
+.st.exited { background: var(--exited); }
+.node .bd { font-size: 11px; padding: 1px 6px; border-radius: 999px; background: var(--hover); color: var(--ink-soft); flex: 0 0 auto; }
+
+.lg {
+  flex: 0 0 auto;
+  display: flex; gap: 16px; align-items: center;
+  padding: 8px 64px; font-size: 11.5px; color: var(--muted);
+}
+.lg i { display: inline-block; width: 28px; border-top: 2px solid var(--line-strong); vertical-align: middle; margin-right: 6px; }
+.lg i.d { border-top-style: dashed; }
+.lg i.c { border-top-color: var(--green); }
+
+.park {
+  flex: 0 0 40%; min-height: 160px; box-sizing: border-box;
+  border-top: 1px solid var(--line); background: var(--panel-soft);
+  display: flex; flex-direction: column;
+}
+.park .hd { display: flex; align-items: center; gap: 12px; padding: 12px 20px; min-height: 52px; box-sizing: border-box; border-bottom: 1px solid #e3e6e3; }
+.park .hd-title { font-weight: 700; font-size: 14px; }
+.park .ls { flex: 1 1 auto; overflow-y: auto; padding: 4px 0 8px; }
+.park .none { padding: 12px 20px; color: var(--muted); }
+.mrow {
+  display: flex; align-items: center; gap: 12px; min-height: 36px; padding: 0 20px; width: 100%; box-sizing: border-box;
+  text-align: left; font-size: 13px; white-space: nowrap;
+}
+.mrow::after { content: "›"; color: var(--gray-dot); flex: 0 0 auto; font-size: 16px; line-height: 1; }
+.mrow:hover { background: var(--hover); }
+.mrow.sel { background: var(--green-soft); box-shadow: inset 3px 0 0 var(--green); }
+.mrow .k { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: #e8eae8; color: var(--ink-soft); min-width: 64px; box-sizing: border-box; text-align: center; flex: 0 0 auto; }
+.mrow .t { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.mrow .s { color: var(--muted); font-size: 12px; flex: 0 0 auto; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+.mrow .w { color: var(--muted); font-size: 12px; width: 84px; text-align: right; flex: 0 0 auto; }
+
+.foot {
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: 10px;
+  height: 28px; padding: 0 20px; box-sizing: border-box;
+  background: var(--panel); border-top: 1px solid var(--line);
+  font-size: 11.5px; color: var(--muted);
+  white-space: nowrap; overflow: hidden;
+}
+.foot .dot { width: 7px; height: 7px; }
+.foot .err-text { color: var(--red); }
+.foot .notice { color: var(--ink); }
+
+/* まとめて外すボタンは凡例の行の右端 */
+.lg { padding-right: 24px; }
+
+/* 動詞のボタン (ポップアップの中) */
+.acts { display: flex; gap: 2px; margin: 0 -8px; }
+.act {
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  min-width: 58px; padding: 8px 4px; border-radius: 8px; font-size: 11.5px; color: var(--ink-soft); line-height: 1;
+}
+.act:hover { background: var(--hover); }
+.act svg { width: 20px; height: 20px; stroke: var(--ink-soft); fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.act.pri { color: var(--green-ink); }
+.act.pri svg { stroke: var(--green); }
+.act.danger { color: #7a2a2f; }
+.act.danger svg { stroke: var(--red); }
+.pop textarea.note {
+  width: 100%; box-sizing: border-box; font: inherit; font-size: 12.5px; padding: 6px 8px;
+  border: 1px solid var(--border); border-radius: 8px; resize: vertical; margin: 4px 0;
+}
+.pop .lk .tb { flex: 0 0 auto; }
+.pop .grp > .tb { align-self: flex-start; }
+.act.on { background: var(--green-soft); }
+
+/* 選んだオブジェクトの単体ビュー。選んだ箱や行のそばに固定位置で出す */
+.pop {
+  position: fixed; width: 400px; max-height: calc(100vh - 100px); box-sizing: border-box; overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(28, 33, 30, 0.18);
+  padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; z-index: 10;
+  -webkit-user-select: text; user-select: text;
+}
+.pop .head { display: flex; flex-direction: column; gap: 6px; padding-right: 28px; }
+.pop .title { font-size: 16px; font-weight: 700; line-height: 1.35; }
+.pop .chips { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.pop p { margin: 0; font-size: 12.5px; line-height: 1.6; color: var(--ink-soft); white-space: pre-wrap; }
+.pop .grp { display: flex; flex-direction: column; gap: 2px; }
+.pop .x { position: absolute; right: 12px; top: 12px; width: 28px; height: 28px; border-radius: 6px; color: var(--muted); font-size: 16px; line-height: 28px; text-align: center; }
+.pop .x:hover { background: var(--hover); }
+.kv { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 6px 12px; font-size: 12.5px; margin: 0; }
+.kv dt { color: var(--muted); margin: 0; }
+.kv dd { margin: 0; line-height: 1.5; overflow-wrap: anywhere; }
+.lk { display: flex; align-items: center; gap: 8px; font-size: 12.5px; min-height: 28px; }
+.lk button { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.lk button:hover { text-decoration: underline; }
+.src { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--ink-soft); line-height: 1.5; }
+.src span { display: flex; gap: 8px; }
+.src em { font-style: normal; color: var(--muted); flex: 0 0 auto; }

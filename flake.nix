@@ -50,6 +50,8 @@
             # mod (hooks/*.ts、*.tsx) の型検査 (tsc)。nixpkgs の typescript は 7 系 (Go 実装、旧 typescript-go)。
             # 型は Claude Code が .claude-plugin/types/ に置く
             typescript
+            # gui/frontend の npm (task gui:frontend)。配置の library を取るだけで bundler は使わない
+            nodejs
           ];
           env.GOTOOLCHAIN = "local";
         };

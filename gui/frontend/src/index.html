@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>agent-tasks</title>
+<link rel="stylesheet" href="./style.css">
+<!-- runtime.js は Wails の asset server が出す ES module で、window.wails に Call と Events を置く -->
+<script type="module" src="/wails/runtime.js"></script>
+<script type="module" src="./app.js"></script>
+</head>
+<body>
+<header class="bar">
+  <span class="ph">タスク</span>
+  <span class="seg" role="group" aria-label="見せ方">
+    <button class="on" type="button" data-view="graph">依存図</button>
+    <button type="button" data-view="list" disabled title="まだ無い">一覧</button>
+  </span>
+  <label class="sw" id="completed-toggle" hidden><input type="checkbox" id="completed-check"> <span id="completed-label"></span></label>
+  <span class="grow"></span>
+</header>
+<main class="graph" id="graph">
+  <div class="empty" id="empty">依存図を読んでいる…</div>
+</main>
+<div class="lg" id="legend" hidden>
+  <span><i aria-hidden="true"></i>同じセッションの blockedBy</span>
+  <span><i class="d" aria-hidden="true"></i>セッションをまたぐ依存</span>
+  <span><i class="c" aria-hidden="true"></i>longest chain</span>
+  <span class="grow"></span>
+  <button class="tb sm" type="button" id="dismiss-ended" hidden></button>
+</div>
+<section class="park" id="park" hidden>
+  <div class="hd">
+    <span class="hd-title" id="park-title">メモ</span>
+    <select class="tb sm" id="repo-filter" aria-label="repo で絞る"><option value="">すべての repo</option></select>
+    <span class="grow"></span>
+    <button class="tb sm" type="button" id="discard-stale" hidden></button>
+  </div>
+  <div class="ls" id="park-list"></div>
+</section>
+<footer class="foot" id="foot"><span class="dot off"></span><span id="foot-text">daemon の状態を読んでいる…</span></footer>
+<div class="pop" id="pop" role="dialog" hidden></div>
+</body>
+</html>

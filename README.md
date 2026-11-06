@@ -39,7 +39,8 @@ plugin が持つもの:
 | `agents-daemon dream` | consolidation の実行系 (`harvest` / `mine` / `stage` / `adopt` / `forget`) |
 | `agents-daemon prune-worktrees` | 誰も使っていない Claude Code の worktree の回収 (SessionStart hook が `--hook` 付きで呼ぶ。手で叩く形は `skills/agents-daemon/references/operations.md`) |
 | `/deps` コマンド (mod、`hooks/deps.tsx`) | 依存図: セッションをまたぐタスクの依存を、辺をレーンで描いた行 (`git log --graph` の形、上流が上) で会話の横の pane に描く。fullscreen のレイアウトでだけ開く。生きているセッションとタスクをすべて描き、ノードを選ぶと辺を外す・足す、そのタスクのセッションへ指示を送れる (#134) |
-| `agents-daemon deps` | mod が読む依存図の JSON (タスクの記録、status.json、辺、メモを組み直したもの) を出す |
+| `agent-tasks` (macOS のアプリ、`gui/`) | 依存図をセッションの外の窓で描く操作盤。箱と線の図とパーキングロットの一覧を出し、タスクやメモを選ぶとその場に単体ビューが開く。バイナリだけで済む操作 (依存の付け外し、メモを捨てる、終了したセッションのタスクを外す・メモにする、メモを新しいセッションへ渡す) を持つ。セッションへの送達を伴う操作は `/deps` の pane に残っている (#364、設計は issue から) |
+| `agents-daemon deps` | mod とアプリが読む依存図の JSON (タスクの記録、status.json、辺、メモを組み直したもの) を出す |
 | `agents-daemon ingest-task` | PostToolUse hook の stdin からタスクを `tasks/<session_id>/` に記録する |
 | `agents-daemon ingest-turn-failure` | hook の stdin から turn の失敗を `turn-failures/<session_id>.json` に記録し、消す |
 | `agents-daemon park add\|set\|list\|discard\|withdraw\|adopt` | パーキングロット (タスクの途中で見つけた脇のメモ) を `parking/` に置く・status を書き換える・一覧する・古い open のメモをまとめて捨てる・置いたセッションが取り下げる・終了したセッションのタスクをメモへ移す。同じメモは 1 つにまとめる (#121) |
@@ -117,8 +118,23 @@ agents-daemon prune-worktrees --dry-run          # 回収対象の worktree を�
 agents-daemon spawn < request.json               # prompt を最初のターンにした Claude Code を repo の rex window に起こす (依存図の pane が呼ぶ)
 ```
 
-mod が呼ぶコマンド (`deps`、`park`、`edge add` / `rm`、`spawn`、`event-log`) は入力を stdin の JSON で受ける。
-形は `protocol/protocol.schema.json` が持つ。
+mod とアプリが呼ぶコマンド (`deps`、`park`、`edge add` / `rm`、`task dismiss`、`spawn`、`event-log`) は入力を
+stdin の JSON で受ける。形は `protocol/protocol.schema.json` が持つ。
+
+## 依存図のアプリ (agent-tasks)
+
+`gui/` は依存図をセッションの外の窓で描く macOS のアプリで、[Wails v3](https://v3.wails.io/) の WKWebView に
+HTML の箱と SVG の線で描く。root とは別の Go module で、plugin の install では建たない。手元で建てて置く。
+
+```sh
+task gui:build    # gui/frontend を組んで bin/agent-tasks にビルドする (Xcode Command Line Tools と npm が要る)
+task gui:test     # go vet、gosec、go test と、フロントエンドの node --test
+task gui:install  # ~/Applications/agent-tasks.app に置く (ad hoc 署名)
+```
+
+アプリは daemon のバイナリ (`${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon`) のサブコマンドを呼ぶだけで、
+状態はバイナリが持つ。数秒おきに `deps` を読み直し、操作は `park` / `edge` / `task dismiss` / `spawn` に
+stdin の JSON で渡す。ログに添える操作主体は `app`。
 
 ## 開発
 
@@ -132,7 +148,7 @@ claude plugin validate --strict .
 ```
 
 開発には flakes を有効にした [Nix](https://nixos.org/) と、[direnv](https://direnv.net/) と
-[nix-direnv](https://github.com/nix-community/nix-direnv) を使う。Go・task・golangci-lint・shellcheck・bats・jq などは
+[nix-direnv](https://github.com/nix-community/nix-direnv) を使う。Go・task・golangci-lint・shellcheck・bats・jq・nodejs などは
 `flake.nix` の devShell で揃え、版は `flake.lock` が固定する nixpkgs で決まる。`.envrc` が `use flake` で devShell を
 読み込むので `direnv allow` する。CI も同じ flake を使う。plugin を使うだけなら Nix は要らない。
 

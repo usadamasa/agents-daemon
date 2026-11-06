@@ -1,0 +1,3 @@
+# task gui:frontend が src/ と node_modules/ から組む (main.go が embed する)
+/frontend/dist/
+/frontend/node_modules/

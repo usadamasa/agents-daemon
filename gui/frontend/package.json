@@ -1,0 +1,12 @@
+{
+  "name": "agent-tasks-frontend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test 'test/*.test.js'"
+  },
+  "description": "agent-tasks (依存図のアプリ) のフロントエンド。npm は配置の library (dagre) を取るためだけに使い、bundler は使わない",
+  "dependencies": {
+    "@dagrejs/dagre": "3.1.3"
+  }
+}

@@ -385,6 +385,21 @@ func TestExecClient_PaneRead(t *testing.T) {
 	}
 }
 
+// Styled は制御シーケンスを保ったまま読む (--format=vt)。
+func TestExecClient_PaneRead_styled(t *testing.T) {
+	f := newFakeRex(t)
+	f.put(t, "capture-"+blockClaudeWorking+".txt", "❯ \x1b[2mhint\x1b[0m\r\n")
+	got, err := f.client(staticResolver(nil)).PaneRead(context.Background(), blockClaudeWorking,
+		multiplexer.PaneReadOptions{Styled: true})
+	if err != nil {
+		t.Fatalf("PaneRead() error = %v", err)
+	}
+	if got != "❯ \x1b[2mhint\x1b[0m\r\n" {
+		t.Errorf("PaneRead() = %q", got)
+	}
+	f.assertCalls(t, "--autostart=false capture -b "+blockClaudeWorking+" --trim --unwrap --format=vt")
+}
+
 // PaneGeometry は size と modes の 2 回で block の高さと screen を返す。screen の未知の値は primary と見る
 // (modes の output_schema: Treat any other value as 'primary')。
 func TestExecClient_PaneGeometry(t *testing.T) {

@@ -260,10 +260,15 @@ func (c *execClient) fetchBlock(ctx context.Context, session, blockID string) (*
 
 // PaneRead は block の画面を返す。Claude Code は alternate screen で描くので、Claude の block では
 // 可視の行数で頭打ちになる (alternate screen でない block では scrollback も返る)。
-// opts.Lines > 0 なら末尾 Lines 行に絞る。
+// opts.Lines > 0 なら末尾 Lines 行に絞る。opts.Styled なら制御シーケンスを保つ。
 // rex-premise: preview.25 cli capture は alternate screen では可視の行だけ、通常の画面では scrollback も返す。--trim と --unwrap がある
+// rex-premise: preview.25 cli capture --format=vt は制御シーケンス (SGR、CR) を保つ
 func (c *execClient) PaneRead(ctx context.Context, paneID string, opts multiplexer.PaneReadOptions) (string, error) {
-	out, err := c.run(ctx, "capture", "-b", paneID, "--trim", "--unwrap")
+	args := []string{"capture", "-b", paneID, "--trim", "--unwrap"}
+	if opts.Styled {
+		args = append(args, "--format=vt")
+	}
+	out, err := c.run(ctx, args...)
 	if err != nil {
 		return "", err
 	}

@@ -107,6 +107,8 @@ func IsClaudeAgent(p Pane) bool {
 // PaneReadOptions は PaneRead の呼び出しオプション。
 type PaneReadOptions struct {
 	Lines int // 0 以下なら行数を指定しない
+	// Styled は端末の制御シーケンス (SGR) を保ったまま読む。文字の見た目 (薄字) で区別が要るときだけ。
+	Styled bool
 }
 
 // Geometry は pane の端末の大きさと、alternate screen (全画面のプログラムが切り替える、scrollback の無い画面) に

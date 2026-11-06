@@ -23,6 +23,7 @@ teardown() {
 @test "バイナリと stamp が揃っていれば daemon --ensure を exec し、build しない" {
   make_fake_daemon "$TEST_TMPDIR/daemon.calls" "$BIN"
   printf '%s\n' "$PLUGIN_VERSION" >"$STAMP"
+  printf '%s\n' "$PLUGIN_VERSION" >"$GUI_STAMP"
   install_fake_go
 
   PATH="$FIXTURE_PATH" run_hook --separate-stderr "$HOOK"
@@ -31,6 +32,26 @@ teardown() {
   [ "$(<"$TEST_TMPDIR/daemon.calls")" = "daemon --ensure" ]
   [ ! -e "$TEST_TMPDIR/go.calls" ]
   [ ! -e "$BUILD_LOG" ]
+}
+
+@test "daemon は最新で agent-tasks の stamp だけ違えば、gui の build を detach してから daemon --ensure を exec する" {
+  require_darwin
+  make_fake_daemon "$TEST_TMPDIR/daemon.calls" "$BIN"
+  printf '%s\n' "$PLUGIN_VERSION" >"$STAMP"
+  printf '%s\n' "0000.0000.0" >"$GUI_STAMP"
+  install_fake_go
+  install_fake_gui_toolchain
+
+  PATH="$FIXTURE_PATH" run_hook --separate-stderr "$HOOK"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  [ "$(<"$TEST_TMPDIR/daemon.calls")" = "daemon --ensure" ]
+
+  wait_until gui_stamp_is_current
+  [ -x "$GUI_APP/Contents/MacOS/agent-tasks" ]
+  # daemon は建て直さない
+  ! grep -q -- " ./cmd/agents-daemon" "$TEST_TMPDIR/go.calls"
+  [ "$(<"$STAMP")" = "$PLUGIN_VERSION" ]
 }
 
 @test "stamp が plugin の version と違えば build を detach し、完了後に新しいバイナリで daemon --ensure する" {

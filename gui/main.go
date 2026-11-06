@@ -9,9 +9,11 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
-// frontend/dist だけを embed する。frontend/ 直下は後で npm の package.json と node_modules を持つ。
+// frontend/src をそのまま embed する (bundler は使わない)。配置の library は src/vendor に写してあり、build に npm は要らない
+// (SessionStart hook が go build だけで建てられるように)。frontend/ 直下の package.json と node_modules はテストと vendor の
+// 更新 (task gui:vendor) のためだけにある。
 //
-//go:embed all:frontend/dist
+//go:embed all:frontend/src
 var assets embed.FS
 
 func main() {

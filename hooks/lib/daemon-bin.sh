@@ -20,6 +20,13 @@ DAEMON_STAMP="$DAEMON_BIN_DIR/agents-daemon.version"
 DAEMON_BUILD_LOCK="$DAEMON_BIN_DIR/.build.lock"
 DAEMON_BUILD_LOG="${XDG_STATE_HOME:-$HOME/.local/state}/agents-daemon/logs/build.log"
 
+# 依存図のアプリ (gui/、agent-tasks)。バイナリは daemon と同じ cache に置き、起動用の .app は ~/Applications に組む。
+# stamp と lock は daemon と別 (macOS 以外や toolchain の無い環境では gui だけ建たない)。
+GUI_BIN="$DAEMON_BIN_DIR/agent-tasks"
+GUI_STAMP="$DAEMON_BIN_DIR/agent-tasks.version"
+GUI_BUILD_LOCK="$DAEMON_BIN_DIR/.build-gui.lock"
+GUI_APP="$HOME/Applications/agent-tasks.app"
+
 # plugin.json の version を stdout に出す。読めなければ非 0。
 plugin_version() {
   jq -er '.version' "$PLUGIN_ROOT/.claude-plugin/plugin.json"

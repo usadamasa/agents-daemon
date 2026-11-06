@@ -26,7 +26,7 @@ func newDaemon() *Daemon {
 }
 
 // daemonBin はバイナリの置き場。hooks/lib/daemon-bin.sh、hooks/daemon-bin.ts、Taskfile.yml の install と同じ規則で、
-// 変えるときは 4 つを揃える。
+// 変えるときは 4 つを揃える (AGENTS.md)。
 func daemonBin() string {
 	cache := os.Getenv("XDG_CACHE_HOME")
 	if cache == "" {

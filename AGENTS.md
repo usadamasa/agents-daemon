@@ -61,7 +61,9 @@ mod が呼ぶコマンドは入力を stdin の JSON で受け、出力を JSON 
 書き済みのファイルの読み方も変わる。
 
 バイナリの置き場 (`${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon`) は `hooks/lib/daemon-bin.sh`、
-`hooks/daemon-bin.ts`、`Taskfile.yml` の `install` が同じ規則で持つ。変えるときは 3 つを揃える。
+`hooks/daemon-bin.ts`、`Taskfile.yml` の `install`、`gui/service.go` が同じ規則で持つ。変えるときは 4 つを揃える。
+依存図のアプリ (`gui/`) は `hooks/build-gui.sh` が同じ cache と `~/Applications/agent-tasks.app` に置く
+(置き場は `daemon-bin.sh` だけが持つ)。
 
 ## 文章を書くときの決めごと
 

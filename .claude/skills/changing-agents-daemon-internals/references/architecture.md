@@ -152,7 +152,7 @@ pane ごとに次を評価する。上限側の詳細は [rate-limit.md](rate-li
 | `$STATE/turn-failures/<session_id>.json` | `agents-daemon ingest-turn-failure` (StopFailure / Stop / UserPromptSubmit hook `hooks/ingest-turn-failure.sh` が呼ぶ) | StopFailure で書き、Stop と UserPromptSubmit で消す | そのセッションの最後の turn を終わらせた API error (`error`、`error_details`、`last_assistant_message`、観測時刻。`turnfailure`)。あるのは「最後の turn が API error で終わり、次の turn がまだ始まっていない」間だけ。読み手は daemon の上限の出来事の記録 | 次の turn の hook が消す。閉じたセッションの残りは daemon が 24 時間で消す |
 | `$STATE/logs/events.log` | `agents-daemon ingest-task` / `park add` / `park set` / `park discard` / `park withdraw` / `park adopt` / `park hand` / `task dismiss` / `tell` と、mod (`hooks/log.ts`) が呼ぶ `agents-daemon event-log` | タスクの記録、メモの操作、アプリからの送達 (tell、park hand)、mod の出来事 (tool の登録の失敗、通知の失敗) があったとき。mod は同じ失敗を書き直さない | 依存図とパーキングロットの経路の出来事を 1 行 1 件 (`eventlog`、出来事の一覧は package doc)。session ID、task ID、メモの id、件数、失敗の理由だけで、subject、title、detail、送った文面は書かない。`logs --events` が読む | rotate |
 | `$STATE/logs/events.log.YYYY-MM-DD` | 上と同じ | 日付が変わって最初に書くとき | 前日までの `events.log` をそのまま退避したもの | daemon が 7 日で消す |
-| `$STATE/logs/build.log` | `hooks/build-daemon.sh` | SessionStart が build を起こしたとき | build の開始・完了・失敗 | 消さない (追記) |
+| `$STATE/logs/build.log` | `hooks/build-daemon.sh`、`hooks/build-gui.sh` | SessionStart が build を起こしたとき | build の開始・完了・失敗・飛ばした理由 | 消さない (追記) |
 | `$STATE/logs/dream-harvest.log` | Stop hook が detach した `agents-daemon dream harvest` | 失敗したときだけ (成功は無音) | 時刻付きの失敗の行と stderr | 消さない (追記) |
 | `$STATE/dream/harvest/<YYYY-MM-DD>.jsonl` | `agents-daemon dream harvest` (Stop hook と手動) | Stop のたび | 1 セッション 1 行の transcript の要約 (PII 除去済み)。日付は ts_start | `dream harvest` が 90 日で消す |
 | `$STATE/dream/harvest-state.json` | `agents-daemon dream harvest` | Stop のたび | `--incremental` の前回実行時刻 | 上書き |
@@ -160,6 +160,9 @@ pane ごとに次を評価する。上限側の詳細は [rate-limit.md](rate-li
 | `$STATE/dream/replays/<candidate-id>.json`、`$STATE/dream/verdicts/<candidate-id>.json` | `agents-daemon:dream` skill の Replay / Gate (LLM が Write する) | 手動 | 旧新の挙動予測と 3 judge の verdict | `dream harvest` が 90 日で消す |
 | `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon` | `hooks/build-daemon.sh` / `task install` | build 時 | 実行ファイル | 消さない |
 | `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon.version` | `hooks/build-daemon.sh` | build の成功時 | 建てた元の plugin version | 消さない |
+| `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agent-tasks` | `hooks/build-gui.sh` (`build-daemon.sh` の末尾と、daemon だけ最新のときの SessionStart、`task gui:install` が呼ぶ) | build 時 (macOS で go と Xcode Command Line Tools があるときだけ) | 依存図のアプリの実行ファイル | 消さない |
+| `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agent-tasks.version` | `hooks/build-gui.sh` | build の成功時 (飛ばしたときは書かない) | 建てた元の plugin version | 消さない |
+| `~/Applications/agent-tasks.app` | `hooks/build-gui.sh` | build の成功時 (一時の bundle を組んで rename で入れ替える) | 起動用の .app (上の実行ファイルの写し、`gui/darwin/Info.plist`、ad hoc 署名)。起動中のアプリは元の inode を持ち続け、次に開いたときに新しくなる | 消さない |
 
 `$STATE` はデーモンが必要に応じて作る。消しても壊れない
 (次回の起動と次回の statusline 描画で再生成される)。

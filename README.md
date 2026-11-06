@@ -38,9 +38,10 @@ plugin が持つもの:
 | `agents-daemon ingest-statusline` | 自前の statusline から stdin を渡して state file だけを書かせるサブコマンド |
 | `agents-daemon dream` | consolidation の実行系 (`harvest` / `mine` / `stage` / `adopt` / `forget`) |
 | `agents-daemon prune-worktrees` | 誰も使っていない Claude Code の worktree の回収 (SessionStart hook が `--hook` 付きで呼ぶ。手で叩く形は `skills/agents-daemon/references/operations.md`) |
-| `/deps` コマンド (mod、`hooks/deps.tsx`) | 依存図: セッションをまたぐタスクの依存を、辺をレーンで描いた行 (`git log --graph` の形、上流が上) で会話の横の pane に描く。fullscreen のレイアウトでだけ開く。生きているセッションとタスクをすべて描き、ノードを選ぶと辺を外す・足す、そのタスクのセッションへ指示を送れる (#134) |
-| `agent-tasks` (macOS のアプリ、`gui/`) | 依存図をセッションの外の窓で描く操作盤。箱と線の図とパーキングロットの一覧を出し、タスクやメモを選ぶとその場に単体ビューが開く。バイナリだけで済む操作 (依存の付け外し、メモを捨てる、終了したセッションのタスクを外す・メモにする、メモを新しいセッションへ渡す) を持つ。セッションへの送達を伴う操作は `/deps` の pane に残っている (#364、設計は issue から) |
-| `agents-daemon deps` | mod とアプリが読む依存図の JSON (タスクの記録、status.json、辺、メモを組み直したもの) を出す |
+| `agent-tasks` (macOS のアプリ、`gui/`) | 依存図 (#134): セッションをまたぐタスクの依存を、セッションの外の窓に箱と線で描く操作盤。生きているセッションとタスクをすべて描き、パーキングロットの一覧を下に出す。タスクやメモを選ぶとその場に単体ビューが開き、依存の付け外し、そのタスクのセッションへの指示、渡す・着手・完了・削除の依頼、メモを生きているセッションか新しいセッションへ渡す、捨てる、終了したセッションのタスクを外す・メモにする、を行う (#364) |
+| `agents-daemon deps` | アプリと mod が読む依存図の JSON (タスクの記録、status.json、辺、メモを組み直したもの) を出す |
+| `agents-daemon tell` | 生きているセッションの pane の入力欄に文面を打って Enter を送る。アプリの送達の経路 |
+| `agents-daemon park hand` | パーキングのメモを取って生きているセッション (`tell`) か新しく起こすセッション (`spawn`) へ渡し、届かなければ戻す |
 | `agents-daemon ingest-task` | PostToolUse hook の stdin からタスクを `tasks/<session_id>/` に記録する |
 | `agents-daemon ingest-turn-failure` | hook の stdin から turn の失敗を `turn-failures/<session_id>.json` に記録し、消す |
 | `agents-daemon park add\|set\|list\|discard\|withdraw\|adopt` | パーキングロット (タスクの途中で見つけた脇のメモ) を `parking/` に置く・status を書き換える・一覧する・古い open のメモをまとめて捨てる・置いたセッションが取り下げる・終了したセッションのタスクをメモへ移す。同じメモは 1 つにまとめる (#121) |
@@ -115,10 +116,12 @@ agents-daemon dream mine --project <canonical>   # memory と skill を突き合
 agents-daemon dream stage --project <canonical>  # 候補の承認レポートを ./tmp/dream/ に書く
 agents-daemon dream forget <memory-name>...      # auto memory を消す (sandbox の外で動かす)
 agents-daemon prune-worktrees --dry-run          # 回収対象の worktree を表示する (SessionStart hook が --hook 付きで呼ぶ)
-agents-daemon spawn < request.json               # prompt を最初のターンにした Claude Code を repo の rex window に起こす (依存図の pane が呼ぶ)
+agents-daemon spawn < request.json               # prompt を最初のターンにした Claude Code を repo の rex window に起こす (アプリが呼ぶ)
+agents-daemon tell < request.json                # 生きているセッションの入力欄に文面を打つ (アプリが呼ぶ)
+agents-daemon park hand < request.json           # メモを取って渡し、届かなければ戻す (アプリが呼ぶ)
 ```
 
-mod とアプリが呼ぶコマンド (`deps`、`park`、`edge add` / `rm`、`task dismiss`、`spawn`、`event-log`) は入力を
+アプリと mod が呼ぶコマンド (`deps`、`park`、`edge add` / `rm`、`task dismiss`、`spawn`、`tell`、`event-log`) は入力を
 stdin の JSON で受ける。形は `protocol/protocol.schema.json` が持つ。
 
 ## 依存図のアプリ (agent-tasks)
@@ -133,8 +136,13 @@ task gui:install  # ~/Applications/agent-tasks.app に置く (ad hoc 署名)
 ```
 
 アプリは daemon のバイナリ (`${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon`) のサブコマンドを呼ぶだけで、
-状態はバイナリが持つ。数秒おきに `deps` を読み直し、操作は `park` / `edge` / `task dismiss` / `spawn` に
-stdin の JSON で渡す。ログに添える操作主体は `app`。
+状態はバイナリが持つ。数秒おきに `deps` を読み直し、操作は `park` / `edge` / `task dismiss` / `spawn` / `tell` /
+`park hand` に stdin の JSON で渡す。ログに添える操作主体は `app`。
+
+セッションへ届ける操作 (指示、タスクの着手・完了・削除・渡す依頼、メモの手渡し) は `tell` が rex の pane の入力欄に
+文面を打って Enter を送る形で届く。利用者の答えを待つ prompt が開いている、上限の画面、入力欄に打ちかけの文がある
+pane には送らず、理由を文面の下に出す。アプリは rex の外で起きるので、新しいセッションを起こす rex の session は
+利用者が最後に使っていた session (statusline の記録) になる。
 
 ## 開発
 

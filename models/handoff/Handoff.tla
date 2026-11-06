@@ -1,12 +1,14 @@
 ---------------------------- MODULE Handoff ----------------------------
-(* パーキングのメモ 1 つを、複数のセッションの mod が渡す・捨てる・adopt する手順のモデル。
+(* パーキングのメモ 1 つを、複数の呼び手 (依存図のアプリが起こす `park hand` のプロセス) が渡す・捨てる・adopt する
+   手順のモデル。Mods は同時に動きうる呼び手の集合で、名前は mod が渡していた頃のまま。
 
    写しているもの:
-   - handOff は「依存図を読む → 取る (park set の status handed、from open) → 送る → 届かなければ戻す
-     (park set の status open、from handed)」(hooks/parking.ts の handOff)。from は元の status が違えば失敗する
-     (parking の Store.Set)。取れるのは 1 つの mod だけで、取られたメモはほかの mod の依存図に open と出ても取れない。
+   - park hand は「依存図を読む → 取る (park set の status handed、from open) → 送る → 届かなければ戻す
+     (park set の status open、from handed)」(parkhand の Runner.Run)。1 つのプロセスが直列に行うが、取る・送る・戻すは
+     それぞれ別のファイルの書き込みと rex への送信なので、2 つの呼び手の手順は交錯しうる。from は元の status が違えば
+     失敗する (parking の Store.Set)。取れるのは 1 つの呼び手だけで、取られたメモはほかの依存図に open と出ても取れない。
    - spawn は window を作ってから claude が前景になるのを待ち、待ち切れなければ foreground=false で返す。pane は残り、
-     claude が起動していることもある (spawn/spawn.go の waitForClaude)。mod はそのメモを戻さず handed のまま残す。
+     claude が起動していることもある (spawn/spawn.go の waitForClaude)。park hand はそのメモを戻さず handed のまま残す。
    - deps は status.json が今の daemon のものでなければ pane を空として扱い、未完了のタスクを exited と描く
      (deps/deps.go の livePanes、graph.go)。Adopt は「今の daemon がタスクの記録より後に書いた status.json に
      そのセッションの pane が無い」ときだけ通す (daemonstate の SessionExited、parking/place.go の Adopt)。
@@ -92,9 +94,9 @@ Read(m) ==
   /\ view' = [view EXCEPT ![m] = memo]
   /\ UNCHANGED <<memo, handoff, pc, attempts, deliveries, sessions, live, seen, task, taskMemo, adoptedLive>>
 
-(* 取る。mod は自分が読んだ依存図で open だったメモを、送る前に park set (status handed、from open、宛先) で取る。
-   ファイルの status が open でなければ (ほかの mod が先に取った、捨てた) 失敗し、読み直しに戻る。
-   プロセスの失敗も同じ経路 (parking.ts の handOff)。SplitClaim なら宛先は次の手で書く。 *)
+(* 取る。呼び手は自分が読んだ依存図で open だったメモを、送る前に park set (status handed、from open、宛先) で取る。
+   ファイルの status が open でなければ (ほかの呼び手が先に取った、捨てた) 失敗し、読み直しに戻る。
+   プロセスの失敗も同じ経路 (parkhand の Run は取れなければ error で終わる)。SplitClaim なら宛先は次の手で書く。 *)
 Claim(m, d) ==
   /\ pc[m] = "idle" /\ view[m] = "open" /\ attempts[m] < MaxAttempts
   /\ attempts' = [attempts EXCEPT ![m] = @ + 1]
@@ -115,7 +117,8 @@ Record(m) ==
   /\ pc' = [pc EXCEPT ![m] = "claimed"]
   /\ UNCHANGED <<memo, dest, deliveredTo, view, attempts, deliveries, sessions, live, seen, task, taskMemo, adoptedLive>>
 
-(* 取ったメモを渡す (peer / self)。届けば handed のまま終わり、届かなければ戻しに進む。 *)
+(* 取ったメモを生きているセッションへ渡す (tell で入力欄に打つ。peer と self の区別は無くなったが宛先の名前は残す)。
+   届けば handed のまま終わり、届かなければ (prompt が開いている、打ちかけの文がある、rex の失敗) 戻しに進む。 *)
 Send(m) ==
   /\ pc[m] = "claimed" /\ dest[m] \in {"peer", "self"}
   /\ \/ /\ deliveries' = deliveries + 1
@@ -129,7 +132,7 @@ Send(m) ==
 (* 取ったメモを、新しいセッションを起こして渡す。入力の検査で拒まれれば何も起きず戻しに進む。window を作れば claude が
    前景になるのを待ち、なれば届いたことになる。待ち切れなければ pane は残り claude が起動していることもある。起きたか
    分からないメモは戻さず handed のまま残し、人に pane を知らせる (spawn.go の waitForClaude が foreground=false で返し、
-   parking.ts の handOff は戻さない)。戻すと押し直しで 2 つ目が起きる。宛先は起こす先の repo のまま書き直さない。 *)
+   parkhand の spawn は戻さない)。戻すと押し直しで 2 つ目が起きる。宛先は起こす先の repo のまま書き直さない。 *)
 Spawn(m) ==
   /\ pc[m] = "claimed" /\ dest[m] = "repo"
   /\ \/ /\ pc' = [pc EXCEPT ![m] = "undelivered"]                   \* check で拒否

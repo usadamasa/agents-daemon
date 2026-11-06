@@ -1,92 +1,77 @@
-# 依存図 (mod)
+# 依存図
 
-plugin の mod が描く依存図の pane と、model の `SendMessage` の結果に添える辺の書き方の通知。パーキングのメモの
-見せ方と操作、park tool、ファイルのメモの通知は [parking.md](parking.md) が持つ。mod は Claude Code の中で動き、
-データはバイナリのサブコマンド越しに読み書きする。
+`agents-daemon deps` が出す依存図の JSON、それを描くアプリ (`gui/`) とセッションへの送達 (`tell`、`park hand`)、
+model の `SendMessage` の結果に添える辺の書き方の通知 (mod)。パーキングのメモの見せ方と操作、park tool、
+ファイルのメモの通知は [parking.md](parking.md) が持つ。
 
 ## mod の束ね方
 
 `hooks/hooks.json` の `modules` に書ける module は 1 つなので、`hooks/register.ts` が
-`hooks/deps.tsx`、`hooks/park.tsx`、`hooks/notice.ts`、`hooks/handoff-notice.ts` の hook を束ね、皆が使う
-`session.start` を持つ。
+`hooks/park.tsx`、`hooks/notice.ts`、`hooks/handoff-notice.ts` の hook を束ね、皆が使う `session.start` を持つ。
+依存図を描く mod (`/deps` の pane) は #364 でアプリに移して外した。mod に残るのは tool の結果に添える経路で、
+セッションの中にしか置けないものだけ。
 
-## 依存図の pane
+## 依存図の JSON (`deps`)
 
-`/deps` コマンドで依存図を会話の横 (dock) の pane に開き、`agents-daemon deps` の JSON (`DepsData`) を数秒ごとに
-読み直して描く。読み込みは `hooks/deps-data.ts` の `loadDeps` が 1 箇所で持つ。JSON は `deps` パッケージが
+`agents-daemon deps` は stdin の `{}` を受けて `DepsData` を出す。JSON は `deps` パッケージが
 `$STATE/tasks/` (PostToolUse hook の `ingest-task` が書く)、`status.json`、`$STATE/edges/`、`$STATE/parking/` から組む。
+読み手 (アプリ、`hooks/handoff-notice.ts`) はどのセッションにも属さないので、「自分の repo」のような欄は無い。
 
-- `graph` はタスクの依存の DAG (次の節)
+- `graph` はタスクの依存の DAG (「依存の DAG」の節)
 - `repos` は repo (`git rev-parse --git-common-dir` の main worktree) ごとの生きているセッション (`sessions`) と
   open のメモ (`memos`)。セッションは作業の cwd の repo に入り、タスクの無いセッションは pane の cwd の repo に入る。
   メモだけの repo も載る。並びは見出し、鍵の順
 - `sessions` の `subject` は、その repo で進行中のタスク (Key の順で最初のもの)、進行中の TodoWrite の項目、
   pane の今の作業 (`agent_message`)、セッション名、cwd の末尾の順に選ぶ。並びは表示名、session ID の順
-- `here` は開いたセッションの repo の鍵で、pane はこの repo を自セッションの repo として扱う
+- `recent_repos` はセッション台帳に載った repo (最後に見た時刻の新しい順)。新しいセッションを起こす repo の候補
+- `stale_memo_days` は open のメモを「古い」とみなす日数 (`parking` の `StaleAfter`)
 
-指示を送れるのは生きているセッションのノードだけ。
-<!-- cc-premise: 2.1.302 hooks mods の pane / session.send / session.cwd と、PostToolUse の Task 系の形 -->
+## 依存図のアプリ (`gui/`)
 
-pane は fullscreen のレイアウトで dock に置かれるときだけ出す。
-`/deps` は `presentation.isFullscreen` が false なら開かず、
-開いた後に `placement: inline` で描かれたら (端末を 110 桁より狭めたときなど) mod が閉じる。
-中身は「依存の DAG」の `rows`: 1 行 1 ノードで上流を上に並べ、行頭に辺のレーンを罫線で描いたもの
-(`git log --graph` の形)。合流は `├─┘`、分岐は `├─┐` の行を挟み、
-閉じたレーンには右のレーンを 1 本ずつ `┌─┘` の行で詰める。セッションをまたぐ辺 (`kind: edge`) は `┆ ┄` の破線、
-longest chain の辺の罫線 (`marks`) は色付き。同じノードは 1 回しか出ず、
-先頭の数の行 (`■ ○ ▸ ↵ ✓ ◇`) の下に全部の行を描く (pane はスクロールする)。完了したノードは既定で出さず、
-`Show completed` で `rows_with_completed` に切り替える。pane の底には記号の凡例を薄く置き、中身が pane の高さに
-満たないときも底に寄せる。記号と数の行と凡例は `hooks/graph.ts`、レーンの割り当ては `graph/dag` が持つ。
+アプリは依存図をセッションの外の窓に箱と線で描き、タスクとメモの単体ビューに動詞を並べる操作盤。建て方と置き場は
+README の「依存図のアプリ (agent-tasks)」。Go 側 (`gui/service.go`) はバイナリのサブコマンドを allow-list の中で
+exec して stdout を返すだけで、JSON はフロントエンド (`gui/frontend/src/`) が読む。状態はバイナリが持ち、
+数秒おきに `deps` を読み直す (窓が隠れている間は間隔を伸ばす)。操作のログの主体は固定の `app`。
 
-終了したセッションのタスク (`⊘` と、終了したセッションの `✓`) は、ノードの操作の `Dismiss` と、凡例の枠の
-`Dismiss N ended` (いま行に出ている分だけ。畳んだ完了は `Show completed` のときだけ数える) で一覧から外す (#337)。
-`Dismiss N ended` は記録を戻せないので、押すと確かめの行 (`Dismiss` / `Cancel`) に替わり、押したときに見えていた
-行の key だけを消す。
-どちらも `task dismiss` に参照を 1 つずつ渡し (一括の数え上げは mod が持つ)、バイナリが `park adopt` と同じく status.json でセッションの終了を確かめてから
-`tasks/` の記録を消す。生きているセッションの記録は次の TaskList で戻るので対象にしない。TodoWrite の項目
-(記録はセッションの 1 リスト) と置き場のノード (記録が無い) も対象外。辺の記録は残り、相手の記録が無い辺は描かない
-(`sid:` の端点はセッションのタスクが無くなると `exited` の置き場のノードになるので、`Unlink` で外す)。
-`hooks/dismiss.ts` が持つ。
-選んだノードの詳細で辺を操作する。
+- `graph.js` は DAG の索引、`ops.js` は操作の判定 (`candidates`、`canDismiss`、`canAdopt`、`canTell`、`isOwnTask`)、
+  宛先の並べ方、タスクへ頼む文面の雛形。`actions.js` は操作 (結果の文面を返す)。`app.js` が描く
+- バイナリだけで済む操作: 依存を足す・外す (`edge add` / `rm`)、メモを捨てる (`park set` / `park discard`)、
+  終了したセッションのタスクを外す (`task dismiss`)・メモにする (`park adopt`)
+- 送達を伴う操作: 生きているセッションのノードへ指示を送る、未完了のタスクを渡す (生きているセッションか新しく起こす
+  repo)、着手・完了・削除・メモにする (持ち主のセッションに TaskUpdate を頼む)、同じセッションの blockedBy の
+  解消を頼む。どれも `tell` で届け、タスクを渡すときは相手へ送ってから持ち主に消すよう頼む (新しく起こすときは
+  `spawn` の後)。起きたか分からない (`foreground: false`) ときは消すよう頼まずに残す
+- メモを渡す (タスクにする・issue にする): 宛先は生きているセッションと新しく起こす repo。`park hand` 1 回で
+  取る・送る・戻すまで行う ([parking.md](parking.md))
+- 送達が拒まれたとき (下の `tell` の判定) は開いている選択と打った文面を残し、理由を文面の下に出す
 
-- `kind: edge` の辺は `Unlink` で `edge rm` に元の記録の今の参照を渡す (`sid:` の端点がタスクへ解決された後の
-  ノードの key は辺の記録に無いので、それでは消せない)
-- `kind: task` の辺 (同じセッションの `blockedBy`) は daemon から外せず、TaskUpdate にも外す引数が無い。
-  `Ask to unlink → <session>` でそのセッションへ、待たれている側を片付けるか待っている側を作り直すよう頼む
-  (タスクの ID はノードの `task_id`)
-- `+ Add blocker` は足すと輪になる候補 (下流) と `endpoint` が false のノードを出さず、`edge add` に両端のノードの
-  key と cwd を渡す
+### セッションへの送達 (`tell`)
 
-詳細の操作は枠の最後の行の `▾` で開くメニューに 1 行ずつ並べ、選んだらメニューを閉じてすぐ走らせる (#308)。
-横に並べると pane の幅で見切れるため。`Select` は開いた一覧を後ろの行に重ねて描き、枠の罫線と凡例が崩れるので
-使わず、枠なしの `Button` で並べて後ろの行を押し下げる。宛先を選ぶ操作 (`Hand off`、`To task`、`Ask for issue`) は
-見出しの下に宛先を `├` / `└` の枝で並べる。
-<!-- cc-premise: 2.1.312 mods Select は開いた一覧を後ろの行に重ねて描き、場所を取らない -->
+`agents-daemon tell` (`tell` パッケージ、handoff の家族) は宛先の session ID の pane の入力欄に文面を打って Enter を
+送る。利用者の操作は利用者の指示なので、peer メッセージではなく入力欄に打った文面としてそのターンの指示にする。
 
-開いたセッション自身の完了していないタスクには、`Start` / `Complete` / `Hand off` (宛先) / `Delete` / `To parking` /
-`+ Add blocker` を出す (`hooks/own-task.ts`)。mod は TaskUpdate を呼べないので、どの操作も自分の入力
-(`$.prompt.submit`) へ頼む文を渡し、タスクを動かすのは自分の model に任せる。
-peer への `Hand off` だけは mod が peer へ `$.session.send` で session ID 宛てに title とノードの `description` を送り、
-届いてから自分にタスクを消すよう頼む。渡す先は repo を問わず生きている
-ほかのセッション。宛先の `new session` の下にはメモと同じ repo の候補 ([parking.md](parking.md)) を並べ、mod が
-`agents-daemon spawn` で起こして同じ文面を最初のターンに入れ、起きてから自分にタスクを消すよう頼む (#309)。
-起きたか分からない (`foreground: false`) ときは消すよう頼まずに残す。`▾` の右の補足欄 (`✎`) に書いた文は、`Start` と `Hand off` の文面 (peer へは相手へ送る文面) の
-末尾に `利用者からの補足: …` として足し、選んだら欄を空にする (#310)。空なら文面は変わらない。`Complete` / `Delete` /
-`To parking` には足さない。開いたメニューと補足の下書きはノードを選び直すと消える。`To parking` は、扱うメモ (`memos` のうち捨てていないもの)
-があれば新しいメモを作らず、handed のメモを `park set` (status open、from handed) で戻してから消すよう頼み、
-入力へ渡せなければ自分への handed (to_session に自分) に取り直す。扱うメモが無ければ park tool で置いてから
-消すよう頼む。
-<!-- cc-premise: 2.1.303 mods pane の placement (dock / inline) と command.run の presentation.isFullscreen -->
+- 宛先の block は statusline の記録 (`context/<sid>.json`) を逆引きし、claude が前景のものを選ぶ (複数なら新しい block)
+- 送る前に pane を読み、利用者の答えを待つ prompt (`multiplexer.WaitingOnPrompt`、permission / question / auth)、
+  上限の画面 (`detect` の分類。cmd が注入する)、入力欄の打ちかけの文のどれかに当たれば送らずに exit 1 で理由を返す。
+  入力欄は `❯` で始まる最後の行で、空のときは `❯` の後に NBSP だけ。`❯` の行が無ければ送らない
+- 文面と Enter は別々に送る (monitor の再開と同じ作法)。複数行の文面は bracketed paste (`\x1b[200~` … `\x1b[201~`)
+  で囲み、改行が Enter にならないようにする (実測: 3 行が 1 つの prompt として入る)
+- monitor と違って Escape は送らない。Escape は `/rate-limit-options` のメニューを閉じるためのもので、ターンの途中の
+  セッションに送ると中断になる。ターンの途中の pane には送り、文面は入力欄に溜まって次のターンになる
+- 文面が上限の検知語を含むときは送ったうえで `warning` を返す (入力欄に残る間は daemon が上限と取り違えうる。#257)
+- 結果は `tell` の出来事 (to、pane、delivered、reason) に書く
+<!-- cc-premise: 2.1.319 input-line 入力欄は ❯ で始まる行で、空のときは NBSP。複数行は bracketed paste で 1 つの貼り付けになる -->
 
-pane を開いたとき、数 (repo、セッション、ノード、メモ) が変わったとき、`deps` が失敗したときは出来事のログに
-`mod.deps.open` / `mod.deps.changed` / `mod.deps.failed` を書く (`hooks/log.ts`、`eventlog`)。
+アプリは rex の外で起きるので、`spawn` / `tell` / `park hand` は REX_SESSION を要求しない (`backend.ConnectRex`)。
+`spawn` が window を置く rex の session は、REX_SESSION が無ければ statusline の記録で最後に見た session
+(`sessioncontext.LatestMultiplexerSession`)。rex は session を指定しないと複数あるときに曖昧として拒む。
 
 ## 依存の DAG (`graph`)
 
 `graph` はセッションをまたぐタスクの依存の DAG (#134)。ノードはタスク 1 つ (`task:<sid>/<tid>`)、TodoWrite の
 項目 1 つ (`todo:<sid>/<n>`)、タスクの無い生きているセッション 1 つ (`sid:<sid>`) で、辺は同じセッションの
 `blockedBy` (`kind: task`) と `$STATE/edges/` の辺 (`kind: edge`) を 1 つにしたもの。ノードの `key` は Ref
-(`ref`) そのもので、辺の端点と同じ形になる。mod は key を切り出さず、端点にできるかは `endpoint`
+(`ref`) そのもので、辺の端点と同じ形になる。読み手は key を切り出さず、端点にできるかは `endpoint`
 (TodoWrite の項目だけ false)、タスクの ID は `task_id` で読む。ノードの材料 (`graph.Card`) は `deps` パッケージが組み、
 辺の記録の端点は依存図を組むたびにノードへ解決し直す (`deps/graph`)。
 
@@ -111,7 +96,7 @@ created_at に生きていたか後から現れた (last_seen が created_at 以
 動いていた候補 (first_seen が created_at 以前) があれば first_seen の最も新しいもの、無ければ created_at より後に
 最初に現れたものを選ぶ。渡す側は `claude --name` で起こしてすぐ `edge add` を書くので、直前に起きた同名のセッションが
 相手になる。古い同名のセッションを待たせたかった場合のような取り違えは、`edge rm` してから `sid:` で書き直す。結びつけた端点は `sid:<sid>` に書き換え、元の参照を `bound_from` に残し、二度と結び直さない。
-tick ごとにするのは、渡した側が `edge add` を書いてから数秒で端点がそのセッションのノードにつながり、pane が置き場の
+tick ごとにするのは、渡した側が `edge add` を書いてから数秒で端点がそのセッションのノードにつながり、アプリが置き場の
 ノードを描き続けないようにするため。結びつく前の数秒は、`hooks/graph.ts` の `unlinked` が記録の `session:<名前>`
 で辺を見つけるので、辺の書き忘れの通知は出ない。
 
@@ -130,12 +115,12 @@ pane を解釈するのは `deps` パッケージの `activity` だけで、生�
 生きているセッションの未着手は `pending`、進行中は活動そのもの。
 <!-- cc-premise: 2.1.302 osc7501 agent_status と blocked の kind (permission / question / auth) からセッションの活動を決める -->
 
-止まっているかもバイナリが決めて渡し、mod は状態の語から決めない。`halted` はセッション自身が止まっている
-(`question` / `permission` / `limit` / `error`) ノードで、行の title の色と原因の鎖で先に選ぶ上流に使う。`stuck` は
-`halted` か、完了していない待ちの輪のノードで、数の行の ■、行の末尾の下流の数、longest chain の起点に使う。
+止まっているかもバイナリが決めて渡し、読み手は状態の語から決めない。`halted` はセッション自身が止まっている
+(`question` / `permission` / `limit` / `error`) ノードで、原因の鎖で先に選ぶ上流に使う。`stuck` は
+`halted` か、完了していない待ちの輪のノードで、footer の数、箱の下流の数、longest chain の起点に使う。
 
-段・下流の数・待ちの輪・原因の鎖・最長の鎖の数え方と、`rows` / `rows_with_completed` (位相順の行とレーンの割り当て。
-行の並びは `Nodes` の順を優先の順にし、直前のノードの下流で上流が出揃ったものを先に出す) は `graph/dag` が持つ。
+段 (`depth`)・下流の数・待ちの輪・原因の鎖・最長の鎖の数え方と、`rows` / `rows_with_completed` (位相順の行とレーンの
+割り当て) は `graph/dag` が持つ。アプリは `depth` を dagre の段にし、`rows` は読まない。
 
 ## 渡した宛先の辺の確かめ
 
@@ -150,7 +135,7 @@ after を `session:<名前>` と宛先の cwd にし、自分のタスクが宛�
 
 - 辺を書くのは渡した側の model だけなので、人ではなく model に伝える
 - subagent や teammate、cloud のセッションへの送信は依存図の名前に当たらないので添えない
-- mod 自身の送信 (`$.session.send`、メモの手渡しやノードへの指示) は `tool.call` を通らないので見ない
+- アプリの送達 (`tell`、`park hand`) は `tool.call` を通らないので見ない
 - 送信のエラー、subagent の送信、文面の無い送信 (`notify_when_idle` だけ、shutdown などの要求)、依存図の読み込みの
   失敗では何も添えない
 <!-- cc-premise: 2.1.310 mods SendMessage の tool.call は e.to と e.message を持ち、context は model だけが読む -->

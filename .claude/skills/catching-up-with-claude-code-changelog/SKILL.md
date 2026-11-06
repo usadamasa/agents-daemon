@@ -168,10 +168,11 @@ rg -n -o 'cc-premise: [0-9.]+ [a-z0-9-]+.*' --glob '!tmp/**' . | sort -t' ' -k3,
 | `osc7501` | 多重化ツールへの状態の報告 | OSC 7501, Program Status, terminal, title |
 | `peer-messaging` | 別セッションへの送受信 | ListAgents, SendMessage, messaging socket, cross-session |
 | `sandbox` | `dream forget` を sandbox の外で動かす設定 (setup skill) | excludedCommands, sandbox, excluded command, allowUnsandboxedCommands, Strict sandbox |
-| `mods` | 依存図とパーキングロットの mod (`hooks/deps.tsx` ほか): pane、slash command、`$.session.send` | mods, plugin modules, pane, ui.render, session.send, --plugin-dir |
+| `mods` | パーキングロットと通知の mod (`hooks/park.tsx`、`hooks/notice.ts`、`hooks/handoff-notice.ts`): tool.register、tool.call の結果の context、session.compact | mods, plugin modules, tool.register, tool.call, session.compact, --plugin-dir |
 | `tools` | タスクの記録 (`ingest-task`) が拾う Task 系ツールと TodoWrite の有無と入出力 | TaskCreate, TaskUpdate, TaskList, TodoWrite, CLAUDE_CODE_ENABLE_TODO_TOOLS, tasks |
 | `worktrees` | 放置 worktree の回収 (`prune-worktrees`): 本体の sweep の範囲と lock reason の書式 | worktree, worktrees, cleanupPeriodDays, EnterWorktree, --worktree, worktree lock, sweep |
 | `bash-env` | Bash ツールの環境から自分の session_id を引く (`edge add` の task 欄、`scripts/get-session-id.sh`) | CLAUDE_CODE_SESSION_ID, Bash tool, environment variable, env |
+| `input-line` | `tell` が送る前に読む入力欄 (`❯` の行、空なら NBSP、複数行は bracketed paste) | prompt input, input box, placeholder, paste, bracketed paste, multiline |
 
 ## やらないこと
 

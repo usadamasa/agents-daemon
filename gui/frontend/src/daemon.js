@@ -19,11 +19,6 @@ export async function park(command, req) {
   return "failure" in ran ? ran.failure : "";
 }
 
-// logEvent は出来事のログに 1 行書く (`logs --events` が手渡しの経路を追う)。書けなくても操作は続ける。
-export async function logEvent(event, fields) {
-  await run("event-log", { session_id: SESSION, event, fields: Object.entries(fields).map(([key, value]) => ({ key, value: String(value) })) });
-}
-
 // pickFolder は macOS のフォルダ選択の dialog を開き、選んだ絶対パスを返す (選ばなければ空)。
 export async function pickFolder() {
   try {

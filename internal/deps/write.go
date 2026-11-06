@@ -14,9 +14,10 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
 
-// Write は依存図を組み、JSON で w へ書く。cwd は開いたセッションの cwd (Deps.Here の元)。daemon が動いていなくても
-// タスクの記録は描く (daemon_running が false で、ノードはすべて Live でない)。
-func Write(w io.Writer, p apppath.Paths, cwd string) error {
+// Write は依存図を組み、JSON で w へ書く。読み手 (アプリ、handoff-notice の mod) はどのセッションにも属さないので、
+// 開いたセッションの repo のような「自分」は持たない。daemon が動いていなくてもタスクの記録は描く (daemon_running が
+// false で、ノードはすべて Live でない)。
+func Write(w io.Writer, p apppath.Paths) error {
 	pid, snap, err := daemonstate.Running(p)
 	if err != nil {
 		return err
@@ -47,7 +48,6 @@ func Write(w io.Writer, p apppath.Paths, cwd string) error {
 		return err
 	}
 	b := build(input{
-		CWD:          cwd,
 		PID:          pid,
 		Snapshot:     snap,
 		Tasks:        tasks,

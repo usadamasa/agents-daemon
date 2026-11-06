@@ -1,20 +1,17 @@
 import type { Register } from 'claude-code'
 
-import { registerDeps, startDeps } from './deps'
 import { registerHandoffNotice } from './handoff-notice'
 import { registerNotice } from './notice'
 import { registerPark, startPark } from './park'
 
 // hooks.json の modules は 1 つしか書けず、matcher の無い hook は 1 つの plugin で 1 つの event に 1 つしか
-// 置けない。mod ごとの hook をここで束ね、session.start はここで持つ。
+// 置けない。mod ごとの hook をここで束ね、session.start はここで持つ。依存図の描画と操作はアプリ (gui/) に移した。
 export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
-    await startDeps($)
     await startPark($)
 
     return next(e)
   })
-  registerDeps(on, options)
   registerPark(on, options)
   registerNotice(on, options)
   registerHandoffNotice(on, options)

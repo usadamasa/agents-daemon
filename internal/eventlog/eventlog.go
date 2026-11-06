@@ -1,5 +1,5 @@
-// Package eventlog は依存図とパーキングロットの経路 (タスクの記録、パーキング、mod) で起きたことを、後から読める
-// ログに 1 行 1 件で書く (#146)。daemon のプロセスを通らない CLI と mod (`event-log` 経由) が書き、
+// Package eventlog は依存図とパーキングロットの経路 (タスクの記録、パーキング、アプリからの送達、mod) で起きたことを、
+// 後から読めるログに 1 行 1 件で書く (#146)。daemon のプロセスを通らない CLI と mod (`event-log` 経由) が書き、
 // `agents-daemon logs --events` が読む。
 //
 //	logs/events.log              現行のログ
@@ -17,14 +17,12 @@
 //	park.discard              古い open のメモをまとめて捨てた (days、memos、ids)
 //	park.withdraw             置いたセッションが自分の open のメモを取り下げた (memo)
 //	park.adopt                終了したセッションのタスクをメモにした (from_session、task、memo、created)
+//	park.hand                 メモを生きているセッションか新しく起こすセッションへ渡した (memo、intent、repo、to、delivered、status、reason)
 //	park.failed               park の操作が失敗した (op、reason)
 //	task.dismiss              終了したセッションのタスクの記録を消した (from_session、task)
 //	task.dismiss.failed       タスクの記録を消さなかった (ref、reason)
+//	tell                      セッションの入力欄に文面を打った (to、pane、delivered、reason)
 //	mod.tool-register.failed  session.start で park の tool を登録できなかった (reason)
-//	mod.deps.open             依存図の pane を開いた (repos、sessions、nodes、memos、daemon_running)
-//	mod.deps.changed          repo・セッション・ノード・メモの数か daemon の稼働が変わった (同上)
-//	mod.deps.failed           `agents-daemon deps` が失敗した (reason)
-//	mod.send                  pane から指示やメモを送った (via、to、delivered、reason。新しいセッションを起こして渡したときは repo も)
 //	mod.notice                ファイルを触った tool の結果で model にメモを伝えた (tool、memos)
 //	mod.notice.failed         伝えるメモを選べなかった (reason)
 //	mod.handoff.unlinked      SendMessage の宛先に依存の辺が無いことを model に伝えた (session)

@@ -4,15 +4,10 @@
 // definitions は schema の $defs。$ref を含まないもの (Memo) はそのまま tool の inputSchema に渡せる。
 export const definitions = {
   "DepsRequest": {
-    "description": "deps の stdin",
+    "description": "deps の stdin。欄は無く {} を渡す (読み手はどのセッションにも属さない)",
     "type": "object",
     "additionalProperties": false,
-    "properties": {
-      "cwd": {
-        "type": "string",
-        "description": "pane を開いたセッションの cwd。この repo を here にする (無ければ今の cwd)"
-      }
-    }
+    "properties": {}
   },
   "ParkAddRequest": {
     "description": "park add の stdin。memo を置き、ParkAdded を出す",
@@ -188,6 +183,101 @@ export const definitions = {
       }
     }
   },
+  "ParkHandRequest": {
+    "description": "park hand の stdin。open のメモを取り (status handed、宛先付き)、文面を組んで宛先へ渡し、届かなければ open に戻す。宛先は生きているセッション (to_session。tell で入力欄に打つ) か、新しく起こすセッションの repo (to_repo。spawn) のどちらか 1 つ。取れなければ (ほかが先に渡した、捨てた) 何もせず exit 1 で理由を返し、取れた後は届かなくても ParkHandResult を出す",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "id",
+      "intent"
+    ],
+    "not": {
+      "required": [
+        "to_session",
+        "to_repo"
+      ]
+    },
+    "anyOf": [
+      {
+        "required": [
+          "to_session"
+        ]
+      },
+      {
+        "required": [
+          "to_repo"
+        ]
+      }
+    ],
+    "properties": {
+      "id": {
+        "type": "string",
+        "description": "メモの id"
+      },
+      "intent": {
+        "type": "string",
+        "enum": [
+          "task",
+          "issue"
+        ],
+        "description": "渡した先に頼むこと。task はタスクにする、issue は GitHub の issue にする"
+      },
+      "to_session": {
+        "type": "string",
+        "description": "宛先のセッションの ID"
+      },
+      "to_repo": {
+        "type": "string",
+        "description": "新しく起こすセッションの repo の絶対パス"
+      },
+      "note": {
+        "type": "string",
+        "description": "利用者の補足。文面の末尾に足す"
+      },
+      "session_id": {
+        "type": "string",
+        "description": "操作した主体 (セッションの ID かアプリの固定の名前。ログに添える)"
+      }
+    }
+  },
+  "ParkHandResult": {
+    "description": "park hand の出力。delivered が false のときは reason に届かなかった理由があり、status が open なら戻してある。新しく起こしたセッションで claude が前景になるのを待ち切れたときは to に起こした session ID、status は handed のまま (戻すと押し直しで 2 つ目が起きる)",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "delivered",
+      "status"
+    ],
+    "properties": {
+      "delivered": {
+        "type": "boolean"
+      },
+      "status": {
+        "type": "string",
+        "enum": [
+          "open",
+          "handed"
+        ],
+        "description": "渡した後のメモの status"
+      },
+      "to": {
+        "type": "string",
+        "description": "届いた (届けようとした) セッションの ID。起こす前に失敗したときは無い"
+      },
+      "pane_id": {
+        "type": "string",
+        "description": "打った (起こした) pane の ID"
+      },
+      "reason": {
+        "type": "string",
+        "description": "届かなかった理由。戻せなかったときはその理由も続ける"
+      },
+      "warning": {
+        "type": "string",
+        "description": "届いたうえでの注意 (TellResult.warning と同じ)"
+      }
+    }
+  },
   "TaskDismissRequest": {
     "description": "task dismiss の stdin。終了したセッションのタスク (完了しているかを問わない) の記録を消して依存図から外し、{} を出す。セッションの終了は park adopt と同じく status.json で確かめ、確かめられなければ消さずに exit 1 で理由を返す",
     "type": "object",
@@ -279,6 +369,29 @@ export const definitions = {
       "prompt": {
         "type": "string",
         "description": "最初のターンとして入る本文"
+      }
+    }
+  },
+  "TellRequest": {
+    "description": "tell の stdin。to_session のセッションが動いている rex の pane の入力欄に text を打って Enter を送り、TellResult を出す。pane で claude が前景でない、利用者の答えを待つ prompt (permission / question / auth) が開いている、上限の画面、入力欄に打ちかけの文がある、のどれかなら送らずに exit 1 で理由を返す。ターンの途中の pane には送り、文面は入力欄に溜まって次のターンになる",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "to_session",
+      "text"
+    ],
+    "properties": {
+      "to_session": {
+        "type": "string",
+        "description": "宛先のセッションの ID"
+      },
+      "text": {
+        "type": "string",
+        "description": "入力欄に打つ文面。複数行は 1 回の paste として打つ"
+      },
+      "session_id": {
+        "type": "string",
+        "description": "操作した主体 (セッションの ID かアプリの固定の名前。ログに添える)"
       }
     }
   },
@@ -597,13 +710,30 @@ export const definitions = {
       }
     }
   },
+  "TellResult": {
+    "description": "tell の出力。送れたときだけ出る (送らなかったときは exit 1)",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "pane_id"
+    ],
+    "properties": {
+      "pane_id": {
+        "type": "string",
+        "description": "打った pane の ID"
+      },
+      "warning": {
+        "type": "string",
+        "description": "文面が上限の検知語を含み、入力欄に残る間は daemon の誤検知の種になりうるときの注意。送ってはある"
+      }
+    }
+  },
   "DepsData": {
     "description": "deps の出力。依存の DAG と、repo ごとの生きているセッションと open のメモ",
     "type": "object",
     "additionalProperties": false,
     "required": [
       "daemon_running",
-      "here",
       "stale_memo_days",
       "repos",
       "recent_repos",
@@ -618,13 +748,9 @@ export const definitions = {
         "format": "date-time",
         "description": "status.json の更新時刻。daemon が動いていないか、まだ書いていなければ無い"
       },
-      "here": {
-        "type": "string",
-        "description": "開いたセッションの cwd の repo の鍵 (DepsRepo.repo と同じ規則)。その repo が無ければ repos に無い鍵になる"
-      },
       "stale_memo_days": {
         "type": "integer",
-        "description": "open のメモを「古い」とみなす日数。pane はこれより前に最後に置かれたメモをまとめて捨てるボタンを出す"
+        "description": "open のメモを「古い」とみなす日数。アプリはこれより前に最後に置かれたメモをまとめて捨てるボタンを出す"
       },
       "repos": {
         "type": "array",

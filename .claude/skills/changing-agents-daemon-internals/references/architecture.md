@@ -62,8 +62,9 @@ subagent の worktree (`claude agent` の lock) は Claude Code 本体の period
 触らない。daemon の housekeeping にしなかったのは、daemon が rex の外では起きず、対象リポジトリの一覧も cwd も
 持たないため (#97)。
 
-plugin は mod も持つ。依存図の pane と渡した宛先の辺の通知は [deps.md](deps.md)、パーキングのメモ、park tool、
-ファイルのメモの通知は [parking.md](parking.md)。
+plugin は mod も持ち、依存図は別 module のアプリ (`gui/`) が描く。依存図の JSON、アプリ、セッションへの送達 (`tell`)、
+渡した宛先の辺の通知は [deps.md](deps.md)、パーキングのメモと手渡し (`park hand`)、park tool、ファイルのメモの通知は
+[parking.md](parking.md)。
 
 バイナリ自体も SessionStart hook が用意し、差し替わったら動いている daemon が自分で入れ替わる。build の条件、
 lock、入れ替わりは [binary.md](binary.md)。
@@ -83,8 +84,8 @@ backend の判定と rex の呼び方は [multiplexer.md](multiplexer.md)。
 
 | family | コマンド |
 | ---- | ---- |
-| `depscli` | deps (依存図の JSON)、edge、ingest-task (依存図に載る記録を書く・読む)、event-log (出来事のログに mod の出来事を書く) |
-| `parkcli` | park、spawn (パーキングロットのメモと、メモを渡す先のセッションを起こす) |
+| `depscli` | deps (依存図の JSON)、edge、ingest-task、task dismiss (依存図に載る記録を書く・読む・消す)、event-log (出来事のログに mod の出来事を書く) |
+| `parkcli` | park (hand を含む)、spawn、tell (パーキングロットのメモ、メモを渡す先のセッションを起こす、セッションの入力欄に打つ) |
 | `daemoncli` | daemon、stop、status、logs、doctor、inspect、simulate (daemon のライフサイクルと読むだけの診断)、ingest-turn-failure (daemon が上限の出来事に添える記録を書く) |
 | `dreamcli` | dream |
 | `statuslinecli` | statusline、ingest-statusline |
@@ -149,7 +150,7 @@ pane ごとに次を評価する。上限側の詳細は [rate-limit.md](rate-li
 | `$STATE/logs/daemon.log.YYYY-MM-DD` | daemon | 日付が変わって最初に書くとき | 前日までの `daemon.log` をそのまま退避したもの | daemon が 7 日で消す |
 | `$STATE/limit-events/<YYYY-MM-DD>.jsonl` | daemon | 上限の出来事 (検知して待機に入った、送った、抑制した、ネイティブに譲った、Enter 待ち、hard cap、prompt で見送り) で daemon.log に行を書くのと同じ遷移のとき | 1 出来事 1 行の JSON (`daemon/limitlog`): 判定した画面そのもの (末尾 `readLines` 行)、分類 (kind)、outcome、Claude Code の自己申告 (record)、block の高さと screen (`size` / `modes`)、own と account の利用上限 state、`readLines` / `detectionTailLines`、そのセッションの turn の失敗 (`turn_failure`、あるときだけ)。読み方は verification.md「次に上限を踏んだとき」 | daemon が 30 日で消す |
 | `$STATE/turn-failures/<session_id>.json` | `agents-daemon ingest-turn-failure` (StopFailure / Stop / UserPromptSubmit hook `hooks/ingest-turn-failure.sh` が呼ぶ) | StopFailure で書き、Stop と UserPromptSubmit で消す | そのセッションの最後の turn を終わらせた API error (`error`、`error_details`、`last_assistant_message`、観測時刻。`turnfailure`)。あるのは「最後の turn が API error で終わり、次の turn がまだ始まっていない」間だけ。読み手は daemon の上限の出来事の記録 | 次の turn の hook が消す。閉じたセッションの残りは daemon が 24 時間で消す |
-| `$STATE/logs/events.log` | `agents-daemon ingest-task` / `park add` / `park set` / `park discard` / `park withdraw` / `park adopt` / `task dismiss` と、mod (`hooks/log.ts`) が呼ぶ `agents-daemon event-log` | タスクの記録、メモの操作、mod の出来事 (tool の登録の失敗、依存図の数と読み込みの失敗、送信の結果) があったとき。mod は同じ失敗と同じ数を書き直さない | 依存図とパーキングロットの経路の出来事を 1 行 1 件 (`eventlog`、出来事の一覧は package doc)。session ID、task ID、メモの id、件数、失敗の理由だけで、subject、title、detail、送った文面は書かない。`logs --events` が読む | rotate |
+| `$STATE/logs/events.log` | `agents-daemon ingest-task` / `park add` / `park set` / `park discard` / `park withdraw` / `park adopt` / `park hand` / `task dismiss` / `tell` と、mod (`hooks/log.ts`) が呼ぶ `agents-daemon event-log` | タスクの記録、メモの操作、アプリからの送達 (tell、park hand)、mod の出来事 (tool の登録の失敗、通知の失敗) があったとき。mod は同じ失敗を書き直さない | 依存図とパーキングロットの経路の出来事を 1 行 1 件 (`eventlog`、出来事の一覧は package doc)。session ID、task ID、メモの id、件数、失敗の理由だけで、subject、title、detail、送った文面は書かない。`logs --events` が読む | rotate |
 | `$STATE/logs/events.log.YYYY-MM-DD` | 上と同じ | 日付が変わって最初に書くとき | 前日までの `events.log` をそのまま退避したもの | daemon が 7 日で消す |
 | `$STATE/logs/build.log` | `hooks/build-daemon.sh` | SessionStart が build を起こしたとき | build の開始・完了・失敗 | 消さない (追記) |
 | `$STATE/logs/dream-harvest.log` | Stop hook が detach した `agents-daemon dream harvest` | 失敗したときだけ (成功は無音) | 時刻付きの失敗の行と stderr | 消さない (追記) |

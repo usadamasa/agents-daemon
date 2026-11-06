@@ -2,13 +2,13 @@
 // パーキングのメモ (parking) から依存図を組む (#134)。
 //
 // 依存図は 2 つを持つ。graph はタスクの依存の DAG (deps/graph)。repos は repo ごとの生きているセッションと
-// open のメモで、pane がメモの節を描き、メモを渡す宛先を選ぶのに使う。worktree の作業は main worktree の repo に入る。
-// ほかに、セッション台帳 (ledger) から最近動いた repo (recent_repos) を添え、pane は新しいセッションを起こす repo の
+// open のメモで、アプリがメモの一覧を描き、メモを渡す宛先を選ぶのに使う。worktree の作業は main worktree の repo に入る。
+// ほかに、セッション台帳 (ledger) から最近動いた repo (recent_repos) を添え、アプリは新しいセッションを起こす repo の
 // 候補にする (#309)。
 //
-// 読み手は plugin の mod (hooks/deps.tsx) で、`agents-daemon deps` の JSON を数秒ごとに読んで pane に描く。
-// 並び順はここが持ち、mod は受け取った順に描くだけにする (JSON を加工する処理はバイナリに持たせる、という
-// AGENTS.md の決めごとに合わせる)。
+// 読み手は依存図のアプリ (gui/) と、渡した宛先の辺を確かめる mod (hooks/handoff-notice.ts) で、`agents-daemon deps` の
+// JSON を読む。並び順はここが持ち、読み手は受け取った順に描くだけにする (JSON を加工する処理はバイナリに持たせる、
+// という AGENTS.md の決めごとに合わせる)。
 package deps
 
 import (
@@ -33,8 +33,6 @@ type Deps = protocol.DepsData
 
 // input は依存図を組む材料。
 type input struct {
-	// CWD は開いたセッションの cwd (Deps.Here の元)。
-	CWD string
 	// PID は動いている daemon の pid。0 なら動いていない。
 	PID      int
 	Snapshot *daemonstate.StatusSnapshot
@@ -65,7 +63,6 @@ func build(in input) Deps {
 		cards[i].Session = names[cards[i].SessionID]
 	}
 	l := locator{locate: in.Locate, cache: map[string]gitrepo.Place{}}
-	d.Here, _ = l.row(in.CWD)
 	d.Repos = arrange(cards, open, panes, names, in.SessionNames, l)
 	d.RecentRepos = recentRepos(in.Sessions)
 	d.Graph = graph.Build(graph.Input{

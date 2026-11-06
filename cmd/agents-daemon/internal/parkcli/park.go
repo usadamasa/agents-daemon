@@ -1,8 +1,9 @@
 // Package parkcli はパーキングロットのコマンド (メモを置く・書き換える・一覧する park と、メモを渡す先の
-// セッションを起こす spawn) の組み立てを持つ。
+// セッションを起こす spawn、セッションの入力欄に文面を打つ tell) の組み立てを持つ。
 package parkcli
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"time"
@@ -13,18 +14,21 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/daemonstate"
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
+	"github.com/usadamasa/agents-daemon/internal/parkhand"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/protocol"
 	"github.com/usadamasa/agents-daemon/internal/ref"
+	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
+	"github.com/usadamasa/agents-daemon/internal/tell"
 )
 
 // Commands は root に登録するコマンド。
 func Commands() []*cobra.Command {
-	return []*cobra.Command{newParkCmd(), newSpawnCmd()}
+	return []*cobra.Command{newParkCmd(), newSpawnCmd(), newTellCmd()}
 }
 
-// newParkCmd は `agents-daemon park add|set|list|discard|withdraw|adopt` を組み立てる (parking)。
+// newParkCmd は `agents-daemon park add|set|list|discard|withdraw|adopt|hand` を組み立てる (parking、parkhand)。
 // 入力は stdin の JSON で受け、結果は JSON で stdout に出す。
 func newParkCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "park", Short: "パーキングロット (脇のメモ) を置く・書き換える・一覧する"}
@@ -88,6 +92,58 @@ func newParkCmd() *cobra.Command {
 		}
 		return parkAdopt(p.StateDir(), parking.New(p.StateDir()), tasklog.New(p.StateDir()), req.SessionID, sessionID, taskID, exited, time.Now())
 	}))
-	cmd.AddCommand(add, set, list, discard, withdraw, adopt)
+	cmd.AddCommand(add, set, list, discard, withdraw, adopt, newParkHandCmd())
 	return cmd
+}
+
+// newParkHandCmd は `agents-daemon park hand` を組み立てる (parkhand)。rex を叩くので、実行されるコマンド自身の
+// Context を渡す (親の park の Context は cobra が埋めない)。
+func newParkHandCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "hand",
+		Short: "stdin の ParkHandRequest で open のメモを取り、生きているセッション (tell) か新しく起こすセッション (spawn) へ渡し、ParkHandResult を出す",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return statecmd.Run(cmd, statecmd.Decoded("ParkHandRequest", func(p apppath.Paths, req protocol.ParkHandRequest) (any, error) {
+				runner, err := newHandRunner(p, req.SessionID)
+				if err != nil {
+					return nil, err
+				}
+				res, err := runner.Run(cmd.Context(), req)
+				parkHand(p.StateDir(), req, res, err, time.Now())
+				if err != nil {
+					return nil, err
+				}
+				return res, nil
+			}))
+		},
+	}
+}
+
+// newHandRunner は park hand の手段をつなぐ。取る・戻すは park set と同じ書き換えとログ (parkSet)、送るのは tell と spawn。
+func newHandRunner(p apppath.Paths, viewer string) (parkhand.Runner, error) {
+	store := parking.New(p.StateDir())
+	teller, err := newTellRunner(p)
+	if err != nil {
+		return parkhand.Runner{}, err
+	}
+	return parkhand.Runner{
+		Memo: store.Get,
+		Set: func(id, status, from, to string) error {
+			_, err := parkSet(p.StateDir(), store, viewer, id, status, from, to, time.Now())
+			return err
+		},
+		Tell: func(ctx context.Context, sessionID, text string) (protocol.TellResult, error) {
+			res, err := teller.Run(ctx, tell.Request{ToSession: sessionID, Text: text})
+			tellSent(p.StateDir(), viewer, sessionID, res.PaneID, err, time.Now())
+			return res, err
+		},
+		Spawn: func(ctx context.Context, repo, prompt string) (protocol.SpawnResult, error) {
+			return spawnSession(ctx, p, repo, prompt)
+		},
+		SessionNames: func() map[string]string {
+			names, _ := sessioncontext.New(p.StateDir()).ListSessionNames()
+			return names
+		},
+	}, nil
 }

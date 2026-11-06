@@ -174,7 +174,7 @@ rg -n 'agents-daemon dream forget' ~/.claude/settings.json
 
 ## 8. タスクのツール
 
-依存図 (`/deps`) は TaskCreate / TaskUpdate / TaskList / TodoWrite の呼び出しを PostToolUse hook で記録して描く。
+依存図 (アプリ `agent-tasks`) は TaskCreate / TaskUpdate / TaskList / TodoWrite の呼び出しを PostToolUse hook で記録して描く。
 このセッションのツールにそれらがあるかを見る。
 
 <!-- cc-premise: 2.1.302 tools Task 系ツールは env の CLAUDE_CODE_ENABLE_TODO_TOOLS=1 が無いと載らない (interactive と -p の両方で実測) -->

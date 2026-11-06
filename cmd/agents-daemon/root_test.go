@@ -18,7 +18,7 @@ func TestRootCmd_registersAllCommands(t *testing.T) {
 	}
 	want := []string{
 		"daemon", "deps", "doctor", "dream", "edge", "event-log", "ingest-statusline", "ingest-task", "ingest-turn-failure", "inspect",
-		"logs", "park", "prune-worktrees", "simulate", "spawn", "status", "statusline", "stop", "task", "update", "version",
+		"logs", "park", "prune-worktrees", "simulate", "spawn", "status", "statusline", "stop", "task", "tell", "update", "version",
 	}
 	slices.Sort(names)
 	if !slices.Equal(names, want) {
@@ -97,6 +97,7 @@ func TestRootCmd_jsonFlag(t *testing.T) {
 		"agents-daemon park add":        true,
 		"agents-daemon park adopt":      true,
 		"agents-daemon park discard":    true,
+		"agents-daemon park hand":       true,
 		"agents-daemon park list":       true,
 		"agents-daemon park set":        true,
 		"agents-daemon park withdraw":   true,
@@ -106,6 +107,7 @@ func TestRootCmd_jsonFlag(t *testing.T) {
 		"agents-daemon status":          true,
 		"agents-daemon stop":            true,
 		"agents-daemon task dismiss":    true,
+		"agents-daemon tell":            true,
 		"agents-daemon version":         true,
 	}
 	var leaves []string

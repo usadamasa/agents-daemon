@@ -23,8 +23,8 @@ plugin の `agents-daemon:agents-daemon` skill の `references/operations.md` �
 | [pane-io.md](references/pane-io.md) | pane の読み取りと送信 |
 | [program-status.md](references/program-status.md) | rex の program_status (OSC 7501) |
 | [multiplexer.md](references/multiplexer.md) | 多重化ツールの backend (rex) |
-| [deps.md](references/deps.md) | 依存図 (mod) |
-| [parking.md](references/parking.md) | パーキングロット (mod) |
+| [deps.md](references/deps.md) | 依存図 (JSON、アプリ、tell、辺の通知の mod) |
+| [parking.md](references/parking.md) | パーキングロット (メモの手渡し、park tool、通知の mod) |
 | [binary.md](references/binary.md) | バイナリの用意と差し替え |
 | [verification.md](references/verification.md) | 検証用コマンドと実機での検証 |
 

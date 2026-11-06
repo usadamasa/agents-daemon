@@ -52,6 +52,21 @@ func TestAdd_writesOneFilePerItem(t *testing.T) {
 }
 
 // PlacedDuring は session と task の組が sources にあるメモだけを残す。まとめたメモも、後から足した source で引ける。
+func TestGet(t *testing.T) {
+	s := New(t.TempDir())
+	item := mustAdd(t, s, testRepo, aside("a"), source("s1", ""))
+	got, err := s.Get(item.ID)
+	if err != nil || got.Title != "a" {
+		t.Fatalf("Get(%s) = %+v, %v", item.ID, got, err)
+	}
+	if _, err := s.Get("20261019T120000-00000000"); err == nil || !strings.Contains(err.Error(), "無い") {
+		t.Errorf("無い id の Get の err = %v", err)
+	}
+	if _, err := s.Get("../x"); err == nil {
+		t.Error("ファイル名に使えない id を通した")
+	}
+}
+
 func TestPlacedDuring(t *testing.T) {
 	s := New(t.TempDir())
 	during := mustAdd(t, s, testRepo, aside("a"), source("s1", "3"))
@@ -383,7 +398,7 @@ func TestWithdraw(t *testing.T) {
 	if _, err := s.Withdraw(shared.ID, "s1"); err == nil {
 		t.Error("ほかのセッションも置いたメモを取り下げた")
 	}
-	// 渡した後のメモは pane の一覧に出ないので、pane ではなく、作ったタスクを閉じるよう案内する。
+	// 渡した後のメモはアプリの一覧に出ないので、アプリではなく、作ったタスクを閉じるよう案内する。
 	if _, err := s.Withdraw(handed.ID, "s1"); err == nil || !strings.Contains(err.Error(), "TaskUpdate") {
 		t.Errorf("渡した後のメモを取り下げた、またはタスクを閉じるよう案内しない: %v", err)
 	}

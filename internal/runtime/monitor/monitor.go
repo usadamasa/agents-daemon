@@ -257,29 +257,6 @@ func tickNative(ps *PaneState, kind detect.Kind) (Outcome, bool, error) {
 	}
 }
 
-// Claude Code が blocked の record に付ける kind のうち、利用者が答える prompt が開いているもの。
-// 限度の画面がこの kind で来ることは無いので、列挙に無い kind (dialog 一般の kind 無し) は送信を止めない
-// (上限到達時の record は未実測。#77)。
-// cc-premise: 2.1.302 osc7501 blocked の kind は permission / question / auth。dialog 一般は kind 無し
-const (
-	kindPermission = "permission"
-	kindQuestion   = "question"
-	kindAuth       = "auth"
-)
-
-// waitingOnPrompt は pane が利用者の答えを待つ prompt で止まっているかを返す。
-// この pane へ esc を送ると prompt を断り、Enter を送ると承認する。
-func waitingOnPrompt(pane multiplexer.Pane) bool {
-	if pane.AgentStatus != multiplexer.AgentStatusBlocked {
-		return false
-	}
-	switch pane.AgentKind {
-	case kindPermission, kindQuestion, kindAuth:
-		return true
-	}
-	return false
-}
-
 // standDown は待機中だった pane を監視状態へ戻す。
 func standDown(ps *PaneState) {
 	if ps.Status != StatusWaiting {
@@ -386,7 +363,7 @@ func tickWaiting(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *Pane
 	// 画面に上限の文言が残ったまま permission prompt などが開いていることがある。esc は prompt を断り、
 	// Enter は承認するので、利用者が答えるまで送らない。agent_status を見るのはこの送信の抑止だけで、
 	// 検知には使わない (上限で止まった pane は working と申告され続けることがある)。
-	if waitingOnPrompt(pane) {
+	if multiplexer.WaitingOnPrompt(pane) {
 		ps.WaitUntil = now.Add(time.Duration(deps.Config.PollIntervalSeconds*notClaudeBackoffMultiplier) * time.Second)
 		return OutcomeBlockedByPrompt, nil
 	}

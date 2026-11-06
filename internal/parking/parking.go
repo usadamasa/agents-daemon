@@ -1,5 +1,5 @@
 // Package parking は agent がタスクの途中で見つけた脇のメモ (パーキングロット、#89) を XDG state 配下に
-// 置く (#121)。置くのは `agents-daemon park add`、取り出すのは依存図の pane とファイルのメモの通知 (`park list`)。
+// 置く (#121)。置くのは `agents-daemon park add`、取り出すのは依存図のアプリ (`deps`) とファイルのメモの通知 (`park list`)。
 //
 //	parking/<id>.json   1 件 1 ファイル
 //
@@ -36,7 +36,7 @@ const (
 const (
 	// OriginPlaced は model が park tool (park add) で置いたメモ。
 	OriginPlaced = "placed"
-	// OriginAdopted は終了したセッションに残った未完了のタスクを pane の操作 (park adopt) で移したメモ。
+	// OriginAdopted は終了したセッションに残った未完了のタスクをアプリの操作 (park adopt) で移したメモ。
 	OriginAdopted = "adopted"
 )
 
@@ -68,7 +68,7 @@ const (
 	// ClosedRetention は handed / discarded のメモを残す期間。「最近片付けたもの」として見えれば足りる。
 	ClosedRetention = 7 * 24 * time.Hour
 	// StaleAfter は open のメモを「古い」とみなす、最後に置かれてからの期間。週次の棚卸しを 4 回越したメモは文脈が
-	// 薄れている。housekeeping が OpenRetention で黙って消す前に、依存図の pane で人が見て捨てる区切り
+	// 薄れている。housekeeping が OpenRetention で黙って消す前に、依存図のアプリで人が見て捨てる区切り
 	// (`deps` の stale_memo_days、park discard の days)。保持期間の間の関係は `daemon/retention_test.go`。
 	StaleAfter = 30 * 24 * time.Hour
 )
@@ -193,7 +193,7 @@ func (s Store) Set(id, status, from, to string) (Item, string, error) {
 
 // Withdraw は sessionID のセッションが置いた open のメモ id を discarded にし、書いた後のメモを返す。置いた本人が
 // 前提の消えたメモを取り下げる経路 (park tool の unpark)。sources のどれかがほかのセッションなら、そのセッションの
-// 前提はまだ残りうるので書き換えない。open だけを書き換えるので、pane の Discard と同じ遷移になる (models/handoff の
+// 前提はまだ残りうるので書き換えない。open だけを書き換えるので、アプリの「捨てる」と同じ遷移になる (models/handoff の
 // Discard)。
 func (s Store) Withdraw(id, sessionID string) (Item, error) {
 	if s.Dir == "" {
@@ -215,14 +215,14 @@ func (s Store) Withdraw(id, sessionID string) (Item, error) {
 		switch item.Status {
 		case StatusOpen:
 		case StatusHanded:
-			// handed のメモは pane の一覧に出ず、渡した先のタスクの詳細にだけ出る。タスクを閉じればどこにも出なくなる。
+			// handed のメモはアプリの一覧に出ず、渡した先のタスクの詳細にだけ出る。タスクを閉じればどこにも出なくなる。
 			return fmt.Errorf("メモ %s は渡した後 (handed) なので書き換えない。このメモからタスクを作っていれば、そのタスクを TaskUpdate で閉じる", id)
 		default:
 			return fmt.Errorf("メモ %s の status は %s なので取り下げない (取り下げられるのは open だけ)", id, item.Status)
 		}
 		for _, src := range item.Sources {
 			if src.SessionID != sessionID {
-				return fmt.Errorf("メモ %s はこのセッションだけが置いたメモではないので取り下げない。依存図の pane の Discard で捨てる", id)
+				return fmt.Errorf("メモ %s はこのセッションだけが置いたメモではないので取り下げない。依存図のアプリの「捨てる」で捨てる", id)
 			}
 		}
 		item.Status = StatusDiscarded
@@ -232,7 +232,7 @@ func (s Store) Withdraw(id, sessionID string) (Item, error) {
 }
 
 // DiscardBefore は open のメモのうち、最後に置かれた時刻 (sources の最大の at) が before より前の
-// ものを discarded にし、捨てたメモを id の順に返す。該当なしは空の配列。pane の「古いメモをまとめて捨てる」が
+// ものを discarded にし、捨てたメモを id の順に返す。該当なしは空の配列。アプリの「古いメモをまとめて捨てる」が
 // 呼び、「古い」の日数は呼び出し側 (mod) が持つ。
 func (s Store) DiscardBefore(before time.Time) ([]Item, error) {
 	if s.Dir == "" {
@@ -272,6 +272,21 @@ func (s Store) list() ([]Item, error) {
 		return nil, nil
 	}
 	return readDir(s.Dir), nil
+}
+
+// Get はメモ id の記録を返す。無ければエラー。
+func (s Store) Get(id string) (Item, error) {
+	if s.Dir == "" {
+		return Item{}, errors.New("parking の置き場所が無い")
+	}
+	if !statefile.ValidSessionID(id) {
+		return Item{}, fmt.Errorf("id %q はファイル名に使えない", id)
+	}
+	item, ok := readItem(filepath.Join(s.Dir, id+".json"))
+	if !ok {
+		return Item{}, fmt.Errorf("メモ %s が無い", id)
+	}
+	return item, nil
 }
 
 // Find はメモのうち repo と status が一致するものを返す。空の条件は絞らない。該当なしは空の配列。

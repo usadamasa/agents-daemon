@@ -78,7 +78,8 @@ Claude Code の sandbox の中で叩くと、`git worktree remove` は main work
 渡す操作から両端を自動で決めることはせず、辺の無い生きているセッションへ `SendMessage` で送ると、
 その tool の結果で送った model に辺の書き方を伝える (#172)。
 
-mod が呼ぶコマンド (`deps`、`park`、`edge add` / `rm`、`spawn`、`event-log`) は入力を stdin の JSON だけで受ける。
+アプリと mod が呼ぶコマンド (`deps`、`park`、`edge add` / `rm`、`task dismiss`、`spawn`、`tell`、`event-log`) は入力を
+stdin の JSON だけで受ける。
 形と欄の意味はバイナリに埋め込んだ JSON Schema (`protocol/protocol.schema.json`) の `$defs` が持ち、
 外れた入力は schema の検証の文言で弾く。人が打つときも同じ JSON を渡す。
 
@@ -118,9 +119,11 @@ printf '%s' '{"id":"<id>","status":"open"}' | agents-daemon park set            
 ```
 
 - メモは種類 `kind` (aside / scope / preference) と出自 `origin` を持つ。`placed` は model が park tool で置いたメモ、
-  `adopted` は終了したセッションの未完了のタスクを依存図の pane の `To parking` (`park adopt`) で
+  `adopted` は終了したセッションの未完了のタスクをアプリの「メモにする」(`park adopt`) で
   移したメモ (種類は scope)
 - handed のメモは宛先 `handed_to` (`sid:<session_id>` か、新しく起こしたセッションの `repo:<path>`) を持つ
+- メモを渡すのはアプリの「タスクにする」「issue にする」(`park hand`)。取る (handed)、送る (生きているセッションの
+  入力欄に `tell` で打つか、`spawn` で新しいセッションを起こす)、届かなければ戻す (open) を 1 回で行う
 
 ### 終了したセッションのタスクを一覧から外す
 
@@ -128,10 +131,10 @@ printf '%s' '{"id":"<id>","status":"open"}' | agents-daemon park set            
 printf '%s' '{"ref":"task:<session_id>/<task_id>"}' | agents-daemon task dismiss   # TaskDismissRequest → {}
 ```
 
-- 依存図の pane の `Dismiss` と `Dismiss N ended` (1 つずつ呼ぶ) が使う。終了したセッションのタスクの記録を、
-  完了しているかを問わず消す
+- アプリの「一覧から外す」と「終了したセッションのタスク n 件を外す」(1 つずつ呼ぶ) が使う。終了したセッションの
+  タスクの記録を、完了しているかを問わず消す
 - セッションの終了は動いている daemon の status.json で確かめ、確かめられなければ消さずに exit 1 で理由を出す
-- 消した記録は戻せない。メモとして残すなら `To parking` (`park adopt`) を使う
+- 消した記録は戻せない。メモとして残すなら「メモにする」(`park adopt`) を使う
 
 ### `--json`
 

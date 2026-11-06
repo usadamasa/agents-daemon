@@ -160,7 +160,7 @@ select { font: inherit; color: inherit; }
 .lg { padding-right: 24px; }
 
 /* 動詞のボタン (ポップアップの中) */
-.acts { display: flex; gap: 2px; margin: 0 -8px; }
+.acts { display: flex; flex-wrap: wrap; gap: 2px; margin: 0 -8px; }
 .act {
   display: flex; flex-direction: column; align-items: center; gap: 5px;
   min-width: 58px; padding: 8px 4px; border-radius: 8px; font-size: 11.5px; color: var(--ink-soft); line-height: 1;
@@ -178,6 +178,9 @@ select { font: inherit; color: inherit; }
 .pop .lk .tb { flex: 0 0 auto; }
 .pop .grp > .tb { align-self: flex-start; }
 .act.on { background: var(--green-soft); }
+/* 送達が拒まれた理由。文面の下に出し、文面は残す */
+.pop .refusal { color: var(--red); font-size: 12px; line-height: 1.5; white-space: pre-wrap; margin: 2px 0; }
+.pop .sub { margin-top: 8px; }
 
 /* 選んだオブジェクトの単体ビュー。選んだ箱や行のそばに固定位置で出す */
 .pop {

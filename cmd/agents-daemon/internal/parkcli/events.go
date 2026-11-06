@@ -87,6 +87,42 @@ func parkAdopt(stateDir string, s parking.Store, tasks tasklog.Store, viewer, se
 	return added, nil
 }
 
+// parkHand は park hand の結果を書く (park.hand)。取れなかった (err) ときも書く。取る・戻すの park.set と、送った tell は
+// それぞれの行が別に残る。
+func parkHand(stateDir string, req protocol.ParkHandRequest, res protocol.ParkHandResult, err error, now time.Time) {
+	fields := []string{kv("memo", req.ID), kv("intent", req.Intent)}
+	if req.ToRepo != "" {
+		fields = append(fields, kv("repo", req.ToRepo))
+	}
+	if res.To != "" {
+		fields = append(fields, kv("to", res.To))
+	}
+	switch {
+	case err != nil:
+		fields = append(fields, kv("delivered", false), kv("reason", err))
+	case res.Delivered:
+		fields = append(fields, kv("delivered", true), kv("status", res.Status))
+	default:
+		fields = append(fields, kv("delivered", false), kv("status", res.Status), kv("reason", res.Reason))
+	}
+	_ = eventlog.Record(stateDir, req.SessionID, "park.hand", fields, now)
+}
+
+// tellSent は tell の結果を書く (tell)。session は操作した主体、to は宛先のセッション、pane は打った pane (送らなかった
+// ときは空)。文面は書かない。
+func tellSent(stateDir, session, to, pane string, err error, now time.Time) {
+	fields := []string{kv("to", to)}
+	if pane != "" {
+		fields = append(fields, kv("pane", pane))
+	}
+	if err != nil {
+		fields = append(fields, kv("delivered", false), kv("reason", err))
+	} else {
+		fields = append(fields, kv("delivered", true))
+	}
+	_ = eventlog.Record(stateDir, session, "tell", fields, now)
+}
+
 // parkFailed は park の操作の失敗を書く。op を先頭に、session、extra、reason の順に並べる。
 func parkFailed(stateDir string, now time.Time, op, session string, err error, extra ...string) {
 	fields := []string{kv("op", op)}

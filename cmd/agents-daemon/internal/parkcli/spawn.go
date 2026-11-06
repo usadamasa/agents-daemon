@@ -1,6 +1,7 @@
 package parkcli
 
 import (
+	"context"
 	"errors"
 	"os"
 
@@ -24,28 +25,40 @@ func newSpawnCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "spawn",
 		Short: "stdin の SpawnRequest の prompt を最初のターンにした Claude Code のセッションを、repo を cwd にした rex の window に起こす",
-		Long: "パーキングロットのメモを、生きているセッションの無い repo へ渡すときに mod が呼ぶ。\n" +
+		Long: "パーキングロットのメモを、生きているセッションの無い repo へ渡すときに呼ぶ。\n" +
 			"新しいセッションは `claude --session-id <uuid> --model $" + subagentModelEnv + " -- <本文>` で起き、\n" +
 			"claude が前景になってから SpawnResult を JSON で出す。待ち切れたときは window を残したまま\n" +
 			"foreground=false と detail を出す (error にするのは window を作れなかったときだけ)。",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return statecmd.Run(cmd, statecmd.Decoded("SpawnRequest", func(paths apppath.Paths, req protocol.SpawnRequest) (any, error) {
-				_, client, err := backend.Connect(os.Getenv, sessioncontext.New(paths.StateDir()))
-				if err != nil {
-					return nil, err
-				}
-				host, ok := client.(spawn.Host)
-				if !ok {
-					return nil, errors.New("この backend は window を作れない")
-				}
-				return spawn.Runner{Host: host}.Run(cmd.Context(), spawn.Request{
-					Repo:               req.Repo,
-					Prompt:             req.Prompt,
-					Model:              os.Getenv(subagentModelEnv),
-					MultiplexerSession: os.Getenv("REX_SESSION"),
-				})
+				return spawnSession(cmd.Context(), paths, req.Repo, req.Prompt)
 			}))
 		},
 	}
+}
+
+// spawnSession は repo で新しいセッションを起こし、prompt を最初のターンにする。依存図のアプリは rex の外で起きるので
+// REX_SESSION を要求しない (ConnectRex)。window を置く rex の session も、REX_SESSION が無ければ利用者が最後に使っていた
+// session (statusline の記録) にする。rex は session を指定しないと複数あるときに曖昧として拒む。
+func spawnSession(ctx context.Context, paths apppath.Paths, repo, prompt string) (spawn.Result, error) {
+	contexts := sessioncontext.New(paths.StateDir())
+	host, ok := backend.ConnectRex(contexts).(spawn.Host)
+	if !ok {
+		return spawn.Result{}, errors.New("この backend は window を作れない")
+	}
+	session := os.Getenv("REX_SESSION")
+	if session == "" {
+		latest, err := contexts.LatestMultiplexerSession(sessioncontext.MultiplexerKindRex)
+		if err != nil {
+			return spawn.Result{}, err
+		}
+		session = latest
+	}
+	return spawn.Runner{Host: host}.Run(ctx, spawn.Request{
+		Repo:               repo,
+		Prompt:             prompt,
+		Model:              os.Getenv(subagentModelEnv),
+		MultiplexerSession: session,
+	})
 }

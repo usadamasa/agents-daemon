@@ -4,10 +4,8 @@ package protocol
 
 import "time"
 
-// DepsRequest は deps の stdin。
+// DepsRequest は deps の stdin。欄は無く {} を渡す (読み手はどのセッションにも属さない)。
 type DepsRequest struct {
-	// pane を開いたセッションの cwd。この repo を here にする (無ければ今の cwd)。
-	CWD string `json:"cwd,omitempty"`
 }
 
 // ParkAddRequest は park add の stdin。memo を置き、ParkAdded を出す。
@@ -73,6 +71,37 @@ type ParkAdoptRequest struct {
 	SessionID string `json:"session_id,omitempty"`
 }
 
+// ParkHandRequest は park hand の stdin。open のメモを取り (status handed、宛先付き)、文面を組んで宛先へ渡し、届かなければ open に戻す。宛先は生きているセッション (to_session。tell で入力欄に打つ) か、新しく起こすセッションの repo (to_repo。spawn) のどちらか 1 つ。取れなければ (ほかが先に渡した、捨てた) 何もせず exit 1 で理由を返し、取れた後は届かなくても ParkHandResult を出す。
+type ParkHandRequest struct {
+	// メモの id。
+	ID string `json:"id"`
+	// 渡した先に頼むこと。task はタスクにする、issue は GitHub の issue にする。
+	Intent string `json:"intent"`
+	// 宛先のセッションの ID。
+	ToSession string `json:"to_session,omitempty"`
+	// 新しく起こすセッションの repo の絶対パス。
+	ToRepo string `json:"to_repo,omitempty"`
+	// 利用者の補足。文面の末尾に足す。
+	Note string `json:"note,omitempty"`
+	// 操作した主体 (セッションの ID かアプリの固定の名前。ログに添える)。
+	SessionID string `json:"session_id,omitempty"`
+}
+
+// ParkHandResult は park hand の出力。delivered が false のときは reason に届かなかった理由があり、status が open なら戻してある。新しく起こしたセッションで claude が前景になるのを待ち切れたときは to に起こした session ID、status は handed のまま (戻すと押し直しで 2 つ目が起きる)。
+type ParkHandResult struct {
+	Delivered bool `json:"delivered"`
+	// 渡した後のメモの status。
+	Status string `json:"status"`
+	// 届いた (届けようとした) セッションの ID。起こす前に失敗したときは無い。
+	To string `json:"to,omitempty"`
+	// 打った (起こした) pane の ID。
+	PaneID string `json:"pane_id,omitempty"`
+	// 届かなかった理由。戻せなかったときはその理由も続ける。
+	Reason string `json:"reason,omitempty"`
+	// 届いたうえでの注意 (TellResult.warning と同じ)。
+	Warning string `json:"warning,omitempty"`
+}
+
 // TaskDismissRequest は task dismiss の stdin。終了したセッションのタスク (完了しているかを問わない) の記録を消して依存図から外し、{} を出す。セッションの終了は park adopt と同じく status.json で確かめ、確かめられなければ消さずに exit 1 で理由を返す。
 type TaskDismissRequest struct {
 	// 依存図のタスクのノードの key (task:<session_id>/<task_id>)。
@@ -111,6 +140,16 @@ type SpawnRequest struct {
 	Repo string `json:"repo"`
 	// 最初のターンとして入る本文。
 	Prompt string `json:"prompt"`
+}
+
+// TellRequest は tell の stdin。to_session のセッションが動いている rex の pane の入力欄に text を打って Enter を送り、TellResult を出す。pane で claude が前景でない、利用者の答えを待つ prompt (permission / question / auth) が開いている、上限の画面、入力欄に打ちかけの文がある、のどれかなら送らずに exit 1 で理由を返す。ターンの途中の pane には送り、文面は入力欄に溜まって次のターンになる。
+type TellRequest struct {
+	// 宛先のセッションの ID。
+	ToSession string `json:"to_session"`
+	// 入力欄に打つ文面。複数行は 1 回の paste として打つ。
+	Text string `json:"text"`
+	// 操作した主体 (セッションの ID かアプリの固定の名前。ログに添える)。
+	SessionID string `json:"session_id,omitempty"`
 }
 
 // EventLogRequest は event-log の stdin。mod の出来事を出来事のログに 1 行書く。出来事の名前と欄は eventlog の package doc が持つ。
@@ -215,14 +254,20 @@ type SpawnResult struct {
 	Detail     string `json:"detail,omitempty"`
 }
 
+// TellResult は tell の出力。送れたときだけ出る (送らなかったときは exit 1)。
+type TellResult struct {
+	// 打った pane の ID。
+	PaneID string `json:"pane_id"`
+	// 文面が上限の検知語を含み、入力欄に残る間は daemon の誤検知の種になりうるときの注意。送ってはある。
+	Warning string `json:"warning,omitempty"`
+}
+
 // DepsData は deps の出力。依存の DAG と、repo ごとの生きているセッションと open のメモ。
 type DepsData struct {
 	DaemonRunning bool `json:"daemon_running"`
 	// status.json の更新時刻。daemon が動いていないか、まだ書いていなければ無い。
 	UpdatedAt *time.Time `json:"updated_at,omitempty"`
-	// 開いたセッションの cwd の repo の鍵 (DepsRepo.repo と同じ規則)。その repo が無ければ repos に無い鍵になる。
-	Here string `json:"here"`
-	// open のメモを「古い」とみなす日数。pane はこれより前に最後に置かれたメモをまとめて捨てるボタンを出す。
+	// open のメモを「古い」とみなす日数。アプリはこれより前に最後に置かれたメモをまとめて捨てるボタンを出す。
 	StaleMemoDays int        `json:"stale_memo_days"`
 	Repos         []DepsRepo `json:"repos"`
 	// セッション台帳に載った repo。最後に見た時刻の新しい順 (新しいセッションを起こす repo の候補)。

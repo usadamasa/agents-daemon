@@ -5,6 +5,7 @@
 # - cache のバイナリが plugin の version から建てたものなら `daemon --ensure` を exec する
 # - そうでなければ build-daemon.sh を detach して即座に戻る。build 完了後の起動は
 #   build-daemon.sh が行う。SessionStart を go build で待たせない
+# - daemon は最新で依存図のアプリ (agent-tasks) だけ古ければ、build-gui.sh を detach する
 #
 # stdout は会話の context へ注入されるため、何も出さない。ログは stderr と build.log へ送る。
 
@@ -27,16 +28,28 @@ if ! version=$(plugin_version); then
   exit 1
 fi
 
+prepare_build_log() {
+  local log_dir
+  log_dir=$(dirname "$DAEMON_BUILD_LOG")
+  if ! mkdir -p "$log_dir"; then
+    log_error "mkdir failed: $log_dir"
+    exit 1
+  fi
+}
+
 if [ -x "$DAEMON_BIN" ] && [ -f "$DAEMON_STAMP" ] && [ "$(<"$DAEMON_STAMP")" = "$version" ]; then
+  # daemon は最新。依存図のアプリだけ古い (前回の build で toolchain が無かった、など) なら、それだけ建て直す。
+  # macOS 以外では build-gui.sh が飛ばすだけなので起こさない。
+  if [ "$(uname -s)" = Darwin ] && { [ ! -f "$GUI_STAMP" ] || [ "$(<"$GUI_STAMP")" != "$version" ]; }; then
+    prepare_build_log
+    log_info "agent-tasks missing or built from another version; building $version in background (log: $DAEMON_BUILD_LOG)"
+    nohup "$SCRIPT_DIR/build-gui.sh" </dev/null >>"$DAEMON_BUILD_LOG" 2>&1 &
+  fi
   # daemon の出力が context へ混ざらないよう stdout も stderr へ寄せる。
   exec "$DAEMON_BIN" daemon --ensure >&2
 fi
 
-log_dir=$(dirname "$DAEMON_BUILD_LOG")
-if ! mkdir -p "$log_dir"; then
-  log_error "mkdir failed: $log_dir"
-  exit 1
-fi
+prepare_build_log
 
 log_info "binary missing or built from another version; building $version in background (log: $DAEMON_BUILD_LOG)"
 # stdin も切らないと、呼び出し元が build の終了までパイプを待ち続ける。

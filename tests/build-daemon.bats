@@ -56,6 +56,44 @@ teardown() {
   [ ! -d "$LOCK" ]
 }
 
+@test "daemon を建てて起動した後に agent-tasks も建てる" {
+  require_darwin
+  install_fake_gui_toolchain
+
+  PATH="$FIXTURE_PATH" run_hook "$BUILD"
+  [ "$status" -eq 0 ]
+  [ "$(<"$STAMP")" = "$PLUGIN_VERSION" ]
+  [ "$(<"$GUI_STAMP")" = "$PLUGIN_VERSION" ]
+  [ -x "$GUI_APP/Contents/MacOS/agent-tasks" ]
+  # daemon --ensure が gui の build より先
+  [ "$(<"$TEST_TMPDIR/daemon.calls")" = "daemon --ensure" ]
+  grep -q -- " ./cmd/agents-daemon" "$TEST_TMPDIR/go.calls"
+  grep -q -- "build -C $REPO_ROOT/gui " "$TEST_TMPDIR/go.calls"
+}
+
+@test "agent-tasks の build が失敗しても、daemon は建てて起動し、exit 0 で ERROR を残す" {
+  require_darwin
+  install_fake_gui_toolchain
+  export CODESIGN_STUB_EXIT=1
+
+  PATH="$FIXTURE_PATH" run_hook "$BUILD"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"ERROR"*"agent-tasks build failed"* ]]
+  [ "$(<"$STAMP")" = "$PLUGIN_VERSION" ]
+  [ "$(<"$TEST_TMPDIR/daemon.calls")" = "daemon --ensure" ]
+  [ ! -e "$GUI_STAMP" ]
+  [ ! -d "$LOCK" ]
+  [ ! -d "$GUI_LOCK" ]
+}
+
+@test "toolchain が無ければ daemon だけ建てて、agent-tasks は INFO で飛ばす" {
+  PATH="$FIXTURE_PATH" run_hook "$BUILD"
+  [ "$status" -eq 0 ]
+  [ "$(<"$STAMP")" = "$PLUGIN_VERSION" ]
+  [[ "$output" == *"skipping agent-tasks"* ]]
+  [ ! -e "$GUI_STAMP" ]
+}
+
 @test "go build が失敗したら既存のバイナリと stamp を残し、一時ファイルと lock を片付ける" {
   make_fake_daemon "$TEST_TMPDIR/old-daemon.calls" "$BIN"
   printf '%s\n' "0000.0000.0" >"$STAMP"

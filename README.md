@@ -127,12 +127,16 @@ stdin の JSON で受ける。形は `protocol/protocol.schema.json` が持つ�
 ## 依存図のアプリ (agent-tasks)
 
 `gui/` は依存図をセッションの外の窓で描く macOS のアプリで、[Wails v3](https://v3.wails.io/) の WKWebView に
-HTML の箱と SVG の線で描く。root とは別の Go module で、plugin の install では建たない。手元で建てて置く。
+HTML の箱と SVG の線で描く。root とは別の Go module だが、daemon のバイナリと同じく SessionStart hook が plugin の
+ソースから建てて、`~/Applications/agent-tasks.app` に置く (ad hoc 署名。手元で建てるので Gatekeeper は見ない)。
+要るのは Go toolchain と Xcode Command Line Tools (`xcode-select --install`) で、無い Mac と macOS 以外では建てずに
+`build.log` に 1 行残す。建て直しは plugin の更新後の次の SessionStart か `agents-daemon update`。
 
 ```sh
-task gui:build    # gui/frontend を組んで bin/agent-tasks にビルドする (Xcode Command Line Tools と npm が要る)
-task gui:test     # go vet、gosec、go test と、フロントエンドの node --test
-task gui:install  # ~/Applications/agent-tasks.app に置く (ad hoc 署名)
+task gui:build    # bin/agent-tasks にビルドする (開発用。Xcode Command Line Tools が要る)
+task gui:test     # go vet、gosec、go test と、フロントエンドの node --test (npm が要る)
+task gui:install  # hook と同じ script で cache と ~/Applications/agent-tasks.app に置く
+task gui:vendor   # 配置の library (dagre) を npm から gui/frontend/src/vendor に写す (版を上げたとき)
 ```
 
 アプリは daemon のバイナリ (`${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon`) のサブコマンドを呼ぶだけで、

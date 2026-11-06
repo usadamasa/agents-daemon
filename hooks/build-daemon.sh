@@ -7,6 +7,7 @@
 # - 建てたバイナリは同一ディレクトリの一時ファイルから mv で差し替える。動作中の daemon は
 #   実行ファイルの差し替えを検知して自分で入れ替わるので、ここでは止めない
 # - go が無ければエラー終了する。PATH に何が居るかは仮定しない (入れ方は README)
+# - 最後に build-gui.sh を呼び、依存図のアプリも同じ version で建て直す
 
 set -euo pipefail
 
@@ -21,55 +22,17 @@ fi
 source "$SCRIPT_DIR/lib/hook-logger.sh"
 # shellcheck disable=SC1091 # Dynamically resolved path
 source "$SCRIPT_DIR/lib/daemon-bin.sh"
+# shellcheck disable=SC2034 # build-lock.sh が読む
+BUILD_LOCK="$DAEMON_BUILD_LOCK"
+# shellcheck disable=SC1091 # Dynamically resolved path
+source "$SCRIPT_DIR/lib/build-lock.sh"
 
 if ! mkdir -p "$DAEMON_BIN_DIR"; then
   log_error "mkdir failed: $DAEMON_BIN_DIR"
   exit 1
 fi
 
-# lock は mkdir の原子性で取り、持ち主の PID を中に置く。取れなかったときは持ち主が生きているかで
-# 「ビルド中」と「残骸」を分ける。残骸 (SIGKILL 等で cleanup が走らなかった) は消して取り直す。
-# mkdir と pid の書き込みの間に別の build が覗くと残骸と誤認するが、起きるのは二重 build 1 回で、
-# バイナリは mv で原子的に置かれるので壊れない。
-take_lock() {
-  mkdir "$DAEMON_BUILD_LOCK" 2>/dev/null || return 1
-  if ! printf '%s\n' "$$" >"$DAEMON_BUILD_LOCK/pid"; then
-    log_error "write failed: $DAEMON_BUILD_LOCK/pid"
-    release_lock
-    return 1
-  fi
-}
-
-release_lock() {
-  rm -f "$DAEMON_BUILD_LOCK/pid" || log_error "rm failed: $DAEMON_BUILD_LOCK/pid"
-  rmdir "$DAEMON_BUILD_LOCK" || log_error "rmdir failed: $DAEMON_BUILD_LOCK"
-}
-
-# lock の持ち主の PID を stdout に出す。pid ファイルが無いか形が不正なら空。
-lock_holder() {
-  local pid=""
-  [ -f "$DAEMON_BUILD_LOCK/pid" ] && pid=$(<"$DAEMON_BUILD_LOCK/pid")
-  [[ "$pid" =~ ^[0-9]+$ ]] && printf '%s\n' "$pid"
-}
-
-lock_is_stale() {
-  local pid
-  pid=$(lock_holder)
-  [ -z "$pid" ] || ! kill -0 "$pid" 2>/dev/null
-}
-
-if ! take_lock; then
-  if ! lock_is_stale; then
-    log_info "another build (pid $(lock_holder)) holds $DAEMON_BUILD_LOCK; skipping"
-    exit 0
-  fi
-  log_info "stale lock $DAEMON_BUILD_LOCK (holder pid '$(lock_holder)' is gone); removing it"
-  release_lock
-  if ! take_lock; then
-    log_info "another build took $DAEMON_BUILD_LOCK first; skipping"
-    exit 0
-  fi
-fi
+claim_lock || exit 0
 
 tmp_bin=""
 tmp_stamp=""
@@ -132,4 +95,11 @@ log_info "built $DAEMON_BIN ($version)"
 if ! "$DAEMON_BIN" daemon --ensure; then
   log_error "$DAEMON_BIN daemon --ensure failed"
   exit 1
+fi
+
+# 依存図のアプリも同じ version で建て直す (macOS 以外や toolchain の無い環境では build-gui.sh が飛ばす)。
+# daemon の後に回すのは、daemon の起動を cgo の link で待たせないため。アプリが建たなくても daemon は建って
+# 起きているので、失敗にしない (task install と agents-daemon update もここを通る)。
+if ! "$SCRIPT_DIR/build-gui.sh"; then
+  log_error "agent-tasks build failed; agents-daemon itself is built and running"
 fi

@@ -4,8 +4,8 @@
 # PATH は差し引きではなく組み立てる。hook が呼ぶコマンドだけを symlink した
 # ディレクトリを PATH にすれば、開発機でも CI でも `go` が無い状態を同じ形で作れる。
 
-# hook・build・fake go が呼ぶ外部コマンド (bash の builtin は含めない)。
-DAEMON_FIXTURE_COMMANDS=(jq mkdir mv mktemp nohup dirname rm rmdir chmod sleep date)
+# hook・build・fake go が呼ぶ外部コマンド (bash の builtin は含めない)。cp と uname は build-gui.sh が使う。
+DAEMON_FIXTURE_COMMANDS=(jq mkdir mv mktemp nohup dirname rm rmdir chmod sleep date cp uname)
 
 # HOME と XDG の各ディレクトリを一時ディレクトリへ向け、PATH 用のディレクトリを作る。
 # setup から呼ぶ。呼んだ後は FIXTURE_PATH・BIN_DIR・BIN・STAMP・BUILD_LOG・LOCK が使える。
@@ -25,6 +25,10 @@ setup_daemon_fixture() {
   STAMP="$BIN_DIR/agents-daemon.version"
   LOCK="$BIN_DIR/.build.lock"
   BUILD_LOG="$XDG_STATE_HOME/agents-daemon/logs/build.log"
+  GUI_BIN="$BIN_DIR/agent-tasks"
+  GUI_STAMP="$BIN_DIR/agent-tasks.version"
+  GUI_LOCK="$BIN_DIR/.build-gui.lock"
+  GUI_APP="$HOME/Applications/agent-tasks.app"
   PLUGIN_VERSION=$(jq -er '.version' "$REPO_ROOT/.claude-plugin/plugin.json")
 
   FIXTURE_PATH="$TEST_TMPDIR/pathbin"
@@ -54,6 +58,25 @@ make_fake_daemon() {
 install_fake_go() {
   cp "$REPO_ROOT/tests/fixtures/fake-go" "$FIXTURE_PATH/go"
   chmod +x "$FIXTURE_PATH/go"
+}
+
+# FIXTURE_PATH に gui の build が要る toolchain の代役 (cc と codesign) を置く。cc は呼ばれない (go の代役が cgo を
+# 使わない) ので空のスクリプト。codesign は引数を $TEST_TMPDIR/codesign.calls へ記録し、CODESIGN_STUB_EXIT が 0 以外なら
+# その値で終わる。
+install_fake_gui_toolchain() {
+  printf '#!/bin/bash\nexit 0\n' >"$FIXTURE_PATH/cc"
+  # shellcheck disable=SC2016 # 展開するのは書き出した script の側
+  printf '#!/bin/bash\nprintf "%%s\\n" "$*" >>"%s"\nexit "${CODESIGN_STUB_EXIT:-0}"\n' "$TEST_TMPDIR/codesign.calls" >"$FIXTURE_PATH/codesign"
+  chmod +x "$FIXTURE_PATH/cc" "$FIXTURE_PATH/codesign"
+}
+
+# macOS でだけ通るテストの先頭で呼ぶ。build-gui.sh は macOS 以外では建てない。
+require_darwin() {
+  [ "$(uname -s)" = Darwin ] || skip "macOS でだけ建てる"
+}
+
+gui_stamp_is_current() {
+  [ -f "$GUI_STAMP" ] && [ "$(<"$GUI_STAMP")" = "$PLUGIN_VERSION" ]
 }
 
 # 条件コマンドが成功するまで最大 10 秒待つ。detach した build の完了待ちに使う。

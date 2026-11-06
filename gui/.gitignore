@@ -1,3 +1,2 @@
-# task gui:frontend が src/ と node_modules/ から組む (main.go が embed する)
-/frontend/dist/
+# npm はテスト (node --test) と task gui:vendor (src/vendor の更新) のためだけに使う
 /frontend/node_modules/

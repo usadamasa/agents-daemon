@@ -16,23 +16,20 @@ tasks:
     cmds:
       - hooks/build-daemon.sh
 
-  gui:frontend:
-    desc: gui/frontend/src と npm の dagre から gui/frontend/dist (main.go が embed する) を組む
-    # bundler は使わない。src をそのまま写し、配置の library だけ node_modules から vendor/ に写す。
+  gui:vendor:
+    desc: 配置の library (dagre) を npm から gui/frontend/src/vendor に写す。package.json の版を上げたときに打つ
+    # src/vendor はリポジトリに入れる。main.go が src を直接 embed するので、build に npm は要らない。
     dir: gui/frontend
     cmds:
       - npm ci --no-audit --no-fund
-      - rm -rf dist
-      - mkdir -p dist/vendor
-      - cp -R src/. dist/
-      - cp node_modules/@dagrejs/dagre/dist/dagre.esm.js dist/vendor/dagre.esm.js
+      - cp node_modules/@dagrejs/dagre/dist/dagre.esm.js src/vendor/dagre.esm.js
+      - cp node_modules/@dagrejs/dagre/LICENSE src/vendor/LICENSE.dagre
 
   gui:build:
     desc: タスクの依存図のアプリ (gui/、別 module) を bin/agent-tasks にビルドする。macOS だけ
-    # root の module に Wails を混ぜない (cgo と WebKit の link が SessionStart hook の go build と Linux の CI に
-    # 載らない) ので、-C で gui/ の module に入ってビルドする。deployment target は wails3 CLI の darwin の
-    # build task と同じ 12.0 に揃える (揃えないと ld が object ごとに版の食い違いを警告する)。
-    deps: [gui:frontend]
+    # root の module に Wails を混ぜない (cgo と WebKit の link が Linux の CI に載らない) ので、-C で gui/ の module に
+    # 入ってビルドする。deployment target は wails3 CLI の darwin の build task と同じ 12.0 に揃える (揃えないと ld が
+    # object ごとに版の食い違いを警告する)。cache と ~/Applications へ置くのは gui:install (hooks/build-gui.sh)。
     env: &gui-env
       CGO_CFLAGS: -mmacosx-version-min=12.0
       CGO_LDFLAGS: -mmacosx-version-min=12.0
@@ -42,26 +39,21 @@ tasks:
 
   gui:test:
     desc: gui/ の module のテスト (Wails の link が要るので macOS だけ。CI には載せない)
-    # main.go が embed する frontend/dist は生成物なので、先に組まないと vet が落ちる
-    deps: [gui:frontend]
     dir: gui
     env: *gui-env
     cmds:
       - go vet ./...
       - gosec -quiet ./...
       - go test ./...
-      # フロントエンドの DOM に依らない部分 (graph.js、memo.js) は frontend/test を node --test で回す
+      # フロントエンドの DOM に依らない部分 (graph.js、memo.js、ops.js、actions.js) は frontend/test を node --test で回す
+      - npm --prefix frontend ci --no-audit --no-fund
       - npm --prefix frontend test
 
   gui:install:
-    desc: bin/agent-tasks を ~/Applications/agent-tasks.app に置く (ad hoc 署名、手元でだけ動く)
-    deps: [gui:build]
+    desc: アプリを hook と同じ cache の場所に建てて ~/Applications/agent-tasks.app に置く (ad hoc 署名、手元でだけ動く)
+    # SessionStart hook が使うビルドスクリプトをそのまま呼ぶ (install と同じ考え)。
     cmds:
-      - mkdir -p ~/Applications/agent-tasks.app/Contents/MacOS
-      - cp bin/agent-tasks ~/Applications/agent-tasks.app/Contents/MacOS/agent-tasks
-      # build/ は global の gitignore に当たるので darwin/ に置く
-      - cp gui/darwin/Info.plist ~/Applications/agent-tasks.app/Contents/Info.plist
-      - codesign --force --sign - ~/Applications/agent-tasks.app
+      - hooks/build-gui.sh
 
   test:
     desc: Go テストと bats テストを実行

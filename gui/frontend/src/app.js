@@ -4,8 +4,8 @@
 import * as dagre from "./vendor/dagre.esm.js";
 import { Graph } from "./graph.js";
 import { isStale, kindLabel, lastPlacedAt, stamp } from "./memo.js";
-import { canAdopt, canDismiss, candidates, pathDestination, spawnDestinations, spawnLabel } from "./ops.js";
-import { addBlocker, adopt, discard, discardStale, dismissAll, dismissOne, handOffToNew, unlink } from "./actions.js";
+import { canAdopt, canDismiss, canTell, candidates, destinationLabel, isOwnTask, issueDestinations, pathDestination, peerDestinations, spawnDestinations, spawnLabel, taskDestinations } from "./ops.js";
+import { addBlocker, adopt, askUnlink, discard, discardStale, dismissAll, dismissOne, handOff, handOffTask, instruct, setStatus, start, toParking, unlink } from "./actions.js";
 import { pickFolder } from "./daemon.js";
 
 const NODE_W = 240;
@@ -50,10 +50,14 @@ const state = {
   lastText: "",
   // selected は選んだオブジェクト。{ type: "node", key } か { type: "memo", id }。
   selected: null,
-  // picker はポップアップの中で開いている選択。"blocker" (先に済ませるタスク) か "spawn" (起こす repo)。
+  // picker はポップアップの中で開いている選択。"blocker" (先に済ませるタスク)、"instruct" (指示の文面)、"hand" (タスクを渡す先)、
+  // "start" (着手の補足)、"task" / "issue" (メモを渡す先)。
   picker: null,
-  // note は補足欄の下書き。組み直しても消えないようにここに持つ。
+  // note は補足欄、draft は指示の文面の下書き。組み直しても消えないようにここに持つ。
   note: "",
+  draft: "",
+  // refusal は送達が拒まれた理由。文面の下に出し、文面は残す。
+  refusal: "",
   // moreRepos は起こす repo の候補を全部出しているか。
   moreRepos: false,
   // notice は最後の操作の結果。footer に出し、noticeUntil (ミリ秒) まで残す。
@@ -65,19 +69,29 @@ const state = {
 
 const NOTICE_MS = 10000;
 
-// act は操作を走らせ、結果を footer に出して依存図を読み直す。
+// act は操作を走らせ、結果を footer に出して依存図を読み直す。結果が { ok: false } なら (送達が拒まれた) 開いている選択と
+// 打った文面を残し、理由を文面の下に出す。
 async function act(run) {
   if (state.busy) return;
   state.busy = true;
+  state.refusal = "";
   renderPopup();
+  let result;
   try {
-    state.notice = await run();
+    result = await run();
   } finally {
     state.busy = false;
   }
+  const ok = typeof result === "string" || result.ok;
+  state.notice = typeof result === "string" ? result : result.message;
   state.noticeUntil = Date.now() + NOTICE_MS;
-  state.picker = null;
-  state.note = "";
+  if (ok) {
+    state.picker = null;
+    state.note = "";
+    state.draft = "";
+  } else {
+    state.refusal = result.message;
+  }
   state.lastText = "";
   await fetchDeps();
   setTimeout(renderFoot, NOTICE_MS + 100);
@@ -447,7 +461,8 @@ function group(label, rows) {
 }
 
 // nodeRow は関係するノードの 1 行: 状態の丸、題 (押すとそのノードを選ぶ)、直接か間接かの印、依存を外すボタン (あれば)。
-function nodeRow(n, mark, link) {
+// owner は選んでいるノード (同じセッションの blockedBy の解消を頼む宛先)。
+function nodeRow(n, mark, link, owner) {
   const row = document.createElement("div");
   row.className = "lk";
   const dot = document.createElement("span");
@@ -470,16 +485,26 @@ function nodeRow(n, mark, link) {
     x.addEventListener("click", () => act(() => unlink(link)));
     row.append(x);
   }
+  // 同じセッションの blockedBy は TaskUpdate のもので外せないので、そのセッションに解消を頼む。
+  if (link?.kind === "task" && owner && canTell(owner)) {
+    const ask = document.createElement("button");
+    ask.type = "button";
+    ask.className = "tb sm";
+    ask.textContent = "外すよう頼む";
+    ask.disabled = state.busy;
+    ask.addEventListener("click", () => act(() => askUnlink(n, owner)));
+    row.append(ask);
+  }
   return row;
 }
 
 // related は key の直近 (直接) と、その先 (間接) のノードを並べる。direct は [ノード, 辺] の組。
-function related(g, direct, all) {
+function related(g, direct, all, owner) {
   const rows = [];
   const seen = new Set();
   for (const [n, link] of direct) {
     seen.add(n.key);
-    rows.push(nodeRow(n, "直接", link));
+    rows.push(nodeRow(n, "直接", link, owner));
   }
   for (const k of all) {
     if (seen.has(k)) continue;
@@ -496,7 +521,12 @@ const ICONS = {
   remove: '<path d="M5 12h14"/><circle cx="12" cy="12" r="9"/>',
   trash: '<path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 14h10l1-14"/>',
   task: '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V2h6v2"/><path d="M9 13l2 2 4-4"/>',
+  issue: '<circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><path d="M12 16h.01"/>',
   folder: '<path d="M3 7h6l2 2h10v10H3z"/>',
+  send: '<path d="M4 12l16-8-6 16-2-7z"/><path d="M12 13l8-9"/>',
+  hand: '<path d="M4 12h12"/><path d="M12 7l5 5-5 5"/><path d="M20 5v14"/>',
+  play: '<path d="M7 5l12 7-12 7z"/>',
+  check: '<path d="M5 12l5 5 9-10"/>',
 };
 
 function actButton(label, icon, tone, onClick) {
@@ -525,6 +555,7 @@ function cancelButton() {
   b.textContent = "やめる";
   b.addEventListener("click", () => {
     state.picker = null;
+    state.refusal = "";
     renderPopup();
   });
   return b;
@@ -568,13 +599,51 @@ function noteField() {
   return t;
 }
 
+// refusalLine は送達が拒まれた理由。無ければ出さない。
+function refusalLine() {
+  const p = document.createElement("div");
+  p.className = "refusal";
+  p.textContent = state.refusal;
+  p.hidden = state.refusal === "";
+  return p;
+}
+
+function subheading(text) {
+  const s = document.createElement("span");
+  s.className = "ph sub";
+  s.textContent = text;
+  return s;
+}
+
+// destinationRows は生きているセッションの宛先の一覧。無ければその旨を 1 行出す。
+function destinationRows(peers, onPick) {
+  if (peers.length === 0) {
+    const none = document.createElement("span");
+    none.className = "ph";
+    none.textContent = "生きているセッションが無い";
+    return [none];
+  }
+  return peers.map((to) => {
+    const row = document.createElement("div");
+    row.className = "lk";
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = destinationLabel(to);
+    b.title = to.session_id;
+    b.disabled = state.busy;
+    b.addEventListener("click", () => onPick(to));
+    row.append(b);
+    return row;
+  });
+}
+
 // SPAWN_SHOWN は起こす repo の候補を、「ほか n 件」を押す前に出す件数。台帳の repo は多いので畳む。
 const SPAWN_SHOWN = 8;
 
-// spawnPicker は「新しいセッションを起こして渡す」の repo の一覧とフォルダの選択。
-function spawnPicker(memo, repo) {
+// spawnRows は「新しいセッションを起こして渡す」の repo の一覧とフォルダの選択。first は先頭に出す repo (無ければ undefined)。
+function spawnRows(first, onPick) {
   const now = Date.now();
-  const all = spawnDestinations(state.data, { repo: repo.repo, title: repo.title });
+  const all = spawnDestinations(state.data, first);
   const shown = state.moreRepos ? all : all.slice(0, SPAWN_SHOWN);
   const rows = shown.map((to) => {
     const row = document.createElement("div");
@@ -584,10 +653,21 @@ function spawnPicker(memo, repo) {
     b.textContent = spawnLabel(to, now);
     b.title = to.repo;
     b.disabled = state.busy;
-    b.addEventListener("click", () => act(() => handOffToNew(memo, to, "task", state.note)));
+    b.addEventListener("click", () => onPick(to));
     row.append(b);
     return row;
   });
+  if (all.length > shown.length) {
+    const more = document.createElement("button");
+    more.type = "button";
+    more.className = "tb sm";
+    more.textContent = `ほか ${all.length - shown.length} 件…`;
+    more.addEventListener("click", () => {
+      state.moreRepos = true;
+      renderPopup();
+    });
+    rows.push(more);
+  }
   const pick = document.createElement("button");
   pick.type = "button";
   pick.className = "tb sm";
@@ -603,23 +683,92 @@ function spawnPicker(memo, repo) {
       renderFoot();
       return;
     }
-    await act(() => handOffToNew(memo, to, "task", state.note));
+    await onPick(to);
   });
-  if (all.length > shown.length) {
-    const more = document.createElement("button");
-    more.type = "button";
-    more.className = "tb sm";
-    more.textContent = `ほか ${all.length - shown.length} 件…`;
-    more.addEventListener("click", () => {
-      state.moreRepos = true;
-      renderPopup();
-    });
-    rows.push(more);
-  }
   const foot = document.createElement("div");
   foot.className = "lk";
   foot.append(pick, cancelButton());
-  return group("新しいセッションを起こす repo を選ぶ", [noteField(), ...rows, foot]);
+  return [...rows, foot];
+}
+
+// repoOf はノードのセッションがいる repo (起こす repo の候補の先頭にする)。
+function repoOf(n) {
+  const r = state.data.repos.find((repo) => repo.sessions.some((s) => s.session_id === n.session_id));
+  return r ? { repo: r.repo, title: r.title } : undefined;
+}
+
+// memoHandPicker は「タスクにする」「issue にする」の宛先: 生きているセッションと、新しく起こす repo。
+function memoHandPicker(memo, repo, intent) {
+  const peers = intent === "task" ? taskDestinations(repo) : issueDestinations(state.data, repo);
+  const pick = (to) => act(() => handOff(memo, to, intent, state.note));
+  const label = intent === "task" ? "タスクにするセッションを選ぶ" : "issue にするセッションを選ぶ";
+  return group(label, [noteField(), refusalLine(), ...destinationRows(peers, pick), subheading("新しいセッションを起こす"), ...spawnRows({ repo: repo.repo, title: repo.title }, pick)]);
+}
+
+// taskHandPicker は「渡す」の宛先: 持ち主を除く生きているセッションと、新しく起こす repo。
+function taskHandPicker(n) {
+  const pick = (to) => act(() => handOffTask(n, to, state.note));
+  return group("渡すセッションを選ぶ", [noteField(), refusalLine(), ...destinationRows(peerDestinations(state.data, n.session_id), pick), subheading("新しいセッションを起こす"), ...spawnRows(repoOf(n), pick)]);
+}
+
+// instructPicker は指示の文面を打って送る。textarea なので IME の変換中の Enter は送信にならず、送るのはボタンか ⌘ Enter。
+function instructPicker(n) {
+  const t = document.createElement("textarea");
+  t.className = "note draft";
+  t.rows = 4;
+  t.placeholder = n.kind === "task" ? "指示 (タスクの題を添えて入力欄に打つ)" : "指示 (入力欄に打つ文面)";
+  t.value = state.draft;
+  const send = document.createElement("button");
+  send.type = "button";
+  send.className = "tb sm";
+  send.textContent = "送る";
+  const submit = () => {
+    if (state.draft.trim() === "") return;
+    act(() => instruct(n, state.draft.trim()));
+  };
+  send.disabled = state.busy || state.draft.trim() === "";
+  send.addEventListener("click", submit);
+  t.addEventListener("input", () => {
+    state.draft = t.value;
+    send.disabled = state.busy || state.draft.trim() === "";
+  });
+  t.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && e.metaKey && !e.isComposing) {
+      e.preventDefault();
+      submit();
+    }
+  });
+  const foot = document.createElement("div");
+  foot.className = "lk";
+  foot.append(send, cancelButton());
+  return group(`${n.session ?? ""} へ指示を送る`, [t, refusalLine(), foot]);
+}
+
+// startPicker は着手の依頼に補足を添えて送る。
+function startPicker(n) {
+  const send = document.createElement("button");
+  send.type = "button";
+  send.className = "tb sm";
+  send.textContent = "着手を頼む";
+  send.disabled = state.busy;
+  send.addEventListener("click", () => act(() => start(n, state.note)));
+  const foot = document.createElement("div");
+  foot.className = "lk";
+  foot.append(send, cancelButton());
+  return group(`${n.session ?? ""} に着手を頼む`, [noteField(), refusalLine(), foot]);
+}
+
+// toggle は picker を開く・閉じる動詞。
+function toggle(name) {
+  return () => {
+    state.picker = state.picker === name ? null : name;
+    state.refusal = "";
+    renderPopup();
+  };
+}
+
+function on(name) {
+  return state.picker === name ? "on" : "";
 }
 
 function stateChip(n) {
@@ -646,18 +795,26 @@ function nodePopup(n) {
   head.append(ph, title, chips);
   parts.push(head);
 
-  // 動詞。送達を伴うもの (指示、渡す、着手、完了、削除) は第 2 段。
+  // 動詞。送達を伴うもの (指示、渡す、着手、完了、削除、メモにする) は生きているセッションのタスクに、バイナリだけで済む
+  // もの (メモにする = adopt、一覧から外す) は終了したセッションのタスクに出る。
   const verbs = [];
-  if (n.endpoint && n.cwd !== undefined) {
-    verbs.push(actButton("依存を足す", "link", state.picker === "blocker" ? "on" : "", () => {
-      state.picker = state.picker === "blocker" ? null : "blocker";
-      renderPopup();
-    }));
+  if (canTell(n)) verbs.push(actButton("指示を送る", "send", on("instruct"), toggle("instruct")));
+  if (n.endpoint && n.cwd !== undefined) verbs.push(actButton("依存を足す", "link", on("blocker"), toggle("blocker")));
+  if (isOwnTask(n)) {
+    verbs.push(actButton("渡す", "hand", on("hand"), toggle("hand")));
+    if (n.state !== "in_progress") verbs.push(actButton("着手", "play", on("start"), toggle("start")));
+    verbs.push(actButton("完了", "check", "", () => act(() => setStatus(n, "completed"))));
+    verbs.push(actButton("メモにする", "memo", "", () => act(() => toParking(n))));
+    verbs.push(actButton("削除", "trash", "danger", () => act(() => setStatus(n, "deleted"))));
   }
   if (canAdopt(n, state.data)) verbs.push(actButton("メモにする", "memo", "", () => act(() => adopt(n))));
   if (canDismiss(n, state.data)) verbs.push(actButton("一覧から外す", "remove", "danger", () => act(() => dismissOne(n))));
   if (verbs.length > 0) parts.push(actsBar(verbs));
+  if (state.picker === "instruct") parts.push(instructPicker(n));
   if (state.picker === "blocker") parts.push(blockerPicker(n));
+  if (state.picker === "hand") parts.push(taskHandPicker(n));
+  if (state.picker === "start") parts.push(startPicker(n));
+  if (state.refusal !== "" && !["instruct", "blocker", "hand", "start"].includes(state.picker)) parts.push(refusalLine());
 
   if (n.description) {
     const p = document.createElement("p");
@@ -668,7 +825,7 @@ function nodePopup(n) {
   const after = g.after(n.key).map((m) => [m, undefined]);
   parts.push(group(`このタスクを待っている · ${g.reach(n.key).size}`, related(g, after, g.reach(n.key))));
   const before = g.blockers(n.key).flatMap((l) => (g.node(l.before) ? [[g.node(l.before), l]] : []));
-  parts.push(group(`このタスクが待っている · ${g.upstream(n.key).size}`, related(g, before, g.upstream(n.key))));
+  parts.push(group(`このタスクが待っている · ${g.upstream(n.key).size}`, related(g, before, g.upstream(n.key), n)));
 
   if (n.memos.length > 0) {
     parts.push(group(`扱うメモ · ${n.memos.length}`, n.memos.map((m) => memoRowInPopup(m.id, m.title, m.status, m.status === "open"))));
@@ -716,17 +873,16 @@ function memoPopup({ memo, repo }) {
   head.append(ph, title, chips);
   parts.push(head);
 
-  // 動詞。生きているセッションへ渡す (タスクにする / issue にする) は第 2 段。ここでは新しいセッションを起こして渡す。
+  // 動詞。渡す先は生きているセッションか、新しく起こすセッション。
   parts.push(
     actsBar([
-      actButton("タスクにする", "task", state.picker === "spawn" ? "pri on" : "pri", () => {
-        state.picker = state.picker === "spawn" ? null : "spawn";
-        renderPopup();
-      }),
+      actButton("タスクにする", "task", `pri ${on("task")}`.trim(), toggle("task")),
+      actButton("issue にする", "issue", on("issue"), toggle("issue")),
       actButton("捨てる", "trash", "danger", () => act(() => discard(memo))),
     ]),
   );
-  if (state.picker === "spawn") parts.push(spawnPicker(memo, repo));
+  if (state.picker === "task" || state.picker === "issue") parts.push(memoHandPicker(memo, repo, state.picker));
+  else if (state.refusal !== "") parts.push(refusalLine());
 
   if (memo.detail) {
     const p = document.createElement("p");

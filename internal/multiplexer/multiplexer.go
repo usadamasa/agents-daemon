@@ -75,6 +75,29 @@ func RecordLabel(p Pane) string {
 	return label
 }
 
+// Claude Code が blocked の record に付ける kind のうち、利用者が答える prompt が開いているもの。
+// 限度の画面がこの kind で来ることは無いので、列挙に無い kind (dialog 一般の kind 無し) は送信を止めない
+// (上限到達時の record は未実測。#77)。
+// cc-premise: 2.1.302 osc7501 blocked の kind は permission / question / auth。dialog 一般は kind 無し
+const (
+	AgentKindPermission = "permission"
+	AgentKindQuestion   = "question"
+	AgentKindAuth       = "auth"
+)
+
+// WaitingOnPrompt は pane が利用者の答えを待つ prompt で止まっているかを返す。
+// この pane へ esc を送ると prompt を断り、Enter を送ると承認する。monitor の再開と tell が送信を見送る判断に使う。
+func WaitingOnPrompt(p Pane) bool {
+	if p.AgentStatus != AgentStatusBlocked {
+		return false
+	}
+	switch p.AgentKind {
+	case AgentKindPermission, AgentKindQuestion, AgentKindAuth:
+		return true
+	}
+	return false
+}
+
 // IsClaudeAgent は pane が Claude Code の agent を持つかを判定する。
 // agent フィールドへの大文字小文字を無視した部分一致で判定する。
 func IsClaudeAgent(p Pane) bool {

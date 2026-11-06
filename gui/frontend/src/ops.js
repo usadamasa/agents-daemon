@@ -1,6 +1,5 @@
-// 操作の判定と文面。hooks/graph.ts の candidates、hooks/dismiss.ts の canDismiss、hooks/parking.ts の宛先と文面のうち
-// engine に依らない部分を移した。アプリはセッションではないので「自分 (self)」の区別は無い。
-import { kindLabel } from "./memo.js";
+// 操作の判定、宛先の並べ方、タスクのセッションへ頼む文面の雛形。アプリはセッションではないので「自分 (self)」の
+// 区別は無く、生きている全セッションのタスクに同じ動詞が出る。
 
 // candidates は selected の「先に済ませるタスク」の候補: 辺の端点にできる (endpoint の) ノードのうち、自分、既にある上流、
 // 下流 (足すと輪になる)、完了と終了したものを除く。
@@ -71,56 +70,113 @@ function basename(path) {
   return path.replace(/\/+$/, "").split("/").pop() ?? path;
 }
 
-// withNote は利用者が補足欄に書いた文を、操作の文面の末尾に足す。空なら text のまま。
+// withNote は利用者が補足欄に書いた文を、操作の文面の末尾に足す。空なら text のまま。メモを渡す文面の雛形は
+// バイナリ (parkhand) が持ち、アプリが組むのはタスクへの依頼だけ。
 export function withNote(text, note) {
   const said = note.trim();
   return said === "" ? text : `${text}\n利用者からの補足: ${said}`;
 }
 
-// PREMISE_CHECK は渡す文面で依頼の前に置く確かめ。メモは置いた時点の前提で書かれていて、渡すまでにレビューや別の
-// 変更で前提が消えていることがある。渡したメモは handed になり一覧から消えるので、受け手はメモの status を触らずに終えてよい。
-const PREMISE_CHECK = "先に、メモの前提 (詳細と関係するファイル) が今のコードと計画で成り立つかを確かめてください。";
-const PREMISE_GONE = "前提が成り立たないとき (該当箇所が無くなった、別の変更で直った) は、その理由を 1 行で返して終えてください。";
-
-// taskText は「タスクにする」で送る文面。着手の時期は受け手の計画に任せる。依存図はタスクの description に
-// 書かれた id でメモと照合する (deps/graph)。
-export function taskText(memo, note = "") {
-  const text = [
-    `パーキングロットのメモ「${memo.title}」(種類: ${kindLabel(memo)}) をタスクにしてください。` +
-      PREMISE_CHECK +
-      `成り立つときは TaskCreate で作り、タスクの description にメモの id (${memo.id}) を入れてください。` +
-      `既にこのメモを扱うタスクがあれば、新しく作らずにその description に id を書き足すだけで構いません。` +
-      `着手の時期は今の計画 (タスクの依存) に従ってください。` +
-      PREMISE_GONE,
-    ...context(memo),
-  ].join("\n");
-  return withNote(text, note);
+// canTell はノードのセッションへ文面を打てるか (生きていて、セッションを持つ)。pane の状態 (prompt、上限、打ちかけの文) は
+// 送るときにバイナリが見る。
+export function canTell(node) {
+  return node.live && typeof node.session_id === "string" && node.session_id !== "";
 }
 
-// issueText は「issue にするよう頼む」で送る文面。
-export function issueText(memo, repo, note = "") {
-  const text = [
-    `パーキングロットのメモ「${memo.title}」を GitHub の issue にしてください。repo: ${repo}。` + PREMISE_CHECK + "成り立つときは起票し、URL を返してください。" + PREMISE_GONE,
-    ...context(memo),
-  ].join("\n");
-  return withNote(text, note);
+// isOwnTask はセッションが動かせる (未完了の) タスクか。着手・完了・削除・メモにする、の対象。
+export function isOwnTask(node) {
+  return node.kind === "task" && canTell(node) && node.state !== "completed";
 }
 
-// spawnText は新しく起こすセッションの最初のターンの文面。起こした経緯を 1 行置き、続けて渡す文面。
-// issue はメモの repo ではなく起こした repo を起票先にする (生きているセッションの無い repo へ渡すための経路なので)。
-export function spawnText(memo, to, intent, note = "") {
-  const body = intent === "task" ? taskText(memo, note) : issueText(memo, to.title, note);
-  return `このメモを渡すため、${to.title} (${to.repo}) で新しいセッションとして起こしました。\n${body}`;
-}
-
-function context(memo) {
-  const lines = [];
-  if (memo.detail) lines.push(`詳細: ${memo.detail}`);
-  for (const source of memo.sources) {
-    if (source.detail) lines.push(`補足 (${source.session}): ${source.detail}`);
+// uniqueLive は sessions を受け取った順に宛先にする。exclude と、同じセッションの 2 回目は除く (subject は最初のもの)。
+function uniqueLive(sessions, exclude) {
+  const seen = new Set();
+  const out = [];
+  for (const s of sessions) {
+    if (!s.live || s.session_id === "" || s.session_id === exclude || seen.has(s.session_id)) continue;
+    seen.add(s.session_id);
+    out.push({ route: "peer", session_id: s.session_id, session: s.session, subject: s.subject });
   }
-  if (memo.files?.length) lines.push(`関係するファイル: ${memo.files.join(", ")}`);
-  if (memo.default_taken) lines.push(`置いたときの既定: ${memo.default_taken}`);
-  lines.push(`(メモ ${memo.id})`);
-  return lines;
+  return out;
+}
+
+// taskDestinations は「タスクにする」の宛先: メモの repo の生きているセッション。
+export function taskDestinations(repo) {
+  return uniqueLive(repo.sessions);
+}
+
+// issueDestinations は「issue にする」の宛先: メモの repo のセッションを先に、続けてほかの repo の生きているセッション。
+export function issueDestinations(data, repo) {
+  return uniqueLive([...repo.sessions, ...data.repos.flatMap((r) => r.sessions)]);
+}
+
+// peerDestinations はタスクを渡す宛先: repo を問わず生きているほかのセッション (持ち主を除く)。
+export function peerDestinations(data, owner) {
+  return uniqueLive(data.repos.flatMap((r) => r.sessions), owner);
+}
+
+// SUBJECT_CHARS は宛先の名前に添える subject の長さの上限。
+const SUBJECT_CHARS = 28;
+
+// destinationLabel は宛先の名前。セッションには何をしているか (subject) を添える。
+export function destinationLabel(to) {
+  if (to.route === "spawn") return to.title;
+  if (to.subject === "") return to.session;
+  const subject = to.subject.length > SUBJECT_CHARS ? `${to.subject.slice(0, SUBJECT_CHARS - 1)}…` : to.subject;
+  return `${to.session} (${subject})`;
+}
+
+// ---- タスクのセッションへ頼む文面 ----
+
+function ref(node) {
+  return `タスク #${node.task_id ?? ""}「${node.title}」`;
+}
+
+// instruction は指示の文面。タスクのノードなら、どのタスクについての指示かを title で添える。
+export function instruction(node, text) {
+  return node.kind === "task" ? `タスク「${node.title}」について: ${text}` : text;
+}
+
+// unlinkText は同じセッションの blockedBy の解消を頼む文面。TaskUpdate に blockedBy を外す引数が無いので、
+// 待たれている側を片付けるか、待っている側を作り直すよう頼む。
+export function unlinkText(before, after) {
+  const id = (n) => n.task_id ?? "";
+  return (
+    `タスク #${id(after)}「${after.title}」が #${id(before)}「${before.title}」の完了待ち (blockedBy) になっています。` +
+    `この待ちが要らなければ、#${id(before)} を completed か deleted にするか、#${id(after)} を blockedBy なしで作り直してください。`
+  );
+}
+
+export function startText(node, note = "") {
+  return withNote(`${ref(node)}に着手してください。TaskUpdate で in_progress にしてから進めてください。`, note);
+}
+
+export function statusText(node, status) {
+  return `${ref(node)}を TaskUpdate で ${status} にしてください。`;
+}
+
+// handText は渡す相手へ送る文面 (title と description)。補足 (note) は末尾に足す。
+export function handText(node, note = "") {
+  const lines = [`${node.session ?? ""} (session ID ${node.session_id ?? ""}) からタスク「${node.title}」を渡します。TaskCreate で作って進めてください。`];
+  if (node.description) lines.push(`詳細: ${node.description}`);
+  return withNote(lines.join("\n"), note);
+}
+
+// spawnHandText は新しく起こすセッションの最初のターンの文面。起こした経緯を 1 行置き、続けて渡す文面。
+export function spawnHandText(node, to, note = "") {
+  return `このタスクを渡すため、${to.title} (${to.repo}) で新しいセッションとして起こしました。\n${handText(node, note)}`;
+}
+
+// handedText は渡した後に持ち主へタスクを消すよう頼む文面。
+export function handedText(node, toName) {
+  return `${ref(node)}を ${toName} へ渡しました (title と description を送った)。TaskUpdate で deleted にしてください。`;
+}
+
+// parkText はタスクをパーキングロットへ戻すよう頼む文面。扱うメモ (捨てていないもの) があればそれを open に戻した後に
+// タスクを消すよう頼み、無ければ park tool でメモに置いてから消すよう頼む。
+export function parkText(node, reopenedIDs) {
+  if (reopenedIDs.length === 0) {
+    return `${ref(node)}をパーキングロットへ戻してください。park tool でタスクの title と description をメモ (kind は scope) に置き、置けたら TaskUpdate で deleted にしてください。`;
+  }
+  return `${ref(node)}の元のメモ (${reopenedIDs.join(", ")}) をパーキングロットの open に戻しました。TaskUpdate で deleted にしてください。`;
 }

@@ -1,4 +1,4 @@
-// パーキングのメモの見せ方。hooks/parking.ts のうち engine に依らない部分を移した。
+// パーキングのメモの見せ方 (時刻、古さ、種類の語)。
 
 // lastPlacedAt はメモが最後に置かれた時刻 (sources は新しい順)。
 export function lastPlacedAt(memo) {

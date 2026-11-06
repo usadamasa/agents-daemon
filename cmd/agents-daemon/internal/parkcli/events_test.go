@@ -107,7 +107,7 @@ func TestParkWithdrawEvents(t *testing.T) {
 	}
 	got := eventLines(t, dir)
 	equalLines(t, got[1:], []string{
-		`park.failed op=withdraw session=s2 memo=` + id + ` reason="メモ ` + id + ` はこのセッションだけが置いたメモではないので取り下げない。依存図の pane の Discard で捨てる"`,
+		`park.failed op=withdraw session=s2 memo=` + id + ` reason="メモ ` + id + ` はこのセッションだけが置いたメモではないので取り下げない。依存図のアプリの「捨てる」で捨てる"`,
 		"park.withdraw session=s1 memo=" + id,
 	})
 }

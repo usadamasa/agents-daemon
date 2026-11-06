@@ -36,22 +36,26 @@ func daemonBin() string {
 }
 
 // runTimeout は mod の runDaemon と同じ 10 秒。spawnTimeout は claude が前景になるまでバイナリが待つ分 (mod と同じ 30 秒)。
+// tellTimeout は rex を数回叩いて文面と Enter の間に待つ分 (rex 1 回は 10 秒で切れる)。
 const (
 	runTimeout   = 10 * time.Second
 	spawnTimeout = 30 * time.Second
+	tellTimeout  = 20 * time.Second
 )
 
 // commands はフロントエンドが Run で呼べるサブコマンドと、その timeout。stdin の形は protocol.schema.json の
 // <Command>Request。ここに無いコマンドは呼べない (フロントエンドの文字列をそのまま exec に渡さない)。
+// 出来事のログはどのコマンドもバイナリが書くので、event-log は無い。
 var commands = map[string]time.Duration{
 	"park set":     runTimeout,
 	"park discard": runTimeout,
 	"park adopt":   runTimeout,
+	"park hand":    spawnTimeout,
 	"edge add":     runTimeout,
 	"edge rm":      runTimeout,
 	"task dismiss": runTimeout,
-	"event-log":    runTimeout,
 	"spawn":        spawnTimeout,
+	"tell":         tellTimeout,
 }
 
 // Deps は `agents-daemon deps` の stdout (DepsData の JSON) を返す。

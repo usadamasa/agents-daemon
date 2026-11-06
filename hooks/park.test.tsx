@@ -23,8 +23,6 @@ function world(on: On, run: (argv: readonly string[]) => ProcessRunResult) {
     tools.push({ ...e })
     return { value: { tool: `mcp__agents-daemon__${e.name}` } }
   })
-  // deps.tsx も同じ session.start で /deps を登録する。
-  on('command.register', async (_$, e) => ({ value: { command: e.name } }))
   on('session.start', async (_$, e) => ({ cwd: e.cwd }))
   return { ran, tools }
 }
@@ -145,9 +143,9 @@ test('unpark はメモの id とこのセッションの ID を park withdraw �
 })
 
 test('unpark が失敗したら、取り下げられなかった理由を model へ返す', async ($, on) => {
-  world(on, () => output('', 1, `メモ ${ID} はほかのセッションも置いたので取り下げない。pane の Discard で捨てる`))
+  world(on, () => output('', 1, `メモ ${ID} はほかのセッションも置いたので取り下げない。依存図のアプリの「捨てる」で捨てる`))
   await $.session.start(START)
 
   const res = await $.tool.call({ tool: UNPARK, id: ID } as never)
-  expect(res.deny).toMatch(/^メモを取り下げられませんでした: .*pane の Discard/)
+  expect(res.deny).toMatch(/^メモを取り下げられませんでした: .*「捨てる」/)
 })

@@ -28,6 +28,15 @@ func Connect(getenv func(string) string, contexts sessioncontext.Store) (string,
 	if err != nil {
 		return "", nil, err
 	}
-	resolve := func() (map[string]string, error) { return contexts.ListMultiplexerBlocks(kind) }
-	return kind, rexcli.NewExecClient(resolve), nil
+	return kind, ConnectRex(contexts), nil
+}
+
+// ConnectRex は REX_SESSION を確かめずに rex の Client を作る。依存図のアプリ (gui/) は rex の外で起きて spawn / tell /
+// park hand を呼ぶので、自分が rex の block にいるかは問わず、rex の server に届くかだけが問われる (届かなければ
+// 呼び出しが失敗する)。daemon は Detect 付きの Connect を使う。
+func ConnectRex(contexts sessioncontext.Store) multiplexer.Client {
+	resolve := func() (map[string]string, error) {
+		return contexts.ListMultiplexerBlocks(sessioncontext.MultiplexerKindRex)
+	}
+	return rexcli.NewExecClient(resolve)
 }

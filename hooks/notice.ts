@@ -3,7 +3,6 @@ import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
 
 import { runDaemon } from './daemon-bin'
 import { logChange, logEvent, reason, settle } from './log'
-import { kindLabel } from './parking'
 import type { ParkingItem, ParkingItemList } from '../types'
 
 // model がファイルを読む・書いたら、そのファイルを files に持つパーキングのメモを tool の結果の context で model に
@@ -19,6 +18,12 @@ import type { ParkingItem, ParkingItemList } from '../types'
 // cc-premise: 2.1.310 mods session.compact の next(e) は置き換えた会話 (messages) か skip を返す。precompute は何も置き換えず、e.agentId は subagent の compact にだけ付く
 
 const told = atom({ plugin: 'agents-daemon', key: 'told' } as const, [])
+
+// kindLabel はメモの種類の語 (park tool の kind の語のまま)。終了したセッションから移したメモ (origin adopted) は
+// adopted を添える。アプリ (gui/frontend/src/memo.js) とバイナリ (parkhand) も同じ語で出す。
+export function kindLabel(memo: { kind: string; origin?: string }): string {
+  return memo.origin === 'adopted' ? `${memo.kind}・adopted` : memo.kind
+}
 
 // repo の下に置く worktree (Claude Code の EnterWorktree の置き場)。
 const WORKTREES = '/.claude/worktrees/'

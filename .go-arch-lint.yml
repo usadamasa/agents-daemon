@@ -47,6 +47,8 @@ components:
     in:
       - "internal/deps/**"
       - "internal/spawn"
+      - "internal/tell"
+      - "internal/parkhand"
   runtime:
     in: "internal/runtime/**"
   dream:

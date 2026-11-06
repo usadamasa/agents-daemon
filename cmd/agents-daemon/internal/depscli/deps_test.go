@@ -28,7 +28,7 @@ func runDeps(t *testing.T, stdin string) deps.Deps {
 	return d
 }
 
-// deps はタスクの記録から依存図を組み、stdin の cwd の repo の鍵を here に置く。
+// deps はタスクの記録から依存図を組む。stdin は {}。
 func TestDeps(t *testing.T) {
 	root := testEnv(t)
 	home := filepath.Join(root, "src", "home", "a")
@@ -38,8 +38,8 @@ func TestDeps(t *testing.T) {
 	writeFile(t, filepath.Join(root, "state", "agents-daemon", "tasks", "W", "1.json"),
 		`{"id": "1", "subject": "書く", "status": "pending", "session_id": "W", "cwd": "`+home+`"}`)
 
-	d := runDeps(t, `{"cwd": "`+home+`"}`)
-	if len(d.Repos) != 1 || d.Here != d.Repos[0].Repo || len(d.Graph.Nodes) != 1 || d.Graph.Nodes[0].Title != "書く" {
+	d := runDeps(t, `{}`)
+	if len(d.Repos) != 1 || len(d.Graph.Nodes) != 1 || d.Graph.Nodes[0].Title != "書く" {
 		t.Errorf("deps = %+v", d)
 	}
 }

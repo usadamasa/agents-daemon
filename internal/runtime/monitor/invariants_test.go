@@ -72,7 +72,7 @@ func randomPane(r *rand.Rand) multiplexer.Pane {
 		multiplexer.AgentStatusIdle, multiplexer.AgentStatusWorking, multiplexer.AgentStatusBlocked,
 		multiplexer.AgentStatusDone, multiplexer.AgentStatusError, multiplexer.AgentStatusUnknown, "",
 	}
-	kinds := []string{"", "", kindPermission, kindQuestion, kindAuth, "dialog"}
+	kinds := []string{"", "", multiplexer.AgentKindPermission, multiplexer.AgentKindQuestion, multiplexer.AgentKindAuth, "dialog"}
 	return multiplexer.Pane{
 		PaneID:      "pane-1",
 		Agent:       agents[r.IntN(len(agents))],
@@ -190,7 +190,7 @@ func checkSend(cfg config.Config, st step, tr tickResult) string {
 		return "待機の期限前、または監視中に送った"
 	case !multiplexer.IsClaudeAgent(st.pane):
 		return "Claude agent でない pane へ送った"
-	case waitingOnPrompt(st.pane):
+	case multiplexer.WaitingOnPrompt(st.pane):
 		return "利用者の答えを待つ prompt が開いている pane へ送った"
 	case !tr.seen || strings.TrimSpace(st.screen) == "":
 		return "画面を読めていないのに送った"

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Graph } from "../src/graph.js";
-import { canAdopt, canDismiss, candidates, pathDestination, spawnDestinations, spawnLabel, taskText } from "../src/ops.js";
+import { canAdopt, canDismiss, candidates, canTell, destinationLabel, isOwnTask, issueDestinations, pathDestination, peerDestinations, spawnDestinations, spawnLabel, taskDestinations } from "../src/ops.js";
 
 const node = (key, extra = {}) => ({ key, kind: "task", state: "pending", title: key, live: true, depth: 0, downstream: 0, parked: 0, memos: [], blocked_by: [], deadlock: false, halted: false, stuck: false, endpoint: true, session_id: "s1", ...extra });
 
@@ -60,16 +60,31 @@ test("spawnLabel は最後に見た時刻からの経過を添える", () => {
   assert.equal(spawnLabel({ route: "spawn", repo: "/r/a", title: "a", last_seen: "2026-11-01T09:00:00Z" }, now), "a (5 日前)");
 });
 
+test("canTell と isOwnTask は生きているセッションのノードだけ", () => {
+  const live = { kind: "task", live: true, session_id: "s1", state: "pending" };
+  assert.equal(canTell(live), true);
+  assert.equal(canTell({ ...live, live: false }), false);
+  assert.equal(canTell({ ...live, session_id: "" }), false);
+  assert.equal(isOwnTask(live), true);
+  assert.equal(isOwnTask({ ...live, state: "completed" }), false);
+  assert.equal(isOwnTask({ ...live, kind: "session" }), false);
+});
+
+test("宛先はメモの repo のセッション、ほかの repo、持ち主を除く、の順と重複除去", () => {
+  const a = { session_id: "s1", session: "a", subject: "lint", live: true };
+  const b = { session_id: "s2", session: "b", subject: "", live: true };
+  const gone = { session_id: "s3", session: "c", subject: "", live: false };
+  const data = { repos: [{ repo: "/r/x", sessions: [a, gone] }, { repo: "/r/y", sessions: [b, a] }] };
+  assert.deepEqual(taskDestinations(data.repos[1]).map((t) => t.session_id), ["s2", "s1"]);
+  assert.deepEqual(issueDestinations(data, data.repos[1]).map((t) => t.session_id), ["s2", "s1"]);
+  assert.deepEqual(issueDestinations(data, data.repos[0]).map((t) => t.session_id), ["s1", "s2"]);
+  assert.deepEqual(peerDestinations(data, "s1").map((t) => t.session_id), ["s2"]);
+  assert.equal(destinationLabel(taskDestinations(data.repos[0])[0]), "a (lint)");
+  assert.equal(destinationLabel({ route: "peer", session_id: "s2", session: "b", subject: "" }), "b");
+  assert.equal(destinationLabel({ route: "spawn", repo: "/r/x", title: "x" }), "x");
+});
+
 test("pathDestination は絶対パスだけを受ける", () => {
   assert.deepEqual(pathDestination(" /r/x/ "), { route: "spawn", repo: "/r/x/", title: "x" });
   assert.equal("failure" in pathDestination("r/x"), true);
-});
-
-test("taskText はメモの id と前提の確かめを含み、補足を末尾に足す", () => {
-  const memo = { id: "m1", kind: "scope", origin: "placed", title: "T", detail: "D", files: ["a.go"], default_taken: "やらない", sources: [{ session: "s", at: "2026-11-06T00:00:00Z", detail: "補" }] };
-  const text = taskText(memo, " 急ぎ ");
-  for (const part of ["「T」", "(種類: scope)", "メモの id (m1)", "詳細: D", "補足 (s): 補", "関係するファイル: a.go", "置いたときの既定: やらない", "(メモ m1)", "利用者からの補足: 急ぎ"]) {
-    assert.ok(text.includes(part), part);
-  }
-  assert.ok(!taskText(memo).includes("利用者からの補足"));
 });

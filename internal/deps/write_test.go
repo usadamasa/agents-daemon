@@ -33,10 +33,10 @@ func writeFile(t *testing.T, path, data string) {
 	}
 }
 
-func writeDeps(t *testing.T, p apppath.Paths, cwd string) Deps {
+func writeDeps(t *testing.T, p apppath.Paths) Deps {
 	t.Helper()
 	var buf bytes.Buffer
-	if err := Write(&buf, p, cwd); err != nil {
+	if err := Write(&buf, p); err != nil {
 		t.Fatalf("Write() error = %v", err)
 	}
 	var d Deps
@@ -52,7 +52,7 @@ func TestWrite(t *testing.T) {
 	tasks := filepath.Join(p.StateDir(), "tasks")
 	writeFile(t, filepath.Join(tasks, "H", "1.json"), `{"id":"1","subject":"私用","status":"pending","session_id":"H","cwd":"/src/home/a"}`)
 
-	d := writeDeps(t, p, "/src/home/a")
+	d := writeDeps(t, p)
 	if d.DaemonRunning || len(d.Repos) != 1 || len(d.Graph.Nodes) != 1 || d.Graph.Nodes[0].Title != "私用" {
 		t.Errorf("deps = %+v", d)
 	}
@@ -66,15 +66,11 @@ func TestWrite_parking(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "1.json"), `{"id":"1","repo":"/src/home/a","kind":"aside","title":"開いている","status":"open",`+src+`}`)
 	writeFile(t, filepath.Join(dir, "2.json"), `{"id":"2","repo":"/src/home/a","kind":"aside","title":"捨てた","status":"discarded",`+src+`}`)
 
-	home := writeDeps(t, p, "/src/home/a")
+	home := writeDeps(t, p)
 	if len(home.Repos) != 1 || len(home.Repos[0].Memos) != 1 || home.Repos[0].Memos[0].Title != "開いている" {
 		t.Errorf("home = %+v", home.Repos)
 	}
-	// here は開いたセッションの repo の鍵 (mod が自分の repo を引く)。repo の鍵と同じ規則で決める。
-	if home.Here != home.Repos[0].Repo {
-		t.Errorf("here = %q, want %q", home.Here, home.Repos[0].Repo)
-	}
-	// 古いメモの日数はバイナリが渡し、mod は持たない (parking.StaleAfter)。
+	// 古いメモの日数はバイナリが渡し、読み手は持たない (parking.StaleAfter)。
 	if home.StaleMemoDays != 30 {
 		t.Errorf("stale_memo_days = %d, want 30", home.StaleMemoDays)
 	}
@@ -87,7 +83,7 @@ func TestWrite_memos(t *testing.T) {
 	writeFile(t, filepath.Join(p.StateDir(), "tasks", "H", "1.json"), `{"id":"1","subject":"渡されたメモ","description":"(メモ `+id+`)","status":"pending","session_id":"H","cwd":"/src/home/a"}`)
 	writeFile(t, filepath.Join(p.StateDir(), "parking", id+".json"), `{"id":"`+id+`","repo":"/src/home/a","kind":"aside","title":"渡した","status":"handed","sources":[{"session_id":"H","cwd":"/src/home/a","at":"2026-10-18T09:00:00Z"}]}`)
 
-	home := writeDeps(t, p, "/src/home/a")
+	home := writeDeps(t, p)
 	if len(home.Graph.Nodes) != 1 || len(home.Graph.Nodes[0].Memos) != 1 || home.Graph.Nodes[0].Memos[0].Title != "渡した" {
 		t.Errorf("nodes = %+v", home.Graph.Nodes)
 	}
@@ -106,7 +102,7 @@ func TestWrite_edges(t *testing.T) {
 	dir := filepath.Join(p.StateDir(), "edges")
 	writeFile(t, filepath.Join(dir, "e1.json"), `{"id":"e1","before":`+ep("task:H/1", "/src/home/a")+`,"after":`+ep("task:H/2", "/src/home/a")+`,"created_at":"2026-10-18T09:00:00Z"}`)
 
-	home := writeDeps(t, p, "/src/home/a")
+	home := writeDeps(t, p)
 	if len(home.Graph.Links) != 1 || home.Graph.Links[0].Before != "task:H/1" || home.Graph.Links[0].After != "task:H/2" || len(home.Graph.Nodes) != 2 {
 		t.Errorf("graph = %+v", home.Graph)
 	}

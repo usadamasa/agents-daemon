@@ -146,6 +146,28 @@ func (s Store) ListMultiplexerBlocks(kind string) (map[string]string, error) {
 	return sessions, nil
 }
 
+// LatestMultiplexerSession は kind の記録のうち observed_at が最新のものの多重化ツールの session (rex なら
+// REX_SESSION の値) を返す。無ければ空。rex の外で起きた呼び手 (依存図のアプリの spawn) が、window を置く rex の
+// session を「利用者が最後に使っていた session」として選ぶのに使う。rex は session を指定しないと複数あるときに
+// 曖昧として拒む。
+func (s Store) LatestMultiplexerSession(kind string) (string, error) {
+	files, err := s.readAll()
+	if err != nil {
+		return "", err
+	}
+	var latest int64
+	session := ""
+	for _, raw := range files {
+		if raw.Multiplexer == nil || raw.Multiplexer.Kind != kind || raw.Multiplexer.Session == "" {
+			continue
+		}
+		if session == "" || raw.ObservedAt > latest {
+			session, latest = raw.Multiplexer.Session, raw.ObservedAt
+		}
+	}
+	return session, nil
+}
+
 // ListSessionNames は context/ を 1 回走査し、session_id からセッション名への対応を返す。
 // 名前の無い記録は載せない。記録は prune (Retention) まで残るので、終了したセッションの名前も引ける。
 func (s Store) ListSessionNames() (map[string]string, error) {

@@ -216,6 +216,33 @@ func TestListMultiplexerBlocks(t *testing.T) {
 }
 
 // セッション名は session ID ごとに引ける。名前の無い記録と壊れたファイルは載せない。
+func TestLatestMultiplexerSession(t *testing.T) {
+	s := New(t.TempDir())
+	base := time.Date(2026, 11, 7, 0, 0, 0, 0, time.UTC)
+	for _, rec := range []Record{
+		{SessionID: "old", ObservedAt: base, Multiplexer: &MultiplexerRef{Kind: MultiplexerKindRex, Session: "session:1", Block: "block:1"}},
+		{SessionID: "new", ObservedAt: base.Add(time.Minute), Multiplexer: &MultiplexerRef{Kind: MultiplexerKindRex, Session: "session:2", Block: "block:2"}},
+		{SessionID: "tmux", ObservedAt: base.Add(time.Hour), Multiplexer: &MultiplexerRef{Kind: "tmux", Session: "main", Block: "%1"}},
+		{SessionID: "bare", ObservedAt: base.Add(time.Hour)},
+	} {
+		if err := s.Write(rec); err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
+	}
+	got, err := s.LatestMultiplexerSession(MultiplexerKindRex)
+	if err != nil {
+		t.Fatalf("LatestMultiplexerSession() error = %v", err)
+	}
+	if got != "session:2" {
+		t.Errorf("LatestMultiplexerSession(rex) = %q, want \"session:2\"", got)
+	}
+
+	empty, err := New(t.TempDir()).LatestMultiplexerSession(MultiplexerKindRex)
+	if err != nil || empty != "" {
+		t.Errorf("記録が無いとき = %q, %v; want \"\", nil", empty, err)
+	}
+}
+
 func TestListSessionNames(t *testing.T) {
 	s := New(t.TempDir())
 	now := time.Date(2026, 10, 19, 0, 0, 0, 0, time.UTC)

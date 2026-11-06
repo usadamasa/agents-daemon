@@ -9,7 +9,7 @@ import type { EdgeAddRequest } from '../types'
 const BIN = '/home/u/.cache/agents-daemon/bin/agents-daemon'
 const CWD = '/src/home/agents-daemon'
 const PEER_CWD = '/src/home/agents-daemon/.claude/worktrees/edge-cli'
-const DEPS = [BIN, 'deps', { cwd: CWD }]
+const DEPS = [BIN, 'deps', {}]
 
 // node はタスクのノード。sid と tid から key (task:<sid>/<tid>) を組む。
 function node(sid: string, tid: string, sessionName: string, extra: Record<string, unknown> = {}) {
@@ -40,7 +40,6 @@ function node(sid: string, tid: string, sessionName: string, extra: Record<strin
 function deps(nodes: unknown[], links: unknown[] = []) {
   return {
     daemon_running: true,
-    here: CWD,
     stale_memo_days: 30,
     repos: [],
     recent_repos: [],

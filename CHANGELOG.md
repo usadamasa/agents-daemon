@@ -1,5 +1,15 @@
 # Changelog
 
+## [2026.1106.0](https://github.com/usadamasa/agents-daemon/compare/2026.1102.1...2026.1106.0) - 2026-11-06
+
+- rex preview.25 で前提を確かめ直して marker を上げる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/359
+- rex の点検レポートを main の checkout の tmp に置く手順を足す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/361
+- peer-sessions skill のモデルの指定に既定と /model を使わない理由を書く by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/362
+- feat(gui): 依存図を描く macOS のアプリ agent-tasks を足す (#364 第 1 段) by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/369
+- 依存図アプリの第 2 段: tell と park hand で送達を伴う操作をアプリへ移し、/deps の mod を外す (#364) by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/370
+- fix(tell): 文面の制御文字を落とし、入力欄の提案を打ちかけの文と取り違えない by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/371
+- SessionStart hook で依存図のアプリ (agent-tasks) を建てて ~/Applications に置く by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/378
+
 ## [2026.1102.1](https://github.com/usadamasa/agents-daemon/compare/2026.1102.0...2026.1102.1) - 2026-11-02
 
 - 依存図の pane で選んだ時点で操作のメニューを開く by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/357

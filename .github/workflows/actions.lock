@@ -7,6 +7,8 @@ workflows:
         - 'actions/checkout@v7.0.1'
         - 'actions/upload-artifact@v7.0.2'
         - 'usadamasa/gh-manage@main'
+    '.github/workflows/pr-labels.yaml':
+        - 'actions/checkout@v7.0.1'
     '.github/workflows/tagpr.yaml':
         - 'actions/checkout@v7.0.1'
         - 'actions/create-github-app-token@v3.3.0'

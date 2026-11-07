@@ -96,13 +96,16 @@ func TestGraph_nodeStates(t *testing.T) {
 	if got["task:L/1"].Detail != "14:30" || got["task:Q/1"].Detail != "" {
 		t.Errorf("detail = %q / %q, want 上限の解除時刻だけ", got["task:L/1"].Detail, got["task:Q/1"].Detail)
 	}
-	// タスクの無いセッションは名前の有無によらず sid: で辺の端点にできる。
-	if s := got["sid:S"]; s.Kind != graph.KindSession || s.Title != "調べている" || !s.Endpoint || s.TaskID != "" {
+	// タスクの無いセッションは名前の有無によらず sid: で辺の端点にできる。題はセッション名 (無ければ cwd の末尾) で、
+	// Claude Code が申告した今の作業 (msg) は summary に回す (#394)。
+	if s := got["sid:S"]; s.Kind != graph.KindSession || s.Title != "s" || s.Summary != "調べている" || !s.Endpoint || s.TaskID != "" {
 		t.Errorf("sid:S = %+v", s)
 	}
-	// msg の無いセッションはセッション名、名前も無ければ cwd の末尾を title にする。
-	if u := got["sid:U"]; u.Title != "waiter" {
-		t.Errorf("sid:U title = %q, want waiter", u.Title)
+	if u := got["sid:U"]; u.Title != "waiter" || u.Summary != "" {
+		t.Errorf("sid:U title / summary = %q / %q, want waiter / 空", u.Title, u.Summary)
+	}
+	if w := got["task:W/1"]; w.Summary != "" {
+		t.Errorf("task:W/1 summary = %q, want 空 (タスクの題で足りる)", w.Summary)
 	}
 	if v := got["sid:V"]; v.Title != "dotfiles" {
 		t.Errorf("sid:V title = %q, want dotfiles", v.Title)

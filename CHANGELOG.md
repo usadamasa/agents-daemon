@@ -1,5 +1,12 @@
 # Changelog
 
+## [2026.1107.4](https://github.com/usadamasa/agents-daemon/compare/2026.1107.3...2026.1107.4) - 2026-11-07
+
+### Features
+- 依存図: マージせずに閉じた PR と not planned の issue を「取りやめ」にし、完了にしない by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/454
+- agent-tasks にアプリアイコンを付ける by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/461
+- 依存図: セッションの作業を hook で記録し、タスクの無いセッションも作業のノードにする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/459
+
 ## [2026.1107.3](https://github.com/usadamasa/agents-daemon/compare/2026.1107.2...2026.1107.3) - 2026-11-07
 
 ### Features

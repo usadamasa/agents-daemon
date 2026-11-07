@@ -161,7 +161,7 @@ func TestGraph_linksDepthAndDownstream(t *testing.T) {
 }
 
 // sid: の端点は、after 側ならそのセッションの根のタスク (同じセッションの blockedBy が無いもの)、
-// before 側なら末端のタスク (同じセッションのどのタスクも止めていないもの) につなぐ。タスクの無い生きている
+// before 側なら末端のタスク (同じセッションのどのタスクも止めていないもの。複数なら sid: のノードに集める) につなぐ。タスクの無い生きている
 // セッションはそのノードへ。daemon がまだ結びつけていない session:<名前> は、同じ名前のセッションが生きていても
 // 名前を key にした置き場のノード (pending) にする。issue: / pr: は参照を key にした置き場のノード (external)、
 // 終了していてタスクを作らなかったセッションは sid: を key にした置き場のノード (exited) にする。
@@ -213,10 +213,11 @@ func TestGraph_refEndpoints(t *testing.T) {
 		"issue:o/r#1>task:A/1",
 		"session:alpha>issue:o/r#3",
 		"session:later>sid:G",
+		"sid:A>pr:o/r#2",
 		"sid:G>task:A/1",
 		"sid:Z>sid:L",
 		"task:A/1>task:A/2", "task:A/1>task:A/4", "task:A/2>task:A/3",
-		"task:A/3>pr:o/r#2", "task:A/4>pr:o/r#2",
+		"task:A/3>sid:A", "task:A/4>sid:A",
 		"task:N/1>sid:L",
 	}
 	if !reflect.DeepEqual(links(b.Graph), want) {
@@ -274,7 +275,7 @@ func TestGraph_refEndpoints(t *testing.T) {
 	}
 }
 
-// セッションのタスクがすべて輪になっていて根も末端も無ければ、タスク全部につなぐ。
+// セッションのタスクがすべて輪になっていて根も末端も無ければ、タスク全部につなぐ (before 側は sid: のノードに集める)。
 func TestGraph_refEndpointsEdgeCases(t *testing.T) {
 	const cwd = "/w/a"
 	e := func(id, before, after string) edge.Edge {
@@ -291,7 +292,7 @@ func TestGraph_refEndpointsEdgeCases(t *testing.T) {
 		},
 		SessionNames: map[string]string{"C": "loop", "D": "after"},
 	})
-	want := []string{"task:C/1>task:C/2", "task:C/1>task:D/1", "task:C/2>task:C/1", "task:C/2>task:D/1"}
+	want := []string{"sid:C>task:D/1", "task:C/1>sid:C", "task:C/1>task:C/2", "task:C/2>sid:C", "task:C/2>task:C/1"}
 	if !reflect.DeepEqual(links(b.Graph), want) {
 		t.Errorf("links = %v, want %v", links(b.Graph), want)
 	}

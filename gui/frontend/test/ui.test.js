@@ -163,28 +163,37 @@ test("ノードを選ぶと単体ビューを開き、待っている先と待�
   assert.equal(pop.hidden, true);
 });
 
-test("作業のノード: 会話から自動で付けた題は押すと直せる chip で示し、題を直すと一覧から外す (終了したもの) が出る", async () => {
+test("作業のノード: 題そのものを押すとその場で直せ、自動で付けた題は chip で分かり、終了したものは一覧から外せる", async () => {
   // 箱の副題には出どころを出さない (そこでは何もできない)。
   assert.doesNotMatch(q('.node[data-key="sid:zeta"] small').textContent, /題/);
   q('.node[data-key="sid:zeta"]').click();
   const pop = q("#pop");
-  // 自動で付けた題の chip は状態の色 (ok / warn / limit / err) を使わず、押すと題を直す欄が開く。
-  const guess = pop.querySelector(".chips .chip.guess");
-  assert.equal(guess.textContent, "会話から自動で付けた題 · 直す");
+  // 自動で付けた題の chip は出どころの説明で、状態の色 (ok / warn / limit / err) を使わない。
+  assert.equal(pop.querySelector(".chips .chip.guess").textContent, "会話から自動で付けた題");
   assert.equal(pop.querySelectorAll(".chips .chip.warn").length, 0);
+  // 動詞のバーに「題を直す」は無く、題 (対象) そのものが入口。
   let verbs = [...pop.querySelectorAll(".acts .act")].map((b) => b.textContent);
-  assert.ok(verbs.includes("題を直す"), verbs.join(" / "));
-  assert.ok(!verbs.includes("一覧から外す"), verbs.join(" / "));
-  guess.click();
-  assert.equal(pop.querySelector('input[type="text"]').value, "zeta");
+  assert.ok(!verbs.includes("題を直す") && !verbs.includes("一覧から外す"), verbs.join(" / "));
+  const title = pop.querySelector(".title");
+  assert.equal(title.getAttribute("role"), "button");
+  title.click();
+  const input = pop.querySelector('.title input[type="text"]');
+  assert.equal(input.value, "zeta");
   await snapshot("graph-popup-work");
+  input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  assert.equal(pop.querySelector(".title").textContent, "zeta");
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
 
   q('.node[data-key="sid:gamma"]').click();
   verbs = [...pop.querySelectorAll(".acts .act")].map((b) => b.textContent);
-  assert.ok(verbs.includes("一覧から外す") && verbs.includes("メモにする") && verbs.includes("題を直す"), verbs.join(" / "));
+  assert.ok(verbs.includes("一覧から外す") && verbs.includes("メモにする"), verbs.join(" / "));
+  assert.equal(pop.querySelector(".title").getAttribute("role"), "button");
   // prompt から付けた題には chip を出さない。
   assert.equal(pop.querySelector(".chips .chip.guess"), null);
+  // タスクのノードの題は直せない。
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+  q('.node[data-key="task:beta/1"]').click();
+  assert.equal(pop.querySelector(".title").getAttribute("role"), null);
   assert.equal(q("#dismiss-ended").textContent, "終了したセッションのタスクと作業 1 件を外す");
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
 });

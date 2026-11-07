@@ -37,9 +37,9 @@ const STATE_LABEL = {
 };
 const REF_KIND_LABEL = { issue: "issue", pr: "PR" };
 const KIND_LABEL = { task: "タスク", todo: "TodoWrite の項目", session: "セッションの作業", ref: "参照" };
-// companion が会話から付けた題 (origin inferred) に添える chip の文。押すと題を直す欄が開く (見せるだけの印にしない)。
-// 最初の prompt の題、人が直した題、記録の無い pane の名前には何も添えない。
-const INFERRED_CHIP = "会話から自動で付けた題 · 直す";
+// companion が会話から付けた題 (origin inferred) に添える chip の文 (出どころの説明)。直すのは題そのものを押す (OOUI:
+// 対象を選んでから動詞)。最初の prompt の題、人が直した題、記録の無い pane の名前には何も添えない。
+const INFERRED_CHIP = "会話から自動で付けた題";
 
 const state = {
   data: null,
@@ -556,7 +556,6 @@ const ICONS = {
   hand: '<path d="M4 12h12"/><path d="M12 7l5 5-5 5"/><path d="M20 5v14"/>',
   play: '<path d="M7 5l12 7-12 7z"/>',
   check: '<path d="M5 12l5 5 9-10"/>',
-  edit: '<path d="M4 20h4L18 10l-4-4L4 16z"/><path d="M13 7l4 4"/>',
 };
 
 function actButton(label, icon, tone, onClick) {
@@ -789,12 +788,14 @@ function startPicker(n) {
 }
 
 // toggle は picker を開く・閉じる動詞。
-// renamePicker は作業の題を打ち直す欄。空欄では直さない。
-function renamePicker(n) {
+// renameField は単体ビューの題をその場で打ち直す欄 (題の位置に置く)。空欄では直さない。Enter で直し、Escape で戻す。
+function renameField(n) {
+  const wrap = document.createElement("span");
+  wrap.className = "edit";
   const t = document.createElement("input");
   t.type = "text";
   t.className = "note draft";
-  t.placeholder = "作業の題";
+  t.setAttribute("aria-label", "作業の題");
   t.value = state.draft === "" ? n.title : state.draft;
   const save = document.createElement("button");
   save.type = "button";
@@ -811,15 +812,46 @@ function renamePicker(n) {
     state.draft = t.value;
   });
   t.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.isComposing) {
+    if (e.isComposing) return;
+    if (e.key === "Enter") {
       e.preventDefault();
       submit();
+    } else if (e.key === "Escape") {
+      e.stopPropagation();
+      toggle("rename")();
     }
   });
-  const foot = document.createElement("div");
-  foot.className = "lk";
-  foot.append(save, cancelButton());
-  return group("題を直す (直した題は自動で書き換わらない)", [t, refusalLine(), foot]);
+  wrap.append(t, save, cancelButton());
+  return wrap;
+}
+
+// titleOf は単体ビューの題。題を直せるノード (canRename) では題そのものが入口で、押すとその場で欄に変わる (OOUI:
+// 対象を選んでから動詞。動詞のバーに「題を直す」は置かない)。
+function titleOf(n) {
+  const title = document.createElement("span");
+  title.className = "title";
+  if (!canRename(n)) {
+    title.textContent = n.title;
+    return title;
+  }
+  if (state.picker === "rename") {
+    title.classList.add("editing");
+    title.append(renameField(n));
+    return title;
+  }
+  title.classList.add("editable");
+  title.textContent = n.title;
+  title.title = "押して題を直す (直した題は自動で書き換わらない)";
+  title.setAttribute("role", "button");
+  title.tabIndex = 0;
+  title.addEventListener("click", toggle("rename"));
+  title.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      toggle("rename")();
+    }
+  });
+  return title;
 }
 
 function toggle(name) {
@@ -848,28 +880,21 @@ function nodePopup(n) {
   const ph = document.createElement("span");
   ph.className = "ph";
   ph.textContent = [KIND_LABEL[n.kind] ?? n.kind, n.task_id].filter(Boolean).join(" · ");
-  const title = document.createElement("span");
-  title.className = "title";
-  title.textContent = n.title;
+  const title = titleOf(n);
   const chips = document.createElement("div");
   chips.className = "chips";
   chips.append(stateChip(n));
-  // 会話から自動で付けた題は、状態の色と被らない破線の chip (guess) で示し、押すと題を直す欄が開く。
-  if (n.origin === "inferred" && canRename(n)) {
-    const c = linkChip(INFERRED_CHIP, toggle("rename"));
-    c.classList.add("guess");
-    chips.append(c);
-  }
+  // 会話から自動で付けた題は、状態の色と被らない破線の chip (guess) で出どころを示す。直すのは題を押す。
+  if (n.origin === "inferred") chips.append(chip(INFERRED_CHIP, "guess"));
   if (n.session) chips.append(chip(`${n.session} ›`, "", undefined));
   head.append(ph, title, chips);
   parts.push(head);
 
   // 動詞。送達を伴うもの (指示、渡す、着手、完了、削除、メモにする) は生きているセッションのタスクに、バイナリだけで済む
-  // もの (メモにする = adopt、一覧から外す) は終了したセッションのタスクと作業に、題を直すは作業の記録のあるセッションに出る。
+  // もの (メモにする = adopt、一覧から外す) は終了したセッションのタスクと作業に出る。題を直すのは題そのもの (titleOf)。
   const verbs = [];
   if (canTell(n)) verbs.push(actButton("指示を送る", "send", on("instruct"), toggle("instruct")));
   if (n.endpoint && n.cwd !== undefined) verbs.push(actButton("依存を足す", "link", on("blocker"), toggle("blocker")));
-  if (canRename(n)) verbs.push(actButton("題を直す", "edit", on("rename"), toggle("rename")));
   if (isOwnTask(n)) {
     verbs.push(actButton("渡す", "hand", on("hand"), toggle("hand")));
     if (n.state !== "in_progress") verbs.push(actButton("着手", "play", on("start"), toggle("start")));
@@ -884,8 +909,7 @@ function nodePopup(n) {
   if (state.picker === "blocker") parts.push(blockerPicker(n));
   if (state.picker === "hand") parts.push(taskHandPicker(n));
   if (state.picker === "start") parts.push(startPicker(n));
-  if (state.picker === "rename") parts.push(renamePicker(n));
-  if (state.refusal !== "" && !["instruct", "blocker", "hand", "start", "rename"].includes(state.picker)) parts.push(refusalLine());
+  if (state.refusal !== "" && !["instruct", "blocker", "hand", "start"].includes(state.picker)) parts.push(refusalLine());
 
   // タスクの説明と並ぶので、今の作業 (msg) は見出しを添えて分ける。
   for (const text of [n.description, n.summary ? `今の作業: ${n.summary}` : ""]) {

@@ -438,8 +438,8 @@ func TestGraph_folded(t *testing.T) {
 	if want := []protocol.FoldedLink{{Before: "task:A/1", After: "task:A/4", Via: []string{"task:A/2", "task:A/3"}}}; !reflect.DeepEqual(f.Links, want) {
 		t.Errorf("folded links = %+v, want %+v", f.Links, want)
 	}
-	// 畳んだ辺は破線で描く。
-	if got, want := drawRows(b.Graph.Rows), "* task:A/1\n┆\n* task:A/4\n* sid:P\n┆\n* task:A/5\n* sid:G"; got != want {
+	// 畳んだ辺 (A/1 → A/4) と残した末端 (P → A/5) は、それぞれ同じレーンの続く行になる。
+	if got, want := drawRows(b.Graph.Rows), "* task:A/1\n* task:A/4\n* sid:G\n* sid:P\n* task:A/5"; got != want {
 		t.Errorf("rows =\n%s\nwant\n%s", got, want)
 	}
 	// ノードが無ければ空の配列 (JSON で null にしない)。

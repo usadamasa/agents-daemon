@@ -27,6 +27,29 @@ test("reach と upstream は自分を含めずに輪を止める", () => {
   assert.deepEqual([...g.upstream("C")].sort(), ["A", "B", "D"]);
 });
 
+test("view は完了を隠すとき folded の keys と、両端が見える辺と畳んだ辺を返す", () => {
+  // A→B(完了)→C と D→C、E(完了) は D の末端として残る。
+  const g = new Graph({
+    nodes: [node("A"), node("B", { state: "completed" }), node("C"), node("D"), node("E", { state: "completed" })],
+    links: [
+      { before: "A", after: "B", kind: "task" },
+      { before: "B", after: "C", kind: "task" },
+      { before: "D", after: "C", kind: "edge" },
+      { before: "D", after: "E", kind: "edge" },
+    ],
+    folded: { keys: ["A", "C", "D", "E"], links: [{ before: "A", after: "C", via: ["B"] }] },
+  });
+  const hidden = g.view(false);
+  assert.deepEqual(hidden.nodes.map((n) => n.key), ["A", "C", "D", "E"]);
+  assert.deepEqual(
+    hidden.links.map((l) => `${l.before}>${l.after}:${l.kind}:${(l.via ?? []).join(",")}`),
+    ["D>C:edge:", "D>E:edge:", "A>C:folded:B"],
+  );
+  const all = g.view(true);
+  assert.equal(all.nodes.length, 5);
+  assert.equal(all.links.length, 4);
+});
+
 test("node は key で引き、無ければ undefined", () => {
   const g = new Graph(data);
   assert.equal(g.node("B").key, "B");

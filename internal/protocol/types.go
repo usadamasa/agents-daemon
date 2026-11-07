@@ -389,11 +389,14 @@ type GraphNode struct {
 	Kind string `json:"kind"`
 	// external は daemon がまだ状態を引けていない外部の参照 (issue / PR)。daemon が open と引けた参照は waiting、merged の PR、completed で閉じた issue と引けた参照は completed、マージせずに閉じた PR、not planned / duplicate で閉じた issue は dropped (取りやめ)。
 	State string `json:"state"`
+	// ノードの題。issue: / pr: の置き場は daemon が引いた題で、引けていなければ番号と repo。
 	Title string `json:"title"`
 	// kind session のノードの題の出どころ。prompt は最初の prompt、inferred は companion の推定 (推定と分かるように見せる)、human は人が直した、pane は作業の記録が無く pane の名前から付けた。
 	Origin string `json:"origin,omitempty"`
 	// issue: / pr: の置き場のノードの参照の種類。
 	RefKind string `json:"ref_kind,omitempty"`
+	// issue: / pr: の置き場のノードの番号と repo (「PR #389 · owner/repo」)。題を引いた後も番号を読めるように残す。
+	RefLabel string `json:"ref_label,omitempty"`
 	// セッションの今の作業。生きていれば Claude Code が申告したもの (OSC 7501 の msg)、終了していれば最後のターンの応答の 1 行目 (作業の記録)。kind session のノードと、進行中のタスクと TodoWrite の項目のノードに付く。
 	Summary string `json:"summary,omitempty"`
 	// 状態の補足 (上限の解除時刻)。
@@ -472,7 +475,8 @@ type EdgeRecord struct {
 	ID     string       `json:"id"`
 	Before EdgeEndpoint `json:"before"`
 	After  EdgeEndpoint `json:"after"`
-	Note   string       `json:"note,omitempty"`
+	// 辺の補足。空なら daemon が引いた before の issue / PR の題で埋める (記録は書き換えない)。
+	Note string `json:"note,omitempty"`
 }
 
 // GraphRow はレーンの行 1 つ。lanes は行頭の罫線で、ノードの行は * がそのノードのレーンの位置。node が無ければ辺をつなぐだけの行。

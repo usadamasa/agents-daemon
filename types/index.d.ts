@@ -389,11 +389,14 @@ export type GraphNode = {
   kind: 'task' | 'todo' | 'session' | 'ref'
   // external は daemon がまだ状態を引けていない外部の参照 (issue / PR)。daemon が open と引けた参照は waiting、merged の PR、completed で閉じた issue と引けた参照は completed、マージせずに閉じた PR、not planned / duplicate で閉じた issue は dropped (取りやめ)
   state: 'working' | 'done' | 'unknown' | 'question' | 'permission' | 'error' | 'limit' | 'pending' | 'completed' | 'exited' | 'external' | 'waiting' | 'dropped'
+  // ノードの題。issue: / pr: の置き場は daemon が引いた題で、引けていなければ番号と repo
   title: string
   // kind session のノードの題の出どころ。prompt は最初の prompt、inferred は companion の推定 (推定と分かるように見せる)、human は人が直した、pane は作業の記録が無く pane の名前から付けた
   origin?: 'prompt' | 'inferred' | 'human' | 'pane'
   // issue: / pr: の置き場のノードの参照の種類
   ref_kind?: 'issue' | 'pr'
+  // issue: / pr: の置き場のノードの番号と repo (「PR #389 · owner/repo」)。題を引いた後も番号を読めるように残す
+  ref_label?: string
   // セッションの今の作業。生きていれば Claude Code が申告したもの (OSC 7501 の msg)、終了していれば最後のターンの応答の 1 行目 (作業の記録)。kind session のノードと、進行中のタスクと TodoWrite の項目のノードに付く
   summary?: string
   // 状態の補足 (上限の解除時刻)
@@ -472,6 +475,7 @@ export type EdgeRecord = {
   id: string
   before: EdgeEndpoint
   after: EdgeEndpoint
+  // 辺の補足。空なら daemon が引いた before の issue / PR の題で埋める (記録は書き換えない)
   note?: string
 }
 

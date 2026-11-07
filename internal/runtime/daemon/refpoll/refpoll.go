@@ -26,8 +26,14 @@ import (
 // 長く止めない。
 const fetchTimeout = 10 * time.Second
 
-// Fetcher は issue / PR の今の状態 (refstate の語) を引く。
-type Fetcher func(ctx context.Context, it ref.Item) (string, error)
+// Remote は引いた issue / PR 1 つ。State は refstate の語。
+type Remote struct {
+	State string
+	Title string
+}
+
+// Fetcher は issue / PR の今の状態と題を引く。
+type Fetcher func(ctx context.Context, it ref.Item) (Remote, error)
 
 // failure は gh が失敗した参照 1 つの、次に引ける時刻とログに書いた理由。
 type failure struct {
@@ -134,7 +140,7 @@ func (p *Poller) refresh(ctx context.Context, key string, prev refstate.Record, 
 	it, _ := ref.ParseItem(key)
 	fetchCtx, cancel := context.WithTimeout(ctx, fetchTimeout)
 	defer cancel()
-	state, err := p.fetch(fetchCtx, it)
+	remote, err := p.fetch(fetchCtx, it)
 	if err != nil {
 		reason := err.Error()
 		if reason != p.failures[key].reason {
@@ -147,7 +153,8 @@ func (p *Poller) refresh(ctx context.Context, key string, prev refstate.Record, 
 		delete(p.failures, key)
 		p.log.Logf("外部の参照の状態を引けるようになりました: %s", key)
 	}
-	rec := refstate.Record{Ref: key, State: state, CheckedAt: now}
+	state := remote.State
+	rec := refstate.Record{Ref: key, State: state, Title: remote.Title, CheckedAt: now}
 	if err := p.refs.Put(rec); err != nil {
 		p.log.Logf("外部の参照の写しの書き込みに失敗: %v", err)
 		return refstate.Record{}, false
@@ -162,16 +169,16 @@ func (p *Poller) refresh(ctx context.Context, key string, prev refstate.Record, 
 	return rec, true
 }
 
-// GH は gh で issue / PR の状態を引く。daemon は Claude Code の sandbox の外で動き、gh の認証 (~/.config/gh) と
+// GH は gh で issue / PR の状態と題を引く。daemon は Claude Code の sandbox の外で動き、gh の認証 (~/.config/gh) と
 // network をそのまま使う。gh は SessionStart の hook から継いだ PATH で探す。
-func GH(ctx context.Context, it ref.Item) (string, error) {
+func GH(ctx context.Context, it ref.Item) (Remote, error) {
 	bin, err := exec.LookPath("gh")
 	if err != nil {
-		return "", fmt.Errorf("gh が PATH に無い: %w", err)
+		return Remote{}, fmt.Errorf("gh が PATH に無い: %w", err)
 	}
-	sub, fields := "issue", "state,stateReason"
+	sub, fields := "issue", "state,stateReason,title"
 	if it.Kind == "pr" {
-		sub, fields = "pr", "state"
+		sub, fields = "pr", "state,title"
 	}
 	cmd := exec.CommandContext(ctx, bin, sub, "view", strconv.Itoa(it.Number), "--repo", it.Repo, "--json", fields) // #nosec G204 -- 固定の gh のサブコマンドと、ref.ParseItem で検証した repo と番号
 	var stderr bytes.Buffer
@@ -180,19 +187,29 @@ func GH(ctx context.Context, it ref.Item) (string, error) {
 	if err != nil {
 		if _, ok := errors.AsType[*exec.ExitError](err); ok {
 			if line, _, _ := strings.Cut(strings.TrimSpace(stderr.String()), "\n"); line != "" {
-				return "", fmt.Errorf("gh %s view が失敗: %s", sub, line)
+				return Remote{}, fmt.Errorf("gh %s view が失敗: %s", sub, line)
 			}
 		}
-		return "", fmt.Errorf("gh %s view が失敗: %w", sub, err)
+		return Remote{}, fmt.Errorf("gh %s view が失敗: %w", sub, err)
 	}
+	return decodeView(sub, out)
+}
+
+// decodeView は gh の view の JSON (sub は issue か pr) を状態と題にする。
+func decodeView(sub string, out []byte) (Remote, error) {
 	var v struct {
 		State       string `json:"state"`
 		StateReason string `json:"stateReason"`
+		Title       string `json:"title"`
 	}
 	if err := json.Unmarshal(out, &v); err != nil {
-		return "", fmt.Errorf("gh %s view の出力を読めない: %w", sub, err)
+		return Remote{}, fmt.Errorf("gh %s view の出力を読めない: %w", sub, err)
 	}
-	return ghState(sub, v.State, v.StateReason)
+	state, err := ghState(sub, v.State, v.StateReason)
+	if err != nil {
+		return Remote{}, err
+	}
+	return Remote{State: state, Title: v.Title}, nil
 }
 
 // ghState は gh の state (issue は stateReason も) を写しの状態にする。閉じた PR はマージしたかで、閉じた issue は

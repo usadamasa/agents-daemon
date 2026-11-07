@@ -53,7 +53,12 @@ func Write(w io.Writer, p apppath.Paths) error {
 	if err != nil {
 		return err
 	}
-	refs, err := refstate.New(p.StateDir()).States()
+	refStore := refstate.New(p.StateDir())
+	refs, err := refStore.States()
+	if err != nil {
+		return err
+	}
+	titles, err := refStore.Titles()
 	if err != nil {
 		return err
 	}
@@ -69,6 +74,7 @@ func Write(w io.Writer, p apppath.Paths) error {
 		SessionNames: names,
 		Sessions:     sessions,
 		RefStates:    refs,
+		RefTitles:    titles,
 	})
 	return json.NewEncoder(w).Encode(b)
 }

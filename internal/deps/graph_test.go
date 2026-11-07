@@ -318,12 +318,13 @@ func TestGraph_refStates(t *testing.T) {
 		Tasks:    []record.Task{task("A", "1", "マージ待ち", "pending", cwd)},
 		Edges: []edge.Edge{
 			{ID: "e1", Before: ep("pr:o/r#1"), After: ep("task:A/1")},
-			{ID: "e2", Before: ep("issue:o/r#2"), After: ep("task:A/1")},
+			{ID: "e2", Before: ep("issue:o/r#2"), After: ep("task:A/1"), Note: "書いた note"},
 			{ID: "e3", Before: ep("pr:o/r#3"), After: ep("task:A/1")},
 			{ID: "e4", Before: ep("issue:o/r#4"), After: ep("task:A/1")},
 			{ID: "e5", Before: ep("pr:o/r#5"), After: ep("task:A/1")},
 		},
 		RefStates: map[string]string{"pr:o/r#1": "merged", "issue:o/r#2": "closed", "pr:o/r#3": "open", "pr:o/r#5": "dropped"},
+		RefTitles: map[string]string{"pr:o/r#1": "依存図に題を出す", "issue:o/r#2": "issue の題", "pr:o/r#3": "マージを待つ PR"},
 	})
 	got := nodes(b.Graph)
 	want := map[string]string{
@@ -338,9 +339,27 @@ func TestGraph_refStates(t *testing.T) {
 			t.Errorf("%s = %+v, want %s", key, n, state)
 		}
 	}
-	// 題と種類は状態にかかわらず参照から付ける。
-	if n := got["pr:o/r#1"]; n.Title != "PR #1 · o/r" || n.RefKind != "pr" {
+	// 種類は状態にかかわらず参照から付ける。題は daemon が引いた題、引けていなければ番号と repo (#472)。
+	// 番号と repo は ref_label に残す。
+	if n := got["pr:o/r#1"]; n.Title != "依存図に題を出す" || n.RefKind != "pr" || n.RefLabel != "PR #1 · o/r" {
 		t.Errorf("pr:o/r#1 = %+v", n)
+	}
+	// open と引けた参照 (waiting) も題を出す。
+	if n := got["pr:o/r#3"]; n.Title != "マージを待つ PR" || n.RefLabel != "PR #3 · o/r" {
+		t.Errorf("waiting の pr:o/r#3 = %+v", n)
+	}
+	if n := got["issue:o/r#4"]; n.Title != "issue #4 · o/r" || n.RefLabel != "issue #4 · o/r" {
+		t.Errorf("題を引いていない issue:o/r#4 = %+v", n)
+	}
+	// note の無い辺は before の参照の題を note に出す。書いた note と、題を引いていない参照の辺はそのまま。
+	notes := map[string]string{}
+	for _, l := range b.Graph.Links {
+		if l.Edge != nil {
+			notes[l.Edge.ID] = l.Edge.Note
+		}
+	}
+	if want := map[string]string{"e1": "依存図に題を出す", "e2": "書いた note", "e3": "マージを待つ PR", "e4": "", "e5": ""}; !reflect.DeepEqual(notes, want) {
+		t.Errorf("notes = %v, want %v", notes, want)
 	}
 	shown := map[string]bool{}
 	for _, n := range b.Graph.Folded.Nodes {

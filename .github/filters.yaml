@@ -1,0 +1,10 @@
+# ci.yaml の changes ジョブが読む dorny/paths-filter の定義。
+# gui: task gui:test が読むもの。gui/ の外のソースに依らないことは tests/gui-isolation.bats が確かめる。
+gui:
+  - 'gui/**'
+  - 'Taskfile.yml'
+  - 'flake.nix'
+  - 'flake.lock'
+  - '.github/workflows/ci.yaml'
+  - '.github/workflows/actions.lock'
+  - '.github/filters.yaml'

@@ -38,7 +38,7 @@ tasks:
       - go build -C gui -o ../bin/agent-tasks .
 
   gui:test:
-    desc: gui/ の module のテスト (Wails の link が要るので macOS だけ。CI には載せない)
+    desc: gui/ の module のテスト (Wails の link が要るので macOS だけ。CI は macOS の runner で回す)
     dir: gui
     env: *gui-env
     cmds:

@@ -114,6 +114,19 @@ jobs:
       - name: Typecheck the mod
         run: task typecheck
 
+  # gui/ は Wails v3 の macOS のアプリ (cgo と WebKit の link) なので macOS の runner で回す。
+  # node --test も同じジョブで回す (public repo は macOS の分も課金されないので ubuntu へ分けない)
+  gui-test:
+    name: gui test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: usadamasa/gh-manage/actions/setup-nix@main
+
+      - name: Test the gui module
+        run: task gui:test
+
   actions-lock:
     name: actions-lock verify
     runs-on: ubuntu-latest
@@ -123,7 +136,7 @@ jobs:
       - uses: usadamasa/gh-manage/actions/verify-actions-lock@main
 
   ci-status-check:
-    needs: [go-test, go-lint, bats, shellcheck, plugin-validate, mod-typecheck, actions-lock]
+    needs: [go-test, go-lint, bats, shellcheck, plugin-validate, mod-typecheck, gui-test, actions-lock]
     if: always()
     runs-on: ubuntu-slim
     timeout-minutes: 10

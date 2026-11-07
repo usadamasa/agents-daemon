@@ -14,6 +14,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/protocol"
 	"github.com/usadamasa/agents-daemon/internal/ref"
+	"github.com/usadamasa/agents-daemon/internal/refstate"
 	"github.com/usadamasa/agents-daemon/internal/tasklog/record"
 )
 
@@ -41,8 +42,9 @@ const (
 	StatePending    = "pending"
 	StateCompleted  = "completed"
 	StateExited     = "exited" // セッションが終了していて、未完了のまま残った
-	// StateExternal は daemon が状態を知らない外部の参照 (issue / PR)。済んだかどうか分からないので、原因の鎖に
-	// 選ばず、末端の完了ノードを残す上流にも数えない。
+	// StateExternal は済んだと分かっていない外部の参照 (issue / PR)。daemon が引いて open だったか、まだ引けて
+	// いない。済んだかどうか分からないので、原因の鎖に選ばず、末端の完了ノードを残す上流にも数えない。
+	// merged / closed と引けた参照は StateCompleted にする (#416)。
 	StateExternal = "external"
 	// StateUnknown はセッションは生きているが状態を分類できない (申告の前、古い record)。作業中とは限らないので
 	// working に倒さない。
@@ -113,6 +115,8 @@ type Input struct {
 	SessionNames map[string]string
 	// PeerNames は session ID → ListAgents の名前 (台帳)。ノードの SessionName (SendMessage の宛先に書く形) に使う。
 	PeerNames map[string]string
+	// RefStates は issue / PR の参照 → daemon が引いた状態 (refstate)。
+	RefStates map[string]string
 }
 
 // builder はグラフを組む途中の状態。
@@ -225,6 +229,9 @@ func (g *builder) resolve(ep edge.Endpoint, pick func(sessionID string) []string
 	if it, ok := ref.ParseItem(ep.Ref); ok {
 		n := g.nodes[key]
 		n.Title, n.State, n.RefKind = it.Title(), StateExternal, it.Kind
+		if refstate.Done(g.in.RefStates[ep.Ref]) {
+			n.State = StateCompleted
+		}
 	}
 	return []string{key}
 }

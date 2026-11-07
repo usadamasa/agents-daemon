@@ -49,6 +49,8 @@ type input struct {
 	// Sessions はセッション台帳 (ledger)。新しいセッションを起こす repo の候補 (Deps.RecentRepos) と、ノードの
 	// session_name (ListAgents の名前) の元。
 	Sessions []ledger.Session
+	// RefStates は issue / PR の参照 → daemon が引いた状態 (refstate)。
+	RefStates map[string]string
 }
 
 // build は依存図を組む。
@@ -74,6 +76,7 @@ func build(in input) Deps {
 		Open:         open,
 		SessionNames: in.SessionNames,
 		PeerNames:    peerNames(in.Sessions),
+		RefStates:    in.RefStates,
 	})
 	d.Graph.ColumnOrder = columnOrder(d.Graph.Nodes, lastActive(in.Tasks, in.Todos), func(cwd string) string {
 		key, _ := l.row(cwd)

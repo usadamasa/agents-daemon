@@ -4,7 +4,7 @@
 import * as dagre from "./vendor/dagre.esm.js";
 import { Graph } from "./graph.js";
 import { partition } from "./column.js";
-import { spreadPorts } from "./ports.js";
+import { fitEdges, spreadPorts } from "./ports.js";
 import { isStale, kindLabel, lastPlacedAt, stamp } from "./memo.js";
 import { canAdopt, canDismiss, canTell, candidates, destinationLabel, isOwnTask, issueDestinations, pathDestination, peerDestinations, spawnDestinations, spawnLabel, taskDestinations } from "./ops.js";
 import { addBlocker, adopt, askUnlink, discard, discardStale, dismissAll, dismissOne, handOff, handOffTask, instruct, setStatus, start, toParking, unlink } from "./actions.js";
@@ -218,6 +218,8 @@ function layout(connected, links, depth) {
   for (const n of connected) g.setNode(n.key, { width: NODE_W, height: NODE_H });
   for (const l of links) if (g.hasNode(l.before) && g.hasNode(l.after)) g.setEdge(l.before, l.after);
   dagre.layout(g);
+  // renderGraph は connected が空なら layout を呼ばないので、ここでは空を見ない。
+  fitEdges(g, MARGIN_X, MARGIN_Y);
   const pos = new Map(connected.map((n) => [n.key, g.node(n.key)]));
   return { g, pos, width: g.graph().width, height: g.graph().height };
 }

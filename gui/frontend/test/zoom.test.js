@@ -1,6 +1,49 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { MAX_ZOOM, MIN_ZOOM, clampZoom, fitZoom, percent, scrollAfterZoom, stepZoom } from "../src/zoom.js";
+import { MAX_ZOOM, MIN_ZOOM, WHEEL_GAP_MS, clampZoom, fitZoom, percent, scrollAfterZoom, stepZoom, wheelZoomer } from "../src/zoom.js";
+
+// 慣性で減っていくトラックパッドのスクロール。上へ払った向き (deltaY が負) で、t は ms。
+function flick(from, n, modifierAt) {
+  return Array.from({ length: n }, (_, i) => ({ deltaY: -120 * 0.85 ** i, modifier: i >= modifierAt, t: from + i * 16 }));
+}
+
+function run(zoomer, events, start = 1) {
+  let z = start;
+  for (const e of events) z = zoomer(e, z) ?? z;
+  return z;
+}
+
+test("wheelZoomer はスクロールの途中で修飾キーが押されても拡大率を変えない", () => {
+  // 払ったスクロールの慣性が残るうちに Cmd を押した (Cmd + Tab、Cmd + Enter など)。
+  const zoomer = wheelZoomer();
+  const events = flick(0, 30, 5);
+  for (const e of events) assert.equal(zoomer(e, 1), null, `t=${e.t}`);
+});
+
+test("wheelZoomer は修飾キーを押して始めたホイールの連なりを拡大縮小にする", () => {
+  const zoomer = wheelZoomer();
+  assert.equal(run(zoomer, flick(0, 3, 0)), MAX_ZOOM);
+  // 下へ回すと縮小
+  const out = wheelZoomer();
+  assert.ok(run(out, [{ deltaY: 10, modifier: true, t: 0 }]) < 1);
+});
+
+test("wheelZoomer は間が WHEEL_GAP_MS 空いたら新しい連なりとして修飾キーを見直す", () => {
+  const zoomer = wheelZoomer();
+  run(zoomer, flick(0, 10, 99));
+  const last = 9 * 16;
+  // 間を空けずに Cmd を押したままの続きは、まだスクロールの連なり
+  assert.equal(zoomer({ deltaY: -10, modifier: true, t: last + WHEEL_GAP_MS - 1 }, 1), null);
+  // 止めてから Cmd を押して回し直すと拡大縮小になる
+  const t = last + WHEEL_GAP_MS - 1 + WHEEL_GAP_MS + 1;
+  assert.ok(zoomer({ deltaY: -10, modifier: true, t }, 1) > 1);
+});
+
+test("wheelZoomer は拡大縮小の連なりの途中で修飾キーを離したら拡大率を変えない", () => {
+  const zoomer = wheelZoomer();
+  assert.ok(zoomer({ deltaY: -10, modifier: true, t: 0 }, 1) > 1);
+  assert.equal(zoomer({ deltaY: -10, modifier: false, t: 16 }, 1), null);
+});
 
 test("clampZoom は MIN_ZOOM と MAX_ZOOM の間に収め、数でない値は 1 にする", () => {
   assert.equal(clampZoom(0.01), MIN_ZOOM);

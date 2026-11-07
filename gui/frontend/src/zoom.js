@@ -28,6 +28,18 @@ export function scrollAfterZoom(scroll, pointer, from, to) {
   return Math.max(0, ((scroll + pointer) * to) / from - pointer);
 }
 
+export const WHEEL_GAP_MS = 150;
+
+// wheelZoomer はホイールの 1 回 ({ deltaY, modifier, t }) と今の拡大率から次の拡大率を返す関数を作る。
+// 拡大縮小にしないときは null を返す。
+export function wheelZoomer() {
+  return (e, z) => {
+    if (!e.modifier) return null;
+    const delta = Math.max(-50, Math.min(50, e.deltaY));
+    return clampZoom(z * Math.exp(-delta * 0.01));
+  };
+}
+
 export function percent(z) {
   return `${Math.round(z * 100)}%`;
 }

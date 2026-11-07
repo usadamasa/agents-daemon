@@ -1,5 +1,16 @@
 # Changelog
 
+## [2026.1107.2](https://github.com/usadamasa/agents-daemon/compare/2026.1107.1...2026.1107.2) - 2026-11-07
+
+### Features
+- 依存図: 作業中のノードを縮小しても見分けられるよう強調する by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/430
+- 依存図: 依存の無いノードを右の列に縦 1 列で、作業の都合の順に並べる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/434
+- 依存図: 進行中のタスクに今の作業 (msg) を補足として出す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/436
+- 依存図: 辺どうしの交点に飛び越し線を描く by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/439
+- 依存図の描画を fixture で確かめる UI テストとスナップショットを足す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/440
+### Bug Fixes
+- 依存図: セッションの末端を 1 つのノードに集めて辺の複製をなくす by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/433
+
 ## [2026.1107.1](https://github.com/usadamasa/agents-daemon/compare/2026.1107.0...2026.1107.1) - 2026-11-07
 
 ### Features

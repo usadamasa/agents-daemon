@@ -108,8 +108,8 @@ func parkHand(stateDir string, req protocol.ParkHandRequest, res protocol.ParkHa
 	_ = eventlog.Record(stateDir, req.SessionID, "park.hand", fields, now)
 }
 
-// tellSent は tell の結果を書く (tell)。session は操作した主体、to は宛先のセッション、pane は打った pane (送らなかった
-// ときは空)。文面は書かない。
+// tellSent は tell の結果を書く (tell)。session は操作した主体、to は宛先のセッション、pane は打った pane (文面を打つ
+// 前に止めたときは空)。文面は書かない。
 func tellSent(stateDir, session, to, pane string, err error, now time.Time) {
 	fields := []string{kv("to", to)}
 	if pane != "" {

@@ -10,6 +10,11 @@
 // Escape は送らない。Escape は `/rate-limit-options` のメニューを閉じるためのもので、ターンの途中のセッションに送ると
 // 中断になる。ターンの途中の pane には送り、文面は入力欄に溜まって次のターンになる。
 //
+// 文面を打った後、Enter の直前にも pane の自己申告 (OSC 7501) を見て、claude が前景でないか prompt が開いていれば
+// Enter を送らずに文面を入力欄に残す (#372)。残る窓は、その読み直しと Enter の 2 回の往復と、Claude Code が prompt を
+// 描いてから blocked を申告するまでの遅れ。最初に読んでから文面を打つまでに開いた prompt には文面がキーとして入る。
+// 文面の文字で prompt が閉じるかは確かめておらず、閉じれば読み直しで blocked が解けていて Enter も送る。
+//
 // 多重化ツールの口 (Host) は multiplexer.Client に足さず、ここに閉じる (spawn.Host と同じ考え)。
 package tell
 
@@ -79,7 +84,8 @@ type Runner struct {
 	ReadLines int
 }
 
-// Run は req の文面を宛先のセッションの pane に打つ。送らなかったときは理由を error で返し、pane には何も送っていない。
+// Run は req の文面を宛先のセッションの pane に打つ。送らなかったときは理由を error で返す。pane に何か残るのは
+// 文面を打った後に止めたときだけで、理由に「文面は入力欄に残っている」と書く。
 func (r Runner) Run(ctx context.Context, req Request) (Result, error) {
 	req.Text = stripControls(req.Text)
 	if strings.TrimSpace(req.Text) == "" {
@@ -124,7 +130,8 @@ func (r Runner) Run(ctx context.Context, req Request) (Result, error) {
 		res.Warning = fmt.Sprintf("文面が上限の検知語 (%s) を含む。入力欄に残る間は daemon が上限と取り違えることがある", kind)
 	}
 	if err := r.submit(ctx, pane.PaneID, req.Text); err != nil {
-		return Result{}, err
+		// 文面を打ちかけた pane は、送れなかった記録にも残す。
+		return Result{PaneID: pane.PaneID}, err
 	}
 	return res, nil
 }
@@ -200,6 +207,18 @@ func (r Runner) submit(ctx context.Context, paneID, text string) error {
 		delay = defaultSubmitDelay
 	}
 	sleep(delay)
+	// 読んでから文面を打つまでと待ちの間に prompt が開くと、Enter がその承認になる。Enter の直前にもう一度見る。
+	pane, err := r.Host.PaneGet(ctx, paneID)
+	if err != nil {
+		return fmt.Errorf("pane %s を Enter の前に読み直せないので Enter を送らない (文面は入力欄に残っている): %w", paneID, err)
+	}
+	// claude が終わって shell が前景になっていると、Enter で文面がコマンドとして走る。
+	if !multiplexer.IsClaudeAgent(pane) {
+		return fmt.Errorf("pane %s は文面を打った後に claude が前景でないので Enter を送らない (文面は入力欄に残っている)", paneID)
+	}
+	if multiplexer.WaitingOnPrompt(pane) {
+		return fmt.Errorf("pane %s は文面を打った後に利用者の答えを待つ prompt が開いた (%s) ので Enter を送らない (文面は入力欄に残っている。prompt に答えてから、その端末で Enter を押す)", paneID, multiplexer.RecordLabel(pane))
+	}
 	if err := r.Host.SendKeys(ctx, paneID, "enter"); err != nil {
 		return fmt.Errorf("pane %s に Enter を送れない (文面は入力欄に残っている): %w", paneID, err)
 	}

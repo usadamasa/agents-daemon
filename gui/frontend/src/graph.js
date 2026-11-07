@@ -24,15 +24,16 @@ export class Graph {
     return this.#byKey.get(key);
   }
 
-  // view は図に描くノードと辺。完了を隠すときはバイナリが組んだ folded を使い、隠したノードを通り抜けた辺を
-  // kind "folded" (via に通り抜けたノードの key) として足す。
+  // view は図に描くノードと辺と段 (key → depth)。完了を隠すときはバイナリが組んだ folded を使い、隠したノードを
+  // 通り抜けた辺を kind "folded" (via に通り抜けたノードの key) として足す。段も folded で数え直したものを使う。
   view(showCompleted) {
-    if (showCompleted) return { nodes: this.nodes, links: this.links };
-    const shown = new Set(this.folded.keys);
+    if (showCompleted) return { nodes: this.nodes, links: this.links, depth: new Map(this.nodes.map((n) => [n.key, n.depth])) };
+    const depth = new Map(this.folded.nodes.map((n) => [n.key, n.depth]));
     return {
-      nodes: this.nodes.filter((n) => shown.has(n.key)),
+      depth,
+      nodes: this.nodes.filter((n) => depth.has(n.key)),
       links: [
-        ...this.links.filter((l) => shown.has(l.before) && shown.has(l.after)),
+        ...this.links.filter((l) => depth.has(l.before) && depth.has(l.after)),
         ...this.folded.links.map((l) => ({ ...l, kind: "folded" })),
       ],
     };

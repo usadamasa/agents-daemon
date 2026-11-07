@@ -6,7 +6,8 @@ set -euo pipefail
 # 設計を変えるときは、先にモデルへ写して holds のまま通ることを見てから実装する (models/handoff/README.md)。
 #
 # TLC は標準モジュールを java.io.tmpdir に展開し、探索の状態を -metadir に書く。どちらも ./tmp 配下にする
-# (sandbox の中では /var/folders に書けない)。TLC の exit code は 0 が反例なし、12 が不変条件の違反。
+# (sandbox の中では /var/folders に書けない)。TLC の exit code は 0 が反例なし、12 が不変条件の違反、13 が
+# liveness の性質 (PROPERTIES) の違反。
 
 cd "$(dirname "$0")/.."
 tmp="$PWD/tmp/tlc"
@@ -27,6 +28,9 @@ run() {
       ;;
     violated:12)
       printf '    反例あり (%s、trace は %s)\n' "$(awk '/^Error: Invariant/ {print $3}' "$log")" "$log"
+      ;;
+    violated:13)
+      printf '    反例あり (liveness、trace は %s)\n' "$log"
       ;;
     *)
       printf '    NG: exit %s (期待 %s)。log: %s\n' "$rc" "$expect" "$log"
@@ -51,5 +55,11 @@ run models/handoff EdgeBind EdgeBind.cfg holds
 run models/handoff EdgeBind EdgeBindRaceAdd.cfg violated
 # lock 無しで結びつけが読んでから書くと、間に edge rm で消した辺を作り直す (NoResurrect の反例)。
 run models/handoff EdgeBind EdgeBindRaceRemove.cfg violated
+# 外部の参照の状態を daemon が gh で引いて写しに書き、依存図が merged / closed を完了にする形 (#416)。
+run models/refstate RefState RefState.cfg holds
+# gh の失敗を closed として写しに書くと、済んでいない参照を完了と見せる (NoFalseComplete の反例)。
+run models/refstate RefState RefStateFailAsClosed.cfg violated
+# 写しが open の参照を引き直さないと、マージされた PR がいつまでも完了にならない (EventuallyCompleted の反例)。
+run models/refstate RefState RefStateNoRefetch.cfg violated
 
 exit "$failed"

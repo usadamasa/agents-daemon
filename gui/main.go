@@ -5,6 +5,7 @@ package main
 import (
 	"embed"
 	"log"
+	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -21,6 +22,11 @@ var assets embed.FS
 var version = "dev"
 
 func main() {
+	daemon := newDaemon()
+	daemon.upgrader = newUpgrader()
+	if s, ok := loadRestore(daemon.upgrader.restore, version, time.Now()); ok {
+		daemon.restored = &s
+	}
 	app := application.New(application.Options{
 		Name: "agent-tasks",
 		// アプリのメニューの About は Info.plist ではなく Name と Description を出す。
@@ -32,15 +38,16 @@ func main() {
 			Handler: application.AssetFileServerFS(assets),
 		},
 		Services: []application.Service{
-			application.NewService(newDaemon()),
+			application.NewService(daemon),
 		},
 	})
-	app.Window.NewWithOptions(application.WebviewWindowOptions{
+	daemon.window = app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:  "agent-tasks " + version,
 		Width:  1280,
 		Height: 820,
 		URL:    "/",
 	})
+	go daemon.upgrader.watch(app)
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
 	}

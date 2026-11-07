@@ -132,6 +132,8 @@ HTML の箱と SVG の線で描く。root とは別の Go module だが、daemon
 要るのは Go toolchain と Xcode Command Line Tools (`xcode-select --install`) で、無い Mac と macOS 以外では建てずに
 `build.log` に 1 行残す。建て直しは plugin の更新後の次の SessionStart か `agents-daemon update`。
 建てた plugin のバージョンは窓の title とアプリのメニューの About に出る (`task gui:build` で建てたものは `dev`)。
+開いているアプリは、建て直されるとヘッダーに切り替えのボタンを出し、押すと窓と画面の状態を引き継いで新しいバージョンへ
+入れ替わる (`dev` は出さない)。
 
 対話のセッションが始まると、アプリを前面を奪わずに開く (開いていれば何もしない)。閉じた後は `/agent-tasks` で
 前面に開き直す。起動時に開かないようにするには、環境変数 `AGENTS_DAEMON_OPEN_APP=0` を置く (settings.json の `env`)。

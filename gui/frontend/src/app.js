@@ -9,6 +9,7 @@ import { canAdopt, canDismiss, canTell, candidates, destinationLabel, isOwnTask,
 import { addBlocker, adopt, askUnlink, discard, discardStale, dismissAll, dismissOne, handOff, handOffTask, instruct, setStatus, start, toParking, unlink } from "./actions.js";
 import { pickFolder } from "./daemon.js";
 import { MAX_ZOOM, MIN_ZOOM, clampZoom, fitZoom, percent, scrollAfterZoom, stepZoom } from "./zoom.js";
+import { restore, scrollView, watchUpgrade } from "./restore.js";
 
 const NODE_W = 240;
 const NODE_H = 72;
@@ -1195,5 +1196,22 @@ document.addEventListener("visibilitychange", () => {
   if (!document.hidden) fetchDeps();
 });
 
+// 新しいバージョンへ切り替えるときに引き継ぐ画面の状態 (restore.js)。
+const views = {
+  selected: { get: () => state.selected, set: (v) => { state.selected = v; } },
+  showCompleted: { get: () => state.showCompleted, set: (v) => { state.showCompleted = v === true; } },
+  repoFilter: { get: () => state.repoFilter, set: (v) => { state.repoFilter = String(v); } },
+  // 開いていた選択と、打ちかけの指示と補足。
+  picker: { get: () => state.picker, set: (v) => { state.picker = typeof v === "string" ? v : null; } },
+  draft: { get: () => state.draft, set: (v) => { state.draft = String(v); } },
+  note: { get: () => state.note, set: (v) => { state.note = String(v); } },
+  zoom: { get: () => zoom, set: (v) => { zoom = clampZoom(Number(v) || 1); renderZoom(); } },
+  graphScroll: scrollView(el("graph")),
+  parkScroll: scrollView(el("park-list")),
+};
+
 await fetchDeps();
+await restore(views);
+render();
 schedule();
+watchUpgrade(views, el("upgrade"));

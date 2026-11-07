@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -19,10 +20,45 @@ import (
 // 状態の読み書きはバイナリが持ち、ここは exec して結果を返すだけにする。
 type Daemon struct {
 	bin string
+	// 以下は開いたまま新しいバージョンへ切り替えるためのもの (upgrade.go)。window は main が窓を作った後に入れる。
+	upgrader *upgrader
+	window   *application.WebviewWindow
+	restored *restoreState
 }
 
 func newDaemon() *Daemon {
 	return &Daemon{bin: daemonBin()}
+}
+
+// Restore は切り替える前の窓の位置と大きさを戻し、画面の状態 (restore.js が詰めた JSON の object) を返す。
+// 切り替えで起きたのでなければ空。1 度だけ返す。
+func (d *Daemon) Restore() (string, error) {
+	s := d.restored
+	d.restored = nil
+	if s == nil {
+		return "", nil
+	}
+	if d.window != nil && s.Bounds.Width > 0 && s.Bounds.Height > 0 {
+		d.window.SetBounds(s.Bounds)
+	}
+	b, err := json.Marshal(s.View)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+// Upgrade は画面の状態 view を新しいバージョンへ渡し、新しい .app を起こしてから自分を終える。
+func (d *Daemon) Upgrade(view string) error {
+	if d.upgrader == nil || d.window == nil {
+		return errors.New("切り替えの用意が無い")
+	}
+	if err := d.upgrader.switchTo(d.window.Bounds(), view); err != nil {
+		return err
+	}
+	// 呼び出しへ返してから終える。
+	go application.Get().Quit()
+	return nil
 }
 
 // daemonBin はバイナリの置き場。hooks/lib/daemon-bin.sh、hooks/daemon-bin.ts、Taskfile.yml の install と同じ規則で、

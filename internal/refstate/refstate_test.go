@@ -15,7 +15,7 @@ func TestStore_PutとStates(t *testing.T) {
 	for _, rec := range []Record{
 		{Ref: "pr:o/r#1", State: StateMerged, CheckedAt: t0},
 		{Ref: "issue:o/r#2", State: StateOpen, CheckedAt: t0},
-		{Ref: "pr:o/r#1", State: StateMerged, CheckedAt: t0.Add(time.Minute)},
+		{Ref: "pr:o/r#1", State: StateMerged, Title: "題を引く", CheckedAt: t0.Add(time.Minute)},
 	} {
 		if err := s.Put(rec); err != nil {
 			t.Fatal(err)
@@ -26,7 +26,7 @@ func TestStore_PutとStates(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[string]Record{
-		"pr:o/r#1":    {Ref: "pr:o/r#1", State: StateMerged, CheckedAt: t0.Add(time.Minute)},
+		"pr:o/r#1":    {Ref: "pr:o/r#1", State: StateMerged, Title: "題を引く", CheckedAt: t0.Add(time.Minute)},
 		"issue:o/r#2": {Ref: "issue:o/r#2", State: StateOpen, CheckedAt: t0},
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -38,6 +38,14 @@ func TestStore_PutとStates(t *testing.T) {
 	}
 	if !reflect.DeepEqual(states, map[string]string{"pr:o/r#1": StateMerged, "issue:o/r#2": StateOpen}) {
 		t.Errorf("States = %v", states)
+	}
+	titles, err := s.Titles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 題の無い写し (題を引く前に書いたもの) は載せない。
+	if !reflect.DeepEqual(titles, map[string]string{"pr:o/r#1": "題を引く"}) {
+		t.Errorf("Titles = %v", titles)
 	}
 }
 

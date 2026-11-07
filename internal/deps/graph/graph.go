@@ -126,6 +126,8 @@ type Input struct {
 	PeerNames map[string]string
 	// RefStates は issue / PR の参照 → daemon が引いた状態 (refstate)。
 	RefStates map[string]string
+	// RefTitles は issue / PR の参照 → daemon が引いた題 (refstate)。
+	RefTitles map[string]string
 }
 
 // builder はグラフを組む途中の状態。
@@ -197,12 +199,16 @@ func (g *builder) linkBlockedBy() {
 }
 
 // linkEdges は辺の記録の端点をノードに解決して辺にする。before 側は末端 (複数ならセッションのノード)、after 側は
-// 根のタスクにつなぐ。
+// 根のタスクにつなぐ。note の無い辺は、daemon が before の issue / PR の題を引いていればそれを note に出す。
 func (g *builder) linkEdges() {
 	for _, e := range g.in.Edges {
 		befores := g.resolve(e.Before, g.sinkHub)
 		afters := g.resolve(e.After, g.roots)
-		via := &protocol.EdgeRecord{ID: e.ID, Before: e.Before, After: e.After, Note: e.Note}
+		note := e.Note
+		if note == "" {
+			note = g.in.RefTitles[e.Before.Ref]
+		}
+		via := &protocol.EdgeRecord{ID: e.ID, Before: e.Before, After: e.After, Note: note}
 		for _, b := range befores {
 			for _, a := range afters {
 				g.link(b, a, LinkEdge, via)
@@ -237,7 +243,10 @@ func (g *builder) resolve(ep edge.Endpoint, pick func(sessionID string) []string
 	key := g.placeholder(ep.Ref, ep.CWD, ep.Ref, "", StatePending)
 	if it, ok := ref.ParseItem(ep.Ref); ok {
 		n := g.nodes[key]
-		n.Title, n.State, n.RefKind = it.Title(), StateExternal, it.Kind
+		n.Title, n.State, n.RefKind, n.RefLabel = it.Title(), StateExternal, it.Kind, it.Title()
+		if t := g.in.RefTitles[ep.Ref]; t != "" {
+			n.Title = t
+		}
 		switch s := g.in.RefStates[ep.Ref]; {
 		case refstate.Done(s):
 			n.State = StateCompleted

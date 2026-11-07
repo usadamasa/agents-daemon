@@ -90,6 +90,8 @@ const el = (id) => document.getElementById(id);
 function stateLabel(n) {
   // 下流が全部完了した idle の peer は報告を済ませていて、こちらの返事を要さない。
   const label = n.state === "done" && state.graph.settled(n.key) ? "手が空いている (idle)" : (STATE_LABEL[n.state] ?? n.state);
+  // 題を引いた issue / PR は題が番号を含まないので、番号と repo を状態に添える。
+  if (n.ref_label && n.ref_label !== n.title) return `${label} · ${n.ref_label}`;
   if (n.ref_kind) return `${label} · ${REF_KIND_LABEL[n.ref_kind] ?? n.ref_kind}`;
   return n.detail ? `${label}、${n.detail}` : label;
 }

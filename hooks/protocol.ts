@@ -1166,7 +1166,8 @@ export const definitions = {
         "description": "external は daemon がまだ状態を引けていない外部の参照 (issue / PR)。daemon が open と引けた参照は waiting、merged の PR、completed で閉じた issue と引けた参照は completed、マージせずに閉じた PR、not planned / duplicate で閉じた issue は dropped (取りやめ)"
       },
       "title": {
-        "type": "string"
+        "type": "string",
+        "description": "ノードの題。issue: / pr: の置き場は daemon が引いた題で、引けていなければ番号と repo"
       },
       "origin": {
         "type": "string",
@@ -1185,6 +1186,10 @@ export const definitions = {
           "pr"
         ],
         "description": "issue: / pr: の置き場のノードの参照の種類"
+      },
+      "ref_label": {
+        "type": "string",
+        "description": "issue: / pr: の置き場のノードの番号と repo (「PR #389 · owner/repo」)。題を引いた後も番号を読めるように残す"
       },
       "summary": {
         "type": "string",
@@ -1405,7 +1410,8 @@ export const definitions = {
         "$ref": "#/$defs/EdgeEndpoint"
       },
       "note": {
-        "type": "string"
+        "type": "string",
+        "description": "辺の補足。空なら daemon が引いた before の issue / PR の題で埋める (記録は書き換えない)"
       }
     }
   },

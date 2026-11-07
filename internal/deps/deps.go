@@ -54,6 +54,8 @@ type input struct {
 	Sessions []ledger.Session
 	// RefStates は issue / PR の参照 → daemon が引いた状態 (refstate)。
 	RefStates map[string]string
+	// RefTitles は issue / PR の参照 → daemon が引いた題 (refstate)。
+	RefTitles map[string]string
 }
 
 // build は依存図を組む。
@@ -80,6 +82,7 @@ func build(in input) Deps {
 		SessionNames: in.SessionNames,
 		PeerNames:    peerNames(in.Sessions),
 		RefStates:    in.RefStates,
+		RefTitles:    in.RefTitles,
 	})
 	d.Graph.ColumnOrder = columnOrder(d.Graph.Nodes, lastActive(in.Tasks, in.Todos, in.Works), func(cwd string) string {
 		key, _ := l.row(cwd)

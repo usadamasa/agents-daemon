@@ -23,17 +23,18 @@ var t0 = time.Date(2026, 11, 7, 12, 0, 0, 0, time.UTC)
 // fakeRemote は GitHub の側の状態。呼ばれた参照を順に残す。
 type fakeRemote struct {
 	states map[string]string
+	titles map[string]string
 	errs   map[string]error
 	calls  []string
 }
 
-func (f *fakeRemote) fetch(_ context.Context, it ref.Item) (string, error) {
+func (f *fakeRemote) fetch(_ context.Context, it ref.Item) (Remote, error) {
 	key := it.Kind + ":" + it.Repo + "#" + strconv.Itoa(it.Number)
 	f.calls = append(f.calls, key)
 	if err := f.errs[key]; err != nil {
-		return "", err
+		return Remote{}, err
 	}
-	return f.states[key], nil
+	return Remote{State: f.states[key], Title: f.titles[key]}, nil
 }
 
 type fixture struct {
@@ -272,6 +273,38 @@ func TestGHState(t *testing.T) {
 		if got, err := ghState(c[0], c[1], c[2]); err == nil {
 			t.Errorf("ghState(%q, %q, %q) = %q, want error", c[0], c[1], c[2], got)
 		}
+	}
+}
+
+// 引いた題は状態と一緒に写しへ書く (#472)。引き直しで題が変わっていれば書き直す。
+func TestRefresh_題を写しに書く(t *testing.T) {
+	remote := &fakeRemote{states: map[string]string{"pr:o/r#1": "open"}, titles: map[string]string{"pr:o/r#1": "依存図に題を出す"}}
+	f, add := newFixture(t, remote)
+	add("pr:o/r#1", "sid:a")
+	f.p.Refresh(context.Background(), t0)
+	remote.titles["pr:o/r#1"] = "依存図に読める題を出す"
+	f.p.Refresh(context.Background(), t0.Add(refstate.RefreshInterval))
+	got, err := f.refs.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec := got["pr:o/r#1"]; rec.Title != "依存図に読める題を出す" || rec.State != refstate.StateOpen {
+		t.Errorf("写し = %+v", rec)
+	}
+}
+
+// gh の view の JSON から状態と題を読む。
+func TestDecodeView(t *testing.T) {
+	got, err := decodeView("pr", []byte(`{"state":"MERGED","title":"題を引く"}`))
+	if err != nil || got != (Remote{State: refstate.StateMerged, Title: "題を引く"}) {
+		t.Errorf("decodeView(pr) = %+v, %v", got, err)
+	}
+	got, err = decodeView("issue", []byte(`{"state":"CLOSED","stateReason":"NOT_PLANNED","title":"やめた"}`))
+	if err != nil || got != (Remote{State: refstate.StateDropped, Title: "やめた"}) {
+		t.Errorf("decodeView(issue) = %+v, %v", got, err)
+	}
+	if got, err := decodeView("pr", []byte(`{`)); err == nil {
+		t.Errorf("壊れた JSON = %+v, want error", got)
 	}
 }
 

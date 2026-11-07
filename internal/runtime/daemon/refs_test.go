@@ -22,7 +22,7 @@ func TestDaemonRuntimeTick_refreshesRefs(t *testing.T) {
 	r, statusPath := newTestRuntime(t, client, now)
 	dir := filepath.Dir(statusPath)
 	r.attachStateDir(dir)
-	r.refPoll = refpoll.New(r.edges, r.refs, func(context.Context, ref.Item) (string, error) { return "merged", nil }, r.log)
+	r.refPoll = refpoll.New(r.edges, r.refs, func(context.Context, ref.Item) (refpoll.Remote, error) { return refpoll.Remote{State: "merged"}, nil }, r.log)
 	if _, err := edge.New(dir).Add(edge.Endpoint{Ref: "pr:o/r#1", CWD: "/w"}, edge.Endpoint{Ref: "sid:a", CWD: "/w"}, "", now); err != nil {
 		t.Fatal(err)
 	}

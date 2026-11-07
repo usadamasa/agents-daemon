@@ -118,7 +118,9 @@ test("完了を隠した既定の図: 状態の丸に状態ごとの色の class
 test("完了を隠した既定の図: マージせずに閉じた PR は完了で畳まず、「取りやめ」と手当ての要る強調で描く", () => {
   const card = q('.node[data-key="pr:usadamasa/agents-daemon#254"]');
   assert.ok(["attn", "drop", "halt"].every((c) => card.classList.contains(c)), card.className);
-  assert.equal(card.querySelector("small").textContent, "取りやめ · PR");
+  // 題は daemon が引いた PR の題で、番号と repo は副題に残す (#472)。
+  assert.equal(card.querySelector("b").textContent, "依存図の色を状態ごとに分ける");
+  assert.equal(card.querySelector("small").textContent, "取りやめ · PR #254 · usadamasa/agents-daemon");
   assert.equal(card.querySelector(".st").getAttribute("class"), "st drop");
 });
 
@@ -178,6 +180,15 @@ test("ノードを選ぶと単体ビューを開き、待っている先と待�
   await snapshot("graph-popup");
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
   assert.equal(pop.hidden, true);
+});
+
+test("PR のノードの単体ビュー: 見出しは PR の題で、番号と repo は状態の chip に残す", async () => {
+  q('.node[data-key="pr:usadamasa/agents-daemon#254"]').click();
+  const pop = q("#pop");
+  assert.equal(pop.querySelector(".title").textContent, "依存図の色を状態ごとに分ける");
+  assert.equal(pop.querySelector(".chips .chip").textContent, "取りやめ · PR #254 · usadamasa/agents-daemon");
+  await snapshot("graph-popup-ref");
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
 });
 
 test("作業のノード: 題そのものを押すとその場で直せ、自動で付けた題は chip で分かり、終了したものは一覧から外せる", async () => {

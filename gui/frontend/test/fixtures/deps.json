@@ -71,8 +71,8 @@
         "blocked_by": [], "deadlock": false, "halted": true, "stuck": true
       },
       {
-        "key": "pr:usadamasa/agents-daemon#254", "kind": "ref", "state": "dropped", "title": "PR #254 · usadamasa/agents-daemon",
-        "ref_kind": "pr", "endpoint": true, "cwd": "/repo/agents-daemon", "live": false,
+        "key": "pr:usadamasa/agents-daemon#254", "kind": "ref", "state": "dropped", "title": "依存図の色を状態ごとに分ける",
+        "ref_kind": "pr", "ref_label": "PR #254 · usadamasa/agents-daemon", "endpoint": true, "cwd": "/repo/agents-daemon", "live": false,
         "depth": 0, "downstream": 1, "parked": 0, "memos": [], "blocked_by": [], "deadlock": false, "halted": true, "stuck": true
       },
       {

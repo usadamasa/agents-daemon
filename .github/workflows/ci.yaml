@@ -114,10 +114,30 @@ jobs:
       - name: Typecheck the mod
         run: task typecheck
 
+  # PR で変わったパスを .github/filters.yaml で振り分ける。pull_request では REST API から読むので pull-requests: read が要る
+  changes:
+    runs-on: ubuntu-slim
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      gui: ${{ steps.filter.outputs.gui != 'false' }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: dorny/paths-filter@v4.0.3
+        id: filter
+        if: github.event_name == 'pull_request'
+        with:
+          filters: .github/filters.yaml
+
   # gui/ は Wails v3 の macOS のアプリ (cgo と WebKit の link) なので macOS の runner で回す。
-  # node --test も同じジョブで回す (public repo は macOS の分も課金されないので ubuntu へ分けない)
+  # node --test も同じジョブで回す (public repo は macOS の分も課金されないので ubuntu へ分けない)。
+  # PR では filters.yaml の gui に当たるときだけ回し、main への push では毎回回す
   gui-test:
     name: gui test
+    needs: [changes]
+    if: needs.changes.outputs.gui == 'true'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7.0.1
@@ -145,7 +165,7 @@ jobs:
       - uses: usadamasa/gh-manage/actions/verify-actions-lock@main
 
   ci-status-check:
-    needs: [go-test, go-lint, bats, shellcheck, plugin-validate, mod-typecheck, gui-test, actions-lock]
+    needs: [go-test, go-lint, bats, shellcheck, plugin-validate, mod-typecheck, changes, gui-test, actions-lock]
     if: always()
     runs-on: ubuntu-slim
     timeout-minutes: 10

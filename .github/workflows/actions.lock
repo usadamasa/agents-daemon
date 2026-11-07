@@ -6,6 +6,7 @@ workflows:
     '.github/workflows/ci.yaml':
         - 'actions/checkout@v7.0.1'
         - 'actions/upload-artifact@v7.0.2'
+        - 'dorny/paths-filter@v4.0.3'
         - 'usadamasa/gh-manage@main'
     '.github/workflows/pr-labels.yaml':
         - 'actions/checkout@v7.0.1'
@@ -37,6 +38,11 @@ dependencies:
         commit: 'sha1-3138316df39ed29be04236d7ffc686fa525866aa'
         owner_id: 80991770
         repo_id: 588678074
+    'dorny/paths-filter@v4.0.3':
+        ref: 'v4.0.3'
+        commit: 'sha1-ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d'
+        owner_id: 1588572
+        repo_id: 265601040
     'nicknovitski/nix-develop@v1.2.1':
         ref: 'v1.2.1'
         commit: 'sha1-9be7cfb4b10451d3390a75dc18ad0465bed4932a'

@@ -336,7 +336,7 @@ export type DepsGraph = {
   // 下流の最も多い止まっているノードから、下流をたどった最長の鎖の key
   longest_chain: string[]
   folded: FoldedGraph
-  // folded の keys と、links のうち両端が keys にあるものと folded の links で組んだレーンの行
+  // folded の nodes と、links のうち両端が folded の nodes にあるものと folded の links で組んだレーンの行
   rows: GraphRow[]
   // 完了したノードも含めて組んだレーンの行
   rows_with_completed: GraphRow[]
@@ -399,10 +399,17 @@ export type GraphLink = {
 
 // 完了したノードを隠したときの図。隠したノードを通り抜けていた辺は畳んで残す
 export type FoldedGraph = {
-  // 見せるノードの key (nodes の順)。完了していないものと、完了していても下流に完了していないノードが無く、完了も終了もしていない上流を直接持つもの
-  keys: string[]
-  // 隠したノードを通り抜けた辺。両端が keys にあり、同じ組の辺が links に無いもの
+  // 見せるノード (DepsGraph.nodes の順)。完了していないものと、完了していても下流に完了していないノードが無く、完了も終了もしていない上流を直接持つもの
+  nodes: FoldedNode[]
+  // 隠したノードを通り抜けた辺。両端が nodes にあり、同じ組の辺が DepsGraph.links に無いもの
   links: FoldedLink[]
+}
+
+// 完了したノードを隠した図に見せるノード 1 つ
+export type FoldedNode = {
+  key: string
+  // この図の辺 (両端が見える辺と畳んだ辺) で数え直した段。数え方は GraphNode.depth と同じ
+  depth: number
 }
 
 // 隠したノードを通り抜けた経路を畳んだ辺 1 本

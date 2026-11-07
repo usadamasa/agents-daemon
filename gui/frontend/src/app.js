@@ -3,6 +3,7 @@
 // オブジェクトはタスク (図の箱) とメモ (下の一覧の行)。選ぶとそのそばにポップアップで単体ビューが開く。
 import * as dagre from "./vendor/dagre.esm.js";
 import { Graph } from "./graph.js";
+import { spreadPorts } from "./ports.js";
 import { isStale, kindLabel, lastPlacedAt, stamp } from "./memo.js";
 import { canAdopt, canDismiss, canTell, candidates, destinationLabel, isOwnTask, issueDestinations, pathDestination, peerDestinations, spawnDestinations, spawnLabel, taskDestinations } from "./ops.js";
 import { addBlocker, adopt, askUnlink, discard, discardStale, dismissAll, dismissOne, handOff, handOffTask, instruct, setStatus, start, toParking, unlink } from "./actions.js";
@@ -184,7 +185,8 @@ function chainEdges(graph) {
   return set;
 }
 
-// rankByDepth はバイナリの depth (前提をたどった最長の深さ、根が 0) をそのまま段にする ranker。dagre の組み込みの
+// rankByDepth はバイナリの段 (前提をたどった最長の深さ、根が 0。完了を隠す図では folded で数え直したもの) を
+// そのまま段にする ranker。dagre の組み込みの
 // ranker はどれも前提の無いノードを下流の直前へ寄せる (A→B→C と D→C で D が B の段に来る) ので使わない。
 // layout は辺のラベルの場所を空けるために辺の minlen を 2 倍にし、組み込みの ranker が出す rank は偶数になる。
 // depth も 2 倍にして同じ尺に揃える (@dagrejs/dagre 3.1.3 の内部の前提。奇数の rank を渡すと layout が落ちる)。
@@ -201,14 +203,14 @@ const GAP_Y = 44;
 
 // layout は辺でつながるノードを dagre で配置し、辺の無いノードはその下に格子で並べる。dagre は辺の無いノードを
 // 全部 1 段目の 1 行に並べるので、タスクの無いセッションが多いと横にだけ伸びる。格子の列数は窓の幅から決める。
-// 返すのは key → { x, y } (中心) と、全体の width、height、辺の経路を持つ dagre の graph。
-function layout(nodes, links, hostWidth) {
+// depth は key → 段 (Graph.view の depth)。返すのは key → { x, y } (中心) と、全体の width、height、辺の経路を持つ
+// dagre の graph。
+function layout(nodes, links, depth, hostWidth) {
   const linked = new Set(links.flatMap((l) => [l.before, l.after]));
   const connected = nodes.filter((n) => linked.has(n.key));
   const isolated = nodes.filter((n) => !linked.has(n.key));
 
   const g = new dagre.graphlib.Graph();
-  const depth = new Map(connected.map((n) => [n.key, n.depth]));
   g.setGraph({ rankdir: "TB", ranker: rankByDepth(depth), nodesep: GAP_X, ranksep: GAP_Y, marginx: MARGIN_X, marginy: MARGIN_Y });
   g.setDefaultEdgeLabel(() => ({}));
   for (const n of connected) g.setNode(n.key, { width: NODE_W, height: NODE_H });
@@ -324,7 +326,7 @@ function highlightKeys() {
 function renderGraph() {
   const host = el("graph");
   const graph = state.data.graph;
-  const { nodes, links } = state.graph.view(state.showCompleted);
+  const { nodes, links, depth } = state.graph.view(state.showCompleted);
   const scroll = { left: host.scrollLeft, top: host.scrollTop };
   host.replaceChildren();
   if (nodes.length === 0) {
@@ -334,7 +336,7 @@ function renderGraph() {
     host.append(empty);
     return;
   }
-  const { g, pos, width, height } = layout(nodes, links, host.clientWidth);
+  const { g, pos, width, height } = layout(nodes, links, depth, host.clientWidth);
 
   const canvas = document.createElement("div");
   canvas.className = "canvas";
@@ -350,12 +352,12 @@ function renderGraph() {
   svg.append(defs);
 
   const chain = chainEdges(graph);
-  for (const l of links) {
-    if (!g.hasEdge(l.before, l.after)) continue;
+  const drawn = links.filter((l) => g.hasEdge(l.before, l.after)).map((l) => ({ ...l, points: g.edge(l.before, l.after).points }));
+  for (const l of spreadPorts(drawn, pos, NODE_W, NODE_H)) {
     const onChain = chain.has(`${l.before}\u0000${l.after}`);
     const cls = [l.kind === "task" ? "" : l.kind, onChain ? "chain" : ""].filter(Boolean).join(" ");
     const hint = l.kind === "folded" ? foldedHint(l) : "";
-    svg.append(edgePath(g.edge(l.before, l.after).points, cls, onChain ? "arrow-chain" : "arrow", hint));
+    svg.append(edgePath(l.points, cls, onChain ? "arrow-chain" : "arrow", hint));
   }
   canvas.append(svg);
 

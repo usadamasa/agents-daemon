@@ -2,7 +2,6 @@ package deps
 
 import (
 	"reflect"
-	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -432,8 +431,16 @@ func TestGraph_folded(t *testing.T) {
 	})
 	f := b.Graph.Folded
 	// A/5 は生きている peer を上流に持つ末端なので残る。X/1 の上流は終了した置き場、A/7 の上流は完了なので隠す。
-	if want := []string{"sid:P", "task:A/1", "task:A/4", "task:A/5", "sid:G"}; !reflect.DeepEqual(sortKeys(f.Keys), sortKeys(want)) {
-		t.Errorf("folded keys = %v, want %v", f.Keys, want)
+	// 段はこの図の辺で数え直す (#395)。A/4 は全部の図では 3 段目だが、畳んだ辺で A/1 の次の段になる。
+	got := map[string]int{}
+	for _, n := range f.Nodes {
+		got[n.Key] = n.Depth
+	}
+	if want := map[string]int{"sid:P": 0, "task:A/1": 0, "task:A/4": 1, "task:A/5": 1, "sid:G": 0}; !reflect.DeepEqual(got, want) {
+		t.Errorf("folded nodes = %v, want %v", got, want)
+	}
+	if n := nodes(b.Graph)["task:A/4"]; n.Depth != 3 {
+		t.Errorf("task:A/4 depth = %d, want 3 (全部の図の段は変えない)", n.Depth)
 	}
 	if want := []protocol.FoldedLink{{Before: "task:A/1", After: "task:A/4", Via: []string{"task:A/2", "task:A/3"}}}; !reflect.DeepEqual(f.Links, want) {
 		t.Errorf("folded links = %+v, want %+v", f.Links, want)
@@ -444,15 +451,9 @@ func TestGraph_folded(t *testing.T) {
 	}
 	// ノードが無ければ空の配列 (JSON で null にしない)。
 	empty := build(input{})
-	if empty.Graph.Folded.Keys == nil || empty.Graph.Folded.Links == nil {
+	if empty.Graph.Folded.Nodes == nil || empty.Graph.Folded.Links == nil {
 		t.Errorf("folded = %+v, want 空の配列", empty.Graph.Folded)
 	}
-}
-
-func sortKeys(keys []string) []string {
-	out := append([]string{}, keys...)
-	sort.Strings(out)
-	return out
 }
 
 // 止まっているノードも待ちの輪も無ければ longest chain は空。循環した辺があっても止まらずに組む。

@@ -76,10 +76,10 @@ test("watchUpgrade は知らせの新しいバージョンをボタンの文に�
   const button = fakeButton();
   watchUpgrade(views({ selected: null, showCompleted: false }), button);
   w.handlers["agent-tasks:upgrade"]({ name: "agent-tasks:upgrade", data: "2026.1107.99" });
-  assert.equal(button.textContent, "↻ 2026.1107.99 に切り替える");
+  assert.equal(button.textContent, "↻ Update 2026.1107.99");
   // Wails が data を配列で渡しても読む。
   w.handlers["agent-tasks:upgrade"]({ name: "agent-tasks:upgrade", data: ["2026.1108.0"] });
-  assert.equal(button.textContent, "↻ 2026.1108.0 に切り替える");
+  assert.equal(button.textContent, "↻ Update 2026.1108.0");
 });
 
 test("watchUpgrade は出た直後だけ pulse を付け、動きが済んだら外し、次の知らせでは付け直さない", () => {

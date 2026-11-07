@@ -131,6 +131,7 @@ HTML の箱と SVG の線で描く。root とは別の Go module だが、daemon
 ソースから建てて、`~/Applications/agent-tasks.app` に置く (ad hoc 署名。手元で建てるので Gatekeeper は見ない)。
 要るのは Go toolchain と Xcode Command Line Tools (`xcode-select --install`) で、無い Mac と macOS 以外では建てずに
 `build.log` に 1 行残す。建て直しは plugin の更新後の次の SessionStart か `agents-daemon update`。
+建てた plugin のバージョンは窓の title とアプリのメニューの About に出る (`task gui:build` で建てたものは `dev`)。
 
 ```sh
 task gui:build    # bin/agent-tasks にビルドする (開発用。Xcode Command Line Tools が要る)

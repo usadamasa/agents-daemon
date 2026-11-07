@@ -16,9 +16,15 @@ import (
 //go:embed all:frontend/src
 var assets embed.FS
 
+// version はこのバイナリを建てた plugin の version。hooks/build-gui.sh が -ldflags -X で入れる
+// (task gui:build で建てたものは dev のまま)。窓の title と About に出し、開いている窓がどの version かを見分ける。
+var version = "dev"
+
 func main() {
 	app := application.New(application.Options{
 		Name: "agent-tasks",
+		// アプリのメニューの About は Info.plist ではなく Name と Description を出す。
+		Description: "version " + version,
 		Mac: application.MacOptions{
 			ApplicationShouldTerminateAfterLastWindowClosed: true,
 		},
@@ -30,7 +36,7 @@ func main() {
 		},
 	})
 	app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:  "agent-tasks",
+		Title:  "agent-tasks " + version,
 		Width:  1280,
 		Height: 820,
 		URL:    "/",

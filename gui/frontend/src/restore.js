@@ -46,7 +46,7 @@ export async function restore(views) {
 export function watchUpgrade(views, button) {
   window.wails.Events.On(UPGRADE_EVENT, (ev) => {
     const data = Array.isArray(ev?.data) ? ev.data[0] : ev?.data;
-    button.textContent = data ? `↻ ${data} に切り替える` : "↻ 新しいバージョンに切り替える";
+    button.textContent = data ? `↻ Update ${data}` : "↻ Update";
     if (!button.hidden) return;
     // 出た直後に一度だけ目を引く (style.css の .pulse。prefers-reduced-motion では動かさない)。
     button.hidden = false;

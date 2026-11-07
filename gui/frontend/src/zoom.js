@@ -22,10 +22,23 @@ export function stepZoom(z, dir) {
   return clampZoom(z * STEP ** dir);
 }
 
+// centerOffset は長さ frame の枠を長さ view の領域の中心へ寄せる片側の余白。はみ出す枠は寄せずにスクロールで見る。
+export function centerOffset(frame, view) {
+  return Math.max(0, (view - frame) / 2);
+}
+
+// overflowCenter は長さ frame の枠が長さ view の領域からはみ出すとき、枠の中心を見せるスクロール量。
+export function overflowCenter(frame, view) {
+  return Math.max(0, (frame - view) / 2);
+}
+
 // scrollAfterZoom は画面上の pointer (スクロール領域の左上からの距離) が指す図の点を、拡大率を from から to へ
-// 変えた後も同じ画面位置に残すスクロール量。
-export function scrollAfterZoom(scroll, pointer, from, to) {
-  return Math.max(0, ((scroll + pointer) * to) / from - pointer);
+// 変えた後も同じ画面位置に残すスクロール量。1 つの向きについて、content は拡大前の図の長さ、view は見える長さ。
+// 枠が領域より小さい間は centerOffset の余白が付くので、その分を差し引いて点を求める。
+export function scrollAfterZoom(scroll, pointer, from, to, content, view) {
+  const point = (scroll + pointer - centerOffset(content * from, view)) / from;
+  const next = point * to + centerOffset(content * to, view) - pointer;
+  return Math.max(0, Math.min(next, content * to - view));
 }
 
 // ホイールの連なりの切れ目。トラックパッドの慣性は 16ms 前後の間隔で届くので、これより空いたら指を離して止まったとみる。

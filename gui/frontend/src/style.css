@@ -93,6 +93,8 @@ select { font: inherit; color: inherit; }
 .graph .zoom-frame { overflow: hidden; }
 .zoom { display: inline-flex; align-items: center; gap: 4px; }
 .zoom #zoom-reset { min-width: 56px; justify-content: center; font-variant-numeric: tabular-nums; }
+/* 全体表示のトグルがオンの間 (aria-pressed と同時に app.js の renderZoom が付ける) */
+.tb.on { background: var(--green-soft); border-color: var(--green); color: var(--green-ink); font-weight: 500; }
 /* 新しいバージョンへの切り替え。拡大縮小の並びに埋もれないよう、塗りつぶしと間で離す */
 .tb.upgrade {
   margin-left: 18px;

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { MAX_ZOOM, MIN_ZOOM, WHEEL_GAP_MS, clampZoom, fitZoom, percent, scrollAfterZoom, stepZoom, wheelZoomer } from "../src/zoom.js";
+import { MAX_ZOOM, MIN_ZOOM, WHEEL_GAP_MS, centerOffset, clampZoom, fitZoom, overflowCenter, percent, scrollAfterZoom, stepZoom, wheelZoomer } from "../src/zoom.js";
 
 // 慣性で減っていくトラックパッドのスクロール。上へ払った向き (deltaY が負) で、t は ms。
 function flick(from, n, modifierAt) {
@@ -75,12 +75,36 @@ test("stepZoom は 1 段ずつ拡大縮小し、往復すると元に戻り、�
 });
 
 test("scrollAfterZoom は指した点が拡大縮小の前後で同じ画面位置に残るスクロール量を返す", () => {
+  // 図の幅 1000、見える幅 400。どの拡大率でも枠が領域よりはみ出し、中心の余白は付かない。
   // scroll 100 で画面の 50 を指す点は図の (100 + 50) / 1 = 150。2 倍で 300 になり、画面の 50 に残すには 250。
-  assert.equal(scrollAfterZoom(100, 50, 1, 2), 250);
+  assert.equal(scrollAfterZoom(100, 50, 1, 2, 1000, 400), 250);
   // 縮小: 図の (250 + 50) / 2 = 150 が 0.5 倍で 75。画面の 50 に残すには 25。
-  assert.equal(scrollAfterZoom(250, 50, 2, 0.5), 25);
+  assert.equal(scrollAfterZoom(250, 50, 2, 0.5, 1000, 400), 25);
   // 負のスクロールにはしない
-  assert.equal(scrollAfterZoom(0, 300, 1, 0.5), 0);
+  assert.equal(scrollAfterZoom(0, 300, 1, 0.5, 1000, 400), 0);
+});
+
+test("scrollAfterZoom は中心へ寄せた余白を差し引いて、指した点を同じ画面位置に残す", () => {
+  // 図の幅 200 を見える幅 300 に 100% で描くと左右に 50 の余白。画面の 150 は図の 100 を指す。
+  // 2 倍で枠は 400 になり余白は消え、図の 100 は 200。画面の 150 に残すには 50。
+  assert.equal(scrollAfterZoom(0, 150, 1, 2, 200, 300), 50);
+  // 縮小して枠が領域に収まると、スクロールの余地は無いので 0 (図は中心へ寄る)。
+  assert.equal(scrollAfterZoom(300, 200, 1, 0.3, 1000, 400), 0);
+  // スクロールできる量 (枠 - 見える幅) を超えない。
+  assert.equal(scrollAfterZoom(600, 400, 1, 2, 1000, 400), 1600);
+});
+
+test("centerOffset は枠が領域より小さいとき、中心へ寄せる片側の余白を返す", () => {
+  assert.equal(centerOffset(200, 400), 100);
+  assert.equal(centerOffset(400, 400), 0);
+  // はみ出す枠は寄せない (スクロールで見る)
+  assert.equal(centerOffset(600, 400), 0);
+});
+
+test("overflowCenter は枠が領域からはみ出すとき、枠の中心を見せるスクロール量を返す", () => {
+  assert.equal(overflowCenter(600, 400), 100);
+  assert.equal(overflowCenter(400, 400), 0);
+  assert.equal(overflowCenter(200, 400), 0);
 });
 
 test("percent は拡大率を整数の百分率の文字列にする", () => {

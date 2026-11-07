@@ -75,6 +75,10 @@ func build(in input) Deps {
 		SessionNames: in.SessionNames,
 		PeerNames:    peerNames(in.Sessions),
 	})
+	d.Graph.ColumnOrder = columnOrder(d.Graph.Nodes, lastActive(in.Tasks, in.Todos), func(cwd string) string {
+		key, _ := l.row(cwd)
+		return key
+	})
 	return d
 }
 

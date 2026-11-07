@@ -17,14 +17,14 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const SRC = path.join(here, "..", "src");
 const FIXTURE = path.join(here, "fixtures", "deps.json");
 const SHOTS = path.resolve(process.env.SNAPSHOT_DIR || path.join(here, "..", "..", "..", "tmp", "gui-snapshots"));
-// 窓 1280 × 800 から header・凡例・メモの一覧・footer を除いた #graph の大きさ。
-const HOST = { width: 1280, height: 520 };
+// 窓 1280 × 800 から header・右の列・凡例・メモの一覧・footer を除いた #graph の大きさ。
+const HOST = { width: 1000, height: 520 };
 // メモの古さ (stale_memo_days) を数える現在時刻。
 const NOW = new Date("2026-11-07T12:00:00+09:00");
 
 let css;
 
-// setHost は #graph の見える領域の大きさを決める。layout の格子の列数と「全体を表示」の拡大率がこれで決まる。
+// setHost は #graph の見える領域の大きさを決める。「全体を表示」の拡大率がこれで決まる。
 function setHost({ width, height }) {
   const host = document.getElementById("graph");
   Object.defineProperty(host, "clientWidth", { configurable: true, value: width });
@@ -72,9 +72,10 @@ async function snapshot(name) {
   await writeFile(path.join(SHOTS, `${name}.html`), `<!doctype html>\n${doc.outerHTML}\n`);
 }
 
-// cards は描いた箱を key → { classes, left, top } で返す。
-function cards() {
-  const list = [...document.querySelectorAll("#graph .node")].map((e) => ({
+// cards は host (依存図の #graph か右の列の #column、既定は両方) に描いた箱を key → { classes, left, top } で返す。
+// 右の列の箱は CSS の flex で並ぶので left / top を持たない (NaN)。
+function cards(host = "#graph, #column") {
+  const list = [...document.querySelectorAll(`:is(${host}) .node`)].map((e) => ({
     key: e.dataset.key,
     classes: [...e.classList],
     left: parseFloat(e.style.left),
@@ -92,8 +93,8 @@ const EDGE = "svg.edges path[marker-end]";
 test("完了を隠した既定の図: 完了していないノードと、完了していないノードへ続く完了を除いた箱を描く", () => {
   const byKey = cards();
   assert.deepEqual([...byKey.keys()].sort(), [
-    "sid:delta",
     "sid:gamma",
+    "sid:zeta",
     "task:alpha/2",
     "task:alpha/4",
     "task:beta/1",
@@ -121,17 +122,17 @@ test("完了を隠した既定の図: 見える辺と隠した完了を通り抜
   assert.deepEqual(hints.sort(), ["API の形が決まるのを待つ", "テストを直す を経由"]);
 });
 
-test("完了を隠した既定の図: 段の浅いノードを上に、辺の無いノードを辺でつながる図の下に並べる", () => {
-  const byKey = cards();
-  const top = (key) => byKey.get(key).top;
+test("完了を隠した既定の図: 辺でつながるノードを段の浅い順に上から描き、辺の無いノードを右の列に column_order の順で並べる", () => {
+  const graph = cards("#graph");
+  assert.deepEqual([...graph.keys()].sort(), ["task:alpha/2", "task:alpha/4", "task:beta/1", "task:beta/2", "task:beta/3"]);
+  const top = (key) => graph.get(key).top;
   assert.ok(top("task:alpha/2") < top("task:beta/1"));
   assert.equal(top("task:beta/1"), top("task:alpha/4"));
   assert.ok(top("task:beta/1") < top("task:beta/2"));
   assert.ok(top("task:beta/2") < top("task:beta/3"));
-  const linkedBottom = Math.max(...["task:alpha/2", "task:alpha/4", "task:beta/1", "task:beta/2", "task:beta/3"].map(top));
-  assert.ok(top("sid:delta") > linkedBottom);
-  assert.equal(top("sid:delta"), top("sid:gamma"));
-  assert.ok(byKey.get("sid:delta").left < byKey.get("sid:gamma").left);
+  assert.equal(q("#column").hidden, false);
+  // nodes では gamma (終了) が先に来るが、column_order は作業中の zeta を先に並べる。
+  assert.deepEqual([...cards("#column").keys()], ["sid:zeta", "sid:gamma"]);
 });
 
 test("完了を隠した既定の図: 止まったノードに下流の数を、メモを置いたノードにメモの数を添える", () => {
@@ -170,6 +171,7 @@ test("完了も表示した図: 完了したノードも描き、通り抜けて
     assert.deepEqual(keysWith(byKey, "gone"), ["sid:gamma", "task:alpha/1", "task:alpha/3"]);
     assert.equal(count(EDGE), 6);
     assert.equal(count(`${EDGE}.folded`), 0);
+    assert.equal(cards("#graph").size, 7);
     assert.ok(byKey.get("task:alpha/1").top < byKey.get("task:alpha/2").top);
     assert.ok(byKey.get("task:alpha/3").top < byKey.get("task:alpha/4").top);
     await snapshot("graph-completed");

@@ -39,7 +39,7 @@
       "repo": "/repo/other",
       "title": "other",
       "sessions": [
-        { "session_id": "sid-delta", "session": "delta", "subject": "issue を読んでいる", "live": true }
+        { "session_id": "sid-zeta", "session": "zeta", "subject": "issue を読んでいる", "live": true }
       ],
       "memos": []
     }
@@ -83,13 +83,13 @@
         "depth": 3, "downstream": 1, "parked": 0, "memos": [], "blocked_by": ["task:beta/1"], "deadlock": false, "halted": false, "stuck": false
       },
       {
-        "key": "sid:delta", "kind": "session", "state": "working", "title": "delta", "summary": "issue を読んでいる",
-        "endpoint": true, "cwd": "/repo/other", "session_id": "sid-delta", "session": "delta", "session_name": "delta", "live": true,
+        "key": "sid:gamma", "kind": "session", "state": "exited", "title": "gamma",
+        "endpoint": true, "cwd": "/repo/agents-daemon", "session_id": "sid-gamma", "session": "gamma", "live": false,
         "depth": 0, "downstream": 0, "parked": 0, "memos": [], "blocked_by": [], "deadlock": false, "halted": false, "stuck": false
       },
       {
-        "key": "sid:gamma", "kind": "session", "state": "exited", "title": "gamma",
-        "endpoint": true, "cwd": "/repo/agents-daemon", "session_id": "sid-gamma", "session": "gamma", "live": false,
+        "key": "sid:zeta", "kind": "session", "state": "working", "title": "zeta", "summary": "issue を読んでいる",
+        "endpoint": true, "cwd": "/repo/other", "session_id": "sid-zeta", "session": "zeta", "session_name": "zeta", "live": true,
         "depth": 0, "downstream": 0, "parked": 0, "memos": [], "blocked_by": [], "deadlock": false, "halted": false, "stuck": false
       },
       {
@@ -127,8 +127,8 @@
         { "key": "task:alpha/2", "depth": 0 },
         { "key": "task:beta/1", "depth": 1 },
         { "key": "task:beta/2", "depth": 2 },
-        { "key": "sid:delta", "depth": 0 },
         { "key": "sid:gamma", "depth": 0 },
+        { "key": "sid:zeta", "depth": 0 },
         { "key": "task:alpha/4", "depth": 1 },
         { "key": "task:beta/3", "depth": 3 }
       ],
@@ -137,6 +137,17 @@
       ]
     },
     "rows": [],
-    "rows_with_completed": []
+    "rows_with_completed": [],
+    "column_order": [
+      "task:beta/1",
+      "task:alpha/2",
+      "sid:zeta",
+      "task:alpha/4",
+      "task:beta/2",
+      "task:beta/3",
+      "sid:gamma",
+      "task:alpha/1",
+      "task:alpha/3"
+    ]
   }
 }

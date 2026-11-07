@@ -1,5 +1,16 @@
 # Changelog
 
+## [2026.1107.3](https://github.com/usadamasa/agents-daemon/compare/2026.1107.2...2026.1107.3) - 2026-11-07
+
+### Features
+- CI: gui/ に関係しない PR では gui test を走らせない by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/444
+- 依存図: 外部参照 (issue / PR) の状態を daemon が引き、merged / closed を完了にする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/449
+- 依存図: マージ済み / close 済みの issue / PR を before に持つ辺を daemon が消す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/451
+- 依存図: 全体を表示をトグルにし、既定で図を領域の中心に写す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/452
+### Dependencies
+- chore(deps): Bump Songmu/tagpr from 1.21.4 to 1.22.0 by @dependabot[bot] in https://github.com/usadamasa/agents-daemon/pull/427
+- chore(deps): Bump nixpkgs from `3ec6363` to `0bb2eed` by @dependabot[bot] in https://github.com/usadamasa/agents-daemon/pull/428
+
 ## [2026.1107.2](https://github.com/usadamasa/agents-daemon/compare/2026.1107.1...2026.1107.2) - 2026-11-07
 
 ### Features

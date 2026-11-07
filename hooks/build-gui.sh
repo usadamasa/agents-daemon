@@ -119,6 +119,12 @@ for key in CFBundleShortVersionString CFBundleVersion; do
     exit 1
   fi
 done
+# go build の linker が arm64 のバイナリに付けた ad hoc 署名を先に剥がす。残したまま bundle に署名すると、codesign が
+# 上書きの案内行 (replacing existing signature) を毎回 build.log に出す。
+if ! codesign --remove-signature "$tmp_app/Contents/MacOS/agent-tasks"; then
+  log_error "codesign --remove-signature failed: $tmp_app/Contents/MacOS/agent-tasks"
+  exit 1
+fi
 if ! codesign --force --sign - "$tmp_app"; then
   log_error "codesign failed: $tmp_app"
   exit 1

@@ -1,9 +1,10 @@
 #!/usr/bin/env bats
 # StopFailure / Stop / UserPromptSubmit hook (ingest-turn-failure.sh) の分岐を検証する。
 #
-# - cache のバイナリが無いか、stamp が plugin の version と違えば何もせず exit 0 (旧版のバイナリは
+# - cache のバイナリか stamp が無ければ何もせず exit 0
+# - stamp が plugin の version より古ければ、両方の version を stderr に 1 行出して exit 0 (旧版のバイナリは
 #   このサブコマンドを知らないかもしれない)
-# - そろっていれば `ingest-turn-failure` を exec し、stdin をそのまま渡す。どの event で書くか消すかは
+# - stamp が plugin の version 以上なら `ingest-turn-failure` を exec し、stdin をそのまま渡す。どの event で書くか消すかは
 #   バイナリ側の責務 (turnfailure、daemoncli/ingest_turn_failure_test.go)
 
 bats_require_minimum_version 1.5.0
@@ -32,7 +33,7 @@ write_current_stamp() {
   [ -z "$stderr" ]
 }
 
-@test "stamp が plugin の version と違えば何もせず exit 0 (旧版のバイナリを呼ばない)" {
+@test "stamp が plugin の version より古ければ旧版のバイナリを呼ばず、両方の version を stderr に出す" {
   make_fake_daemon "$TEST_TMPDIR/daemon.calls" "$BIN"
   printf '0000.0000.0\n' >"$STAMP"
 
@@ -40,6 +41,28 @@ write_current_stamp() {
   [ "$status" -eq 0 ]
   [ -z "$output" ]
   [ ! -f "$TEST_TMPDIR/daemon.calls" ]
+  [[ "$stderr" == *"0000.0000.0"* ]]
+  [[ "$stderr" == *"$PLUGIN_VERSION"* ]]
+}
+
+@test "stamp が plugin の version より新しければ ingest-turn-failure を exec する" {
+  make_fake_daemon "$TEST_TMPDIR/daemon.calls" "$BIN"
+  printf '9999.9999.9\n' >"$STAMP"
+
+  PATH="$FIXTURE_PATH" run_hook --separate-stderr "$HOOK" <<<'{"hook_event_name": "StopFailure"}'
+  [ "$status" -eq 0 ]
+  [ -z "$stderr" ]
+  [ "$(<"$TEST_TMPDIR/daemon.calls")" = "ingest-turn-failure" ]
+}
+
+@test "stamp が読めなければバイナリを呼ばず、cannot compare を stderr に出す" {
+  make_fake_daemon "$TEST_TMPDIR/daemon.calls" "$BIN"
+  printf 'garbage\n' >"$STAMP"
+
+  PATH="$FIXTURE_PATH" run_hook --separate-stderr "$HOOK" <<<'{"hook_event_name": "StopFailure"}'
+  [ "$status" -eq 0 ]
+  [ ! -f "$TEST_TMPDIR/daemon.calls" ]
+  [[ "$stderr" == *"cannot compare"* ]]
 }
 
 @test "stamp が無ければ何もせず exit 0" {

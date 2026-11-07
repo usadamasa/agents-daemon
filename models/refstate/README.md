@@ -12,6 +12,14 @@
 | `RefStateFailAsClosed.cfg` | `NoFalseComplete` が破れる (`violated` を期待) | gh の失敗を closed と書くと、open の参照を完了と見せる。失敗では写しを書かない根拠 |
 | `RefStateNoRefetch.cfg` | `EventuallyCompleted` が破れる (`violated` を期待) | 写しが open の参照を引き直さないと、マージされた PR がいつまでも外部のまま。open を間引いて引き直す根拠 |
 
+同じ性質を実装に対してテストが持つ。
+
+| 性質 | テスト |
+| ---- | ---- |
+| `NoFalseComplete` | `refpoll/refpoll_test.go` の `TestRefresh_ghの失敗` (失敗した参照の写しを書かない) |
+| `CacheSound` | `refstate/refstate_test.go` の `TestStore_Put_知らない状態は書かない` |
+| `EventuallyCompleted` | `refpoll/refpoll_test.go` の `TestRefresh_間引きと引き直し` と `refstate/refstate_test.go` の `TestDue` |
+
 ## 前提
 
 - GitHub の側の状態は open から merged か closed へ 1 回だけ移る。close した issue を開き直すと、写しが保持期間で

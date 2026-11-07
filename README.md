@@ -26,9 +26,10 @@ plugin が持つもの:
 
 | 部品 | 役目 |
 | ---- | ---- |
-| SessionStart hook | daemon のバイナリを用意し、`daemon --ensure` で起こす。続けて `prune-worktrees --hook` で放置 worktree を回収する |
-| Stop hook | `dream harvest` を起こす。turn の失敗の記録を `ingest-turn-failure` で消す |
-| StopFailure / UserPromptSubmit hook | turn を終わらせた API error を `ingest-turn-failure` で記録し、次の turn で消す (#77) |
+| SessionStart hook | daemon のバイナリを用意し、`daemon --ensure` で起こす。続けて `prune-worktrees --hook` で放置 worktree を回収する。resume なら作業の記録の終了を `ingest-work` で消す |
+| Stop hook | `dream harvest` を起こす。turn の失敗の記録を `ingest-turn-failure` で消す。最後の応答の 1 行目を作業の記録の要約として `ingest-work` で書く |
+| StopFailure / UserPromptSubmit hook | turn を終わらせた API error を `ingest-turn-failure` で記録し、次の turn で消す (#77)。UserPromptSubmit は最初の prompt を作業の記録の題として `ingest-work` で書く |
+| SessionEnd hook | 作業の記録に終了の時刻と理由を `ingest-work` で書く |
 | PostToolUse hook | Task 系ツール (TaskCreate / TaskUpdate / TaskList) と TodoWrite の呼び出しを `ingest-task` に渡し、セッションのタスクを記録する (#121) |
 | `agents-daemon:agents-daemon` skill | 運用と切り分けの手引き (症状から引く) |
 | `agents-daemon:setup` skill | 前提の確認と statusline の配線、peer messaging の切り分け |
@@ -38,17 +39,20 @@ plugin が持つもの:
 | `agents-daemon ingest-statusline` | 自前の statusline から stdin を渡して state file だけを書かせるサブコマンド |
 | `agents-daemon dream` | consolidation の実行系 (`harvest` / `mine` / `stage` / `adopt` / `forget`) |
 | `agents-daemon prune-worktrees` | 誰も使っていない Claude Code の worktree の回収 (SessionStart hook が `--hook` 付きで呼ぶ。手で叩く形は `skills/agents-daemon/references/operations.md`) |
-| `agent-tasks` (macOS のアプリ、`gui/`) | 依存図 (#134): セッションをまたぐタスクの依存を、セッションの外の窓に箱と線で描く操作盤。生きているセッションとタスクをすべて描き、パーキングロットの一覧を下に出す。タスクやメモを選ぶとその場に単体ビューが開き、依存の付け外し、そのタスクのセッションへの指示、渡す・着手・完了・削除の依頼、メモを生きているセッションか新しいセッションへ渡す、捨てる、終了したセッションのタスクを外す・メモにする、を行う (#364) |
-| `agents-daemon deps` | アプリと mod が読む依存図の JSON (タスクの記録、status.json、辺、メモを組み直したもの) を出す |
+| `agent-tasks` (macOS のアプリ、`gui/`) | 依存図 (#134): セッションをまたぐタスクの依存を、セッションの外の窓に箱と線で描く操作盤。生きているセッションとタスクをすべて描き、パーキングロットの一覧を下に出す。タスクやメモを選ぶとその場に単体ビューが開き、依存の付け外し、そのタスクのセッションへの指示、渡す・着手・完了・削除の依頼、メモを生きているセッションか新しいセッションへ渡す、捨てる、終了したセッションのタスクと作業を外す・メモにする、作業の題を直す、を行う (#364) |
+| `agents-daemon deps` | アプリと mod が読む依存図の JSON (タスクの記録、作業の記録、status.json、辺、メモを組み直したもの) を出す。タスクの無いセッションは作業の記録から作業のノードになり、終了しても残る (#368) |
 | `agents-daemon tell` | 生きているセッションの pane の入力欄に文面を打って Enter を送る。アプリの送達の経路 |
 | `agents-daemon park hand` | パーキングのメモを取って生きているセッション (`tell`) か新しく起こすセッション (`spawn`) へ渡し、届かなければ戻す |
 | `agents-daemon ingest-task` | PostToolUse hook の stdin からタスクを `tasks/<session_id>/` に記録する |
+| `agents-daemon ingest-work` | SessionStart / UserPromptSubmit / Stop / SessionEnd hook の stdin からセッションの作業 (最初の prompt の題、最後の応答の要約、turns、始まりと終わり) を `work/<session_id>.json` に記録する (#368) |
+| `agents-daemon work set\|get` | 作業の題を書き換える (人が直した題、companion の推定の題)・記録を読む |
 | `agents-daemon ingest-turn-failure` | hook の stdin から turn の失敗を `turn-failures/<session_id>.json` に記録し、消す |
 | `agents-daemon park add\|set\|list\|discard\|withdraw\|adopt` | パーキングロット (タスクの途中で見つけた脇のメモ) を `parking/` に置く・status を書き換える・一覧する・古い open のメモをまとめて捨てる・置いたセッションが取り下げる・終了したセッションのタスクをメモへ移す。同じメモは 1 つにまとめる (#121) |
 | `agents-daemon edge add\|rm\|list` | 作業を渡す側が、セッションをまたぐ作業の依存 (辺) を `edges/` に書く・消す・一覧する (#134。使い方は `skills/agents-daemon/references/operations.md`) |
 | `park` tool (mod、`hooks/park.tsx`) | model が聞かずに脇のことをメモとしてパーキングロットへ置く tool (#121) |
 | ファイルのメモの通知 (mod、`hooks/notice.ts`) | model が Read / Edit / Write で触ったファイルを files に持つ、ほかのセッションが置いたメモを、その tool の結果に添えて model へ 1 回だけ伝える (#89) |
 | 渡した宛先の辺の確かめ (mod、`hooks/handoff-notice.ts`) | model が `SendMessage` で送った生きているセッションに依存の辺が無ければ、その tool の結果に辺の書き方を添えて model へ伝える (#172) |
+| 作業の題の推定 (mod、`hooks/work-infer.ts`) | ターンを重ねたセッション (3 ターン以上) の会話から、作業の題を `$.model.fork` で 1 行に推定して作業の記録に添える (#368)。アプリでは「会話から自動で付けた題 · 直す」の chip で分かり、押すと直せる。人が直した題は上書きしない |
 
 ## 前提
 
@@ -121,7 +125,7 @@ agents-daemon tell < request.json                # 生きているセッショ�
 agents-daemon park hand < request.json           # メモを取って渡し、届かなければ戻す (アプリが呼ぶ)
 ```
 
-アプリと mod が呼ぶコマンド (`deps`、`park`、`edge add` / `rm`、`task dismiss`、`spawn`、`tell`、`event-log`) は入力を
+アプリと mod が呼ぶコマンド (`deps`、`park`、`edge add` / `rm`、`task dismiss`、`work set` / `get`、`spawn`、`tell`、`event-log`) は入力を
 stdin の JSON で受ける。形は `protocol/protocol.schema.json` が持つ。
 
 ## 依存図のアプリ (agent-tasks)
@@ -150,7 +154,7 @@ task gui:vendor   # 配置の library (dagre) を npm から gui/frontend/src/ve
 ```
 
 アプリは daemon のバイナリ (`${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon`) のサブコマンドを呼ぶだけで、
-状態はバイナリが持つ。数秒おきに `deps` を読み直し、操作は `park` / `edge` / `task dismiss` / `spawn` / `tell` /
+状態はバイナリが持つ。数秒おきに `deps` を読み直し、操作は `park` / `edge` / `task dismiss` / `work set` / `spawn` / `tell` /
 `park hand` に stdin の JSON で渡す。ログに添える操作主体は `app`。
 
 セッションへ届ける操作 (指示、タスクの着手・完了・削除・渡す依頼、メモの手渡し) は `tell` が rex の pane の入力欄に

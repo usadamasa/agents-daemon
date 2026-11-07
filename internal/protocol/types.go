@@ -63,12 +63,50 @@ type ParkWithdrawRequest struct {
 	SessionID string `json:"session_id"`
 }
 
-// ParkAdoptRequest は park adopt の stdin。終了したセッションの未完了のタスクを出自 adopted (種類 scope) のメモにし、タスクの記録を消して ParkAdded を出す。セッションの終了は、動いている daemon がタスクの記録より後に書いた status.json に pane が無いことで確かめる。
+// ParkAdoptRequest は park adopt の stdin。終了したセッションの未完了のタスク (task:) か、タスクの無いセッションの作業 (sid:) を出自 adopted (種類 scope) のメモにし、その記録を消して ParkAdded を出す。セッションの終了は、動いている daemon が記録より後に書いた status.json に pane が無いことで確かめる。
 type ParkAdoptRequest struct {
-	// 依存図のタスクのノードの key (task:<session_id>/<task_id>)。
+	// 依存図のノードの key (task:<session_id>/<task_id> か sid:<session_id>)。
 	Ref string `json:"ref"`
 	// 操作したセッションの ID (ログに添える)。
 	SessionID string `json:"session_id,omitempty"`
+}
+
+// WorkSetRequest は work set の stdin。セッションの作業の記録の題を書き換え、Work を出す。subject は人が直した題 (出どころ human。以後の hook と companion は書き換えない)、inferred は companion の推定の題 (subject とは別の欄で、人が直していなければこちらを見せる)。どちらか 1 つ以上。記録が無ければ exit 1。
+type WorkSetRequest struct {
+	// 作業のセッションの ID。
+	SessionID string `json:"session_id"`
+	// 人が直した題。
+	Subject string `json:"subject,omitempty"`
+	// companion の推定の題。
+	Inferred string `json:"inferred,omitempty"`
+}
+
+// WorkGetRequest は work get の stdin。セッションの作業の記録を Work で出す。無ければ exit 1。
+type WorkGetRequest struct {
+	// 作業のセッションの ID。
+	SessionID string `json:"session_id"`
+}
+
+// Work はセッション 1 つの作業の記録 (work get、work set の出力)。hook が書く事実 (最初の prompt の題、最後のターンの要約、turns、始まりと終わり) と、人の直した題、companion の推定の題。
+type Work struct {
+	SessionID string `json:"session_id"`
+	CWD       string `json:"cwd"`
+	// 題 (出どころは origin)。
+	Subject string `json:"subject,omitempty"`
+	// 題の出どころ。prompt は最初の prompt の 1 行目、human は人が work set で直した。
+	Origin string `json:"origin,omitempty"`
+	// companion の推定の題。
+	Inferred string `json:"inferred,omitempty"`
+	// 最後のターンの応答の 1 行目。
+	Summary string `json:"summary,omitempty"`
+	// UserPromptSubmit の数 (peer の delivery も数える)。
+	Turns     int       `json:"turns"`
+	StartedAt time.Time `json:"started_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	// SessionEnd の時刻。生きている (resume した) 間は無い。
+	EndedAt *time.Time `json:"ended_at,omitempty"`
+	// SessionEnd の reason。
+	EndReason string `json:"end_reason,omitempty"`
 }
 
 // ParkHandRequest は park hand の stdin。open のメモを取り (status handed、宛先付き)、文面を組んで宛先へ渡し、届かなければ open に戻す。宛先は生きているセッション (to_session。tell で入力欄に打つ) か、新しく起こすセッションの repo (to_repo。spawn) のどちらか 1 つ。取れなければ (ほかが先に渡した、捨てた) 何もせず exit 1 で理由を返し、取れた後は届かなくても ParkHandResult を出す。
@@ -102,9 +140,9 @@ type ParkHandResult struct {
 	Warning string `json:"warning,omitempty"`
 }
 
-// TaskDismissRequest は task dismiss の stdin。終了したセッションのタスク (完了しているかを問わない) の記録を消して依存図から外し、{} を出す。セッションの終了は park adopt と同じく status.json で確かめ、確かめられなければ消さずに exit 1 で理由を返す。
+// TaskDismissRequest は task dismiss の stdin。終了したセッションのタスク (完了しているかを問わない。task:) か、タスクの無いセッションの作業 (sid:) の記録を消して依存図から外し、{} を出す。セッションの終了は park adopt と同じく status.json で確かめ、確かめられなければ消さずに exit 1 で理由を返す。
 type TaskDismissRequest struct {
-	// 依存図のタスクのノードの key (task:<session_id>/<task_id>)。
+	// 依存図のノードの key (task:<session_id>/<task_id> か sid:<session_id>)。
 	Ref string `json:"ref"`
 	// 操作したセッションの ID (ログに添える)。
 	SessionID string `json:"session_id,omitempty"`
@@ -344,7 +382,7 @@ type DepsGraph struct {
 	ColumnOrder []string `json:"column_order"`
 }
 
-// GraphNode は依存の DAG のノード 1 つ (タスク 1 つ、タスクの無いセッション、端点の参照だけの置き場)。
+// GraphNode は依存の DAG のノード 1 つ (タスク 1 つ、タスクの無いセッションの作業、端点の参照だけの置き場)。
 type GraphNode struct {
 	// Ref (task:、todo:、sid:、session:、issue:、pr:)。mod は切り出さずに不透明な文字列として扱う。
 	Key  string `json:"key"`
@@ -352,9 +390,11 @@ type GraphNode struct {
 	// external は済んだと分かっていない外部の参照 (issue / PR)。daemon が merged の PR、completed で閉じた issue と引けた参照は completed、マージせずに閉じた PR、not planned / duplicate で閉じた issue は dropped (取りやめ)。
 	State string `json:"state"`
 	Title string `json:"title"`
+	// kind session のノードの題の出どころ。prompt は最初の prompt、inferred は companion の推定 (推定と分かるように見せる)、human は人が直した、pane は作業の記録が無く pane の名前から付けた。
+	Origin string `json:"origin,omitempty"`
 	// issue: / pr: の置き場のノードの参照の種類。
 	RefKind string `json:"ref_kind,omitempty"`
-	// Claude Code が申告したセッションの今の作業 (OSC 7501 の msg)。kind session のノードと、進行中のタスクと TodoWrite の項目のノードに付く。
+	// セッションの今の作業。生きていれば Claude Code が申告したもの (OSC 7501 の msg)、終了していれば最後のターンの応答の 1 行目 (作業の記録)。kind session のノードと、進行中のタスクと TodoWrite の項目のノードに付く。
 	Summary string `json:"summary,omitempty"`
 	// 状態の補足 (上限の解除時刻)。
 	Detail string `json:"detail,omitempty"`

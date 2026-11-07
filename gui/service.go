@@ -90,6 +90,7 @@ var commands = map[string]time.Duration{
 	"edge add":     runTimeout,
 	"edge rm":      runTimeout,
 	"task dismiss": runTimeout,
+	"work set":     runTimeout,
 	"spawn":        spawnTimeout,
 	"tell":         tellTimeout,
 }

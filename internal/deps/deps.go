@@ -25,6 +25,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/protocol"
 	"github.com/usadamasa/agents-daemon/internal/ref"
 	"github.com/usadamasa/agents-daemon/internal/tasklog/record"
+	"github.com/usadamasa/agents-daemon/internal/worklog"
 )
 
 // Deps は `agents-daemon deps` が出す JSON の全体。形は protocol の schema が持つ。セッションの表示名はノードと
@@ -38,6 +39,8 @@ type input struct {
 	Snapshot *daemonstate.StatusSnapshot
 	Tasks    []record.Task
 	Todos    []record.TodoList
+	// Works はセッションの作業の記録 (worklog)。タスクの無いセッションのノードの材料で、終了したセッションも載る。
+	Works []worklog.Record
 	// Parking はメモ (status を問わない)。repo の memos には open のものだけを出し、タスクとの照合には全部を使う。
 	Parking []parking.Item
 	// Edges はセッションをまたぐ辺 (edge)。
@@ -78,7 +81,7 @@ func build(in input) Deps {
 		PeerNames:    peerNames(in.Sessions),
 		RefStates:    in.RefStates,
 	})
-	d.Graph.ColumnOrder = columnOrder(d.Graph.Nodes, lastActive(in.Tasks, in.Todos), func(cwd string) string {
+	d.Graph.ColumnOrder = columnOrder(d.Graph.Nodes, lastActive(in.Tasks, in.Todos, in.Works), func(cwd string) string {
 		key, _ := l.row(cwd)
 		return key
 	})
@@ -130,8 +133,9 @@ func livePanes(in input) (running bool, updatedAt *time.Time, panes map[string]*
 	return true, &updated, panes
 }
 
-// collect はタスク、TodoWrite の項目、タスクの無い生きているセッションをノードの材料にする。表示名 (Session) は
-// 呼び手が付ける。
+// collect はタスク、TodoWrite の項目、タスクの無いセッションの作業をノードの材料にする。表示名 (Session) は
+// 呼び手が付ける。タスクの無いセッションは作業の記録 (work) から作り、生きていても終了していても載る (#368)。記録の無い
+// 生きているセッション (plugin の更新前に起きたもの) は pane から作る。
 func collect(in input, panes map[string]*daemonstate.PaneStatus) []graph.Card {
 	var cards []graph.Card
 	acts := activities(panes)
@@ -150,15 +154,61 @@ func collect(in input, panes map[string]*daemonstate.PaneStatus) []graph.Card {
 				CWD: list.CWD, Live: live, Status: todo.Status, Activity: a.act, Detail: a.detail, Summary: a.summaryFor(todo.Status)})
 		}
 	}
+	withWork := map[string]bool{}
+	for _, w := range in.Works {
+		if withTasks[w.SessionID] {
+			continue
+		}
+		withWork[w.SessionID] = true
+		a, live := acts[w.SessionID]
+		summary := w.Summary
+		if live {
+			summary = a.msg
+		}
+		cards = append(cards, graph.Card{Key: ref.SessionID(w.SessionID), Kind: graph.KindSession, Origin: workOrigin(w), Title: workTitle(w, in.SessionNames[w.SessionID]), Summary: summary,
+			SessionID: w.SessionID, CWD: w.CWD, Live: live, Status: "in_progress", Activity: a.act, Detail: a.detail})
+	}
 	for id, p := range panes {
-		if withTasks[id] {
+		if withTasks[id] || withWork[id] {
 			continue
 		}
 		a := acts[id]
-		cards = append(cards, graph.Card{Key: ref.SessionID(id), Kind: graph.KindSession, Title: sessionName(p, in.SessionNames[id]), Summary: a.msg, SessionID: id,
+		cards = append(cards, graph.Card{Key: ref.SessionID(id), Kind: graph.KindSession, Origin: originPane, Title: sessionName(p, in.SessionNames[id]), Summary: a.msg, SessionID: id,
 			CWD: p.CWD, Live: true, Status: "in_progress", Activity: a.act, Detail: a.detail})
 	}
 	return cards
+}
+
+// 題の出どころ (GraphNode.origin)。prompt / human は作業の記録の origin と同じ語で、inferred は推定の題を見せているとき、
+// pane は作業の記録が無く pane の名前から付けたとき。
+const (
+	originInferred = "inferred"
+	originPane     = "pane"
+)
+
+// workOrigin は作業の記録の見せる題の出どころ。
+func workOrigin(w worklog.Record) string {
+	switch {
+	case w.Origin == worklog.OriginHuman:
+		return worklog.OriginHuman
+	case w.Inferred != "":
+		return originInferred
+	case w.Subject != "":
+		return worklog.OriginPrompt
+	default:
+		return originPane
+	}
+}
+
+// workTitle は作業の記録の見せる題。記録に題が無ければ (prompt を打つ前の Stop) セッション名か session ID。
+func workTitle(w worklog.Record, name string) string {
+	if title := worklog.Title(w); title != "" {
+		return title
+	}
+	if name != "" {
+		return name
+	}
+	return filepath.Base(w.CWD)
 }
 
 // sessionSubject はタスクの無いセッションの見出し。Claude Code が申告した今の作業 (作業中ならその作業、
@@ -253,7 +303,8 @@ type subjectPick struct {
 	title string
 }
 
-// subjectRank は見出しに選ぶ順。進行中でないものは選ばない (ok が false)。
+// subjectRank は見出しに選ぶ順。進行中でないものは選ばない (ok が false)。作業の記録から作ったセッションのノードは
+// 見せる題をそのまま見出しにし、記録の無いセッション (origin pane) は呼び手が sessionSubject に倒す。
 func subjectRank(c graph.Card) (rank int, ok bool) {
 	if c.Status != "in_progress" {
 		return 0, false
@@ -263,6 +314,8 @@ func subjectRank(c graph.Card) (rank int, ok bool) {
 		return 0, true
 	case graph.KindTodo:
 		return 1, true
+	case graph.KindSession:
+		return 2, c.Origin != originPane
 	default:
 		return 0, false
 	}

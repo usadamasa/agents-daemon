@@ -37,6 +37,7 @@ components:
       - "internal/sessionstate"
       - "internal/tasklog"
       - "internal/tasklog/record"
+      - "internal/worklog"
       - "internal/parking"
       - "internal/edge"
       - "internal/ledger"

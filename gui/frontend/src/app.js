@@ -8,8 +8,8 @@ import { fitEdges, spreadPorts } from "./ports.js";
 import { findJumps, jumpPath } from "./jumps.js";
 import { STATE_LABEL, STATE_TONE, emphasis } from "./card.js";
 import { isStale, kindLabel, lastPlacedAt, stamp } from "./memo.js";
-import { canAdopt, canDismiss, canTell, candidates, destinationLabel, isOwnTask, issueDestinations, pathDestination, peerDestinations, spawnDestinations, spawnLabel, taskDestinations } from "./ops.js";
-import { addBlocker, adopt, askUnlink, discard, discardStale, dismissAll, dismissOne, handOff, handOffTask, instruct, setStatus, start, toParking, unlink } from "./actions.js";
+import { canAdopt, canDismiss, canRename, canTell, candidates, destinationLabel, isOwnTask, issueDestinations, pathDestination, peerDestinations, spawnDestinations, spawnLabel, taskDestinations } from "./ops.js";
+import { addBlocker, adopt, askUnlink, discard, discardStale, dismissAll, dismissOne, handOff, handOffTask, instruct, rename, setStatus, start, toParking, unlink } from "./actions.js";
 import { pickFolder } from "./daemon.js";
 import { MAX_ZOOM, MIN_ZOOM, centerOffset, clampZoom, fitZoom, overflowCenter, percent, scrollAfterZoom, stepZoom, wheelZoomer } from "./zoom.js";
 import { restore, scrollView, watchUpgrade } from "./restore.js";
@@ -22,7 +22,10 @@ const POLL_MS = 3000;
 const POLL_HIDDEN_MS = 15000;
 
 const REF_KIND_LABEL = { issue: "issue", pr: "PR" };
-const KIND_LABEL = { task: "タスク", todo: "TodoWrite の項目", session: "セッション", ref: "参照" };
+const KIND_LABEL = { task: "タスク", todo: "TodoWrite の項目", session: "セッションの作業", ref: "参照" };
+// companion が会話から付けた題 (origin inferred) に添える chip の文 (出どころの説明)。直すのは題そのものを押す (OOUI:
+// 対象を選んでから動詞)。最初の prompt の題、人が直した題、記録の無い pane の名前には何も添えない。
+const INFERRED_CHIP = "会話から自動で付けた題";
 
 const state = {
   data: null,
@@ -771,6 +774,72 @@ function startPicker(n) {
 }
 
 // toggle は picker を開く・閉じる動詞。
+// renameField は単体ビューの題をその場で打ち直す欄 (題の位置に置く)。空欄では直さない。Enter で直し、Escape で戻す。
+function renameField(n) {
+  const wrap = document.createElement("span");
+  wrap.className = "edit";
+  const t = document.createElement("input");
+  t.type = "text";
+  t.className = "note draft";
+  t.setAttribute("aria-label", "作業の題");
+  t.value = state.draft === "" ? n.title : state.draft;
+  const save = document.createElement("button");
+  save.type = "button";
+  save.className = "tb sm";
+  save.textContent = "直す";
+  const submit = () => {
+    const subject = t.value.trim();
+    if (subject === "") return;
+    act(() => rename(n, subject));
+  };
+  save.disabled = state.busy;
+  save.addEventListener("click", submit);
+  t.addEventListener("input", () => {
+    state.draft = t.value;
+  });
+  t.addEventListener("keydown", (e) => {
+    if (e.isComposing) return;
+    if (e.key === "Enter") {
+      e.preventDefault();
+      submit();
+    } else if (e.key === "Escape") {
+      e.stopPropagation();
+      toggle("rename")();
+    }
+  });
+  wrap.append(t, save, cancelButton());
+  return wrap;
+}
+
+// titleOf は単体ビューの題。題を直せるノード (canRename) では題そのものが入口で、押すとその場で欄に変わる (OOUI:
+// 対象を選んでから動詞。動詞のバーに「題を直す」は置かない)。
+function titleOf(n) {
+  const title = document.createElement("span");
+  title.className = "title";
+  if (!canRename(n)) {
+    title.textContent = n.title;
+    return title;
+  }
+  if (state.picker === "rename") {
+    title.classList.add("editing");
+    title.append(renameField(n));
+    return title;
+  }
+  title.classList.add("editable");
+  title.textContent = n.title;
+  title.title = "押して題を直す (直した題は自動で書き換わらない)";
+  title.setAttribute("role", "button");
+  title.tabIndex = 0;
+  title.addEventListener("click", toggle("rename"));
+  title.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      toggle("rename")();
+    }
+  });
+  return title;
+}
+
 function toggle(name) {
   return () => {
     state.picker = state.picker === name ? null : name;
@@ -797,18 +866,18 @@ function nodePopup(n) {
   const ph = document.createElement("span");
   ph.className = "ph";
   ph.textContent = [KIND_LABEL[n.kind] ?? n.kind, n.task_id].filter(Boolean).join(" · ");
-  const title = document.createElement("span");
-  title.className = "title";
-  title.textContent = n.title;
+  const title = titleOf(n);
   const chips = document.createElement("div");
   chips.className = "chips";
   chips.append(stateChip(n));
+  // 会話から自動で付けた題は、状態の色と被らない破線の chip (guess) で出どころを示す。直すのは題を押す。
+  if (n.origin === "inferred") chips.append(chip(INFERRED_CHIP, "guess"));
   if (n.session) chips.append(chip(`${n.session} ›`, "", undefined));
   head.append(ph, title, chips);
   parts.push(head);
 
   // 動詞。送達を伴うもの (指示、渡す、着手、完了、削除、メモにする) は生きているセッションのタスクに、バイナリだけで済む
-  // もの (メモにする = adopt、一覧から外す) は終了したセッションのタスクに出る。
+  // もの (メモにする = adopt、一覧から外す) は終了したセッションのタスクと作業に出る。題を直すのは題そのもの (titleOf)。
   const verbs = [];
   if (canTell(n)) verbs.push(actButton("指示を送る", "send", on("instruct"), toggle("instruct")));
   if (n.endpoint && n.cwd !== undefined) verbs.push(actButton("依存を足す", "link", on("blocker"), toggle("blocker")));
@@ -1041,7 +1110,7 @@ function renderBulk() {
   const ended = visibleNodes().filter((n) => canDismiss(n, state.data));
   const dismissBtn = el("dismiss-ended");
   dismissBtn.hidden = ended.length === 0;
-  dismissBtn.textContent = `終了したセッションのタスク ${ended.length} 件を外す`;
+  dismissBtn.textContent = `終了したセッションのタスクと作業 ${ended.length} 件を外す`;
   dismissBtn.disabled = state.busy;
   dismissBtn.onclick = () => act(() => dismissAll(ended));
 

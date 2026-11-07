@@ -11,17 +11,23 @@ export function candidates(g, selected) {
   );
 }
 
-// canDismiss はノードを一覧から外せるか。終了したセッションのタスク (完了しているかを問わない) だけ。TodoWrite の
-// 項目はセッションの 1 リストなので 1 項目では消せず、置き場のノードには消す記録が無い。daemon が status.json を
-// 書いていない依存図は生きているセッションも live でないと描くので出さない。
+// canDismiss はノードを一覧から外せるか。終了したセッションのタスク (完了しているかを問わない) と作業 (タスクの無い
+// セッション、#368) だけ。TodoWrite の項目はセッションの 1 リストなので 1 項目では消せず、置き場のノードには消す記録が
+// 無い。daemon が status.json を書いていない依存図は生きているセッションも live でないと描くので出さない。
 export function canDismiss(node, data) {
-  return data.updated_at !== undefined && node.kind === "task" && !node.live && node.session_id !== undefined;
+  return data.updated_at !== undefined && (node.kind === "task" || node.kind === "session") && !node.live && node.session_id !== undefined;
 }
 
-// canAdopt はタスクのノードをパーキングへ移せるか。外せるタスクのうち未完了のものだけ。押した後の判定はバイナリが
+// canAdopt はタスクか作業のノードをパーキングへ移せるか。外せるもののうち未完了のものだけ。押した後の判定はバイナリが
 // status.json で改めて行う (`park adopt`)。
 export function canAdopt(node, data) {
   return canDismiss(node, data) && node.state !== "completed";
+}
+
+// canRename は作業の題を人が直せるか。作業の記録のあるセッションのノード (origin が pane でないもの) だけで、生きていても
+// 終了していてもよい。直した題は origin human になり、hook と companion が書き換えない (`work set`)。
+export function canRename(node) {
+  return node.kind === "session" && node.origin !== undefined && node.origin !== "pane";
 }
 
 // spawnDestinations は「新しいセッションを起こして渡す」の repo の候補: first (メモの repo)、依存図に出ている repo、

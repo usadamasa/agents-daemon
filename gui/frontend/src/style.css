@@ -74,6 +74,8 @@ select { font: inherit; color: inherit; }
 .chip.limit { background: var(--purple-soft); color: var(--purple-ink); }
 .chip.err { background: #f3e0e1; color: #6e2328; }
 .chip.drop { background: var(--slate-soft); color: var(--slate-ink); }
+/* 会話から自動で付けた題 (companion)。状態の色 (ok / warn / limit / err / drop) と被らないよう、塗らずに破線の縁で「仮」を表す。 */
+.chip.guess { background: transparent; border: 1px dashed var(--ink-soft); color: var(--ink-soft); padding: 2px 9px; }
 .chip.link { cursor: pointer; }
 .chip.link:hover { text-decoration: underline; }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; background: var(--green); flex: 0 0 auto; }
@@ -256,6 +258,11 @@ select { font: inherit; color: inherit; }
 }
 .pop .head { display: flex; flex-direction: column; gap: 6px; padding-right: 28px; }
 .pop .title { font-size: 16px; font-weight: 700; line-height: 1.35; }
+/* 直せる題は題そのものが入口 (押すとその場で欄に変わる)。縁の破線で直せることを示す。 */
+.pop .title.editable { cursor: text; border-bottom: 1px dashed var(--line); }
+.pop .title.editable:hover, .pop .title.editable:focus-visible { border-bottom-color: var(--ink-soft); outline: none; }
+.pop .title .edit { display: flex; align-items: center; gap: 8px; }
+.pop .title .edit input { flex: 1 1 auto; min-width: 0; font: inherit; padding: 2px 6px; border: 1px solid var(--line); border-radius: 6px; }
 .pop .chips { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .pop p { margin: 0; font-size: 12.5px; line-height: 1.6; color: var(--ink-soft); white-space: pre-wrap; }
 .pop .grp { display: flex; flex-direction: column; gap: 2px; }

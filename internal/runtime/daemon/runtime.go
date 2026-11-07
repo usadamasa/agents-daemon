@@ -33,6 +33,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 	"github.com/usadamasa/agents-daemon/internal/turnfailure"
+	"github.com/usadamasa/agents-daemon/internal/worklog"
 )
 
 // maxConsecutiveTickFailures は PaneList の取得にこの回数だけ連続で
@@ -76,6 +77,8 @@ type daemonRuntime struct {
 	// tasks は hook が書くタスクの記録 (tasklog)。daemon は housekeeping で消すだけ。
 	// ゼロ値は何も消さない。
 	tasks tasklog.Store
+	// works は hook が書くセッションの作業の記録 (worklog)。daemon は housekeeping で消すだけ。ゼロ値は何も消さない。
+	works worklog.Store
 	// edges は `edge add` が書くセッションをまたぐ辺 (edge)。daemon は tick ごとに session:<名前> の
 	// 端点を台帳のセッションに結びつけ、housekeeping で消す。ゼロ値は何もしない。
 	edges edge.Store

@@ -13,6 +13,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/refstate"
 	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
+	"github.com/usadamasa/agents-daemon/internal/worklog"
 )
 
 // Write は依存図を組み、JSON で w へ書く。読み手 (アプリ、handoff-notice の mod) はどのセッションにも属さないので、
@@ -29,6 +30,10 @@ func Write(w io.Writer, p apppath.Paths) error {
 		return err
 	}
 	todos, err := store.ListTodos()
+	if err != nil {
+		return err
+	}
+	works, err := worklog.New(p.StateDir()).List()
 	if err != nil {
 		return err
 	}
@@ -57,6 +62,7 @@ func Write(w io.Writer, p apppath.Paths) error {
 		Snapshot:     snap,
 		Tasks:        tasks,
 		Todos:        todos,
+		Works:        works,
 		Parking:      memos,
 		Edges:        edges,
 		Locate:       gitrepo.Locate,

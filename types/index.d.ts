@@ -63,12 +63,50 @@ export type ParkWithdrawRequest = {
   session_id: string
 }
 
-// park adopt の stdin。終了したセッションの未完了のタスクを出自 adopted (種類 scope) のメモにし、タスクの記録を消して ParkAdded を出す。セッションの終了は、動いている daemon がタスクの記録より後に書いた status.json に pane が無いことで確かめる
+// park adopt の stdin。終了したセッションの未完了のタスク (task:) か、タスクの無いセッションの作業 (sid:) を出自 adopted (種類 scope) のメモにし、その記録を消して ParkAdded を出す。セッションの終了は、動いている daemon が記録より後に書いた status.json に pane が無いことで確かめる
 export type ParkAdoptRequest = {
-  // 依存図のタスクのノードの key (task:<session_id>/<task_id>)
+  // 依存図のノードの key (task:<session_id>/<task_id> か sid:<session_id>)
   ref: string
   // 操作したセッションの ID (ログに添える)
   session_id?: string
+}
+
+// work set の stdin。セッションの作業の記録の題を書き換え、Work を出す。subject は人が直した題 (出どころ human。以後の hook と companion は書き換えない)、inferred は companion の推定の題 (subject とは別の欄で、人が直していなければこちらを見せる)。どちらか 1 つ以上。記録が無ければ exit 1
+export type WorkSetRequest = {
+  // 作業のセッションの ID
+  session_id: string
+  // 人が直した題
+  subject?: string
+  // companion の推定の題
+  inferred?: string
+}
+
+// work get の stdin。セッションの作業の記録を Work で出す。無ければ exit 1
+export type WorkGetRequest = {
+  // 作業のセッションの ID
+  session_id: string
+}
+
+// セッション 1 つの作業の記録 (work get、work set の出力)。hook が書く事実 (最初の prompt の題、最後のターンの要約、turns、始まりと終わり) と、人の直した題、companion の推定の題
+export type Work = {
+  session_id: string
+  cwd: string
+  // 題 (出どころは origin)
+  subject?: string
+  // 題の出どころ。prompt は最初の prompt の 1 行目、human は人が work set で直した
+  origin?: 'prompt' | 'human'
+  // companion の推定の題
+  inferred?: string
+  // 最後のターンの応答の 1 行目
+  summary?: string
+  // UserPromptSubmit の数 (peer の delivery も数える)
+  turns: number
+  started_at: string
+  updated_at: string
+  // SessionEnd の時刻。生きている (resume した) 間は無い
+  ended_at?: string
+  // SessionEnd の reason
+  end_reason?: string
 }
 
 // park hand の stdin。open のメモを取り (status handed、宛先付き)、文面を組んで宛先へ渡し、届かなければ open に戻す。宛先は生きているセッション (to_session。tell で入力欄に打つ) か、新しく起こすセッションの repo (to_repo。spawn) のどちらか 1 つ。取れなければ (ほかが先に渡した、捨てた) 何もせず exit 1 で理由を返し、取れた後は届かなくても ParkHandResult を出す
@@ -102,9 +140,9 @@ export type ParkHandResult = {
   warning?: string
 }
 
-// task dismiss の stdin。終了したセッションのタスク (完了しているかを問わない) の記録を消して依存図から外し、{} を出す。セッションの終了は park adopt と同じく status.json で確かめ、確かめられなければ消さずに exit 1 で理由を返す
+// task dismiss の stdin。終了したセッションのタスク (完了しているかを問わない。task:) か、タスクの無いセッションの作業 (sid:) の記録を消して依存図から外し、{} を出す。セッションの終了は park adopt と同じく status.json で確かめ、確かめられなければ消さずに exit 1 で理由を返す
 export type TaskDismissRequest = {
-  // 依存図のタスクのノードの key (task:<session_id>/<task_id>)
+  // 依存図のノードの key (task:<session_id>/<task_id> か sid:<session_id>)
   ref: string
   // 操作したセッションの ID (ログに添える)
   session_id?: string
@@ -344,7 +382,7 @@ export type DepsGraph = {
   column_order: string[]
 }
 
-// 依存の DAG のノード 1 つ (タスク 1 つ、タスクの無いセッション、端点の参照だけの置き場)
+// 依存の DAG のノード 1 つ (タスク 1 つ、タスクの無いセッションの作業、端点の参照だけの置き場)
 export type GraphNode = {
   // Ref (task:、todo:、sid:、session:、issue:、pr:)。mod は切り出さずに不透明な文字列として扱う
   key: string
@@ -352,9 +390,11 @@ export type GraphNode = {
   // external は済んだと分かっていない外部の参照 (issue / PR)。daemon が merged の PR、completed で閉じた issue と引けた参照は completed、マージせずに閉じた PR、not planned / duplicate で閉じた issue は dropped (取りやめ)
   state: 'working' | 'done' | 'unknown' | 'question' | 'permission' | 'error' | 'limit' | 'pending' | 'completed' | 'exited' | 'external' | 'dropped'
   title: string
+  // kind session のノードの題の出どころ。prompt は最初の prompt、inferred は companion の推定 (推定と分かるように見せる)、human は人が直した、pane は作業の記録が無く pane の名前から付けた
+  origin?: 'prompt' | 'inferred' | 'human' | 'pane'
   // issue: / pr: の置き場のノードの参照の種類
   ref_kind?: 'issue' | 'pr'
-  // Claude Code が申告したセッションの今の作業 (OSC 7501 の msg)。kind session のノードと、進行中のタスクと TodoWrite の項目のノードに付く
+  // セッションの今の作業。生きていれば Claude Code が申告したもの (OSC 7501 の msg)、終了していれば最後のターンの応答の 1 行目 (作業の記録)。kind session のノードと、進行中のタスクと TodoWrite の項目のノードに付く
   summary?: string
   // 状態の補足 (上限の解除時刻)
   detail?: string
@@ -457,6 +497,10 @@ declare module 'claude-code' {
       told: string[]
       // logged は出来事のログに slot ごとに最後に書いた中身 (hooks/log.ts)。同じものを書き直さないため。
       logged: Record<string, string>
+      // inferDue は main のターンが終わってから companion の timer がまだ見ていない印 (hooks/work-infer.ts)。
+      inferDue: boolean
+      // inferAttempts はこのセッションで companion が推定を起こした回数。上限で止まる。
+      inferAttempts: number
     }
   }
 }

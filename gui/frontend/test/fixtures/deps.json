@@ -88,12 +88,12 @@
         "depth": 3, "downstream": 1, "parked": 0, "memos": [], "blocked_by": ["task:beta/1"], "deadlock": false, "halted": false, "stuck": false
       },
       {
-        "key": "sid:gamma", "kind": "session", "state": "exited", "title": "gamma",
+        "key": "sid:gamma", "kind": "session", "state": "exited", "title": "gamma", "origin": "prompt", "summary": "最後の応答",
         "endpoint": true, "cwd": "/repo/agents-daemon", "session_id": "sid-gamma", "session": "gamma", "live": false,
         "depth": 0, "downstream": 0, "parked": 0, "memos": [], "blocked_by": [], "deadlock": false, "halted": false, "stuck": false
       },
       {
-        "key": "sid:zeta", "kind": "session", "state": "working", "title": "zeta", "summary": "issue を読んでいる",
+        "key": "sid:zeta", "kind": "session", "state": "working", "title": "zeta", "origin": "inferred", "summary": "issue を読んでいる",
         "endpoint": true, "cwd": "/repo/other", "session_id": "sid-zeta", "session": "zeta", "session_name": "zeta", "live": true,
         "depth": 0, "downstream": 0, "parked": 0, "memos": [], "blocked_by": [], "deadlock": false, "halted": false, "stuck": false
       },

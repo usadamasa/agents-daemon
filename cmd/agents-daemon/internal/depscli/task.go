@@ -13,22 +13,23 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/protocol"
 	"github.com/usadamasa/agents-daemon/internal/ref"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
+	"github.com/usadamasa/agents-daemon/internal/worklog"
 )
 
-// newTaskCmd は `agents-daemon task dismiss` を組み立てる。依存図の pane が、終了したセッションのタスクを一覧から
-// 外すのに使う (#337)。入力は stdin の JSON で受け、成功は {} を出す。
+// newTaskCmd は `agents-daemon task dismiss` を組み立てる。依存図のアプリが、終了したセッションのタスク (task:) か
+// タスクの無いセッションの作業 (sid:、#368) を一覧から外すのに使う (#337)。入力は stdin の JSON で受け、成功は {} を出す。
 func newTaskCmd() *cobra.Command {
-	cmd := &cobra.Command{Use: "task", Short: "依存図に出るタスクの記録を操作する"}
+	cmd := &cobra.Command{Use: "task", Short: "依存図に出るタスクと作業の記録を操作する"}
 	dismiss := &cobra.Command{
 		Use:   "dismiss",
-		Short: "stdin の TaskDismissRequest で終了したセッションのタスクの記録を消す",
+		Short: "stdin の TaskDismissRequest で終了したセッションのタスクか作業の記録を消す",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return statecmd.Run(cmd, statecmd.Decoded("TaskDismissRequest", func(p apppath.Paths, req protocol.TaskDismissRequest) (any, error) {
 				exited := func(sessionID string, after time.Time) error {
 					return daemonstate.SessionExited(p, sessionID, after)
 				}
-				return struct{}{}, dismissTask(p.StateDir(), tasklog.New(p.StateDir()), req.SessionID, req.Ref, exited, time.Now())
+				return struct{}{}, dismiss(p.StateDir(), tasklog.New(p.StateDir()), worklog.New(p.StateDir()), req.SessionID, req.Ref, exited, time.Now())
 			}))
 		},
 	}
@@ -36,10 +37,18 @@ func newTaskCmd() *cobra.Command {
 	return cmd
 }
 
-// dismissTask は参照のタスクの記録を消し、結果を出来事のログに書く。viewer は操作したセッション。
-func dismissTask(stateDir string, tasks tasklog.Store, viewer, r string, exited func(string, time.Time) error, now time.Time) error {
+// dismiss は参照のタスク (task:) か作業 (sid:) の記録を消し、結果を出来事のログに書く。viewer は操作したセッション。
+func dismiss(stateDir string, tasks tasklog.Store, works worklog.Store, viewer, r string, exited func(string, time.Time) error, now time.Time) error {
+	if sessionID, ok := ref.ParseSessionID(r); ok {
+		if err := works.Dismiss(sessionID, exited); err != nil {
+			_ = eventlog.Record(stateDir, viewer, "work.dismiss.failed", []string{kv("ref", r), kv("reason", err)}, now)
+			return err
+		}
+		_ = eventlog.Record(stateDir, viewer, "work.dismiss", []string{kv("from_session", sessionID)}, now)
+		return nil
+	}
 	sessionID, taskID, ok := ref.ParseTask(r)
-	err := fmt.Errorf("参照 %q は task:<session_id>/<task_id> の形でない", r)
+	err := fmt.Errorf("参照 %q は task:<session_id>/<task_id> か sid:<session_id> の形でない", r)
 	if ok {
 		err = tasks.Dismiss(sessionID, taskID, exited)
 	}

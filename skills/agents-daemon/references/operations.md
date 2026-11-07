@@ -86,7 +86,7 @@ Claude Code の sandbox の中で叩くと、`git worktree remove` は main work
 渡す操作から両端を自動で決めることはせず、辺の無い生きているセッションへ `SendMessage` で送ると、
 その tool の結果で送った model に辺の書き方を伝える (#172)。
 
-アプリと mod が呼ぶコマンド (`deps`、`park`、`edge add` / `rm`、`task dismiss`、`spawn`、`tell`、`event-log`) は入力を
+アプリと mod が呼ぶコマンド (`deps`、`park`、`edge add` / `rm`、`task dismiss`、`work set` / `get`、`spawn`、`tell`、`event-log`) は入力を
 stdin の JSON だけで受ける。
 形と欄の意味はバイナリに埋め込んだ JSON Schema (`protocol/protocol.schema.json`) の `$defs` が持ち、
 外れた入力は schema の検証の文言で弾く。人が打つときも同じ JSON を渡す。
@@ -139,22 +139,37 @@ printf '%s' '{"id":"<id>","status":"open"}' | agents-daemon park set            
 - メモを渡すのはアプリの「タスクにする」「issue にする」(`park hand`)。取る (handed)、送る (生きているセッションの
   入力欄に `tell` で打つか、`spawn` で新しいセッションを起こす)、届かなければ戻す (open) を 1 回で行う
 
-### 終了したセッションのタスクを一覧から外す
+### 終了したセッションのタスクと作業を一覧から外す
 
 ```sh
 printf '%s' '{"ref":"task:<session_id>/<task_id>"}' | agents-daemon task dismiss   # TaskDismissRequest → {}
+printf '%s' '{"ref":"sid:<session_id>"}' | agents-daemon task dismiss              # タスクの無いセッションの作業
 ```
 
-- アプリの「一覧から外す」と「終了したセッションのタスク n 件を外す」(1 つずつ呼ぶ) が使う。終了したセッションの
-  タスクの記録を、完了しているかを問わず消す
+- アプリの「一覧から外す」と「終了したセッションのタスクと作業 n 件を外す」(1 つずつ呼ぶ) が使う。終了したセッションの
+  タスクの記録 (完了しているかを問わない) か作業の記録 (`sid:`、#368) を消す
 - セッションの終了は動いている daemon の status.json で確かめ、確かめられなければ消さずに exit 1 で理由を出す
-- 消した記録は戻せない。メモとして残すなら「メモにする」(`park adopt`) を使う
+- 消した記録は戻せない。メモとして残すなら「メモにする」(`park adopt`。`sid:` も受ける) を使う
+
+### セッションの作業の記録を読む・題を直す
+
+```sh
+printf '%s' '{"session_id":"<session_id>"}' | agents-daemon work get                       # WorkGetRequest → Work
+printf '%s' '{"session_id":"<session_id>","subject":"直した題"}' | agents-daemon work set   # WorkSetRequest → Work
+```
+
+- 作業の記録 (`work/<session_id>.json`) は hook が書く: 最初の prompt の 1 行目が題 (origin prompt)、Stop ごとの最後の
+  応答の 1 行目が要約、turns、始まりと終わり。model が Task 系ツールを打たなくても、prompt を打ったセッションは依存図に
+  作業のノード (`sid:<session_id>`) で載り、終了しても 7 日残る
+- `subject` を書くと出どころが human になり、以後の hook と companion は書き換えない (アプリの「題を直す」が使う)。
+  `inferred` は companion (mod) が会話から推定した題で、人が直していなければアプリはこちらを題にし、「会話から自動で
+  付けた題 · 直す」の chip (押すと直せる) を添える
 
 ### `--json`
 
 root のグローバルオプション。付けると、人が読む形の代わりに JSON を 1 つ stdout に出す。
-元から JSON を出す `deps`、`park`、`edge`、`task`、`spawn` は付けても変わらない。
-stdout を Claude Code や mod が読む hook 用のコマンド (`statusline`、`ingest-statusline`、`ingest-task`、`ingest-turn-failure`、`event-log`) と、
+元から JSON を出す `deps`、`park`、`edge`、`task`、`work`、`spawn` は付けても変わらない。
+stdout を Claude Code や mod が読む hook 用のコマンド (`statusline`、`ingest-statusline`、`ingest-task`、`ingest-work`、`ingest-turn-failure`、`event-log`) と、
 子プロセスの出力を流すだけの `update` は対応しない。付けると、文字の出力を JSON と思い込んで読む事故を避けるため
 error で止まる。flag の組み合わせで JSON にできないもの (`daemon --foreground`、`prune-worktrees --hook`、
 `dream harvest --detach`) も同じ。

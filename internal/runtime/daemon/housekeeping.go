@@ -1,6 +1,8 @@
 package daemon
 
 import (
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/applog"
@@ -12,6 +14,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/runtime/daemon/limitlog"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 	"github.com/usadamasa/agents-daemon/internal/turnfailure"
+	"github.com/usadamasa/agents-daemon/internal/worklog"
 )
 
 // ランタイム状態は揮発物として扱い、daemon 自身が古いものを消す。sidecar file の
@@ -25,11 +28,12 @@ const (
 	housekeepInterval = time.Hour
 )
 
-// attachStateDir は housekeeping が消す対象 (tasks / parking / edges / sessions / events log / limit-events /
+// attachStateDir は housekeeping が消す対象 (tasks / work / parking / edges / sessions / events log / limit-events /
 // turn-failures) の置き場を stateDir から配線する。sessions と limit-events は daemon が書く先、edges は daemon が
 // 端点を結びつける先、turn-failures は上限の出来事に添えて読む先でもある。
 func (r *daemonRuntime) attachStateDir(stateDir string) {
 	r.tasks = tasklog.New(stateDir)
+	r.works = worklog.New(stateDir)
 	r.parking = parking.New(stateDir)
 	r.edges = edge.New(stateDir)
 	r.sessions = ledger.New(stateDir)
@@ -42,6 +46,27 @@ func (r *daemonRuntime) attachStateDir(stateDir string) {
 // housekeepDue は前回の housekeeping から housekeepInterval 以上経ったかを返す。
 func (r *daemonRuntime) housekeepDue(now time.Time) bool {
 	return r.lastHousekeepAt.IsZero() || !now.Before(r.lastHousekeepAt.Add(housekeepInterval))
+}
+
+// sidecar は housekeeping が消す記録の 1 種類。label はログの文面、prune は消した数を返す。
+type sidecar struct {
+	label string
+	prune func(now time.Time) (int, error)
+}
+
+// sidecars は保持期間を書式のパッケージが持つ記録の一覧。並びがそのままログの並びになる。
+// 記録を足すときはここに 1 行足す (housekeep は変えない)。
+func (r *daemonRuntime) sidecars() []sidecar {
+	return []sidecar{
+		{"タスクの記録", r.tasks.Prune},
+		{"作業の記録", r.works.Prune},
+		{"パーキング", r.parking.Prune},
+		{"辺", r.edges.Prune},
+		{"上限の出来事", r.limits.Prune},
+		{"セッション台帳", r.sessions.Prune},
+		{"turn の失敗", r.turnFailures.Prune},
+		{"外部の参照", r.refs.Prune},
+	}
 }
 
 // housekeep は保持期間を過ぎた rotated ログと sidecar file を消す。何かを
@@ -65,36 +90,21 @@ func (r *daemonRuntime) housekeep(logPath string, now time.Time) {
 	if err != nil {
 		r.log.Logf("sidecar file の削除でエラー: %v", err)
 	}
-	tasks, err := r.tasks.Prune(now)
-	if err != nil {
-		r.log.Logf("タスクの記録の削除でエラー: %v", err)
+	removed := logs + states + contexts
+	counts := []string{
+		fmt.Sprintf("rotated ログ %d 件", logs),
+		fmt.Sprintf("利用上限 state %d 件", states),
+		fmt.Sprintf("context state %d 件", contexts),
 	}
-	parked, err := r.parking.Prune(now)
-	if err != nil {
-		r.log.Logf("パーキングの削除でエラー: %v", err)
+	for _, s := range r.sidecars() {
+		n, err := s.prune(now)
+		if err != nil {
+			r.log.Logf("%sの削除でエラー: %v", s.label, err)
+		}
+		removed += n
+		counts = append(counts, fmt.Sprintf("%s %d 件", s.label, n))
 	}
-	edges, err := r.edges.Prune(now)
-	if err != nil {
-		r.log.Logf("辺の削除でエラー: %v", err)
-	}
-	limits, err := r.limits.Prune(now)
-	if err != nil {
-		r.log.Logf("上限の出来事の記録の削除でエラー: %v", err)
-	}
-	sessions, err := r.sessions.Prune(now)
-	if err != nil {
-		r.log.Logf("セッション台帳の削除でエラー: %v", err)
-	}
-	failures, err := r.turnFailures.Prune(now)
-	if err != nil {
-		r.log.Logf("turn の失敗の記録の削除でエラー: %v", err)
-	}
-	refs, err := r.refs.Prune(now)
-	if err != nil {
-		r.log.Logf("外部の参照の写しの削除でエラー: %v", err)
-	}
-	if logs > 0 || states > 0 || contexts > 0 || tasks > 0 || parked > 0 || edges > 0 || limits > 0 || sessions > 0 || failures > 0 || refs > 0 {
-		r.log.Logf("保持期間を過ぎたファイルを削除しました: rotated ログ %d 件、利用上限 state %d 件、context state %d 件、タスクの記録 %d 件、パーキング %d 件、辺 %d 件、上限の出来事 %d 件、セッション台帳 %d 件、turn の失敗 %d 件、外部の参照 %d 件",
-			logs, states, contexts, tasks, parked, edges, limits, sessions, failures, refs)
+	if removed > 0 {
+		r.log.Logf("保持期間を過ぎたファイルを削除しました: %s", strings.Join(counts, "、"))
 	}
 }

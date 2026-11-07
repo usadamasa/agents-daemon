@@ -55,6 +55,14 @@ run models/handoff EdgeBind EdgeBind.cfg holds
 run models/handoff EdgeBind EdgeBindRaceAdd.cfg violated
 # lock 無しで結びつけが読んでから書くと、間に edge rm で消した辺を作り直す (NoResurrect の反例)。
 run models/handoff EdgeBind EdgeBindRaceRemove.cfg violated
+# hook と companion が work/.lock の中で読んでから自分の欄だけを書く形 (worklog)。liveness も見る。
+run models/work Work Work.cfg holds
+# lock 無しで読んだ写しを書くと、人が直した subject を hook が戻す (HumanSubjectKept の反例)。
+run models/work Work WorkRace.cfg violated
+# 同じく、SessionEnd が書いた ended を遅れた Stop や companion が消す (EndedStays の反例)。
+run models/work Work WorkRaceEnded.cfg violated
+# 同じく、UserPromptSubmit と Stop が交錯して turns の更新を失う (NoLostUpdate の反例)。
+run models/work Work WorkRaceTurns.cfg violated
 # 外部の参照の状態を daemon が gh で引いて写しに書き、依存図が merged / closed を完了にする形 (#416)。
 run models/refstate RefState RefState.cfg holds
 # gh の失敗を closed として写しに書くと、済んでいない参照を完了と見せる (NoFalseComplete の反例)。

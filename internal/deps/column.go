@@ -8,6 +8,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/protocol"
 	"github.com/usadamasa/agents-daemon/internal/ref"
 	"github.com/usadamasa/agents-daemon/internal/tasklog/record"
+	"github.com/usadamasa/agents-daemon/internal/worklog"
 )
 
 // columnTier は依存図の右の列 (依存の無いノード) の段。小さいほど上に出す (#420)。
@@ -26,9 +27,9 @@ var columnTier = map[string]int{
 	graph.StateCompleted:  5,
 }
 
-// lastActive はノードの key → 最後に動いた時刻 (タスクと TodoWrite の記録の更新時刻)。タスクの無いセッションは
-// 活動の変わった時刻を daemon が持たないので載らない。
-func lastActive(tasks []record.Task, todos []record.TodoList) map[string]time.Time {
+// lastActive はノードの key → 最後に動いた時刻 (タスクと TodoWrite の記録の更新時刻、作業の記録の更新時刻)。作業の
+// 記録の無いセッションは活動の変わった時刻を daemon が持たないので載らない。
+func lastActive(tasks []record.Task, todos []record.TodoList, works []worklog.Record) map[string]time.Time {
 	out := map[string]time.Time{}
 	for _, t := range tasks {
 		out[ref.Task(t.SessionID, t.ID)] = t.UpdatedAt
@@ -37,6 +38,9 @@ func lastActive(tasks []record.Task, todos []record.TodoList) map[string]time.Ti
 		for i := range list.Todos {
 			out[ref.Todo(list.SessionID, i)] = list.UpdatedAt
 		}
+	}
+	for _, w := range works {
+		out[ref.SessionID(w.SessionID)] = w.UpdatedAt
 	}
 	return out
 }

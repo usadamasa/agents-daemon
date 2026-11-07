@@ -29,7 +29,7 @@ README の「役割」が持つ。機能を足す・外す判断はそこに照�
 | `internal/protocol/protocol.schema.json` | mod とバイナリが受け渡す JSON の形の定義。Go の型 (`types.go`) の生成元 |
 | `tests/` | hook と script の bats テスト |
 | `ci/mod-types/` | `task typecheck` が使う mod の型の写し (`task mod-types:sync`) |
-| `models/handoff/` | メモの受け渡しの TLA+ のモデル (`task model-check`) |
+| `models/handoff/`、`models/work/` | メモの受け渡しとセッションの作業の記録の TLA+ のモデル (`task model-check`) |
 | `models/refstate/` | 外部の参照 (issue / PR) の状態を引いて依存図へ写し、済んだ参照の辺を消す TLA+ のモデル |
 | `flake.nix` | 開発ツールの devShell |
 | `.claude/skills/` | この repo の保守用 skill。plugin には同梱しない |

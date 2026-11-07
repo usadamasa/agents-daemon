@@ -1,5 +1,5 @@
 // Package depscli は依存図のコマンド (アプリと mod が読む deps、セッションをまたぐ辺の edge、タスクの記録の ingest-task と
-// task dismiss) と、
+// task dismiss、セッションの作業の記録の ingest-work と work set / get) と、
 // mod の出来事をログに書く event-log の組み立てを持つ。
 package depscli
 
@@ -13,7 +13,7 @@ import (
 
 // Commands は root に登録するコマンド。
 func Commands() []*cobra.Command {
-	return []*cobra.Command{newDepsCmd(), newEdgeCmd(), newTaskCmd(), newIngestTaskCmd(), newEventLogCmd()}
+	return []*cobra.Command{newDepsCmd(), newEdgeCmd(), newTaskCmd(), newIngestTaskCmd(), newWorkCmd(), newIngestWorkCmd(), newEventLogCmd()}
 }
 
 // newDepsCmd は `agents-daemon deps` を組み立てる。依存図の JSON (deps パッケージ) を出し、アプリ (gui/) が数秒ごとに、

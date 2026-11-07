@@ -103,7 +103,8 @@ func TestRunner_Run(t *testing.T) {
 		t.Fatalf("result = %+v", res)
 	}
 	// block は ID の順に見る (shellID の方が古い)。
-	want := []string{"PaneGet:" + shellID, "PaneGet:" + claudeID, "PaneRead:" + claudeID, "SendText:" + claudeID, "SendKeys:" + claudeID}
+	// Enter の直前に pane をもう一度見る (#372)。
+	want := []string{"PaneGet:" + shellID, "PaneGet:" + claudeID, "PaneRead:" + claudeID, "SendText:" + claudeID, "PaneGet:" + claudeID, "SendKeys:" + claudeID}
 	if strings.Join(f.host.Calls, ",") != strings.Join(want, ",") {
 		t.Fatalf("calls = %v", f.host.Calls)
 	}
@@ -252,6 +253,46 @@ func TestTypedRemainder(t *testing.T) {
 		if got := typedRemainder(tc.styled); got != tc.want {
 			t.Errorf("typedRemainder(%q) = %q, want %q", tc.styled, got, tc.want)
 		}
+	}
+}
+
+// 文面を打ってから Enter までの間に prompt が開いたら、Enter を送らずに文面を入力欄に残して理由を返す (#372)。
+// Enter が prompt の承認にならないようにする。pane を読み直せないときも Enter を送らない。
+func TestRunner_Run_promptOpensBeforeEnter(t *testing.T) {
+	cases := []struct {
+		name   string
+		during func(f *fixture)
+		want   string
+	}{
+		{"permission の prompt が開いた", func(f *fixture) {
+			f.panes[claudeID] = multiplexer.Pane{PaneID: claudeID, Agent: "claude-code", AgentStatus: multiplexer.AgentStatusBlocked, AgentKind: multiplexer.AgentKindPermission, AgentMessage: "approve Bash?", SessionID: sid}
+		}, "prompt"},
+		{"pane を読み直せない", func(f *fixture) { delete(f.panes, claudeID) }, "読み直せない"},
+		// claude が終わって shell が前景になると、Enter で文面がコマンドとして走る。
+		{"前景が shell に変わった", func(f *fixture) { f.panes[claudeID] = multiplexer.Pane{PaneID: claudeID, SessionID: sid} }, "claude が前景でない"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFixture()
+			r := f.runner()
+			r.Sleep = func(time.Duration) { tc.during(f) }
+			res, err := r.Run(context.Background(), request("hello"))
+			if err == nil || !strings.Contains(err.Error(), tc.want) || !strings.Contains(err.Error(), "文面は入力欄に残っている") {
+				t.Fatalf("err = %v, want %q", err, tc.want)
+			}
+			// 文面を打った pane は、送れなかったときも記録 (event log) に残せるよう返す。
+			if res.PaneID != claudeID {
+				t.Fatalf("result = %+v", res)
+			}
+			if len(f.host.SentTexts) != 1 {
+				t.Fatalf("sent = %v", f.host.SentTexts)
+			}
+			for _, c := range f.host.Calls {
+				if strings.HasPrefix(c, "SendKeys") {
+					t.Fatalf("Enter を送っている: %v", f.host.Calls)
+				}
+			}
+		})
 	}
 }
 

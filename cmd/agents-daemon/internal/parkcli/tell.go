@@ -23,7 +23,8 @@ func newTellCmd() *cobra.Command {
 		Short: "stdin の TellRequest の text を、to_session のセッションの pane の入力欄に打って Enter を送る",
 		Long: "依存図のアプリ (gui/) が利用者の押した操作 (指示、タスクの着手や完了の依頼、メモの手渡し) をセッションへ届けるときに呼ぶ。\n" +
 			"送る前に pane を読み、利用者の答えを待つ prompt が開いている、上限の画面、入力欄に打ちかけの文がある、claude が前景でない、\n" +
-			"のどれかなら送らずに exit 1 で理由を出す。送れたら TellResult を JSON で出す。",
+			"のどれかなら送らずに exit 1 で理由を出す。文面を打った後に prompt が開いたら、Enter を送らずに文面を入力欄に残して exit 1 で理由を出す。\n" +
+			"送れたら TellResult を JSON で出す。",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return statecmd.Run(cmd, statecmd.Decoded("TellRequest", func(paths apppath.Paths, req protocol.TellRequest) (any, error) {

@@ -79,7 +79,12 @@ select { font: inherit; color: inherit; }
 .dot.err { background: var(--red); }
 
 .graph { flex: 1 1 0; min-height: 160px; position: relative; overflow: auto; }
-.graph .canvas { position: relative; }
+/* 拡大率は #graph の --zoom に置く。canvas は描き直すたびに作り直すが、変数は #graph に残る。
+   CSS の zoom は transform と違ってレイアウトの大きさも変えるので、スクロールの範囲が図に追従する */
+.graph { --zoom: 1; }
+.graph .canvas { position: relative; zoom: var(--zoom); }
+.zoom { display: inline-flex; align-items: center; gap: 4px; }
+.zoom #zoom-reset { min-width: 56px; justify-content: center; font-variant-numeric: tabular-nums; }
 .graph svg.edges { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
 .graph svg.edges path { fill: none; stroke: var(--line-strong); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .graph svg.edges path.edge { stroke-dasharray: 6 6; }

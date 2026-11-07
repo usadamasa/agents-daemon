@@ -8,6 +8,7 @@ import { isStale, kindLabel, lastPlacedAt, stamp } from "./memo.js";
 import { canAdopt, canDismiss, canTell, candidates, destinationLabel, isOwnTask, issueDestinations, pathDestination, peerDestinations, spawnDestinations, spawnLabel, taskDestinations } from "./ops.js";
 import { addBlocker, adopt, askUnlink, discard, discardStale, dismissAll, dismissOne, handOff, handOffTask, instruct, setStatus, start, toParking, unlink } from "./actions.js";
 import { pickFolder } from "./daemon.js";
+import { MAX_ZOOM, MIN_ZOOM, clampZoom, fitZoom, percent, scrollAfterZoom, stepZoom } from "./zoom.js";
 
 const NODE_W = 240;
 const NODE_H = 72;
@@ -1081,6 +1082,68 @@ function render() {
   }
   renderFoot();
 }
+
+// ---- 拡大縮小 ----
+// 描画には触れず、#graph の --zoom とスクロール量だけを変える。拡大率は図を読み直しても保つ (勝手に全体表示へ戻さない)。
+
+let zoom = 1;
+
+// setZoom は拡大率を next にし、pointer (#graph の左上からの距離) が指す図の点を同じ画面位置に残す。
+// pointer が無ければ見えている領域の中央を残す。
+function setZoom(next, pointer) {
+  const host = el("graph");
+  const to = clampZoom(next);
+  const p = pointer ?? { x: host.clientWidth / 2, y: host.clientHeight / 2 };
+  const left = scrollAfterZoom(host.scrollLeft, p.x, zoom, to);
+  const top = scrollAfterZoom(host.scrollTop, p.y, zoom, to);
+  zoom = to;
+  host.style.setProperty("--zoom", String(to));
+  host.scrollTo(left, top);
+  renderZoom();
+  if (state.selected !== null) renderPopup();
+}
+
+// fitAll は図全体が見える領域に収まる拡大率にし、左上から見せる。下限で止まった分はスクロールで見る。
+function fitAll() {
+  const host = el("graph");
+  const canvas = host.querySelector(".canvas");
+  if (canvas === null) return;
+  setZoom(fitZoom(parseFloat(canvas.style.width), parseFloat(canvas.style.height), host.clientWidth, host.clientHeight));
+  host.scrollTo(0, 0);
+}
+
+function renderZoom() {
+  el("zoom-reset").textContent = percent(zoom);
+  el("zoom-in").disabled = zoom >= MAX_ZOOM;
+  el("zoom-out").disabled = zoom <= MIN_ZOOM;
+}
+
+function pointerIn(e) {
+  const r = el("graph").getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+
+el("zoom-in").addEventListener("click", () => setZoom(stepZoom(zoom, 1)));
+el("zoom-out").addEventListener("click", () => setZoom(stepZoom(zoom, -1)));
+el("zoom-reset").addEventListener("click", () => setZoom(1));
+el("zoom-fit").addEventListener("click", fitAll);
+// Cmd + ホイール (と Chromium 系のピンチが送る ctrl + ホイール)。passive にすると preventDefault が効かずスクロールされる。
+el("graph").addEventListener("wheel", (e) => {
+  if (!e.metaKey && !e.ctrlKey) return;
+  e.preventDefault();
+  const delta = Math.max(-50, Math.min(50, e.deltaY));
+  setZoom(zoom * Math.exp(-delta * 0.01), pointerIn(e));
+}, { passive: false });
+// WKWebView のトラックパッドのピンチは gesture* で届き、scale は gesturestart からの倍率。
+let gestureFrom = 1;
+el("graph").addEventListener("gesturestart", (e) => {
+  e.preventDefault();
+  gestureFrom = zoom;
+});
+el("graph").addEventListener("gesturechange", (e) => {
+  e.preventDefault();
+  setZoom(gestureFrom * e.scale, pointerIn(e));
+});
 
 function popupAnchor() {
   if (state.selected?.type === "node") return document.querySelector(`.node[data-key="${CSS.escape(state.selected.key)}"]`);

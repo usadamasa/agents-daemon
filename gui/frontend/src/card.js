@@ -24,7 +24,7 @@ export const STATE_TONE = {
   limit: "limit",
   error: "err",
   exited: "exited",
-  dropped: "warn",
+  dropped: "drop",
 };
 
 // 人の手当てが要る状態。作業中より目立たせる。取りやめの参照は、待っていた下流を人が付け替えるまで止める。

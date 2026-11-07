@@ -93,15 +93,17 @@ const EDGE = "svg.edges path[marker-end]";
 test("完了を隠した既定の図: 完了していないノードと、完了していないノードへ続く完了を除いた箱を描く", () => {
   const byKey = cards();
   assert.deepEqual([...byKey.keys()].sort(), [
+    "pr:usadamasa/agents-daemon#254",
     "sid:gamma",
     "sid:zeta",
     "task:alpha/2",
     "task:alpha/4",
+    "task:alpha/5",
     "task:beta/1",
     "task:beta/2",
     "task:beta/3",
   ]);
-  assert.deepEqual(keysWith(byKey, "halt"), ["task:beta/1"]);
+  assert.deepEqual(keysWith(byKey, "halt"), ["pr:usadamasa/agents-daemon#254", "task:beta/1"]);
   assert.deepEqual(keysWith(byKey, "gone"), ["sid:gamma"]);
 });
 
@@ -113,18 +115,33 @@ test("完了を隠した既定の図: 状態の丸に状態ごとの色の class
   assert.equal(dot("task:beta/2"), "st");
 });
 
+test("完了を隠した既定の図: マージせずに閉じた PR は完了で畳まず、「取りやめ」と手当ての要る強調で描く", () => {
+  const card = q('.node[data-key="pr:usadamasa/agents-daemon#254"]');
+  assert.ok(["attn", "drop", "halt"].every((c) => card.classList.contains(c)), card.className);
+  assert.equal(card.querySelector("small").textContent, "取りやめ · PR");
+  assert.equal(card.querySelector(".st").getAttribute("class"), "st drop");
+});
+
 test("完了を隠した既定の図: 見える辺と隠した完了を通り抜けた辺を描き、longest chain の辺に印を付ける", () => {
-  assert.equal(count(EDGE), 4);
+  assert.equal(count(EDGE), 5);
   assert.equal(count(`${EDGE}.chain`), 2);
   assert.equal(count(`${EDGE}.folded`), 1);
-  assert.equal(count(`${EDGE}.edge`), 1);
+  assert.equal(count(`${EDGE}.edge`), 2);
   const hints = [...document.querySelectorAll("svg.edges g.hint title")].map((t) => t.textContent);
-  assert.deepEqual(hints.sort(), ["API の形が決まるのを待つ", "テストを直す を経由"]);
+  assert.deepEqual(hints.sort(), ["API の形が決まるのを待つ", "PR #254 のマージを待つ", "テストを直す を経由"]);
 });
 
 test("完了を隠した既定の図: 辺でつながるノードを段の浅い順に上から描き、辺の無いノードを右の列に column_order の順で並べる", () => {
   const graph = cards("#graph");
-  assert.deepEqual([...graph.keys()].sort(), ["task:alpha/2", "task:alpha/4", "task:beta/1", "task:beta/2", "task:beta/3"]);
+  assert.deepEqual([...graph.keys()].sort(), [
+    "pr:usadamasa/agents-daemon#254",
+    "task:alpha/2",
+    "task:alpha/4",
+    "task:alpha/5",
+    "task:beta/1",
+    "task:beta/2",
+    "task:beta/3",
+  ]);
   const top = (key) => graph.get(key).top;
   assert.ok(top("task:alpha/2") < top("task:beta/1"));
   assert.equal(top("task:beta/1"), top("task:alpha/4"));
@@ -146,7 +163,7 @@ test("完了を隠した既定の図: メモの一覧と凡例と footer を出�
   assert.equal(q("#legend").hidden, false);
   assert.equal(q("#completed-label").textContent, "完了したタスクも表示 (2 件)");
   assert.equal(q("#discard-stale").hidden, true);
-  assert.match(q("#foot-text").textContent, /daemon 動作中 .*止まっている 1 · 作業中 2 · 待ち 0 · 完了 2 \(非表示\)/);
+  assert.match(q("#foot-text").textContent, /daemon 動作中 .*止まっている 2 · 作業中 2 · 待ち 0 · 完了 2 \(非表示\)/);
   await snapshot("graph");
 });
 
@@ -167,18 +184,18 @@ test("完了も表示した図: 完了したノードも描き、通り抜けて
   q("#completed-check").click();
   try {
     const byKey = cards();
-    assert.equal(byKey.size, 9);
+    assert.equal(byKey.size, 11);
     assert.deepEqual(keysWith(byKey, "gone"), ["sid:gamma", "task:alpha/1", "task:alpha/3"]);
-    assert.equal(count(EDGE), 6);
+    assert.equal(count(EDGE), 7);
     assert.equal(count(`${EDGE}.folded`), 0);
-    assert.equal(cards("#graph").size, 7);
+    assert.equal(cards("#graph").size, 9);
     assert.ok(byKey.get("task:alpha/1").top < byKey.get("task:alpha/2").top);
     assert.ok(byKey.get("task:alpha/3").top < byKey.get("task:alpha/4").top);
     await snapshot("graph-completed");
   } finally {
     q("#completed-check").click();
   }
-  assert.equal(cards().size, 7);
+  assert.equal(cards().size, 9);
 });
 
 test("縮小した図: 全体を表示で 100% より小さくし、図全体を見える領域に収める", async () => {

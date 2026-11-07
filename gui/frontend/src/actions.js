@@ -22,16 +22,21 @@ export async function unlink(link, io = defaultIO) {
   return "failure" in ran ? `依存を外せませんでした: ${ran.failure}` : `依存を外しました: ${e.before.ref} → ${e.after.ref}`;
 }
 
-// adopt は終了したセッションのタスクをパーキングへ移す。ノードの key (task: の Ref) をそのまま渡す。
+// noun はノードの呼び名。タスクの無いセッションのノードは「作業」(#368)。
+function noun(node) {
+  return node.kind === "session" ? "作業" : "タスク";
+}
+
+// adopt は終了したセッションのタスクか作業をパーキングへ移す。ノードの key (task: か sid: の Ref) をそのまま渡す。
 export async function adopt(node, io = defaultIO) {
   const failure = await io.park("park adopt", { ref: node.key });
-  return failure === "" ? `タスク「${node.title}」をパーキングへ移しました` : `パーキングへ移せませんでした: ${failure}`;
+  return failure === "" ? `${noun(node)}「${node.title}」をパーキングへ移しました` : `パーキングへ移せませんでした: ${failure}`;
 }
 
 // dismissOne はノード 1 つを一覧から外す。
 export async function dismissOne(node, io = defaultIO) {
   const failure = await io.park("task dismiss", { ref: node.key });
-  return failure === "" ? `タスク「${node.title}」を一覧から外しました` : `一覧から外せませんでした: ${failure}`;
+  return failure === "" ? `${noun(node)}「${node.title}」を一覧から外しました` : `一覧から外せませんでした: ${failure}`;
 }
 
 // dismissAll は nodes を 1 つずつ外し、外した数と、外せなかった数と最初の理由を返す。1 つが外せなくても残りは続ける。
@@ -42,7 +47,13 @@ export async function dismissAll(nodes, io = defaultIO) {
     if (failure !== "") failures.push(failure);
   }
   const failed = failures[0] === undefined ? "" : ` (${failures.length} つは外せませんでした: ${failures[0]})`;
-  return `終了したセッションのタスク ${nodes.length - failures.length} つを一覧から外しました${failed}`;
+  return `終了したセッションのタスクと作業 ${nodes.length - failures.length} つを一覧から外しました${failed}`;
+}
+
+// rename は作業の題を人の手で直す (`work set`、origin human)。以後の hook と companion はこの題を書き換えない。
+export async function rename(node, subject, io = defaultIO) {
+  const ran = await io.run("work set", { session_id: node.session_id, subject });
+  return "failure" in ran ? `題を直せませんでした: ${ran.failure}` : `題を「${subject}」に直しました`;
 }
 
 // discard は open のメモを捨てる。ほかのセッションが先に取ったメモは捨てない (from open)。

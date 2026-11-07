@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Graph } from "../src/graph.js";
-import { canAdopt, canDismiss, candidates, canTell, destinationLabel, isOwnTask, issueDestinations, pathDestination, peerDestinations, spawnDestinations, spawnLabel, taskDestinations } from "../src/ops.js";
+import { canAdopt, canDismiss, canRename, candidates, canTell, destinationLabel, isOwnTask, issueDestinations, pathDestination, peerDestinations, spawnDestinations, spawnLabel, taskDestinations } from "../src/ops.js";
 
 const node = (key, extra = {}) => ({ key, kind: "task", state: "pending", title: key, live: true, depth: 0, downstream: 0, parked: 0, memos: [], blocked_by: [], deadlock: false, halted: false, stuck: false, endpoint: true, session_id: "s1", ...extra });
 
@@ -18,21 +18,34 @@ test("candidates は端点にできるノードから自分、上流、下流、
   assert.deepEqual(candidates(g, g.node("D")).map((n) => n.key), ["A", "B", "C"]);
 });
 
-test("canDismiss は daemon が書いた依存図の、終了したセッションのタスクだけ", () => {
+test("canDismiss は daemon が書いた依存図の、終了したセッションのタスクと作業だけ", () => {
   const data = { updated_at: "2026-11-06T00:00:00Z" };
   assert.equal(canDismiss(node("t", { live: false }), data), true);
   assert.equal(canDismiss(node("t", { live: false, state: "completed" }), data), true);
+  assert.equal(canDismiss(node("sid:s1", { live: false, kind: "session", state: "exited", origin: "prompt" }), data), true);
   assert.equal(canDismiss(node("t", { live: true }), data), false);
+  assert.equal(canDismiss(node("sid:s1", { live: true, kind: "session" }), data), false);
   assert.equal(canDismiss(node("t", { live: false, kind: "todo" }), data), false);
+  assert.equal(canDismiss(node("t", { live: false, kind: "ref" }), data), false);
   assert.equal(canDismiss(node("t", { live: false, session_id: undefined }), data), false);
   assert.equal(canDismiss(node("t", { live: false }), {}), false);
 });
 
-test("canAdopt は外せるタスクのうち未完了のものだけ", () => {
+test("canAdopt は外せるタスクと作業のうち未完了のものだけ", () => {
   const data = { updated_at: "2026-11-06T00:00:00Z" };
   assert.equal(canAdopt(node("t", { live: false }), data), true);
+  assert.equal(canAdopt(node("sid:s1", { live: false, kind: "session", state: "exited", origin: "inferred" }), data), true);
   assert.equal(canAdopt(node("t", { live: false, state: "completed" }), data), false);
   assert.equal(canAdopt(node("t", { live: true }), data), false);
+});
+
+test("canRename は作業の記録のあるセッションのノードだけ (生きていても終了していても)", () => {
+  assert.equal(canRename(node("sid:s1", { kind: "session", origin: "prompt" })), true);
+  assert.equal(canRename(node("sid:s1", { kind: "session", origin: "inferred", live: false })), true);
+  assert.equal(canRename(node("sid:s1", { kind: "session", origin: "human" })), true);
+  assert.equal(canRename(node("sid:s1", { kind: "session", origin: "pane" })), false);
+  assert.equal(canRename(node("sid:s1", { kind: "session" })), false);
+  assert.equal(canRename(node("t", { origin: "prompt" })), false);
 });
 
 test("spawnDestinations はメモの repo、依存図の repo、台帳の最近の repo の順で重複を除く", () => {

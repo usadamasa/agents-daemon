@@ -8,8 +8,8 @@ import { fitEdges, spreadPorts } from "./ports.js";
 import { findJumps, jumpPath } from "./jumps.js";
 import { STATE_TONE, emphasis } from "./card.js";
 import { isStale, kindLabel, lastPlacedAt, stamp } from "./memo.js";
-import { canAdopt, canDismiss, canTell, candidates, destinationLabel, isOwnTask, issueDestinations, pathDestination, peerDestinations, spawnDestinations, spawnLabel, taskDestinations } from "./ops.js";
-import { addBlocker, adopt, askUnlink, discard, discardStale, dismissAll, dismissOne, handOff, handOffTask, instruct, setStatus, start, toParking, unlink } from "./actions.js";
+import { canAdopt, canDismiss, canRename, canTell, candidates, destinationLabel, isOwnTask, issueDestinations, pathDestination, peerDestinations, spawnDestinations, spawnLabel, taskDestinations } from "./ops.js";
+import { addBlocker, adopt, askUnlink, discard, discardStale, dismissAll, dismissOne, handOff, handOffTask, instruct, rename, setStatus, start, toParking, unlink } from "./actions.js";
 import { pickFolder } from "./daemon.js";
 import { MAX_ZOOM, MIN_ZOOM, clampZoom, fitZoom, percent, scrollAfterZoom, stepZoom, wheelZoomer } from "./zoom.js";
 import { restore, scrollView, watchUpgrade } from "./restore.js";
@@ -36,7 +36,10 @@ const STATE_LABEL = {
   external: "外部",
 };
 const REF_KIND_LABEL = { issue: "issue", pr: "PR" };
-const KIND_LABEL = { task: "タスク", todo: "TodoWrite の項目", session: "セッション", ref: "参照" };
+const KIND_LABEL = { task: "タスク", todo: "TodoWrite の項目", session: "セッションの作業", ref: "参照" };
+// 作業の題の出どころのうち、人に見せるもの。推定 (companion) は推定と分かるように、人が直した題はその旨を添える。
+// 最初の prompt から付けた題 (prompt) と記録の無い pane の名前 (pane) は添えない。
+const ORIGIN_LABEL = { inferred: "推定の題", human: "人が直した題" };
 
 const state = {
   data: null,
@@ -240,8 +243,9 @@ function nodeCard(n, highlight) {
   const title = document.createElement("b");
   title.textContent = n.title;
   const sub = document.createElement("small");
-  // 副題はセッション名 (題と違うとき)、状態、今の作業 (タスクの無いセッションと進行中の作業にだけ付く) の順。
-  sub.textContent = [n.session !== n.title ? n.session : "", stateLabel(n), n.summary].filter(Boolean).join(" · ");
+  // 副題はセッション名 (題と違うとき)、状態、題の出どころ (推定か人の手のとき)、今の作業 (タスクの無いセッションと
+  // 進行中の作業にだけ付く) の順。
+  sub.textContent = [n.session !== n.title ? n.session : "", stateLabel(n), ORIGIN_LABEL[n.origin] ?? "", n.summary].filter(Boolean).join(" · ");
   if (n.summary) b.title = n.summary;
   lb.append(title, sub);
   b.append(dot, lb);
@@ -553,6 +557,7 @@ const ICONS = {
   hand: '<path d="M4 12h12"/><path d="M12 7l5 5-5 5"/><path d="M20 5v14"/>',
   play: '<path d="M7 5l12 7-12 7z"/>',
   check: '<path d="M5 12l5 5 9-10"/>',
+  edit: '<path d="M4 20h4L18 10l-4-4L4 16z"/><path d="M13 7l4 4"/>',
 };
 
 function actButton(label, icon, tone, onClick) {
@@ -785,6 +790,39 @@ function startPicker(n) {
 }
 
 // toggle は picker を開く・閉じる動詞。
+// renamePicker は作業の題を打ち直す欄。空欄では直さない。
+function renamePicker(n) {
+  const t = document.createElement("input");
+  t.type = "text";
+  t.className = "note draft";
+  t.placeholder = "作業の題";
+  t.value = state.draft === "" ? n.title : state.draft;
+  const save = document.createElement("button");
+  save.type = "button";
+  save.className = "tb sm";
+  save.textContent = "直す";
+  const submit = () => {
+    const subject = t.value.trim();
+    if (subject === "") return;
+    act(() => rename(n, subject));
+  };
+  save.disabled = state.busy;
+  save.addEventListener("click", submit);
+  t.addEventListener("input", () => {
+    state.draft = t.value;
+  });
+  t.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.isComposing) {
+      e.preventDefault();
+      submit();
+    }
+  });
+  const foot = document.createElement("div");
+  foot.className = "lk";
+  foot.append(save, cancelButton());
+  return group("題を直す (人が直した題は hook と companion が書き換えない)", [t, refusalLine(), foot]);
+}
+
 function toggle(name) {
   return () => {
     state.picker = state.picker === name ? null : name;
@@ -817,15 +855,17 @@ function nodePopup(n) {
   const chips = document.createElement("div");
   chips.className = "chips";
   chips.append(stateChip(n));
+  if (ORIGIN_LABEL[n.origin]) chips.append(chip(ORIGIN_LABEL[n.origin], n.origin === "inferred" ? "warn" : ""));
   if (n.session) chips.append(chip(`${n.session} ›`, "", undefined));
   head.append(ph, title, chips);
   parts.push(head);
 
   // 動詞。送達を伴うもの (指示、渡す、着手、完了、削除、メモにする) は生きているセッションのタスクに、バイナリだけで済む
-  // もの (メモにする = adopt、一覧から外す) は終了したセッションのタスクに出る。
+  // もの (メモにする = adopt、一覧から外す) は終了したセッションのタスクと作業に、題を直すは作業の記録のあるセッションに出る。
   const verbs = [];
   if (canTell(n)) verbs.push(actButton("指示を送る", "send", on("instruct"), toggle("instruct")));
   if (n.endpoint && n.cwd !== undefined) verbs.push(actButton("依存を足す", "link", on("blocker"), toggle("blocker")));
+  if (canRename(n)) verbs.push(actButton("題を直す", "edit", on("rename"), toggle("rename")));
   if (isOwnTask(n)) {
     verbs.push(actButton("渡す", "hand", on("hand"), toggle("hand")));
     if (n.state !== "in_progress") verbs.push(actButton("着手", "play", on("start"), toggle("start")));
@@ -840,7 +880,8 @@ function nodePopup(n) {
   if (state.picker === "blocker") parts.push(blockerPicker(n));
   if (state.picker === "hand") parts.push(taskHandPicker(n));
   if (state.picker === "start") parts.push(startPicker(n));
-  if (state.refusal !== "" && !["instruct", "blocker", "hand", "start"].includes(state.picker)) parts.push(refusalLine());
+  if (state.picker === "rename") parts.push(renamePicker(n));
+  if (state.refusal !== "" && !["instruct", "blocker", "hand", "start", "rename"].includes(state.picker)) parts.push(refusalLine());
 
   // タスクの説明と並ぶので、今の作業 (msg) は見出しを添えて分ける。
   for (const text of [n.description, n.summary ? `今の作業: ${n.summary}` : ""]) {
@@ -1055,7 +1096,7 @@ function renderBulk() {
   const ended = visibleNodes().filter((n) => canDismiss(n, state.data));
   const dismissBtn = el("dismiss-ended");
   dismissBtn.hidden = ended.length === 0;
-  dismissBtn.textContent = `終了したセッションのタスク ${ended.length} 件を外す`;
+  dismissBtn.textContent = `終了したセッションのタスクと作業 ${ended.length} 件を外す`;
   dismissBtn.disabled = state.busy;
   dismissBtn.onclick = () => act(() => dismissAll(ended));
 

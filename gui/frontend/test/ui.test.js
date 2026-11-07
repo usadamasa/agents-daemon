@@ -163,6 +163,28 @@ test("ノードを選ぶと単体ビューを開き、待っている先と待�
   assert.equal(pop.hidden, true);
 });
 
+test("作業のノード: 推定の題は副題と chip で分かり、題を直すと一覧から外す (終了したもの) が出る", async () => {
+  assert.match(q('.node[data-key="sid:zeta"] small').textContent, /推定の題/);
+  assert.doesNotMatch(q('.node[data-key="sid:gamma"] small').textContent, /の題/);
+  q('.node[data-key="sid:zeta"]').click();
+  const pop = q("#pop");
+  const chips = [...pop.querySelectorAll(".chips .chip")].map((c) => c.textContent);
+  assert.ok(chips.includes("推定の題"), chips.join(" / "));
+  let verbs = [...pop.querySelectorAll(".acts .act")].map((b) => b.textContent);
+  assert.ok(verbs.includes("題を直す"), verbs.join(" / "));
+  assert.ok(!verbs.includes("一覧から外す"), verbs.join(" / "));
+  pop.querySelector(".acts .act:nth-child(3)").click();
+  assert.equal(pop.querySelector('input[type="text"]').value, "zeta");
+  await snapshot("graph-popup-work");
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+
+  q('.node[data-key="sid:gamma"]').click();
+  verbs = [...pop.querySelectorAll(".acts .act")].map((b) => b.textContent);
+  assert.ok(verbs.includes("一覧から外す") && verbs.includes("メモにする") && verbs.includes("題を直す"), verbs.join(" / "));
+  assert.equal(q("#dismiss-ended").textContent, "終了したセッションのタスクと作業 1 件を外す");
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+});
+
 test("完了も表示した図: 完了したノードも描き、通り抜けていた辺を元の辺で描く", async () => {
   q("#completed-check").click();
   try {

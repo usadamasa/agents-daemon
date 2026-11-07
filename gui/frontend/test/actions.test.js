@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { askUnlink, discardStale, dismissAll, handOff, handOffTask, instruct, setStatus, start, toParking } from "../src/actions.js";
+import { adopt, askUnlink, discardStale, dismissAll, dismissOne, handOff, handOffTask, instruct, rename, setStatus, start, toParking } from "../src/actions.js";
 
 const memo = { id: "m1", kind: "aside", origin: "placed", title: "T", sources: [] };
 const spawnTo = { route: "spawn", repo: "/r/a", title: "a" };
@@ -166,7 +166,26 @@ test("dismissAll は 1 つが外せなくても残りを続け、数と最初の
   const io = fakeIO({ park: ["", "まだ生きている", ""] });
   const message = await dismissAll([{ key: "a" }, { key: "b" }, { key: "c" }], io);
   assert.equal(io.calls.length, 3);
-  assert.equal(message, "終了したセッションのタスク 2 つを一覧から外しました (1 つは外せませんでした: まだ生きている)");
+  assert.equal(message, "終了したセッションのタスクと作業 2 つを一覧から外しました (1 つは外せませんでした: まだ生きている)");
+});
+
+test("dismissOne と adopt は作業のノード (sid:) も key をそのまま渡し、呼び名を作業にする", async () => {
+  const work = { key: "sid:s9", kind: "session", title: "README を直す", session_id: "s9", live: false, state: "exited" };
+  let io = fakeIO({});
+  assert.equal(await dismissOne(work, io), "作業「README を直す」を一覧から外しました");
+  assert.deepEqual(io.calls, [["task dismiss", { ref: "sid:s9" }]]);
+  io = fakeIO({});
+  assert.equal(await adopt(work, io), "作業「README を直す」をパーキングへ移しました");
+  assert.deepEqual(io.calls, [["park adopt", { ref: "sid:s9" }]]);
+});
+
+test("rename は work set に session_id と題を渡す", async () => {
+  const work = { key: "sid:s9", kind: "session", title: "推定の題", session_id: "s9", origin: "inferred" };
+  let io = fakeIO({});
+  assert.equal(await rename(work, "人の題", io), "題を「人の題」に直しました");
+  assert.deepEqual(io.calls, [["work set", { session_id: "s9", subject: "人の題" }]]);
+  io = fakeIO({ run: [{ failure: "記録が無い" }] });
+  assert.equal(await rename(work, "人の題", io), "題を直せませんでした: 記録が無い");
 });
 
 test("discardStale は捨てた数を返す", async () => {

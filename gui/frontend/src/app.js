@@ -1202,6 +1202,7 @@ const views = {
   picker: { get: () => state.picker, set: (v) => { state.picker = typeof v === "string" ? v : null; } },
   draft: { get: () => state.draft, set: (v) => { state.draft = String(v); } },
   note: { get: () => state.note, set: (v) => { state.note = String(v); } },
+  zoom: { get: () => zoom, set: (v) => { zoom = clampZoom(Number(v) || 1); renderZoom(); } },
   graphScroll: scrollView(el("graph")),
   parkScroll: scrollView(el("park-list")),
 };

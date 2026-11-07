@@ -51,5 +51,13 @@ run models/handoff EdgeBind EdgeBind.cfg holds
 run models/handoff EdgeBind EdgeBindRaceAdd.cfg violated
 # lock 無しで結びつけが読んでから書くと、間に edge rm で消した辺を作り直す (NoResurrect の反例)。
 run models/handoff EdgeBind EdgeBindRaceRemove.cfg violated
+# hook と companion が work/.lock の中で読んでから自分の欄だけを書く形 (worklog)。liveness も見る。
+run models/work Work Work.cfg holds
+# lock 無しで読んだ写しを書くと、人が直した subject を hook が戻す (HumanSubjectKept の反例)。
+run models/work Work WorkRace.cfg violated
+# 同じく、SessionEnd が書いた ended を遅れた Stop や companion が消す (EndedStays の反例)。
+run models/work Work WorkRaceEnded.cfg violated
+# 同じく、UserPromptSubmit と Stop が交錯して turns の更新を失う (NoLostUpdate の反例)。
+run models/work Work WorkRaceTurns.cfg violated
 
 exit "$failed"

@@ -28,7 +28,9 @@ const STATE_LABEL = {
   pending: "未着手",
   completed: "完了",
   exited: "セッション終了",
+  external: "外部",
 };
+const REF_KIND_LABEL = { issue: "issue", pr: "PR" };
 // 丸と chip の色の鍵。無い状態は既定の灰。
 const STATE_TONE = {
   working: "working",
@@ -102,6 +104,7 @@ const el = (id) => document.getElementById(id);
 
 function stateLabel(n) {
   const label = STATE_LABEL[n.state] ?? n.state;
+  if (n.ref_kind) return `${label} · ${REF_KIND_LABEL[n.ref_kind] ?? n.ref_kind}`;
   return n.detail ? `${label}、${n.detail}` : label;
 }
 

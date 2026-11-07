@@ -19,6 +19,37 @@ var endpointPattern = regexp.MustCompile(`^(?:session:\S+|sid:[^\s/]+|(?:issue|p
 
 var taskPattern = regexp.MustCompile(`^task:([^\s/]+)/([^\s/]+)$`)
 
+var itemPattern = regexp.MustCompile(`^(issue|pr):([\w.-]+/[\w.-]+)#([0-9]+)$`)
+
+// Item は issue / PR の参照を分けたもの。Kind は "issue" か "pr"、Repo は owner/name。
+type Item struct {
+	Kind   string
+	Repo   string
+	Number int
+}
+
+// ParseItem は issue / PR の参照を分ける。issue / PR の参照でなければ ok が false。
+func ParseItem(r string) (Item, bool) {
+	m := itemPattern.FindStringSubmatch(r)
+	if m == nil {
+		return Item{}, false
+	}
+	n, err := strconv.Atoi(m[3])
+	if err != nil {
+		return Item{}, false
+	}
+	return Item{Kind: m[1], Repo: m[2], Number: n}, true
+}
+
+// Title は依存図に出す題 (「PR #389 · owner/repo」)。
+func (it Item) Title() string {
+	kind := it.Kind
+	if kind == "pr" {
+		kind = "PR"
+	}
+	return kind + " #" + strconv.Itoa(it.Number) + " · " + it.Repo
+}
+
 // Task はタスクの Ref。
 func Task(sessionID, taskID string) string {
 	return "task:" + sessionID + "/" + taskID

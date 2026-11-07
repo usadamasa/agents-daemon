@@ -41,6 +41,9 @@ const (
 	StatePending    = "pending"
 	StateCompleted  = "completed"
 	StateExited     = "exited" // セッションが終了していて、未完了のまま残った
+	// StateExternal は daemon が状態を知らない外部の参照 (issue / PR)。済んだかどうか分からないので、原因の鎖に
+	// 選ばず、末端の完了ノードを残す上流にも数えない。
+	StateExternal = "external"
 	// StateUnknown はセッションは生きているが状態を分類できない (申告の前、古い record)。作業中とは限らないので
 	// working に倒さない。
 	StateUnknown = "unknown"
@@ -208,9 +211,13 @@ func (g *builder) resolve(ep edge.Endpoint, pick func(sessionID string) []string
 		return []string{g.placeholder(ep.Ref, ep.CWD, rest, "", StatePending)}
 	case "sid":
 		return g.sessionKeys(rest, ep.CWD, pick)
-	default:
-		return []string{g.placeholder(ep.Ref, ep.CWD, ep.Ref, "", StatePending)}
 	}
+	key := g.placeholder(ep.Ref, ep.CWD, ep.Ref, "", StatePending)
+	if it, ok := ref.ParseItem(ep.Ref); ok {
+		n := g.nodes[key]
+		n.Title, n.State, n.RefKind = it.Title(), StateExternal, it.Kind
+	}
+	return []string{key}
 }
 
 // sessionKeys はセッションのノードのうち pick が選んだものの Key。ノードが無ければ sid: の置き場のノードを作る。
@@ -276,7 +283,8 @@ func (g *builder) finish() Graph {
 		pairs = append(pairs, [2]string{l.Before, l.After})
 	}
 	a := dag.New(pairs, KeyLess)
-	open := func(key string) bool { return g.nodes[key].State != StateCompleted }
+	// 原因の鎖に選ぶ上流。外部の参照は済んだか分からないので選ばない。
+	open := func(key string) bool { s := g.nodes[key].State; return s != StateCompleted && s != StateExternal }
 	rankOf := func(key string) int { return rank(g.nodes[key].State) }
 	out := Graph{Nodes: make([]Node, 0, len(g.nodes)), Links: g.links, LongestChain: []string{}}
 	memos := g.mentionedMemos()
@@ -372,7 +380,7 @@ func (g *builder) shownWhenFolded(a *dag.Graph, key string) bool {
 		if l.After != key {
 			continue
 		}
-		if s := g.nodes[l.Before].State; s != StateCompleted && s != StateExited {
+		if s := g.nodes[l.Before].State; s != StateCompleted && s != StateExited && s != StateExternal {
 			return true
 		}
 	}

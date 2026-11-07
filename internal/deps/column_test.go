@@ -11,8 +11,8 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/tasklog/record"
 )
 
-// 段は手当てが要るもの、作業中、返事待ち、未着手、終了したセッションに残ったもの、完了の順。
-// 同じ段は最後に動いた時刻の新しい順で、時刻の無いノードはその後ろ。それも同じなら repo、セッション名、key の順。
+// 段は手当てが要るもの、作業中、返事待ち、未着手、外部の参照、完了、終了したセッションに残ったものの順。
+// 終了したセッションは最後に動いた時刻が新しくても外部の参照より下に出す (#446)。同じ段は最後に動いた時刻の新しい順で、時刻の無いノードはその後ろ。それも同じなら repo、セッション名、key の順。
 func TestColumnOrder(t *testing.T) {
 	at := func(m int) time.Time { return t0.Add(time.Duration(m) * time.Minute) }
 	node := func(key, state, cwd, session string) protocol.GraphNode {
@@ -41,6 +41,7 @@ func TestColumnOrder(t *testing.T) {
 		"work-timed": at(3),
 		"limit":      at(1), "ask": at(4), "perm": at(2), "err": at(3),
 		"idle": at(1), "unknown": at(2),
+		"gone": at(9),
 	}
 	repo := func(cwd string) string { return cwd }
 
@@ -50,8 +51,9 @@ func TestColumnOrder(t *testing.T) {
 		"work-timed", "work-a-x", "work-a-y", "work-b",
 		"unknown", "idle",
 		"todo-new", "todo-old",
-		"ext", "wait", "gone",
+		"ext", "wait",
 		"done",
+		"gone",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("columnOrder =\n  %v\nwant\n  %v", got, want)

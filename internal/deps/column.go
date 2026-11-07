@@ -12,8 +12,9 @@ import (
 )
 
 // columnTier は依存図の右の列 (依存の無いノード) の段。小さいほど上に出す (#420)。
-// 不明は手当てを要すると決められないので返事待ちに、外部の参照 (open と引けたものを含む) は終了と同じく
-// 手元では動かないものとして並べる。
+// 不明は手当てを要すると決められないので返事待ちに、外部の参照 (open と引けたものを含む) は手元では動かないが
+// まだ動きうるものとして未着手の下に並べる。終了したセッションに残ったものは手を入れる余地が無いので、
+// 「完了も表示」で利用者が求めて出す完了よりも下に置く (#446)。
 var columnTier = map[string]int{
 	graph.StatePermission: 0,
 	graph.StateQuestion:   0,
@@ -23,10 +24,10 @@ var columnTier = map[string]int{
 	graph.StateDone:       2,
 	graph.StateUnknown:    2,
 	graph.StatePending:    3,
-	graph.StateExited:     4,
 	graph.StateExternal:   4,
 	graph.StateWaiting:    4,
 	graph.StateCompleted:  5,
+	graph.StateExited:     6,
 }
 
 // lastActive はノードの key → 最後に動いた時刻 (タスクと TodoWrite の記録の更新時刻、作業の記録の更新時刻)。作業の

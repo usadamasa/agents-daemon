@@ -184,10 +184,11 @@ func TestRunner_Run_refuses(t *testing.T) {
 			f.panes[claudeID] = multiplexer.Pane{PaneID: claudeID, Agent: "claude-code", AgentStatus: multiplexer.AgentStatusBlocked, AgentKind: multiplexer.AgentKindPermission, AgentMessage: "approve Bash?", SessionID: sid}
 		}, "prompt"},
 		{"上限の画面", func(f *fixture, _ *Request) { f.kinds[idleScreen] = "limit" }, "上限"},
-		{"入力欄に打ちかけの文", func(f *fixture, _ *Request) { f.screen, f.styled = typingScreen, typedStyled }, "打ちかけ"},
+		// 利用者が宛先の端末で打っていた文だと結び付くよう、どこの何かと、どうすれば送れるかを書く (#380)。
+		{"入力欄に打ちかけの文", func(f *fixture, _ *Request) { f.screen, f.styled = typingScreen, typedStyled }, "宛先のセッションの端末の入力欄に、Enter を押していない打ちかけの文"},
 		{"提案の後に打ちかけの文", func(f *fixture, _ *Request) {
 			f.screen, f.styled = typingScreen, "❯ \x1b[0m\x1b[2mここまで\x1b[0m打った\r\n"
-		}, "打ちかけの文 (3 文字)"},
+		}, "打ちかけの文 (3 文字) があるので送らない (pane " + claudeID + "。その端末で送るか消してから、もう一度押す)"},
 		{"入力欄が見つからない", func(f *fixture, _ *Request) { f.screen = "何も無い画面\n" }, "入力欄"},
 		{"文面が空", func(_ *fixture, req *Request) { req.Text = " \n" }, "空"},
 	}

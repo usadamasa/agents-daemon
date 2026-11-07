@@ -147,7 +147,8 @@ export async function handOffTask(node, to, note, io = defaultIO) {
 }
 
 // toParking はタスクをパーキングロットへ戻す。扱うメモ (捨てていないもの) があるタスクは新しいメモを作らず、handed の
-// メモを open に戻してからタスクを消すよう頼む。頼めなければ戻したメモを持ち主への handed に取り直す。
+// メモを open に戻してからタスクを消すよう頼む。頼めなくてもメモは一覧に戻っているので取り直さず、押し直しで依頼だけを
+// 送り直せる (open のメモは戻す対象にならない)。
 export async function toParking(node, io = defaultIO) {
   const kept = node.memos.filter((m) => m.status !== "discarded");
   const reopened = [];
@@ -159,7 +160,8 @@ export async function toParking(node, io = defaultIO) {
   const ids = kept.map((m) => m.id);
   const sent = await tell(node.session_id, parkText(node, ids), io);
   if (sent.ok) return { ok: true, message: ids.length === 0 ? `${sessionName(node)} にメモに置くよう頼みました` : `メモ ${ids.join(", ")} を open に戻し、${sessionName(node)} にタスクを消すよう頼みました` };
-  return { ok: false, message: `${sessionName(node)} へ送れませんでした: ${sent.reason}${await reclaim(node, reopened, io)}` };
+  if (ids.length === 0) return { ok: false, message: `${sessionName(node)} へ送れませんでした: ${sent.reason}` };
+  return { ok: false, message: `メモ ${ids.join(", ")} は open に戻しましたが、${sessionName(node)} へタスクを消す依頼を送れませんでした: ${sent.reason}。もう一度「メモにする」を押すと依頼だけ送り直します` };
 }
 
 // reclaim は open に戻したメモを持ち主への handed に取り直し、結果の文面 (前の文に続ける) を返す。

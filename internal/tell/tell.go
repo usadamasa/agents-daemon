@@ -114,8 +114,9 @@ func (r Runner) Run(ctx context.Context, req Request) (Result, error) {
 			return Result{}, fmt.Errorf("pane %s の画面を読めない: %w", pane.PaneID, err)
 		}
 		if typed := typedRemainder(styled); typed != "" {
-			// 打ちかけの文は相手のセッションの中身なので、理由 (ログにも残る) には長さだけを書く。
-			return Result{}, fmt.Errorf("pane %s の入力欄に打ちかけの文 (%d 文字) があるので送らない", pane.PaneID, utf8.RuneCountInString(typed))
+			// 打ちかけの文は相手のセッションの中身なので、理由 (ログにも残る) には長さだけを書く。利用者が別の端末で
+			// 打っていた文だと結び付けられるよう、どこの文かと、どうすれば送れるかを添える。
+			return Result{}, fmt.Errorf("宛先のセッションの端末の入力欄に、Enter を押していない打ちかけの文 (%d 文字) があるので送らない (pane %s。その端末で送るか消してから、もう一度押す)", utf8.RuneCountInString(typed), pane.PaneID)
 		}
 	}
 	res := Result{PaneID: pane.PaneID}

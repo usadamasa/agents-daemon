@@ -56,10 +56,44 @@ function fakeWails(fail = false) {
 }
 
 function fakeButton() {
-  const b = { hidden: true, disabled: false, title: "", onclick: null };
+  const classes = new Set();
+  const b = {
+    hidden: true,
+    disabled: false,
+    title: "",
+    textContent: "",
+    onclick: null,
+    onanimationend: null,
+    classList: { add: (c) => classes.add(c), remove: (c) => classes.delete(c), contains: (c) => classes.has(c) },
+    classes,
+  };
   b.click = () => b.onclick?.();
   return b;
 }
+
+test("watchUpgrade は知らせの新しいバージョンをボタンの文に添える", () => {
+  const w = fakeWails();
+  const button = fakeButton();
+  watchUpgrade(views({ selected: null, showCompleted: false }), button);
+  w.handlers["agent-tasks:upgrade"]({ name: "agent-tasks:upgrade", data: "2026.1107.99" });
+  assert.equal(button.textContent, "↻ 2026.1107.99 に切り替える");
+  // Wails が data を配列で渡しても読む。
+  w.handlers["agent-tasks:upgrade"]({ name: "agent-tasks:upgrade", data: ["2026.1108.0"] });
+  assert.equal(button.textContent, "↻ 2026.1108.0 に切り替える");
+});
+
+test("watchUpgrade は出た直後だけ pulse を付け、動きが済んだら外し、次の知らせでは付け直さない", () => {
+  const w = fakeWails();
+  const button = fakeButton();
+  watchUpgrade(views({ selected: null, showCompleted: false }), button);
+  w.handlers["agent-tasks:upgrade"]({ data: "2026.1107.99" });
+  assert.equal(button.classList.contains("pulse"), true);
+
+  button.onanimationend?.();
+  assert.equal(button.classList.contains("pulse"), false);
+  w.handlers["agent-tasks:upgrade"]({ data: "2026.1107.99" });
+  assert.equal(button.classList.contains("pulse"), false);
+});
 
 test("watchUpgrade は新しいバージョンの知らせでボタンを出すだけで、押すまで切り替えない", () => {
   const w = fakeWails();

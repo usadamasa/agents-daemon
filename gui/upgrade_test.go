@@ -45,6 +45,26 @@ func TestNewer(t *testing.T) {
 	}
 }
 
+func TestAvailableReturnsNewerStampVersion(t *testing.T) {
+	stamp := filepath.Join(t.TempDir(), "agent-tasks.version")
+	u := &upgrader{version: "2026.1107.0", stamp: stamp}
+	if v, ok := u.available(); ok || v != "" {
+		t.Fatalf("stamp が無いのに (%q, %v)", v, ok)
+	}
+	if err := os.WriteFile(stamp, []byte("2026.1107.0\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := u.available(); ok {
+		t.Fatal("同じ version で ok")
+	}
+	if err := os.WriteFile(stamp, []byte("2026.1107.99\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if v, ok := u.available(); !ok || v != "2026.1107.99" {
+		t.Fatalf("新しい stamp で (%q, %v)", v, ok)
+	}
+}
+
 func TestReadStampTrimsNewline(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "agent-tasks.version")
 	if err := os.WriteFile(path, []byte("2026.1107.0\n"), 0o600); err != nil {

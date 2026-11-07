@@ -26,27 +26,29 @@
   <button class="tb upgrade" type="button" id="upgrade" hidden>↻ Update</button>
 </header>
 <div class="stage">
-  <main class="graph" id="graph">
-    <div class="empty" id="empty">依存図を読んでいる…</div>
-  </main>
+  <div class="main">
+    <main class="graph" id="graph">
+      <div class="empty" id="empty">依存図を読んでいる…</div>
+    </main>
+    <div class="lg" id="legend" hidden>
+      <span><i aria-hidden="true"></i>同じセッションの blockedBy</span>
+      <span><i class="d" aria-hidden="true"></i>セッションをまたぐ依存</span>
+      <span><i class="c" aria-hidden="true"></i>longest chain</span>
+      <span class="grow"></span>
+      <button class="tb sm" type="button" id="dismiss-ended" hidden></button>
+    </div>
+    <section class="park" id="park" hidden>
+      <div class="hd">
+        <span class="hd-title" id="park-title">メモ</span>
+        <select class="tb sm" id="repo-filter" aria-label="repo で絞る"><option value="">すべての repo</option></select>
+        <span class="grow"></span>
+        <button class="tb sm" type="button" id="discard-stale" hidden></button>
+      </div>
+      <div class="ls" id="park-list"></div>
+    </section>
+  </div>
   <aside class="column" id="column" aria-label="依存の無いタスクとセッション" hidden></aside>
 </div>
-<div class="lg" id="legend" hidden>
-  <span><i aria-hidden="true"></i>同じセッションの blockedBy</span>
-  <span><i class="d" aria-hidden="true"></i>セッションをまたぐ依存</span>
-  <span><i class="c" aria-hidden="true"></i>longest chain</span>
-  <span class="grow"></span>
-  <button class="tb sm" type="button" id="dismiss-ended" hidden></button>
-</div>
-<section class="park" id="park" hidden>
-  <div class="hd">
-    <span class="hd-title" id="park-title">メモ</span>
-    <select class="tb sm" id="repo-filter" aria-label="repo で絞る"><option value="">すべての repo</option></select>
-    <span class="grow"></span>
-    <button class="tb sm" type="button" id="discard-stale" hidden></button>
-  </div>
-  <div class="ls" id="park-list"></div>
-</section>
 <footer class="foot" id="foot"><span class="dot off"></span><span id="foot-text">daemon の状態を読んでいる…</span></footer>
 <div class="pop" id="pop" role="dialog" hidden></div>
 </body>

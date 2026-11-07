@@ -414,6 +414,72 @@ func TestGraph_rows(t *testing.T) {
 	}
 }
 
+// before 側の sid: の端点が末端のタスクを複数持つときは、末端をセッションのノード (sid:) に集め、辺の記録 1 つを
+// セッションのノードからの 1 本にする (#405)。セッションのノードは末端がすべて完了したら完了、そうでなければ
+// セッションの活動を映す。末端が 1 つならそのタスクへ直接つなぐ。
+func TestGraph_sessionSinksHub(t *testing.T) {
+	const cwd = "/w/a"
+	e := func(id, before, after string) edge.Edge {
+		return edge.Edge{ID: id, Before: edge.Endpoint{Ref: before, CWD: cwd}, After: edge.Endpoint{Ref: after, CWD: cwd}}
+	}
+	b := build(input{
+		PID: 42,
+		Snapshot: snapshot(
+			daemonstate.PaneStatus{PaneID: "p1", SessionID: "W", CWD: cwd, AgentStatus: "working"},
+			daemonstate.PaneStatus{PaneID: "p2", SessionID: "P", CWD: cwd, AgentStatus: "working"},
+			daemonstate.PaneStatus{PaneID: "p3", SessionID: "Q", CWD: cwd, AgentStatus: "done"},
+			daemonstate.PaneStatus{PaneID: "p4", SessionID: "S", CWD: cwd, AgentStatus: "working"},
+		),
+		Tasks: []record.Task{
+			task("W", "10", "#373 の報告待ち", "pending", cwd),
+			task("W", "11", "#398 の報告待ち", "pending", cwd),
+			task("W", "12", "Q を待つ", "pending", cwd),
+			task("W", "13", "S を待つ", "pending", cwd),
+			task("P", "1", "#373", "completed", cwd),
+			task("P", "2", "#398", "in_progress", cwd),
+			task("Q", "1", "a", "completed", cwd),
+			task("Q", "2", "b", "completed", cwd),
+			task("S", "1", "ひとつ", "in_progress", cwd),
+		},
+		Edges: []edge.Edge{
+			e("e1", "sid:P", "task:W/10"),
+			e("e2", "sid:P", "task:W/11"),
+			e("e3", "sid:Q", "task:W/12"),
+			e("e4", "sid:S", "task:W/13"),
+		},
+		SessionNames: map[string]string{"P": "peer", "Q": "quiet"},
+		Sessions:     []ledger.Session{{SessionID: "P", Name: "at-ci-ui"}},
+	})
+	want := []string{
+		"sid:P>task:W/10", "sid:P>task:W/11",
+		"sid:Q>task:W/12",
+		"task:P/1>sid:P", "task:P/2>sid:P",
+		"task:Q/1>sid:Q", "task:Q/2>sid:Q",
+		"task:S/1>task:W/13",
+	}
+	if !reflect.DeepEqual(links(b.Graph), want) {
+		t.Errorf("links = %v, want %v", links(b.Graph), want)
+	}
+	for _, l := range b.Graph.Links {
+		if l.Before == "sid:P" && (l.Edge == nil || l.Edge.Before.Ref != "sid:P") {
+			t.Errorf("セッションのノードからの辺は元の記録を持つ: %+v", l)
+		}
+		if l.After == "sid:P" && l.Kind != graph.LinkTask {
+			t.Errorf("末端からセッションのノードへの辺は実線 (task): %+v", l)
+		}
+	}
+	got := nodes(b.Graph)
+	if n := got["sid:P"]; n.Kind != graph.KindRef || n.State != graph.StateWorking || n.SessionID != "P" || n.Title != "peer" || n.SessionName != "at-ci-ui" || !n.Endpoint {
+		t.Errorf("sid:P = %+v", n)
+	}
+	if n := got["sid:Q"]; n.State != graph.StateCompleted {
+		t.Errorf("sid:Q state = %q, want completed (末端がすべて完了)", n.State)
+	}
+	if _, ok := got["sid:S"]; ok {
+		t.Errorf("末端が 1 つのセッションにノードを足さない")
+	}
+}
+
 // 完了したノードを隠した図 (folded) は、隠したノードを通り抜けた辺を畳んで残す (#392)。末端の完了ノードは、
 // 完了も終了もしていない上流を直接持つ間だけ見せる。rows も同じ図で組む。
 func TestGraph_folded(t *testing.T) {

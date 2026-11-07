@@ -127,6 +127,15 @@ jobs:
       - name: Test the gui module
         run: task gui:test
 
+      # ui.test.js が fixture の図から書いたスナップショット。見た目を変える PR は before / after をここから取る
+      - name: Upload gui snapshots
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: gui-snapshots
+          path: tmp/gui-snapshots
+          if-no-files-found: ignore
+
   actions-lock:
     name: actions-lock verify
     runs-on: ubuntu-latest

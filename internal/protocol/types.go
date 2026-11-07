@@ -387,7 +387,7 @@ type GraphNode struct {
 	// Ref (task:、todo:、sid:、session:、issue:、pr:)。mod は切り出さずに不透明な文字列として扱う。
 	Key  string `json:"key"`
 	Kind string `json:"kind"`
-	// external は daemon が状態を知らない外部の参照 (issue / PR)。
+	// external は済んだと分かっていない外部の参照 (issue / PR)。daemon が merged の PR、completed で閉じた issue と引けた参照は completed、マージせずに閉じた PR、not planned / duplicate で閉じた issue は dropped (取りやめ)。
 	State string `json:"state"`
 	Title string `json:"title"`
 	// kind session のノードの題の出どころ。prompt は最初の prompt、inferred は companion の推定 (推定と分かるように見せる)、human は人が直した、pane は作業の記録が無く pane の名前から付けた。

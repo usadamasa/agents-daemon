@@ -20,6 +20,9 @@
   --purple-soft: #ebe4f5;
   --purple-ink: #4f3a7a;
   --red: #a4343a;
+  --slate: #4a6b8c;
+  --slate-soft: #e4ebf2;
+  --slate-ink: #2f4a66;
   --gray-dot: #9aa49e;
   --exited: #b4bbb6;
 }
@@ -70,7 +73,8 @@ select { font: inherit; color: inherit; }
 .chip.warn { background: var(--orange-soft); color: var(--orange-ink); }
 .chip.limit { background: var(--purple-soft); color: var(--purple-ink); }
 .chip.err { background: #f3e0e1; color: #6e2328; }
-/* 会話から自動で付けた題 (companion)。状態の色 (ok / warn / limit / err) と被らないよう、塗らずに破線の縁で「仮」を表す。 */
+.chip.drop { background: var(--slate-soft); color: var(--slate-ink); }
+/* 会話から自動で付けた題 (companion)。状態の色 (ok / warn / limit / err / drop) と被らないよう、塗らずに破線の縁で「仮」を表す。 */
 .chip.guess { background: transparent; border: 1px dashed var(--ink-soft); color: var(--ink-soft); padding: 2px 9px; }
 .chip.link { cursor: pointer; }
 .chip.link:hover { text-decoration: underline; }
@@ -79,6 +83,7 @@ select { font: inherit; color: inherit; }
 .dot.warn { background: var(--orange); }
 .dot.limit { background: var(--purple); }
 .dot.err { background: var(--red); }
+.dot.drop { background: var(--slate); }
 
 /* 依存図と右の列を横に並べる段。列は拡大縮小の外で、依存図とは別にスクロールする */
 .stage { flex: 1 1 0; min-height: 160px; display: flex; }
@@ -95,6 +100,8 @@ select { font: inherit; color: inherit; }
 .graph .zoom-frame { overflow: hidden; }
 .zoom { display: inline-flex; align-items: center; gap: 4px; }
 .zoom #zoom-reset { min-width: 56px; justify-content: center; font-variant-numeric: tabular-nums; }
+/* 全体表示のトグルがオンの間 (aria-pressed と同時に app.js の renderZoom が付ける) */
+.tb.on { background: var(--green-soft); border-color: var(--green); color: var(--green-ink); font-weight: 500; }
 /* 新しいバージョンへの切り替え。拡大縮小の並びに埋もれないよう、塗りつぶしと間で離す */
 .tb.upgrade {
   margin-left: 18px;
@@ -145,6 +152,7 @@ select { font: inherit; color: inherit; }
 .st.warn { background: var(--orange); }
 .st.limit { background: var(--purple); }
 .st.err { background: var(--red); }
+.st.drop { background: var(--slate); }
 .st.exited { background: var(--exited); }
 /* カード全体の強調。枠は outline に置き、選択 (.sel の border と box-shadow) と重ねても互いを消さない。
    太さは拡大率 (--zoom、applyZoom が置く) で割り、縮小しても画面上で 2px を下回らせない。
@@ -165,6 +173,8 @@ select { font: inherit; color: inherit; }
 .node.attn.warn { --tone: var(--orange); background: var(--orange-soft); }
 .node.attn.limit { --tone: var(--purple); background: var(--purple-soft); }
 .node.attn.err { --tone: var(--red); background: #f3e0e1; }
+/* 取りやめの参照は閉じていて自分では進まないので、枠を点線にして手当て待ちのセッションと分ける */
+.node.attn.drop { --tone: var(--slate); background: var(--slate-soft); outline-style: dashed; }
 @media (prefers-reduced-motion: reduce) {
   .node.working::after { animation: none; opacity: 0.6; }
 }

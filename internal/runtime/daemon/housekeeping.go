@@ -8,6 +8,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/eventlog"
 	"github.com/usadamasa/agents-daemon/internal/ledger"
 	"github.com/usadamasa/agents-daemon/internal/parking"
+	"github.com/usadamasa/agents-daemon/internal/refstate"
 	"github.com/usadamasa/agents-daemon/internal/runtime/daemon/limitlog"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 	"github.com/usadamasa/agents-daemon/internal/turnfailure"
@@ -37,6 +38,7 @@ func (r *daemonRuntime) attachStateDir(stateDir string) {
 	r.eventLog = eventlog.Path(stateDir)
 	r.limits = limitlog.New(stateDir)
 	r.turnFailures = turnfailure.New(stateDir)
+	r.refs = refstate.New(stateDir)
 }
 
 // housekeepDue は前回の housekeeping から housekeepInterval 以上経ったかを返す。
@@ -93,8 +95,12 @@ func (r *daemonRuntime) housekeep(logPath string, now time.Time) {
 	if err != nil {
 		r.log.Logf("turn の失敗の記録の削除でエラー: %v", err)
 	}
-	if logs > 0 || states > 0 || contexts > 0 || tasks > 0 || works > 0 || parked > 0 || edges > 0 || limits > 0 || sessions > 0 || failures > 0 {
-		r.log.Logf("保持期間を過ぎたファイルを削除しました: rotated ログ %d 件、利用上限 state %d 件、context state %d 件、タスクの記録 %d 件、作業の記録 %d 件、パーキング %d 件、辺 %d 件、上限の出来事 %d 件、セッション台帳 %d 件、turn の失敗 %d 件",
-			logs, states, contexts, tasks, works, parked, edges, limits, sessions, failures)
+	refs, err := r.refs.Prune(now)
+	if err != nil {
+		r.log.Logf("外部の参照の写しの削除でエラー: %v", err)
+	}
+	if logs > 0 || states > 0 || contexts > 0 || tasks > 0 || works > 0 || parked > 0 || edges > 0 || limits > 0 || sessions > 0 || failures > 0 || refs > 0 {
+		r.log.Logf("保持期間を過ぎたファイルを削除しました: rotated ログ %d 件、利用上限 state %d 件、context state %d 件、タスクの記録 %d 件、作業の記録 %d 件、パーキング %d 件、辺 %d 件、上限の出来事 %d 件、セッション台帳 %d 件、turn の失敗 %d 件、外部の参照 %d 件",
+			logs, states, contexts, tasks, works, parked, edges, limits, sessions, failures, refs)
 	}
 }

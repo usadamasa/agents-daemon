@@ -71,6 +71,11 @@
         "blocked_by": [], "deadlock": false, "halted": true, "stuck": true
       },
       {
+        "key": "pr:usadamasa/agents-daemon#254", "kind": "ref", "state": "dropped", "title": "PR #254 · usadamasa/agents-daemon",
+        "ref_kind": "pr", "endpoint": true, "cwd": "/repo/agents-daemon", "live": false,
+        "depth": 0, "downstream": 1, "parked": 0, "memos": [], "blocked_by": [], "deadlock": false, "halted": true, "stuck": true
+      },
+      {
         "key": "task:alpha/3", "kind": "task", "state": "completed", "title": "テストを直す",
         "endpoint": true, "cwd": "/repo/agents-daemon", "task_id": "3",
         "session_id": "sid-alpha", "session": "alpha", "session_name": "alpha", "live": true,
@@ -99,6 +104,12 @@
         "depth": 3, "downstream": 0, "parked": 0, "memos": [], "blocked_by": [], "deadlock": false, "halted": false, "stuck": false
       },
       {
+        "key": "task:alpha/5", "kind": "task", "state": "pending", "title": "PR #254 の設定の読み方に合わせて移す",
+        "endpoint": true, "cwd": "/repo/agents-daemon", "task_id": "5",
+        "session_id": "sid-alpha", "session": "alpha", "session_name": "alpha", "live": true,
+        "depth": 1, "downstream": 0, "parked": 0, "memos": [], "blocked_by": ["pr:usadamasa/agents-daemon#254"], "deadlock": false, "halted": false, "stuck": false
+      },
+      {
         "key": "task:beta/3", "kind": "task", "state": "pending", "title": "PR を作る",
         "endpoint": true, "cwd": "/repo/agents-daemon", "task_id": "3",
         "session_id": "sid-beta", "session": "beta", "session_name": "beta", "live": true,
@@ -119,7 +130,16 @@
         }
       },
       { "before": "task:beta/1", "after": "task:beta/2", "kind": "task" },
-      { "before": "task:beta/2", "after": "task:beta/3", "kind": "task" }
+      { "before": "task:beta/2", "after": "task:beta/3", "kind": "task" },
+      {
+        "before": "pr:usadamasa/agents-daemon#254", "after": "task:alpha/5", "kind": "edge",
+        "edge": {
+          "id": "edge-2",
+          "before": { "ref": "pr:usadamasa/agents-daemon#254", "cwd": "/repo/agents-daemon", "repo": "/repo/agents-daemon" },
+          "after": { "ref": "task:alpha/5", "cwd": "/repo/agents-daemon", "repo": "/repo/agents-daemon" },
+          "note": "PR #254 のマージを待つ"
+        }
+      }
     ],
     "longest_chain": ["task:beta/1", "task:beta/2", "task:beta/3"],
     "folded": {
@@ -130,7 +150,9 @@
         { "key": "sid:gamma", "depth": 0 },
         { "key": "sid:zeta", "depth": 0 },
         { "key": "task:alpha/4", "depth": 1 },
-        { "key": "task:beta/3", "depth": 3 }
+        { "key": "task:beta/3", "depth": 3 },
+        { "key": "pr:usadamasa/agents-daemon#254", "depth": 0 },
+        { "key": "task:alpha/5", "depth": 1 }
       ],
       "links": [
         { "before": "task:alpha/2", "after": "task:alpha/4", "via": ["task:alpha/3"] }
@@ -140,9 +162,11 @@
     "rows_with_completed": [],
     "column_order": [
       "task:beta/1",
+      "pr:usadamasa/agents-daemon#254",
       "task:alpha/2",
       "sid:zeta",
       "task:alpha/4",
+      "task:alpha/5",
       "task:beta/2",
       "task:beta/3",
       "sid:gamma",

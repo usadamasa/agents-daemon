@@ -117,6 +117,12 @@ agents-daemon edge list --cwd <dir> [--here | --repo <main worktree>] [--ref <�
   間は結びつかず、依存図には名前の置き場のノードで出る
 - 結びついた後も、書いたときの参照の組 (`session:<名前>`) と結びついた後の参照の組 (`sid:<session_id>`) のどちらで
   `edge add` / `edge rm` しても同じ辺に当たる。`edge add` は結びついた端点を名前に戻さない
+- `issue:` / `pr:` の端点は daemon が gh で状態を引き (open は 5 分ごと)、マージした PR と completed で閉じた issue は
+  依存図で完了にする。その参照を before に持つ辺は daemon が消し、daemon.log に 1 行書く。after にあるだけの辺は残る
+- マージせずに閉じた PR と、not planned / duplicate で閉じた issue は「取りやめ」になる。完了にはせず、待っていた下流を
+  止めている手当ての要るノードとして出し、辺も残す。代わりの PR へ付け替える (`edge rm` してから `edge add`) か、
+  待ちが要らなければ `edge rm` する
+- gh が無い・未認証・失敗した間は外部のまま残り、辺も消えない
 - `list` はすべての辺を出す。`--ref` は今の参照 (結びついた後なら `sid:`) で絞る。`--cwd` は `--here` の基準で、`--repo` / `--here` / `--ref` はどちらかの端点で絞る
 
 ### パーキングのメモを一覧する・書き換える

@@ -14,6 +14,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/protocol"
 	"github.com/usadamasa/agents-daemon/internal/ref"
+	"github.com/usadamasa/agents-daemon/internal/refstate"
 	"github.com/usadamasa/agents-daemon/internal/tasklog/record"
 )
 
@@ -41,9 +42,13 @@ const (
 	StatePending    = "pending"
 	StateCompleted  = "completed"
 	StateExited     = "exited" // セッションが終了していて、未完了のまま残った
-	// StateExternal は daemon が状態を知らない外部の参照 (issue / PR)。済んだかどうか分からないので、原因の鎖に
-	// 選ばず、末端の完了ノードを残す上流にも数えない。
+	// StateExternal は済んだと分かっていない外部の参照 (issue / PR)。daemon が引いて open だったか、まだ引けて
+	// いない。済んだかどうか分からないので、原因の鎖に選ばず、末端の完了ノードを残す上流にも数えない。
+	// merged / closed (completed で閉じた issue) と引けた参照は StateCompleted にする (#416)。
 	StateExternal = "external"
+	// StateDropped は待っていたものが届かずに閉じた外部の参照 (マージせずに閉じた PR、not planned / duplicate で
+	// 閉じた issue)。完了にせず、下流を止めている人の手当ての要るノードにする (付け替えるか `edge rm` する)。
+	StateDropped = "dropped"
 	// StateUnknown はセッションは生きているが状態を分類できない (申告の前、古い record)。作業中とは限らないので
 	// working に倒さない。
 	StateUnknown = "unknown"
@@ -55,8 +60,9 @@ const (
 	LinkEdge = "edge" // 渡す側が `agents-daemon edge add` で書いた辺 (edge)
 )
 
-// halted はセッション自身が止まっているノードの状態 (人の手か時間を待っている、または失敗した)。
-var halted = map[string]bool{StateQuestion: true, StatePermission: true, StateLimit: true, StateError: true}
+// halted は自分では進まないノードの状態。セッション自身が人の手か時間を待っている・失敗した、または待っていた
+// 外部の参照が取りやめになった。
+var halted = map[string]bool{StateQuestion: true, StatePermission: true, StateLimit: true, StateError: true, StateDropped: true}
 
 // DAG の形は protocol の schema が持つ。組み方の規則はここが持つ:
 //   - ノードはタスク 1 つで、同じセッションの blockedBy と edge list の辺を 1 つにする
@@ -115,6 +121,8 @@ type Input struct {
 	SessionNames map[string]string
 	// PeerNames は session ID → ListAgents の名前 (台帳)。ノードの SessionName (SendMessage の宛先に書く形) に使う。
 	PeerNames map[string]string
+	// RefStates は issue / PR の参照 → daemon が引いた状態 (refstate)。
+	RefStates map[string]string
 }
 
 // builder はグラフを組む途中の状態。
@@ -227,6 +235,12 @@ func (g *builder) resolve(ep edge.Endpoint, pick func(sessionID string) []string
 	if it, ok := ref.ParseItem(ep.Ref); ok {
 		n := g.nodes[key]
 		n.Title, n.State, n.RefKind = it.Title(), StateExternal, it.Kind
+		switch s := g.in.RefStates[ep.Ref]; {
+		case refstate.Done(s):
+			n.State = StateCompleted
+		case s == refstate.StateDropped:
+			n.State = StateDropped
+		}
 	}
 	return []string{key}
 }

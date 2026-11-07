@@ -93,15 +93,17 @@ const EDGE = "svg.edges path[marker-end]";
 test("完了を隠した既定の図: 完了していないノードと、完了していないノードへ続く完了を除いた箱を描く", () => {
   const byKey = cards();
   assert.deepEqual([...byKey.keys()].sort(), [
+    "pr:usadamasa/agents-daemon#254",
     "sid:gamma",
     "sid:zeta",
     "task:alpha/2",
     "task:alpha/4",
+    "task:alpha/5",
     "task:beta/1",
     "task:beta/2",
     "task:beta/3",
   ]);
-  assert.deepEqual(keysWith(byKey, "halt"), ["task:beta/1"]);
+  assert.deepEqual(keysWith(byKey, "halt"), ["pr:usadamasa/agents-daemon#254", "task:beta/1"]);
   assert.deepEqual(keysWith(byKey, "gone"), ["sid:gamma"]);
 });
 
@@ -113,18 +115,33 @@ test("完了を隠した既定の図: 状態の丸に状態ごとの色の class
   assert.equal(dot("task:beta/2"), "st");
 });
 
+test("完了を隠した既定の図: マージせずに閉じた PR は完了で畳まず、「取りやめ」と手当ての要る強調で描く", () => {
+  const card = q('.node[data-key="pr:usadamasa/agents-daemon#254"]');
+  assert.ok(["attn", "drop", "halt"].every((c) => card.classList.contains(c)), card.className);
+  assert.equal(card.querySelector("small").textContent, "取りやめ · PR");
+  assert.equal(card.querySelector(".st").getAttribute("class"), "st drop");
+});
+
 test("完了を隠した既定の図: 見える辺と隠した完了を通り抜けた辺を描き、longest chain の辺に印を付ける", () => {
-  assert.equal(count(EDGE), 4);
+  assert.equal(count(EDGE), 5);
   assert.equal(count(`${EDGE}.chain`), 2);
   assert.equal(count(`${EDGE}.folded`), 1);
-  assert.equal(count(`${EDGE}.edge`), 1);
+  assert.equal(count(`${EDGE}.edge`), 2);
   const hints = [...document.querySelectorAll("svg.edges g.hint title")].map((t) => t.textContent);
-  assert.deepEqual(hints.sort(), ["API の形が決まるのを待つ", "テストを直す を経由"]);
+  assert.deepEqual(hints.sort(), ["API の形が決まるのを待つ", "PR #254 のマージを待つ", "テストを直す を経由"]);
 });
 
 test("完了を隠した既定の図: 辺でつながるノードを段の浅い順に上から描き、辺の無いノードを右の列に column_order の順で並べる", () => {
   const graph = cards("#graph");
-  assert.deepEqual([...graph.keys()].sort(), ["task:alpha/2", "task:alpha/4", "task:beta/1", "task:beta/2", "task:beta/3"]);
+  assert.deepEqual([...graph.keys()].sort(), [
+    "pr:usadamasa/agents-daemon#254",
+    "task:alpha/2",
+    "task:alpha/4",
+    "task:alpha/5",
+    "task:beta/1",
+    "task:beta/2",
+    "task:beta/3",
+  ]);
   const top = (key) => graph.get(key).top;
   assert.ok(top("task:alpha/2") < top("task:beta/1"));
   assert.equal(top("task:beta/1"), top("task:alpha/4"));
@@ -146,7 +163,7 @@ test("完了を隠した既定の図: メモの一覧と凡例と footer を出�
   assert.equal(q("#legend").hidden, false);
   assert.equal(q("#completed-label").textContent, "完了したタスクも表示 (2 件)");
   assert.equal(q("#discard-stale").hidden, true);
-  assert.match(q("#foot-text").textContent, /daemon 動作中 .*止まっている 1 · 作業中 2 · 待ち 0 · 完了 2 \(非表示\)/);
+  assert.match(q("#foot-text").textContent, /daemon 動作中 .*止まっている 2 · 作業中 2 · 待ち 0 · 完了 2 \(非表示\)/);
   await snapshot("graph");
 });
 
@@ -202,34 +219,137 @@ test("完了も表示した図: 完了したノードも描き、通り抜けて
   q("#completed-check").click();
   try {
     const byKey = cards();
-    assert.equal(byKey.size, 9);
+    assert.equal(byKey.size, 11);
     assert.deepEqual(keysWith(byKey, "gone"), ["sid:gamma", "task:alpha/1", "task:alpha/3"]);
-    assert.equal(count(EDGE), 6);
+    assert.equal(count(EDGE), 7);
     assert.equal(count(`${EDGE}.folded`), 0);
-    assert.equal(cards("#graph").size, 7);
+    assert.equal(cards("#graph").size, 9);
     assert.ok(byKey.get("task:alpha/1").top < byKey.get("task:alpha/2").top);
     assert.ok(byKey.get("task:alpha/3").top < byKey.get("task:alpha/4").top);
     await snapshot("graph-completed");
   } finally {
     q("#completed-check").click();
   }
-  assert.equal(cards().size, 7);
+  assert.equal(cards().size, 9);
 });
 
-test("縮小した図: 全体を表示で 100% より小さくし、図全体を見える領域に収める", async () => {
+// resize は #graph の見える領域を size にし、窓の大きさが変わったことを知らせる。
+function resize(size) {
+  setHost(size);
+  window.dispatchEvent(new Event("resize"));
+}
+
+// view は拡大縮小の今の見え方: 拡大率の表示、全体表示のオンオフ、枠の大きさと中心の余白、スクロール量。
+function view() {
+  const frame = q("#graph .zoom-frame");
+  const host = q("#graph");
+  return {
+    label: q("#zoom-reset").textContent,
+    fit: q("#zoom-fit").getAttribute("aria-pressed"),
+    width: parseFloat(frame.style.width),
+    height: parseFloat(frame.style.height),
+    marginLeft: parseFloat(frame.style.marginLeft || "0"),
+    marginTop: parseFloat(frame.style.marginTop || "0"),
+    scrollLeft: host.scrollLeft,
+    scrollTop: host.scrollTop,
+  };
+}
+
+// assertFitted は枠が size に収まり、余った分を左右と上下に等しく空けて中心に置いていることを確かめる。
+function assertFitted(v, size) {
+  assert.equal(v.fit, "true");
+  assert.ok(v.width <= size.width, `枠の幅 ${v.width}`);
+  assert.ok(v.height <= size.height, `枠の高さ ${v.height}`);
+  assert.equal(v.marginLeft, (size.width - v.width) / 2);
+  assert.equal(v.marginTop, (size.height - v.height) / 2);
+  assert.ok(v.marginLeft > 0 || v.marginTop > 0, "どちらかの向きに余白が残る");
+}
+
+test("既定の図: 全体を表示はオンで、図を見える領域に収めて中心に置く", () => {
+  const v = view();
+  assertFitted(v, HOST);
+  assert.ok(q("#zoom-fit").classList.contains("on"));
+  assert.ok(parseInt(v.label, 10) <= 100, `拡大率が ${v.label}`);
+});
+
+test("縮小した図: 窓を小さくすると全体表示が 100% より小さくし、図全体を見える領域の中心に収める", async () => {
   const small = { width: 480, height: 320 };
-  setHost(small);
+  resize(small);
   try {
-    q("#zoom-fit").click();
-    const label = q("#zoom-reset").textContent;
-    assert.ok(parseInt(label, 10) < 100, `拡大率が ${label}`);
-    const frame = q("#graph .zoom-frame");
-    assert.ok(parseFloat(frame.style.width) <= small.width, `枠の幅 ${frame.style.width}`);
-    assert.ok(parseFloat(frame.style.height) <= small.height, `枠の高さ ${frame.style.height}`);
+    const v = view();
+    assert.ok(parseInt(v.label, 10) < 100, `拡大率が ${v.label}`);
+    assertFitted(v, small);
     assert.match(q("#graph .canvas").style.transform, /^scale\(0\.\d+\)$/);
     await snapshot("graph-fit");
   } finally {
-    setHost(HOST);
-    q("#zoom-reset").click();
+    resize(HOST);
   }
+  assertFitted(view(), HOST);
+});
+
+test("下限より小さくしないと収まらない図: 下限で止め、上 (根の側) と横の中心を見せる", async () => {
+  const tiny = { width: 120, height: 90 };
+  resize(tiny);
+  try {
+    const v = view();
+    assert.equal(v.label, "30%");
+    assert.equal(v.fit, "true");
+    assert.ok(v.width > tiny.width && v.height > tiny.height, `枠 ${v.width} × ${v.height}`);
+    assert.equal(v.marginLeft, 0);
+    assert.equal(v.marginTop, 0);
+    assert.equal(v.scrollTop, 0);
+    assert.equal(v.scrollLeft, (v.width - tiny.width) / 2);
+    // 拡大率の変わらない描き直しでは、利用者が動かしたスクロールを保つ。
+    q("#graph").scrollTo(5, 40);
+    q("#completed-check").click();
+    q("#completed-check").click();
+    assert.deepEqual([q("#graph").scrollLeft, q("#graph").scrollTop], [5, 40]);
+    await snapshot("graph-fit-min");
+  } finally {
+    resize(HOST);
+  }
+});
+
+test("全体表示がオンの間は、描き直すたびに合わせ直し、同じ図なら拡大率も位置も変えない", () => {
+  const first = view();
+  q("#completed-check").click();
+  try {
+    // 完了も表示すると図が変わり、その図に合わせ直す。
+    assertFitted(view(), HOST);
+  } finally {
+    q("#completed-check").click();
+  }
+  assert.deepEqual(view(), first);
+});
+
+test("利用者が拡大縮小すると全体表示をオフにし、描き直しても拡大率を保つ。押し直すとまた合わせる", async () => {
+  const fitted = view();
+  q("#zoom-in").click();
+  try {
+    const zoomed = view();
+    assert.equal(zoomed.fit, "false");
+    assert.ok(!q("#zoom-fit").classList.contains("on"));
+    assert.notEqual(zoomed.label, fitted.label);
+    q("#completed-check").click();
+    q("#completed-check").click();
+    resize(HOST);
+    assert.equal(view().label, zoomed.label);
+    assert.equal(view().fit, "false");
+    q("#zoom-reset").click();
+    assert.equal(view().label, "100%");
+    assert.equal(view().fit, "false");
+    await snapshot("graph-fit-off");
+  } finally {
+    q("#zoom-fit").click();
+  }
+  assert.deepEqual(view(), fitted);
+  // オンのときに押すとオフになり、拡大率はそのまま残す。
+  q("#zoom-fit").click();
+  try {
+    assert.equal(view().fit, "false");
+    assert.equal(view().label, fitted.label);
+  } finally {
+    q("#zoom-fit").click();
+  }
+  assert.equal(view().fit, "true");
 });

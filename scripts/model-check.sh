@@ -6,7 +6,8 @@ set -euo pipefail
 # 設計を変えるときは、先にモデルへ写して holds のまま通ることを見てから実装する (models/handoff/README.md)。
 #
 # TLC は標準モジュールを java.io.tmpdir に展開し、探索の状態を -metadir に書く。どちらも ./tmp 配下にする
-# (sandbox の中では /var/folders に書けない)。TLC の exit code は 0 が反例なし、12 が不変条件の違反。
+# (sandbox の中では /var/folders に書けない)。TLC の exit code は 0 が反例なし、12 が不変条件の違反、13 が
+# liveness の性質 (PROPERTIES) の違反。
 
 cd "$(dirname "$0")/.."
 tmp="$PWD/tmp/tlc"
@@ -27,6 +28,9 @@ run() {
       ;;
     violated:12)
       printf '    反例あり (%s、trace は %s)\n' "$(awk '/^Error: Invariant/ {print $3}' "$log")" "$log"
+      ;;
+    violated:13)
+      printf '    反例あり (liveness、trace は %s)\n' "$log"
       ;;
     *)
       printf '    NG: exit %s (期待 %s)。log: %s\n' "$rc" "$expect" "$log"
@@ -59,5 +63,15 @@ run models/work Work WorkRace.cfg violated
 run models/work Work WorkRaceEnded.cfg violated
 # 同じく、UserPromptSubmit と Stop が交錯して turns の更新を失う (NoLostUpdate の反例)。
 run models/work Work WorkRaceTurns.cfg violated
+# 外部の参照の状態を daemon が gh で引いて写しに書き、依存図が merged / closed を完了にする形 (#416)。
+run models/refstate RefState RefState.cfg holds
+# gh の失敗を closed として写しに書くと、済んでいない参照を完了と見せる (NoFalseComplete の反例)。
+run models/refstate RefState RefStateFailAsClosed.cfg violated
+# マージせずに閉じた PR、not planned で閉じた issue を済んだ状態と書くと、届いていない参照を完了と見せる (NoFalseComplete の反例)。
+run models/refstate RefState RefStateDroppedAsDone.cfg violated
+# 写しが open の参照を引き直さないと、マージされた PR がいつまでも完了にならない (EventuallyCompleted の反例)。
+run models/refstate RefState RefStateNoRefetch.cfg violated
+# 済んだ状態に変わった引き直しのときだけ辺を消すと、済んだ PR へ後から書いた辺が残り続ける (EdgeRemoved の反例、#422)。
+run models/refstate RefState RefStateSweepOnTransition.cfg violated
 
 exit "$failed"

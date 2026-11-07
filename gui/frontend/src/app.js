@@ -5,6 +5,7 @@ import * as dagre from "./vendor/dagre.esm.js";
 import { Graph } from "./graph.js";
 import { partition } from "./column.js";
 import { fitEdges, spreadPorts } from "./ports.js";
+import { STATE_TONE, emphasis } from "./card.js";
 import { isStale, kindLabel, lastPlacedAt, stamp } from "./memo.js";
 import { canAdopt, canDismiss, canTell, candidates, destinationLabel, isOwnTask, issueDestinations, pathDestination, peerDestinations, spawnDestinations, spawnLabel, taskDestinations } from "./ops.js";
 import { addBlocker, adopt, askUnlink, discard, discardStale, dismissAll, dismissOne, handOff, handOffTask, instruct, setStatus, start, toParking, unlink } from "./actions.js";
@@ -34,15 +35,6 @@ const STATE_LABEL = {
   external: "外部",
 };
 const REF_KIND_LABEL = { issue: "issue", pr: "PR" };
-// 丸と chip の色の鍵。無い状態は既定の灰。
-const STATE_TONE = {
-  working: "working",
-  question: "warn",
-  permission: "warn",
-  limit: "limit",
-  error: "err",
-  exited: "exited",
-};
 const KIND_LABEL = { task: "タスク", todo: "TodoWrite の項目", session: "セッション", ref: "参照" };
 
 const state = {
@@ -228,6 +220,7 @@ function nodeCard(n, highlight) {
   const b = document.createElement("button");
   b.type = "button";
   b.className = "node";
+  b.classList.add(...emphasis(n));
   if (n.halted) b.classList.add("halt");
   if (n.state === "exited" || n.state === "completed") b.classList.add("gone");
   if (state.selected?.type === "node" && state.selected.key === n.key) b.classList.add("sel");
@@ -1114,6 +1107,8 @@ function applyZoom() {
   frame.style.width = `${Math.ceil(parseFloat(canvas.style.width) * zoom)}px`;
   frame.style.height = `${Math.ceil(parseFloat(canvas.style.height) * zoom)}px`;
   canvas.style.transform = zoom === 1 ? "" : `scale(${zoom})`;
+  // カードの強調の枠を縮小しても細くしすぎないよう、style.css が拡大率で割る。
+  canvas.style.setProperty("--zoom", String(zoom));
 }
 
 // setZoom は拡大率を next にし、pointer (#graph の左上からの距離) が指す図の点を同じ画面位置に残す。

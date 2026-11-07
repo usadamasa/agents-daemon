@@ -50,6 +50,10 @@ SessionStart hook は `--dry-run` **なし**で配線してある。検知の挙
 済んでいる。Claude Code の sandbox は `~/.claude/plugins` と `~/.cache/agents-daemon` に書けないので、
 利用者が `!` で打つ。
 
+起動中のセッションは、起動したときの版の hook と mod を使い続ける。hook (タスクの記録など) は新しいバイナリへ
+そのまま渡すので止まらない。mod は古い版の形の JSON を送り、新しいバイナリの schema に合わなければ弾かれる。
+mod の失敗が出たセッションは開き直す。
+
 ### 放置された worktree を回収する
 
 普段は SessionStart hook が `prune-worktrees --hook` で、今開いたリポジトリの `.claude/worktrees/` 配下を回収する

@@ -1,8 +1,9 @@
 #!/usr/bin/env bats
 # SessionStart hook (ensure-daemon.sh) の分岐を検証する。
 #
-# - cache のバイナリと stamp が plugin の version と揃っていれば daemon --ensure を exec する
-# - 揃っていなければ build-daemon.sh を detach して即座に戻る (go build を前景で回さない)
+# - cache のバイナリがあり、stamp が plugin の version 以上なら daemon --ensure を exec する (新しい stamp を
+#   古い plugin のソースで上書きしない)
+# - stamp が無い・古い・読めなければ build-daemon.sh を detach して即座に戻る (go build を前景で回さない)
 # - go が無ければ build.log に ERROR を残し、バイナリを作らない
 #
 # SessionStart hook の stdout は会話の context へ注入されるため、どの分岐でも stdout を空に保つ。
@@ -34,6 +35,35 @@ teardown() {
   [ ! -e "$BUILD_LOG" ]
 }
 
+@test "stamp が plugin の version より新しければ建て直さず daemon --ensure を exec する (旧 plugin のセッションが古いソースで上書きしない)" {
+  make_fake_daemon "$TEST_TMPDIR/daemon.calls" "$BIN"
+  printf '9999.9999.9\n' >"$STAMP"
+  printf '9999.9999.9\n' >"$GUI_STAMP"
+  install_fake_go
+  install_fake_gui_toolchain
+
+  PATH="$FIXTURE_PATH" run_hook --separate-stderr "$HOOK"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  [ "$(<"$TEST_TMPDIR/daemon.calls")" = "daemon --ensure" ]
+  [ ! -e "$TEST_TMPDIR/go.calls" ]
+  [ ! -e "$BUILD_LOG" ]
+  [ "$(<"$STAMP")" = "9999.9999.9" ]
+  [ "$(<"$GUI_STAMP")" = "9999.9999.9" ]
+}
+
+@test "stamp が読めなければ建て直す" {
+  make_fake_daemon "$TEST_TMPDIR/old-daemon.calls" "$BIN"
+  printf 'garbage\n' >"$STAMP"
+  install_fake_go
+
+  PATH="$FIXTURE_PATH" run_hook --separate-stderr "$HOOK"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  wait_until stamp_is_current
+  wait_until daemon_ensured
+}
+
 @test "daemon は最新で agent-tasks の stamp だけ違えば、gui の build を detach してから daemon --ensure を exec する" {
   require_darwin
   make_fake_daemon "$TEST_TMPDIR/daemon.calls" "$BIN"
@@ -54,7 +84,7 @@ teardown() {
   [ "$(<"$STAMP")" = "$PLUGIN_VERSION" ]
 }
 
-@test "stamp が plugin の version と違えば build を detach し、完了後に新しいバイナリで daemon --ensure する" {
+@test "stamp が plugin の version より古ければ build を detach し、完了後に新しいバイナリで daemon --ensure する" {
   make_fake_daemon "$TEST_TMPDIR/old-daemon.calls" "$BIN"
   printf '%s\n' "0000.0000.0" >"$STAMP"
   install_fake_go

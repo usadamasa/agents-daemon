@@ -1,9 +1,10 @@
 #!/usr/bin/env bats
 # SessionStart hook (prune-worktrees.sh) の分岐を検証する。
 #
-# - cache のバイナリが無いか、stamp が plugin の version と違えば何もせず exit 0 (ensure-daemon.sh が build するまで待つ。
-#   旧版のバイナリはこのサブコマンドを知らないかもしれない)
-# - そろっていれば `prune-worktrees --hook` を exec し、stdin をそのまま渡す。判定と systemMessage はバイナリ側の責務
+# - cache のバイナリか stamp が無ければ何もせず exit 0
+# - stamp が plugin の version より古ければ、両方の version を stderr に 1 行出して exit 0 (ensure-daemon.sh が
+#   build するまで待つ。旧版のバイナリはこのサブコマンドを知らないかもしれない)
+# - stamp が plugin の version 以上なら `prune-worktrees --hook` を exec し、stdin をそのまま渡す。判定と systemMessage はバイナリ側の責務
 #   (worktree/hook.go、worktreecli/prune_worktrees_test.go)
 #
 # dream-harvest.sh と違い、この hook は stdout を stderr へ寄せない。バイナリが出す {"systemMessage": ...} を
@@ -35,15 +36,36 @@ write_current_stamp() {
   [ -z "$stderr" ]
 }
 
-@test "stamp が plugin の version と違えば何もせず exit 0 (旧版のバイナリを呼ばない)" {
+@test "stamp が plugin の version より古ければ旧版のバイナリを呼ばず、両方の version を stderr に出す" {
   make_fake_daemon "$TEST_TMPDIR/daemon.calls" "$BIN"
   printf '0000.0000.0\n' >"$STAMP"
 
   PATH="$FIXTURE_PATH" run_hook --separate-stderr "$HOOK" <<<'{"cwd": "/nowhere"}'
   [ "$status" -eq 0 ]
   [ -z "$output" ]
-  [ -z "$stderr" ]
   [ ! -f "$TEST_TMPDIR/daemon.calls" ]
+  [[ "$stderr" == *"0000.0000.0"* ]]
+  [[ "$stderr" == *"$PLUGIN_VERSION"* ]]
+}
+
+@test "stamp が plugin の version より新しければ prune-worktrees --hook を exec する" {
+  make_fake_daemon "$TEST_TMPDIR/daemon.calls" "$BIN"
+  printf '9999.9999.9\n' >"$STAMP"
+
+  PATH="$FIXTURE_PATH" run_hook --separate-stderr "$HOOK" <<<'{"cwd": "/nowhere"}'
+  [ "$status" -eq 0 ]
+  [ -z "$stderr" ]
+  [ "$(<"$TEST_TMPDIR/daemon.calls")" = "prune-worktrees --hook" ]
+}
+
+@test "stamp が読めなければバイナリを呼ばず、cannot compare を stderr に出す" {
+  make_fake_daemon "$TEST_TMPDIR/daemon.calls" "$BIN"
+  printf 'garbage\n' >"$STAMP"
+
+  PATH="$FIXTURE_PATH" run_hook --separate-stderr "$HOOK" <<<'{"cwd": "/nowhere"}'
+  [ "$status" -eq 0 ]
+  [ ! -f "$TEST_TMPDIR/daemon.calls" ]
+  [[ "$stderr" == *"cannot compare"* ]]
 }
 
 @test "stamp が無ければ何もせず exit 0" {

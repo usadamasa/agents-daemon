@@ -2,8 +2,8 @@
 # SessionStart hook: agents-daemon の daemon を起こす。
 #
 # plugin には install 時の lifecycle hook が無いため、バイナリの用意もここで担う。
-# - cache のバイナリが plugin の version から建てたものなら `daemon --ensure` を exec する
-# - そうでなければ build-daemon.sh を detach して即座に戻る。build 完了後の起動は
+# - cache のバイナリが plugin の version 以上から建てたものなら `daemon --ensure` を exec する (stamp_current)
+# - stamp が無い・古い・読めなければ build-daemon.sh を detach して即座に戻る。build 完了後の起動は
 #   build-daemon.sh が行う。SessionStart を go build で待たせない
 # - daemon は最新で依存図のアプリ (agent-tasks) だけ古ければ、build-gui.sh を detach する
 #
@@ -37,10 +37,10 @@ prepare_build_log() {
   fi
 }
 
-if [ -x "$DAEMON_BIN" ] && [ -f "$DAEMON_STAMP" ] && [ "$(<"$DAEMON_STAMP")" = "$version" ]; then
-  # daemon は最新。依存図のアプリだけ古い (前回の build で toolchain が無かった、など) なら、それだけ建て直す。
+if [ -x "$DAEMON_BIN" ] && stamp_current "$DAEMON_STAMP" "$version"; then
+  # daemon は plugin 以上。依存図のアプリだけ古い (前回の build で toolchain が無かった、など) なら、それだけ建て直す。
   # macOS 以外では build-gui.sh が飛ばすだけなので起こさない。
-  if [ "$(uname -s)" = Darwin ] && { [ ! -f "$GUI_STAMP" ] || [ "$(<"$GUI_STAMP")" != "$version" ]; }; then
+  if [ "$(uname -s)" = Darwin ] && ! stamp_current "$GUI_STAMP" "$version"; then
     prepare_build_log
     log_info "agent-tasks missing or built from another version; building $version in background (log: $DAEMON_BUILD_LOG)"
     nohup "$SCRIPT_DIR/build-gui.sh" </dev/null >>"$DAEMON_BUILD_LOG" 2>&1 &

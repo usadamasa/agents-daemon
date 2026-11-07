@@ -1,6 +1,6 @@
 #!/bin/bash
 # daemon-bin.sh
-# ensure-daemon.sh と build-daemon.sh が共有する、daemon バイナリの置き場と plugin version の解決。
+# hook と build の script が共有する、daemon バイナリの置き場、plugin version の解決、stamp との比較。
 # source して使う (実行はしない)。source 前に SCRIPT_DIR (hooks/) を設定しておく。
 
 # shellcheck disable=SC2034
@@ -30,4 +30,57 @@ GUI_APP="$HOME/Applications/agent-tasks.app"
 # plugin.json の version を stdout に出す。読めなければ非 0。
 plugin_version() {
   jq -er '.version' "$PLUGIN_ROOT/.claude-plugin/plugin.json"
+}
+
+# version_older A B: A が B より古ければ 0、同じか新しければ 1、どちらかが `.` 区切りの数でなければ 2。
+# 欄ごとに 10 進の数として比べる (`0926` を 8 進と読まず、`9` と `10` を文字列順で比べない)。
+version_older() {
+  local -a a b
+  local i x y n
+  [ -n "$1" ] && [ -n "$2" ] || return 2
+  IFS=. read -ra a <<<"$1"
+  IFS=. read -ra b <<<"$2"
+  n=${#a[@]}
+  [ "${#b[@]}" -gt "$n" ] && n=${#b[@]}
+  [ "$n" -gt 0 ] || return 2
+  for ((i = 0; i < n; i++)); do
+    # 欄の数が違うときだけ足りない欄を 0 にする。空の欄 (`2026..0`) は 0 にせず、数でないとして弾く。
+    x=${a[i]-0}
+    y=${b[i]-0}
+    [[ "$x" =~ ^[0-9]+$ && "$y" =~ ^[0-9]+$ ]] || return 2
+    if ((10#$x < 10#$y)); then
+      return 0
+    fi
+    if ((10#$x > 10#$y)); then
+      return 1
+    fi
+  done
+  return 1
+}
+
+# stamp_current FILE VERSION: stamp file があり、その version が VERSION 以上なら 0。無い・古い・読めないなら 1。
+# 建て直すかの判断に使う。新しい stamp を古い plugin のソースで上書きしない (update 後に旧 plugin のセッションが
+# compact や clear で SessionStart を起こしても、バイナリを古いものへ戻さない)。
+stamp_current() {
+  local rc=0
+  [ -f "$1" ] || return 1
+  version_older "$(<"$1")" "$2" || rc=$?
+  [ "$rc" -eq 1 ]
+}
+
+# daemon_bin_serves STAMP VERSION: cache のバイナリ (STAMP の version から建った) に plugin (VERSION) の hook の
+# サブコマンドを渡してよければ 0。stamp が plugin より古いか読めなければ、理由を stderr に 1 行出して 1。
+# 古いバイナリはサブコマンドを知らず `unknown command` で exit 1 になりうる。新しいバイナリは知っているので通す
+# (update の後も、旧 plugin のまま起動中のセッションの記録を止めない)。log_skip を使うので hook-logger.sh も source する。
+# 新しいバイナリが古い hook の呼び出しを受けられることが前提なので、hook から呼ぶサブコマンドと引数は消さず、
+# 変えずに足すだけにする。
+daemon_bin_serves() {
+  local stamp="$1" version="$2" rc=0
+  version_older "$stamp" "$version" || rc=$?
+  case "$rc" in
+    1) return 0 ;;
+    0) log_skip "binary $stamp is older than plugin $version; waiting for ensure-daemon.sh to rebuild" ;;
+    *) log_skip "cannot compare binary stamp '$stamp' with plugin $version" ;;
+  esac
+  return 1
 }

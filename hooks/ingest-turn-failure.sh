@@ -3,8 +3,8 @@
 #
 # turn を終わらせた API error を XDG state の turn-failures/ に記録し、次の turn で消す (#77、turnfailure)。
 # どの event で書くか消すかはバイナリ側が持つ。この hook が担うのはバイナリの場所の解決だけで、無ければ何もしない
-# (ensure-daemon.sh が build する)。stamp が plugin の version と違うときも何もしない。旧版のバイナリは
-# このサブコマンドを知らず、`unknown command` で exit 1 になるため。
+# (ensure-daemon.sh が build する)。stamp が plugin の version より古いときも、理由を stderr に出して何もしない
+# (daemon_bin_serves)。新しいときは通す。
 #
 # バイナリは stdout に何も出さず (UserPromptSubmit の stdout は会話の context に入る)、失敗しても exit 0 で
 # 終わる (理由は stderr)。記録の失敗でセッションの作業に割り込まないため。
@@ -29,6 +29,6 @@ if ! version=$(plugin_version); then
   log_error "cannot read version from $PLUGIN_ROOT/.claude-plugin/plugin.json"
   exit 1
 fi
-[ "$(<"$DAEMON_STAMP")" = "$version" ] || exit 0
+daemon_bin_serves "$(<"$DAEMON_STAMP")" "$version" || exit 0
 
 exec "$DAEMON_BIN" ingest-turn-failure

@@ -236,3 +236,43 @@ func TestCauseAndLongest(t *testing.T) {
 		t.Errorf("Longest(x) = %v, want 輪で止まる", got)
 	}
 }
+
+// Fold は隠したノード (大文字) を通り抜ける経路を、見えているノードどうしの 1 本の辺に畳む。
+func TestFold(t *testing.T) {
+	shown := func(k string) bool { return strings.ToLower(k) == k }
+	cases := []struct {
+		name  string
+		links [][2]string
+		want  []Folded
+	}{
+		{"鎖は通り抜けたノードを経路の順に持つ", [][2]string{{"a", "B"}, {"B", "C"}, {"C", "d"}},
+			[]Folded{{Before: "a", After: "d", Via: []string{"B", "C"}}}},
+		{"隠したノードで分かれて合わさる先は見えている組ごとに 1 本", [][2]string{{"a", "H"}, {"b", "H"}, {"H", "c"}, {"H", "d"}},
+			[]Folded{{"a", "c", []string{"H"}}, {"a", "d", []string{"H"}}, {"b", "c", []string{"H"}}, {"b", "d", []string{"H"}}}},
+		{"直接の辺がある組は畳まない", [][2]string{{"a", "H"}, {"H", "c"}, {"a", "c"}}, nil},
+		{"見えているノードの先へは通り抜けない", [][2]string{{"a", "b"}, {"b", "H"}, {"H", "c"}},
+			[]Folded{{"b", "c", []string{"H"}}}},
+		{"同じ組へ 2 本の経路があっても 1 本", [][2]string{{"a", "H"}, {"a", "K"}, {"H", "c"}, {"K", "c"}},
+			[]Folded{{"a", "c", []string{"H"}}}},
+		{"隠したノードの輪でも止まる", [][2]string{{"a", "H"}, {"H", "K"}, {"K", "H"}, {"K", "c"}},
+			[]Folded{{"a", "c", []string{"H", "K"}}}},
+		{"隠したノードで行き止まりなら辺は無い", [][2]string{{"a", "H"}}, nil},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var order []string
+			for _, l := range c.links {
+				for _, k := range l {
+					if !slices.Contains(order, k) {
+						order = append(order, k)
+					}
+				}
+			}
+			slices.Sort(order)
+			got := New(c.links, less).Fold(order, shown)
+			if !reflect.DeepEqual(got, c.want) {
+				t.Errorf("Fold = %v, want %v", got, c.want)
+			}
+		})
+	}
+}

@@ -949,6 +949,7 @@ export const definitions = {
       "nodes",
       "links",
       "longest_chain",
+      "folded",
       "rows",
       "rows_with_completed"
     ],
@@ -973,12 +974,15 @@ export const definitions = {
         },
         "description": "下流の最も多い止まっているノードから、下流をたどった最長の鎖の key"
       },
+      "folded": {
+        "$ref": "#/$defs/FoldedGraph"
+      },
       "rows": {
         "type": "array",
         "items": {
           "$ref": "#/$defs/GraphRow"
         },
-        "description": "完了したノードを落として組んだレーンの行"
+        "description": "folded の keys と、links のうち両端が keys にあるものと folded の links で組んだレーンの行"
       },
       "rows_with_completed": {
         "type": "array",
@@ -1165,6 +1169,56 @@ export const definitions = {
       },
       "edge": {
         "$ref": "#/$defs/EdgeRecord"
+      }
+    }
+  },
+  "FoldedGraph": {
+    "description": "完了したノードを隠したときの図。隠したノードを通り抜けていた辺は畳んで残す",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "keys",
+      "links"
+    ],
+    "properties": {
+      "keys": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "見せるノードの key (nodes の順)。完了していないものと、完了していても下流に完了していないノードが無く、完了も終了もしていない上流を直接持つもの"
+      },
+      "links": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/FoldedLink"
+        },
+        "description": "隠したノードを通り抜けた辺。両端が keys にあり、同じ組の辺が links に無いもの"
+      }
+    }
+  },
+  "FoldedLink": {
+    "description": "隠したノードを通り抜けた経路を畳んだ辺 1 本",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "before",
+      "after",
+      "via"
+    ],
+    "properties": {
+      "before": {
+        "type": "string"
+      },
+      "after": {
+        "type": "string"
+      },
+      "via": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "通り抜けた隠したノードの key (経路の順)"
       }
     }
   },

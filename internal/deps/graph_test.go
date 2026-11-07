@@ -2,6 +2,7 @@ package deps
 
 import (
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/ledger"
 	"github.com/usadamasa/agents-daemon/internal/parking"
+	"github.com/usadamasa/agents-daemon/internal/protocol"
 	"github.com/usadamasa/agents-daemon/internal/tasklog/record"
 )
 
@@ -401,6 +403,56 @@ func TestGraph_rows(t *testing.T) {
 	if empty.Graph.Rows == nil || empty.Graph.RowsWithCompleted == nil {
 		t.Errorf("rows = %v / %v, want 空の配列", empty.Graph.Rows, empty.Graph.RowsWithCompleted)
 	}
+}
+
+// 完了したノードを隠した図 (folded) は、隠したノードを通り抜けた辺を畳んで残す (#392)。末端の完了ノードは、
+// 完了も終了もしていない上流を直接持つ間だけ見せる。rows も同じ図で組む。
+func TestGraph_folded(t *testing.T) {
+	const cwd = "/w/a"
+	b := build(input{
+		PID: 42,
+		Snapshot: snapshot(
+			daemonstate.PaneStatus{PaneID: "p1", SessionID: "A", CWD: cwd, AgentStatus: "working"},
+			daemonstate.PaneStatus{PaneID: "p2", SessionID: "P", CWD: cwd, AgentStatus: "working"},
+		),
+		Tasks: []record.Task{
+			task("A", "1", "始め", "in_progress", cwd),
+			task("A", "2", "済んだ中間", "completed", cwd, "1"),
+			task("A", "3", "済んだ中間 2", "completed", cwd, "2"),
+			task("A", "4", "終わり", "pending", cwd, "3"),
+			task("A", "5", "報告を受け取る", "completed", cwd),
+			task("A", "6", "済んだ前提", "completed", cwd),
+			task("A", "7", "済んだ末端", "completed", cwd, "6"),
+			task("X", "1", "終了したセッションを待った", "completed", cwd),
+		},
+		Edges: []edge.Edge{
+			{ID: "e1", Before: edge.Endpoint{Ref: "sid:P", CWD: cwd}, After: edge.Endpoint{Ref: "task:A/5", CWD: cwd}},
+			{ID: "e2", Before: edge.Endpoint{Ref: "sid:G", CWD: cwd}, After: edge.Endpoint{Ref: "task:X/1", CWD: cwd}},
+		},
+	})
+	f := b.Graph.Folded
+	// A/5 は生きている peer を上流に持つ末端なので残る。X/1 の上流は終了した置き場、A/7 の上流は完了なので隠す。
+	if want := []string{"sid:P", "task:A/1", "task:A/4", "task:A/5", "sid:G"}; !reflect.DeepEqual(sortKeys(f.Keys), sortKeys(want)) {
+		t.Errorf("folded keys = %v, want %v", f.Keys, want)
+	}
+	if want := []protocol.FoldedLink{{Before: "task:A/1", After: "task:A/4", Via: []string{"task:A/2", "task:A/3"}}}; !reflect.DeepEqual(f.Links, want) {
+		t.Errorf("folded links = %+v, want %+v", f.Links, want)
+	}
+	// 畳んだ辺は破線で描く。
+	if got, want := drawRows(b.Graph.Rows), "* task:A/1\n┆\n* task:A/4\n* sid:P\n┆\n* task:A/5\n* sid:G"; got != want {
+		t.Errorf("rows =\n%s\nwant\n%s", got, want)
+	}
+	// ノードが無ければ空の配列 (JSON で null にしない)。
+	empty := build(input{})
+	if empty.Graph.Folded.Keys == nil || empty.Graph.Folded.Links == nil {
+		t.Errorf("folded = %+v, want 空の配列", empty.Graph.Folded)
+	}
+}
+
+func sortKeys(keys []string) []string {
+	out := append([]string{}, keys...)
+	sort.Strings(out)
+	return out
 }
 
 // 止まっているノードも待ちの輪も無ければ longest chain は空。循環した辺があっても止まらずに組む。

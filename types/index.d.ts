@@ -335,7 +335,8 @@ export type DepsGraph = {
   links: GraphLink[]
   // 下流の最も多い止まっているノードから、下流をたどった最長の鎖の key
   longest_chain: string[]
-  // 完了したノードを落として組んだレーンの行
+  folded: FoldedGraph
+  // folded の keys と、links のうち両端が keys にあるものと folded の links で組んだレーンの行
   rows: GraphRow[]
   // 完了したノードも含めて組んだレーンの行
   rows_with_completed: GraphRow[]
@@ -394,6 +395,22 @@ export type GraphLink = {
   after: string
   kind: 'task' | 'edge'
   edge?: EdgeRecord
+}
+
+// 完了したノードを隠したときの図。隠したノードを通り抜けていた辺は畳んで残す
+export type FoldedGraph = {
+  // 見せるノードの key (nodes の順)。完了していないものと、完了していても下流に完了していないノードが無く、完了も終了もしていない上流を直接持つもの
+  keys: string[]
+  // 隠したノードを通り抜けた辺。両端が keys にあり、同じ組の辺が links に無いもの
+  links: FoldedLink[]
+}
+
+// 隠したノードを通り抜けた経路を畳んだ辺 1 本
+export type FoldedLink = {
+  before: string
+  after: string
+  // 通り抜けた隠したノードの key (経路の順)
+  via: string[]
 }
 
 // kind edge の辺の元の記録。edge rm に渡す

@@ -28,6 +28,24 @@ export function scrollAfterZoom(scroll, pointer, from, to) {
   return Math.max(0, ((scroll + pointer) * to) / from - pointer);
 }
 
+// ホイールの連なりの切れ目。トラックパッドの慣性は 16ms 前後の間隔で届くので、これより空いたら指を離して止まったとみる。
+export const WHEEL_GAP_MS = 150;
+
+// wheelZoomer はホイールの 1 回 ({ deltaY, modifier, t }) と今の拡大率から次の拡大率を返す関数を作る。
+// 拡大縮小にしないときは null を返す。修飾キーを押して始めた連なりだけを拡大縮小にする。
+// 慣性のスクロールは途中で押した修飾キー (Cmd + Tab など) を載せて届き、読み替えると 2 回の wheel で上限へ跳ねる。
+export function wheelZoomer() {
+  let last = -Infinity;
+  let zooming = false;
+  return (e, z) => {
+    if (e.t - last > WHEEL_GAP_MS) zooming = e.modifier;
+    last = e.t;
+    if (!zooming || !e.modifier) return null;
+    const delta = Math.max(-50, Math.min(50, e.deltaY));
+    return clampZoom(z * Math.exp(-delta * 0.01));
+  };
+}
+
 export function percent(z) {
   return `${Math.round(z * 100)}%`;
 }

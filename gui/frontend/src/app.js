@@ -8,7 +8,7 @@ import { isStale, kindLabel, lastPlacedAt, stamp } from "./memo.js";
 import { canAdopt, canDismiss, canTell, candidates, destinationLabel, isOwnTask, issueDestinations, pathDestination, peerDestinations, spawnDestinations, spawnLabel, taskDestinations } from "./ops.js";
 import { addBlocker, adopt, askUnlink, discard, discardStale, dismissAll, dismissOne, handOff, handOffTask, instruct, setStatus, start, toParking, unlink } from "./actions.js";
 import { pickFolder } from "./daemon.js";
-import { MAX_ZOOM, MIN_ZOOM, clampZoom, fitZoom, percent, scrollAfterZoom, stepZoom } from "./zoom.js";
+import { MAX_ZOOM, MIN_ZOOM, clampZoom, fitZoom, percent, scrollAfterZoom, stepZoom, wheelZoomer } from "./zoom.js";
 import { restore, scrollView, watchUpgrade } from "./restore.js";
 
 const NODE_W = 240;
@@ -1161,11 +1161,12 @@ el("zoom-out").addEventListener("click", () => setZoom(stepZoom(zoom, -1)));
 el("zoom-reset").addEventListener("click", () => setZoom(1));
 el("zoom-fit").addEventListener("click", fitAll);
 // Cmd + ホイール (と Chromium 系のピンチが送る ctrl + ホイール)。passive にすると preventDefault が効かずスクロールされる。
+const wheelZoom = wheelZoomer();
 el("graph").addEventListener("wheel", (e) => {
-  if (!e.metaKey && !e.ctrlKey) return;
+  const next = wheelZoom({ deltaY: e.deltaY, modifier: e.metaKey || e.ctrlKey, t: e.timeStamp }, zoom);
+  if (next === null) return;
   e.preventDefault();
-  const delta = Math.max(-50, Math.min(50, e.deltaY));
-  setZoom(zoom * Math.exp(-delta * 0.01), pointerIn(e));
+  setZoom(next, pointerIn(e));
 }, { passive: false });
 // WKWebView のトラックパッドのピンチは gesture* で届き、scale は gesturestart からの倍率。
 let gestureFrom = 1;

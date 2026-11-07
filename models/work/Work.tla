@@ -1,10 +1,10 @@
 ---------------------------- MODULE Work ----------------------------
 (* セッションの作業の記録 (work/<session_id>.json、worklog) を hook と companion と人が書く手順を写したモデル (#368)。
 
-   - SessionStart の hook は記録が無ければ作り、resume なら ended_at を消す (worklog の Ingest)。
+   - SessionStart の hook は記録があって resume なら ended_at を消す。無ければ作らない (worklog の Ingest)。
    - UserPromptSubmit の hook は記録が無ければ作り、subject が空なら prompt を subject にし (origin prompt)、turns を 1 増やす。
-   - Stop の hook は summary を書く (ここでは写さない)。ended_at には触れない。
-   - SessionEnd の hook は ended_at を書く。
+   - Stop の hook は記録が無ければ作り、summary を書く (ここでは写さない)。ended_at には触れない。
+   - SessionEnd の hook は記録があれば ended_at を書く。prompt を打たずに終わったセッションの記録は作らない。
    - companion (mod) は turns が InferAfter 以上で推定の題が無い記録に、推定の題 (inferred) を書く (`work set`)。推定は時間が
      かかり、その間にほかの hook や人の編集が入る。
    - 人は `work set` で subject を直す (origin human)。hook も companion も human の subject を書き換えない。
@@ -14,9 +14,10 @@
    - ファイルの書き込みは statefile.WriteJSONAtomic なので 1 回の書き込みを 1 ステップにしている。
    - 同じセッションの hook は順に走るが、peer の delivery の UserPromptSubmit はターンの途中に入り Stop と前後しうる。
      ここでは動いていない hook はどの順でも動けることにして、実際より広く探している。
-   - SessionEnd の hook は process が終わる前に走り切る (1.5 秒の予算) ので、resume は SessionEnd の hook が残っている間は
-     起きない。同じく SessionStart の hook は会話に入る前に終わるので、終了は SessionStart の hook が残っている間は
-     起きない (この 2 つを外すと、resume の hook が SessionEnd の後に ended を消す順が見つかる)。 *)
+   - hook はセッションの process の中で同期に走り切る (SessionStart は会話に入る前、UserPromptSubmit と Stop はターンの進みを
+     止めて、SessionEnd は process が終わる前の 1.5 秒の予算で) ので、終了するときに残っている hook は無く、resume は
+     SessionEnd の hook が残っている間は起きない。この前提を外すと、遅れた prompt の hook が SessionEnd の後に記録を作る
+     (ended にならない)、resume の hook が SessionEnd の後に ended を消す、という順が見つかる。 *)
 EXTENDS Naturals, FiniteSets
 
 CONSTANTS
@@ -80,18 +81,20 @@ Enqueue(kind) ==
   /\ hooks' = hooks \cup {[id |-> nextId, kind |-> kind, pc |-> "pending", snap |-> Absent]}
   /\ nextId' = nextId + 1
 
-\* hook の kind ごとの書き換え。w は読んだ記録 (Locked なら今の記録)。
+\* hook の kind ごとの書き換え。w は読んだ記録 (Locked なら今の記録)。記録を作るのは prompt と stop だけで、
+\* SessionStart と SessionEnd は記録があるときだけ書き換える (prompt を打たずに終わったセッションの記録を残さない)。
 Apply(kind, w) ==
   LET base == IF w.present THEN w ELSE Fresh IN
-  CASE kind = "start" -> base
-    [] kind = "resume" -> [base EXCEPT !.ended = FALSE]
+  CASE kind = "start" -> w
+    [] kind = "resume" -> IF w.present THEN [w EXCEPT !.ended = FALSE] ELSE w
     [] kind = "prompt" -> [base EXCEPT !.subject = IF @ = None THEN "prompt" ELSE @, !.turns = @ + 1]
     [] kind = "stop" -> base
-    [] kind = "end" -> [base EXCEPT !.ended = TRUE]
+    [] kind = "end" -> IF w.present THEN [w EXCEPT !.ended = TRUE] ELSE w
 
-\* 書いた後の印。SessionEnd が ended を書けば endedSet、resume の hook が消せば落とす。
-Marks(kind) ==
-  /\ endedSet' = CASE kind = "end" -> TRUE [] kind = "resume" -> FALSE [] OTHER -> endedSet
+\* 書いた後の印。SessionEnd が ended を書けば endedSet、resume の hook が消せば落とす。記録が無くて書かなかったときは
+\* 変えない。
+Marks(kind, w) ==
+  /\ endedSet' = CASE kind = "end" /\ w.present -> TRUE [] kind = "resume" /\ w.present -> FALSE [] OTHER -> endedSet
 
 --------------------------------------------------------------------------------
 \* Claude Code 側の出来事
@@ -108,10 +111,10 @@ Stop ==
   /\ Enqueue("stop")
   /\ UNCHANGED <<alive, prompts, resumes, work, infers, inferring, isnap, humanSet, endedSet>>
 
-\* process の SessionStart の hook は SessionEnd より先に終わる (起動の hook が済んでから会話に入る)。
+\* hook はセッションの process の中で同期に走り切る (SessionStart は会話に入る前、UserPromptSubmit と Stop はターンの
+\* 進みを止めて) ので、SessionEnd が走るときに残っている hook は無い。companion の推定だけは process の外の時間で進む。
 Exit ==
-  /\ alive
-  /\ \A h \in hooks : h.kind \notin {"start", "resume"}
+  /\ alive /\ hooks = {}
   /\ alive' = FALSE
   /\ Enqueue("end")
   /\ UNCHANGED <<prompts, stops, resumes, work, infers, inferring, isnap, humanSet, endedSet>>
@@ -133,7 +136,7 @@ RunHook(h) ==
   /\ Locked
   /\ hooks' = hooks \ {h}
   /\ work' = Apply(h.kind, work)
-  /\ Marks(h.kind)
+  /\ Marks(h.kind, work)
   /\ UNCHANGED <<alive, prompts, stops, resumes, nextId, infers, inferring, isnap, humanSet>>
 
 \* Locked でない: 読んだ写しを持ち、
@@ -147,7 +150,7 @@ WriteHook(h) ==
   /\ ~Locked /\ h.pc = "read"
   /\ hooks' = hooks \ {h}
   /\ work' = Apply(h.kind, h.snap)
-  /\ Marks(h.kind)
+  /\ Marks(h.kind, h.snap)
   /\ UNCHANGED <<alive, prompts, stops, resumes, nextId, infers, inferring, isnap, humanSet>>
 
 HookStep == \E h \in hooks : RunHook(h) \/ ReadHook(h) \/ WriteHook(h)

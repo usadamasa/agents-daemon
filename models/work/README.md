@@ -24,8 +24,13 @@ SessionEnd)、companion (mod の推定の題)、人 (`work set`)、daemon (prune
 
 - 同じセッションの hook は順に走るが、peer の delivery の UserPromptSubmit はターンの途中に入り Stop と前後しうる。モデルは
   動いていない hook をどの順でも動けることにして、実際より広く探している。
-- SessionEnd の hook は process が終わる前に走り切り (1.5 秒の予算)、SessionStart の hook は会話に入る前に終わる。この 2 つを
-  外すと、resume の SessionStart が SessionEnd の後に ended を消す順が見つかる (モデルを書いて最初に出た反例)。
+- hook はセッションの process の中で同期に走り切る (SessionStart は会話に入る前、UserPromptSubmit と Stop はターンの進みを
+  止めて、SessionEnd は process が終わる前の 1.5 秒の予算で) ので、終了するときに残っている hook は無く、resume は SessionEnd の
+  hook が残っている間は起きない。companion の推定だけは process の外の時間で進み、終了をまたぐ。この前提を外すと、遅れた
+  prompt の hook が SessionEnd の後に記録を作る、resume の hook が SessionEnd の後に ended を消す、という順が見つかる
+  (モデルを書いて最初に出た反例)。
+- 記録を作るのは UserPromptSubmit と Stop の hook だけ。SessionStart と SessionEnd は記録があるときだけ書き換える
+  (prompt を打たずに終わったセッションの記録を残さない)。
 - `/clear` は SessionEnd (reason clear) の後に新しい session_id で SessionStart (source clear) が走る (実測)。別のセッションの
   記録になるので、モデルは 1 つの session_id だけを追う。
 - companion の推定 (`$.model.fork`) は時間がかかり、その間にほかの hook と人の編集が入る。失敗 (API error、nothing-to-fork) は

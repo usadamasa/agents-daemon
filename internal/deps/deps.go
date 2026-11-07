@@ -141,7 +141,7 @@ func livePanes(in input) (running bool, updatedAt *time.Time, panes map[string]*
 // 生きているセッション (plugin の更新前に起きたもの) は pane から作る。
 func collect(in input, panes map[string]*daemonstate.PaneStatus) []graph.Card {
 	var cards []graph.Card
-	acts := activities(panes)
+	acts := activities(panes, in.Works)
 	withTasks := map[string]bool{}
 	for _, t := range in.Tasks {
 		withTasks[t.SessionID] = true

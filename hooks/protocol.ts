@@ -234,7 +234,7 @@ export const definitions = {
     }
   },
   "Work": {
-    "description": "セッション 1 つの作業の記録 (work get、work set の出力)。hook が書く事実 (最初の prompt の題、最後のターンの要約、turns、始まりと終わり) と、人の直した題、companion の推定の題",
+    "description": "セッション 1 つの作業の記録 (work get、work set の出力)。hook が書く事実 (最初の prompt の題、最後のターンの要約、turns、最後の prompt と Stop の時刻、始まりと終わり) と、人の直した題、companion の推定の題",
     "type": "object",
     "additionalProperties": false,
     "required": [
@@ -282,6 +282,16 @@ export const definitions = {
       "updated_at": {
         "type": "string",
         "format": "date-time"
+      },
+      "prompted_at": {
+        "type": "string",
+        "format": "date-time",
+        "description": "最後の UserPromptSubmit の時刻"
+      },
+      "stopped_at": {
+        "type": "string",
+        "format": "date-time",
+        "description": "最後の Stop の時刻"
       },
       "ended_at": {
         "type": "string",

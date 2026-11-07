@@ -15,18 +15,15 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/spawn"
 )
 
-// subagentModelEnv は新しいセッションのモデルを取る環境変数。ハーネスの settings の env が定義し、Claude Code の
-// 子プロセス (mod の process.run) に見える。別セッションへ渡す作業は subagent 用のモデルに揃える (peer-sessions skill)。
-const subagentModelEnv = "CLAUDE_CODE_SUBAGENT_MODEL"
-
-// newSpawnCmd は `agents-daemon spawn` を組み立てる (spawn)。判定は spawn.Runner が持ち、ここは stdin と環境を
+// newSpawnCmd は `agents-daemon spawn` を組み立てる (spawn)。判定は spawn.Runner が持ち、ここは stdin と設定を
 // 渡すだけ。
 func newSpawnCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "spawn",
 		Short: "stdin の SpawnRequest の prompt を最初のターンにした Claude Code のセッションを、repo を cwd にした rex の window に起こす",
 		Long: "パーキングロットのメモを、生きているセッションの無い repo へ渡すときに呼ぶ。\n" +
-			"新しいセッションは `claude --session-id <uuid> --model $" + subagentModelEnv + " -- <本文>` で起き、\n" +
+			"新しいセッションは `claude --session-id <uuid> --model <model> -- <本文>` で起きる。<model> は\n" +
+			"Claude Code の settings.json の env." + spawn.SubagentModelKey + " から読む。\n" +
 			"claude が前景になってから SpawnResult を JSON で出す。待ち切れたときは window を残したまま\n" +
 			"foreground=false と detail を出す (error にするのは window を作れなかったときだけ)。",
 		Args: cobra.NoArgs,
@@ -55,10 +52,18 @@ func spawnSession(ctx context.Context, paths apppath.Paths, repo, prompt string)
 		}
 		session = latest
 	}
+	configDir, err := apppath.ClaudeConfigDir()
+	if err != nil {
+		return spawn.Result{}, err
+	}
+	model, err := spawn.SubagentModel(configDir)
+	if err != nil {
+		return spawn.Result{}, err
+	}
 	return spawn.Runner{Host: host}.Run(ctx, spawn.Request{
 		Repo:               repo,
 		Prompt:             prompt,
-		Model:              os.Getenv(subagentModelEnv),
+		Model:              model,
 		MultiplexerSession: session,
 	})
 }

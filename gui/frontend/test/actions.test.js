@@ -131,7 +131,7 @@ test("toParking は扱うメモが無ければ park tool で置くよう頼む",
   assert.deepEqual(res, { ok: true, message: "deps-app にメモに置くよう頼みました" });
 });
 
-test("toParking は handed のメモを open に戻してから頼み、頼めなければ取り直す", async () => {
+test("toParking は handed のメモを open に戻してから頼み、頼めなくてもメモは open のまま残す", async () => {
   const node = { ...task, memos: [{ id: "m1", title: "a", status: "handed" }, { id: "m2", title: "b", status: "discarded" }, { id: "m3", title: "c", status: "open" }] };
   const io = fakeIO({ run: [toldOK] });
   const res = await toParking(node, io);
@@ -139,10 +139,27 @@ test("toParking は handed のメモを open に戻してから頼み、頼め�
   assert.ok(io.calls[1][1].text.includes("元のメモ (m1, m3) を"));
   assert.equal(res.message, "メモ m1, m3 を open に戻し、deps-app にタスクを消すよう頼みました");
 
+  // 頼めなくてもメモは一覧に戻っているので取り直さない (#380)。押し直すとタスクを消す依頼だけが送り直される。
   const io2 = fakeIO({ run: [{ failure: "上限の画面" }] });
   const res2 = await toParking(node, io2);
-  assert.deepEqual(io2.calls[2], ["park set", { id: "m1", status: "handed", from: "open", to_session: "s1" }]);
-  assert.ok(!res2.ok && res2.message.endsWith("。メモは handed に戻しました"));
+  assert.equal(io2.calls.length, 2);
+  assert.deepEqual(res2, {
+    ok: false,
+    message: "メモ m1, m3 は open に戻しましたが、deps-app へタスクを消す依頼を送れませんでした: 上限の画面。もう一度「メモにする」を押すと依頼だけ送り直します",
+  });
+
+  const reopened = { ...node, memos: [{ id: "m1", title: "a", status: "open" }, { id: "m3", title: "c", status: "open" }] };
+  const io3 = fakeIO({ run: [toldOK] });
+  const res3 = await toParking(reopened, io3);
+  assert.equal(io3.calls.length, 1);
+  assert.ok(io3.calls[0][1].text.includes("元のメモ (m1, m3) を"));
+  assert.ok(res3.ok);
+});
+
+test("toParking は扱うメモが無くて頼めなければ、そのまま理由を返す", async () => {
+  const io = fakeIO({ run: [{ failure: "上限の画面" }] });
+  const res = await toParking(task, io);
+  assert.deepEqual(res, { ok: false, message: "deps-app へ送れませんでした: 上限の画面" });
 });
 
 test("dismissAll は 1 つが外せなくても残りを続け、数と最初の理由を返す", async () => {

@@ -45,7 +45,7 @@ type Request struct {
 	// Prompt は最初のターンとして入る本文。
 	Prompt string
 	// Model は新しいセッションのモデル。別セッションへ渡す作業は subagent 用のモデルに揃える (peer-sessions skill) ので、
-	// CLI は CLAUDE_CODE_SUBAGENT_MODEL を入れる。空なら起こさない。
+	// CLI は settings.json の env.CLAUDE_CODE_SUBAGENT_MODEL (SubagentModel) を入れる。空なら起こさない。
 	Model string
 	// MultiplexerSession は window を置く多重化ツールの session (rex なら REX_SESSION の値)。
 	MultiplexerSession string
@@ -113,7 +113,7 @@ func (r Runner) check(req Request) error {
 		return errors.New("本文が空なので起こさない")
 	}
 	if req.Model == "" {
-		return errors.New("モデルが無いので起こさない (CLAUDE_CODE_SUBAGENT_MODEL を settings の env に定義する)")
+		return errors.New("モデルが無いので起こさない (Claude Code の settings.json の env に " + SubagentModelKey + " を定義する)")
 	}
 	return nil
 }

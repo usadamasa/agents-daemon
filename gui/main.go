@@ -22,6 +22,7 @@ var assets embed.FS
 var version = "dev"
 
 func main() {
+	disablePressAndHold()
 	daemon := newDaemon()
 	daemon.upgrader = newUpgrader()
 	if s, ok := loadRestore(daemon.upgrader.restore, version, time.Now()); ok {

@@ -1,5 +1,12 @@
 # Changelog
 
+## [2026.1107.0](https://github.com/usadamasa/agents-daemon/compare/2026.1106.0...2026.1107.0) - 2026-11-07
+
+- fix: アプリから新しいセッションを起こせない不具合と、送れないときの文面・「メモにする」の戻りを直す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/383
+- tell が Enter の直前に prompt を確かめ、開いていれば Enter を送らない by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/388
+- fix(hooks): update 後も起動中のセッションのタスク記録を止めない by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/389
+- spawn で起こしたセッションを専用の rex session に置き、起こした側の名前を書き換えないようにする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/387
+
 ## [2026.1106.0](https://github.com/usadamasa/agents-daemon/compare/2026.1102.1...2026.1106.0) - 2026-11-06
 
 - rex preview.25 で前提を確かめ直して marker を上げる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/359

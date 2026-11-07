@@ -3,7 +3,7 @@
 #
 # - macOS 以外か、go / cc / codesign が無ければ INFO 1 行で飛ばし、何も書かない (stamp も書かないので次の SessionStart が
 #   また試す)
-# - 建てたら cache のバイナリ、.app の bundle、stamp がそろう
+# - 建てたら cache のバイナリ、.app の bundle、stamp がそろい、バイナリと Info.plist に plugin の version が入る
 # - go build か codesign が失敗したら、前の bundle と stamp を残し、一時ファイルと lock を片付ける
 # - 同時の build は lock で 1 本に絞る (build-daemon.sh と同じ)
 
@@ -52,12 +52,16 @@ teardown() {
   [ "$status" -eq 0 ]
   [ -x "$GUI_BIN" ]
   [ -x "$GUI_APP/Contents/MacOS/agent-tasks" ]
-  cmp -s "$GUI_APP/Contents/Info.plist" "$REPO_ROOT/gui/darwin/Info.plist"
   [ "$(<"$GUI_STAMP")" = "$PLUGIN_VERSION" ]
   # go build は gui/ の module で、-C で入って . を建てる
   grep -q -- "build -C $REPO_ROOT/gui " "$TEST_TMPDIR/go.calls"
   grep -q -- " -o " "$TEST_TMPDIR/go.calls"
   grep -q -- " \.$" "$TEST_TMPDIR/go.calls"
+  # plugin の version をバイナリ (窓の title) と Info.plist (About の panel) に入れる
+  grep -q -- " -ldflags -X main.version=$PLUGIN_VERSION " "$TEST_TMPDIR/go.calls"
+  [ "$(plutil -extract CFBundleShortVersionString raw "$GUI_APP/Contents/Info.plist")" = "$PLUGIN_VERSION" ]
+  [ "$(plutil -extract CFBundleVersion raw "$GUI_APP/Contents/Info.plist")" = "$PLUGIN_VERSION" ]
+  [ "$(plutil -extract CFBundleIdentifier raw "$GUI_APP/Contents/Info.plist")" = "com.github.usadamasa.agents-daemon.agent-tasks" ]
   # ad hoc 署名は bundle に対して行う
   grep -q -- "--force --sign - " "$TEST_TMPDIR/codesign.calls"
   [ ! -d "$GUI_LOCK" ]

@@ -25,9 +25,12 @@
   </span>
   <button class="tb upgrade" type="button" id="upgrade" hidden>↻ Update</button>
 </header>
-<main class="graph" id="graph">
-  <div class="empty" id="empty">依存図を読んでいる…</div>
-</main>
+<div class="stage">
+  <main class="graph" id="graph">
+    <div class="empty" id="empty">依存図を読んでいる…</div>
+  </main>
+  <aside class="column" id="column" aria-label="依存の無いタスクとセッション" hidden></aside>
+</div>
 <div class="lg" id="legend" hidden>
   <span><i aria-hidden="true"></i>同じセッションの blockedBy</span>
   <span><i class="d" aria-hidden="true"></i>セッションをまたぐ依存</span>

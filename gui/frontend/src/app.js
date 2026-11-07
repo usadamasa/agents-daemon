@@ -3,6 +3,7 @@
 // オブジェクトはタスク (図の箱) とメモ (下の一覧の行)。選ぶとそのそばにポップアップで単体ビューが開く。
 import * as dagre from "./vendor/dagre.esm.js";
 import { Graph } from "./graph.js";
+import { partition } from "./column.js";
 import { spreadPorts } from "./ports.js";
 import { isStale, kindLabel, lastPlacedAt, stamp } from "./memo.js";
 import { canAdopt, canDismiss, canTell, candidates, destinationLabel, isOwnTask, issueDestinations, pathDestination, peerDestinations, spawnDestinations, spawnLabel, taskDestinations } from "./ops.js";
@@ -207,38 +208,18 @@ const MARGIN_Y = 24;
 const GAP_X = 48;
 const GAP_Y = 44;
 
-// layout は辺でつながるノードを dagre で配置し、辺の無いノードはその下に格子で並べる。dagre は辺の無いノードを
-// 全部 1 段目の 1 行に並べるので、タスクの無いセッションが多いと横にだけ伸びる。格子の列数は窓の幅から決める。
+// layout は辺でつながるノード (connected) を dagre で配置する。辺の無いノードは図の外の右の列に並べる (renderColumn)。
 // depth は key → 段 (Graph.view の depth)。返すのは key → { x, y } (中心) と、全体の width、height、辺の経路を持つ
 // dagre の graph。
-function layout(nodes, links, depth, hostWidth) {
-  const linked = new Set(links.flatMap((l) => [l.before, l.after]));
-  const connected = nodes.filter((n) => linked.has(n.key));
-  const isolated = nodes.filter((n) => !linked.has(n.key));
-
+function layout(connected, links, depth) {
   const g = new dagre.graphlib.Graph();
   g.setGraph({ rankdir: "TB", ranker: rankByDepth(depth), nodesep: GAP_X, ranksep: GAP_Y, marginx: MARGIN_X, marginy: MARGIN_Y });
   g.setDefaultEdgeLabel(() => ({}));
   for (const n of connected) g.setNode(n.key, { width: NODE_W, height: NODE_H });
   for (const l of links) if (g.hasNode(l.before) && g.hasNode(l.after)) g.setEdge(l.before, l.after);
   dagre.layout(g);
-
   const pos = new Map(connected.map((n) => [n.key, g.node(n.key)]));
-  let width = connected.length > 0 ? g.graph().width : 0;
-  let height = connected.length > 0 ? g.graph().height : MARGIN_Y;
-  if (isolated.length > 0) {
-    const columns = Math.max(1, Math.floor((hostWidth - MARGIN_X * 2 + GAP_X) / (NODE_W + GAP_X)));
-    const top = height + (connected.length > 0 ? GAP_Y : 0);
-    isolated.forEach((n, i) => {
-      const col = i % columns;
-      const row = Math.floor(i / columns);
-      pos.set(n.key, { x: MARGIN_X + col * (NODE_W + GAP_X) + NODE_W / 2, y: top + row * (NODE_H + GAP_Y) + NODE_H / 2 });
-    });
-    const rows = Math.ceil(isolated.length / columns);
-    width = Math.max(width, MARGIN_X * 2 + Math.min(columns, isolated.length) * (NODE_W + GAP_X) - GAP_X);
-    height = top + rows * (NODE_H + GAP_Y) - GAP_Y + MARGIN_Y;
-  }
-  return { g, pos, width, height };
+  return { g, pos, width: g.graph().width, height: g.graph().height };
 }
 
 function nodeCard(n, highlight) {
@@ -334,16 +315,19 @@ function renderGraph() {
   const host = el("graph");
   const graph = state.data.graph;
   const { nodes, links, depth } = state.graph.view(state.showCompleted);
+  const { connected, column } = partition(nodes, links, graph.column_order);
+  const highlight = highlightKeys();
+  renderColumn(column, highlight);
   const scroll = { left: host.scrollLeft, top: host.scrollTop };
   host.replaceChildren();
-  if (nodes.length === 0) {
+  if (connected.length === 0) {
     const empty = document.createElement("div");
     empty.className = "empty";
-    empty.textContent = "タスクが無い";
+    empty.textContent = nodes.length === 0 ? "タスクが無い" : "依存のあるタスクは無い";
     host.append(empty);
     return;
   }
-  const { g, pos, width, height } = layout(nodes, links, depth, host.clientWidth);
+  const { g, pos, width, height } = layout(connected, links, depth);
 
   const canvas = document.createElement("div");
   canvas.className = "canvas";
@@ -368,8 +352,7 @@ function renderGraph() {
   }
   canvas.append(svg);
 
-  const highlight = highlightKeys();
-  for (const n of nodes) {
+  for (const n of connected) {
     const p = pos.get(n.key);
     const card = nodeCard(n, highlight);
     card.style.left = `${Math.round(p.x - NODE_W / 2)}px`;
@@ -378,6 +361,16 @@ function renderGraph() {
   }
   host.append(canvas);
   host.scrollTo(scroll.left, scroll.top);
+}
+
+// renderColumn は辺の無いノードを右の列に縦 1 列で並べる。列は拡大縮小の外にあり、独立してスクロールする。
+// 無ければ列ごと隠して、依存図に幅を返す。
+function renderColumn(column, highlight) {
+  const host = el("column");
+  const scroll = host.scrollTop;
+  host.hidden = column.length === 0;
+  host.replaceChildren(...column.map((n) => nodeCard(n, highlight)));
+  host.scrollTop = scroll;
 }
 
 function renderToggle() {
@@ -1195,13 +1188,14 @@ el("repo-filter").addEventListener("change", (e) => {
 });
 // 余白を押したら選択を解く。箱と行は stopPropagation で止める。
 el("graph").addEventListener("click", () => select(null));
+el("column").addEventListener("click", () => select(null));
 el("park-list").addEventListener("click", () => select(null));
 el("pop").addEventListener("click", (e) => e.stopPropagation());
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && state.selected !== null) select(null);
 });
 // スクロールと窓の大きさの変化でポップアップの位置を追わせる。
-for (const target of [el("graph"), el("park-list")]) target.addEventListener("scroll", () => { if (state.selected !== null) renderPopup(); });
+for (const target of [el("graph"), el("column"), el("park-list")]) target.addEventListener("scroll", () => { if (state.selected !== null) renderPopup(); });
 window.addEventListener("resize", () => { if (state.selected !== null) renderPopup(); });
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) fetchDeps();
@@ -1218,6 +1212,7 @@ const views = {
   note: { get: () => state.note, set: (v) => { state.note = String(v); } },
   zoom: { get: () => zoom, set: (v) => { zoom = clampZoom(Number(v) || 1); renderZoom(); } },
   graphScroll: scrollView(el("graph")),
+  columnScroll: scrollView(el("column")),
   parkScroll: scrollView(el("park-list")),
 };
 

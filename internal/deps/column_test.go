@@ -38,7 +38,7 @@ func TestColumnOrder(t *testing.T) {
 	active := map[string]time.Time{
 		"todo-old": at(1), "todo-new": at(5),
 		"work-timed": at(3),
-		"limit": at(1), "ask": at(4), "perm": at(2), "err": at(3),
+		"limit":      at(1), "ask": at(4), "perm": at(2), "err": at(3),
 		"idle": at(1), "unknown": at(2),
 	}
 	repo := func(cwd string) string { return cwd }

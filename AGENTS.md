@@ -122,7 +122,8 @@ mod が呼ぶコマンドは入力を stdin の JSON で受け、出力を JSON 
 
 - 本文に、閉じる issue を `Closes #N` で 1 行ずつ書く。pr-labels workflow が issue の種類と area のラベルを PR へ写し、
   release note の category になる。
-- issue を閉じない PR は、`gh pr create --label` で種類と area のラベルを付けて作る。選び方は `triaging-issues` skill。
+- issue を閉じない PR は、`gh pr create --label` で種類と area のラベルを付けて作る。選び方は `labeling-github-issues` skill、
+  area の表は `triaging-issues` skill。
 
 ## リリース
 

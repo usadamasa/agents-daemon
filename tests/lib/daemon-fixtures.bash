@@ -38,6 +38,10 @@ setup_daemon_fixture() {
     src=$(command -v "$c")
     ln -s "$src" "$FIXTURE_PATH/$c"
   done
+  # plutil は macOS にだけある (build-gui.sh が Info.plist に version を書く)。
+  if src=$(command -v plutil); then
+    ln -s "$src" "$FIXTURE_PATH/plutil"
+  fi
 }
 
 teardown_daemon_fixture() {

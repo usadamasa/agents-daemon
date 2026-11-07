@@ -3,7 +3,7 @@
 # .app に置く。build-daemon.sh の末尾と、ensure-daemon.sh (daemon は最新で gui だけ古いとき) が呼ぶ。
 # task gui:install も同じ。出力は build.log へ流れる。
 #
-# - macOS 以外、go / cc / codesign が無い環境では INFO 1 行で飛ばす (exit 0)。stamp は書かないので次の
+# - macOS 以外、go / cc / codesign / plutil が無い環境では INFO 1 行で飛ばす (exit 0)。stamp は書かないので次の
 #   SessionStart がまた試す。gui は daemon と違って無くても plugin の他の機能に影響しない
 # - 同時に起きた build は lock で 1 本に絞る (build-lock.sh)
 # - バイナリは一時ファイルから mv で差し替え、.app は一時の bundle を組んで rename で入れ替える。起動中のアプリは
@@ -32,7 +32,7 @@ if [ "$(uname -s)" != Darwin ]; then
   log_info "not macOS; skipping agent-tasks"
   exit 0
 fi
-for tool in go cc codesign; do
+for tool in go cc codesign plutil; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     log_info "$tool not found in PATH; skipping agent-tasks (needs the Go toolchain and Xcode Command Line Tools)"
     exit 0
@@ -77,8 +77,9 @@ if ! tmp_bin=$(mktemp "$DAEMON_BIN_DIR/.agent-tasks.XXXXXX"); then
   exit 1
 fi
 # deployment target は wails3 CLI の darwin の build と同じ 12.0 (Taskfile の gui:build と揃える)。
+# version は窓の title に出す (gui/main.go の version)。
 if ! CGO_CFLAGS=-mmacosx-version-min=12.0 CGO_LDFLAGS=-mmacosx-version-min=12.0 MACOSX_DEPLOYMENT_TARGET=12.0 \
-  go build -C "$PLUGIN_ROOT/gui" -o "$tmp_bin" .; then
+  go build -C "$PLUGIN_ROOT/gui" -ldflags "-X main.version=$version" -o "$tmp_bin" .; then
   log_error "go build failed"
   exit 1
 fi
@@ -111,6 +112,13 @@ if ! cp "$PLUGIN_ROOT/gui/darwin/Info.plist" "$tmp_app/Contents/Info.plist"; the
   log_error "cp failed: $PLUGIN_ROOT/gui/darwin/Info.plist -> $tmp_app/Contents/Info.plist"
   exit 1
 fi
+# About の panel と Finder の「情報を見る」は Info.plist の version を出す。
+for key in CFBundleShortVersionString CFBundleVersion; do
+  if ! plutil -replace "$key" -string "$version" "$tmp_app/Contents/Info.plist"; then
+    log_error "plutil failed: $key in $tmp_app/Contents/Info.plist"
+    exit 1
+  fi
+done
 if ! codesign --force --sign - "$tmp_app"; then
   log_error "codesign failed: $tmp_app"
   exit 1

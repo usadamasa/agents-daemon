@@ -62,8 +62,10 @@ teardown() {
   [ "$(plutil -extract CFBundleShortVersionString raw "$GUI_APP/Contents/Info.plist")" = "$PLUGIN_VERSION" ]
   [ "$(plutil -extract CFBundleVersion raw "$GUI_APP/Contents/Info.plist")" = "$PLUGIN_VERSION" ]
   [ "$(plutil -extract CFBundleIdentifier raw "$GUI_APP/Contents/Info.plist")" = "com.github.usadamasa.agents-daemon.agent-tasks" ]
-  # ad hoc 署名は bundle に対して行う
-  grep -q -- "--force --sign - " "$TEST_TMPDIR/codesign.calls"
+  # go build の linker が付けた署名を剥がしてから、bundle に ad hoc 署名する (上書きの案内行を build.log に残さない)
+  [ "$(wc -l <"$TEST_TMPDIR/codesign.calls")" -eq 2 ]
+  [[ "$(sed -n 1p "$TEST_TMPDIR/codesign.calls")" == "--remove-signature "*"/Contents/MacOS/agent-tasks" ]]
+  [[ "$(sed -n 2p "$TEST_TMPDIR/codesign.calls")" == "--force --sign - "*".agent-tasks.app."* ]]
   [ ! -d "$GUI_LOCK" ]
   [ -z "$(find "$BIN_DIR" -name '.agent-tasks.*')" ]
   [ -z "$(find "$HOME/Applications" -name '.agent-tasks.app.*')" ]

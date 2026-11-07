@@ -451,7 +451,7 @@
         "folded": { "$ref": "#/$defs/FoldedGraph" },
         "rows": { "type": "array", "items": { "$ref": "#/$defs/GraphRow" }, "description": "folded の nodes と、links のうち両端が folded の nodes にあるものと folded の links で組んだレーンの行" },
         "rows_with_completed": { "type": "array", "items": { "$ref": "#/$defs/GraphRow" }, "description": "完了したノードも含めて組んだレーンの行" },
-        "column_order": { "type": "array", "items": { "type": "string" }, "description": "依存の無いノードを依存図の右の列に並べる順 (全ノードの key)。手当てが要るもの、作業中、返事待ち、未着手、終了、完了の段で、同じ段は最後に動いた時刻の新しい順" }
+        "column_order": { "type": "array", "items": { "type": "string" }, "description": "依存の無いノードを依存図の右の列に並べる順 (全ノードの key)。手当てが要るもの、作業中、返事待ち、未着手、外部の参照、完了、終了の段で、同じ段は最後に動いた時刻の新しい順" }
       }
     },
     "GraphNode": {

@@ -11,7 +11,7 @@ import { isStale, kindLabel, lastPlacedAt, stamp } from "./memo.js";
 import { canAdopt, canDismiss, canTell, candidates, destinationLabel, isOwnTask, issueDestinations, pathDestination, peerDestinations, spawnDestinations, spawnLabel, taskDestinations } from "./ops.js";
 import { addBlocker, adopt, askUnlink, discard, discardStale, dismissAll, dismissOne, handOff, handOffTask, instruct, setStatus, start, toParking, unlink } from "./actions.js";
 import { pickFolder } from "./daemon.js";
-import { MAX_ZOOM, MIN_ZOOM, clampZoom, fitZoom, percent, scrollAfterZoom, stepZoom, wheelZoomer } from "./zoom.js";
+import { MAX_ZOOM, MIN_ZOOM, centerOffset, clampZoom, fitZoom, overflowCenter, percent, scrollAfterZoom, stepZoom, wheelZoomer } from "./zoom.js";
 import { restore, scrollView, watchUpgrade } from "./restore.js";
 
 const NODE_W = 240;
@@ -1077,7 +1077,8 @@ function render() {
     return;
   }
   renderGraph();
-  applyZoom();
+  if (fitOn) fitAll(false);
+  else applyZoom();
   renderToggle();
   el("legend").hidden = false;
   renderPark();
@@ -1094,15 +1095,23 @@ function render() {
 }
 
 // ---- 拡大縮小 ----
-// 描画には触れず、描いた canvas を枠で包んで scale とスクロール量だけを変える。拡大率は図を読み直しても保つ
-// (勝手に全体表示へ戻さない)。
+// 描画には触れず、描いた canvas を枠で包んで scale とスクロール量だけを変える。枠が #graph (右の列を除いた領域) より
+// 小さい向きは、枠に余白を付けて中心へ寄せる。
 
 let zoom = 1;
+// fitOn は「全体を表示」のトグル。オンの間は描き直すたびと窓の大きさが変わるたびに全体が収まる拡大率へ合わせ、
+// 利用者が拡大縮小したらオフにする。
+let fitOn = true;
 
-// applyZoom は renderGraph が作った canvas を枠で包み、canvas に scale を、枠に拡大率を掛けた大きさを当てる。
-// 枠は canvas の作り直しで消えるので、描くたびに呼ぶ。
+function canvasSize(canvas) {
+  return { width: parseFloat(canvas.style.width), height: parseFloat(canvas.style.height) };
+}
+
+// applyZoom は renderGraph が作った canvas を枠で包み、canvas に scale を、枠に拡大率を掛けた大きさと中心へ寄せる
+// 余白を当てる。枠は canvas の作り直しで消え、余白は窓の大きさで変わるので、描くたびと窓の大きさが変わるたびに呼ぶ。
 function applyZoom() {
-  const canvas = el("graph").querySelector(".canvas");
+  const host = el("graph");
+  const canvas = host.querySelector(".canvas");
   if (canvas === null) return;
   let frame = canvas.parentElement;
   if (!frame.classList.contains("zoom-frame")) {
@@ -1111,8 +1120,13 @@ function applyZoom() {
     canvas.replaceWith(frame);
     frame.append(canvas);
   }
-  frame.style.width = `${Math.ceil(parseFloat(canvas.style.width) * zoom)}px`;
-  frame.style.height = `${Math.ceil(parseFloat(canvas.style.height) * zoom)}px`;
+  const size = canvasSize(canvas);
+  const width = Math.ceil(size.width * zoom);
+  const height = Math.ceil(size.height * zoom);
+  frame.style.width = `${width}px`;
+  frame.style.height = `${height}px`;
+  frame.style.marginLeft = `${centerOffset(width, host.clientWidth)}px`;
+  frame.style.marginTop = `${centerOffset(height, host.clientHeight)}px`;
   canvas.style.transform = zoom === 1 ? "" : `scale(${zoom})`;
   // カードの強調の枠を縮小しても細くしすぎないよう、style.css が拡大率で割る。
   canvas.style.setProperty("--zoom", String(zoom));
@@ -1122,10 +1136,17 @@ function applyZoom() {
 // pointer が無ければ見えている領域の中央を残す。
 function setZoom(next, pointer) {
   const host = el("graph");
+  const canvas = host.querySelector(".canvas");
   const to = clampZoom(next);
+  if (canvas === null) {
+    zoom = to;
+    renderZoom();
+    return;
+  }
+  const size = canvasSize(canvas);
   const p = pointer ?? { x: host.clientWidth / 2, y: host.clientHeight / 2 };
-  const left = scrollAfterZoom(host.scrollLeft, p.x, zoom, to);
-  const top = scrollAfterZoom(host.scrollTop, p.y, zoom, to);
+  const left = scrollAfterZoom(host.scrollLeft, p.x, zoom, to, size.width, host.clientWidth);
+  const top = scrollAfterZoom(host.scrollTop, p.y, zoom, to, size.height, host.clientHeight);
   zoom = to;
   applyZoom();
   host.scrollTo(left, top);
@@ -1133,19 +1154,35 @@ function setZoom(next, pointer) {
   if (state.selected !== null) renderPopup();
 }
 
-// fitAll は図全体が見える領域に収まる拡大率にし、左上から見せる。下限で止まった分はスクロールで見る。
-function fitAll() {
+// zoomByUser は利用者の拡大縮小 (+ / −、100%、Cmd + ホイール、ピンチ)。全体表示をオフにしてから拡大率を変える。
+function zoomByUser(next, pointer) {
+  fitOn = false;
+  setZoom(next, pointer);
+}
+
+// fitAll は図全体が見える領域に収まる拡大率にする (100% を超えて拡大せず、下限で止める)。拡大率が変わったときと
+// force のときは、下限で止まってはみ出した分のうち上 (根の側) と横の中心を見せる。拡大率の変わらない描き直しでは
+// 今のスクロールを保ち、数秒ごとの読み直しで位置を揺らさない。
+function fitAll(force) {
   const host = el("graph");
   const canvas = host.querySelector(".canvas");
   if (canvas === null) return;
-  setZoom(fitZoom(parseFloat(canvas.style.width), parseFloat(canvas.style.height), host.clientWidth, host.clientHeight));
-  host.scrollTo(0, 0);
+  const size = canvasSize(canvas);
+  const next = fitZoom(size.width, size.height, host.clientWidth, host.clientHeight);
+  const changed = next !== zoom;
+  zoom = next;
+  applyZoom();
+  if (changed || force) host.scrollTo(overflowCenter(Math.ceil(size.width * zoom), host.clientWidth), 0);
+  renderZoom();
 }
 
 function renderZoom() {
   el("zoom-reset").textContent = percent(zoom);
   el("zoom-in").disabled = zoom >= MAX_ZOOM;
   el("zoom-out").disabled = zoom <= MIN_ZOOM;
+  const fit = el("zoom-fit");
+  fit.classList.toggle("on", fitOn);
+  fit.setAttribute("aria-pressed", String(fitOn));
 }
 
 function pointerIn(e) {
@@ -1153,17 +1190,23 @@ function pointerIn(e) {
   return { x: e.clientX - r.left, y: e.clientY - r.top };
 }
 
-el("zoom-in").addEventListener("click", () => setZoom(stepZoom(zoom, 1)));
-el("zoom-out").addEventListener("click", () => setZoom(stepZoom(zoom, -1)));
-el("zoom-reset").addEventListener("click", () => setZoom(1));
-el("zoom-fit").addEventListener("click", fitAll);
+el("zoom-in").addEventListener("click", () => zoomByUser(stepZoom(zoom, 1)));
+el("zoom-out").addEventListener("click", () => zoomByUser(stepZoom(zoom, -1)));
+el("zoom-reset").addEventListener("click", () => zoomByUser(1));
+// オフにするときは今の拡大率と位置を残す。
+el("zoom-fit").addEventListener("click", () => {
+  fitOn = !fitOn;
+  if (fitOn) fitAll(true);
+  else renderZoom();
+  if (state.selected !== null) renderPopup();
+});
 // Cmd + ホイール (と Chromium 系のピンチが送る ctrl + ホイール)。passive にすると preventDefault が効かずスクロールされる。
 const wheelZoom = wheelZoomer();
 el("graph").addEventListener("wheel", (e) => {
   const next = wheelZoom({ deltaY: e.deltaY, modifier: e.metaKey || e.ctrlKey, t: e.timeStamp }, zoom);
   if (next === null) return;
   e.preventDefault();
-  setZoom(next, pointerIn(e));
+  zoomByUser(next, pointerIn(e));
 }, { passive: false });
 // WKWebView のトラックパッドのピンチは gesture* で届き、scale は gesturestart からの倍率。
 let gestureFrom = 1;
@@ -1173,7 +1216,7 @@ el("graph").addEventListener("gesturestart", (e) => {
 });
 el("graph").addEventListener("gesturechange", (e) => {
   e.preventDefault();
-  setZoom(gestureFrom * e.scale, pointerIn(e));
+  zoomByUser(gestureFrom * e.scale, pointerIn(e));
 });
 
 function popupAnchor() {
@@ -1200,12 +1243,17 @@ document.addEventListener("keydown", (e) => {
 });
 // スクロールと窓の大きさの変化でポップアップの位置を追わせる。
 for (const target of [el("graph"), el("column"), el("park-list")]) target.addEventListener("scroll", () => { if (state.selected !== null) renderPopup(); });
-window.addEventListener("resize", () => { if (state.selected !== null) renderPopup(); });
+window.addEventListener("resize", () => {
+  if (fitOn) fitAll(false);
+  else applyZoom();
+  if (state.selected !== null) renderPopup();
+});
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) fetchDeps();
 });
 
 // 新しいバージョンへ切り替えるときに引き継ぐ画面の状態 (restore.js)。
+const graphScroll = scrollView(el("graph"));
 const views = {
   selected: { get: () => state.selected, set: (v) => { state.selected = v; } },
   showCompleted: { get: () => state.showCompleted, set: (v) => { state.showCompleted = v === true; } },
@@ -1215,7 +1263,11 @@ const views = {
   draft: { get: () => state.draft, set: (v) => { state.draft = String(v); } },
   note: { get: () => state.note, set: (v) => { state.note = String(v); } },
   zoom: { get: () => zoom, set: (v) => { zoom = clampZoom(Number(v) || 1); renderZoom(); } },
-  graphScroll: scrollView(el("graph")),
+  // 全体表示がオンなら拡大率と位置は描き直しの fitAll が決めるので、図のスクロールは戻さない。戻すのは描いた後
+  // (requestAnimationFrame) で fitAll の位置を上書きしてしまうため。apply は保存した鍵の順 (= この並び) に戻すので、
+  // fitAll を graphScroll より前に置く。
+  fitAll: { get: () => fitOn, set: (v) => { fitOn = v === true; renderZoom(); } },
+  graphScroll: { get: graphScroll.get, set: (v) => { if (!fitOn) graphScroll.set(v); } },
   columnScroll: scrollView(el("column")),
   parkScroll: scrollView(el("park-list")),
 };

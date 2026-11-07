@@ -401,14 +401,15 @@
       "description": "タスクの依存の DAG",
       "type": "object",
       "additionalProperties": false,
-      "required": ["nodes", "links", "longest_chain", "folded", "rows", "rows_with_completed"],
+      "required": ["nodes", "links", "longest_chain", "folded", "rows", "rows_with_completed", "column_order"],
       "properties": {
         "nodes": { "type": "array", "items": { "$ref": "#/$defs/GraphNode" }, "description": "下流の多い順 (同じなら key の順)" },
         "links": { "type": "array", "items": { "$ref": "#/$defs/GraphLink" } },
         "longest_chain": { "type": "array", "items": { "type": "string" }, "description": "下流の最も多い止まっているノードから、下流をたどった最長の鎖の key" },
         "folded": { "$ref": "#/$defs/FoldedGraph" },
         "rows": { "type": "array", "items": { "$ref": "#/$defs/GraphRow" }, "description": "folded の nodes と、links のうち両端が folded の nodes にあるものと folded の links で組んだレーンの行" },
-        "rows_with_completed": { "type": "array", "items": { "$ref": "#/$defs/GraphRow" }, "description": "完了したノードも含めて組んだレーンの行" }
+        "rows_with_completed": { "type": "array", "items": { "$ref": "#/$defs/GraphRow" }, "description": "完了したノードも含めて組んだレーンの行" },
+        "column_order": { "type": "array", "items": { "type": "string" }, "description": "依存の無いノードを依存図の右の列に並べる順 (全ノードの key)。手当てが要るもの、作業中、返事待ち、未着手、終了、完了の段で、同じ段は最後に動いた時刻の新しい順" }
       }
     },
     "GraphNode": {

@@ -1,5 +1,26 @@
 # Changelog
 
+## [2026.1107.1](https://github.com/usadamasa/agents-daemon/compare/2026.1107.0...2026.1107.1) - 2026-11-07
+
+### Features
+- CI: gui/ のテスト (task gui:test) を macOS の runner で回す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/402
+- セッションの開始と /agent-tasks で依存図アプリを開く by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/410
+- 依存図を拡大縮小でき、全体表示のボタンを付ける by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/406
+- issue のラベルを PR と release note の分類へ通し、付け方を skill にする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/412
+- agent-tasks を開いたままボタンで新しいバージョンへ切り替える by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/408
+- 依存図で辺の note、渡した peer の名前と今の作業、手の空いた peer を読めるようにする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/417
+- agent-tasks で英数キーの長押しを繰り返しにする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/414
+### Bug Fixes
+- 依存図の issue / PR の端点を外部の参照として、番号と repo の題で出す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/415
+- 依存図: スクロールの途中で修飾キーが入っても拡大率を 200% へ跳ねさせない by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/423
+### Documentation
+- triaging-issues を agents-daemon の area の表に絞る by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/418
+### Other
+- agent-tasks の窓の title と About に plugin のバージョンを出す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/403
+- 依存図で完了したタスクを隠しても、通り抜けていた辺を畳んで残す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/407
+- build-gui.sh の codesign が出す上書きの案内行を build.log に残さない by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/411
+- 依存図で完了を隠した図の段を数え直し、矢じりをノードの辺に散らす by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/413
+
 ## [2026.1107.0](https://github.com/usadamasa/agents-daemon/compare/2026.1106.0...2026.1107.0) - 2026-11-07
 
 - fix: アプリから新しいセッションを起こせない不具合と、送れないときの文面・「メモにする」の戻りを直す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/383

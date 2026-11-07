@@ -81,7 +81,8 @@ Claude Code の sandbox の中で叩くと、`git worktree remove` は main work
 
 ### セッションをまたぐ辺を書く
 
-作業を別のセッションへ渡す側が、渡すときに「何の後か」を書く (#134、手順は `agents-daemon:peer-sessions` skill)。
+作業を別のセッションへ渡す側が、渡すときに「何の後か」を書く (#134)。after に置くタスクの選び方と、
+peer の成果が PR のときの鎖の形は `agents-daemon:peer-sessions` skill の「依存の辺を書く」が持つ。
 辺は「before が済まないと after を始められない」を表す。結果は JSON で stdout に出る。
 渡す操作から両端を自動で決めることはせず、辺の無い生きているセッションへ `SendMessage` で送ると、
 その tool の結果で送った model に辺の書き方を伝える (#172)。

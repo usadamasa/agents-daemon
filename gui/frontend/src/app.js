@@ -4,6 +4,7 @@
 import * as dagre from "./vendor/dagre.esm.js";
 import { Graph } from "./graph.js";
 import { fitEdges, spreadPorts } from "./ports.js";
+import { findJumps, jumpPath } from "./jumps.js";
 import { isStale, kindLabel, lastPlacedAt, stamp } from "./memo.js";
 import { canAdopt, canDismiss, canTell, candidates, destinationLabel, isOwnTask, issueDestinations, pathDestination, peerDestinations, spawnDestinations, spawnLabel, taskDestinations } from "./ops.js";
 import { addBlocker, adopt, askUnlink, discard, discardStale, dismissAll, dismissOne, handOff, handOffTask, instruct, setStatus, start, toParking, unlink } from "./actions.js";
@@ -284,10 +285,13 @@ function nodeCard(n, highlight) {
 }
 
 const SVG = "http://www.w3.org/2000/svg";
+// 交点の飛び越しの弧の半径と、線の端 (ノードの縁、矢じり) から飛び越しを置かない距離。拡大縮小は canvas ごと
+// 変わるので、弧も同じ率で伸び縮みする。
+const JUMP_R = 5;
+const JUMP_MARGIN = 16;
 
-function edgePath(points, cls, marker, hint) {
+function edgePath(d, cls, marker, hint) {
   const p = document.createElementNS(SVG, "path");
-  const d = points.map((pt, i) => `${i === 0 ? "M" : "L"} ${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`).join(" ");
   p.setAttribute("d", d);
   if (cls) p.setAttribute("class", cls);
   p.setAttribute("marker-end", `url(#${marker})`);
@@ -361,12 +365,14 @@ function renderGraph() {
 
   const chain = chainEdges(graph);
   const drawn = links.filter((l) => g.hasEdge(l.before, l.after)).map((l) => ({ ...l, points: g.edge(l.before, l.after).points }));
-  for (const l of spreadPorts(drawn, pos, NODE_W, NODE_H)) {
+  const spread = spreadPorts(drawn, pos, NODE_W, NODE_H);
+  const jumps = findJumps(spread.map((l) => l.points), { radius: JUMP_R, margin: JUMP_MARGIN });
+  spread.forEach((l, i) => {
     const onChain = chain.has(`${l.before}\u0000${l.after}`);
     const cls = [l.kind === "task" ? "" : l.kind, onChain ? "chain" : ""].filter(Boolean).join(" ");
     const hint = l.kind === "folded" ? foldedHint(l) : (l.edge?.note ?? "");
-    svg.append(edgePath(l.points, cls, onChain ? "arrow-chain" : "arrow", hint));
-  }
+    svg.append(edgePath(jumpPath(l.points, jumps[i], JUMP_R), cls, onChain ? "arrow-chain" : "arrow", hint));
+  });
   canvas.append(svg);
 
   const highlight = highlightKeys();

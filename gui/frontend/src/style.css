@@ -70,7 +70,7 @@ select { font: inherit; color: inherit; }
 .chip.warn { background: var(--orange-soft); color: var(--orange-ink); }
 .chip.limit { background: var(--purple-soft); color: var(--purple-ink); }
 .chip.err { background: #f3e0e1; color: #6e2328; }
-/* 推定の題 (companion)。状態の色 (ok / warn / limit / err) と被らないよう、塗らずに破線の縁で「仮」を表す。 */
+/* 会話から自動で付けた題 (companion)。状態の色 (ok / warn / limit / err) と被らないよう、塗らずに破線の縁で「仮」を表す。 */
 .chip.guess { background: transparent; border: 1px dashed var(--ink-soft); color: var(--ink-soft); padding: 2px 9px; }
 .chip.link { cursor: pointer; }
 .chip.link:hover { text-decoration: underline; }

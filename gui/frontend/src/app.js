@@ -37,9 +37,9 @@ const STATE_LABEL = {
 };
 const REF_KIND_LABEL = { issue: "issue", pr: "PR" };
 const KIND_LABEL = { task: "タスク", todo: "TodoWrite の項目", session: "セッションの作業", ref: "参照" };
-// 作業の題の出どころのうち、人に見せるもの。推定 (companion) は推定と分かるように、人が直した題はその旨を添える。
-// 最初の prompt から付けた題 (prompt) と記録の無い pane の名前 (pane) は添えない。
-const ORIGIN_LABEL = { inferred: "推定の題", human: "人が直した題" };
+// companion が会話から付けた題 (origin inferred) に添える chip の文。押すと題を直す欄が開く (見せるだけの印にしない)。
+// 最初の prompt の題、人が直した題、記録の無い pane の名前には何も添えない。
+const INFERRED_CHIP = "会話から自動で付けた題 · 直す";
 
 const state = {
   data: null,
@@ -243,9 +243,8 @@ function nodeCard(n, highlight) {
   const title = document.createElement("b");
   title.textContent = n.title;
   const sub = document.createElement("small");
-  // 副題はセッション名 (題と違うとき)、状態、題の出どころ (推定か人の手のとき)、今の作業 (タスクの無いセッションと
-  // 進行中の作業にだけ付く) の順。
-  sub.textContent = [n.session !== n.title ? n.session : "", stateLabel(n), ORIGIN_LABEL[n.origin] ?? "", n.summary].filter(Boolean).join(" · ");
+  // 副題はセッション名 (題と違うとき)、状態、今の作業 (タスクの無いセッションと進行中の作業にだけ付く) の順。
+  sub.textContent = [n.session !== n.title ? n.session : "", stateLabel(n), n.summary].filter(Boolean).join(" · ");
   if (n.summary) b.title = n.summary;
   lb.append(title, sub);
   b.append(dot, lb);
@@ -820,7 +819,7 @@ function renamePicker(n) {
   const foot = document.createElement("div");
   foot.className = "lk";
   foot.append(save, cancelButton());
-  return group("題を直す (人が直した題は hook と companion が書き換えない)", [t, refusalLine(), foot]);
+  return group("題を直す (直した題は自動で書き換わらない)", [t, refusalLine(), foot]);
 }
 
 function toggle(name) {
@@ -855,8 +854,12 @@ function nodePopup(n) {
   const chips = document.createElement("div");
   chips.className = "chips";
   chips.append(stateChip(n));
-  // 推定の題は状態の色と被らない破線の chip (guess)、人が直した題は無地。
-  if (ORIGIN_LABEL[n.origin]) chips.append(chip(ORIGIN_LABEL[n.origin], n.origin === "inferred" ? "guess" : ""));
+  // 会話から自動で付けた題は、状態の色と被らない破線の chip (guess) で示し、押すと題を直す欄が開く。
+  if (n.origin === "inferred" && canRename(n)) {
+    const c = linkChip(INFERRED_CHIP, toggle("rename"));
+    c.classList.add("guess");
+    chips.append(c);
+  }
   if (n.session) chips.append(chip(`${n.session} ›`, "", undefined));
   head.append(ph, title, chips);
   parts.push(head);

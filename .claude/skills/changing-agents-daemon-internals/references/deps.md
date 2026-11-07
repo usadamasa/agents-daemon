@@ -29,7 +29,8 @@ SessionEnd hook の `ingest-work` が書く)、`status.json`、`$STATE/edges/`�
 打つかどうかに関わらず、prompt を打ったセッションは全部載り、終了しても記録が消えるまで (7 日) `exited` で残る。題は
 人が直した題 (`work set` の subject、origin human) > companion の推定の題 (mod `hooks/work-infer.ts` が `$.model.fork` で
 会話から推定し inferred に書く) > 最初の prompt の 1 行目の順で、ノードの `origin` (prompt / inferred / human / pane) が
-どれを見せているかを持つ (アプリは inferred を「推定の題」と添える)。summary は生きていれば pane の今の作業、終了して
+どれを見せているかを持つ (アプリは inferred に「会話から自動で付けた題 · 直す」の chip を添え、押すと題を直す欄が開く。
+箱の副題には出どころを出さない)。summary は生きていれば pane の今の作業、終了して
 いれば最後のターンの応答の 1 行目。記録の無い生きているセッション (plugin の更新前に起きたもの) は今まで通り pane の
 名前から付ける (origin pane)。タスクのあるセッションには作業のノードを作らず、辺の端点の解き方は変えない。
 <!-- cc-premise: 2.1.319 hooks UserPromptSubmit の prompt (peer の delivery は cross-session-message の包みごと)、Stop の last_assistant_message、SessionStart の source、SessionEnd の reason -->

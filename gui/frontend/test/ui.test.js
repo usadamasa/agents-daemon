@@ -163,20 +163,19 @@ test("ノードを選ぶと単体ビューを開き、待っている先と待�
   assert.equal(pop.hidden, true);
 });
 
-test("作業のノード: 推定の題は副題と chip で分かり、題を直すと一覧から外す (終了したもの) が出る", async () => {
-  assert.match(q('.node[data-key="sid:zeta"] small').textContent, /推定の題/);
-  assert.doesNotMatch(q('.node[data-key="sid:gamma"] small').textContent, /の題/);
+test("作業のノード: 会話から自動で付けた題は押すと直せる chip で示し、題を直すと一覧から外す (終了したもの) が出る", async () => {
+  // 箱の副題には出どころを出さない (そこでは何もできない)。
+  assert.doesNotMatch(q('.node[data-key="sid:zeta"] small').textContent, /題/);
   q('.node[data-key="sid:zeta"]').click();
   const pop = q("#pop");
-  const chips = [...pop.querySelectorAll(".chips .chip")].map((c) => c.textContent);
-  assert.ok(chips.includes("推定の題"), chips.join(" / "));
-  // 推定の chip は状態の色 (ok / warn / limit / err) を使わない。
-  assert.equal(pop.querySelector(".chips .chip.guess").textContent, "推定の題");
+  // 自動で付けた題の chip は状態の色 (ok / warn / limit / err) を使わず、押すと題を直す欄が開く。
+  const guess = pop.querySelector(".chips .chip.guess");
+  assert.equal(guess.textContent, "会話から自動で付けた題 · 直す");
   assert.equal(pop.querySelectorAll(".chips .chip.warn").length, 0);
   let verbs = [...pop.querySelectorAll(".acts .act")].map((b) => b.textContent);
   assert.ok(verbs.includes("題を直す"), verbs.join(" / "));
   assert.ok(!verbs.includes("一覧から外す"), verbs.join(" / "));
-  pop.querySelector(".acts .act:nth-child(3)").click();
+  guess.click();
   assert.equal(pop.querySelector('input[type="text"]').value, "zeta");
   await snapshot("graph-popup-work");
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
@@ -184,6 +183,8 @@ test("作業のノード: 推定の題は副題と chip で分かり、題を直
   q('.node[data-key="sid:gamma"]').click();
   verbs = [...pop.querySelectorAll(".acts .act")].map((b) => b.textContent);
   assert.ok(verbs.includes("一覧から外す") && verbs.includes("メモにする") && verbs.includes("題を直す"), verbs.join(" / "));
+  // prompt から付けた題には chip を出さない。
+  assert.equal(pop.querySelector(".chips .chip.guess"), null);
   assert.equal(q("#dismiss-ended").textContent, "終了したセッションのタスクと作業 1 件を外す");
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
 });

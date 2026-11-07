@@ -156,7 +156,8 @@ printf '%s' '{"session_id":"<session_id>","subject":"直した題"}' | agents-da
   応答の 1 行目が要約、turns、始まりと終わり。model が Task 系ツールを打たなくても、prompt を打ったセッションは依存図に
   作業のノード (`sid:<session_id>`) で載り、終了しても 7 日残る
 - `subject` を書くと出どころが human になり、以後の hook と companion は書き換えない (アプリの「題を直す」が使う)。
-  `inferred` は companion (mod) が会話から推定した題で、人が直していなければアプリはこちらを「推定の題」と添えて見せる
+  `inferred` は companion (mod) が会話から推定した題で、人が直していなければアプリはこちらを題にし、「会話から自動で
+  付けた題 · 直す」の chip (押すと直せる) を添える
 
 ### `--json`
 

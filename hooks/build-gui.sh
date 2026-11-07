@@ -100,8 +100,13 @@ if ! tmp_app=$(mktemp -d "$app_dir/.agent-tasks.app.XXXXXX"); then
   log_error "mktemp failed in $app_dir"
   exit 1
 fi
-if ! mkdir -p "$tmp_app/Contents/MacOS"; then
-  log_error "mkdir failed: $tmp_app/Contents/MacOS"
+if ! mkdir -p "$tmp_app/Contents/MacOS" "$tmp_app/Contents/Resources"; then
+  log_error "mkdir failed: $tmp_app/Contents/MacOS, $tmp_app/Contents/Resources"
+  exit 1
+fi
+# アイコンは生成済みの .icns を写すだけ (作り直しは task gui:icon)。Info.plist の CFBundleIconFile が名前で指す。
+if ! cp "$PLUGIN_ROOT/gui/darwin/agent-tasks.icns" "$tmp_app/Contents/Resources/agent-tasks.icns"; then
+  log_error "cp failed: $PLUGIN_ROOT/gui/darwin/agent-tasks.icns -> $tmp_app/Contents/Resources/agent-tasks.icns"
   exit 1
 fi
 if ! cp "$GUI_BIN" "$tmp_app/Contents/MacOS/agent-tasks"; then

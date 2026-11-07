@@ -8,6 +8,8 @@
 	<string>agent-tasks</string>
 	<key>CFBundleExecutable</key>
 	<string>agent-tasks</string>
+	<key>CFBundleIconFile</key>
+	<string>agent-tasks</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.github.usadamasa.agents-daemon.agent-tasks</string>
 	<key>CFBundlePackageType</key>

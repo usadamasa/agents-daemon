@@ -163,7 +163,7 @@ pane ごとに次を評価する。上限側の詳細は [rate-limit.md](rate-li
 | `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon.version` | `hooks/build-daemon.sh` | build の成功時 | 建てた元の plugin version | 消さない |
 | `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agent-tasks` | `hooks/build-gui.sh` (`build-daemon.sh` の末尾と、daemon だけ最新のときの SessionStart、`task gui:install` が呼ぶ) | build 時 (macOS で go と Xcode Command Line Tools があるときだけ) | 依存図のアプリの実行ファイル | 消さない |
 | `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agent-tasks.version` | `hooks/build-gui.sh` | build の成功時 (飛ばしたときは書かない) | 建てた元の plugin version | 消さない |
-| `~/Applications/agent-tasks.app` | `hooks/build-gui.sh` | build の成功時 (一時の bundle を組んで rename で入れ替える) | 起動用の .app (上の実行ファイルの写し、`gui/darwin/Info.plist`、ad hoc 署名)。起動中のアプリは元の inode を持ち続け、stamp が新しくなったのを見て切り替えのボタンを出し、押されたら新しい .app へ入れ替わる (`gui/upgrade.go`) | 消さない |
+| `~/Applications/agent-tasks.app` | `hooks/build-gui.sh` | build の成功時 (一時の bundle を組んで rename で入れ替える) | 起動用の .app (上の実行ファイルの写し、`gui/darwin/Info.plist`、`gui/darwin/agent-tasks.icns`、ad hoc 署名)。起動中のアプリは元の inode を持ち続け、stamp が新しくなったのを見て切り替えのボタンを出し、押されたら新しい .app へ入れ替わる (`gui/upgrade.go`) | 消さない |
 | `${XDG_STATE_HOME:-~/.local/state}/agents-daemon/gui/restore.json` | 起動中の agent-tasks (`gui/upgrade.go`) | 切り替えのボタンが押され、新しいバージョンへ入れ替わる直前 | 窓の位置と大きさ、画面の状態 (frontend の `restore.js` が鍵ごとに詰める) | 次に起きた agent-tasks が起動時に読んで消す (2 分より古いか version が合わなければ読まずに消す)。起こせなかったときは書いた側が消す |
 
 `$STATE` はデーモンが必要に応じて作る。消しても壊れない

@@ -27,6 +27,7 @@
 //	mod.notice.failed         伝えるメモを選べなかった (reason)
 //	mod.handoff.unlinked      SendMessage の宛先に依存の辺が無いことを model に伝えた (session)
 //	mod.handoff.failed        SendMessage の宛先の辺を確かめる依存図を読めなかった (reason)
+//	mod.open-app.failed       session.start で agent-tasks を開けなかった (reason)
 //
 // mod の出来事は同じ理由が続く間は書き直さない (hooks/log.ts)。
 package eventlog

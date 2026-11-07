@@ -16,6 +16,8 @@ function world(on: On, run: (argv: readonly string[]) => ProcessRunResult) {
   on('session.id', async () => ({ value: 'SELF' }))
   on('session.cwd', async () => ({ value: CWD }))
   on('process.run', async (_$, e) => {
+    // session.start で開く agent-tasks (open-app.ts) は数えない。
+    if (e.argv[0] !== BIN) return { value: output('') }
     ran.push({ argv: [...e.argv], stdin: e.init?.stdin })
     return { value: run(e.argv) }
   })

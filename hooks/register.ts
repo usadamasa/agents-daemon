@@ -2,6 +2,7 @@ import type { Register } from 'claude-code'
 
 import { registerHandoffNotice } from './handoff-notice'
 import { registerNotice } from './notice'
+import { openOnStart, registerOpenApp, startOpenApp } from './open-app'
 import { registerPark, startPark } from './park'
 
 // hooks.json の modules は 1 つしか書けず、matcher の無い hook は 1 つの plugin で 1 つの event に 1 つしか
@@ -9,10 +10,13 @@ import { registerPark, startPark } from './park'
 export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     await startPark($)
+    await startOpenApp($)
+    await openOnStart($, e.isInteractive)
 
     return next(e)
   })
   registerPark(on, options)
+  registerOpenApp(on, options)
   registerNotice(on, options)
   registerHandoffNotice(on, options)
 }

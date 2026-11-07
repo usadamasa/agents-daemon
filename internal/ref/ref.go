@@ -19,6 +19,8 @@ var endpointPattern = regexp.MustCompile(`^(?:session:\S+|sid:[^\s/]+|(?:issue|p
 
 var taskPattern = regexp.MustCompile(`^task:([^\s/]+)/([^\s/]+)$`)
 
+var sessionIDPattern = regexp.MustCompile(`^sid:([^\s/]+)$`)
+
 var itemPattern = regexp.MustCompile(`^(issue|pr):([\w.-]+/[\w.-]+)#([0-9]+)$`)
 
 // Item は issue / PR の参照を分けたもの。Kind は "issue" か "pr"、Repo は owner/name。
@@ -72,6 +74,15 @@ func ParseTask(r string) (sessionID, taskID string, ok bool) {
 		return "", "", false
 	}
 	return m[1], m[2], true
+}
+
+// ParseSessionID はセッションそのものの Ref から session ID を取り出す。その形でなければ ok が false。
+func ParseSessionID(r string) (sessionID string, ok bool) {
+	m := sessionIDPattern.FindStringSubmatch(r)
+	if m == nil {
+		return "", false
+	}
+	return m[1], true
 }
 
 // Endpoint は r が辺の端点にできる Ref か。

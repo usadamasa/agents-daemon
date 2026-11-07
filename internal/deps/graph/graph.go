@@ -21,7 +21,7 @@ import (
 const (
 	KindTask    = "task"    // TaskCreate で作られたタスク
 	KindTodo    = "todo"    // TodoWrite のリストの 1 項目
-	KindSession = "session" // タスクを作っていない生きているセッション (subject は今の作業か、セッションの名前)
+	KindSession = "session" // タスクを作っていないセッションの作業 (題は作業の記録から。記録が無ければセッションの名前)
 	// KindRef は辺の端点の参照だけがあるノード (まだ起きていないセッション、issue / PR、タスクを作らずに終了したセッション)。
 	// Key は端点の参照そのもの。終了したセッションは名前で引いても sid:<session_id> を Key にし、名前と session ID の
 	// どちらで書いた辺も同じノードに集める。
@@ -75,11 +75,13 @@ type (
 	MemoRef = protocol.MemoRef
 )
 
-// Card はノードにする作業 1 つ (タスク、TodoWrite の項目、タスクの無い生きているセッション)。
+// Card はノードにする作業 1 つ (タスク、TodoWrite の項目、タスクの無いセッションの作業)。
 type Card struct {
 	// Key は依存図で一意な識別子 (task:、todo:、sid: の Ref)。
 	Key  string
 	Kind string
+	// Origin は kind session の題の出どころ (prompt / inferred / human / pane)。ほかの kind は空。
+	Origin string
 	// TaskID と Description は kind task のタスクの ID と description。
 	TaskID      string
 	Description string
@@ -139,7 +141,7 @@ func Build(in Input) Graph {
 }
 
 func (g *builder) addCard(c Card) {
-	n := &Node{Key: c.Key, Kind: c.Kind, Title: c.Title, Summary: c.Summary, Endpoint: c.Kind != KindTodo, CWD: c.CWD, TaskID: c.TaskID, Description: c.Description, SessionID: c.SessionID,
+	n := &Node{Key: c.Key, Kind: c.Kind, Title: c.Title, Origin: c.Origin, Summary: c.Summary, Endpoint: c.Kind != KindTodo, CWD: c.CWD, TaskID: c.TaskID, Description: c.Description, SessionID: c.SessionID,
 		Session: c.Session, SessionName: g.in.PeerNames[c.SessionID], Live: c.Live, Memos: []MemoRef{}}
 	n.State = nodeState(c.Status, c.Live, c.Activity)
 	if n.State == StateLimit {

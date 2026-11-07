@@ -13,6 +13,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
+	"github.com/usadamasa/agents-daemon/internal/worklog"
 )
 
 func TestRetention_関係(t *testing.T) {
@@ -25,6 +26,7 @@ func TestRetention_関係(t *testing.T) {
 	}{
 		{"完了したタスク (tasklog.CompletedRetention)", tasklog.CompletedRetention, day},
 		{"タスクと TodoWrite のリスト (tasklog.Retention)", tasklog.Retention, 7 * day},
+		{"セッションの作業 (worklog.Retention)", worklog.Retention, 7 * day},
 		{"セッションをまたぐ辺 (edge.Retention)", edge.Retention, 7 * day},
 		{"セッション台帳 (ledger.Retention)", ledger.Retention, 7 * day},
 		{"セッション名 (sessioncontext.Retention)", sessioncontext.Retention, 7 * day},
@@ -46,6 +48,11 @@ func TestRetention_関係(t *testing.T) {
 		{"tasklog.CompletedRetention <= tasklog.Retention", tasklog.CompletedRetention <= tasklog.Retention},
 		// 辺は、端点のタスクのノードが依存図に出うる間 (終了したセッションの未完了のタスク) は残る。
 		{"edge.Retention >= tasklog.Retention", edge.Retention >= tasklog.Retention},
+		// セッションの作業は内訳のタスクより先に消えず、辺・台帳・セッション名は作業のノードが出ている間は引ける。
+		{"worklog.Retention >= tasklog.Retention", worklog.Retention >= tasklog.Retention},
+		{"edge.Retention >= worklog.Retention", edge.Retention >= worklog.Retention},
+		{"ledger.Retention >= worklog.Retention", ledger.Retention >= worklog.Retention},
+		{"sessioncontext.Retention >= worklog.Retention", sessioncontext.Retention >= worklog.Retention},
 		// 台帳は、辺が残っている間はその端点を結びつける候補のセッションを引ける。
 		{"ledger.Retention >= edge.Retention", ledger.Retention >= edge.Retention},
 		// セッション名は、終了したセッションのタスクのノードが出ている間は表示名と置き場の名前に引ける。

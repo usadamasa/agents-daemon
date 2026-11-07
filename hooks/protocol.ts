@@ -166,7 +166,7 @@ export const definitions = {
     }
   },
   "ParkAdoptRequest": {
-    "description": "park adopt の stdin。終了したセッションの未完了のタスクを出自 adopted (種類 scope) のメモにし、タスクの記録を消して ParkAdded を出す。セッションの終了は、動いている daemon がタスクの記録より後に書いた status.json に pane が無いことで確かめる",
+    "description": "park adopt の stdin。終了したセッションの未完了のタスク (task:) か、タスクの無いセッションの作業 (sid:) を出自 adopted (種類 scope) のメモにし、その記録を消して ParkAdded を出す。セッションの終了は、動いている daemon が記録より後に書いた status.json に pane が無いことで確かめる",
     "type": "object",
     "additionalProperties": false,
     "required": [
@@ -175,11 +175,122 @@ export const definitions = {
     "properties": {
       "ref": {
         "type": "string",
-        "description": "依存図のタスクのノードの key (task:<session_id>/<task_id>)"
+        "description": "依存図のノードの key (task:<session_id>/<task_id> か sid:<session_id>)"
       },
       "session_id": {
         "type": "string",
         "description": "操作したセッションの ID (ログに添える)"
+      }
+    }
+  },
+  "WorkSetRequest": {
+    "description": "work set の stdin。セッションの作業の記録の題を書き換え、Work を出す。subject は人が直した題 (出どころ human。以後の hook と companion は書き換えない)、inferred は companion の推定の題 (subject とは別の欄で、人が直していなければこちらを見せる)。どちらか 1 つ以上。記録が無ければ exit 1",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "session_id"
+    ],
+    "anyOf": [
+      {
+        "required": [
+          "subject"
+        ]
+      },
+      {
+        "required": [
+          "inferred"
+        ]
+      }
+    ],
+    "properties": {
+      "session_id": {
+        "type": "string",
+        "description": "作業のセッションの ID"
+      },
+      "subject": {
+        "type": "string",
+        "minLength": 1,
+        "description": "人が直した題"
+      },
+      "inferred": {
+        "type": "string",
+        "minLength": 1,
+        "description": "companion の推定の題"
+      }
+    }
+  },
+  "WorkGetRequest": {
+    "description": "work get の stdin。セッションの作業の記録を Work で出す。無ければ exit 1",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "session_id"
+    ],
+    "properties": {
+      "session_id": {
+        "type": "string",
+        "description": "作業のセッションの ID"
+      }
+    }
+  },
+  "Work": {
+    "description": "セッション 1 つの作業の記録 (work get、work set の出力)。hook が書く事実 (最初の prompt の題、最後のターンの要約、turns、始まりと終わり) と、人の直した題、companion の推定の題",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "session_id",
+      "cwd",
+      "turns",
+      "started_at",
+      "updated_at"
+    ],
+    "properties": {
+      "session_id": {
+        "type": "string"
+      },
+      "cwd": {
+        "type": "string"
+      },
+      "subject": {
+        "type": "string",
+        "description": "題 (出どころは origin)"
+      },
+      "origin": {
+        "type": "string",
+        "enum": [
+          "prompt",
+          "human"
+        ],
+        "description": "題の出どころ。prompt は最初の prompt の 1 行目、human は人が work set で直した"
+      },
+      "inferred": {
+        "type": "string",
+        "description": "companion の推定の題"
+      },
+      "summary": {
+        "type": "string",
+        "description": "最後のターンの応答の 1 行目"
+      },
+      "turns": {
+        "type": "integer",
+        "description": "UserPromptSubmit の数 (peer の delivery も数える)"
+      },
+      "started_at": {
+        "type": "string",
+        "format": "date-time"
+      },
+      "updated_at": {
+        "type": "string",
+        "format": "date-time"
+      },
+      "ended_at": {
+        "type": "string",
+        "format": "date-time",
+        "description": "SessionEnd の時刻。生きている (resume した) 間は無い"
+      },
+      "end_reason": {
+        "type": "string",
+        "description": "SessionEnd の reason"
       }
     }
   },
@@ -279,7 +390,7 @@ export const definitions = {
     }
   },
   "TaskDismissRequest": {
-    "description": "task dismiss の stdin。終了したセッションのタスク (完了しているかを問わない) の記録を消して依存図から外し、{} を出す。セッションの終了は park adopt と同じく status.json で確かめ、確かめられなければ消さずに exit 1 で理由を返す",
+    "description": "task dismiss の stdin。終了したセッションのタスク (完了しているかを問わない。task:) か、タスクの無いセッションの作業 (sid:) の記録を消して依存図から外し、{} を出す。セッションの終了は park adopt と同じく status.json で確かめ、確かめられなければ消さずに exit 1 で理由を返す",
     "type": "object",
     "additionalProperties": false,
     "required": [
@@ -288,7 +399,7 @@ export const definitions = {
     "properties": {
       "ref": {
         "type": "string",
-        "description": "依存図のタスクのノードの key (task:<session_id>/<task_id>)"
+        "description": "依存図のノードの key (task:<session_id>/<task_id> か sid:<session_id>)"
       },
       "session_id": {
         "type": "string",
@@ -1002,7 +1113,7 @@ export const definitions = {
     }
   },
   "GraphNode": {
-    "description": "依存の DAG のノード 1 つ (タスク 1 つ、タスクの無いセッション、端点の参照だけの置き場)",
+    "description": "依存の DAG のノード 1 つ (タスク 1 つ、タスクの無いセッションの作業、端点の参照だけの置き場)",
     "type": "object",
     "additionalProperties": false,
     "required": [
@@ -1055,6 +1166,16 @@ export const definitions = {
       "title": {
         "type": "string"
       },
+      "origin": {
+        "type": "string",
+        "enum": [
+          "prompt",
+          "inferred",
+          "human",
+          "pane"
+        ],
+        "description": "kind session のノードの題の出どころ。prompt は最初の prompt、inferred は companion の推定 (推定と分かるように見せる)、human は人が直した、pane は作業の記録が無く pane の名前から付けた"
+      },
       "ref_kind": {
         "type": "string",
         "enum": [
@@ -1065,7 +1186,7 @@ export const definitions = {
       },
       "summary": {
         "type": "string",
-        "description": "Claude Code が申告したセッションの今の作業 (OSC 7501 の msg)。kind session のノードと、進行中のタスクと TodoWrite の項目のノードに付く"
+        "description": "セッションの今の作業。生きていれば Claude Code が申告したもの (OSC 7501 の msg)、終了していれば最後のターンの応答の 1 行目 (作業の記録)。kind session のノードと、進行中のタスクと TodoWrite の項目のノードに付く"
       },
       "detail": {
         "type": "string",

@@ -17,8 +17,9 @@ func TestRootCmd_registersAllCommands(t *testing.T) {
 		names = append(names, c.Name())
 	}
 	want := []string{
-		"daemon", "deps", "doctor", "dream", "edge", "event-log", "ingest-statusline", "ingest-task", "ingest-turn-failure", "inspect",
-		"logs", "park", "prune-worktrees", "simulate", "spawn", "status", "statusline", "stop", "task", "tell", "update", "version",
+		"daemon", "deps", "doctor", "dream", "edge", "event-log", "ingest-statusline", "ingest-task", "ingest-turn-failure", "ingest-work",
+		"inspect", "logs", "park", "prune-worktrees", "simulate", "spawn", "status", "statusline", "stop", "task", "tell", "update",
+		"version", "work",
 	}
 	slices.Sort(names)
 	if !slices.Equal(names, want) {
@@ -77,6 +78,7 @@ func TestRootCmd_jsonFlag(t *testing.T) {
 		"agents-daemon ingest-statusline":   true,
 		"agents-daemon ingest-task":         true,
 		"agents-daemon ingest-turn-failure": true,
+		"agents-daemon ingest-work":         true,
 		"agents-daemon statusline":          true,
 		"agents-daemon update":              true,
 	}
@@ -109,6 +111,8 @@ func TestRootCmd_jsonFlag(t *testing.T) {
 		"agents-daemon task dismiss":    true,
 		"agents-daemon tell":            true,
 		"agents-daemon version":         true,
+		"agents-daemon work get":        true,
+		"agents-daemon work set":        true,
 	}
 	var leaves []string
 	var walk func(c *cobra.Command)

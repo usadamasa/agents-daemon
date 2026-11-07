@@ -344,11 +344,14 @@ func TestParkAdopt(t *testing.T) {
 		return runPark(t, "adopt", req(t, map[string]any{"ref": ref, "session_id": "viewer"}))
 	}
 
-	// 参照は task: の形だけを受け付ける。
-	for _, ref := range []string{"sid:dead", "todo:dead/0", "dead/4"} {
-		if _, stderr, err := adopt(ref); err == nil || !strings.Contains(stderr, "task:<session_id>/<task_id>") {
-			t.Errorf("%s: タスクの参照でないのに受け付けた: %v %s", ref, err, stderr)
+	// 参照は task: と sid: の形だけを受け付ける。
+	for _, ref := range []string{"todo:dead/0", "dead/4"} {
+		if _, stderr, err := adopt(ref); err == nil || !strings.Contains(stderr, "task:<session_id>/<task_id> か sid:<session_id>") {
+			t.Errorf("%s: タスクでも作業でもない参照を受け付けた: %v %s", ref, err, stderr)
 		}
+	}
+	if _, stderr, err := adopt("sid:nobody"); err == nil || !strings.Contains(stderr, "作業の記録が無い") {
+		t.Errorf("記録の無い作業を移した: %v %s", err, stderr)
 	}
 	if _, stderr, err := adopt("task:dead/4"); err == nil || !strings.Contains(stderr, "daemon が動いていない") {
 		t.Fatalf("daemon が動いていないのに移した: %v %s", err, stderr)
@@ -371,6 +374,27 @@ func TestParkAdopt(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, "state", "agents-daemon", "tasks", "dead", "4.json")); !os.IsNotExist(err) {
 		t.Errorf("タスクの記録が残った: %v", err)
+	}
+
+	// タスクの無いセッションの作業 (sid:) も同じ門で移す。題は見せる題、detail は最後の要約。
+	writeTestConfig(t, filepath.Join(root, "state", "agents-daemon", "work", "gone.json"), `{"session_id": "gone", "cwd": "`+cwd+`", "subject": "最初の prompt", "origin": "prompt", "inferred": "推定の題", "summary": "最後の応答", "turns": 3, "started_at": "2026-10-18T09:00:00Z", "updated_at": "2026-10-18T09:00:00Z"}`)
+	writeDaemonStatus(t, root, `{"pane_id": "b2", "session_id": "gone", "cwd": "`+cwd+`"}`)
+	if _, stderr, err := adopt("sid:gone"); err == nil || !strings.Contains(stderr, "生きている") {
+		t.Fatalf("pane のあるセッションの作業を移した: %v %s", err, stderr)
+	}
+	writeDaemonStatus(t, root, ``)
+	out, _, err = adopt("sid:gone")
+	if err != nil {
+		t.Fatalf("park adopt (sid): %v", err)
+	}
+	if err := json.Unmarshal([]byte(out), &added); err != nil {
+		t.Fatal(err)
+	}
+	if item := added.Item; item.Kind != parking.KindScope || item.Origin != parking.OriginAdopted || item.Title != "推定の題" || item.Detail != "最後の応答" {
+		t.Errorf("item = %+v", item)
+	}
+	if _, err := os.Stat(filepath.Join(root, "state", "agents-daemon", "work", "gone.json")); !os.IsNotExist(err) {
+		t.Errorf("作業の記録が残った: %v", err)
 	}
 }
 

@@ -12,11 +12,17 @@
 //
 //	ingest-task               Task 系ツールと TodoWrite を記録した (tool、written、removed)
 //	ingest-task.failed        記録できなかった (tool、reason)
+//	ingest-work               セッションの作業の記録を作った (event、created) か、SessionEnd で ended を書いた (event、ended)。ターンごとの更新は書かない
+//	ingest-work.failed        作業を記録できなかった (event、reason)
+//	work.set                  作業の題を書き換えた (origin=human は人が直した、inferred=true は companion の推定)
+//	work.set.failed           書き換えられなかった (origin / inferred、reason)
+//	work.dismiss              終了したセッションの作業の記録を消した (from_session)
+//	work.dismiss.failed       作業の記録を消さなかった (ref、reason)
 //	park.add                  メモを置いた (memo、kind、created、task)
 //	park.set                  メモの status を書き換えた (memo、from、to)
 //	park.discard              古い open のメモをまとめて捨てた (days、memos、ids)
 //	park.withdraw             置いたセッションが自分の open のメモを取り下げた (memo)
-//	park.adopt                終了したセッションのタスクをメモにした (from_session、task、memo、created)
+//	park.adopt                終了したセッションのタスク (from_session、task) か作業 (from_session、work=true) をメモにした (memo、created)
 //	park.hand                 メモを生きているセッションか新しく起こすセッションへ渡した (memo、intent、repo、to、delivered、status、reason)
 //	park.failed               park の操作が失敗した (op、reason)
 //	task.dismiss              終了したセッションのタスクの記録を消した (from_session、task)

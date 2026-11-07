@@ -15,6 +15,11 @@
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/prune-worktrees.sh\"",
             "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/ingest-work.sh\"",
+            "timeout": 5
           }
         ]
       }
@@ -30,6 +35,22 @@
           {
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/ingest-turn-failure.sh\"",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/ingest-work.sh\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/ingest-work.sh\"",
             "timeout": 5
           }
         ]
@@ -52,6 +73,11 @@
           {
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/ingest-turn-failure.sh\"",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/ingest-work.sh\"",
             "timeout": 5
           }
         ]

@@ -9,6 +9,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/protocol"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
+	"github.com/usadamasa/agents-daemon/internal/worklog"
 )
 
 // park の出来事 (eventlog の package doc の一覧) を、park の操作の結果から組んで書く。
@@ -83,6 +84,18 @@ func parkAdopt(stateDir string, s parking.Store, tasks tasklog.Store, viewer, se
 		return added, err
 	}
 	fields := []string{kv("from_session", sessionID), kv("task", taskID), kv("memo", added.Item.ID), kv("created", added.Created)}
+	_ = eventlog.Record(stateDir, viewer, "park.adopt", fields, now)
+	return added, nil
+}
+
+// parkAdoptWork は s.AdoptWork を走らせ、移した作業とメモを書く (park adopt、work=true)。exited と viewer は parkAdopt と同じ。
+func parkAdoptWork(stateDir string, s parking.Store, works worklog.Store, viewer, sessionID string, exited func(string, time.Time) error, now time.Time) (parking.Added, error) {
+	added, err := s.AdoptWork(sessionID, works, exited, now)
+	if err != nil {
+		parkFailed(stateDir, now, "adopt", viewer, err, kv("from_session", sessionID), kv("work", true))
+		return added, err
+	}
+	fields := []string{kv("from_session", sessionID), kv("work", true), kv("memo", added.Item.ID), kv("created", added.Created)}
 	_ = eventlog.Record(stateDir, viewer, "park.adopt", fields, now)
 	return added, nil
 }

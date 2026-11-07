@@ -63,7 +63,7 @@ func TestIngest_不変条件を乱択の交錯で破らない(t *testing.T) {
 		if got.Subject != "人の題" || got.Origin != OriginHuman {
 			t.Errorf("seed %d: HumanSubjectKept: subject = %q (%s)", seed, got.Subject, got.Origin)
 		}
-		if !got.Ended() {
+		if !Ended(got) {
 			t.Errorf("seed %d: EndedStays: ended が消えた", seed)
 		}
 		if got.Inferred != "推定" || got.Summary != "済" {

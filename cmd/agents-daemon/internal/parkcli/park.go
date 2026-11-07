@@ -21,6 +21,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 	"github.com/usadamasa/agents-daemon/internal/tell"
+	"github.com/usadamasa/agents-daemon/internal/worklog"
 )
 
 // Commands は root に登録するコマンド。
@@ -82,13 +83,16 @@ func newParkCmd() *cobra.Command {
 	withdraw := sub("withdraw", "stdin の ParkWithdrawRequest で、そのセッションだけが置いた open のメモを discarded にし、ParkingItem を出す", statecmd.Decoded("ParkWithdrawRequest", func(p apppath.Paths, req protocol.ParkWithdrawRequest) (any, error) {
 		return parkWithdraw(p.StateDir(), parking.New(p.StateDir()), req.SessionID, req.ID, time.Now())
 	}))
-	adopt := sub("adopt", "stdin の ParkAdoptRequest で終了したセッションの未完了のタスクをメモにし、ParkAdded を出す", statecmd.Decoded("ParkAdoptRequest", func(p apppath.Paths, req protocol.ParkAdoptRequest) (any, error) {
-		sessionID, taskID, ok := ref.ParseTask(req.Ref)
-		if !ok {
-			return nil, fmt.Errorf("参照 %q は task:<session_id>/<task_id> の形でない", req.Ref)
-		}
+	adopt := sub("adopt", "stdin の ParkAdoptRequest で終了したセッションの未完了のタスク (task:) かタスクの無いセッションの作業 (sid:) をメモにし、ParkAdded を出す", statecmd.Decoded("ParkAdoptRequest", func(p apppath.Paths, req protocol.ParkAdoptRequest) (any, error) {
 		exited := func(sessionID string, after time.Time) error {
 			return daemonstate.SessionExited(p, sessionID, after)
+		}
+		if sessionID, ok := ref.ParseSessionID(req.Ref); ok {
+			return parkAdoptWork(p.StateDir(), parking.New(p.StateDir()), worklog.New(p.StateDir()), req.SessionID, sessionID, exited, time.Now())
+		}
+		sessionID, taskID, ok := ref.ParseTask(req.Ref)
+		if !ok {
+			return nil, fmt.Errorf("参照 %q は task:<session_id>/<task_id> か sid:<session_id> の形でない", req.Ref)
 		}
 		return parkAdopt(p.StateDir(), parking.New(p.StateDir()), tasklog.New(p.StateDir()), req.SessionID, sessionID, taskID, exited, time.Now())
 	}))

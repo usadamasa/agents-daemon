@@ -11,6 +11,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/runtime/daemon/limitlog"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 	"github.com/usadamasa/agents-daemon/internal/turnfailure"
+	"github.com/usadamasa/agents-daemon/internal/worklog"
 )
 
 // ランタイム状態は揮発物として扱い、daemon 自身が古いものを消す。sidecar file の
@@ -24,11 +25,12 @@ const (
 	housekeepInterval = time.Hour
 )
 
-// attachStateDir は housekeeping が消す対象 (tasks / parking / edges / sessions / events log / limit-events /
+// attachStateDir は housekeeping が消す対象 (tasks / work / parking / edges / sessions / events log / limit-events /
 // turn-failures) の置き場を stateDir から配線する。sessions と limit-events は daemon が書く先、edges は daemon が
 // 端点を結びつける先、turn-failures は上限の出来事に添えて読む先でもある。
 func (r *daemonRuntime) attachStateDir(stateDir string) {
 	r.tasks = tasklog.New(stateDir)
+	r.works = worklog.New(stateDir)
 	r.parking = parking.New(stateDir)
 	r.edges = edge.New(stateDir)
 	r.sessions = ledger.New(stateDir)
@@ -67,6 +69,10 @@ func (r *daemonRuntime) housekeep(logPath string, now time.Time) {
 	if err != nil {
 		r.log.Logf("タスクの記録の削除でエラー: %v", err)
 	}
+	works, err := r.works.Prune(now)
+	if err != nil {
+		r.log.Logf("作業の記録の削除でエラー: %v", err)
+	}
 	parked, err := r.parking.Prune(now)
 	if err != nil {
 		r.log.Logf("パーキングの削除でエラー: %v", err)
@@ -87,8 +93,8 @@ func (r *daemonRuntime) housekeep(logPath string, now time.Time) {
 	if err != nil {
 		r.log.Logf("turn の失敗の記録の削除でエラー: %v", err)
 	}
-	if logs > 0 || states > 0 || contexts > 0 || tasks > 0 || parked > 0 || edges > 0 || limits > 0 || sessions > 0 || failures > 0 {
-		r.log.Logf("保持期間を過ぎたファイルを削除しました: rotated ログ %d 件、利用上限 state %d 件、context state %d 件、タスクの記録 %d 件、パーキング %d 件、辺 %d 件、上限の出来事 %d 件、セッション台帳 %d 件、turn の失敗 %d 件",
-			logs, states, contexts, tasks, parked, edges, limits, sessions, failures)
+	if logs > 0 || states > 0 || contexts > 0 || tasks > 0 || works > 0 || parked > 0 || edges > 0 || limits > 0 || sessions > 0 || failures > 0 {
+		r.log.Logf("保持期間を過ぎたファイルを削除しました: rotated ログ %d 件、利用上限 state %d 件、context state %d 件、タスクの記録 %d 件、作業の記録 %d 件、パーキング %d 件、辺 %d 件、上限の出来事 %d 件、セッション台帳 %d 件、turn の失敗 %d 件",
+			logs, states, contexts, tasks, works, parked, edges, limits, sessions, failures)
 	}
 }

@@ -1,6 +1,7 @@
 package worklog
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -133,21 +134,21 @@ func TestIngest_SessionEndはendedを書きresumeのSessionStartが消す(t *tes
 		t.Errorf("Result = %+v, want Ended", res)
 	}
 	got := mustGet(t, s, "s1")
-	if got.EndedAt == nil || !got.EndedAt.Equal(now.Add(time.Hour)) || got.EndReason != "prompt_input_exit" || !got.Ended() {
+	if got.EndedAt == nil || !got.EndedAt.Equal(now.Add(time.Hour)) || got.EndReason != "prompt_input_exit" || !Ended(got) {
 		t.Errorf("Get() = %+v", got)
 	}
 	// Stop は ended に触れない (EndedStays)。
 	mustIngest(t, s, hook("Stop", `"last_assistant_message": "遅れた"`), now.Add(2*time.Hour))
-	if got := mustGet(t, s, "s1"); !got.Ended() || got.Summary != "遅れた" {
+	if got := mustGet(t, s, "s1"); !Ended(got) || got.Summary != "遅れた" {
 		t.Errorf("Stop の後 = %+v", got)
 	}
 	// startup の SessionStart も消さない。resume だけが消す。
 	mustIngest(t, s, hook("SessionStart", `"source": "startup"`), now.Add(3*time.Hour))
-	if got := mustGet(t, s, "s1"); !got.Ended() {
+	if got := mustGet(t, s, "s1"); !Ended(got) {
 		t.Errorf("startup の後 = %+v", got)
 	}
 	mustIngest(t, s, hook("SessionStart", `"source": "resume"`), now.Add(3*time.Hour))
-	if got := mustGet(t, s, "s1"); got.Ended() || got.EndReason != "" {
+	if got := mustGet(t, s, "s1"); Ended(got) || got.EndReason != "" {
 		t.Errorf("resume の後 = %+v", got)
 	}
 }
@@ -163,16 +164,16 @@ func TestSet_人の題とcompanionの題(t *testing.T) {
 	if err != nil || rec.Inferred != "推定の題" || rec.Subject != "最初の prompt" || rec.Origin != OriginPrompt {
 		t.Errorf("Set(inferred) = %+v, %v", rec, err)
 	}
-	if rec.Title() != "推定の題" {
-		t.Errorf("Title() = %q, want 推定の題 (prompt より推定を見せる)", rec.Title())
+	if Title(rec) != "推定の題" {
+		t.Errorf("Title() = %q, want 推定の題 (prompt より推定を見せる)", Title(rec))
 	}
 
 	rec, err = s.Set("s1", Change{Subject: new("人が直した題")}, now.Add(2*time.Minute))
 	if err != nil || rec.Subject != "人が直した題" || rec.Origin != OriginHuman || rec.Inferred != "推定の題" {
 		t.Errorf("Set(subject) = %+v, %v", rec, err)
 	}
-	if rec.Title() != "人が直した題" {
-		t.Errorf("Title() = %q, want 人が直した題", rec.Title())
+	if Title(rec) != "人が直した題" {
+		t.Errorf("Title() = %q, want 人が直した題", Title(rec))
 	}
 	// 人が直した後の hook と companion は題を書き換えない (HumanSubjectKept)。
 	mustIngest(t, s, hook("UserPromptSubmit", `"prompt": "別の prompt"`), now.Add(3*time.Minute))
@@ -180,7 +181,7 @@ func TestSet_人の題とcompanionの題(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := mustGet(t, s, "s1")
-	if got.Subject != "人が直した題" || got.Origin != OriginHuman || got.Title() != "人が直した題" || got.Inferred != "別の推定" {
+	if got.Subject != "人が直した題" || got.Origin != OriginHuman || Title(got) != "人が直した題" || got.Inferred != "別の推定" {
 		t.Errorf("Get() = %+v", got)
 	}
 	if _, err := s.Set("s1", Change{Subject: new("  ")}, now); err == nil {
@@ -192,11 +193,35 @@ func TestSet_人の題とcompanionの題(t *testing.T) {
 }
 
 func TestTitle_無ければ空(t *testing.T) {
-	if got := (Record{}).Title(); got != "" {
+	if got := Title(Record{}); got != "" {
 		t.Errorf("Title() = %q", got)
 	}
-	if got := (Record{Subject: "p", Origin: OriginPrompt}).Title(); got != "p" {
+	if got := Title(Record{Subject: "p", Origin: OriginPrompt}); got != "p" {
 		t.Errorf("Title() = %q", got)
+	}
+}
+
+// Dismiss は終了したと確かめられた記録だけを消す。
+func TestDismiss(t *testing.T) {
+	s := New(t.TempDir())
+	exited := func(string, time.Time) error { return nil }
+	if err := s.Dismiss("s1", exited); err == nil {
+		t.Error("無い記録の Dismiss が通った")
+	}
+	mustIngest(t, s, hook("UserPromptSubmit", `"prompt": "p"`), now)
+	var askedAfter time.Time
+	alive := func(_ string, after time.Time) error { askedAfter = after; return errors.New("生きている") }
+	if err := s.Dismiss("s1", alive); err == nil || !strings.Contains(err.Error(), "生きている") || !askedAfter.Equal(now) {
+		t.Errorf("Dismiss(alive) = %v (asked after %v)", err, askedAfter)
+	}
+	if _, ok := s.Get("s1"); !ok {
+		t.Error("生きているセッションの記録が消えた")
+	}
+	if err := s.Dismiss("s1", exited); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := s.Get("s1"); ok {
+		t.Error("Dismiss の後に残っている")
 	}
 }
 

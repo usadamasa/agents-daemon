@@ -29,6 +29,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/usadamasa/agents-daemon/internal/protocol"
 	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
 
@@ -50,28 +51,14 @@ const subjectLimit = 120
 // lockFile は work/ で書き込みを直列にするロック。
 const lockFile = ".lock"
 
-// Record はセッション 1 つの作業の記録。
-type Record struct {
-	SessionID string `json:"session_id"`
-	CWD       string `json:"cwd"`
-	// Subject は題 (事実か人の手)。Origin はその出どころ (OriginPrompt / OriginHuman)。無ければどちらも空。
-	Subject string `json:"subject,omitempty"`
-	Origin  string `json:"origin,omitempty"`
-	// Inferred は companion が推定した題。subject とは別に置き、見せるときは subject より先に出す (人が直した subject は除く)。
-	Inferred string `json:"inferred,omitempty"`
-	// Summary は最後のターンの応答の 1 行目 (Stop の last_assistant_message)。
-	Summary string `json:"summary,omitempty"`
-	// Turns は UserPromptSubmit の数 (peer の delivery も数える)。
-	Turns     int       `json:"turns"`
-	StartedAt time.Time `json:"started_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	// EndedAt は SessionEnd の時刻。生きている (resume した) 間は無い。EndReason は SessionEnd の reason。
-	EndedAt   *time.Time `json:"ended_at,omitempty"`
-	EndReason string     `json:"end_reason,omitempty"`
-}
+// Record はセッション 1 つの作業の記録。ファイルの形は protocol の schema (Work) が持ち、`work get` / `work set` の出力でもある。
+// Subject は題 (事実か人の手) で Origin がその出どころ、Inferred は companion の推定の題 (subject とは別の欄)、Summary は
+// 最後のターンの応答の 1 行目、Turns は UserPromptSubmit の数 (peer の delivery も数える)、EndedAt は SessionEnd の時刻
+// (生きている間は無い)。
+type Record = protocol.Work
 
 // Title は見せる題。人が直した subject、companion の推定の題、prompt の subject の順。無ければ空。
-func (r Record) Title() string {
+func Title(r Record) string {
 	if r.Origin == OriginHuman {
 		return r.Subject
 	}
@@ -82,15 +69,29 @@ func (r Record) Title() string {
 }
 
 // Ended はセッションが終了した (SessionEnd の後、resume の前) か。
-func (r Record) Ended() bool {
+func Ended(r Record) bool {
 	return r.EndedAt != nil
+}
+
+// Dismiss は終了したセッションの作業の記録を消す (依存図の「一覧から外す」)。exited はセッションが記録の時刻より後に
+// 終了したと確かめる (daemonstate.SessionExited)。確かめられなければ消さない (生きているセッションの記録を消すと、
+// 次の hook まで依存図から落ちる)。
+func (s Store) Dismiss(sessionID string, exited func(sessionID string, after time.Time) error) error {
+	rec, ok := s.Get(sessionID)
+	if !ok {
+		return fmt.Errorf("セッション %s の作業の記録が無い", sessionID)
+	}
+	if err := exited(sessionID, rec.UpdatedAt); err != nil {
+		return fmt.Errorf("セッション %s の作業は消さない: %w", sessionID, err)
+	}
+	return s.Remove(sessionID)
 }
 
 // Change は `work set` で書き換える欄。nil の欄は触らない。
 type Change struct {
 	// Subject は人が直した題。出どころは human になる。空白だけはエラー。
 	Subject *string
-	// Inferred は companion の推定の題。空にすると消す。
+	// Inferred は companion の推定の題。
 	Inferred *string
 }
 

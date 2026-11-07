@@ -79,10 +79,10 @@ select { font: inherit; color: inherit; }
 .dot.err { background: var(--red); }
 
 .graph { flex: 1 1 0; min-height: 160px; position: relative; overflow: auto; }
-/* 拡大率は #graph の --zoom に置く。canvas は描き直すたびに作り直すが、変数は #graph に残る。
-   CSS の zoom は transform と違ってレイアウトの大きさも変えるので、スクロールの範囲が図に追従する */
-.graph { --zoom: 1; }
-.graph .canvas { position: relative; zoom: var(--zoom); }
+.graph .canvas { position: relative; transform-origin: 0 0; }
+/* 拡大縮小した canvas を包む枠。transform はレイアウトの大きさを変えないので、拡大率を掛けた大きさを枠に持たせて
+   スクロールの範囲を図に合わせる (WKWebView では CSS の zoom が文字の大きさに効かなかった) */
+.graph .zoom-frame { overflow: hidden; }
 .zoom { display: inline-flex; align-items: center; gap: 4px; }
 .zoom #zoom-reset { min-width: 56px; justify-content: center; font-variant-numeric: tabular-nums; }
 .graph svg.edges { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }

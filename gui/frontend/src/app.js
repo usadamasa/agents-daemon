@@ -1068,6 +1068,7 @@ function render() {
     return;
   }
   renderGraph();
+  applyZoom();
   renderToggle();
   el("legend").hidden = false;
   renderPark();
@@ -1084,9 +1085,27 @@ function render() {
 }
 
 // ---- 拡大縮小 ----
-// 描画には触れず、#graph の --zoom とスクロール量だけを変える。拡大率は図を読み直しても保つ (勝手に全体表示へ戻さない)。
+// 描画には触れず、描いた canvas を枠で包んで scale とスクロール量だけを変える。拡大率は図を読み直しても保つ
+// (勝手に全体表示へ戻さない)。
 
 let zoom = 1;
+
+// applyZoom は renderGraph が作った canvas を枠で包み、canvas に scale を、枠に拡大率を掛けた大きさを当てる。
+// 枠は canvas の作り直しで消えるので、描くたびに呼ぶ。
+function applyZoom() {
+  const canvas = el("graph").querySelector(".canvas");
+  if (canvas === null) return;
+  let frame = canvas.parentElement;
+  if (!frame.classList.contains("zoom-frame")) {
+    frame = document.createElement("div");
+    frame.className = "zoom-frame";
+    canvas.replaceWith(frame);
+    frame.append(canvas);
+  }
+  frame.style.width = `${Math.ceil(parseFloat(canvas.style.width) * zoom)}px`;
+  frame.style.height = `${Math.ceil(parseFloat(canvas.style.height) * zoom)}px`;
+  canvas.style.transform = zoom === 1 ? "" : `scale(${zoom})`;
+}
 
 // setZoom は拡大率を next にし、pointer (#graph の左上からの距離) が指す図の点を同じ画面位置に残す。
 // pointer が無ければ見えている領域の中央を残す。
@@ -1097,7 +1116,7 @@ function setZoom(next, pointer) {
   const left = scrollAfterZoom(host.scrollLeft, p.x, zoom, to);
   const top = scrollAfterZoom(host.scrollTop, p.y, zoom, to);
   zoom = to;
-  host.style.setProperty("--zoom", String(to));
+  applyZoom();
   host.scrollTo(left, top);
   renderZoom();
   if (state.selected !== null) renderPopup();

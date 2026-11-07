@@ -951,7 +951,8 @@ export const definitions = {
       "longest_chain",
       "folded",
       "rows",
-      "rows_with_completed"
+      "rows_with_completed",
+      "column_order"
     ],
     "properties": {
       "nodes": {
@@ -990,6 +991,13 @@ export const definitions = {
           "$ref": "#/$defs/GraphRow"
         },
         "description": "完了したノードも含めて組んだレーンの行"
+      },
+      "column_order": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "依存の無いノードを依存図の右の列に並べる順 (全ノードの key)。手当てが要るもの、作業中、返事待ち、未着手、終了、完了の段で、同じ段は最後に動いた時刻の新しい順"
       }
     }
   },
@@ -1057,7 +1065,7 @@ export const definitions = {
       },
       "summary": {
         "type": "string",
-        "description": "kind session のノードで、Claude Code が申告した今の作業 (OSC 7501 の msg)"
+        "description": "Claude Code が申告したセッションの今の作業 (OSC 7501 の msg)。kind session のノードと、進行中のタスクと TodoWrite の項目のノードに付く"
       },
       "detail": {
         "type": "string",

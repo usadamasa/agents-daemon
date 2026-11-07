@@ -340,6 +340,8 @@ export type DepsGraph = {
   rows: GraphRow[]
   // 完了したノードも含めて組んだレーンの行
   rows_with_completed: GraphRow[]
+  // 依存の無いノードを依存図の右の列に並べる順 (全ノードの key)。手当てが要るもの、作業中、返事待ち、未着手、終了、完了の段で、同じ段は最後に動いた時刻の新しい順
+  column_order: string[]
 }
 
 // 依存の DAG のノード 1 つ (タスク 1 つ、タスクの無いセッション、端点の参照だけの置き場)
@@ -352,7 +354,7 @@ export type GraphNode = {
   title: string
   // issue: / pr: の置き場のノードの参照の種類
   ref_kind?: 'issue' | 'pr'
-  // kind session のノードで、Claude Code が申告した今の作業 (OSC 7501 の msg)
+  // Claude Code が申告したセッションの今の作業 (OSC 7501 の msg)。kind session のノードと、進行中のタスクと TodoWrite の項目のノードに付く
   summary?: string
   // 状態の補足 (上限の解除時刻)
   detail?: string

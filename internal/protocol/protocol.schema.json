@@ -401,14 +401,15 @@
       "description": "タスクの依存の DAG",
       "type": "object",
       "additionalProperties": false,
-      "required": ["nodes", "links", "longest_chain", "folded", "rows", "rows_with_completed"],
+      "required": ["nodes", "links", "longest_chain", "folded", "rows", "rows_with_completed", "column_order"],
       "properties": {
         "nodes": { "type": "array", "items": { "$ref": "#/$defs/GraphNode" }, "description": "下流の多い順 (同じなら key の順)" },
         "links": { "type": "array", "items": { "$ref": "#/$defs/GraphLink" } },
         "longest_chain": { "type": "array", "items": { "type": "string" }, "description": "下流の最も多い止まっているノードから、下流をたどった最長の鎖の key" },
         "folded": { "$ref": "#/$defs/FoldedGraph" },
         "rows": { "type": "array", "items": { "$ref": "#/$defs/GraphRow" }, "description": "folded の nodes と、links のうち両端が folded の nodes にあるものと folded の links で組んだレーンの行" },
-        "rows_with_completed": { "type": "array", "items": { "$ref": "#/$defs/GraphRow" }, "description": "完了したノードも含めて組んだレーンの行" }
+        "rows_with_completed": { "type": "array", "items": { "$ref": "#/$defs/GraphRow" }, "description": "完了したノードも含めて組んだレーンの行" },
+        "column_order": { "type": "array", "items": { "type": "string" }, "description": "依存の無いノードを依存図の右の列に並べる順 (全ノードの key)。手当てが要るもの、作業中、返事待ち、未着手、終了、完了の段で、同じ段は最後に動いた時刻の新しい順" }
       }
     },
     "GraphNode": {
@@ -422,7 +423,7 @@
         "state": { "type": "string", "enum": ["working", "done", "unknown", "question", "permission", "error", "limit", "pending", "completed", "exited", "external"], "description": "external は daemon が状態を知らない外部の参照 (issue / PR)" },
         "title": { "type": "string" },
         "ref_kind": { "type": "string", "enum": ["issue", "pr"], "description": "issue: / pr: の置き場のノードの参照の種類" },
-        "summary": { "type": "string", "description": "kind session のノードで、Claude Code が申告した今の作業 (OSC 7501 の msg)" },
+        "summary": { "type": "string", "description": "Claude Code が申告したセッションの今の作業 (OSC 7501 の msg)。kind session のノードと、進行中のタスクと TodoWrite の項目のノードに付く" },
         "detail": { "type": "string", "description": "状態の補足 (上限の解除時刻)" },
         "endpoint": { "type": "boolean", "description": "key をそのまま edge add の端点に書けるか (TodoWrite の項目は書けない)" },
         "cwd": { "type": "string" },

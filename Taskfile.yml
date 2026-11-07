@@ -45,9 +45,22 @@ tasks:
       - go vet ./...
       - gosec -quiet ./...
       - go test ./...
-      # フロントエンドの DOM に依らない部分 (graph.js、memo.js、ops.js、actions.js) は frontend/test を node --test で回す
+      # フロントエンドは frontend/test を node --test で回す。ui.test.js は fixture の図を happy-dom で描いて DOM を確かめ、
+      # スナップショットを tmp/gui-snapshots に書く (CI はそれを artifact に残す)
       - npm --prefix frontend ci --no-audit --no-fund
       - npm --prefix frontend test
+
+  gui:snapshot:
+    desc: 依存図を fixture で描き、画面のスナップショット (HTML) を OUT (既定 tmp/gui-snapshots) に書く。ブラウザは要らない
+    # before / after は OUT を分けて 2 回打つ (base の worktree で OUT=<絶対パス>/before、作業中の worktree で after)。
+    # 判定は ui.test.js の DOM の検査が行い、スナップショットは目で見比べる用。
+    vars:
+      OUT: '{{.OUT | default "tmp/gui-snapshots"}}'
+    env:
+      SNAPSHOT_DIR: '{{.OUT}}'
+    cmds:
+      - npm --prefix gui/frontend ci --no-audit --no-fund
+      - node --test gui/frontend/test/ui.test.js
 
   gui:install:
     desc: アプリを hook と同じ cache の場所に建てて ~/Applications/agent-tasks.app に置く (ad hoc 署名、手元でだけ動く)

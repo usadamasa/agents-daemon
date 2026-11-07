@@ -312,16 +312,66 @@ func (g *builder) finish() Graph {
 			break
 		}
 	}
-	out.Rows, out.RowsWithCompleted = g.rows(a, out.Nodes, pairs, open, out.LongestChain)
+	order := make([]string, 0, len(out.Nodes))
+	for _, n := range out.Nodes {
+		order = append(order, n.Key)
+	}
+	out.Folded = g.fold(a, order)
+	out.Rows, out.RowsWithCompleted = g.rows(a, order, pairs, out.Folded, out.LongestChain)
 	return out
 }
 
-// rows はレーンの行を 2 組組む: 完了したノードとその辺を落としたものと、全部を含むもの。落とした方は辺を絞って
-// 組み直す (Depth で輪を切る位置が辺の集合で変わるので、全部の表を使い回さない)。longest chain の辺には印を付ける。
-func (g *builder) rows(all *dag.Graph, nodes []Node, pairs [][2]string, open func(string) bool, chain []string) (opened, every []dag.Row) {
+// fold は完了したノードを隠した図を組む (#392)。隠したノードを通り抜けていた辺は畳んで残す。
+func (g *builder) fold(a *dag.Graph, order []string) protocol.FoldedGraph {
+	shown := map[string]bool{}
+	keys := make([]string, 0, len(order))
+	for _, key := range order {
+		if g.shownWhenFolded(a, key) {
+			shown[key] = true
+			keys = append(keys, key)
+		}
+	}
+	links := a.Fold(order, func(key string) bool { return shown[key] })
+	if links == nil {
+		links = []protocol.FoldedLink{}
+	}
+	return protocol.FoldedGraph{Keys: keys, Links: links}
+}
+
+// shownWhenFolded は完了したノードを隠した図にノードを見せるか。完了したノードは隠すが、下流に完了していないノードが
+// 無く、完了も終了もしていない上流を直接持つものは残す。peer に渡した作業の報告を受けて完了にしたタスクがこれで、
+// 隠すと peer が線を持たずに浮く。上流が完了・終了したら隠す。
+func (g *builder) shownWhenFolded(a *dag.Graph, key string) bool {
+	if g.nodes[key].State != StateCompleted {
+		return true
+	}
+	down, _ := a.Reach(key)
+	for k := range down {
+		if g.nodes[k].State != StateCompleted {
+			return false
+		}
+	}
+	for _, l := range g.links {
+		if l.After != key {
+			continue
+		}
+		if s := g.nodes[l.Before].State; s != StateCompleted && s != StateExited {
+			return true
+		}
+	}
+	return false
+}
+
+// rows はレーンの行を 2 組組む: 完了したノードを隠した図 (folded) と、全部を含むもの。隠した方は辺を絞って
+// 組み直す (Depth で輪を切る位置が辺の集合で変わるので、全部の表を使い回さない)。畳んだ辺は破線にする。
+// longest chain の辺には印を付ける。
+func (g *builder) rows(all *dag.Graph, order []string, pairs [][2]string, folded protocol.FoldedGraph, chain []string) (opened, every []dag.Row) {
 	kinds := map[[2]string]string{}
 	for _, l := range g.links {
 		kinds[[2]string{l.Before, l.After}] = l.Kind
+	}
+	for _, l := range folded.Links {
+		kinds[[2]string{l.Before, l.After}] = LinkEdge
 	}
 	dashed := func(before, after string) bool { return kinds[[2]string{before, after}] == LinkEdge }
 	onChain := map[[2]string]bool{}
@@ -329,21 +379,20 @@ func (g *builder) rows(all *dag.Graph, nodes []Node, pairs [][2]string, open fun
 		onChain[[2]string{chain[i-1], chain[i]}] = true
 	}
 	highlight := func(before, after string) bool { return onChain[[2]string{before, after}] }
-	order := make([]string, 0, len(nodes))
-	openOrder := make([]string, 0, len(nodes))
-	for _, n := range nodes {
-		order = append(order, n.Key)
-		if open(n.Key) {
-			openOrder = append(openOrder, n.Key)
-		}
+	shown := map[string]bool{}
+	for _, key := range folded.Keys {
+		shown[key] = true
 	}
-	openPairs := make([][2]string, 0, len(pairs))
+	shownPairs := make([][2]string, 0, len(pairs)+len(folded.Links))
 	for _, p := range pairs {
-		if open(p[0]) && open(p[1]) {
-			openPairs = append(openPairs, p)
+		if shown[p[0]] && shown[p[1]] {
+			shownPairs = append(shownPairs, p)
 		}
 	}
-	return dag.New(openPairs, KeyLess).Rows(openOrder, dashed, highlight), all.Rows(order, dashed, highlight)
+	for _, l := range folded.Links {
+		shownPairs = append(shownPairs, [2]string{l.Before, l.After})
+	}
+	return dag.New(shownPairs, KeyLess).Rows(folded.Keys, dashed, highlight), all.Rows(order, dashed, highlight)
 }
 
 // rank は原因の鎖で先に選ぶ上流の順。止まっているもの、進行中のもの、それ以外。

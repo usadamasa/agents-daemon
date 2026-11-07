@@ -334,8 +334,9 @@ type DepsGraph struct {
 	Nodes []GraphNode `json:"nodes"`
 	Links []GraphLink `json:"links"`
 	// 下流の最も多い止まっているノードから、下流をたどった最長の鎖の key。
-	LongestChain []string `json:"longest_chain"`
-	// 完了したノードを落として組んだレーンの行。
+	LongestChain []string    `json:"longest_chain"`
+	Folded       FoldedGraph `json:"folded"`
+	// folded の keys と、links のうち両端が keys にあるものと folded の links で組んだレーンの行。
 	Rows []GraphRow `json:"rows"`
 	// 完了したノードも含めて組んだレーンの行。
 	RowsWithCompleted []GraphRow `json:"rows_with_completed"`
@@ -394,6 +395,22 @@ type GraphLink struct {
 	After  string      `json:"after"`
 	Kind   string      `json:"kind"`
 	Edge   *EdgeRecord `json:"edge,omitempty"`
+}
+
+// FoldedGraph は完了したノードを隠したときの図。隠したノードを通り抜けていた辺は畳んで残す。
+type FoldedGraph struct {
+	// 見せるノードの key (nodes の順)。完了していないものと、完了していても下流に完了していないノードが無く、完了も終了もしていない上流を直接持つもの。
+	Keys []string `json:"keys"`
+	// 隠したノードを通り抜けた辺。両端が keys にあり、同じ組の辺が links に無いもの。
+	Links []FoldedLink `json:"links"`
+}
+
+// FoldedLink は隠したノードを通り抜けた経路を畳んだ辺 1 本。
+type FoldedLink struct {
+	Before string `json:"before"`
+	After  string `json:"after"`
+	// 通り抜けた隠したノードの key (経路の順)。
+	Via []string `json:"via"`
 }
 
 // EdgeRecord は kind edge の辺の元の記録。edge rm に渡す。

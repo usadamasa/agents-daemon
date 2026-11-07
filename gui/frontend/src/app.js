@@ -173,7 +173,7 @@ function selectedMemo() {
 // ---- 図 ----
 
 function visibleNodes() {
-  return state.graph.nodes.filter((n) => state.showCompleted || n.state !== "completed");
+  return state.graph.view(state.showCompleted).nodes;
 }
 
 // chainEdges は longest_chain の隣り合う 2 つを before→after の辺として持つ。
@@ -275,13 +275,28 @@ function nodeCard(n, highlight) {
 
 const SVG = "http://www.w3.org/2000/svg";
 
-function edgePath(points, cls, marker) {
+function edgePath(points, cls, marker, hint) {
   const p = document.createElementNS(SVG, "path");
   const d = points.map((pt, i) => `${i === 0 ? "M" : "L"} ${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`).join(" ");
   p.setAttribute("d", d);
   if (cls) p.setAttribute("class", cls);
   p.setAttribute("marker-end", `url(#${marker})`);
-  return p;
+  if (!hint) return p;
+  // 線は細くてホバーしにくいので、太い透明な線を重ねて当たりにする。
+  const group = document.createElementNS(SVG, "g");
+  group.setAttribute("class", "hint");
+  const hit = document.createElementNS(SVG, "path");
+  hit.setAttribute("d", d);
+  hit.setAttribute("class", "hit");
+  const t = document.createElementNS(SVG, "title");
+  t.textContent = hint;
+  group.append(t, p, hit);
+  return group;
+}
+
+// foldedHint は畳んだ辺のホバーの文。通り抜けた完了ノードの題を並べる。
+function foldedHint(l) {
+  return `${l.via.map((key) => state.graph.node(key)?.title ?? key).join(" → ")} を経由`;
 }
 
 function arrowMarker(id, cls) {
@@ -309,7 +324,7 @@ function highlightKeys() {
 function renderGraph() {
   const host = el("graph");
   const graph = state.data.graph;
-  const nodes = visibleNodes();
+  const { nodes, links } = state.graph.view(state.showCompleted);
   const scroll = { left: host.scrollLeft, top: host.scrollTop };
   host.replaceChildren();
   if (nodes.length === 0) {
@@ -319,7 +334,7 @@ function renderGraph() {
     host.append(empty);
     return;
   }
-  const { g, pos, width, height } = layout(nodes, graph.links, host.clientWidth);
+  const { g, pos, width, height } = layout(nodes, links, host.clientWidth);
 
   const canvas = document.createElement("div");
   canvas.className = "canvas";
@@ -335,11 +350,12 @@ function renderGraph() {
   svg.append(defs);
 
   const chain = chainEdges(graph);
-  for (const l of graph.links) {
+  for (const l of links) {
     if (!g.hasEdge(l.before, l.after)) continue;
     const onChain = chain.has(`${l.before}\u0000${l.after}`);
-    const cls = [l.kind === "edge" ? "edge" : "", onChain ? "chain" : ""].filter(Boolean).join(" ");
-    svg.append(edgePath(g.edge(l.before, l.after).points, cls, onChain ? "arrow-chain" : "arrow"));
+    const cls = [l.kind === "task" ? "" : l.kind, onChain ? "chain" : ""].filter(Boolean).join(" ");
+    const hint = l.kind === "folded" ? foldedHint(l) : "";
+    svg.append(edgePath(g.edge(l.before, l.after).points, cls, onChain ? "arrow-chain" : "arrow", hint));
   }
   canvas.append(svg);
 

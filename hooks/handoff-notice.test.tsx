@@ -43,7 +43,7 @@ function deps(nodes: unknown[], links: unknown[] = []) {
     stale_memo_days: 30,
     repos: [],
     recent_repos: [],
-    graph: { nodes, links, longest_chain: [], rows: [], rows_with_completed: [] },
+    graph: { nodes, links, longest_chain: [], folded: { keys: [], links: [] }, rows: [], rows_with_completed: [] },
   }
 }
 

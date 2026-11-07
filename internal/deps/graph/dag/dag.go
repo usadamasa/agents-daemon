@@ -4,7 +4,11 @@
 // 辺は渡す側が自由に書くので循環しうる。どの数え方も、たどっている途中のノードへ戻る辺を無視して止まる。
 package dag
 
-import "sort"
+import (
+	"sort"
+
+	"github.com/usadamasa/agents-daemon/internal/protocol"
+)
 
 // Graph は辺から組んだ前後の表。
 type Graph struct {
@@ -98,6 +102,49 @@ func (g *Graph) Cause(key string, open func(string) bool, rank func(string) int)
 		visited[next] = true
 		cur = next
 	}
+}
+
+// Folded は隠したノードを通り抜けた経路を畳んだ辺。
+type Folded = protocol.FoldedLink
+
+// Fold は shown のノードどうしの、shown でないノードだけを通り抜ける経路を 1 本の辺に畳む。Via は通り抜けたノードを
+// 経路の順に持ち、同じ組へ複数の経路があれば幅優先で最初に着いたものを使う。直接の辺がある組は畳まない。
+// 辺は order の順の before ごとに、着いた順に並ぶ。
+func (g *Graph) Fold(order []string, shown func(string) bool) []Folded {
+	var out []Folded
+	type step struct {
+		key string
+		via []string
+	}
+	for _, from := range order {
+		if !shown(from) {
+			continue
+		}
+		seen := map[string]bool{from: true}
+		var queue []step
+		for _, s := range g.succs[from] {
+			seen[s] = true
+			if !shown(s) {
+				queue = append(queue, step{s, []string{s}})
+			}
+		}
+		for len(queue) > 0 {
+			cur := queue[0]
+			queue = queue[1:]
+			for _, s := range g.succs[cur.key] {
+				if seen[s] {
+					continue
+				}
+				seen[s] = true
+				if shown(s) {
+					out = append(out, Folded{Before: from, After: s, Via: cur.via})
+					continue
+				}
+				queue = append(queue, step{s, append(append([]string{}, cur.via...), s)})
+			}
+		}
+	}
+	return out
 }
 
 // Longest は key から下流をたどった最長の鎖 (key を含む)。長さが同じなら less の順で先のものを選ぶ。

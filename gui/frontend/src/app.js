@@ -3,7 +3,7 @@
 // オブジェクトはタスク (図の箱) とメモ (下の一覧の行)。選ぶとそのそばにポップアップで単体ビューが開く。
 import * as dagre from "./vendor/dagre.esm.js";
 import { Graph } from "./graph.js";
-import { spreadPorts } from "./ports.js";
+import { fitEdges, spreadPorts } from "./ports.js";
 import { STATE_TONE, emphasis } from "./card.js";
 import { isStale, kindLabel, lastPlacedAt, stamp } from "./memo.js";
 import { canAdopt, canDismiss, canTell, candidates, destinationLabel, isOwnTask, issueDestinations, pathDestination, peerDestinations, spawnDestinations, spawnLabel, taskDestinations } from "./ops.js";
@@ -214,6 +214,7 @@ function layout(nodes, links, depth, hostWidth) {
   for (const n of connected) g.setNode(n.key, { width: NODE_W, height: NODE_H });
   for (const l of links) if (g.hasNode(l.before) && g.hasNode(l.after)) g.setEdge(l.before, l.after);
   dagre.layout(g);
+  if (connected.length > 0) fitEdges(g, MARGIN_X, MARGIN_Y);
 
   const pos = new Map(connected.map((n) => [n.key, g.node(n.key)]));
   let width = connected.length > 0 ? g.graph().width : 0;

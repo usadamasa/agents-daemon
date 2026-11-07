@@ -20,6 +20,15 @@ SessionEnd)、companion (mod の推定の題)、人 (`work set`)、daemon (prune
 | `WorkRaceEnded.cfg` | `EndedStays` が破れる (`violated` を期待) | 同じく、SessionEnd の前に読んだ Stop の写しが ended を消す |
 | `WorkRaceTurns.cfg` | `NoLostUpdate` が破れる (`violated` を期待) | 同じく、ターンの途中に入った delivery の UserPromptSubmit と Stop が同じ写しを書く |
 
+同じ不変条件を、実物の Store へ hook の入力と `work set` を goroutine で交錯させる乱択テストが実装に対して持つ
+(`task test` で回る)。
+
+| 不変条件 | テスト |
+| ---- | ---- |
+| `HumanSubjectKept` / `EndedStays` / `NoLostUpdate` | `worklog/invariants_test.go` |
+| `WorkAfterPrompt` (記録を作るのは UserPromptSubmit と Stop、SessionStart と SessionEnd は作らない) | `worklog/worklog_test.go` |
+| `InferBounded` (mod の側: 推定の題がある記録に起こさない、回数は 2 回まで) | `hooks/work-infer.test.tsx` |
+
 ## 前提
 
 - 同じセッションの hook は順に走るが、peer の delivery の UserPromptSubmit はターンの途中に入り Stop と前後しうる。モデルは
@@ -29,8 +38,16 @@ SessionEnd)、companion (mod の推定の題)、人 (`work set`)、daemon (prune
   hook が残っている間は起きない。companion の推定だけは process の外の時間で進み、終了をまたぐ。この前提を外すと、遅れた
   prompt の hook が SessionEnd の後に記録を作る、resume の hook が SessionEnd の後に ended を消す、という順が見つかる
   (モデルを書いて最初に出た反例)。
+  実機 (Claude Code 2.1.319) では、Stop の hook が 4 秒かかる間に /exit すると SessionEnd の hook が先に走り、Stop の hook は
+  書き終える前に殺された (sleep の後に置くはずのファイルが無い)。つまり前提は「hook が終わるまで終了を待つ」ではなく
+  「終了すると残りの hook は書かない」の形で成り立つ。バイナリの hook は数 ms で返るので重なる窓は小さく、重なっても
+  lock の中の読んで書く (Locked) で ended を消さない (WorkRaceEnded は lock 無しの形の反例)。
+  <!-- cc-premise: 2.1.319 hooks /exit は走っている Stop の hook を待たず、SessionEnd の hook を走らせて process を終える -->
 - 記録を作るのは UserPromptSubmit と Stop の hook だけ。SessionStart と SessionEnd は記録があるときだけ書き換える
   (prompt を打たずに終わったセッションの記録を残さない)。
+- 依存図のノードの「終了」(`exited`) は daemon の status.json に pane が無いことで決まり、記録の ended_at には乗らない。
+  上の前提が外れて ended_at が書かれなくても、図の終了の表示と `task dismiss` / `park adopt` の門は崩れない。ended_at が
+  効くのは終了の理由の表示だけ。
 - `/clear` は SessionEnd (reason clear) の後に新しい session_id で SessionStart (source clear) が走る (実測)。別のセッションの
   記録になるので、モデルは 1 つの session_id だけを追う。
 - companion の推定 (`$.model.fork`) は時間がかかり、その間にほかの hook と人の編集が入る。失敗 (API error、nothing-to-fork) は

@@ -68,7 +68,10 @@ func TestAdoptWork_rejects(t *testing.T) {
 
 	writeWork(t, stateDir, "alive", t.TempDir(), "まだ動いている")
 	var askedAfter time.Time
-	alive := func(_ string, after time.Time) error { askedAfter = after; return errors.New("セッション alive は生きている") }
+	alive := func(_ string, after time.Time) error {
+		askedAfter = after
+		return errors.New("セッション alive は生きている")
+	}
 	if _, err := s.AdoptWork("alive", works, alive, testNow); err == nil || !strings.Contains(err.Error(), "生きている") {
 		t.Errorf("AdoptWork(alive) = %v", err)
 	}

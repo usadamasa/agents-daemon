@@ -77,10 +77,10 @@ func TestWorkCmd(t *testing.T) {
 		t.Errorf("get (無い) = %v", err)
 	}
 	for stdin, want := range map[string]string{
-		`{"session_id": "s1"}`:                   "anyOf",
-		`{"session_id": "s1", "subject": ""}`:    "minLength",
-		`{"session_id": "s1", "subject": "x"}`:   "記録が無い",
-		`{"session_id": "s1", "inferred": "x"}`:  "記録が無い",
+		`{"session_id": "s1"}`:                         "anyOf",
+		`{"session_id": "s1", "subject": ""}`:          "minLength",
+		`{"session_id": "s1", "subject": "x"}`:         "記録が無い",
+		`{"session_id": "s1", "inferred": "x"}`:        "記録が無い",
 		`{"session_id": "s1", "subject": "x", "y": 1}`: "y",
 	} {
 		if _, err := runWork(t, "set", stdin); err == nil || !strings.Contains(err.Error(), want) {

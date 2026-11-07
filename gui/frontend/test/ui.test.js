@@ -170,6 +170,9 @@ test("作業のノード: 推定の題は副題と chip で分かり、題を直
   const pop = q("#pop");
   const chips = [...pop.querySelectorAll(".chips .chip")].map((c) => c.textContent);
   assert.ok(chips.includes("推定の題"), chips.join(" / "));
+  // 推定の chip は状態の色 (ok / warn / limit / err) を使わない。
+  assert.equal(pop.querySelector(".chips .chip.guess").textContent, "推定の題");
+  assert.equal(pop.querySelectorAll(".chips .chip.warn").length, 0);
   let verbs = [...pop.querySelectorAll(".acts .act")].map((b) => b.textContent);
   assert.ok(verbs.includes("題を直す"), verbs.join(" / "));
   assert.ok(!verbs.includes("一覧から外す"), verbs.join(" / "));

@@ -855,7 +855,8 @@ function nodePopup(n) {
   const chips = document.createElement("div");
   chips.className = "chips";
   chips.append(stateChip(n));
-  if (ORIGIN_LABEL[n.origin]) chips.append(chip(ORIGIN_LABEL[n.origin], n.origin === "inferred" ? "warn" : ""));
+  // 推定の題は状態の色と被らない破線の chip (guess)、人が直した題は無地。
+  if (ORIGIN_LABEL[n.origin]) chips.append(chip(ORIGIN_LABEL[n.origin], n.origin === "inferred" ? "guess" : ""));
   if (n.session) chips.append(chip(`${n.session} ›`, "", undefined));
   head.append(ph, title, chips);
   parts.push(head);

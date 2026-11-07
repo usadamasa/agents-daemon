@@ -30,8 +30,8 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/runtime/monitor"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
-	"github.com/usadamasa/agents-daemon/internal/worklog"
 	"github.com/usadamasa/agents-daemon/internal/turnfailure"
+	"github.com/usadamasa/agents-daemon/internal/worklog"
 )
 
 // maxConsecutiveTickFailures は PaneList の取得にこの回数だけ連続で

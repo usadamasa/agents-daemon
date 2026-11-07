@@ -14,15 +14,29 @@ model の `SendMessage` の結果に添える辺の書き方の通知 (mod)。�
 ## 依存図の JSON (`deps`)
 
 `agents-daemon deps` は stdin の `{}` を受けて `DepsData` を出す。JSON は `deps` パッケージが
-`$STATE/tasks/` (PostToolUse hook の `ingest-task` が書く)、`status.json`、`$STATE/edges/`、`$STATE/parking/` から組む。
+`$STATE/tasks/` (PostToolUse hook の `ingest-task` が書く)、`$STATE/work/` (SessionStart / UserPromptSubmit / Stop /
+SessionEnd hook の `ingest-work` が書く)、`status.json`、`$STATE/edges/`、`$STATE/parking/` から組む。
 読み手 (アプリ、`hooks/handoff-notice.ts`) はどのセッションにも属さないので、「自分の repo」のような欄は無い。
 
 - `graph` はタスクの依存の DAG (「依存の DAG」の節)
 - `repos` は repo (`git rev-parse --git-common-dir` の main worktree) ごとの生きているセッション (`sessions`) と
-  open のメモ (`memos`)。セッションは作業の cwd の repo に入り、タスクの無いセッションは pane の cwd の repo に入る。
-  メモだけの repo も載る。並びは見出し、鍵の順
+  open のメモ (`memos`)。セッションは作業の cwd の repo に入り、タスクの無いセッションは作業の記録の cwd (無ければ pane の
+  cwd) の repo に入る。メモだけの repo も載る。並びは見出し、鍵の順
 - `sessions` の `subject` は、その repo で進行中のタスク (Key の順で最初のもの)、進行中の TodoWrite の項目、
-  pane の今の作業 (`agent_message`)、セッション名、cwd の末尾の順に選ぶ。並びは表示名、session ID の順
+  作業の記録の見せる題、pane の今の作業 (`agent_message`)、セッション名、cwd の末尾の順に選ぶ。並びは表示名、session ID の順
+
+タスクの無いセッションは作業の記録 (`worklog`、#368) から `sid:<session_id>` のノードになる。model が Task 系ツールを
+打つかどうかに関わらず、prompt を打ったセッションは全部載り、終了しても記録が消えるまで (7 日) `exited` で残る。題は
+人が直した題 (`work set` の subject、origin human) > companion の推定の題 (mod `hooks/work-infer.ts` が `$.model.fork` で
+会話から推定し inferred に書く) > 最初の prompt の 1 行目の順で、ノードの `origin` (prompt / inferred / human / pane) が
+どれを見せているかを持つ (アプリは inferred を「推定の題」と添える)。summary は生きていれば pane の今の作業、終了して
+いれば最後のターンの応答の 1 行目。記録の無い生きているセッション (plugin の更新前に起きたもの) は今まで通り pane の
+名前から付ける (origin pane)。タスクのあるセッションには作業のノードを作らず、辺の端点の解き方は変えない。
+<!-- cc-premise: 2.1.319 hooks UserPromptSubmit の prompt (peer の delivery は cross-session-message の包みごと)、Stop の last_assistant_message、SessionStart の source、SessionEnd の reason -->
+
+**出どころの優先順と上書き**: 人の直した題 > 推定の題 > prompt の題は見せる順で、記録の上では subject (prompt か human) と
+inferred が別の欄に残る。hook と companion は human の subject を書き換えず (`HumanSubjectKept`)、companion は subject では
+なく inferred にだけ書く。推定はセッションの中で 2 回まで (失敗のやり直しを含む。`InferBounded`)。
 - `recent_repos` はセッション台帳に載った repo (最後に見た時刻の新しい順)。新しいセッションを起こす repo の候補
 - `stale_memo_days` は open のメモを「古い」とみなす日数 (`parking` の `StaleAfter`)
 

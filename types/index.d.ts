@@ -497,6 +497,10 @@ declare module 'claude-code' {
       told: string[]
       // logged は出来事のログに slot ごとに最後に書いた中身 (hooks/log.ts)。同じものを書き直さないため。
       logged: Record<string, string>
+      // inferDue は main のターンが終わってから companion の timer がまだ見ていない印 (hooks/work-infer.ts)。
+      inferDue: boolean
+      // inferAttempts はこのセッションで companion が推定を起こした回数。上限で止まる。
+      inferAttempts: number
     }
   }
 }

@@ -6,7 +6,7 @@ import { Graph } from "./graph.js";
 import { partition } from "./column.js";
 import { fitEdges, spreadPorts } from "./ports.js";
 import { findJumps, jumpPath } from "./jumps.js";
-import { STATE_TONE, emphasis } from "./card.js";
+import { STATE_LABEL, STATE_TONE, emphasis } from "./card.js";
 import { isStale, kindLabel, lastPlacedAt, stamp } from "./memo.js";
 import { canAdopt, canDismiss, canTell, candidates, destinationLabel, isOwnTask, issueDestinations, pathDestination, peerDestinations, spawnDestinations, spawnLabel, taskDestinations } from "./ops.js";
 import { addBlocker, adopt, askUnlink, discard, discardStale, dismissAll, dismissOne, handOff, handOffTask, instruct, setStatus, start, toParking, unlink } from "./actions.js";
@@ -21,20 +21,6 @@ const POP_W = 400;
 const POLL_MS = 3000;
 const POLL_HIDDEN_MS = 15000;
 
-// 状態の語は OSC 7501 の state と Task 系ツールの status。
-const STATE_LABEL = {
-  working: "作業中",
-  done: "返事待ち (idle)",
-  unknown: "不明",
-  question: "質問待ち",
-  permission: "permission 待ち",
-  error: "エラー",
-  limit: "上限待ち",
-  pending: "未着手",
-  completed: "完了",
-  exited: "セッション終了",
-  external: "外部",
-};
 const REF_KIND_LABEL = { issue: "issue", pr: "PR" };
 const KIND_LABEL = { task: "タスク", todo: "TodoWrite の項目", session: "セッション", ref: "参照" };
 

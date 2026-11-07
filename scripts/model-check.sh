@@ -59,6 +59,8 @@ run models/handoff EdgeBind EdgeBindRaceRemove.cfg violated
 run models/refstate RefState RefState.cfg holds
 # gh の失敗を closed として写しに書くと、済んでいない参照を完了と見せる (NoFalseComplete の反例)。
 run models/refstate RefState RefStateFailAsClosed.cfg violated
+# マージせずに閉じた PR、not planned で閉じた issue を済んだ状態と書くと、届いていない参照を完了と見せる (NoFalseComplete の反例)。
+run models/refstate RefState RefStateDroppedAsDone.cfg violated
 # 写しが open の参照を引き直さないと、マージされた PR がいつまでも完了にならない (EventuallyCompleted の反例)。
 run models/refstate RefState RefStateNoRefetch.cfg violated
 # 済んだ状態に変わった引き直しのときだけ辺を消すと、済んだ PR へ後から書いた辺が残り続ける (EdgeRemoved の反例、#422)。

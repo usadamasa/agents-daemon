@@ -1,5 +1,6 @@
 // Package refstate は辺の端点の外部の参照 (issue / PR) の状態の写しを XDG state 配下に置く (#416)。書くのは daemon
-// だけで、gh で引いた状態を書く。読むのは依存図 (deps) で、merged / closed の参照を完了にする。
+// だけで、gh で引いた状態を書く。読むのは依存図 (deps) で、merged / closed の参照を完了にし、dropped の参照を
+// 取りやめにする。
 //
 //	refs/<id>.json   参照 1 つ (参照、状態、引いた時刻)
 //
@@ -21,11 +22,15 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
 
-// 状態の語は gh の `--json state` の値を小文字にしたもの。issue は open / closed、PR は open / closed / merged。
+// 状態の語。閉じた参照は、待っていたものが届いた (済んだ) か、届かずに閉じた (取りやめ) かで分ける。
 const (
-	StateOpen   = "open"
-	StateClosed = "closed"
+	StateOpen = "open"
+	// StateMerged はマージされた PR。
 	StateMerged = "merged"
+	// StateClosed は completed で閉じた issue。
+	StateClosed = "closed"
+	// StateDropped はマージせずに閉じた PR と、not planned / duplicate で閉じた issue。
+	StateDropped = "dropped"
 )
 
 const (
@@ -33,7 +38,7 @@ const (
 	// 依存図を見て次の作業へ移る速さで反映されれば足り、gh の呼び出しを参照 12 個で毎分 2〜3 回に抑える。
 	RefreshInterval = 5 * time.Minute
 	// Retention は引き直していない写しを残す期間。消すのは daemon の housekeeping (Prune) で、mtime で判定する。
-	// open の写しは引き直すたびに書き直すので、残り続けるのは merged / closed の写しと、辺が消えて引かなくなった
+	// open の写しは引き直すたびに書き直すので、残り続けるのは閉じた参照の写しと、辺が消えて引かなくなった
 	// 参照だけ。辺 (edge の Retention) と同じ 7 日にそろえ、辺が残る間は写しも残す。消えた写しは、辺が残っていれば
 	// 次の引き直しで書き直す。
 	Retention = 7 * 24 * time.Hour
@@ -46,18 +51,23 @@ type Record struct {
 	CheckedAt time.Time `json:"checked_at"`
 }
 
-// Done は済んだ状態 (merged / closed) か。
+// Done は済んだ状態 (merged / closed) か。取りやめは閉じているが済んでいない。
 func Done(state string) bool {
 	return state == StateMerged || state == StateClosed
 }
 
-// Due は参照を引き直すか。写しが無ければ引く。merged / closed は引き直さない (済んだ状態は戻らないとみなす)。
+// settled は閉じた状態 (済んだか取りやめ) か。
+func settled(state string) bool {
+	return Done(state) || state == StateDropped
+}
+
+// Due は参照を引き直すか。写しが無ければ引く。閉じた参照は引き直さない (閉じた状態は戻らないとみなす)。
 // open は前回から RefreshInterval 経ったら引く。
 func Due(rec Record, found bool, now time.Time) bool {
 	if !found {
 		return true
 	}
-	if Done(rec.State) {
+	if settled(rec.State) {
 		return false
 	}
 	return !now.Before(rec.CheckedAt.Add(RefreshInterval))
@@ -81,7 +91,7 @@ func (s Store) Put(rec Record) error {
 	if _, ok := ref.ParseItem(rec.Ref); !ok {
 		return fmt.Errorf("参照 %q は issue / PR の参照でない", rec.Ref)
 	}
-	if rec.State != StateOpen && !Done(rec.State) {
+	if rec.State != StateOpen && !settled(rec.State) {
 		return fmt.Errorf("%s の状態 %q を知らない", rec.Ref, rec.State)
 	}
 	return statefile.WriteJSONAtomic(filepath.Join(s.Dir, id(rec.Ref)+".json"), ".ref.*", rec)

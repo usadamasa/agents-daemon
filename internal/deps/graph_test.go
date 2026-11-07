@@ -307,7 +307,8 @@ func TestGraph_refEndpoints(t *testing.T) {
 }
 
 // daemon が引いた外部の参照の状態 (refstate) が merged / closed なら、issue / PR の置き場は完了 (completed) になり、
-// 完了を隠した図では畳まれる (#416)。open と、まだ引いていない参照は外部 (external) のまま。
+// 完了を隠した図では畳まれる (#416)。open と、まだ引いていない参照は外部 (external) のまま。取りやめ (dropped) は
+// 完了にせず、待っている下流を止めている人の手当ての要るノード (halted、stuck) にし、原因の鎖に選ぶ。
 func TestGraph_refStates(t *testing.T) {
 	const cwd = "/w/a"
 	ep := func(r string) edge.Endpoint { return edge.Endpoint{Ref: r, CWD: cwd} }
@@ -320,8 +321,9 @@ func TestGraph_refStates(t *testing.T) {
 			{ID: "e2", Before: ep("issue:o/r#2"), After: ep("task:A/1")},
 			{ID: "e3", Before: ep("pr:o/r#3"), After: ep("task:A/1")},
 			{ID: "e4", Before: ep("issue:o/r#4"), After: ep("task:A/1")},
+			{ID: "e5", Before: ep("pr:o/r#5"), After: ep("task:A/1")},
 		},
-		RefStates: map[string]string{"pr:o/r#1": "merged", "issue:o/r#2": "closed", "pr:o/r#3": "open"},
+		RefStates: map[string]string{"pr:o/r#1": "merged", "issue:o/r#2": "closed", "pr:o/r#3": "open", "pr:o/r#5": "dropped"},
 	})
 	got := nodes(b.Graph)
 	want := map[string]string{
@@ -329,6 +331,7 @@ func TestGraph_refStates(t *testing.T) {
 		"issue:o/r#2": graph.StateCompleted,
 		"pr:o/r#3":    graph.StateExternal,
 		"issue:o/r#4": graph.StateExternal,
+		"pr:o/r#5":    graph.StateDropped,
 	}
 	for key, state := range want {
 		if n := got[key]; n.State != state || n.Kind != graph.KindRef || n.RefKind == "" {
@@ -343,8 +346,17 @@ func TestGraph_refStates(t *testing.T) {
 	for _, n := range b.Graph.Folded.Nodes {
 		shown[n.Key] = true
 	}
-	if shown["pr:o/r#1"] || shown["issue:o/r#2"] || !shown["pr:o/r#3"] || !shown["issue:o/r#4"] || !shown["task:A/1"] {
+	if shown["pr:o/r#1"] || shown["issue:o/r#2"] || !shown["pr:o/r#3"] || !shown["issue:o/r#4"] || !shown["pr:o/r#5"] || !shown["task:A/1"] {
 		t.Errorf("完了を隠した図のノード = %v", shown)
+	}
+	if n := got["pr:o/r#5"]; !n.Halted || !n.Stuck {
+		t.Errorf("取りやめの参照 = %+v, want halted / stuck", n)
+	}
+	if n := got["task:A/1"]; !reflect.DeepEqual(n.BlockedBy, []string{"pr:o/r#5"}) {
+		t.Errorf("task:A/1 の原因 = %v, want 取りやめの参照", n.BlockedBy)
+	}
+	if !reflect.DeepEqual(b.Graph.LongestChain, []string{"pr:o/r#5", "task:A/1"}) {
+		t.Errorf("longest chain = %v", b.Graph.LongestChain)
 	}
 }
 

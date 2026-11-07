@@ -211,26 +211,67 @@ func TestRefresh_済んだ参照の辺を消す(t *testing.T) {
 // (models/refstate の NoOpenRemoval)。済んだ参照が after にあるだけの辺も消さない (待っているのは before)。
 func TestRefresh_済んでいない参照の辺は残す(t *testing.T) {
 	remote := &fakeRemote{
-		states: map[string]string{"pr:o/r#1": "open", "pr:o/r#4": "merged"},
+		states: map[string]string{"pr:o/r#1": "open", "pr:o/r#3": "dropped", "pr:o/r#4": "merged"},
 		errs:   map[string]error{"pr:o/r#2": errors.New("rate limit")},
 	}
 	f, add := newFixture(t, remote)
 	add("pr:o/r#1", "sid:a")
 	add("pr:o/r#2", "sid:a")
+	add("pr:o/r#3", "sid:a")
 	add("pr:o/r#9", "sid:a")
 	add("sid:a", "pr:o/r#4")
 	add("sid:a", "sid:b")
 
-	// 参照の順に pr#1 (open)、pr#2 (失敗)、pr#4 (merged) を引き、pr#9 はまだ引いていない。
-	for i := range 3 {
+	// 参照の順に pr#1 (open)、pr#2 (失敗)、pr#3 (取りやめ)、pr#4 (merged) を引き、pr#9 はまだ引いていない。
+	for i := range 4 {
 		f.p.Refresh(context.Background(), t0.Add(time.Duration(i)*time.Second))
 	}
-	if want := []string{"pr:o/r#1", "pr:o/r#2", "pr:o/r#4"}; !reflect.DeepEqual(remote.calls, want) {
+	if want := []string{"pr:o/r#1", "pr:o/r#2", "pr:o/r#3", "pr:o/r#4"}; !reflect.DeepEqual(remote.calls, want) {
 		t.Fatalf("calls = %v, want %v", remote.calls, want)
 	}
-	want := []string{"pr:o/r#1>sid:a", "pr:o/r#2>sid:a", "pr:o/r#9>sid:a", "sid:a>pr:o/r#4", "sid:a>sid:b"}
+	want := []string{"pr:o/r#1>sid:a", "pr:o/r#2>sid:a", "pr:o/r#3>sid:a", "pr:o/r#9>sid:a", "sid:a>pr:o/r#4", "sid:a>sid:b"}
 	if got := edgeKeys(t, f.dir); !reflect.DeepEqual(got, want) {
 		t.Errorf("辺 = %v, want %v", got, want)
+	}
+	// 取りやめは引き直さず、辺も残したまま。取りやめたことはログに 1 行書く。
+	remote.calls = nil
+	f.p.Refresh(context.Background(), t0.Add(100*refstate.RefreshInterval))
+	for _, c := range remote.calls {
+		if c == "pr:o/r#3" {
+			t.Errorf("取りやめを引き直した: %v", remote.calls)
+		}
+	}
+	if !strings.Contains(f.readLog(t), "pr:o/r#3 は取りやめ") {
+		t.Errorf("取りやめのログが無い: %q", f.readLog(t))
+	}
+}
+
+// gh の state (と issue の stateReason) を写しの状態にする。PR はマージしたかで、issue は閉じた理由で、済んだか
+// 取りやめかを分ける (models/refstate の NoFalseComplete。CLOSED だけを見ると取りやめを完了と見せる)。
+func TestGHState(t *testing.T) {
+	cases := []struct {
+		kind, state, reason, want string
+	}{
+		{"pr", "OPEN", "", refstate.StateOpen},
+		{"pr", "MERGED", "", refstate.StateMerged},
+		{"pr", "CLOSED", "", refstate.StateDropped},
+		{"issue", "OPEN", "REOPENED", refstate.StateOpen},
+		{"issue", "CLOSED", "COMPLETED", refstate.StateClosed},
+		{"issue", "CLOSED", "NOT_PLANNED", refstate.StateDropped},
+		{"issue", "CLOSED", "DUPLICATE", refstate.StateDropped},
+		// 理由の無い閉じた issue (理由ができる前に閉じたもの) は、GitHub の既定の理由 (completed) とみなす。
+		{"issue", "CLOSED", "", refstate.StateClosed},
+	}
+	for _, c := range cases {
+		got, err := ghState(c.kind, c.state, c.reason)
+		if err != nil || got != c.want {
+			t.Errorf("ghState(%q, %q, %q) = %q, %v, want %q", c.kind, c.state, c.reason, got, err, c.want)
+		}
+	}
+	for _, c := range [][3]string{{"pr", "DRAFT", ""}, {"issue", "MERGED", ""}, {"pr", "", ""}} {
+		if got, err := ghState(c[0], c[1], c[2]); err == nil {
+			t.Errorf("ghState(%q, %q, %q) = %q, want error", c[0], c[1], c[2], got)
+		}
 	}
 }
 

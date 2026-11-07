@@ -110,8 +110,8 @@ func (p *Poller) due(edges []edge.Edge, cached map[string]refstate.Record, now t
 
 // sweep は写しが merged / closed の参照を before に持つ辺を消す (#422)。待っていたものが済んだ辺は、依存図で畳む
 // だけでなく記録からも消し、書いた側が `edge rm` を覚えていなくても溜まらないようにする。済んだ参照が after に
-// あるだけの辺は残す。写しが済んだ状態に変わったときだけでなく毎回掃くので、済んだ PR へ後から書いた辺も消える
-// (merged / closed は引き直さないため、変わったときだけだと残り続ける。models/refstate の EdgeRemoved)。
+// あるだけの辺と、取りやめの参照の辺 (待っていたものは届いていないので、人が付け替えるか `edge rm` する) は残す。写しが済んだ状態に変わったときだけでなく毎回掃くので、済んだ PR へ後から書いた辺も消える
+// (閉じた参照は引き直さないため、変わったときだけだと残り続ける。models/refstate の EdgeRemoved)。
 func (p *Poller) sweep(edges []edge.Edge, cached map[string]refstate.Record) {
 	for _, e := range edges {
 		state := cached[e.Before.Ref].State
@@ -152,8 +152,12 @@ func (p *Poller) refresh(ctx context.Context, key string, prev refstate.Record, 
 		p.log.Logf("外部の参照の写しの書き込みに失敗: %v", err)
 		return refstate.Record{}, false
 	}
-	if refstate.Done(state) && prev.State != state {
+	switch {
+	case prev.State == state:
+	case refstate.Done(state):
 		p.log.Logf("%s は %s (依存図で完了にします)", key, state)
+	case state == refstate.StateDropped:
+		p.log.Logf("%s は取りやめ (依存図で止まっているノードにし、辺は残します)", key)
 	}
 	return rec, true
 }
@@ -165,11 +169,11 @@ func GH(ctx context.Context, it ref.Item) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("gh が PATH に無い: %w", err)
 	}
-	sub := "issue"
+	sub, fields := "issue", "state,stateReason"
 	if it.Kind == "pr" {
-		sub = "pr"
+		sub, fields = "pr", "state"
 	}
-	cmd := exec.CommandContext(ctx, bin, sub, "view", strconv.Itoa(it.Number), "--repo", it.Repo, "--json", "state") // #nosec G204 -- 固定の gh のサブコマンドと、ref.ParseItem で検証した repo と番号
+	cmd := exec.CommandContext(ctx, bin, sub, "view", strconv.Itoa(it.Number), "--repo", it.Repo, "--json", fields) // #nosec G204 -- 固定の gh のサブコマンドと、ref.ParseItem で検証した repo と番号
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
@@ -182,14 +186,30 @@ func GH(ctx context.Context, it ref.Item) (string, error) {
 		return "", fmt.Errorf("gh %s view が失敗: %w", sub, err)
 	}
 	var v struct {
-		State string `json:"state"`
+		State       string `json:"state"`
+		StateReason string `json:"stateReason"`
 	}
 	if err := json.Unmarshal(out, &v); err != nil {
 		return "", fmt.Errorf("gh %s view の出力を読めない: %w", sub, err)
 	}
-	state := strings.ToLower(v.State)
-	if state != refstate.StateOpen && !refstate.Done(state) {
-		return "", fmt.Errorf("gh %s view の状態 %q を知らない", sub, v.State)
+	return ghState(sub, v.State, v.StateReason)
+}
+
+// ghState は gh の state (issue は stateReason も) を写しの状態にする。閉じた PR はマージしたかで、閉じた issue は
+// 閉じた理由で、済んだか取りやめかを分ける。理由の無い閉じた issue (理由ができる前に閉じたもの) は GitHub の既定の
+// 理由 (completed) とみなす。
+func ghState(kind, state, reason string) (string, error) {
+	switch {
+	case state == "OPEN":
+		return refstate.StateOpen, nil
+	case kind == "pr" && state == "MERGED":
+		return refstate.StateMerged, nil
+	case kind == "pr" && state == "CLOSED":
+		return refstate.StateDropped, nil
+	case kind == "issue" && state == "CLOSED" && (reason == "NOT_PLANNED" || reason == "DUPLICATE"):
+		return refstate.StateDropped, nil
+	case kind == "issue" && state == "CLOSED":
+		return refstate.StateClosed, nil
 	}
-	return state, nil
+	return "", fmt.Errorf("gh %s view の状態 %q (理由 %q) を知らない", kind, state, reason)
 }

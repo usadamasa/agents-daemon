@@ -112,6 +112,7 @@ func TestDue(t *testing.T) {
 		{"open で間隔を過ぎた", Record{State: StateOpen, CheckedAt: t0}, true, t0.Add(RefreshInterval), true},
 		{"merged は引かない", Record{State: StateMerged, CheckedAt: t0}, true, t0.Add(100 * RefreshInterval), false},
 		{"closed は引かない", Record{State: StateClosed, CheckedAt: t0}, true, t0.Add(100 * RefreshInterval), false},
+		{"取りやめは引かない", Record{State: StateDropped, CheckedAt: t0}, true, t0.Add(100 * RefreshInterval), false},
 	}
 	for _, c := range cases {
 		if got := Due(c.rec, c.found, c.now); got != c.want {
@@ -120,10 +121,28 @@ func TestDue(t *testing.T) {
 	}
 }
 
-func TestDone(t *testing.T) {
-	for state, want := range map[string]bool{StateMerged: true, StateClosed: true, StateOpen: false, "": false} {
-		if Done(state) != want {
-			t.Errorf("Done(%q) != %v", state, want)
+// 済んだ (Done) のは merged と closed (completed で閉じた issue) だけ。取りやめは閉じているが済んでいない。
+func TestDoneとsettled(t *testing.T) {
+	cases := map[string][2]bool{
+		StateMerged:  {true, true},
+		StateClosed:  {true, true},
+		StateDropped: {false, true},
+		StateOpen:    {false, false},
+		"":           {false, false},
+	}
+	for state, want := range cases {
+		if Done(state) != want[0] || settled(state) != want[1] {
+			t.Errorf("Done(%q), settled(%q) = %v, %v, want %v", state, state, Done(state), settled(state), want)
 		}
+	}
+}
+
+func TestStore_Put_取りやめを書く(t *testing.T) {
+	s := New(t.TempDir())
+	if err := s.Put(Record{Ref: "pr:o/r#1", State: StateDropped, CheckedAt: t0}); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := s.States(); err != nil || got["pr:o/r#1"] != StateDropped {
+		t.Errorf("States = %v, %v", got, err)
 	}
 }

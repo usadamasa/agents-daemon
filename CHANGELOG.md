@@ -1,5 +1,12 @@
 # Changelog
 
+## [2026.1107.7](https://github.com/usadamasa/agents-daemon/compare/2026.1107.6...2026.1107.7) - 2026-11-07
+
+### Features
+- 依存図の右の列で終了したセッションを一番下に並べる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/493
+### Refactoring
+- 依存図: 使えない「一覧」の切り替えを header から消す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/492
+
 ## [2026.1107.6](https://github.com/usadamasa/agents-daemon/compare/2026.1107.5...2026.1107.6) - 2026-11-07
 
 ### Features

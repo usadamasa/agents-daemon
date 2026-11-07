@@ -104,9 +104,6 @@ func TestGraph_nodeStates(t *testing.T) {
 	if u := got["sid:U"]; u.Title != "waiter" || u.Summary != "" {
 		t.Errorf("sid:U title / summary = %q / %q, want waiter / 空", u.Title, u.Summary)
 	}
-	if w := got["task:W/1"]; w.Summary != "" {
-		t.Errorf("task:W/1 summary = %q, want 空 (タスクの題で足りる)", w.Summary)
-	}
 	if v := got["sid:V"]; v.Title != "dotfiles" {
 		t.Errorf("sid:V title = %q, want dotfiles", v.Title)
 	}
@@ -115,6 +112,39 @@ func TestGraph_nodeStates(t *testing.T) {
 	}
 	if got["task:X/1"].Live {
 		t.Errorf("task:X/1 は終了したセッション")
+	}
+}
+
+// タスクのあるセッションの今の作業 (msg) は、進行中のタスクと TodoWrite の項目の summary に添える (#157)。
+// 未着手と完了の作業はセッションの今の作業と関係が無いので添えない。
+func TestGraph_taskSummary(t *testing.T) {
+	b := build(input{
+		PID: 42,
+		Snapshot: snapshot(
+			daemonstate.PaneStatus{PaneID: "p1", SessionID: "W", CWD: "/w/a", AgentStatus: "working", AgentMessage: "テストを直している"},
+			daemonstate.PaneStatus{PaneID: "p2", SessionID: "T", CWD: "/w/t", AgentStatus: "done", AgentMessage: "済ませた"},
+		),
+		Tasks: []record.Task{
+			task("W", "1", "書く", "in_progress", "/w/a"),
+			task("W", "2", "次", "pending", "/w/a"),
+			task("W", "3", "済んだ", "completed", "/w/a"),
+			task("X", "1", "残った進行中", "in_progress", "/w/x"),
+		},
+		Todos: []record.TodoList{{SessionID: "T", CWD: "/w/t", UpdatedAt: t0, Todos: []record.Todo{
+			{Content: "a", Status: "completed"}, {Content: "b", Status: "in_progress"},
+		}}},
+	})
+	got := nodes(b.Graph)
+	want := map[string]string{
+		"task:W/1": "テストを直している", "task:W/2": "", "task:W/3": "",
+		"todo:T/0": "", "todo:T/1": "済ませた",
+		// 終了したセッションには申告が無い。
+		"task:X/1": "",
+	}
+	for key, summary := range want {
+		if got[key].Summary != summary {
+			t.Errorf("%s summary = %q, want %q", key, got[key].Summary, summary)
+		}
 	}
 }
 

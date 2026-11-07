@@ -1,16 +1,19 @@
 # 外部の参照の状態のモデル (TLA+)
 
 辺の端点の issue / PR の状態を daemon が gh で引いて写し (`refs/`) に書き、依存図がそれを読んでノードの状態を決める
-手順を TLA+ に写したもの (#416)。回し方と期待の突き合わせは `models/handoff/README.md` と同じ `task model-check`。
-ステップと実装の対応は `.tla` のコメントが持つ。
+手順 (#416) と、済んだ参照を before に持つ辺を daemon が消す手順 (#422) を TLA+ に写したもの。回し方と期待の
+突き合わせは `models/handoff/README.md` と同じ `task model-check`。ステップと実装の対応は `.tla` のコメントが持つ。
 
 | cfg | 性質 | 成り立つ理由 |
 | ---- | ---- | ---- |
 | `RefState.cfg` | `NoFalseComplete`: 済んでいない参照を完了と見せない | gh が失敗したら写しを書かない。依存図は写しが merged / closed のときだけ完了にする |
 | | `CacheSound`: 写しが merged / closed なら GitHub の側も同じ | 済んだ状態は戻らないので、引いた値は書いた後も正しい |
+| | `NoOpenRemoval`: open の参照を before に持つ辺を消さない | 写しが merged / closed のときだけ消す。`CacheSound` から、そのとき GitHub の側も済んでいる |
 | | `EventuallyCompleted` (liveness): 済んだ参照はいずれ完了になる | 写しが無いか open の参照は引き直す。gh がいずれ成功する前提で、写しが消えても引き直して書く |
+| | `EdgeRemoved` (liveness): 済んだ参照を before に持つ辺はいずれ消える | 引き直しのたびに、写しが merged / closed の参照の辺を掃く。済んだ後に書いた辺も次の引き直しで消える |
 | `RefStateFailAsClosed.cfg` | `NoFalseComplete` が破れる (`violated` を期待) | gh の失敗を closed と書くと、open の参照を完了と見せる。失敗では写しを書かない根拠 |
 | `RefStateNoRefetch.cfg` | `EventuallyCompleted` が破れる (`violated` を期待) | 写しが open の参照を引き直さないと、マージされた PR がいつまでも外部のまま。open を間引いて引き直す根拠 |
+| `RefStateSweepOnTransition.cfg` | `EdgeRemoved` が破れる (`violated` を期待) | 写しが済んだ状態に変わった引き直しのときだけ消すと、済んだ PR へ後から書いた辺が残り続ける (merged は引き直さない)。毎回掃く根拠 |
 
 同じ性質を実装に対してテストが持つ。
 
@@ -18,7 +21,9 @@
 | ---- | ---- |
 | `NoFalseComplete` | `refpoll/refpoll_test.go` の `TestRefresh_ghの失敗` (失敗した参照の写しを書かない) |
 | `CacheSound` | `refstate/refstate_test.go` の `TestStore_Put_知らない状態は書かない` |
+| `NoOpenRemoval` | `refpoll/refpoll_test.go` の `TestRefresh_済んでいない参照の辺は残す` |
 | `EventuallyCompleted` | `refpoll/refpoll_test.go` の `TestRefresh_間引きと引き直し` と `refstate/refstate_test.go` の `TestDue` |
+| `EdgeRemoved` | `refpoll/refpoll_test.go` の `TestRefresh_済んだ参照の辺を消す` (済んだ後に書いた辺を含む) |
 
 ## 前提
 
@@ -27,3 +32,6 @@
 - gh が無い・未認証のまま直されない間は、参照は外部のまま残る (safety は成り立ち、liveness は前提の外)。
 - 間引きの間隔 (時間) は置かず、公平性 (gh の呼び出しはいずれ成功する) で表す。
 - 書くのは daemon の 1 つの goroutine だけで、写しの書き込みは `statefile.WriteJSONAtomic` なので 1 ステップ。
+- 辺は参照 1 つを before に持つ 1 本で、`edge add` は `MaxAdds` 回まで書き直せる。辺の before は結びつけで書き換わらない
+  (`session:` の端点だけが結びつく) ので、消すかは写しだけで決まり、`edge add` との交錯は `edges/.lock` の中の 1 ステップ
+  (models/handoff の `EdgeBind`) で足りる。

@@ -61,5 +61,7 @@ run models/refstate RefState RefState.cfg holds
 run models/refstate RefState RefStateFailAsClosed.cfg violated
 # 写しが open の参照を引き直さないと、マージされた PR がいつまでも完了にならない (EventuallyCompleted の反例)。
 run models/refstate RefState RefStateNoRefetch.cfg violated
+# 済んだ状態に変わった引き直しのときだけ辺を消すと、済んだ PR へ後から書いた辺が残り続ける (EdgeRemoved の反例、#422)。
+run models/refstate RefState RefStateSweepOnTransition.cfg violated
 
 exit "$failed"

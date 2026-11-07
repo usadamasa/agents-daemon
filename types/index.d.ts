@@ -349,8 +349,8 @@ export type GraphNode = {
   // Ref (task:、todo:、sid:、session:、issue:、pr:)。mod は切り出さずに不透明な文字列として扱う
   key: string
   kind: 'task' | 'todo' | 'session' | 'ref'
-  // external は済んだと分かっていない外部の参照 (issue / PR)。daemon が merged / closed と引けた参照は completed
-  state: 'working' | 'done' | 'unknown' | 'question' | 'permission' | 'error' | 'limit' | 'pending' | 'completed' | 'exited' | 'external'
+  // external は済んだと分かっていない外部の参照 (issue / PR)。daemon が merged の PR、completed で閉じた issue と引けた参照は completed、マージせずに閉じた PR、not planned / duplicate で閉じた issue は dropped (取りやめ)
+  state: 'working' | 'done' | 'unknown' | 'question' | 'permission' | 'error' | 'limit' | 'pending' | 'completed' | 'exited' | 'external' | 'dropped'
   title: string
   // issue: / pr: の置き場のノードの参照の種類
   ref_kind?: 'issue' | 'pr'

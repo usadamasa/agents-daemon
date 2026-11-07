@@ -122,7 +122,7 @@ func TestDue(t *testing.T) {
 }
 
 // 済んだ (Done) のは merged と closed (completed で閉じた issue) だけ。取りやめは閉じているが済んでいない。
-func TestDoneとSettled(t *testing.T) {
+func TestDoneとsettled(t *testing.T) {
 	cases := map[string][2]bool{
 		StateMerged:  {true, true},
 		StateClosed:  {true, true},
@@ -131,8 +131,8 @@ func TestDoneとSettled(t *testing.T) {
 		"":           {false, false},
 	}
 	for state, want := range cases {
-		if Done(state) != want[0] || Settled(state) != want[1] {
-			t.Errorf("Done(%q), Settled(%q) = %v, %v, want %v", state, state, Done(state), Settled(state), want)
+		if Done(state) != want[0] || settled(state) != want[1] {
+			t.Errorf("Done(%q), settled(%q) = %v, %v, want %v", state, state, Done(state), settled(state), want)
 		}
 	}
 }

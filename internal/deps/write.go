@@ -10,6 +10,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/ledger"
 	"github.com/usadamasa/agents-daemon/internal/parking"
+	"github.com/usadamasa/agents-daemon/internal/refstate"
 	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
@@ -47,6 +48,10 @@ func Write(w io.Writer, p apppath.Paths) error {
 	if err != nil {
 		return err
 	}
+	refs, err := refstate.New(p.StateDir()).States()
+	if err != nil {
+		return err
+	}
 	b := build(input{
 		PID:          pid,
 		Snapshot:     snap,
@@ -57,6 +62,7 @@ func Write(w io.Writer, p apppath.Paths) error {
 		Locate:       gitrepo.Locate,
 		SessionNames: names,
 		Sessions:     sessions,
+		RefStates:    refs,
 	})
 	return json.NewEncoder(w).Encode(b)
 }

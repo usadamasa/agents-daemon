@@ -420,7 +420,7 @@
       "properties": {
         "key": { "type": "string", "description": "Ref (task:、todo:、sid:、session:、issue:、pr:)。mod は切り出さずに不透明な文字列として扱う" },
         "kind": { "type": "string", "enum": ["task", "todo", "session", "ref"] },
-        "state": { "type": "string", "enum": ["working", "done", "unknown", "question", "permission", "error", "limit", "pending", "completed", "exited", "external"], "description": "external は daemon が状態を知らない外部の参照 (issue / PR)" },
+        "state": { "type": "string", "enum": ["working", "done", "unknown", "question", "permission", "error", "limit", "pending", "completed", "exited", "external"], "description": "external は済んだと分かっていない外部の参照 (issue / PR)。daemon が merged / closed と引けた参照は completed" },
         "title": { "type": "string" },
         "ref_kind": { "type": "string", "enum": ["issue", "pr"], "description": "issue: / pr: の置き場のノードの参照の種類" },
         "summary": { "type": "string", "description": "Claude Code が申告したセッションの今の作業 (OSC 7501 の msg)。kind session のノードと、進行中のタスクと TodoWrite の項目のノードに付く" },

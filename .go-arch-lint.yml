@@ -28,6 +28,7 @@ components:
       - "internal/applog"
       - "internal/gitrepo"
       - "internal/ref"
+      - "internal/refstate"
       - "internal/multiplexer"
       - "internal/multiplexer/multiplexerfake"
       - "internal/sessioncontext"

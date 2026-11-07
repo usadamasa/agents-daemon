@@ -22,10 +22,12 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/ratelimit"
+	"github.com/usadamasa/agents-daemon/internal/refstate"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend"
 	"github.com/usadamasa/agents-daemon/internal/runtime/config"
 	"github.com/usadamasa/agents-daemon/internal/runtime/daemon/claudesessions"
 	"github.com/usadamasa/agents-daemon/internal/runtime/daemon/limitlog"
+	"github.com/usadamasa/agents-daemon/internal/runtime/daemon/refpoll"
 	"github.com/usadamasa/agents-daemon/internal/runtime/detect"
 	"github.com/usadamasa/agents-daemon/internal/runtime/monitor"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
@@ -93,7 +95,11 @@ type daemonRuntime struct {
 	limits limitlog.Store
 	// turnFailures は hook が書く turn の失敗の記録 (turnfailure)。daemon は上限の出来事に添えて読み、
 	// housekeeping で消す。ゼロ値は「無い」を返し、何も消さない。
-	turnFailures        turnfailure.Store
+	turnFailures turnfailure.Store
+	// refs は辺の端点の issue / PR の状態の写し (refstate)。refPoll が tick ごとに引いて書き、housekeeping で消す。
+	// ゼロ値 (refPoll が nil) は引かない。
+	refs                refstate.Store
+	refPoll             *refpoll.Poller
 	sleep               func(time.Duration)
 	startedAt           time.Time
 	panes               map[string]*paneEntry
@@ -202,6 +208,7 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 		r.log.Logf("status snapshot の書き込みに失敗: %v", err)
 	}
 	r.recordSessions(statusPanes, now)
+	r.refPoll.Refresh(ctx, now)
 
 	if claudeCount == 0 {
 		if r.idleSince.IsZero() {
@@ -592,6 +599,7 @@ func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 	runtime := newDaemonRuntime(client, log, p.StatusFile(), store, time.Sleep, now)
 	runtime.backend = kind
 	runtime.attachStateDir(p.StateDir())
+	runtime.refPoll = refpoll.New(runtime.edges, runtime.refs, refpoll.GH, log)
 	if claudeConfig, err := apppath.ClaudeConfigDir(); err != nil {
 		log.Logf("Claude Code の設定ディレクトリを決められないため、台帳にセッション名を書きません: %v", err)
 	} else {

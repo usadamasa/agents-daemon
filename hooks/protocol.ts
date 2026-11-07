@@ -1050,7 +1050,7 @@ export const definitions = {
           "exited",
           "external"
         ],
-        "description": "external は daemon が状態を知らない外部の参照 (issue / PR)"
+        "description": "external は済んだと分かっていない外部の参照 (issue / PR)。daemon が merged / closed と引けた参照は completed"
       },
       "title": {
         "type": "string"

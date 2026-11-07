@@ -11,6 +11,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/ledger"
 	"github.com/usadamasa/agents-daemon/internal/parking"
+	"github.com/usadamasa/agents-daemon/internal/refstate"
 	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 )
@@ -27,6 +28,7 @@ func TestRetention_関係(t *testing.T) {
 		{"タスクと TodoWrite のリスト (tasklog.Retention)", tasklog.Retention, 7 * day},
 		{"セッションをまたぐ辺 (edge.Retention)", edge.Retention, 7 * day},
 		{"セッション台帳 (ledger.Retention)", ledger.Retention, 7 * day},
+		{"外部の参照の写し (refstate.Retention)", refstate.Retention, 7 * day},
 		{"セッション名 (sessioncontext.Retention)", sessioncontext.Retention, 7 * day},
 		{"open のメモ (parking.OpenRetention)", parking.OpenRetention, 90 * day},
 		{"handed / discarded のメモ (parking.ClosedRetention)", parking.ClosedRetention, 7 * day},
@@ -48,6 +50,8 @@ func TestRetention_関係(t *testing.T) {
 		{"edge.Retention >= tasklog.Retention", edge.Retention >= tasklog.Retention},
 		// 台帳は、辺が残っている間はその端点を結びつける候補のセッションを引ける。
 		{"ledger.Retention >= edge.Retention", ledger.Retention >= edge.Retention},
+		// open の写しは、消える前に引き直して書き直す (辺が残る参照の写しを open のまま消さない)。
+		{"refstate.RefreshInterval < refstate.Retention", refstate.RefreshInterval < refstate.Retention},
 		// セッション名は、終了したセッションのタスクのノードが出ている間は表示名と置き場の名前に引ける。
 		{"sessioncontext.Retention >= tasklog.Retention", sessioncontext.Retention >= tasklog.Retention},
 		// 渡した・捨てたメモは、description に id を書いたタスクのノードが出ている間は詳細で照合できる。

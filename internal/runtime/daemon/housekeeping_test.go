@@ -13,6 +13,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/ledger"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
 	"github.com/usadamasa/agents-daemon/internal/parking"
+	"github.com/usadamasa/agents-daemon/internal/refstate"
 	"github.com/usadamasa/agents-daemon/internal/runtime/daemon/limitlog"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
@@ -83,8 +84,16 @@ func TestHousekeep(t *testing.T) {
 		r.turnFailures = turnfailure.New(dir)
 		turnFailureFile := filepath.Join(r.turnFailures.Dir, "s-old.json")
 		touchAged(t, turnFailureFile, 25*time.Hour, now)
+		// 外部の参照の状態の写しは 1 週間引き直さなければ消える (refstate のテスト)。
+		r.refs = refstate.New(dir)
+		refFile := filepath.Join(r.refs.Dir, "r-old.json")
+		touchAged(t, refFile, 8*24*time.Hour, now)
 
 		r.housekeep(logPath, now)
+
+		if _, err := os.Stat(refFile); !os.IsNotExist(err) {
+			t.Errorf("8 日前の外部の参照の写しは消えるべき (err=%v)", err)
+		}
 
 		if _, err := os.Stat(turnFailureFile); !os.IsNotExist(err) {
 			t.Errorf("25 時間前の turn の失敗の記録は消えるべき (err=%v)", err)
@@ -142,7 +151,7 @@ func TestHousekeep(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ログが読めない: %v", err)
 		}
-		if !strings.Contains(string(data), "rotated ログ 2 件") || !strings.Contains(string(data), "利用上限 state 1 件") || !strings.Contains(string(data), "タスクの記録 1 件") || !strings.Contains(string(data), "パーキング 1 件") || !strings.Contains(string(data), "辺 1 件") || !strings.Contains(string(data), "上限の出来事 1 件") || !strings.Contains(string(data), "セッション台帳 1 件") {
+		if !strings.Contains(string(data), "rotated ログ 2 件") || !strings.Contains(string(data), "利用上限 state 1 件") || !strings.Contains(string(data), "タスクの記録 1 件") || !strings.Contains(string(data), "パーキング 1 件") || !strings.Contains(string(data), "辺 1 件") || !strings.Contains(string(data), "上限の出来事 1 件") || !strings.Contains(string(data), "セッション台帳 1 件") || !strings.Contains(string(data), "外部の参照 1 件") {
 			t.Errorf("削除件数のログが無い: %q", data)
 		}
 	})

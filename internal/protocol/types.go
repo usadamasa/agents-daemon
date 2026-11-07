@@ -349,7 +349,7 @@ type GraphNode struct {
 	// Ref (task:、todo:、sid:、session:、issue:、pr:)。mod は切り出さずに不透明な文字列として扱う。
 	Key  string `json:"key"`
 	Kind string `json:"kind"`
-	// external は daemon が状態を知らない外部の参照 (issue / PR)。
+	// external は済んだと分かっていない外部の参照 (issue / PR)。daemon が merged / closed と引けた参照は completed。
 	State string `json:"state"`
 	Title string `json:"title"`
 	// issue: / pr: の置き場のノードの参照の種類。

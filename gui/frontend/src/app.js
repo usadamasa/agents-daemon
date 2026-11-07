@@ -9,7 +9,7 @@ import { canAdopt, canDismiss, canTell, candidates, destinationLabel, isOwnTask,
 import { addBlocker, adopt, askUnlink, discard, discardStale, dismissAll, dismissOne, handOff, handOffTask, instruct, setStatus, start, toParking, unlink } from "./actions.js";
 import { pickFolder } from "./daemon.js";
 import { MAX_ZOOM, MIN_ZOOM, clampZoom, fitZoom, percent, scrollAfterZoom, stepZoom } from "./zoom.js";
-import { canSwitch, restore, scrollView, watchUpgrade } from "./restore.js";
+import { restore, scrollView, watchUpgrade } from "./restore.js";
 
 const NODE_W = 240;
 const NODE_H = 72;
@@ -1198,13 +1198,16 @@ const views = {
   selected: { get: () => state.selected, set: (v) => { state.selected = v; } },
   showCompleted: { get: () => state.showCompleted, set: (v) => { state.showCompleted = v === true; } },
   repoFilter: { get: () => state.repoFilter, set: (v) => { state.repoFilter = String(v); } },
+  // 開いていた選択と、打ちかけの指示と補足。
+  picker: { get: () => state.picker, set: (v) => { state.picker = typeof v === "string" ? v : null; } },
+  draft: { get: () => state.draft, set: (v) => { state.draft = String(v); } },
+  note: { get: () => state.note, set: (v) => { state.note = String(v); } },
   graphScroll: scrollView(el("graph")),
   parkScroll: scrollView(el("park-list")),
 };
-const typing = () => ["TEXTAREA", "INPUT"].includes(document.activeElement?.tagName) && document.activeElement.type !== "checkbox";
 
 await fetchDeps();
 await restore(views);
 render();
 schedule();
-watchUpgrade(views, () => canSwitch({ busy: state.busy, draft: state.draft, note: state.note, typing: typing() }));
+watchUpgrade(views, el("upgrade"));

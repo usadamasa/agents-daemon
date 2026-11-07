@@ -45,9 +45,9 @@ SessionStart hook は `--dry-run` **なし**で配線してある。検知の挙
 
 `claude plugin marketplace update`、`claude plugin update` を走らせ、更新した版でバイナリを建て直す。
 段が失敗したら後の段は走らせない。動いている daemon は差し替えを次の tick で検知して自分で入れ替わる。
-依存図のアプリ (`~/Applications/agent-tasks.app`) も続けて建て直す。開いているアプリは数秒のうちに新しいバージョンへ
-自分で切り替わり、窓の位置と大きさ、選んでいたもの、完了の表示、repo の絞り込み、スクロール位置を引き継ぐ。
-操作の最中、指示や補足を打ちかけているとき、入力欄に focus があるときは、それが済むまで待つ。
+依存図のアプリ (`~/Applications/agent-tasks.app`) も続けて建て直す。開いているアプリは数秒のうちにヘッダーへ
+「新しいバージョンに切り替える」を出し、押すと窓の位置と大きさ、選んでいたもの、打ちかけの指示と補足、完了の表示、
+repo の絞り込み、スクロール位置を引き継いで新しいバージョンに入れ替わる。
 開いている窓のバージョンは窓の title (`agent-tasks <バージョン>`) とアプリのメニューの About に出る。
 `agents-daemon version` が plugin の版を出し、`logs` に「実行ファイルが更新されたため入れ替わります」が出れば
 済んでいる。Claude Code の sandbox は `~/.claude/plugins` と `~/.cache/agents-daemon` に書けないので、

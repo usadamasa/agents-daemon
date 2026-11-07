@@ -1,5 +1,5 @@
 // 開いたまま新しいバージョンへ切り替えるときに、画面の状態を渡して戻す。Go 側 (upgrade.go) が新しい .app の揃ったことを
-// event で知らせ、ここで切り替えてよい時を待って Daemon.Upgrade に状態を渡す。新しい側は起動時に Daemon.Restore で受け取る。
+// event で知らせ、ここでボタンを出し、押されたら Daemon.Upgrade に状態を渡す。新しい側は起動時に Daemon.Restore で受け取る。
 //
 // 戻す項目は views ({ 鍵: { get, set } }) に登録する。項目を足すときは app.js の views に 1 行足す。
 
@@ -23,11 +23,6 @@ export function apply(views, saved) {
   }
 }
 
-// canSwitch は今切り替えてよいか。操作を走らせている最中、打ちかけの文がある、入力欄に focus がある、なら待つ。
-export function canSwitch({ busy, draft, note, typing }) {
-  return !busy && draft === "" && note === "" && !typing;
-}
-
 // scrollView は要素のスクロール位置の項目。戻すのは次の描画の後 (描き直すと位置が 0 に戻る)。
 export function scrollView(element) {
   return {
@@ -46,16 +41,20 @@ export async function restore(views) {
   }
 }
 
-// watchUpgrade は新しいバージョンの知らせを待ち、idle() が真のときに切り替える。失敗したら次の知らせでまた試す。
-export function watchUpgrade(views, idle) {
-  let switching = false;
-  window.wails.Events.On(UPGRADE_EVENT, async () => {
-    if (switching || !idle()) return;
-    switching = true;
+// watchUpgrade は新しいバージョンの知らせで button を出し、押されたら今の画面の状態を渡して切り替える。窓が勝手に
+// 入れ替わらないよう、押すまでは切り替えない。失敗したら button を押せる状態に戻し、理由を title に出す。
+export function watchUpgrade(views, button) {
+  window.wails.Events.On(UPGRADE_EVENT, () => {
+    button.hidden = false;
+  });
+  button.onclick = async () => {
+    button.disabled = true;
+    button.title = "";
     try {
       await window.wails.Call.ByName("main.Daemon.Upgrade", JSON.stringify(capture(views)));
-    } catch {
-      switching = false;
+    } catch (err) {
+      button.disabled = false;
+      button.title = `切り替えられなかった: ${String(err?.message ?? err)}`;
     }
-  });
+  };
 }

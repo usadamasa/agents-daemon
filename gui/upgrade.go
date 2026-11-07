@@ -15,8 +15,9 @@ import (
 )
 
 // 開いたまま新しいバージョンへ切り替える。hooks/build-gui.sh は .app を入れ替えてから stamp を書くので、stamp が
-// 自分の version より新しければ新しい .app が揃っている。古い側は窓と画面の状態を restore.json に書き、新しい側を
-// 前面を奪わずに起こしてから終わる。新しい側は起動時に restore.json を読んで戻し、読んだかどうかによらず消す。
+// 自分の version より新しければ新しい .app が揃っている。利用者が切り替えのボタンを押したら、古い側は窓と画面の状態を
+// restore.json に書き、新しい側を前面を奪わずに起こしてから終わる。新しい側は起動時に restore.json を読んで戻し、
+// 読んだかどうかによらず消す。
 
 // upgradeEvent は切り替えられるようになったことを frontend へ知らせる event の名前。
 const upgradeEvent = "agent-tasks:upgrade"
@@ -204,8 +205,8 @@ func (u *upgrader) switchTo(bounds application.Rect, view string) error {
 	return nil
 }
 
-// watch は stamp を読み直し、新しいバージョンが揃っている間は毎回 frontend へ知らせる (切り替えに失敗しても次の
-// 知らせでまた試す)。
+// watch は stamp を読み直し、新しいバージョンが揃っている間は毎回 frontend へ知らせる。frontend は切り替えのボタンを
+// 出し、押されたら Upgrade を呼ぶ (窓を勝手に入れ替えない)。
 func (u *upgrader) watch(app *application.App) {
 	t := time.NewTicker(upgradePoll)
 	defer t.Stop()

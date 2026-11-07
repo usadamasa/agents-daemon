@@ -116,7 +116,7 @@ agents-daemon dream mine --project <canonical>   # memory と skill を突き合
 agents-daemon dream stage --project <canonical>  # 候補の承認レポートを ./tmp/dream/ に書く
 agents-daemon dream forget <memory-name>...      # auto memory を消す (sandbox の外で動かす)
 agents-daemon prune-worktrees --dry-run          # 回収対象の worktree を表示する (SessionStart hook が --hook 付きで呼ぶ)
-agents-daemon spawn < request.json               # prompt を最初のターンにした Claude Code を repo の rex window に起こす (アプリが呼ぶ)
+agents-daemon spawn < request.json               # prompt を最初のターンにした Claude Code を repo の新しい rex session に起こす (アプリが呼ぶ)
 agents-daemon tell < request.json                # 生きているセッションの入力欄に文面を打つ (アプリが呼ぶ)
 agents-daemon park hand < request.json           # メモを取って渡し、届かなければ戻す (アプリが呼ぶ)
 ```

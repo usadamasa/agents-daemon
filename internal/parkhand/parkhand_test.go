@@ -211,12 +211,12 @@ func TestRunner_Run_toRepo_unknown(t *testing.T) {
 // 起こせなければ open に戻す。
 func TestRunner_Run_toRepo_fails(t *testing.T) {
 	f := newFixture()
-	f.spawnErr = errors.New("window を作れない")
+	f.spawnErr = errors.New("多重化ツールの session を作れない")
 	res, err := f.runner().Run(context.Background(), toRepo())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Delivered || res.Status != "open" || res.To != "" || !strings.Contains(res.Reason, "window を作れない") {
+	if res.Delivered || res.Status != "open" || res.To != "" || !strings.Contains(res.Reason, "多重化ツールの session を作れない") {
 		t.Fatalf("res = %+v", res)
 	}
 	if len(f.sets) != 2 || f.sets[1].status != "open" {

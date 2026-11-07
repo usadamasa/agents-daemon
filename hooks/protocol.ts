@@ -354,7 +354,7 @@ export const definitions = {
     }
   },
   "SpawnRequest": {
-    "description": "spawn の stdin。prompt を最初のターンにした Claude Code のセッションを、repo を cwd にした rex の window に起こし、SpawnResult を出す",
+    "description": "spawn の stdin。prompt を最初のターンにした Claude Code のセッションを、repo を cwd にした新しい rex の session に起こし、SpawnResult を出す",
     "type": "object",
     "additionalProperties": false,
     "required": [

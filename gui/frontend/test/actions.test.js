@@ -53,7 +53,7 @@ test("handOff は claude が前景にならなかったメモが handed のま�
   const io = fakeIO({ run: [json({ delivered: false, status: "handed", to: "s9", pane_id: "p1", reason: "待ち切れた" })] });
   const res = await handOff(memo, spawnTo, "task", "", io);
   assert.equal(res.ok, false);
-  assert.ok(res.message.startsWith("a で window を作りましたが"));
+  assert.ok(res.message.startsWith("a で新しい rex session を作りましたが"));
   assert.ok(res.message.includes("handed のまま"));
 });
 

@@ -68,8 +68,8 @@ exec して stdout を返すだけで、JSON はフロントエンド (`gui/fron
 <!-- cc-premise: 2.1.319 input-line 入力欄は ❯ で始まる行で、空のときは NBSP。複数行は bracketed paste で 1 つの貼り付けになる。次の prompt の提案は薄字で打つと消える -->
 
 アプリは rex の外で起きるので、`spawn` / `tell` / `park hand` は REX_SESSION を要求しない (`backend.ConnectRex`)。
-`spawn` が window を置く rex の session は、REX_SESSION が無ければ statusline の記録で最後に見た session
-(`sessioncontext.LatestMultiplexerSession`)。rex は session を指定しないと複数あるときに曖昧として拒む。
+`spawn` は起こすたびに `rex session new` で専用の rex session を作る。起きた claude は rex の案内に従って
+自分の REX_SESSION を rename するので、起こす側の session に相乗りさせない (#376)。
 
 ## 依存の DAG (`graph`)
 

@@ -22,7 +22,7 @@ stderr に 1 行出して何もせずに戻る (素の端末の SessionStart で
 | SendKeys | `send-key -b B KEY...` |
 | Reachable | `api call server.status` の `pid` が正 |
 | session_id | `context/<sid>.json` の `multiplexer.block` から逆引き ([statusline-state.md](statusline-state.md)) |
-| RunWindow (`spawn` の Host。Client には無い) | `run --focus=false --keep-open -s S --cwd DIR --label L --json -- ARGV...` の `block_ids[0]`。`-s` は childEnv が `REX_SESSION` を外すので明示する。argv は shell を介さず 1 引数ずつ子へ渡る (空白、引用符、改行、`$` を変えない。実測) |
+| NewSession (`spawn` の Host。Client には無い) | `session new L --cwd DIR --keep-open --window L --json -- ARGV...` の `initial_windows[0].block_ids[0]`。子の `REX_SESSION` は新しい session になる。argv は login shell の環境で 1 引数ずつ子へ渡る (空白、`$` を変えない。実測) |
 
 待機中のラベルは出さない。rex で表示に使える `block rename` は利用者が付けた label を潰すため。
 

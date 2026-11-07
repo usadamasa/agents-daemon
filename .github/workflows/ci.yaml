@@ -80,7 +80,7 @@ jobs:
       - uses: usadamasa/gh-manage/actions/setup-nix@main
 
       - name: Run shellcheck
-        run: shellcheck hooks/*.sh hooks/lib/*.sh scripts/*.sh tests/lib/*.bash tests/fixtures/fake-go .envrc
+        run: shellcheck hooks/*.sh hooks/lib/*.sh scripts/*.sh tests/lib/*.bash tests/fixtures/fake-go tests/fixtures/fake-gh .envrc
 
   plugin-validate:
     name: plugin validate

@@ -43,7 +43,7 @@ task lint                                   # Go の全静的解析。devShell �
 task vulncheck                              # govulncheck の symbol モード (task lint が呼ぶ)
 task typecheck                              # mod の型検査 (tsc)
 task protocol:generate                      # schema を変えたら Go の型と mod の型を作り直す
-shellcheck hooks/*.sh hooks/lib/*.sh scripts/*.sh tests/lib/*.bash tests/fixtures/fake-go .envrc
+shellcheck hooks/*.sh hooks/lib/*.sh scripts/*.sh tests/lib/*.bash tests/fixtures/fake-go tests/fixtures/fake-gh .envrc
 claude plugin validate --strict .           # plugin manifest と hooks.json
 claude plugin validate --strict skills      # skill の frontmatter
 claude plugin test .                        # mod (hooks/*.test.tsx) のテスト
@@ -117,6 +117,12 @@ mod が呼ぶコマンドは入力を stdin の JSON で受け、出力を JSON 
   読むだけの Claude Code の設定ディレクトリは `apppath.ClaudeConfigDir` で決める。
 - 書くファイルを足すときは、同じ PR で消す仕組みと `changing-agents-daemon-internals` skill の architecture.md「出力されるファイル」の行 (書く主体・消す主体) を足す。
 - 削除は daemon 自身が mtime で行う (`internal/runtime/daemon/housekeeping.go`)。保持期間は定数にし、根拠をコメントに書く。
+
+## PR を作るときの決めごと
+
+- 本文に、閉じる issue を `Closes #N` で 1 行ずつ書く。pr-labels workflow が issue の種類と area のラベルを PR へ写し、
+  release note の category になる。
+- issue を閉じない PR は、`gh pr create --label` で種類と area のラベルを付けて作る。選び方は `triaging-issues` skill。
 
 ## リリース
 

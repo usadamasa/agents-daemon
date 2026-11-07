@@ -48,6 +48,18 @@ export class Graph {
     return (this.#succs.get(key) ?? []).flatMap((l) => this.#byKey.get(l.after) ?? []);
   }
 
+  // waiters は key から出ていく辺 (key が済むのを待っている下流の直近への辺)。
+  waiters(key) {
+    return this.#succs.get(key) ?? [];
+  }
+
+  // settled は key の下流の直近があり、全部完了しているか。渡した作業の報告を受け取った側が済ませた peer で、
+  // idle でもこちらの返事は要らない。下流の無いノードはこちらの返事を待っているかもしれないので含めない。
+  settled(key) {
+    const down = this.after(key);
+    return down.length > 0 && down.every((n) => n.state === "completed");
+  }
+
   // blockers は key を止めている辺 (上流の直近)。
   blockers(key) {
     return this.#preds.get(key) ?? [];

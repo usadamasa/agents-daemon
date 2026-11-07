@@ -148,7 +148,7 @@ func collect(in input, panes map[string]*daemonstate.PaneStatus) []graph.Card {
 			continue
 		}
 		a := acts[id]
-		cards = append(cards, graph.Card{Key: ref.SessionID(id), Kind: graph.KindSession, Title: sessionSubject(p, in.SessionNames[id]), SessionID: id,
+		cards = append(cards, graph.Card{Key: ref.SessionID(id), Kind: graph.KindSession, Title: sessionName(p, in.SessionNames[id]), Summary: p.AgentMessage, SessionID: id,
 			CWD: p.CWD, Live: true, Status: "in_progress", Activity: a.act, Detail: a.detail})
 	}
 	return cards
@@ -159,14 +159,20 @@ func collect(in input, panes map[string]*daemonstate.PaneStatus) []graph.Card {
 // どのセッションかが分かるよう、セッション名 (name) か cwd の末尾にする。
 // cc-premise: 2.1.302 osc7501 msg は作業中の作業、ターン後の要約、permission 待ちの approve <tool>: <command>
 func sessionSubject(p *daemonstate.PaneStatus, name string) string {
-	switch {
-	case p.AgentMessage != "":
+	if p.AgentMessage != "" {
 		return p.AgentMessage
-	case name != "":
-		return name
-	default:
-		return filepath.Base(p.CWD)
 	}
+	return sessionName(p, name)
+}
+
+// sessionName は依存図のタスクの無いセッションのノードの題。渡された側は TaskCreate しないことが多く、msg を題に
+// すると最終ターンの要約になって何を渡したか読めないので、セッション名 (無ければ cwd の末尾) にする (#394)。
+// msg はノードの summary に回す。
+func sessionName(p *daemonstate.PaneStatus, name string) string {
+	if name != "" {
+		return name
+	}
+	return filepath.Base(p.CWD)
 }
 
 // arrange は生きているセッションとメモを repo へ分けて並べる。セッションは作業の cwd の repo に入る (タスクの無い

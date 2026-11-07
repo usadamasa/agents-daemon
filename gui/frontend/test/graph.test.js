@@ -71,6 +71,23 @@ test("view は folded の無い JSON (古いバイナリ) なら完了を落と�
   assert.equal(hidden.depth.get("C"), 2);
 });
 
+test("waiters は key から出ていく辺、settled は下流があって全部完了しているか", () => {
+  const g = new Graph({
+    nodes: [node("P", { state: "done" }), node("R", { state: "completed" }), node("Q", { state: "done" }), node("S"), node("Z", { state: "done" })],
+    links: [
+      { before: "P", after: "R", kind: "edge", edge: { id: "e1", note: "報告" } },
+      { before: "Q", after: "R", kind: "edge" },
+      { before: "Q", after: "S", kind: "edge" },
+    ],
+  });
+  assert.deepEqual(g.waiters("Q").map((l) => l.after), ["R", "S"]);
+  assert.equal(g.waiters("P")[0].edge.note, "報告");
+  assert.equal(g.settled("P"), true);
+  assert.equal(g.settled("Q"), false);
+  // 下流の無いノードは、こちらの返事を待っているかもしれないので settled にしない。
+  assert.equal(g.settled("Z"), false);
+});
+
 test("node は key で引き、無ければ undefined", () => {
   const g = new Graph(data);
   assert.equal(g.node("B").key, "B");

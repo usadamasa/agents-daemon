@@ -352,6 +352,8 @@ type GraphNode struct {
 	Title string `json:"title"`
 	// issue: / pr: の置き場のノードの参照の種類。
 	RefKind string `json:"ref_kind,omitempty"`
+	// kind session のノードで、Claude Code が申告した今の作業 (OSC 7501 の msg)。
+	Summary string `json:"summary,omitempty"`
 	// 状態の補足 (上限の解除時刻)。
 	Detail string `json:"detail,omitempty"`
 	// key をそのまま edge add の端点に書けるか (TodoWrite の項目は書けない)。

@@ -1055,6 +1055,10 @@ export const definitions = {
         ],
         "description": "issue: / pr: の置き場のノードの参照の種類"
       },
+      "summary": {
+        "type": "string",
+        "description": "kind session のノードで、Claude Code が申告した今の作業 (OSC 7501 の msg)"
+      },
       "detail": {
         "type": "string",
         "description": "状態の補足 (上限の解除時刻)"

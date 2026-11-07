@@ -105,7 +105,8 @@ async function act(run) {
 const el = (id) => document.getElementById(id);
 
 function stateLabel(n) {
-  const label = STATE_LABEL[n.state] ?? n.state;
+  // 下流が全部完了した idle の peer は報告を済ませていて、こちらの返事を要さない。
+  const label = n.state === "done" && state.graph.settled(n.key) ? "手が空いている (idle)" : (STATE_LABEL[n.state] ?? n.state);
   if (n.ref_kind) return `${label} · ${REF_KIND_LABEL[n.ref_kind] ?? n.ref_kind}`;
   return n.detail ? `${label}、${n.detail}` : label;
 }
@@ -262,8 +263,9 @@ function nodeCard(n, highlight) {
   const title = document.createElement("b");
   title.textContent = n.title;
   const sub = document.createElement("small");
-  // 題がセッション名そのもののノード (タスクの無いセッション、終了したセッションの置き場) は状態だけを添える。
-  sub.textContent = n.session && n.session !== n.title ? `${n.session} · ${stateLabel(n)}` : stateLabel(n);
+  // 題がセッション名そのもののノード (タスクの無いセッション、終了したセッションの置き場) は状態と今の作業を添える。
+  sub.textContent = [n.session !== n.title ? n.session : "", stateLabel(n), n.summary].filter(Boolean).join(" · ");
+  if (n.summary) b.title = n.summary;
   lb.append(title, sub);
   b.append(dot, lb);
 
@@ -361,7 +363,7 @@ function renderGraph() {
   for (const l of spreadPorts(drawn, pos, NODE_W, NODE_H)) {
     const onChain = chain.has(`${l.before}\u0000${l.after}`);
     const cls = [l.kind === "task" ? "" : l.kind, onChain ? "chain" : ""].filter(Boolean).join(" ");
-    const hint = l.kind === "folded" ? foldedHint(l) : "";
+    const hint = l.kind === "folded" ? foldedHint(l) : (l.edge?.note ?? "");
     svg.append(edgePath(l.points, cls, onChain ? "arrow-chain" : "arrow", hint));
   }
   canvas.append(svg);
@@ -498,6 +500,13 @@ function nodeRow(n, mark, link, owner) {
   ph.className = "ph";
   ph.textContent = mark;
   row.append(dot, b, ph);
+  // edge add の note (何の待ちか) は行に添える。
+  if (link?.edge?.note) {
+    const note = document.createElement("span");
+    note.className = "note";
+    note.textContent = link.edge.note;
+    row.append(note);
+  }
   // `edge add` で書いた辺 (kind edge) は元の記録を消せる。同じセッションの blockedBy はそのセッションの TaskUpdate のもの。
   if (link?.kind === "edge" && link.edge) {
     const x = document.createElement("button");
@@ -839,13 +848,14 @@ function nodePopup(n) {
   if (state.picker === "start") parts.push(startPicker(n));
   if (state.refusal !== "" && !["instruct", "blocker", "hand", "start"].includes(state.picker)) parts.push(refusalLine());
 
-  if (n.description) {
+  for (const text of [n.description, n.summary]) {
+    if (!text) continue;
     const p = document.createElement("p");
-    p.textContent = n.description;
+    p.textContent = text;
     parts.push(p);
   }
 
-  const after = g.after(n.key).map((m) => [m, undefined]);
+  const after = g.waiters(n.key).flatMap((l) => (g.node(l.after) ? [[g.node(l.after), l]] : []));
   parts.push(group(`このタスクを待っている · ${g.reach(n.key).size}`, related(g, after, g.reach(n.key))));
   const before = g.blockers(n.key).flatMap((l) => (g.node(l.before) ? [[g.node(l.before), l]] : []));
   parts.push(group(`このタスクが待っている · ${g.upstream(n.key).size}`, related(g, before, g.upstream(n.key), n)));

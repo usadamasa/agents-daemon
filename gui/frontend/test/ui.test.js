@@ -166,6 +166,15 @@ test("完了を隠した既定の図: メモの一覧と凡例と footer を出�
   assert.equal(q("#completed-label").textContent, "完了したタスクも表示 (2 件)");
   assert.equal(q("#discard-stale").hidden, true);
   assert.match(q("#foot-text").textContent, /daemon 動作中 .*止まっている 2 · 作業中 2 · 待ち 0 · 完了 2 \(非表示\)/);
+  // 右の列は header と footer の間の全高を取り、凡例とメモの一覧は依存図の列の幅だけを取る。
+  // 要素どうしを assert.equal で比べると、食い違ったときに happy-dom の要素の inspect が終わらないので真偽で比べる。
+  const stage = q(".stage");
+  assert.ok(q("#column").parentElement === stage, "#column は .stage の直下");
+  for (const id of ["#graph", "#legend", "#park"]) {
+    const box = q(id).parentElement;
+    assert.ok(box !== stage && box.parentElement === stage, `${id} は .stage の中の左の列`);
+    assert.ok(box === q("#graph").parentElement, `${id} は #graph と同じ列`);
+  }
   await snapshot("graph");
 });
 
@@ -177,6 +186,10 @@ test("ノードを選ぶと単体ビューを開き、待っている先と待�
   const groups = [...pop.querySelectorAll(".grp > .ph")].map((p) => p.textContent);
   assert.ok(groups.includes("このタスクを待っている · 2"), groups.join(" / "));
   assert.ok(groups.includes("このタスクが待っている · 2"), groups.join(" / "));
+  // 題が切れても見分けられるよう、関係の行の題は全文を tooltip に持つ。
+  const rows = [...pop.querySelectorAll(".grp .lk > button:first-of-type")];
+  assert.ok(rows.length > 0);
+  for (const b of rows) assert.equal(b.title, b.textContent);
   await snapshot("graph-popup");
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
   assert.equal(pop.hidden, true);
@@ -187,6 +200,10 @@ test("PR のノードの単体ビュー: 見出しは PR の題で、番号と r
   const pop = q("#pop");
   assert.equal(pop.querySelector(".title").textContent, "依存図の色を状態ごとに分ける");
   assert.equal(pop.querySelector(".chips .chip").textContent, "取りやめ · PR #254 · usadamasa/agents-daemon");
+  // 関係の見出しの主語は開いたノードの種類に合わせる。
+  const groups = [...pop.querySelectorAll(".grp > .ph")].map((p) => p.textContent);
+  assert.ok(groups.some((t) => t.startsWith("この PR を待っている · ")), groups.join(" / "));
+  assert.ok(groups.some((t) => t.startsWith("この PR が待っている · ")), groups.join(" / "));
   await snapshot("graph-popup-ref");
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
 });
@@ -202,6 +219,8 @@ test("作業のノード: 題そのものを押すとその場で直せ、自動
   // 動詞のバーに「題を直す」は無く、題 (対象) そのものが入口。
   let verbs = [...pop.querySelectorAll(".acts .act")].map((b) => b.textContent);
   assert.ok(!verbs.includes("題を直す") && !verbs.includes("一覧から外す"), verbs.join(" / "));
+  const heads = [...pop.querySelectorAll(".grp > .ph")].map((p) => p.textContent);
+  assert.ok(heads.some((t) => t.startsWith("このセッションを待っている · ")), heads.join(" / "));
   const title = pop.querySelector(".title");
   assert.equal(title.getAttribute("role"), "button");
   title.click();

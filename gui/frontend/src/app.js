@@ -23,6 +23,9 @@ const POLL_HIDDEN_MS = 15000;
 
 const REF_KIND_LABEL = { issue: "issue", pr: "PR" };
 const KIND_LABEL = { task: "タスク", todo: "TodoWrite の項目", session: "セッションの作業", ref: "参照" };
+// 単体ビューの関係の見出しの主語。参照は issue か PR かで呼び分ける。
+const SUBJECT = { task: "このタスク", todo: "この項目", session: "このセッション", ref: "この参照" };
+const REF_SUBJECT = { issue: "この issue", pr: "この PR" };
 // companion が会話から付けた題 (origin inferred) に添える chip の文 (出どころの説明)。直すのは題そのものを押す (OOUI:
 // 対象を選んでから動詞)。最初の prompt の題、人が直した題、記録の無い pane の名前には何も添えない。
 const INFERRED_CHIP = "会話から自動で付けた題";
@@ -480,6 +483,8 @@ function nodeRow(n, mark, link, owner) {
   const b = document.createElement("button");
   b.type = "button";
   b.textContent = n.title;
+  // 題は note と並ぶと先頭だけ残して切れるので、全文を tooltip に持たせる。
+  b.title = n.title;
   b.addEventListener("click", () => select({ type: "node", key: n.key }));
   const ph = document.createElement("span");
   ph.className = "ph";
@@ -907,10 +912,13 @@ function nodePopup(n) {
     parts.push(p);
   }
 
+  // 英字で終わる主語 (PR、issue) は助詞との間を空ける。
+  const subject = REF_SUBJECT[n.ref_kind] ?? SUBJECT[n.kind] ?? "このノード";
+  const sp = /[A-Za-z]$/.test(subject) ? " " : "";
   const after = g.waiters(n.key).flatMap((l) => (g.node(l.after) ? [[g.node(l.after), l]] : []));
-  parts.push(group(`このタスクを待っている · ${g.reach(n.key).size}`, related(g, after, g.reach(n.key))));
+  parts.push(group(`${subject}${sp}を待っている · ${g.reach(n.key).size}`, related(g, after, g.reach(n.key))));
   const before = g.blockers(n.key).flatMap((l) => (g.node(l.before) ? [[g.node(l.before), l]] : []));
-  parts.push(group(`このタスクが待っている · ${g.upstream(n.key).size}`, related(g, before, g.upstream(n.key), n)));
+  parts.push(group(`${subject}${sp}が待っている · ${g.upstream(n.key).size}`, related(g, before, g.upstream(n.key), n)));
 
   if (n.memos.length > 0) {
     parts.push(group(`扱うメモ · ${n.memos.length}`, n.memos.map((m) => memoRowInPopup(m.id, m.title, m.status, m.status === "open"))));
@@ -930,6 +938,7 @@ function memoRowInPopup(id, title, mark, selectable) {
   const b = document.createElement("button");
   b.type = "button";
   b.textContent = title;
+  b.title = title;
   b.disabled = !selectable;
   b.addEventListener("click", () => select({ type: "memo", id }));
   const ph = document.createElement("span");

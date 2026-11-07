@@ -161,7 +161,8 @@ func TestGraph_linksDepthAndDownstream(t *testing.T) {
 }
 
 // sid: の端点は、after 側ならそのセッションの根のタスク (同じセッションの blockedBy が無いもの)、
-// before 側なら末端のタスク (同じセッションのどのタスクも止めていないもの。複数なら sid: のノードに集める) につなぐ。タスクの無い生きている
+// before 側なら末端のタスク (同じセッションのどのタスクも止めていないもの。複数なら sid: のノードに集める) に
+// つなぐ。タスクの無い生きている
 // セッションはそのノードへ。daemon がまだ結びつけていない session:<名前> は、同じ名前のセッションが生きていても
 // 名前を key にした置き場のノード (pending) にする。issue: / pr: は参照を key にした置き場のノード (external)、
 // 終了していてタスクを作らなかったセッションは sid: を key にした置き場のノード (exited) にする。
@@ -470,7 +471,7 @@ func TestGraph_sessionSinksHub(t *testing.T) {
 		}
 	}
 	got := nodes(b.Graph)
-	if n := got["sid:P"]; n.Kind != graph.KindRef || n.State != graph.StateWorking || n.SessionID != "P" || n.Title != "peer" || n.SessionName != "at-ci-ui" || !n.Endpoint {
+	if n := got["sid:P"]; n.Kind != graph.KindRef || n.State != graph.StateWorking || n.SessionID != "P" || n.Title != "peer" || n.SessionName != "at-ci-ui" || !n.Endpoint || !n.Live {
 		t.Errorf("sid:P = %+v", n)
 	}
 	if n := got["sid:Q"]; n.State != graph.StateCompleted {

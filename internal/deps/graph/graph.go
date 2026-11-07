@@ -292,6 +292,7 @@ func (g *builder) sinkHub(sessionID string) []string {
 		title = key
 	}
 	hub := g.placeholder(key, g.nodes[keys[0]].CWD, title, sessionID, state)
+	g.nodes[hub].Live = g.activity[sessionID] != ""
 	for _, k := range keys {
 		g.link(k, hub, LinkTask, nil)
 	}

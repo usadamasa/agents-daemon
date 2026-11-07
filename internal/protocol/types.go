@@ -134,7 +134,7 @@ type EdgeTarget struct {
 	CWD string `json:"cwd,omitempty"`
 }
 
-// SpawnRequest は spawn の stdin。prompt を最初のターンにした Claude Code のセッションを、repo を cwd にした rex の window に起こし、SpawnResult を出す。
+// SpawnRequest は spawn の stdin。prompt を最初のターンにした Claude Code のセッションを、repo を cwd にした新しい rex の session に起こし、SpawnResult を出す。
 type SpawnRequest struct {
 	// 新しいセッションの cwd (絶対パス)。
 	Repo string `json:"repo"`

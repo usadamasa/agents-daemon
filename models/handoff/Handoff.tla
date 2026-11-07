@@ -7,7 +7,7 @@
      (park set の status open、from handed)」(parkhand の Runner.Run)。1 つのプロセスが直列に行うが、取る・送る・戻すは
      それぞれ別のファイルの書き込みと rex への送信なので、2 つの呼び手の手順は交錯しうる。from は元の status が違えば
      失敗する (parking の Store.Set)。取れるのは 1 つの呼び手だけで、取られたメモはほかの依存図に open と出ても取れない。
-   - spawn は window を作ってから claude が前景になるのを待ち、待ち切れなければ foreground=false で返す。pane は残り、
+   - spawn は rex の session を作ってから claude が前景になるのを待ち、待ち切れなければ foreground=false で返す。pane は残り、
      claude が起動していることもある (spawn/spawn.go の waitForClaude)。park hand はそのメモを戻さず handed のまま残す。
    - deps は status.json が今の daemon のものでなければ pane を空として扱い、未完了のタスクを exited と描く
      (deps/deps.go の livePanes、graph.go)。Adopt は「今の daemon がタスクの記録より後に書いた status.json に
@@ -129,7 +129,7 @@ Send(m) ==
         /\ UNCHANGED <<deliveries, deliveredTo, view>>
   /\ UNCHANGED <<memo, to, dest, attempts, sessions, live, seen, task, taskMemo, adoptedLive>>
 
-(* 取ったメモを、新しいセッションを起こして渡す。入力の検査で拒まれれば何も起きず戻しに進む。window を作れば claude が
+(* 取ったメモを、新しいセッションを起こして渡す。入力の検査で拒まれれば何も起きず戻しに進む。session を作れば claude が
    前景になるのを待ち、なれば届いたことになる。待ち切れなければ pane は残り claude が起動していることもある。起きたか
    分からないメモは戻さず handed のまま残し、人に pane を知らせる (spawn.go の waitForClaude が foreground=false で返し、
    parkhand の spawn は戻さない)。戻すと押し直しで 2 つ目が起きる。宛先は起こす先の repo のまま書き直さない。 *)

@@ -85,7 +85,7 @@ func (r Runner) tell(ctx context.Context, req Request, item parking.Item, names 
 	return Result{Delivered: true, Status: parking.StatusHanded, To: req.ToSession, PaneID: told.PaneID, Warning: told.Warning}
 }
 
-// spawn は取ったメモを新しく起こすセッションへ渡す。起こせなければ戻す。window はできたが claude が前景になるのを待ち切れた
+// spawn は取ったメモを新しく起こすセッションへ渡す。起こせなければ戻す。session はできたが claude が前景になるのを待ち切れた
 // ときは claude が起きているかもしれないので戻さない (戻すと押し直しで 2 つ目のセッションが起きる)。
 func (r Runner) spawn(ctx context.Context, req Request, item parking.Item, names map[string]string) Result {
 	title := filepath.Base(req.ToRepo)

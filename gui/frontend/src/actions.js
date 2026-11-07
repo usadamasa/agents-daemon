@@ -118,7 +118,7 @@ export async function setStatus(node, status, io = defaultIO) {
 }
 
 // handOffTask はタスクを to (生きているセッションか、新しく起こすセッションの repo) へ渡す。相手へ title と description を
-// 送り、届いたら持ち主にタスクを消すよう頼む。起きたか分からない (window はできたが claude が前景にならなかった) ときは、
+// 送り、届いたら持ち主にタスクを消すよう頼む。起きたか分からない (rex の session はできたが claude が前景にならなかった) ときは、
 // 消すと誰も持たないタスクになりうるので頼まずに残す。
 export async function handOffTask(node, to, note, io = defaultIO) {
   const name = destinationLabel(to);
@@ -133,7 +133,7 @@ export async function handOffTask(node, to, note, io = defaultIO) {
       return { ok: false, message: `起こした結果を読めませんでした: ${String(err?.message ?? err)}` };
     }
     if (!res.foreground) {
-      return { ok: false, message: `${name} で window を作りましたが、claude が前景になりませんでした: ${res.detail ?? res.pane_id}。タスクは残してあります (起きていれば TaskUpdate で deleted にする)` };
+      return { ok: false, message: `${name} で新しい rex session を作りましたが、claude が前景になりませんでした: ${res.detail ?? res.pane_id}。タスクは残してあります (起きていれば TaskUpdate で deleted にする)` };
     }
     toName = `${to.title} で起こした新しいセッション`;
   } else {
@@ -195,7 +195,7 @@ export async function handOff(memo, to, intent, note, io = defaultIO) {
   }
   if (res.status === "handed" && to.route === "spawn" && res.to) {
     // 起きたか分からないメモは戻していない。戻すと押し直しで 2 つ目のセッションが起きる。
-    return { ok: false, message: `${name} で window を作りましたが、claude が前景になりませんでした: ${res.reason}。メモは handed のまま残してあります (起きていなければ ${reopenHint(memo.id)} で戻す)` };
+    return { ok: false, message: `${name} で新しい rex session を作りましたが、claude が前景になりませんでした: ${res.reason}。メモは handed のまま残してあります (起きていなければ ${reopenHint(memo.id)} で戻す)` };
   }
   const failed = to.route === "spawn" ? `${name} で新しいセッションを起こせませんでした` : `${name} へ送れませんでした`;
   const left = res.status === "open" ? "メモは open に戻しました" : `メモは handed のまま残っています (${reopenHint(memo.id)} で戻す)`;

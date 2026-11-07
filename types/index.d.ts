@@ -134,7 +134,7 @@ export type EdgeTarget = {
   cwd?: string
 }
 
-// spawn の stdin。prompt を最初のターンにした Claude Code のセッションを、repo を cwd にした rex の window に起こし、SpawnResult を出す
+// spawn の stdin。prompt を最初のターンにした Claude Code のセッションを、repo を cwd にした新しい rex の session に起こし、SpawnResult を出す
 export type SpawnRequest = {
   // 新しいセッションの cwd (絶対パス)
   repo: string

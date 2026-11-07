@@ -7,7 +7,7 @@
 // Client は実装が満たす全部入りで、呼び手は要る method だけを自分の側で interface にして受ける (#301):
 // monitor.Client (読む・送る)、daemon の multiplexerClient (それに列挙・端末の大きさ・到達性)、doctor.Client (到達性・
 // 列挙・端末の大きさ)、verify.PaneClient (pane の情報・読む)、simulate の paneClient (読む・送る・pane の情報)、
-// spawn.Host (window を起こす・pane の情報)。
+// spawn.Host (session を起こす・pane の情報)。
 // 包み (daemon の dry-run、simulate の所有 pane への限定) は呼び手の interface だけを実装すればよく、
 // 使わない method の素通しを持たない。multiplexerfake.Client は全部を持つので、どの呼び手にも差し込める。
 package multiplexer

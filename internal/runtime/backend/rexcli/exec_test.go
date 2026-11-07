@@ -105,7 +105,11 @@ case "$1" in
       *) echo "Error: unknown block subcommand $2" >&2; exit 2 ;;
     esac ;;
   capture) emit "capture-$3.txt" "$3" ;;
-  run) emit run.json run ;;
+  session)
+    case "$2" in
+      new) emit session-new.json session ;;
+      *) echo "Error: unknown session subcommand $2" >&2; exit 2 ;;
+    esac ;;
   api) emit server-status.json server ;;
   events)
     emit events.jsonl events

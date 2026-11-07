@@ -64,7 +64,7 @@ printf '%s' '{"before":{"ref":"session:<待つ相手の name>","cwd":"<その wi
   | "${XDG_CACHE_HOME:-$HOME/.cache}/agents-daemon/bin/agents-daemon" edge add
 ```
 
-自分のタスクが、渡した peer の完了を待つ向き (報告を受けてから進める、peer の PR のマージが要る):
+自分のタスクが、渡した peer の完了を待つ向き (peer の成果を受けてから進める):
 
 ```sh
 printf '%s' '{"before":{"ref":"session:<name>","cwd":"<この window に渡した cwd>"},"after":{"task":"<自分のタスクの id>"},"note":"<何の後か>"}' \
@@ -73,6 +73,23 @@ printf '%s' '{"before":{"ref":"session:<name>","cwd":"<この window に渡し�
 
 `task` の端点は自分のセッションのタスク (`TaskList` の id) で、参照 `task:<session_id>/<id>` と cwd は
 バイナリが埋める (`CLAUDE_CODE_SESSION_ID` と今の cwd)。`ref` で指す相手側の端点には cwd が要る。
+
+after に置くのは、peer の成果が無いと始められない自分の作業 (リリース、成果を使う次の段) のタスクにする。
+「報告を受け取る」だけのタスクは辺の after にせず、報告が来たら成果を使う作業のタスクへ辺を向ける。
+
+peer の成果が PR になったら、報告を受けて PR 番号が分かった時点で、上の `session → task` の辺を
+`edge rm` し、PR を挟んだ鎖に書き直す:
+
+```sh
+printf '%s' '{"before":{"ref":"session:<name>","cwd":"<この window に渡した cwd>"},"after":{"ref":"pr:<owner>/<repo>#<番号>","cwd":"<この window に渡した cwd>"},"note":"PR #<番号>"}' \
+  | "${XDG_CACHE_HOME:-$HOME/.cache}/agents-daemon/bin/agents-daemon" edge add
+printf '%s' '{"before":{"ref":"pr:<owner>/<repo>#<番号>","cwd":"<この window に渡した cwd>"},"after":{"task":"<自分のタスクの id>"},"note":"PR #<番号> のマージの後"}' \
+  | "${XDG_CACHE_HOME:-$HOME/.cache}/agents-daemon/bin/agents-daemon" edge add
+```
+
+- note に書く番号は before の参照の番号 (PR 番号) に揃える。PR が閉じる issue の番号を書くと、線の note と参照が食い違う
+- PR がマージされると、`pr:` を before に持つ辺は daemon が消す。`session → pr` の辺は残るが、peer が終われば
+  図から畳まれ、保持期間 (7 日) で消える。マージせずに閉じた PR の辺は消えないので、付け替えるか `edge rm` する
 
 before の ref は `pr:<owner>/<repo>#<番号>` や `issue:` でもよい。`session:<name>` は、daemon が数秒のうちに
 その名前のセッションへ 1 回だけ結びつける。辺を書いた時点で同名のセッションが動いていれば最も新しく起きたもの

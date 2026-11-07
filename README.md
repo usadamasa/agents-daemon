@@ -139,6 +139,9 @@ HTML の箱と SVG の線で描く。root とは別の Go module だが、daemon
 前面に開き直す。起動時に開かないようにするには、環境変数 `AGENTS_DAEMON_OPEN_APP=0` を置く (settings.json の `env`)。
 アプリがまだ建っていない最初のセッションでは開けず、次のセッションから開く。
 
+アプリの中では英数キーの長押しがアクセント記号の候補ではなく文字の繰り返しになる。候補を出したいときは
+`defaults write com.github.usadamasa.agents-daemon.agent-tasks ApplePressAndHoldEnabled -bool true` で戻す。
+
 ```sh
 task gui:build    # bin/agent-tasks にビルドする (開発用。Xcode Command Line Tools が要る)
 task gui:test     # go vet、gosec、go test と、フロントエンドの node --test (npm が要る)

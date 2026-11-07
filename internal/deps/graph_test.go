@@ -306,6 +306,48 @@ func TestGraph_refEndpoints(t *testing.T) {
 	}
 }
 
+// daemon が引いた外部の参照の状態 (refstate) が merged / closed なら、issue / PR の置き場は完了 (completed) になり、
+// 完了を隠した図では畳まれる (#416)。open と、まだ引いていない参照は外部 (external) のまま。
+func TestGraph_refStates(t *testing.T) {
+	const cwd = "/w/a"
+	ep := func(r string) edge.Endpoint { return edge.Endpoint{Ref: r, CWD: cwd} }
+	b := build(input{
+		PID:      42,
+		Snapshot: snapshot(daemonstate.PaneStatus{PaneID: "p1", SessionID: "A", CWD: cwd, AgentStatus: "working"}),
+		Tasks:    []record.Task{task("A", "1", "マージ待ち", "pending", cwd)},
+		Edges: []edge.Edge{
+			{ID: "e1", Before: ep("pr:o/r#1"), After: ep("task:A/1")},
+			{ID: "e2", Before: ep("issue:o/r#2"), After: ep("task:A/1")},
+			{ID: "e3", Before: ep("pr:o/r#3"), After: ep("task:A/1")},
+			{ID: "e4", Before: ep("issue:o/r#4"), After: ep("task:A/1")},
+		},
+		RefStates: map[string]string{"pr:o/r#1": "merged", "issue:o/r#2": "closed", "pr:o/r#3": "open"},
+	})
+	got := nodes(b.Graph)
+	want := map[string]string{
+		"pr:o/r#1":    graph.StateCompleted,
+		"issue:o/r#2": graph.StateCompleted,
+		"pr:o/r#3":    graph.StateExternal,
+		"issue:o/r#4": graph.StateExternal,
+	}
+	for key, state := range want {
+		if n := got[key]; n.State != state || n.Kind != graph.KindRef || n.RefKind == "" {
+			t.Errorf("%s = %+v, want %s", key, n, state)
+		}
+	}
+	// 題と種類は状態にかかわらず参照から付ける。
+	if n := got["pr:o/r#1"]; n.Title != "PR #1 · o/r" || n.RefKind != "pr" {
+		t.Errorf("pr:o/r#1 = %+v", n)
+	}
+	shown := map[string]bool{}
+	for _, n := range b.Graph.Folded.Nodes {
+		shown[n.Key] = true
+	}
+	if shown["pr:o/r#1"] || shown["issue:o/r#2"] || !shown["pr:o/r#3"] || !shown["issue:o/r#4"] || !shown["task:A/1"] {
+		t.Errorf("完了を隠した図のノード = %v", shown)
+	}
+}
+
 // セッションのタスクがすべて輪になっていて根も末端も無ければ、タスク全部につなぐ (before 側は sid: のノードに集める)。
 func TestGraph_refEndpointsEdgeCases(t *testing.T) {
 	const cwd = "/w/a"

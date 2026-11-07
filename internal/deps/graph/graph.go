@@ -83,7 +83,9 @@ type Card struct {
 	TaskID      string
 	Description string
 	Title       string
-	SessionID   string
+	// Summary は kind session の Card の、Claude Code が申告した今の作業。
+	Summary   string
+	SessionID string
 	// Session はセッションの表示名。CWD は作業の cwd (タスクの記録の cwd、無ければ pane の cwd)。
 	Session string
 	CWD     string
@@ -134,7 +136,7 @@ func Build(in Input) Graph {
 }
 
 func (g *builder) addCard(c Card) {
-	n := &Node{Key: c.Key, Kind: c.Kind, Title: c.Title, Endpoint: c.Kind != KindTodo, CWD: c.CWD, TaskID: c.TaskID, Description: c.Description, SessionID: c.SessionID,
+	n := &Node{Key: c.Key, Kind: c.Kind, Title: c.Title, Summary: c.Summary, Endpoint: c.Kind != KindTodo, CWD: c.CWD, TaskID: c.TaskID, Description: c.Description, SessionID: c.SessionID,
 		Session: c.Session, SessionName: g.in.PeerNames[c.SessionID], Live: c.Live, Memos: []MemoRef{}}
 	n.State = nodeState(c.Status, c.Live, c.Activity)
 	if n.State == StateLimit {

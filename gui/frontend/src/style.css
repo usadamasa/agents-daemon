@@ -78,7 +78,15 @@ select { font: inherit; color: inherit; }
 .dot.limit { background: var(--purple); }
 .dot.err { background: var(--red); }
 
-.graph { flex: 1 1 0; min-height: 160px; position: relative; overflow: auto; }
+/* 依存図と右の列を横に並べる段。列は拡大縮小の外で、依存図とは別にスクロールする */
+.stage { flex: 1 1 0; min-height: 160px; display: flex; }
+.graph { flex: 1 1 0; min-width: 0; position: relative; overflow: auto; }
+.column {
+  flex: 0 0 auto; width: 272px; box-sizing: border-box; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 10px; padding: 16px;
+  border-left: 1px solid var(--line); background: var(--panel-soft);
+}
+.column .node { position: relative; flex: 0 0 auto; }
 .graph .canvas { position: relative; transform-origin: 0 0; }
 /* 拡大縮小した canvas を包む枠。transform はレイアウトの大きさを変えないので、拡大率を掛けた大きさを枠に持たせて
    スクロールの範囲を図に合わせる (WKWebView では CSS の zoom が文字の大きさに効かなかった) */

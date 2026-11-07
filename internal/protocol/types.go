@@ -340,6 +340,8 @@ type DepsGraph struct {
 	Rows []GraphRow `json:"rows"`
 	// 完了したノードも含めて組んだレーンの行。
 	RowsWithCompleted []GraphRow `json:"rows_with_completed"`
+	// 依存の無いノードを依存図の右の列に並べる順 (全ノードの key)。手当てが要るもの、作業中、返事待ち、未着手、終了、完了の段で、同じ段は最後に動いた時刻の新しい順。
+	ColumnOrder []string `json:"column_order"`
 }
 
 // GraphNode は依存の DAG のノード 1 つ (タスク 1 つ、タスクの無いセッション、端点の参照だけの置き場)。

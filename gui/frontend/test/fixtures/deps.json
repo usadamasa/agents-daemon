@@ -1,0 +1,142 @@
+{
+  "daemon_running": true,
+  "updated_at": "2026-11-07T02:59:00Z",
+  "stale_memo_days": 14,
+  "repos": [
+    {
+      "repo": "/repo/agents-daemon",
+      "title": "agents-daemon",
+      "sessions": [
+        { "session_id": "sid-alpha", "session": "alpha", "subject": "API を実装する", "live": true },
+        { "session_id": "sid-beta", "session": "beta", "subject": "画面を描く", "live": true }
+      ],
+      "memos": [
+        {
+          "id": "memo-1",
+          "kind": "aside",
+          "origin": "placed",
+          "title": "ついでに見つけた空の配列の扱い",
+          "detail": "deps の repos が空のときに一覧の見出しが 0 件と出ない",
+          "default_taken": "やらない",
+          "files": ["gui/frontend/src/app.js"],
+          "sources": [
+            { "session_id": "sid-alpha", "task_ref": "task:alpha/2", "session": "alpha", "live": true, "at": "2026-11-07T01:30:00Z" }
+          ]
+        },
+        {
+          "id": "memo-2",
+          "kind": "scope",
+          "origin": "placed",
+          "title": "ラベルの文言も揃えるか",
+          "default_taken": "やらない",
+          "sources": [
+            { "session_id": "sid-beta", "task_ref": "task:beta/1", "session": "beta", "live": true, "at": "2026-11-07T02:10:00Z" }
+          ]
+        }
+      ]
+    },
+    {
+      "repo": "/repo/other",
+      "title": "other",
+      "sessions": [
+        { "session_id": "sid-delta", "session": "delta", "subject": "issue を読んでいる", "live": true }
+      ],
+      "memos": []
+    }
+  ],
+  "recent_repos": [
+    { "repo": "/repo/agents-daemon", "title": "agents-daemon", "last_seen": "2026-11-07T02:58:00Z" },
+    { "repo": "/repo/other", "title": "other", "last_seen": "2026-11-07T02:40:00Z" }
+  ],
+  "graph": {
+    "nodes": [
+      {
+        "key": "task:alpha/1", "kind": "task", "state": "completed", "title": "スキーマを決める",
+        "endpoint": true, "cwd": "/repo/agents-daemon", "task_id": "1", "description": "deps の JSON の形を決める",
+        "session_id": "sid-alpha", "session": "alpha", "session_name": "alpha", "live": true,
+        "depth": 0, "downstream": 6, "parked": 0, "memos": [], "blocked_by": [], "deadlock": false, "halted": false, "stuck": false
+      },
+      {
+        "key": "task:alpha/2", "kind": "task", "state": "working", "title": "API を実装する",
+        "endpoint": true, "cwd": "/repo/agents-daemon", "task_id": "2", "description": "deps のサブコマンドを足す",
+        "session_id": "sid-alpha", "session": "alpha", "session_name": "alpha", "live": true,
+        "depth": 1, "downstream": 5, "parked": 1, "memos": [], "blocked_by": [], "deadlock": false, "halted": false, "stuck": false
+      },
+      {
+        "key": "task:beta/1", "kind": "task", "state": "question", "title": "画面を描く",
+        "endpoint": true, "cwd": "/repo/agents-daemon", "task_id": "1", "description": "依存図の箱と線を描く",
+        "session_id": "sid-beta", "session": "beta", "session_name": "beta", "live": true,
+        "depth": 2, "downstream": 2, "parked": 1,
+        "memos": [{ "id": "memo-0", "title": "色の決め方", "status": "handed" }],
+        "blocked_by": [], "deadlock": false, "halted": true, "stuck": true
+      },
+      {
+        "key": "task:alpha/3", "kind": "task", "state": "completed", "title": "テストを直す",
+        "endpoint": true, "cwd": "/repo/agents-daemon", "task_id": "3",
+        "session_id": "sid-alpha", "session": "alpha", "session_name": "alpha", "live": true,
+        "depth": 2, "downstream": 1, "parked": 0, "memos": [], "blocked_by": [], "deadlock": false, "halted": false, "stuck": false
+      },
+      {
+        "key": "task:beta/2", "kind": "task", "state": "pending", "title": "スクリーンショットを撮る",
+        "endpoint": true, "cwd": "/repo/agents-daemon", "task_id": "2",
+        "session_id": "sid-beta", "session": "beta", "session_name": "beta", "live": true,
+        "depth": 3, "downstream": 1, "parked": 0, "memos": [], "blocked_by": ["task:beta/1"], "deadlock": false, "halted": false, "stuck": false
+      },
+      {
+        "key": "sid:delta", "kind": "session", "state": "working", "title": "delta", "summary": "issue を読んでいる",
+        "endpoint": true, "cwd": "/repo/other", "session_id": "sid-delta", "session": "delta", "session_name": "delta", "live": true,
+        "depth": 0, "downstream": 0, "parked": 0, "memos": [], "blocked_by": [], "deadlock": false, "halted": false, "stuck": false
+      },
+      {
+        "key": "sid:gamma", "kind": "session", "state": "exited", "title": "gamma",
+        "endpoint": true, "cwd": "/repo/agents-daemon", "session_id": "sid-gamma", "session": "gamma", "live": false,
+        "depth": 0, "downstream": 0, "parked": 0, "memos": [], "blocked_by": [], "deadlock": false, "halted": false, "stuck": false
+      },
+      {
+        "key": "task:alpha/4", "kind": "task", "state": "pending", "title": "docs を書く",
+        "endpoint": true, "cwd": "/repo/agents-daemon", "task_id": "4",
+        "session_id": "sid-alpha", "session": "alpha", "session_name": "alpha", "live": true,
+        "depth": 3, "downstream": 0, "parked": 0, "memos": [], "blocked_by": [], "deadlock": false, "halted": false, "stuck": false
+      },
+      {
+        "key": "task:beta/3", "kind": "task", "state": "pending", "title": "PR を作る",
+        "endpoint": true, "cwd": "/repo/agents-daemon", "task_id": "3",
+        "session_id": "sid-beta", "session": "beta", "session_name": "beta", "live": true,
+        "depth": 4, "downstream": 0, "parked": 0, "memos": [], "blocked_by": ["task:beta/2", "task:beta/1"], "deadlock": false, "halted": false, "stuck": false
+      }
+    ],
+    "links": [
+      { "before": "task:alpha/1", "after": "task:alpha/2", "kind": "task" },
+      { "before": "task:alpha/2", "after": "task:alpha/3", "kind": "task" },
+      { "before": "task:alpha/3", "after": "task:alpha/4", "kind": "task" },
+      {
+        "before": "task:alpha/2", "after": "task:beta/1", "kind": "edge",
+        "edge": {
+          "id": "edge-1",
+          "before": { "ref": "task:alpha/2", "cwd": "/repo/agents-daemon", "repo": "/repo/agents-daemon" },
+          "after": { "ref": "task:beta/1", "cwd": "/repo/agents-daemon", "repo": "/repo/agents-daemon" },
+          "note": "API の形が決まるのを待つ"
+        }
+      },
+      { "before": "task:beta/1", "after": "task:beta/2", "kind": "task" },
+      { "before": "task:beta/2", "after": "task:beta/3", "kind": "task" }
+    ],
+    "longest_chain": ["task:beta/1", "task:beta/2", "task:beta/3"],
+    "folded": {
+      "nodes": [
+        { "key": "task:alpha/2", "depth": 0 },
+        { "key": "task:beta/1", "depth": 1 },
+        { "key": "task:beta/2", "depth": 2 },
+        { "key": "sid:delta", "depth": 0 },
+        { "key": "sid:gamma", "depth": 0 },
+        { "key": "task:alpha/4", "depth": 1 },
+        { "key": "task:beta/3", "depth": 3 }
+      ],
+      "links": [
+        { "before": "task:alpha/2", "after": "task:alpha/4", "via": ["task:alpha/3"] }
+      ]
+    },
+    "rows": [],
+    "rows_with_completed": []
+  }
+}

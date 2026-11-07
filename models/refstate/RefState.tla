@@ -137,6 +137,7 @@ Prune ==
 \* 依存図がノードに付ける状態。
 Shown == CASE cache \in Done -> "completed"
            [] cache = Dropped -> "dropped"
+           [] cache = "open" -> "waiting"
            [] OTHER -> "external"
 
 Next ==

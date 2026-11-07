@@ -42,10 +42,13 @@ const (
 	StatePending    = "pending"
 	StateCompleted  = "completed"
 	StateExited     = "exited" // セッションが終了していて、未完了のまま残った
-	// StateExternal は済んだと分かっていない外部の参照 (issue / PR)。daemon が引いて open だったか、まだ引けて
-	// いない。済んだかどうか分からないので、原因の鎖に選ばず、末端の完了ノードを残す上流にも数えない。
+	// StateExternal は daemon がまだ状態を引けていない外部の参照 (issue / PR)。済んだかどうか分からないので、
+	// 原因の鎖に選ばず、末端の完了ノードを残す上流にも数えない。
 	// merged / closed (completed で閉じた issue) と引けた参照は StateCompleted にする (#416)。
 	StateExternal = "external"
+	// StateWaiting は daemon が引いて open だった外部の参照。済んでいないと分かっているので、原因の鎖に選び、
+	// 末端の完了ノードを残す上流にも数える (#471)。止まってはいない (マージを待っているだけ)。
+	StateWaiting = "waiting"
 	// StateDropped は待っていたものが届かずに閉じた外部の参照 (マージせずに閉じた PR、not planned / duplicate で
 	// 閉じた issue)。完了にせず、下流を止めている人の手当ての要るノードにする (付け替えるか `edge rm` する)。
 	StateDropped = "dropped"
@@ -240,6 +243,8 @@ func (g *builder) resolve(ep edge.Endpoint, pick func(sessionID string) []string
 			n.State = StateCompleted
 		case s == refstate.StateDropped:
 			n.State = StateDropped
+		case s == refstate.StateOpen:
+			n.State = StateWaiting
 		}
 	}
 	return []string{key}
@@ -343,7 +348,7 @@ func (g *builder) finish() Graph {
 		pairs = append(pairs, [2]string{l.Before, l.After})
 	}
 	a := dag.New(pairs, KeyLess)
-	// 原因の鎖に選ぶ上流。外部の参照は済んだか分からないので選ばない。
+	// 原因の鎖に選ぶ上流。まだ引いていない外部の参照は済んだか分からないので選ばない。
 	open := func(key string) bool { s := g.nodes[key].State; return s != StateCompleted && s != StateExternal }
 	rankOf := func(key string) int { return rank(g.nodes[key].State) }
 	out := Graph{Nodes: make([]Node, 0, len(g.nodes)), Links: g.links, LongestChain: []string{}}

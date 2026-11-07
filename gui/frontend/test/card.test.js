@@ -21,8 +21,13 @@ test("取りやめの参照 (マージせずに閉じた PR、not planned の is
   assert.ok(Object.entries(STATE_TONE).every(([s, tone]) => s === "dropped" || tone !== "drop"));
 });
 
+test("open と引けた参照は、まだ引いていない参照と別の語で出す", () => {
+  assert.equal(STATE_LABEL.waiting, "open (待ち)");
+  assert.notEqual(STATE_LABEL.waiting, STATE_LABEL.external);
+});
+
 test("ほかの状態はカードを強調しない", () => {
-  for (const state of ["done", "unknown", "pending", "completed", "exited", "external"]) {
+  for (const state of ["done", "unknown", "pending", "completed", "exited", "external", "waiting"]) {
     assert.deepEqual(emphasis({ state }), [], state);
   }
 });

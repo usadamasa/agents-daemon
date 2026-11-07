@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/protocol"
 	"github.com/usadamasa/agents-daemon/internal/worklog"
@@ -76,15 +75,16 @@ func TestWorkCmd(t *testing.T) {
 	if _, err := runWork(t, "get", `{"session_id": "s1"}`); err == nil || !strings.Contains(err.Error(), "記録が無い") {
 		t.Errorf("get (無い) = %v", err)
 	}
-	for stdin, want := range map[string]string{
-		`{"session_id": "s1"}`:                         "anyOf",
-		`{"session_id": "s1", "subject": ""}`:          "minLength",
-		`{"session_id": "s1", "subject": "x"}`:         "記録が無い",
-		`{"session_id": "s1", "inferred": "x"}`:        "記録が無い",
-		`{"session_id": "s1", "subject": "x", "y": 1}`: "y",
+	// 出来事のログの並びを確かめるので、順序のある slice で回す。
+	for _, c := range []struct{ stdin, want string }{
+		{`{"session_id": "s1"}`, "anyOf"},
+		{`{"session_id": "s1", "subject": ""}`, "minLength"},
+		{`{"session_id": "s1", "subject": "x"}`, "記録が無い"},
+		{`{"session_id": "s1", "inferred": "x"}`, "記録が無い"},
+		{`{"session_id": "s1", "subject": "x", "y": 1}`, "y"},
 	} {
-		if _, err := runWork(t, "set", stdin); err == nil || !strings.Contains(err.Error(), want) {
-			t.Errorf("set %s: error = %v, want %q を含む", stdin, err, want)
+		if _, err := runWork(t, "set", c.stdin); err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("set %s: error = %v, want %q を含む", c.stdin, err, c.want)
 		}
 	}
 	runIngestWork(t, `{"session_id": "s1", "cwd": "/w", "hook_event_name": "UserPromptSubmit", "prompt": "最初の prompt"}`)
@@ -125,5 +125,4 @@ func TestWorkCmd(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(state, "work", "s1.json")); err != nil {
 		t.Error(err)
 	}
-	_ = time.Now
 }

@@ -27,17 +27,20 @@ test("reach と upstream は自分を含めずに輪を止める", () => {
   assert.deepEqual([...g.upstream("C")].sort(), ["A", "B", "D"]);
 });
 
-test("view は完了を隠すとき folded の keys と、両端が見える辺と畳んだ辺を返す", () => {
+test("view は完了を隠すとき folded のノードと段、両端が見える辺と畳んだ辺を返す", () => {
   // A→B(完了)→C と D→C、E(完了) は D の末端として残る。
   const g = new Graph({
-    nodes: [node("A"), node("B", { state: "completed" }), node("C"), node("D"), node("E", { state: "completed" })],
+    nodes: [node("A"), node("B", { state: "completed", depth: 1 }), node("C", { depth: 2 }), node("D"), node("E", { state: "completed", depth: 1 })],
     links: [
       { before: "A", after: "B", kind: "task" },
       { before: "B", after: "C", kind: "task" },
       { before: "D", after: "C", kind: "edge" },
       { before: "D", after: "E", kind: "edge" },
     ],
-    folded: { keys: ["A", "C", "D", "E"], links: [{ before: "A", after: "C", via: ["B"] }] },
+    folded: {
+      nodes: [{ key: "A", depth: 0 }, { key: "C", depth: 1 }, { key: "D", depth: 0 }, { key: "E", depth: 1 }],
+      links: [{ before: "A", after: "C", via: ["B"] }],
+    },
   });
   const hidden = g.view(false);
   assert.deepEqual(hidden.nodes.map((n) => n.key), ["A", "C", "D", "E"]);
@@ -45,9 +48,12 @@ test("view は完了を隠すとき folded の keys と、両端が見える辺�
     hidden.links.map((l) => `${l.before}>${l.after}:${l.kind}:${(l.via ?? []).join(",")}`),
     ["D>C:edge:", "D>E:edge:", "A>C:folded:B"],
   );
+  // 段は畳んだ図で数え直したもの (C は全部の図では 2 段目)。
+  assert.deepEqual([...hidden.depth], [["A", 0], ["C", 1], ["D", 0], ["E", 1]]);
   const all = g.view(true);
   assert.equal(all.nodes.length, 5);
   assert.equal(all.links.length, 4);
+  assert.equal(all.depth.get("C"), 2);
 });
 
 test("node は key で引き、無ければ undefined", () => {

@@ -982,7 +982,7 @@ export const definitions = {
         "items": {
           "$ref": "#/$defs/GraphRow"
         },
-        "description": "folded の keys と、links のうち両端が keys にあるものと folded の links で組んだレーンの行"
+        "description": "folded の nodes と、links のうち両端が folded の nodes にあるものと folded の links で組んだレーンの行"
       },
       "rows_with_completed": {
         "type": "array",
@@ -1177,23 +1177,41 @@ export const definitions = {
     "type": "object",
     "additionalProperties": false,
     "required": [
-      "keys",
+      "nodes",
       "links"
     ],
     "properties": {
-      "keys": {
+      "nodes": {
         "type": "array",
         "items": {
-          "type": "string"
+          "$ref": "#/$defs/FoldedNode"
         },
-        "description": "見せるノードの key (nodes の順)。完了していないものと、完了していても下流に完了していないノードが無く、完了も終了もしていない上流を直接持つもの"
+        "description": "見せるノード (DepsGraph.nodes の順)。完了していないものと、完了していても下流に完了していないノードが無く、完了も終了もしていない上流を直接持つもの"
       },
       "links": {
         "type": "array",
         "items": {
           "$ref": "#/$defs/FoldedLink"
         },
-        "description": "隠したノードを通り抜けた辺。両端が keys にあり、同じ組の辺が links に無いもの"
+        "description": "隠したノードを通り抜けた辺。両端が nodes にあり、同じ組の辺が DepsGraph.links に無いもの"
+      }
+    }
+  },
+  "FoldedNode": {
+    "description": "完了したノードを隠した図に見せるノード 1 つ",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "key",
+      "depth"
+    ],
+    "properties": {
+      "key": {
+        "type": "string"
+      },
+      "depth": {
+        "type": "integer",
+        "description": "この図の辺 (両端が見える辺と畳んだ辺) で数え直した段。数え方は GraphNode.depth と同じ"
       }
     }
   },

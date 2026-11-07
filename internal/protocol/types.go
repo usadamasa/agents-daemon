@@ -336,7 +336,7 @@ type DepsGraph struct {
 	// 下流の最も多い止まっているノードから、下流をたどった最長の鎖の key。
 	LongestChain []string    `json:"longest_chain"`
 	Folded       FoldedGraph `json:"folded"`
-	// folded の keys と、links のうち両端が keys にあるものと folded の links で組んだレーンの行。
+	// folded の nodes と、links のうち両端が folded の nodes にあるものと folded の links で組んだレーンの行。
 	Rows []GraphRow `json:"rows"`
 	// 完了したノードも含めて組んだレーンの行。
 	RowsWithCompleted []GraphRow `json:"rows_with_completed"`
@@ -399,10 +399,17 @@ type GraphLink struct {
 
 // FoldedGraph は完了したノードを隠したときの図。隠したノードを通り抜けていた辺は畳んで残す。
 type FoldedGraph struct {
-	// 見せるノードの key (nodes の順)。完了していないものと、完了していても下流に完了していないノードが無く、完了も終了もしていない上流を直接持つもの。
-	Keys []string `json:"keys"`
-	// 隠したノードを通り抜けた辺。両端が keys にあり、同じ組の辺が links に無いもの。
+	// 見せるノード (DepsGraph.nodes の順)。完了していないものと、完了していても下流に完了していないノードが無く、完了も終了もしていない上流を直接持つもの。
+	Nodes []FoldedNode `json:"nodes"`
+	// 隠したノードを通り抜けた辺。両端が nodes にあり、同じ組の辺が DepsGraph.links に無いもの。
 	Links []FoldedLink `json:"links"`
+}
+
+// FoldedNode は完了したノードを隠した図に見せるノード 1 つ。
+type FoldedNode struct {
+	Key string `json:"key"`
+	// この図の辺 (両端が見える辺と畳んだ辺) で数え直した段。数え方は GraphNode.depth と同じ。
+	Depth int `json:"depth"`
 }
 
 // FoldedLink は隠したノードを通り抜けた経路を畳んだ辺 1 本。

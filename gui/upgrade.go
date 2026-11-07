@@ -175,9 +175,13 @@ func newUpgrader() *upgrader {
 	}
 }
 
-// ready は新しいバージョンの .app が揃っているか。
-func (u *upgrader) ready() bool {
-	return newer(u.version, readStamp(u.stamp))
+// available は新しいバージョンの .app が揃っていれば、そのバージョンと true を返す。
+func (u *upgrader) available() (string, bool) {
+	target := readStamp(u.stamp)
+	if !newer(u.version, target) {
+		return "", false
+	}
+	return target, true
 }
 
 // switchTo は bounds と view (restore.js が詰めた JSON の object) を新しいバージョン宛てに書き、新しい .app を前面を
@@ -205,14 +209,14 @@ func (u *upgrader) switchTo(bounds application.Rect, view string) error {
 	return nil
 }
 
-// watch は stamp を読み直し、新しいバージョンが揃っている間は毎回 frontend へ知らせる。frontend は切り替えのボタンを
-// 出し、押されたら Upgrade を呼ぶ (窓を勝手に入れ替えない)。
+// watch は stamp を読み直し、新しいバージョンが揃っている間は毎回そのバージョンを frontend へ知らせる。frontend は
+// 切り替えのボタンを出し、押されたら Upgrade を呼ぶ (窓を勝手に入れ替えない)。
 func (u *upgrader) watch(app *application.App) {
 	t := time.NewTicker(upgradePoll)
 	defer t.Stop()
 	for range t.C {
-		if u.ready() {
-			app.Event.Emit(upgradeEvent)
+		if target, ok := u.available(); ok {
+			app.Event.Emit(upgradeEvent, target)
 		}
 	}
 }

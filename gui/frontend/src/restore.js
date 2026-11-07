@@ -44,8 +44,14 @@ export async function restore(views) {
 // watchUpgrade は新しいバージョンの知らせで button を出し、押されたら今の画面の状態を渡して切り替える。窓が勝手に
 // 入れ替わらないよう、押すまでは切り替えない。失敗したら button を押せる状態に戻し、理由を title に出す。
 export function watchUpgrade(views, button) {
-  window.wails.Events.On(UPGRADE_EVENT, () => {
+  window.wails.Events.On(UPGRADE_EVENT, (ev) => {
+    const data = Array.isArray(ev?.data) ? ev.data[0] : ev?.data;
+    button.textContent = data ? `↻ ${data} に切り替える` : "↻ 新しいバージョンに切り替える";
+    if (!button.hidden) return;
+    // 出た直後に一度だけ目を引く (style.css の .pulse。prefers-reduced-motion では動かさない)。
     button.hidden = false;
+    button.classList.add("pulse");
+    button.onanimationend = () => button.classList.remove("pulse");
   });
   button.onclick = async () => {
     button.disabled = true;

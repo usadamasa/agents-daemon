@@ -84,6 +84,9 @@ select { font: inherit; color: inherit; }
 .graph svg.edges path { fill: none; stroke: var(--line-strong); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .graph svg.edges path.edge { stroke-dasharray: 6 6; }
 .graph svg.edges path.chain { stroke: var(--green); }
+/* 完了したノードを隠して畳んだ辺。薄い点線にし、ホバーで経由したタスクの題を出す */
+.graph svg.edges path.folded { stroke-dasharray: 2 5; opacity: 0.55; }
+.graph svg.edges g.hint path.hit { stroke: transparent; stroke-width: 12; pointer-events: stroke; }
 .graph svg.edges marker path { fill: var(--line-strong); stroke: none; }
 .graph svg.edges marker.chain path { fill: var(--green); }
 .empty { position: absolute; left: 24px; top: 24px; color: var(--muted); }

@@ -12,6 +12,7 @@ export class Graph {
   constructor(data) {
     this.nodes = data.nodes;
     this.links = data.links;
+    this.folded = data.folded;
     for (const n of data.nodes) this.#byKey.set(n.key, n);
     for (const l of data.links) {
       this.#succs.set(l.before, [...(this.#succs.get(l.before) ?? []), l]);
@@ -21,6 +22,20 @@ export class Graph {
 
   node(key) {
     return this.#byKey.get(key);
+  }
+
+  // view は図に描くノードと辺。完了を隠すときはバイナリが組んだ folded を使い、隠したノードを通り抜けた辺を
+  // kind "folded" (via に通り抜けたノードの key) として足す。
+  view(showCompleted) {
+    if (showCompleted) return { nodes: this.nodes, links: this.links };
+    const shown = new Set(this.folded.keys);
+    return {
+      nodes: this.nodes.filter((n) => shown.has(n.key)),
+      links: [
+        ...this.links.filter((l) => shown.has(l.before) && shown.has(l.after)),
+        ...this.folded.links.map((l) => ({ ...l, kind: "folded" })),
+      ],
+    };
   }
 
   // after は key の下流の直近 (key が済まないと始められないノード)。

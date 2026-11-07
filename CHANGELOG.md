@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026.1107.6](https://github.com/usadamasa/agents-daemon/compare/2026.1107.5...2026.1107.6) - 2026-11-07
+
+### Features
+- 依存図アプリ: 単体ビューの見出しと関係の行、右の列の高さを直す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/485
+
 ## [2026.1107.5](https://github.com/usadamasa/agents-daemon/compare/2026.1107.4...2026.1107.5) - 2026-11-07
 
 ### Features

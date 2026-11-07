@@ -18,7 +18,7 @@
 | | `EdgeRemoved` (liveness): 済んだ参照を before に持つ辺はいずれ消える | 引き直しのたびに、写しが merged / closed の参照の辺を掃く。済んだ後に書いた辺も次の引き直しで消える |
 | `RefStateFailAsClosed.cfg` | `NoFalseComplete` が破れる (`violated` を期待) | gh の失敗を closed と書くと、open の参照を完了と見せる。失敗では写しを書かない根拠 |
 | `RefStateDroppedAsDone.cfg` | `NoFalseComplete` が破れる (`violated` を期待) | gh の state (CLOSED) だけを見ると、マージせずに閉じた PR を完了と見せる。マージしたか・閉じた理由で分ける根拠 |
-| `RefStateNoRefetch.cfg` | `EventuallyCompleted` が破れる (`violated` を期待) | 写しが open の参照を引き直さないと、マージされた PR がいつまでも外部のまま。open を間引いて引き直す根拠 |
+| `RefStateNoRefetch.cfg` | `EventuallyCompleted` が破れる (`violated` を期待) | 写しが open の参照を引き直さないと、マージされた PR がいつまでも待ち (`waiting`) のまま。open を間引いて引き直す根拠 |
 | `RefStateSweepOnTransition.cfg` | `EdgeRemoved` が破れる (`violated` を期待) | 写しが済んだ状態に変わった引き直しのときだけ消すと、済んだ PR へ後から書いた辺が残り続ける (merged は引き直さない)。毎回掃く根拠 |
 
 同じ性質を実装に対してテストが持つ。

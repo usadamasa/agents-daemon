@@ -307,7 +307,7 @@ func TestGraph_refEndpoints(t *testing.T) {
 }
 
 // daemon が引いた外部の参照の状態 (refstate) が merged / closed なら、issue / PR の置き場は完了 (completed) になり、
-// 完了を隠した図では畳まれる (#416)。open と、まだ引いていない参照は外部 (external) のまま。取りやめ (dropped) は
+// 完了を隠した図では畳まれる (#416)。open は待ち (waiting、#471)、まだ引いていない参照は外部 (external)。取りやめ (dropped) は
 // 完了にせず、待っている下流を止めている人の手当ての要るノード (halted、stuck) にし、原因の鎖に選ぶ。
 func TestGraph_refStates(t *testing.T) {
 	const cwd = "/w/a"
@@ -329,7 +329,7 @@ func TestGraph_refStates(t *testing.T) {
 	want := map[string]string{
 		"pr:o/r#1":    graph.StateCompleted,
 		"issue:o/r#2": graph.StateCompleted,
-		"pr:o/r#3":    graph.StateExternal,
+		"pr:o/r#3":    graph.StateWaiting,
 		"issue:o/r#4": graph.StateExternal,
 		"pr:o/r#5":    graph.StateDropped,
 	}
@@ -618,7 +618,7 @@ func TestGraph_folded(t *testing.T) {
 	}
 }
 
-// 外部の参照 (issue / PR) は daemon が状態を知らないので、原因の鎖 (blocked_by) に選ばず、完了したタスクを
+// まだ引いていない外部の参照 (issue / PR) は daemon が状態を知らないので、原因の鎖 (blocked_by) に選ばず、完了したタスクを
 // 隠す図で末端の完了ノードを残す上流にも数えない (#393)。
 func TestGraph_externalRef(t *testing.T) {
 	const cwd = "/w/a"
@@ -642,6 +642,55 @@ func TestGraph_externalRef(t *testing.T) {
 		if n.Key == "task:A/2" {
 			t.Errorf("folded nodes = %v, task:A/2 は外部の参照だけを上流に持つので隠す", b.Graph.Folded.Nodes)
 		}
+	}
+}
+
+// daemon が引いて open だった参照は済んでいないと分かっているので、待ち (waiting) にして原因の鎖に選び、末端の
+// 完了ノードを残す上流にも数える (#471)。まだ引いていない参照は外部 (external) のまま鎖から外す。
+func TestGraph_waitingRef(t *testing.T) {
+	const cwd = "/w/a"
+	b := build(input{
+		PID: 42,
+		Snapshot: snapshot(
+			daemonstate.PaneStatus{PaneID: "p1", SessionID: "A", CWD: cwd, AgentStatus: "working"},
+			daemonstate.PaneStatus{PaneID: "p2", SessionID: "P", CWD: cwd, AgentStatus: "working"},
+		),
+		Tasks: []record.Task{
+			task("A", "2", "リリース", "pending", cwd, "3"),
+			task("A", "3", "マージを待つ", "pending", cwd),
+			task("A", "4", "報告を受けて済んだ", "completed", cwd),
+			task("A", "5", "まだ引いていない PR を待つ", "pending", cwd),
+		},
+		Edges: []edge.Edge{
+			{ID: "e1", Before: edge.Endpoint{Ref: "sid:P", CWD: cwd}, After: edge.Endpoint{Ref: "pr:o/r#470", CWD: cwd}},
+			{ID: "e2", Before: edge.Endpoint{Ref: "pr:o/r#470", CWD: cwd}, After: edge.Endpoint{Ref: "task:A/3", CWD: cwd}},
+			{ID: "e3", Before: edge.Endpoint{Ref: "pr:o/r#471", CWD: cwd}, After: edge.Endpoint{Ref: "task:A/4", CWD: cwd}},
+			{ID: "e4", Before: edge.Endpoint{Ref: "pr:o/r#472", CWD: cwd}, After: edge.Endpoint{Ref: "task:A/5", CWD: cwd}},
+		},
+		RefStates: map[string]string{"pr:o/r#470": "open", "pr:o/r#471": "open"},
+	})
+	got := nodes(b.Graph)
+	if n := got["pr:o/r#470"]; n.State != graph.StateWaiting || n.Halted || n.Stuck {
+		t.Errorf("pr:o/r#470 = %+v, want waiting (止まってはいない)", n)
+	}
+	if n := got["pr:o/r#472"]; n.State != graph.StateExternal {
+		t.Errorf("pr:o/r#472 state = %q, want external (まだ引いていない)", n.State)
+	}
+	if n := got["task:A/3"]; !reflect.DeepEqual(n.BlockedBy, []string{"pr:o/r#470", "sid:P"}) {
+		t.Errorf("task:A/3 blocked_by = %v, want PR から peer へ", n.BlockedBy)
+	}
+	if n := got["task:A/2"]; !reflect.DeepEqual(n.BlockedBy, []string{"task:A/3", "pr:o/r#470", "sid:P"}) {
+		t.Errorf("task:A/2 blocked_by = %v, want PR を通って peer まで", n.BlockedBy)
+	}
+	if n := got["task:A/5"]; len(n.BlockedBy) != 0 {
+		t.Errorf("task:A/5 blocked_by = %v, want 空 (まだ引いていない参照は選ばない)", n.BlockedBy)
+	}
+	shown := map[string]bool{}
+	for _, n := range b.Graph.Folded.Nodes {
+		shown[n.Key] = true
+	}
+	if !shown["task:A/4"] {
+		t.Errorf("folded nodes = %v, task:A/4 は open の PR を上流に持つので残す", b.Graph.Folded.Nodes)
 	}
 }
 

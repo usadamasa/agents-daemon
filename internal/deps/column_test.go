@@ -21,6 +21,7 @@ func TestColumnOrder(t *testing.T) {
 	nodes := []protocol.GraphNode{
 		node("done", "completed", "/a", "s"),
 		node("ext", "external", "", ""),
+		node("wait", "waiting", "", ""),
 		node("gone", "exited", "/a", "s"),
 		node("todo-old", "pending", "/a", "s"),
 		node("todo-new", "pending", "/a", "s"),
@@ -49,7 +50,7 @@ func TestColumnOrder(t *testing.T) {
 		"work-timed", "work-a-x", "work-a-y", "work-b",
 		"unknown", "idle",
 		"todo-new", "todo-old",
-		"ext", "gone",
+		"ext", "wait", "gone",
 		"done",
 	}
 	if !reflect.DeepEqual(got, want) {

@@ -1,6 +1,6 @@
 // 依存図のノードのカードの見た目の鍵。DOM に触れず、app.js の nodeCard が class として当てる。
 
-// 状態の語は OSC 7501 の state と Task 系ツールの status。external と dropped は issue / PR の参照のノードだけが持つ。
+// 状態の語は OSC 7501 の state と Task 系ツールの status。external、waiting、dropped は issue / PR の参照のノードだけが持つ。
 export const STATE_LABEL = {
   working: "作業中",
   done: "返事待ち (idle)",
@@ -12,7 +12,8 @@ export const STATE_LABEL = {
   pending: "未着手",
   completed: "完了",
   exited: "セッション終了",
-  external: "外部",
+  external: "外部 (未取得)",
+  waiting: "open (待ち)",
   dropped: "取りやめ",
 };
 

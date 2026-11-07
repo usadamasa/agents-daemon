@@ -12,7 +12,8 @@ import (
 )
 
 // columnTier は依存図の右の列 (依存の無いノード) の段。小さいほど上に出す (#420)。
-// 不明は手当てを要すると決められないので返事待ちに、外部の参照は終了と同じく動かないものとして並べる。
+// 不明は手当てを要すると決められないので返事待ちに、外部の参照 (open と引けたものを含む) は終了と同じく
+// 手元では動かないものとして並べる。
 var columnTier = map[string]int{
 	graph.StatePermission: 0,
 	graph.StateQuestion:   0,
@@ -24,6 +25,7 @@ var columnTier = map[string]int{
 	graph.StatePending:    3,
 	graph.StateExited:     4,
 	graph.StateExternal:   4,
+	graph.StateWaiting:    4,
 	graph.StateCompleted:  5,
 }
 

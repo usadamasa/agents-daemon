@@ -26,15 +26,19 @@ export class Graph {
 
   // view は図に描くノードと辺と段 (key → depth)。完了を隠すときはバイナリが組んだ folded を使い、隠したノードを
   // 通り抜けた辺を kind "folded" (via に通り抜けたノードの key) として足す。段も folded で数え直したものを使う。
+  // folded.nodes の無い JSON は、plugin の更新直後にアプリだけが新しく、cache の daemon のバイナリが古い間に届く。
+  // そのときは完了を落とし、両端が見える辺だけを描く。
   view(showCompleted) {
-    if (showCompleted) return { nodes: this.nodes, links: this.links, depth: new Map(this.nodes.map((n) => [n.key, n.depth])) };
-    const depth = new Map(this.folded.nodes.map((n) => [n.key, n.depth]));
+    const nodeDepth = (nodes) => new Map(nodes.map((n) => [n.key, n.depth]));
+    if (showCompleted) return { nodes: this.nodes, links: this.links, depth: nodeDepth(this.nodes) };
+    const folded = this.folded?.nodes === undefined ? null : this.folded;
+    const depth = folded === null ? nodeDepth(this.nodes.filter((n) => n.state !== "completed")) : nodeDepth(folded.nodes);
     return {
       depth,
       nodes: this.nodes.filter((n) => depth.has(n.key)),
       links: [
         ...this.links.filter((l) => depth.has(l.before) && depth.has(l.after)),
-        ...this.folded.links.map((l) => ({ ...l, kind: "folded" })),
+        ...(folded?.links ?? []).map((l) => ({ ...l, kind: "folded" })),
       ],
     };
   }

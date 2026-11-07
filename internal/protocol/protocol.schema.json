@@ -419,8 +419,9 @@
       "properties": {
         "key": { "type": "string", "description": "Ref (task:、todo:、sid:、session:、issue:、pr:)。mod は切り出さずに不透明な文字列として扱う" },
         "kind": { "type": "string", "enum": ["task", "todo", "session", "ref"] },
-        "state": { "type": "string", "enum": ["working", "done", "unknown", "question", "permission", "error", "limit", "pending", "completed", "exited"] },
+        "state": { "type": "string", "enum": ["working", "done", "unknown", "question", "permission", "error", "limit", "pending", "completed", "exited", "external"], "description": "external は daemon が状態を知らない外部の参照 (issue / PR)" },
         "title": { "type": "string" },
+        "ref_kind": { "type": "string", "enum": ["issue", "pr"], "description": "issue: / pr: の置き場のノードの参照の種類" },
         "detail": { "type": "string", "description": "状態の補足 (上限の解除時刻)" },
         "endpoint": { "type": "boolean", "description": "key をそのまま edge add の端点に書けるか (TodoWrite の項目は書けない)" },
         "cwd": { "type": "string" },

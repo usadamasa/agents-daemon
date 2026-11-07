@@ -347,8 +347,11 @@ export type GraphNode = {
   // Ref (task:、todo:、sid:、session:、issue:、pr:)。mod は切り出さずに不透明な文字列として扱う
   key: string
   kind: 'task' | 'todo' | 'session' | 'ref'
-  state: 'working' | 'done' | 'unknown' | 'question' | 'permission' | 'error' | 'limit' | 'pending' | 'completed' | 'exited'
+  // external は daemon が状態を知らない外部の参照 (issue / PR)
+  state: 'working' | 'done' | 'unknown' | 'question' | 'permission' | 'error' | 'limit' | 'pending' | 'completed' | 'exited' | 'external'
   title: string
+  // issue: / pr: の置き場のノードの参照の種類
+  ref_kind?: 'issue' | 'pr'
   // 状態の補足 (上限の解除時刻)
   detail?: string
   // key をそのまま edge add の端点に書けるか (TodoWrite の項目は書けない)

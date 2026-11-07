@@ -345,10 +345,13 @@ type DepsGraph struct {
 // GraphNode は依存の DAG のノード 1 つ (タスク 1 つ、タスクの無いセッション、端点の参照だけの置き場)。
 type GraphNode struct {
 	// Ref (task:、todo:、sid:、session:、issue:、pr:)。mod は切り出さずに不透明な文字列として扱う。
-	Key   string `json:"key"`
-	Kind  string `json:"kind"`
+	Key  string `json:"key"`
+	Kind string `json:"kind"`
+	// external は daemon が状態を知らない外部の参照 (issue / PR)。
 	State string `json:"state"`
 	Title string `json:"title"`
+	// issue: / pr: の置き場のノードの参照の種類。
+	RefKind string `json:"ref_kind,omitempty"`
 	// 状態の補足 (上限の解除時刻)。
 	Detail string `json:"detail,omitempty"`
 	// key をそのまま edge add の端点に書けるか (TodoWrite の項目は書けない)。

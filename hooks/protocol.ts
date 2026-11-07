@@ -1039,11 +1039,21 @@ export const definitions = {
           "limit",
           "pending",
           "completed",
-          "exited"
-        ]
+          "exited",
+          "external"
+        ],
+        "description": "external は daemon が状態を知らない外部の参照 (issue / PR)"
       },
       "title": {
         "type": "string"
+      },
+      "ref_kind": {
+        "type": "string",
+        "enum": [
+          "issue",
+          "pr"
+        ],
+        "description": "issue: / pr: の置き場のノードの参照の種類"
       },
       "detail": {
         "type": "string",

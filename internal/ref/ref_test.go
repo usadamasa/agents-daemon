@@ -26,6 +26,32 @@ func TestParseTask(t *testing.T) {
 	}
 }
 
+func TestParseItem(t *testing.T) {
+	for r, want := range map[string]Item{
+		"pr:usadamasa/agents-daemon#389": {Kind: "pr", Repo: "usadamasa/agents-daemon", Number: 389},
+		"issue:o/r.x#1":                  {Kind: "issue", Repo: "o/r.x", Number: 1},
+	} {
+		if got, ok := ParseItem(r); !ok || got != want {
+			t.Errorf("ParseItem(%q) = %+v, %v, want %+v", r, got, ok, want)
+		}
+	}
+	for _, r := range []string{"", "pr:#12", "issue:o/r", "pr:o/r#", "task:S1/3", "sid:S1", "pull:o/r#1"} {
+		if _, ok := ParseItem(r); ok {
+			t.Errorf("ParseItem(%q) は issue / PR の参照ではない", r)
+		}
+	}
+}
+
+// Title は「PR #389 · owner/repo」の形。
+func TestItemTitle(t *testing.T) {
+	if got := (Item{Kind: "pr", Repo: "o/r", Number: 389}).Title(); got != "PR #389 · o/r" {
+		t.Errorf("Title = %q", got)
+	}
+	if got := (Item{Kind: "issue", Repo: "o/r", Number: 1}).Title(); got != "issue #1 · o/r" {
+		t.Errorf("Title = %q", got)
+	}
+}
+
 // 辺の端点にできるのは todo 以外の形。todo は並びが変わると別の項目を指す。
 func TestEndpoint(t *testing.T) {
 	for _, r := range []string{"session:ad-134", "sid:2e0b-11", "issue:usadamasa/agents-daemon#134", "pr:usadamasa/agents-config.x#7", "task:2e0b-11/3"} {

@@ -160,7 +160,7 @@ func TestGraph_linksDepthAndDownstream(t *testing.T) {
 // sid: の端点は、after 側ならそのセッションの根のタスク (同じセッションの blockedBy が無いもの)、
 // before 側なら末端のタスク (同じセッションのどのタスクも止めていないもの) につなぐ。タスクの無い生きている
 // セッションはそのノードへ。daemon がまだ結びつけていない session:<名前> は、同じ名前のセッションが生きていても
-// 名前を key にした置き場のノード (pending) にする。issue: / pr: も参照を key にした置き場のノード (pending)、
+// 名前を key にした置き場のノード (pending) にする。issue: / pr: は参照を key にした置き場のノード (external)、
 // 終了していてタスクを作らなかったセッションは sid: を key にした置き場のノード (exited) にする。
 func TestGraph_refEndpoints(t *testing.T) {
 	const cwd = "/w/a"
@@ -221,9 +221,9 @@ func TestGraph_refEndpoints(t *testing.T) {
 	}
 	got := nodes(b.Graph)
 	place := map[string]string{
-		"issue:o/r#1":   graph.StatePending,
-		"issue:o/r#3":   graph.StatePending,
-		"pr:o/r#2":      graph.StatePending,
+		"issue:o/r#1":   graph.StateExternal,
+		"issue:o/r#3":   graph.StateExternal,
+		"pr:o/r#2":      graph.StateExternal,
 		"session:later": graph.StatePending,
 		"session:alpha": graph.StatePending,
 		"sid:G":         graph.StateExited,
@@ -235,8 +235,15 @@ func TestGraph_refEndpoints(t *testing.T) {
 			t.Errorf("%s = %+v, want 置き場のノード (%s)", key, n, state)
 		}
 	}
-	if got["session:later"].Title != "later" || got["session:alpha"].Title != "alpha" || got["issue:o/r#1"].Title != "issue:o/r#1" || got["sid:Z"].Title != "sid:Z" {
+	if got["session:later"].Title != "later" || got["session:alpha"].Title != "alpha" || got["issue:o/r#1"].Title != "issue #1 · o/r" || got["sid:Z"].Title != "sid:Z" {
 		t.Errorf("title = %q / %q / %q / %q", got["session:later"].Title, got["session:alpha"].Title, got["issue:o/r#1"].Title, got["sid:Z"].Title)
+	}
+	// issue / PR の置き場は外部の参照 (external) で、題は番号と repo、ref_kind に種類を持つ (#393)。
+	if n := got["pr:o/r#2"]; n.Title != "PR #2 · o/r" || n.RefKind != "pr" || got["issue:o/r#1"].RefKind != "issue" {
+		t.Errorf("pr:o/r#2 = %+v / issue:o/r#1 ref_kind = %q", n, got["issue:o/r#1"].RefKind)
+	}
+	if n := got["session:later"]; n.RefKind != "" {
+		t.Errorf("session: の置き場に ref_kind = %q", n.RefKind)
 	}
 	if n := got["session:alpha"]; n.SessionID != "" || n.Live {
 		t.Errorf("結びつく前の名前の置き場はセッションを持たない: %+v", n)
@@ -453,6 +460,33 @@ func TestGraph_folded(t *testing.T) {
 	empty := build(input{})
 	if empty.Graph.Folded.Nodes == nil || empty.Graph.Folded.Links == nil {
 		t.Errorf("folded = %+v, want 空の配列", empty.Graph.Folded)
+	}
+}
+
+// 外部の参照 (issue / PR) は daemon が状態を知らないので、原因の鎖 (blocked_by) に選ばず、完了したタスクを
+// 隠す図で末端の完了ノードを残す上流にも数えない (#393)。
+func TestGraph_externalRef(t *testing.T) {
+	const cwd = "/w/a"
+	b := build(input{
+		PID:      42,
+		Snapshot: snapshot(daemonstate.PaneStatus{PaneID: "p1", SessionID: "A", CWD: cwd, AgentStatus: "working"}),
+		Tasks: []record.Task{
+			task("A", "1", "マージを待つ", "pending", cwd),
+			task("A", "2", "マージ後に済んだ", "completed", cwd),
+		},
+		Edges: []edge.Edge{
+			{ID: "e1", Before: edge.Endpoint{Ref: "pr:o/r#389", CWD: cwd}, After: edge.Endpoint{Ref: "task:A/1", CWD: cwd}},
+			{ID: "e2", Before: edge.Endpoint{Ref: "pr:o/r#390", CWD: cwd}, After: edge.Endpoint{Ref: "task:A/2", CWD: cwd}},
+		},
+	})
+	got := nodes(b.Graph)
+	if n := got["task:A/1"]; len(n.BlockedBy) != 0 {
+		t.Errorf("task:A/1 blocked_by = %v, want 空", n.BlockedBy)
+	}
+	for _, n := range b.Graph.Folded.Nodes {
+		if n.Key == "task:A/2" {
+			t.Errorf("folded nodes = %v, task:A/2 は外部の参照だけを上流に持つので隠す", b.Graph.Folded.Nodes)
+		}
 	}
 }
 

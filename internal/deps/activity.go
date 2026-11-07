@@ -36,9 +36,9 @@ func activity(p *daemonstate.PaneStatus) (act, detail string) {
 	}
 }
 
-// sessionActivity は session ID → 活動と補足。生きているセッションだけを持つ。
+// sessionActivity は session ID → 活動と補足と、Claude Code が申告した今の作業 (msg)。生きているセッションだけを持つ。
 type sessionActivity struct {
-	act, detail string
+	act, detail, msg string
 }
 
 // activities は生きているセッションごとに活動を 1 回だけ導く。
@@ -46,7 +46,17 @@ func activities(panes map[string]*daemonstate.PaneStatus) map[string]sessionActi
 	out := make(map[string]sessionActivity, len(panes))
 	for id, p := range panes {
 		act, detail := activity(p)
-		out[id] = sessionActivity{act: act, detail: detail}
+		out[id] = sessionActivity{act: act, detail: detail, msg: p.AgentMessage}
 	}
 	return out
+}
+
+// summaryFor は status の作業に添える今の作業。セッションが今進めているのは進行中の作業だけなので、
+// 未着手と完了の作業には添えない。タスクの subject と今の作業のずれに気付けるようにする (#157)。
+// cc-premise: 2.1.302 osc7501 msg は作業中の作業、ターン後の要約、permission 待ちの approve <tool>: <command>
+func (a sessionActivity) summaryFor(status string) string {
+	if status != "in_progress" {
+		return ""
+	}
+	return a.msg
 }

@@ -1057,7 +1057,7 @@ export const definitions = {
       },
       "summary": {
         "type": "string",
-        "description": "kind session のノードで、Claude Code が申告した今の作業 (OSC 7501 の msg)"
+        "description": "Claude Code が申告したセッションの今の作業 (OSC 7501 の msg)。kind session のノードと、進行中のタスクと TodoWrite の項目のノードに付く"
       },
       "detail": {
         "type": "string",

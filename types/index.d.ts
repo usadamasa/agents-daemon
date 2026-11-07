@@ -352,7 +352,7 @@ export type GraphNode = {
   title: string
   // issue: / pr: の置き場のノードの参照の種類
   ref_kind?: 'issue' | 'pr'
-  // kind session のノードで、Claude Code が申告した今の作業 (OSC 7501 の msg)
+  // Claude Code が申告したセッションの今の作業 (OSC 7501 の msg)。kind session のノードと、進行中のタスクと TodoWrite の項目のノードに付く
   summary?: string
   // 状態の補足 (上限の解除時刻)
   detail?: string

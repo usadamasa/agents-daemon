@@ -263,7 +263,7 @@ function nodeCard(n, highlight) {
   const title = document.createElement("b");
   title.textContent = n.title;
   const sub = document.createElement("small");
-  // 題がセッション名そのもののノード (タスクの無いセッション、終了したセッションの置き場) は状態と今の作業を添える。
+  // 副題はセッション名 (題と違うとき)、状態、今の作業 (タスクの無いセッションと進行中の作業にだけ付く) の順。
   sub.textContent = [n.session !== n.title ? n.session : "", stateLabel(n), n.summary].filter(Boolean).join(" · ");
   if (n.summary) b.title = n.summary;
   lb.append(title, sub);
@@ -848,7 +848,8 @@ function nodePopup(n) {
   if (state.picker === "start") parts.push(startPicker(n));
   if (state.refusal !== "" && !["instruct", "blocker", "hand", "start"].includes(state.picker)) parts.push(refusalLine());
 
-  for (const text of [n.description, n.summary]) {
+  // タスクの説明と並ぶので、今の作業 (msg) は見出しを添えて分ける。
+  for (const text of [n.description, n.summary ? `今の作業: ${n.summary}` : ""]) {
     if (!text) continue;
     const p = document.createElement("p");
     p.textContent = text;

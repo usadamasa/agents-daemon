@@ -133,14 +133,14 @@ func collect(in input, panes map[string]*daemonstate.PaneStatus) []graph.Card {
 		withTasks[t.SessionID] = true
 		a, live := acts[t.SessionID]
 		cards = append(cards, graph.Card{Key: ref.Task(t.SessionID, t.ID), Kind: graph.KindTask, TaskID: t.ID, Description: t.Description, Title: t.Subject, SessionID: t.SessionID,
-			CWD: t.CWD, Live: live, Status: t.Status, Activity: a.act, Detail: a.detail})
+			CWD: t.CWD, Live: live, Status: t.Status, Activity: a.act, Detail: a.detail, Summary: a.summaryFor(t.Status)})
 	}
 	for _, list := range in.Todos {
 		withTasks[list.SessionID] = true
 		a, live := acts[list.SessionID]
 		for i, todo := range list.Todos {
 			cards = append(cards, graph.Card{Key: ref.Todo(list.SessionID, i), Kind: graph.KindTodo, Title: todo.Content, SessionID: list.SessionID,
-				CWD: list.CWD, Live: live, Status: todo.Status, Activity: a.act, Detail: a.detail})
+				CWD: list.CWD, Live: live, Status: todo.Status, Activity: a.act, Detail: a.detail, Summary: a.summaryFor(todo.Status)})
 		}
 	}
 	for id, p := range panes {
@@ -148,7 +148,7 @@ func collect(in input, panes map[string]*daemonstate.PaneStatus) []graph.Card {
 			continue
 		}
 		a := acts[id]
-		cards = append(cards, graph.Card{Key: ref.SessionID(id), Kind: graph.KindSession, Title: sessionName(p, in.SessionNames[id]), Summary: p.AgentMessage, SessionID: id,
+		cards = append(cards, graph.Card{Key: ref.SessionID(id), Kind: graph.KindSession, Title: sessionName(p, in.SessionNames[id]), Summary: a.msg, SessionID: id,
 			CWD: p.CWD, Live: true, Status: "in_progress", Activity: a.act, Detail: a.detail})
 	}
 	return cards

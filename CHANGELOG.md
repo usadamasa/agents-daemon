@@ -1,5 +1,15 @@
 # Changelog
 
+## [2026.1107.5](https://github.com/usadamasa/agents-daemon/compare/2026.1107.4...2026.1107.5) - 2026-11-07
+
+### Features
+- plugin の listing 用アイコンを足す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/466
+- peer-sessions の「依存の辺を書く」に after の選び方と PR の鎖の形を足す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/470
+- 依存図: open と分かった参照を待ち (waiting) にして blocked_by に入れる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/476
+- 依存図: issue / PR の題を引いて参照のノードと空の note に出す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/479
+### Bug Fixes
+- 依頼を受けた直後のセッションを依存図で done に見せない by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/473
+
 ## [2026.1107.4](https://github.com/usadamasa/agents-daemon/compare/2026.1107.3...2026.1107.4) - 2026-11-07
 
 ### Features

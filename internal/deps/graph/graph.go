@@ -64,7 +64,8 @@ var halted = map[string]bool{StateQuestion: true, StatePermission: true, StateLi
 //   - LongestChain は止まっているノード (待ちの輪を含む) から数え、止まっているノードが無ければ空
 //   - Rows は Nodes の順を優先の順にした位相順で、edge の辺 (セッションをまたぐ) は破線 (graph/dag の Rows)
 //   - BlockedBy は完了していない上流を、止まっているもの、進行中のものの順に選ぶ。Memos は消えたメモの id を落とす
-//   - 1 本の辺の記録 (EdgeRecord) は、session: や sid: の端点が根や末端のタスクを複数持つと複数の Link になる
+//   - before 側の sid: の端点が末端のタスクを複数持つと、末端をセッションのノード (sid:) に集め、辺の記録は
+//     そのノードからの 1 本にする (#405)。after 側の sid: は根のタスクの数だけの Link になる
 type (
 	// Graph はセッションをまたぐタスクの依存の DAG (#134)。
 	Graph = protocol.DepsGraph
@@ -83,7 +84,7 @@ type Card struct {
 	TaskID      string
 	Description string
 	Title       string
-	// Summary は kind session の Card の、Claude Code が申告した今の作業。
+	// Summary はセッションが Claude Code に申告した今の作業。kind session の Card と、進行中のタスクと TodoWrite の項目に持つ。
 	Summary   string
 	SessionID string
 	// Session はセッションの表示名。CWD は作業の cwd (タスクの記録の cwd、無ければ pane の cwd)。
@@ -120,13 +121,15 @@ type builder struct {
 	nodes map[string]*Node
 	// bySession はセッションのタスク (と TodoWrite の項目、タスクの無いセッション) のノードの Key。
 	bySession map[string][]string
-	links     []protocol.GraphLink
-	seen      map[[2]string]bool
+	// activity はセッションが生きていればその活動 (Card.Activity)。末端を集めるセッションのノードの状態に使う。
+	activity map[string]string
+	links    []protocol.GraphLink
+	seen     map[[2]string]bool
 }
 
 // Build は Cards からノードを、blockedBy と辺の記録から Links を組み、段・下流・鎖を数える。
 func Build(in Input) Graph {
-	g := &builder{in: in, nodes: map[string]*Node{}, bySession: map[string][]string{}, seen: map[[2]string]bool{}}
+	g := &builder{in: in, nodes: map[string]*Node{}, bySession: map[string][]string{}, activity: map[string]string{}, seen: map[[2]string]bool{}}
 	for _, c := range in.Cards {
 		g.addCard(c)
 	}
@@ -144,6 +147,9 @@ func (g *builder) addCard(c Card) {
 	}
 	g.nodes[n.Key] = n
 	g.bySession[n.SessionID] = append(g.bySession[n.SessionID], n.Key)
+	if c.Live {
+		g.activity[c.SessionID] = c.Activity
+	}
 }
 
 // nodeState は作業の進み (タスクの status)、セッションが生きているか、セッションの活動からノードの状態を決める。
@@ -177,10 +183,11 @@ func (g *builder) linkBlockedBy() {
 	}
 }
 
-// linkEdges は辺の記録の端点をノードに解決して辺にする。before 側は末端、after 側は根のタスクにつなぐ。
+// linkEdges は辺の記録の端点をノードに解決して辺にする。before 側は末端 (複数ならセッションのノード)、after 側は
+// 根のタスクにつなぐ。
 func (g *builder) linkEdges() {
 	for _, e := range g.in.Edges {
-		befores := g.resolve(e.Before, g.sinks)
+		befores := g.resolve(e.Before, g.sinkHub)
 		afters := g.resolve(e.After, g.roots)
 		via := &protocol.EdgeRecord{ID: e.ID, Before: e.Before, After: e.After, Note: e.Note}
 		for _, b := range befores {
@@ -255,6 +262,41 @@ func (g *builder) placeholder(key, cwd, title, sessionID, state string) string {
 // roots はセッションのノードのうち、同じセッションの blockedBy で止められていないもの。
 func (g *builder) roots(sessionID string) []string {
 	return g.sessionEnds(sessionID, func(l protocol.GraphLink) string { return l.After })
+}
+
+// sinkHub は before 側の sid: の端点のノード。末端が 1 つならそのノード、複数あるなら末端 (輪で末端が無ければ
+// セッションのノード全部) を sid:<id> のノードに集めてそれを返す。どの末端を待つ辺かは記録に無いので、末端の全部と
+// 組み合わせると辺の記録 1 つが末端の数だけ線になる (#405)。
+func (g *builder) sinkHub(sessionID string) []string {
+	key := ref.SessionID(sessionID)
+	if g.nodes[key] != nil {
+		// 集めたノード、タスクの無い生きているセッション、終了した置き場のどれか。
+		return []string{key}
+	}
+	keys := g.sinks(sessionID)
+	if len(keys) == 0 {
+		keys = g.bySession[sessionID]
+	}
+	if len(keys) <= 1 {
+		return keys
+	}
+	state := StateCompleted
+	for _, k := range keys {
+		if g.nodes[k].State != StateCompleted {
+			state = nodeState("in_progress", g.activity[sessionID] != "", g.activity[sessionID])
+			break
+		}
+	}
+	title := g.in.SessionNames[sessionID]
+	if title == "" {
+		title = key
+	}
+	hub := g.placeholder(key, g.nodes[keys[0]].CWD, title, sessionID, state)
+	g.nodes[hub].Live = g.activity[sessionID] != ""
+	for _, k := range keys {
+		g.link(k, hub, LinkTask, nil)
+	}
+	return []string{hub}
 }
 
 // sinks はセッションのノードのうち、同じセッションのどのノードも止めていないもの。

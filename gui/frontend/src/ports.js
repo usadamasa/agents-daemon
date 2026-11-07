@@ -23,3 +23,39 @@ export function spreadPorts(edges, pos, width, height) {
   place((e) => e.before, (e) => e.after, () => 0, height / 2);
   return out;
 }
+
+// fitEdges は dagre で配置した graph g の大きさを辺の点列まで含めて広げる。dagre の width / height はノードとラベル
+// だけで決まり、ノードの外を回る辺が図の外へはみ出す (#405)。左上へはみ出した分はノードと点列を寄せて余白
+// (marginX、marginY) を残す。縮めはしない。
+export function fitEdges(g, marginX, marginY) {
+  const label = g.graph();
+  let minX = marginX;
+  let minY = marginY;
+  let maxX = label.width - marginX;
+  let maxY = label.height - marginY;
+  for (const e of g.edges()) {
+    for (const p of g.edge(e).points) {
+      minX = Math.min(minX, p.x);
+      minY = Math.min(minY, p.y);
+      maxX = Math.max(maxX, p.x);
+      maxY = Math.max(maxY, p.y);
+    }
+  }
+  const dx = marginX - minX;
+  const dy = marginY - minY;
+  if (dx !== 0 || dy !== 0) {
+    for (const v of g.nodes()) {
+      const n = g.node(v);
+      n.x += dx;
+      n.y += dy;
+    }
+    for (const e of g.edges()) {
+      for (const p of g.edge(e).points) {
+        p.x += dx;
+        p.y += dy;
+      }
+    }
+  }
+  label.width = maxX - minX + marginX * 2;
+  label.height = maxY - minY + marginY * 2;
+}

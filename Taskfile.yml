@@ -37,6 +37,11 @@ tasks:
     cmds:
       - go build -C gui -o ../bin/agent-tasks .
 
+  gui:icon:
+    desc: アイコンの原本 gui/darwin/agent-tasks.svg から agent-tasks.icns を作り直す (macOS だけ)。SVG を変えたら打つ
+    cmds:
+      - scripts/build-icon.sh
+
   gui:test:
     desc: gui/ の module のテスト (Wails の link が要るので macOS だけ。CI は macOS の runner で回す)
     dir: gui

@@ -4,6 +4,7 @@
 # - macOS 以外か、go / cc / codesign が無ければ INFO 1 行で飛ばし、何も書かない (stamp も書かないので次の SessionStart が
 #   また試す)
 # - 建てたら cache のバイナリ、.app の bundle、stamp がそろい、バイナリと Info.plist に plugin の version が入る
+# - bundle の Resources にアイコン (gui/darwin/agent-tasks.icns) が入り、Info.plist の CFBundleIconFile が指す
 # - go build か codesign が失敗したら、前の bundle と stamp を残し、一時ファイルと lock を片付ける
 # - 同時の build は lock で 1 本に絞る (build-daemon.sh と同じ)
 
@@ -69,6 +70,17 @@ teardown() {
   [ ! -d "$GUI_LOCK" ]
   [ -z "$(find "$BIN_DIR" -name '.agent-tasks.*')" ]
   [ -z "$(find "$HOME/Applications" -name '.agent-tasks.app.*')" ]
+}
+
+@test "建てた bundle の Resources にアイコンを入れ、Info.plist がそれを指す" {
+  require_darwin
+  install_fake_go
+  install_fake_gui_toolchain
+
+  PATH="$FIXTURE_PATH" run_hook "$BUILD"
+  [ "$status" -eq 0 ]
+  cmp "$REPO_ROOT/gui/darwin/agent-tasks.icns" "$GUI_APP/Contents/Resources/agent-tasks.icns"
+  [ "$(plutil -extract CFBundleIconFile raw "$GUI_APP/Contents/Info.plist")" = "agent-tasks" ]
 }
 
 @test "go build が失敗したら前のバイナリと bundle と stamp を残す" {

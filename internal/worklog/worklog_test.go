@@ -112,6 +112,25 @@ func TestIngest_Stopはsummaryを書き記録が無ければ作る(t *testing.T)
 	}
 }
 
+// 最後の prompt と最後の Stop の時刻を残す。依存図が pane の写しより新しい prompt を見分けるのに使う (#469)。
+func TestIngest_最後のpromptとStopの時刻を残す(t *testing.T) {
+	s := New(t.TempDir())
+	mustIngest(t, s, hook("UserPromptSubmit", `"prompt": "p"`), now)
+	got := mustGet(t, s, "s1")
+	if got.PromptedAt == nil || !got.PromptedAt.Equal(now) || got.StoppedAt != nil {
+		t.Fatalf("prompt の後 = prompted %v / stopped %v", got.PromptedAt, got.StoppedAt)
+	}
+	mustIngest(t, s, hook("Stop", `"last_assistant_message": "済んだ"`), now.Add(time.Minute))
+	got = mustGet(t, s, "s1")
+	if !got.PromptedAt.Equal(now) || got.StoppedAt == nil || !got.StoppedAt.Equal(now.Add(time.Minute)) {
+		t.Fatalf("Stop の後 = prompted %v / stopped %v", got.PromptedAt, got.StoppedAt)
+	}
+	mustIngest(t, s, hook("UserPromptSubmit", `"prompt": "次"`), now.Add(2*time.Minute))
+	if got := mustGet(t, s, "s1"); !got.PromptedAt.Equal(now.Add(2*time.Minute)) || !got.StoppedAt.Equal(now.Add(time.Minute)) {
+		t.Errorf("2 つ目の prompt の後 = prompted %v / stopped %v", got.PromptedAt, got.StoppedAt)
+	}
+}
+
 // SessionStart と SessionEnd は記録があるときだけ書く (prompt を打たずに終わったセッションの記録を残さない)。
 func TestIngest_SessionStartとSessionEndは記録が無ければ何もしない(t *testing.T) {
 	dir := t.TempDir()

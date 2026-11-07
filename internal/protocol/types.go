@@ -87,7 +87,7 @@ type WorkGetRequest struct {
 	SessionID string `json:"session_id"`
 }
 
-// Work はセッション 1 つの作業の記録 (work get、work set の出力)。hook が書く事実 (最初の prompt の題、最後のターンの要約、turns、始まりと終わり) と、人の直した題、companion の推定の題。
+// Work はセッション 1 つの作業の記録 (work get、work set の出力)。hook が書く事実 (最初の prompt の題、最後のターンの要約、turns、最後の prompt と Stop の時刻、始まりと終わり) と、人の直した題、companion の推定の題。
 type Work struct {
 	SessionID string `json:"session_id"`
 	CWD       string `json:"cwd"`
@@ -103,6 +103,10 @@ type Work struct {
 	Turns     int       `json:"turns"`
 	StartedAt time.Time `json:"started_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+	// 最後の UserPromptSubmit の時刻。
+	PromptedAt *time.Time `json:"prompted_at,omitempty"`
+	// 最後の Stop の時刻。
+	StoppedAt *time.Time `json:"stopped_at,omitempty"`
 	// SessionEnd の時刻。生きている (resume した) 間は無い。
 	EndedAt *time.Time `json:"ended_at,omitempty"`
 	// SessionEnd の reason。

@@ -87,7 +87,7 @@ export type WorkGetRequest = {
   session_id: string
 }
 
-// セッション 1 つの作業の記録 (work get、work set の出力)。hook が書く事実 (最初の prompt の題、最後のターンの要約、turns、始まりと終わり) と、人の直した題、companion の推定の題
+// セッション 1 つの作業の記録 (work get、work set の出力)。hook が書く事実 (最初の prompt の題、最後のターンの要約、turns、最後の prompt と Stop の時刻、始まりと終わり) と、人の直した題、companion の推定の題
 export type Work = {
   session_id: string
   cwd: string
@@ -103,6 +103,10 @@ export type Work = {
   turns: number
   started_at: string
   updated_at: string
+  // 最後の UserPromptSubmit の時刻
+  prompted_at?: string
+  // 最後の Stop の時刻
+  stopped_at?: string
   // SessionEnd の時刻。生きている (resume した) 間は無い
   ended_at?: string
   // SessionEnd の reason

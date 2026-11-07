@@ -2,7 +2,8 @@
 // XDG state 配下に書く (#368)。model が Task 系ツールを打つかどうかに関わらず、prompt を打ったセッションの作業が依存図に
 // 作業の単位として載り、辺の端点 (sid:<session_id>) にもなれるようにする。読み手は依存図 (deps)。
 //
-//	work/<session_id>.json   セッション 1 つの作業 (subject と出どころ、companion の推定の題、最後のターンの要約、turns、始まりと終わり)
+//	work/<session_id>.json   セッション 1 つの作業 (subject と出どころ、companion の推定の題、最後のターンの要約、turns、
+//	                         最後の prompt と Stop の時刻、始まりと終わり)
 //	work/.lock               hook、`work set`、prune を直列にするロック
 //
 // 書くのは hook (SessionStart / UserPromptSubmit / Stop / SessionEnd が `agents-daemon ingest-work` に渡す)、人とアプリと
@@ -53,8 +54,8 @@ const lockFile = ".lock"
 
 // Record はセッション 1 つの作業の記録。ファイルの形は protocol の schema (Work) が持ち、`work get` / `work set` の出力でもある。
 // Subject は題 (事実か人の手) で Origin がその出どころ、Inferred は companion の推定の題 (subject とは別の欄)、Summary は
-// 最後のターンの応答の 1 行目、Turns は UserPromptSubmit の数 (peer の delivery も数える)、EndedAt は SessionEnd の時刻
-// (生きている間は無い)。
+// 最後のターンの応答の 1 行目、Turns は UserPromptSubmit の数 (peer の delivery も数える)、PromptedAt と StoppedAt は
+// 最後の UserPromptSubmit と Stop の時刻、EndedAt は SessionEnd の時刻 (生きている間は無い)。
 type Record = protocol.Work
 
 // Title は見せる題。人が直した subject、companion の推定の題、prompt の subject の順。無ければ空。
@@ -148,6 +149,8 @@ func (s Store) Ingest(input []byte, now time.Time) (Result, error) {
 		case "UserPromptSubmit":
 			res.Created = !found
 			rec.Turns++
+			at := now
+			rec.PromptedAt = &at
 			if rec.Subject == "" {
 				if subject := subjectOf(in.Prompt); subject != "" {
 					rec.Subject, rec.Origin = subject, OriginPrompt
@@ -156,6 +159,8 @@ func (s Store) Ingest(input []byte, now time.Time) (Result, error) {
 		case "Stop":
 			res.Created = !found
 			rec.Summary = firstLine(in.Message, subjectLimit)
+			at := now
+			rec.StoppedAt = &at
 		case "SessionEnd":
 			if !found {
 				return false

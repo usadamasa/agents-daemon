@@ -280,8 +280,8 @@ function nodeCard(n, highlight) {
 const SVG = "http://www.w3.org/2000/svg";
 // 交点の飛び越しの弧の半径と、線の端 (ノードの縁、矢じり) から飛び越しを置かない距離。拡大縮小は canvas ごと
 // 変わるので、弧も同じ率で伸び縮みする。
-const JUMP_R = 5;
-const JUMP_MARGIN = 16;
+const JUMP_R = 8;
+const JUMP_MARGIN = 20;
 
 function edgePath(d, cls, marker, hint) {
   const p = document.createElementNS(SVG, "path");

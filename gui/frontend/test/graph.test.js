@@ -56,6 +56,21 @@ test("view は完了を隠すとき folded のノードと段、両端が見え�
   assert.equal(all.depth.get("C"), 2);
 });
 
+test("view は folded の無い JSON (古いバイナリ) なら完了を落とし、両端が見える辺だけを返す", () => {
+  const g = new Graph({
+    nodes: [node("A"), node("B", { state: "completed", depth: 1 }), node("C", { depth: 2 })],
+    links: [
+      { before: "A", after: "B", kind: "task" },
+      { before: "B", after: "C", kind: "task" },
+      { before: "A", after: "C", kind: "edge" },
+    ],
+  });
+  const hidden = g.view(false);
+  assert.deepEqual(hidden.nodes.map((n) => n.key), ["A", "C"]);
+  assert.deepEqual(hidden.links.map((l) => `${l.before}>${l.after}`), ["A>C"]);
+  assert.equal(hidden.depth.get("C"), 2);
+});
+
 test("node は key で引き、無ければ undefined", () => {
   const g = new Graph(data);
   assert.equal(g.node("B").key, "B");

@@ -84,7 +84,7 @@ type Card struct {
 	TaskID      string
 	Description string
 	Title       string
-	// Summary は kind session の Card の、Claude Code が申告した今の作業。
+	// Summary はセッションが Claude Code に申告した今の作業。kind session の Card と、進行中のタスクと TodoWrite の項目に持つ。
 	Summary   string
 	SessionID string
 	// Session はセッションの表示名。CWD は作業の cwd (タスクの記録の cwd、無ければ pane の cwd)。

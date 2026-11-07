@@ -178,6 +178,12 @@ test("完了を隠した既定の図: メモの一覧と凡例と footer を出�
   await snapshot("graph");
 });
 
+test("header: 見せ方は依存図だけなので、見せ方の切り替えのボタンを出さない", () => {
+  const labels = [...document.querySelectorAll("header.bar button")].map((b) => b.textContent);
+  assert.ok(!labels.includes("依存図") && !labels.includes("一覧"), labels.join(" / "));
+  assert.equal(count('header.bar [aria-label="見せ方"]'), 0);
+});
+
 test("ノードを選ぶと単体ビューを開き、待っている先と待たれている先を並べる", async () => {
   q('.node[data-key="task:beta/1"]').click();
   const pop = q("#pop");

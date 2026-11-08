@@ -22,9 +22,24 @@ export function stepZoom(z, dir) {
   return clampZoom(z * STEP ** dir);
 }
 
+// scaledFrame は長さ content の図を拡大率 z で包む枠の長さ。fitZoom が割り算で求めた z を掛け戻すと誤差で
+// 見える長さをわずかに超え、切り上げると 1px はみ出してスクロールが出るので、誤差の分を引いてから切り上げる。
+export function scaledFrame(content, z) {
+  return Math.ceil(content * z - 1e-9);
+}
+
 // centerOffset は長さ frame の枠を長さ view の領域の中心へ寄せる片側の余白。はみ出す枠は寄せずにスクロールで見る。
 export function centerOffset(frame, view) {
   return Math.max(0, (view - frame) / 2);
+}
+
+// 図の上端に空ける高さ。全体表示の間は図がスクロールせず、右上の操作 (style.css の .zoom) の下に入ったカードを
+// 動かせないので、操作の下端までを図の外にする。
+export const CONTROLS_BAND = 48;
+
+// topOffset は長さ frame の枠の上の余白。中心へ寄せた余白が操作の置き場より狭いときは置き場の分だけ下げる。
+export function topOffset(frame, view) {
+  return Math.max(CONTROLS_BAND, centerOffset(frame, view));
 }
 
 // overflowCenter は長さ frame の枠が長さ view の領域からはみ出すとき、枠の中心を見せるスクロール量。
@@ -34,11 +49,11 @@ export function overflowCenter(frame, view) {
 
 // scrollAfterZoom は画面上の pointer (スクロール領域の左上からの距離) が指す図の点を、拡大率を from から to へ
 // 変えた後も同じ画面位置に残すスクロール量。1 つの向きについて、content は拡大前の図の長さ、view は見える長さ。
-// 枠が領域より小さい間は centerOffset の余白が付くので、その分を差し引いて点を求める。
-export function scrollAfterZoom(scroll, pointer, from, to, content, view) {
-  const point = (scroll + pointer - centerOffset(content * from, view)) / from;
-  const next = point * to + centerOffset(content * to, view) - pointer;
-  return Math.max(0, Math.min(next, content * to - view));
+// offset (横は centerOffset、縦は topOffset) の余白が枠の手前に付くので、その分を差し引いて点を求める。
+export function scrollAfterZoom(scroll, pointer, from, to, content, view, offset = centerOffset) {
+  const point = (scroll + pointer - offset(content * from, view)) / from;
+  const margin = offset(content * to, view);
+  return Math.max(0, Math.min(point * to + margin - pointer, margin + content * to - view));
 }
 
 // ホイールの連なりの切れ目。トラックパッドの慣性は 16ms 前後の間隔で届くので、これより空いたら指を離して止まったとみる。

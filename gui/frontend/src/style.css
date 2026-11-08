@@ -4,7 +4,9 @@
   --ink-soft: #3f4642;
   --muted: #6a716c;
   --bg: #eef0ee;
+  --bg-veil: rgba(238, 240, 238, 0.6);
   --panel: #ffffff;
+  --panel-veil: rgba(255, 255, 255, 0.7);
   --panel-soft: #f6f7f5;
   --hover: #eef1ee;
   --line: #d8dcd8;
@@ -13,6 +15,7 @@
   --green: #2f6b4f;
   --green-ink: #1f4a36;
   --green-soft: #e3eee7;
+  --green-hover: #d5e5db;
   --orange: #c9841f;
   --orange-soft: #f6ead3;
   --orange-ink: #7a4d10;
@@ -90,7 +93,7 @@ select { font: inherit; color: inherit; }
 /* header と footer の間を、左 (依存図・凡例・メモの一覧) と右の列に分ける段。右の列は段の全高を取り、
    拡大縮小の外で依存図とは別にスクロールする */
 .stage { flex: 1 1 0; min-height: 0; display: flex; }
-.stage > .main { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
+.stage > .main { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; position: relative; }
 .graph { flex: 1 1 0; min-height: 160px; position: relative; overflow: auto; }
 .column {
   flex: 0 0 auto; width: 272px; box-sizing: border-box; overflow-y: auto;
@@ -111,13 +114,27 @@ select { font: inherit; color: inherit; }
 /* 拡大縮小した canvas を包む枠。transform はレイアウトの大きさを変えないので、拡大率を掛けた大きさを枠に持たせて
    スクロールの範囲を図に合わせる (WKWebView では CSS の zoom が文字の大きさに効かなかった) */
 .graph .zoom-frame { overflow: hidden; }
-.zoom { display: inline-flex; align-items: center; gap: 4px; }
+/* 図の右上に重ねる操作。下端は zoom.js の CONTROLS_BAND に収める。図の領域と同じ色の半透明で塗るので、何も無い所では
+   別の面に見えず、カードの上でだけ透けてぼける */
+.zoom {
+  position: absolute; top: 8px; right: 12px; z-index: 5;
+  display: inline-flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 4px;
+  max-width: calc(100% - 24px); box-sizing: border-box; padding: 3px;
+  background: var(--bg-veil); border-radius: 10px;
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+}
+/* :where で詳細度を .tb と揃え、.tb:hover と .tb.on を残す */
+:where(.zoom) .tb { background: var(--panel-veil); }
 .zoom #zoom-reset { min-width: 56px; justify-content: center; font-variant-numeric: tabular-nums; }
+.zoom #zoom-fit { width: 28px; padding: 0; justify-content: center; }
+.zoom #zoom-fit svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 /* 全体表示のトグルがオンの間 (aria-pressed と同時に app.js の renderZoom が付ける) */
 .tb.on { background: var(--green-soft); border-color: var(--green); color: var(--green-ink); font-weight: 500; }
-/* 新しいバージョンへの切り替え。拡大縮小の並びに埋もれないよう、塗りつぶしと間で離す */
+/* .tb:hover と .tb.on は同じ詳細度なので、オンの間の hover と押下はここで持つ */
+.tb.on:hover { background: var(--green-hover); }
+.tb:active:not(:disabled), .tb.on:active { background: var(--line); }
+/* 新しいバージョンへの切り替え。ほかのボタンに埋もれないよう塗りつぶす */
 .tb.upgrade {
-  margin-left: 18px;
   background: var(--green); border-color: var(--green-ink); color: #fff; font-weight: 700;
   box-shadow: 0 1px 3px rgba(31, 74, 54, 0.35);
 }

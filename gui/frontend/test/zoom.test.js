@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { MAX_ZOOM, MIN_ZOOM, WHEEL_GAP_MS, centerOffset, clampZoom, fitZoom, overflowCenter, percent, scrollAfterZoom, stepZoom, wheelZoomer } from "../src/zoom.js";
+import { CONTROLS_BAND, MAX_ZOOM, MIN_ZOOM, WHEEL_GAP_MS, centerOffset, clampZoom, fitZoom, overflowCenter, percent, scrollAfterZoom, stepZoom, topOffset, wheelZoomer } from "../src/zoom.js";
 
 // 慣性で減っていくトラックパッドのスクロール。上へ払った向き (deltaY が負) で、t は ms。
 function flick(from, n, modifierAt) {
@@ -82,6 +82,22 @@ test("scrollAfterZoom は指した点が拡大縮小の前後で同じ画面位�
   assert.equal(scrollAfterZoom(250, 50, 2, 0.5, 1000, 400), 25);
   // 負のスクロールにはしない
   assert.equal(scrollAfterZoom(0, 300, 1, 0.5, 1000, 400), 0);
+});
+
+test("topOffset は中心の余白と操作の置き場の高さの大きい方を返す", () => {
+  // 縦に余裕があれば中心のまま。
+  assert.equal(topOffset(100, 400), 150);
+  // 中心の余白が操作の置き場より狭ければ、置き場の分だけ下げる。
+  assert.equal(topOffset(380, 400), CONTROLS_BAND);
+  // はみ出す図も、スクロールの先頭では操作の下に入らない。
+  assert.equal(topOffset(1000, 400), CONTROLS_BAND);
+});
+
+test("scrollAfterZoom は上の余白の決め方を受け取り、余白を差し引いて指した点を同じ画面位置に残す", () => {
+  // 点は (0 + 100 - 48) = 52。2 倍して 104、余白 48 を足し、指した 100 を引く。
+  assert.equal(scrollAfterZoom(0, 100, 1, 2, 300, 200, topOffset), 52);
+  // スクロールの最大は余白の分だけ伸びる (48 + 300 - 200)。
+  assert.equal(scrollAfterZoom(148, 100, 1, 1, 300, 200, topOffset), 148);
 });
 
 test("scrollAfterZoom は中心へ寄せた余白を差し引いて、指した点を同じ画面位置に残す", () => {

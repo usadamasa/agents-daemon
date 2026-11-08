@@ -28,12 +28,12 @@ tasks:
   gui:build:
     desc: タスクの依存図のアプリ (gui/、別 module) を bin/agent-tasks にビルドする。macOS だけ
     # root の module に Wails を混ぜない (cgo と WebKit の link が Linux の CI に載らない) ので、-C で gui/ の module に
-    # 入ってビルドする。deployment target は wails3 CLI の darwin の build task と同じ 12.0 に揃える (揃えないと ld が
-    # object ごとに版の食い違いを警告する)。cache と ~/Applications へ置くのは gui:install (hooks/build-gui.sh)。
+    # 入ってビルドする。deployment target は Go 1.27 が要求する macOS の下限 13.0 に揃える (下げると ld が Go の object との
+    # バージョンの食い違いを警告する)。cache と ~/Applications へ置くのは gui:install (hooks/build-gui.sh)。
     env: &gui-env
-      CGO_CFLAGS: -mmacosx-version-min=12.0
-      CGO_LDFLAGS: -mmacosx-version-min=12.0
-      MACOSX_DEPLOYMENT_TARGET: "12.0"
+      CGO_CFLAGS: -mmacosx-version-min=13.0
+      CGO_LDFLAGS: -mmacosx-version-min=13.0
+      MACOSX_DEPLOYMENT_TARGET: "13.0"
     cmds:
       - go build -C gui -o ../bin/agent-tasks .
 

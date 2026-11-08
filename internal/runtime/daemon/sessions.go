@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"errors"
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/daemonstate"
@@ -13,15 +14,15 @@ func (r *daemonRuntime) attachClaudeConfigDir(dir string) {
 	r.claudeSessions = claudesessions.New(dir)
 }
 
-// observeSessions は tick で見えたセッションを、pane が見えている間進める記録 (台帳、作業の記録) へ反映する。
+// observeSessions は tick で見えたセッションを、pane が見えている間進める記録 (台帳、作業の記録、未完了のタスク、辺) へ反映する。
 func (r *daemonRuntime) observeSessions(panes []daemonstate.PaneStatus, now time.Time) {
 	r.recordSessions(panes, now)
-	r.touchWorks(panes, now)
+	r.touchLive(panes, now)
 }
 
-// touchWorks は tick で見えたセッションの作業の記録の mtime を進め、見えたセッションを liveSessions に控える。開いたまま
-// 何も打たないセッションの記録を保持期間で消さないため。進められなくても tick は止めない。
-func (r *daemonRuntime) touchWorks(panes []daemonstate.PaneStatus, now time.Time) {
+// touchLive は tick で見えたセッションの作業の記録と未完了のタスク、辺の mtime を進め、見えたセッションを liveSessions に控える。
+// 開いたまま何も打たないセッションの記録を保持期間で消さないため。進められなくても tick は止めない。
+func (r *daemonRuntime) touchLive(panes []daemonstate.PaneStatus, now time.Time) {
 	ids := make([]string, 0, len(panes))
 	for _, p := range panes {
 		if p.SessionID != "" {
@@ -29,8 +30,8 @@ func (r *daemonRuntime) touchWorks(panes []daemonstate.PaneStatus, now time.Time
 		}
 	}
 	r.liveSessions = ids
-	if err := r.works.Touch(ids, now); err != nil {
-		r.log.Logf("作業の記録の mtime を進められません: %v", err)
+	if err := errors.Join(r.works.Touch(ids, now), r.tasks.Touch(ids, now), r.edges.TouchSessions(ids, now)); err != nil {
+		r.log.Logf("生きているセッションの記録の mtime を進められません: %v", err)
 	}
 }
 

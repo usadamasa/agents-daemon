@@ -81,6 +81,18 @@ func (p *Poller) Refresh(ctx context.Context, now time.Time) {
 		}
 	}
 	p.sweep(edges, cached)
+	p.keepOpen(cached, now)
+}
+
+// keepOpen は写しが open の参照を before に持つ辺の保持期間を数え直す。マージを待っている PR の辺を、更新が無いだけで消さない。
+func (p *Poller) keepOpen(cached map[string]refstate.Record, now time.Time) {
+	open := map[string]bool{}
+	for key, rec := range cached {
+		open[key] = rec.State == refstate.StateOpen
+	}
+	if err := p.edges.TouchBefore(open, now); err != nil {
+		p.log.Logf("open の参照の辺の mtime を進められません: %v", err)
+	}
 }
 
 // due は辺の端点の issue / PR のうち、引き直す時期のものを引く順に返す。辺から消えた参照の失敗の記録は捨てる。

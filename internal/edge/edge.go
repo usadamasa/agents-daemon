@@ -42,8 +42,10 @@ import (
 )
 
 // Retention は更新の無い辺を残す期間。消すのは daemon の housekeeping (Prune) で、mtime で判定する。
+// daemon が、生きているセッションを端点に持つ辺と、open の参照を before に持つ辺の mtime を tick ごとに進める
+// (TouchSessions、TouchBefore) ので、mtime からの経過は待つ相手がいなくなってからの経過になる。
 // 端点が依存図に出うる最も長いタスクのノード (終了したセッションの未完了のタスク、7 日) に合わせる。
-// それを過ぎた辺は両端とも依存図に出ない。渡す側が登録し直すと数え直す。
+// 渡す側が登録し直すと数え直す。
 const Retention = 7 * 24 * time.Hour
 
 // lockFile は edges/ で Add、Remove、Bind、Prune を直列にするロック。

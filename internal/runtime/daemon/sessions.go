@@ -13,6 +13,26 @@ func (r *daemonRuntime) attachClaudeConfigDir(dir string) {
 	r.claudeSessions = claudesessions.New(dir)
 }
 
+// observeSessions は tick で見えたセッションを、pane が見えている間進める記録 (台帳、作業の記録) へ反映する。
+func (r *daemonRuntime) observeSessions(panes []daemonstate.PaneStatus, now time.Time) {
+	r.recordSessions(panes, now)
+	r.touchWorks(panes, now)
+}
+
+// touchWorks は tick で見えたセッションの作業の記録の mtime を進める。開いたまま何も打たないセッションの記録を
+// 保持期間で消さないため。進められなくても tick は止めない。
+func (r *daemonRuntime) touchWorks(panes []daemonstate.PaneStatus, now time.Time) {
+	ids := make([]string, 0, len(panes))
+	for _, p := range panes {
+		if p.SessionID != "" {
+			ids = append(ids, p.SessionID)
+		}
+	}
+	if err := r.works.Touch(ids, now); err != nil {
+		r.log.Logf("作業の記録の mtime を進められません: %v", err)
+	}
+}
+
 // recordSessions は tick で見えたセッションを台帳に書き、同じ tick で辺の session:<名前> の端点を台帳の
 // セッションに結びつける。名前は ListAgents の名前 (Claude Code の登録簿) で、session:<名前> は model が
 // SendMessage の宛先と同じ名前で書く。結びつけを tick ごとにするのは、渡した側が `edge add` を書いてから数秒で

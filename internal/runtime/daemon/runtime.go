@@ -77,7 +77,8 @@ type daemonRuntime struct {
 	// tasks は hook が書くタスクの記録 (tasklog)。daemon は housekeeping で消すだけ。
 	// ゼロ値は何も消さない。
 	tasks tasklog.Store
-	// works は hook が書くセッションの作業の記録 (worklog)。daemon は housekeeping で消すだけ。ゼロ値は何も消さない。
+	// works は hook が書くセッションの作業の記録 (worklog)。daemon は tick で生きているセッションの mtime を進め、
+	// housekeeping で消す。ゼロ値は何もしない。
 	works worklog.Store
 	// edges は `edge add` が書くセッションをまたぐ辺 (edge)。daemon は tick ごとに session:<名前> の
 	// 端点を台帳のセッションに結びつけ、housekeeping で消す。ゼロ値は何もしない。
@@ -210,7 +211,7 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 	if err := daemonstate.WriteStatusSnapshot(r.statusPath, os.Getpid(), r.backend, r.startedAt, now, statusPanes); err != nil {
 		r.log.Logf("status snapshot の書き込みに失敗: %v", err)
 	}
-	r.recordSessions(statusPanes, now)
+	r.observeSessions(statusPanes, now)
 	r.refPoll.Refresh(ctx, now)
 
 	if claudeCount == 0 {

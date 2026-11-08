@@ -85,13 +85,13 @@ export async function discardStale(days, io = defaultIO) {
 // ---- 送達を伴う操作。結果は { ok, message } で、ok が false なら文面を残して理由を見せる ----
 
 // tell はセッションの入力欄に text を打つ (`agents-daemon tell`)。送らなかった理由 (prompt が開いている、打ちかけの文がある、
-// 上限の画面) はバイナリが返す。
+// セッションが上限で止まっている) はバイナリが返す。
 async function tell(sessionID, text, io) {
   const ran = await io.run("tell", { to_session: sessionID, text, session_id: daemon.SESSION });
   if ("failure" in ran) return { ok: false, reason: ran.failure };
   try {
-    const res = JSON.parse(ran.stdout);
-    return { ok: true, warning: res.warning ?? "" };
+    JSON.parse(ran.stdout);
+    return { ok: true };
   } catch (err) {
     return { ok: false, reason: `送った結果を読めませんでした: ${String(err?.message ?? err)}` };
   }
@@ -105,7 +105,7 @@ function sessionName(node) {
 const SAID = " の入力欄に打ちました";
 
 function told(name, sent, done = SAID) {
-  if (sent.ok) return { ok: true, message: `${name}${done}${sent.warning ? ` (${sent.warning})` : ""}` };
+  if (sent.ok) return { ok: true, message: `${name}${done}` };
   return { ok: false, message: `${name} へ送れませんでした: ${sent.reason}` };
 }
 
@@ -201,9 +201,8 @@ export async function handOff(memo, to, intent, note, io = defaultIO) {
     return { ok: false, message: `メモを渡した結果を読めませんでした: ${String(err?.message ?? err)}` };
   }
   const name = destinationLabel(to);
-  const warned = res.warning ? ` (${res.warning})` : "";
   if (res.delivered) {
-    return { ok: true, message: to.route === "spawn" ? `${name} で新しいセッションを起こし、メモを渡しました${warned}` : `${name} へ送り、メモを渡しました${warned}` };
+    return { ok: true, message: to.route === "spawn" ? `${name} で新しいセッションを起こし、メモを渡しました` : `${name} へ送り、メモを渡しました` };
   }
   if (res.status === "handed" && to.route === "spawn" && res.to) {
     // 起きたか分からないメモは戻していない。戻すと押し直しで 2 つ目のセッションが起きる。

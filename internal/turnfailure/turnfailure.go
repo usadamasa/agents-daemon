@@ -1,8 +1,9 @@
 // Package turnfailure は turn-failures/<session_id>.json (StopFailure hook が受けた、turn を終わらせた API error)
-// の書式を読み書き両方で持つ。書き、消すのは `agents-daemon ingest-turn-failure`、読むのは daemon の上限の出来事の記録。
+// の書式を読み書き両方で持つ。書き、消すのは `agents-daemon ingest-turn-failure`、読むのは daemon。
 //
-// 判定にはまだ使わない。上限で止まった pane の OSC 7501 の record と並べて残し、上限検知の前段のゲートに
-// どちらが使えるかを比べる材料にする (#77)。
+// 上限の判定は transcript の末尾の entry で行い、この記録は突き合わせに使う。記録が rate_limit なのに transcript が
+// 上限と読めなければ transcript の形が変わった疑いで、daemon が daemon.log に残す。上限の出来事の記録 (limit-events) にも添える。
+// hook が走らないセッションでは記録が無く、判定はそれだけで成り立つ。
 package turnfailure
 
 import (

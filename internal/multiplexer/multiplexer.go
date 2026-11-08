@@ -33,8 +33,8 @@ const (
 	AgentStatusBlocked AgentStatus = "blocked"
 	// AgentStatusDone は idle と同じ実体だが、focused UI で未観測のままバックグラウンド作業が終わった状態。
 	AgentStatusDone AgentStatus = "done"
-	// AgentStatusError は Claude Code のターンが API error (rate limit を含む) で終わった状態。
-	// 上限到達時の自己申告がこれかは未実測で、daemon はログに残すだけで判定には使わない (#77)。
+	// AgentStatusError は Claude Code のターンが API error (rate limit を含む) で終わった状態。上限かどうかは transcript で
+	// 決めるので daemon はこの値を判定には使わず、working でないことだけを見る (working の pane には触らない)。
 	AgentStatusError AgentStatus = "error"
 	// AgentStatusUnknown は agent は存在するが backend が分類できない状態。完了の証明にはならない。
 	AgentStatusUnknown AgentStatus = "unknown"
@@ -78,8 +78,7 @@ func RecordLabel(p Pane) string {
 }
 
 // Claude Code が blocked の record に付ける kind のうち、利用者が答える prompt が開いているもの。
-// 限度の画面がこの kind で来ることは無いので、列挙に無い kind (dialog 一般の kind 無し) は送信を止めない
-// (上限到達時の record は未実測。#77)。
+// 上限で止まった pane の record はこの kind では来ないので、列挙に無い kind (dialog 一般の kind 無し) は送信を止めない。
 // cc-premise: 2.1.302 osc7501 blocked の kind は permission / question / auth。dialog 一般は kind 無し
 const (
 	AgentKindPermission = "permission"

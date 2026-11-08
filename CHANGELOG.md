@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026.1108.4](https://github.com/usadamasa/agents-daemon/compare/2026.1108.3...2026.1108.4) - 2026-11-08
+
+### Features
+- 依存図: カードの tooltip に description の受け入れ条件を出す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/526
+
 ## [2026.1108.3](https://github.com/usadamasa/agents-daemon/compare/2026.1108.2...2026.1108.3) - 2026-11-08
 
 ### Features

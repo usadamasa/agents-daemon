@@ -512,7 +512,9 @@ test("辺の端点だけの置き場のカード: 単体で外せてメモには
     data.graph.nodes.push({ ...gamma, key, kind: "ref", title: key, origin: undefined, session_id: key.slice(4) });
     data.graph.folded.nodes.push({ key, depth: 0 });
   }
-  data.graph.links.push({ before: "sid:ghost-waited", after: "task:beta/1", kind: "edge" });
+  gamma.depth = 1;
+  data.graph.folded.nodes.find((n) => n.key === "sid:gamma").depth = 1;
+  data.graph.links.push({ before: "sid:ghost-waited", after: "task:beta/1", kind: "edge" }, { before: "sid:ghost-idle", after: "sid:gamma", kind: "edge" });
   await loadDeps(JSON.stringify(data));
   try {
     assert.equal(q("#dismiss-ended").textContent, "終了したセッションのタスクと作業 2 件を外す");

@@ -16,7 +16,8 @@ export function candidates(g, selected) {
 // 1 項目では消せず、issue / PR の置き場は session_id を持たない。daemon が status.json を書いていない依存図は生きている
 // セッションも live でないと描くので出さない。
 export function canDismiss(node, data) {
-  return data.updated_at !== undefined && node.kind !== "todo" && !node.live && node.session_id !== undefined;
+  const dismissable = node.kind === "task" || node.kind === "session" || (node.kind === "ref" && node.state === "exited");
+  return data.updated_at !== undefined && dismissable && !node.live && node.session_id !== undefined;
 }
 
 // bulkDismissable は一括で外す対象か。sid: を外すと端点の辺も消えるので、完了でも終了でもない下流が待っているカードは

@@ -61,7 +61,8 @@ test("canDismiss は daemon が書いた依存図の、終了したセッショ�
   assert.equal(canDismiss(node("t", { live: true }), data), false);
   assert.equal(canDismiss(node("sid:s1", { live: true, kind: "session" }), data), false);
   assert.equal(canDismiss(node("t", { live: false, kind: "todo" }), data), false);
-  assert.equal(canDismiss(node("pr:o/r#1", { live: false, kind: "ref", session_id: undefined }), data), false);
+  assert.equal(canDismiss(node("pr:o/r#1", { live: false, kind: "ref", state: "dropped", session_id: "" }), data), false);
+  assert.equal(canDismiss(node("pr:o/r#1", { live: false, kind: "ref", state: "exited", session_id: undefined }), data), false);
   assert.equal(canDismiss(node("t", { live: false, session_id: undefined }), data), false);
   assert.equal(canDismiss(node("t", { live: false }), {}), false);
 });

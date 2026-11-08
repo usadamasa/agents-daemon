@@ -14,6 +14,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/protocol"
 	"github.com/usadamasa/agents-daemon/internal/tasklog/record"
+	"github.com/usadamasa/agents-daemon/internal/worklog"
 )
 
 // nodes はグラフのノードを Key で引けるようにする。
@@ -343,6 +344,55 @@ func TestGraph_exitedPlaceholderNeedsLink(t *testing.T) {
 	want := []string{"sid:G>task:A/1", "sid:M>task:A/1"}
 	if !reflect.DeepEqual(links(b.Graph), want) {
 		t.Errorf("links = %v, want %v", links(b.Graph), want)
+	}
+}
+
+// 終了したセッションの置き場は、待っている作業がすべて済むと完了を隠した図から消える (#455)。全部の図には線と一緒に残る。
+func TestGraph_exitedPlaceholderFolded(t *testing.T) {
+	const cwd = "/w/a"
+	e := func(id, before, after string) edge.Edge {
+		return edge.Edge{ID: id, Before: edge.Endpoint{Ref: before, CWD: cwd}, After: edge.Endpoint{Ref: after, CWD: cwd}}
+	}
+	b := build(input{
+		Tasks: []record.Task{
+			task("A", "1", "a", "completed", cwd),
+			task("B", "1", "b", "pending", cwd),
+			task("C", "1", "c", "completed", cwd),
+			task("D", "1", "d", "pending", cwd),
+			task("F", "1", "f", "completed", cwd),
+			task("J", "1", "j", "pending", cwd),
+			task("K", "1", "k", "completed", cwd),
+		},
+		Works: []worklog.Record{{SessionID: "W", CWD: cwd, Subject: "終わった作業"}},
+		Edges: []edge.Edge{
+			e("done", "sid:G", "task:A/1"),
+			e("open", "sid:H", "task:B/1"),
+			e("mixed-done", "sid:M", "task:C/1"),
+			e("mixed-open", "sid:M", "task:D/1"),
+			// 下流が無い置き場は上流で決まる。
+			e("from-done", "task:F/1", "sid:Y"),
+			e("from-open", "task:J/1", "sid:Z"),
+			// 作業の記録から作ったノードは置き場ではない。
+			e("work", "sid:W", "task:K/1"),
+		},
+	})
+	folded := map[string]bool{}
+	for _, n := range b.Graph.Folded.Nodes {
+		folded[n.Key] = true
+	}
+	all := nodes(b.Graph)
+	for key, want := range map[string]bool{"sid:G": false, "sid:Y": false, "sid:H": true, "sid:M": true, "sid:Z": true, "sid:W": true} {
+		if folded[key] != want {
+			t.Errorf("完了を隠した図の %s = %v, want %v", key, folded[key], want)
+		}
+		if n, ok := all[key]; !ok || n.State != graph.StateExited {
+			t.Errorf("全部の図の %s = %+v, want exited のノード", key, n)
+		}
+	}
+	for _, want := range []string{"sid:G>task:A/1", "task:F/1>sid:Y"} {
+		if !strings.Contains(strings.Join(links(b.Graph), " "), want) {
+			t.Errorf("全部の図に線 %s が無い: %v", want, links(b.Graph))
+		}
 	}
 }
 

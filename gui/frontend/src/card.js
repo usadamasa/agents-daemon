@@ -38,6 +38,26 @@ export function cardText(n, label, grouped) {
   };
 }
 
+const ACCEPTANCE = /受け入れ条件\s*[:：]\s*/;
+const BULLET = /^[-*・]\s*/;
+
+// acceptanceLine はタスクの description からカードに添える 1 行を選ぶ。受け入れ条件の行があれば印から後ろ (印だけの行は
+// 次の行を添える)、無ければ空でない 1 行目。書式を model に求めないので、印が無くても 1 行目が出る。
+export function acceptanceLine(n) {
+  if (n.kind !== "task" || !n.description) return "";
+  const lines = n.description.split("\n").map((l) => l.trim()).filter(Boolean);
+  const at = lines.findIndex((l) => ACCEPTANCE.test(l));
+  if (at < 0) return lines[0] ?? "";
+  const line = lines[at].slice(lines[at].search(ACCEPTANCE));
+  if (line.replace(ACCEPTANCE, "") !== "" || at + 1 === lines.length) return line;
+  return `${line} ${lines[at + 1].replace(BULLET, "")}`;
+}
+
+// cardHint はカードの tooltip。今の作業と、タスクの受け入れ条件を行に分ける。
+export function cardHint(n) {
+  return [n.summary, acceptanceLine(n)].filter(Boolean).join("\n");
+}
+
 // 人の手当てが要る状態。作業中より目立たせる。取りやめの参照は、待っていた下流を人が付け替えるまで止める。
 const ATTENTION = new Set(["question", "permission", "limit", "error", "dropped"]);
 

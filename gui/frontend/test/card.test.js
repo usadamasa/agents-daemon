@@ -1,6 +1,35 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { STATE_LABEL, STATE_TONE, cardText, emphasis } from "../src/card.js";
+import { STATE_LABEL, STATE_TONE, acceptanceLine, cardHint, cardText, emphasis } from "../src/card.js";
+
+test("acceptanceLine は受け入れ条件の行を選び、行の途中の印からを返す", () => {
+  const task = (description) => ({ kind: "task", description });
+  assert.equal(acceptanceLine(task("背景の説明\n受け入れ条件: CI が緑\n補足")), "受け入れ条件: CI が緑");
+  assert.equal(acceptanceLine(task("マージする。受け入れ条件: CI が緑")), "受け入れ条件: CI が緑");
+  assert.equal(acceptanceLine(task("- 受け入れ条件：CI が緑")), "受け入れ条件：CI が緑");
+});
+
+test("acceptanceLine は印だけの行なら次の行を添える", () => {
+  assert.equal(acceptanceLine({ kind: "task", description: "受け入れ条件:\n\n- CI が緑\n- レビュー済み" }), "受け入れ条件: CI が緑");
+  assert.equal(acceptanceLine({ kind: "task", description: "説明\n受け入れ条件:" }), "受け入れ条件:");
+});
+
+test("acceptanceLine は印が無ければ description の空でない 1 行目を返す", () => {
+  assert.equal(acceptanceLine({ kind: "task", description: "\n  PR を確かめる  \n二行目" }), "PR を確かめる");
+});
+
+test("acceptanceLine は description が無いタスクとタスクでないカードは空", () => {
+  assert.equal(acceptanceLine({ kind: "task" }), "");
+  assert.equal(acceptanceLine({ kind: "task", description: "  \n" }), "");
+  assert.equal(acceptanceLine({ kind: "session", description: "受け入れ条件: x" }), "");
+});
+
+test("cardHint は今の作業と受け入れ条件を行に分け、どちらも無ければ空", () => {
+  assert.equal(cardHint({ kind: "task", summary: "テストを書いている", description: "受け入れ条件: CI が緑" }), "テストを書いている\n受け入れ条件: CI が緑");
+  assert.equal(cardHint({ kind: "task", description: "PR を確かめる" }), "PR を確かめる");
+  assert.equal(cardHint({ kind: "session", summary: "読んでいる" }), "読んでいる");
+  assert.equal(cardHint({ kind: "ref" }), "");
+});
 
 test("線でつながるカードの副題はセッション名、状態、今の作業の順", () => {
   const n = { title: "API を実装する", session: "alpha", summary: "テストを書いている" };

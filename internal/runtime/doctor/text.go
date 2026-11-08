@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"io"
 	"time"
-
-	"github.com/usadamasa/agents-daemon/internal/runtime/detect"
 )
 
 // write は Report を人が読む形で w へ書く。節の見出しと OK / NG / ⚠ の行の形は
@@ -54,13 +52,20 @@ func writeBackend(w io.Writer, rep BackendReport) {
 }
 
 func writePanes(w io.Writer, rep PanesReport) {
+	if rep.RegistryError != "" {
+		_, _ = fmt.Fprintf(w, "  ⚠ Claude Code の登録簿を読めないため、statusline の記録の無い pane の session_id を補えません: %s\n", rep.RegistryError)
+	}
 	for _, pane := range rep.Claude {
 		// recordLabel は agent_status= から始まり、kind と msg はあるときだけ続く。
-		_, _ = fmt.Fprintf(w, "  pane=%s cwd=%s %s session_id=%s\n",
-			pane.PaneID, pane.CWD, pane.recordLabel(), defaultString(pane.SessionID, "(なし)"))
+		session := "(なし)"
+		if pane.SessionID != "" {
+			session = pane.SessionID + " (" + pane.SessionSource + ")"
+		}
+		_, _ = fmt.Fprintf(w, "  pane=%s cwd=%s %s session_id=%s\n", pane.PaneID, pane.CWD, pane.recordLabel(), session)
 		if pane.UnknownReason != "" {
 			_, _ = fmt.Fprintf(w, "    unknown の理由: %s\n", pane.UnknownReason)
 		}
+		writePaneTranscript(w, pane.Transcript)
 		writePaneGeometry(w, pane)
 	}
 	if len(rep.Claude) == 0 {
@@ -69,7 +74,22 @@ func writePanes(w io.Writer, rep PanesReport) {
 	_, _ = fmt.Fprintf(w, "  pane 総数: %d 件 (うち Claude agent: %d 件)\n", rep.Total, len(rep.Claude))
 }
 
-// writePaneGeometry は block の高さと screen を出し、高さが下限に満たなければ ⚠ を出す。
+// writePaneTranscript は daemon が上限の判定に読む transcript の末尾を出す。読めなければ ⚠ (この pane は判定の対象外)。
+func writePaneTranscript(w io.Writer, rep TranscriptReport) {
+	if rep.LastEntry == nil {
+		_, _ = fmt.Fprintf(w, "    ⚠ transcript を読めないため上限を判定できない: %s\n", rep.Reason)
+		return
+	}
+	e := rep.LastEntry
+	errPart := ""
+	if e.Error != "" {
+		errPart = " error=" + e.Error
+	}
+	_, _ = fmt.Fprintf(w, "    transcript: %s\n", rep.Path)
+	_, _ = fmt.Fprintf(w, "    末尾の entry: type=%s%s at %s → %s\n", e.Type, errPart, e.Timestamp.Format(time.RFC3339), e.Kind)
+}
+
+// writePaneGeometry は block の高さと screen を出す。
 func writePaneGeometry(w io.Writer, pane PaneReport) {
 	if pane.GeometryError != "" {
 		_, _ = fmt.Fprintf(w, "    高さと screen を取れない: %s\n", pane.GeometryError)
@@ -81,9 +101,6 @@ func writePaneGeometry(w io.Writer, pane PaneReport) {
 		screen = "alternate"
 	}
 	_, _ = fmt.Fprintf(w, "    rows=%d columns=%d screen=%s\n", g.Rows, g.Columns, screen)
-	if pane.tooShort() {
-		_, _ = fmt.Fprintf(w, "    ⚠ 高さが %d 行未満。上限の文が画面の外へ出て検知できないことがある\n", detect.MinDetectableRows)
-	}
 }
 
 // writePremises はずれを ⚠ で出す。
@@ -102,9 +119,6 @@ func writePremises(w io.Writer, rep PremisesReport) {
 }
 
 func writeRateLimitStates(w io.Writer, rep RateLimitsReport) {
-	if rep.ConfigError != "" {
-		_, _ = fmt.Fprintf(w, "  設定の読み込みに失敗したため、既定の鮮度閾値で判定します: %s\n", rep.ConfigError)
-	}
 	for _, s := range rep.Sessions {
 		_, _ = fmt.Fprintf(w, "  pane=%s session_id=%s\n", s.PaneID, defaultString(s.SessionID, "(なし)"))
 		writeSessionRateLimitState(w, s)
@@ -132,20 +146,9 @@ func writeSessionRateLimitState(w io.Writer, rep SessionRateLimitReport) {
 		_, _ = fmt.Fprintln(w, "  state ファイルはまだありません (statusline 経由の ingest-statusline がまだ rate_limits を受け取っていません)")
 		return
 	}
-	maxAge := time.Duration(st.MaxAgeSeconds) * time.Second
 	_, _ = fmt.Fprintf(w, "  observed_at: %s (%s 前)\n", st.ObservedAt.Format(time.RFC3339), time.Duration(st.AgeSeconds)*time.Second)
-	if st.Fresh {
-		_, _ = fmt.Fprintf(w, "  鮮度: OK (閾値 %s 以内)\n", maxAge)
-	} else {
-		_, _ = fmt.Fprintf(w, "  鮮度: 古い (閾値 %s を超過。daemon はゲートを開いたまま画面テキストだけで判定します)\n", maxAge)
-	}
-	_, _ = fmt.Fprintf(w, "  five_hour.used_percentage: %.1f%% (閾値 %.1f%%)\n", st.FiveHourUsed, st.Threshold)
-	if st.Exhausted {
-		_, _ = fmt.Fprintln(w, "  → 閾値以上: limit 検知時にゲートで抑制しません")
-	} else {
-		_, _ = fmt.Fprintln(w, "  → 閾値未満: fresh な間は limit と判定されてもゲートで抑制されます")
-	}
-	_, _ = fmt.Fprintf(w, "  five_hour.resets_at: %s\n", st.FiveHourResetsAt.Format(time.RFC3339))
+	_, _ = fmt.Fprintf(w, "  five_hour.used_percentage: %.1f%%\n", st.FiveHourUsed)
+	_, _ = fmt.Fprintf(w, "  five_hour.resets_at: %s (transcript の entry に解除時刻が無いときの予備)\n", st.FiveHourResetsAt.Format(time.RFC3339))
 	if st.SessionIDMismatch != "" {
 		_, _ = fmt.Fprintf(w, "  ⚠ ファイル名と中身の session_id が食い違っています (中身: %s)\n", st.SessionIDMismatch)
 	}
@@ -221,6 +224,8 @@ func writePaths(w io.Writer, rep PathsReport) {
 	_, _ = fmt.Fprintf(w, "  config:      %s\n", rep.Config)
 	_, _ = fmt.Fprintf(w, "  state dir:   %s\n", rep.StateDir)
 	_, _ = fmt.Fprintf(w, "  rate limits: %s\n", rep.RateLimits)
+	_, _ = fmt.Fprintf(w, "  transcripts: %s\n", rep.Transcripts)
+	_, _ = fmt.Fprintf(w, "  registry:    %s\n", rep.Registry)
 	_, _ = fmt.Fprintf(w, "  pid file:    %s\n", rep.PIDFile)
 	_, _ = fmt.Fprintf(w, "  status file: %s\n", rep.StatusFile)
 	_, _ = fmt.Fprintf(w, "  log file:    %s\n", rep.LogFile)

@@ -38,7 +38,6 @@ type fixture struct {
 	spawned   []string
 	spawnRes  protocol.SpawnResult
 	spawnErr  error
-	tellWarn  string
 	missingID bool
 }
 
@@ -63,7 +62,7 @@ func (f *fixture) runner() Runner {
 			if f.tellErr != nil {
 				return protocol.TellResult{}, f.tellErr
 			}
-			return protocol.TellResult{PaneID: paneID, Warning: f.tellWarn}, nil
+			return protocol.TellResult{PaneID: paneID}, nil
 		},
 		Spawn: func(_ context.Context, repo, prompt string) (protocol.SpawnResult, error) {
 			f.spawned = append(f.spawned, repo+"\n"+prompt)
@@ -84,12 +83,11 @@ func toRepo() protocol.ParkHandRequest {
 // 生きているセッションへ: 取ってから tell で打ち、届けば handed のまま。
 func TestRunner_Run_toSession(t *testing.T) {
 	f := newFixture()
-	f.tellWarn = "注意"
 	res, err := f.runner().Run(context.Background(), toSession())
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := protocol.ParkHandResult{Delivered: true, Status: "handed", To: peerSID, PaneID: paneID, Warning: "注意"}
+	want := protocol.ParkHandResult{Delivered: true, Status: "handed", To: peerSID, PaneID: paneID}
 	if res != want {
 		t.Fatalf("res = %+v, want %+v", res, want)
 	}

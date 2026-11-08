@@ -13,16 +13,18 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/runtime/detect"
 	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
 	"github.com/usadamasa/agents-daemon/internal/tell"
+	"github.com/usadamasa/agents-daemon/internal/transcript"
 )
 
 // newTellCmd は `agents-daemon tell` を組み立てる (tell)。送る判定は tell.Runner が持ち、ここは rex の Client、上限の
-// 画面の分類 (detect は runtime の家族で tell から import できない)、設定の待ち時間を注入する。
+// 判定 (transcript の末尾と画面の通知欄。detect は runtime の家族で tell から import できない)、設定の待ち時間を注入する。
 func newTellCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "tell",
 		Short: "stdin の TellRequest の text を、to_session のセッションの pane の入力欄に打って Enter を送る",
 		Long: "依存図のアプリ (gui/) が利用者の押した操作 (指示、タスクの着手や完了の依頼、メモの手渡し) をセッションへ届けるときに呼ぶ。\n" +
-			"送る前に pane を読み、利用者の答えを待つ prompt が開いている、上限の画面、入力欄に打ちかけの文がある、claude が前景でない、\n" +
+			"送る前に pane を読み、利用者の答えを待つ prompt が開いている、宛先のセッションの最後の turn が上限で終わっている、\n" +
+			"本体の通知欄 (Enter 待ちなど) が出ている、入力欄に打ちかけの文がある、claude が前景でない、\n" +
 			"のどれかなら送らずに exit 1 で理由を出す。文面を打った後に prompt が開いたら、Enter を送らずに文面を入力欄に残して exit 1 で理由を出す。\n" +
 			"送れたら TellResult を JSON で出す。",
 		Args: cobra.NoArgs,
@@ -43,23 +45,30 @@ func newTellCmd() *cobra.Command {
 	}
 }
 
-// newTellRunner は rex の Client と、daemon と同じ設定 (読む行数、待ち時間、追加の検知語) の tell.Runner を作る。
-// 設定が読めなければ既定値で続ける (daemon の tick と同じ)。
+// newTellRunner は rex の Client と、daemon と同じ設定 (読む行数、待ち時間) と判定 (transcript の末尾、画面の通知欄) の
+// tell.Runner を作る。設定が読めなければ既定値で続ける (daemon の tick と同じ)。
 func newTellRunner(paths apppath.Paths) (tell.Runner, error) {
 	contexts := sessioncontext.New(paths.StateDir())
 	cfg, _ := config.Load(paths.ConfigFile())
-	classifier, err := detect.NewClassifier(cfg.CustomPatterns)
+	claudeDir, err := apppath.ClaudeConfigDir()
 	if err != nil {
 		return tell.Runner{}, err
 	}
+	transcripts := transcript.New(claudeDir)
 	return tell.Runner{
 		Host: backend.ConnectRex(contexts),
 		Blocks: func() (map[string]string, error) {
 			return contexts.ListMultiplexerBlocks(sessioncontext.MultiplexerKindRex)
 		},
-		Screen: func(text string) string {
-			if kind := classifier.Classify(text, cfg.DetectionTailLines); kind != detect.KindNone {
+		Limited: func(sessionID string) string {
+			if kind := detect.ClassifyTurn(transcripts.Tail(sessionID).Entry); kind != detect.KindNone {
 				return kind.String()
+			}
+			return ""
+		},
+		Hint: func(screen string) string {
+			if hint := detect.ClassifyScreen(screen, cfg.DetectionTailLines); hint != detect.HintNone {
+				return hint.String()
 			}
 			return ""
 		},

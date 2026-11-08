@@ -140,8 +140,6 @@ export type ParkHandResult = {
   pane_id?: string
   // 届かなかった理由。戻せなかったときはその理由も続ける
   reason?: string
-  // 届いたうえでの注意 (TellResult.warning と同じ)
-  warning?: string
 }
 
 // task dismiss の stdin。終了したセッションのタスク (完了しているかを問わない。task:) か、セッションの作業 (sid:) の記録と端点の辺を消して依存図から外し、{} を出す。セッションの終了は park adopt と同じく status.json で確かめ、確かめられなければ消さずに exit 1 で理由を返す
@@ -300,8 +298,6 @@ export type SpawnResult = {
 export type TellResult = {
   // 打った pane の ID
   pane_id: string
-  // 文面が上限の検知語を含み、入力欄に残る間は daemon の誤検知の種になりうるときの注意。送ってはある
-  warning?: string
 }
 
 // deps の出力。依存の DAG と、repo ごとの生きているセッションと open のメモ

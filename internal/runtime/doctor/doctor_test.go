@@ -92,7 +92,7 @@ func TestRun(t *testing.T) {
 		}
 	})
 
-	t.Run("rate-limits.json が新鮮で閾値以上なら発火抑制しない旨を報告する", func(t *testing.T) {
+	t.Run("rate-limits.json があれば観測時刻と使用率と解除時刻を報告する (判定には使わない)", func(t *testing.T) {
 		home := t.TempDir()
 		p := apppath.New(home, "", "")
 		writeJSONFile(t, mustRateLimitFile(t, p, "sess-1"), map[string]any{
@@ -117,11 +117,17 @@ func TestRun(t *testing.T) {
 			t.Fatalf("Run() error = %v", err)
 		}
 		out := buf.String()
-		if !strings.Contains(out, "鮮度: OK") {
-			t.Errorf("鮮度 OK の報告が無い: %s", out)
+		// 時刻はファイルの epoch 秒から time.Unix で組み立てるので、表示はローカルの tz になる。
+		resetsAt := time.Unix(fixedNow.Add(time.Hour).Unix(), 0).Format(time.RFC3339)
+		for _, want := range []string{"(1m0s 前)", "five_hour.used_percentage: 95.0%", "five_hour.resets_at: " + resetsAt} {
+			if !strings.Contains(out, want) {
+				t.Errorf("出力に %q が無い: %s", want, out)
+			}
 		}
-		if !strings.Contains(out, "閾値以上: limit 検知時にゲートで抑制しません") {
-			t.Errorf("閾値以上の報告が無い: %s", out)
+		for _, stale := range []string{"鮮度", "閾値", "ゲート"} {
+			if strings.Contains(out, stale) {
+				t.Errorf("旧判定の語 %q が残っている: %s", stale, out)
+			}
 		}
 	})
 
@@ -317,8 +323,8 @@ func TestCollectDoctor_JSON(t *testing.T) {
 			t.Errorf("premises = %+v, want finding 1 件", rep.Premises)
 		}
 		st := rep.RateLimits.Sessions[0].State
-		if st == nil || st.AgeSeconds != 90 || !st.Fresh || !st.Exhausted {
-			t.Errorf("rate_limits の state = %+v, want 90 秒前で fresh かつ閾値以上", st)
+		if st == nil || st.AgeSeconds != 90 || st.FiveHourUsed != 95 {
+			t.Errorf("rate_limits の state = %+v, want 90 秒前で 95%%", st)
 		}
 		if rep.Config.Exists || rep.Daemon.Running {
 			t.Errorf("config/daemon = %+v / %+v, want 設定なし・未起動", rep.Config, rep.Daemon)

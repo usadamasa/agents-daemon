@@ -41,12 +41,13 @@ const (
 )
 
 type fixture struct {
-	host   *multiplexerfake.Client
-	panes  map[string]multiplexer.Pane
-	screen string
-	styled string
-	kinds  map[string]string
-	slept  []time.Duration
+	host    *multiplexerfake.Client
+	panes   map[string]multiplexer.Pane
+	screen  string
+	styled  string
+	limited map[string]string
+	hints   map[string]string
+	slept   []time.Duration
 }
 
 func newFixture() *fixture {
@@ -56,9 +57,10 @@ func newFixture() *fixture {
 			shellID:  {PaneID: shellID, SessionID: sid},
 			otherID:  {PaneID: otherID, Agent: "claude-code", AgentStatus: multiplexer.AgentStatusWorking, SessionID: otherSID},
 		},
-		screen: idleScreen,
-		styled: emptyStyled,
-		kinds:  map[string]string{},
+		screen:  idleScreen,
+		styled:  emptyStyled,
+		limited: map[string]string{},
+		hints:   map[string]string{},
 	}
 	f.host = &multiplexerfake.Client{
 		PaneGetFunc: func(_ context.Context, id string) (multiplexer.Pane, error) {
@@ -84,7 +86,8 @@ func (f *fixture) runner() Runner {
 		Blocks: func() (map[string]string, error) {
 			return map[string]string{claudeID: sid, shellID: sid, otherID: otherSID}, nil
 		},
-		Screen:      func(text string) string { return f.kinds[text] },
+		Limited:     func(sessionID string) string { return f.limited[sessionID] },
+		Hint:        func(screen string) string { return f.hints[screen] },
 		Sleep:       func(d time.Duration) { f.slept = append(f.slept, d) },
 		SubmitDelay: 7 * time.Millisecond,
 	}
@@ -99,7 +102,7 @@ func TestRunner_Run(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.PaneID != claudeID || res.Warning != "" {
+	if res.PaneID != claudeID {
 		t.Fatalf("result = %+v", res)
 	}
 	// block は ID の順に見る (shellID の方が古い)。
@@ -158,20 +161,6 @@ func TestRunner_Run_stripsControlCharacters(t *testing.T) {
 	}
 }
 
-// 文面が上限の検知語に当たるときは送ったうえで注意を返す。
-func TestRunner_Run_warnsOnDetectionWords(t *testing.T) {
-	f := newFixture()
-	text := "rate limit の画面の文言を直して"
-	f.kinds[text] = "limit"
-	res, err := f.runner().Run(context.Background(), request(text))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(res.Warning, "limit") || len(f.host.SentTexts) != 1 {
-		t.Fatalf("result = %+v, sent = %v", res, f.host.SentTexts)
-	}
-}
-
 // 送らない経路。どれも SendText / SendKeys を呼ばない。
 func TestRunner_Run_refuses(t *testing.T) {
 	cases := []struct {
@@ -184,7 +173,9 @@ func TestRunner_Run_refuses(t *testing.T) {
 		{"prompt が開いている", func(f *fixture, _ *Request) {
 			f.panes[claudeID] = multiplexer.Pane{PaneID: claudeID, Agent: "claude-code", AgentStatus: multiplexer.AgentStatusBlocked, AgentKind: multiplexer.AgentKindPermission, AgentMessage: "approve Bash?", SessionID: sid}
 		}, "prompt"},
-		{"上限の画面", func(f *fixture, _ *Request) { f.kinds[idleScreen] = "limit" }, "上限"},
+		// 上限かどうかは画面ではなく宛先のセッションの transcript で決める (#257)。
+		{"宛先のセッションが上限で止まっている", func(f *fixture, _ *Request) { f.limited[sid] = "limit" }, "最後の turn が上限 (limit)"},
+		{"本体の通知欄 (Enter 待ち) が出ている", func(f *fixture, _ *Request) { f.hints[idleScreen] = "resume-ready" }, "通知欄 (resume-ready)"},
 		// 利用者が宛先の端末で打っていた文だと結び付くよう、どこの何かと、どうすれば送れるかを書く (#380)。
 		{"入力欄に打ちかけの文", func(f *fixture, _ *Request) { f.screen, f.styled = typingScreen, typedStyled }, "宛先のセッションの端末の入力欄に、Enter を押していない打ちかけの文"},
 		{"提案の後に打ちかけの文", func(f *fixture, _ *Request) {

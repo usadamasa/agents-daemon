@@ -1,7 +1,11 @@
 // Package simulate は `simulate` サブコマンドの実装を提供する。使い捨て pane を作り、
-// daemon パッケージと同じ検知・判定経路 (monitor パッケージ) をその pane に対してだけ
+// daemon パッケージと同じ判定・送信の経路 (monitor パッケージ) をその pane に対してだけ
 // 実際に通す end-to-end の検証ツール。読むだけの診断 (doctor と verify の inspect) とは
 // 違い、pane の作成と送信を伴う。
+//
+// 上限かどうかは transcript の末尾の entry で決まるので、使い捨て pane には本物の transcript が無い。そこで monitor へ渡す
+// transcript の読み手を差し替え、fixture の entry (既定は実機で踏んだ 5 時間ウィンドウの上限) を返す。
+// 利用者の `~/.claude/projects` には書かない。画面は待機明けのキー選択にだけ効く。
 package simulate
 
 import (
@@ -22,6 +26,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/runtime/detect"
 	"github.com/usadamasa/agents-daemon/internal/runtime/monitor"
 	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
+	"github.com/usadamasa/agents-daemon/internal/transcript"
 )
 
 // simulateMetadataSource は simulate が使い捨て block に付ける label。利用者が付けた label と
@@ -29,8 +34,8 @@ import (
 const simulateMetadataSource = "agents-daemon-simulate"
 
 // defaultSimulateScreen は --screen-file を省略した場合に使う内蔵の limit 画面。
-// 2026-08-16 に実機 (Claude Code 2.1.224) で観測した文面と同じ形
-// (detect/real_sample_test.go の realLimitScreen 参照)。
+// 2026-08-16 に実機 (Claude Code 2.1.224) で観測した文面と同じ形 (detect/screen_test.go の realLimitScreen)。
+// 通知欄は無いので、待機明けには esc → 文面 → enter を送る経路になる。
 const defaultSimulateScreen = `  ⏺ Bash(task test)
   ⎿  ✅ テスト完了
 
@@ -41,6 +46,12 @@ const defaultSimulateScreen = `  ⏺ Bash(task test)
 ❯
 ────────────────────────────────────────────────────────────────────────────
 `
+
+// defaultSimulateTurn は --turn-file を省略した場合に使う transcript の末尾の entry。2026-10-04 に実機 (Claude Code 2.1.289)
+// で踏んだ 5 時間ウィンドウの上限 (transcript/testdata と同じ形で、cwd と session を伏せた)。resetsAt は過去なので
+// 1 回目の Tick は margin だけ待ち、2 回目で送る。
+// cc-premise: 2.1.319 limit-screen rate_limit の entry の形 (error、isApiErrorMessage、quotaLimits)
+const defaultSimulateTurn = `{"type":"assistant","uuid":"cae11b0e-b253-403c-8cd6-7cf350809a97","timestamp":"2026-10-04T08:32:13.884Z","message":{"role":"assistant","content":[{"type":"text","text":"You've hit your session limit · resets 9:30pm (Asia/Tokyo)"}]},"quotaLimits":{"status":"rejected","resetsAt":1791117000,"rateLimitType":"five_hour","overageStatus":"rejected"},"error":"rate_limit","isApiErrorMessage":true,"apiErrorStatus":429,"version":"2.1.289"}`
 
 // paneClient は simulate が使い捨て pane に対して使う操作。monitor.Tick へ渡す 3 つ (読む・送る) と、pane が Claude agent に
 // 見えたかを待つ PaneGet (#301)。Run が backend.Connect から受ける multiplexer.Client (全部入り) をそのまま渡し、
@@ -56,6 +67,9 @@ type Options struct {
 	Send       bool
 	Keep       bool
 	ScreenFile string
+	// TurnFile は monitor へ渡す transcript (JSONL)。末尾の会話の entry を使い捨て pane のセッションの末尾として
+	// 読ませる。空なら内蔵の上限の entry。
+	TurnFile string
 }
 
 // Result は simulate が通した経路の記録。文字の報告と同じ中身を積み、`simulate --json` はこれをそのまま出す。
@@ -66,13 +80,22 @@ type Result struct {
 	Agent       string                  `json:"agent,omitempty"`
 	AgentStatus multiplexer.AgentStatus `json:"agent_status,omitempty"`
 	// Send は dry-run をやめて使い捨て pane へ実際に送ったか。
-	Send        bool         `json:"send"`
-	ConfigError string       `json:"config_error,omitempty"`
-	Ticks       []TickReport `json:"ticks"`
+	Send        bool   `json:"send"`
+	ConfigError string `json:"config_error,omitempty"`
+	// Turn は monitor へ渡した transcript の末尾 (出どころと entry の uuid、分類)。
+	Turn  TurnReport   `json:"turn"`
+	Ticks []TickReport `json:"ticks"`
 	// Kept は --keep で pane を残したか。Closed は後始末で閉じたか。
 	Kept         bool   `json:"kept"`
 	Closed       bool   `json:"closed"`
 	CleanupError string `json:"cleanup_error,omitempty"`
+}
+
+// TurnReport は monitor へ渡した transcript の末尾。
+type TurnReport struct {
+	Source string `json:"source"`
+	UUID   string `json:"uuid"`
+	Kind   string `json:"kind"`
 }
 
 // TickReport は 1 回の monitor.Tick の結果。
@@ -271,20 +294,30 @@ func cleanupSimulatePane(ctx context.Context, w io.Writer, host simulateHost, ow
 	_, _ = fmt.Fprintf(w, "pane %s を閉じました\n", ownedPaneID)
 }
 
-// runSimulateTicks は monitor.Tick を daemon と同じ設定で実行し、結果を w へ表示する。
-// 1 回目の Tick で limit を検知して待機状態に入った場合、2 回目は起床時刻を過ぎたと
-// 仮定した合成の now を渡して再送信の経路 (recoverPane 経由の SendText/SendKeys) まで
-// 確認する。実時間では待たない (上限解除まで数時間かかるため)。
-// sessionIDOf は使い捨て pane に紐づく Claude セッション ID を引く。取れなければ空 (state 無しとして扱う)。
-// 利用上限 state はセッションごとに別ファイルなので、この対応付けが取れないとどの state を読むかが決まらない。
-func sessionIDOf(ctx context.Context, client paneClient, paneID string) string {
-	pane, err := client.PaneGet(ctx, paneID)
-	if err != nil {
-		return ""
+// loadSimulateTurn は monitor へ渡す transcript の末尾を決める。--turn-file があればその末尾の会話の entry、
+// 無ければ内蔵の上限の entry。
+func loadSimulateTurn(turnFile string) (monitor.Turn, string, error) {
+	if turnFile == "" {
+		entry, ok := transcript.Parse([]byte(defaultSimulateTurn))
+		if !ok {
+			return monitor.Turn{}, "", errors.New("内蔵の transcript の entry を読めません")
+		}
+		return monitor.Turn{Path: "(内蔵: 2.1.289 の five_hour の上限)", Entry: &entry}, "builtin", nil
 	}
-	return pane.SessionID
+	entry, ok, err := transcript.ReadTail(turnFile)
+	if err != nil {
+		return monitor.Turn{}, "", fmt.Errorf("--turn-file の読み込みに失敗: %w", err)
+	}
+	if !ok {
+		return monitor.Turn{}, "", fmt.Errorf("--turn-file %s に会話の entry (type が user / assistant) がありません", turnFile)
+	}
+	return monitor.Turn{Path: turnFile, Entry: &entry}, "file:" + turnFile, nil
 }
 
+// runSimulateTicks は monitor.Tick を daemon と同じ設定で実行し、結果を w へ表示する。
+// 1 回目の Tick で上限を検知して待機状態に入った場合、2 回目は起床時刻を過ぎたと
+// 仮定した合成の now を渡して再送信の経路 (recoverPane 経由の SendText/SendKeys) まで
+// 確認する。実時間では待たない (上限解除まで数時間かかるため)。
 func runSimulateTicks(ctx context.Context, w io.Writer, p apppath.Paths, ownedPaneID string, execClient paneClient, opts Options, res *Result) error {
 	cfg, cfgErr := config.Load(p.ConfigFile())
 	if cfgErr != nil {
@@ -292,17 +325,14 @@ func runSimulateTicks(ctx context.Context, w io.Writer, p apppath.Paths, ownedPa
 		_, _ = fmt.Fprintf(w, "設定の読み込みに失敗、デフォルト値で継続します: %v\n", cfgErr)
 		cfg = config.Default()
 	}
-	classifier, err := detect.NewClassifier(cfg.CustomPatterns)
+	turn, source, err := loadSimulateTurn(opts.TurnFile)
 	if err != nil {
-		return fmt.Errorf("分類器の構築に失敗: %w", err)
+		return err
 	}
-	store := ratelimit.New(p.StateDir())
-	rateState, stateErr := store.Load(sessionIDOf(ctx, execClient, ownedPaneID))
-	if stateErr != nil {
-		_, _ = fmt.Fprintf(w, "利用上限 state の読み込みに失敗、state 無しとして扱います: %v\n", stateErr)
-		rateState = nil
-	}
-	account, accountErr := store.LatestWindow(time.Now())
+	res.Turn = TurnReport{Source: source, UUID: turn.Entry.UUID, Kind: detect.ClassifyTurn(turn.Entry).String()}
+	_, _ = fmt.Fprintf(w, "\ntranscript の末尾として渡す entry: %s (uuid=%s, 判定=%s)\n", source, res.Turn.UUID, res.Turn.Kind)
+
+	account, accountErr := ratelimit.New(p.StateDir()).LatestWindow(time.Now())
 	if accountErr != nil {
 		_, _ = fmt.Fprintf(w, "アカウント全体の利用上限 state の走査に失敗、無しとして扱います: %v\n", accountErr)
 		account = nil
@@ -317,19 +347,26 @@ func runSimulateTicks(ctx context.Context, w io.Writer, p apppath.Paths, ownedPa
 	} else {
 		tickClient = simulateDryRunClient{inner: guarded, w: w, sent: &wouldSend}
 	}
-	_, _ = fmt.Fprintf(w, "\nmonitor.Tick を daemon と同じロジックで実行します (%s)\n", mode)
+	_, _ = fmt.Fprintf(w, "monitor.Tick を daemon と同じロジックで実行します (%s)\n", mode)
 
 	pane, err := guarded.PaneGet(ctx, ownedPaneID)
 	if err != nil {
 		return fmt.Errorf("pane %s の取得に失敗: %w", ownedPaneID, err)
 	}
+	// 使い捨て pane には session が無いので、fixture の読み手を引く鍵として仮の ID を置く。
+	if pane.SessionID == "" {
+		pane.SessionID = "simulate"
+	}
 	res.Agent, res.AgentStatus = pane.Agent, pane.AgentStatus
 	_, _ = fmt.Fprintf(w, "  観測した pane: agent=%s agent_status=%s\n", pane.Agent, pane.AgentStatus)
 
-	deps := monitor.Deps{Client: tickClient, Classifier: classifier, Config: cfg, Sleep: time.Sleep, Account: account}
+	deps := monitor.Deps{
+		Client: tickClient, Config: cfg, Sleep: time.Sleep, Account: account,
+		Turns: func(string) monitor.Turn { return turn },
+	}
 	ps := &monitor.PaneState{}
 	tick := func(n int, now time.Time) monitor.Outcome {
-		outcome, tickErr := monitor.Tick(ctx, deps, pane, ps, rateState, now)
+		outcome, tickErr := monitor.Tick(ctx, deps, pane, ps, nil, now)
 		report := TickReport{Now: now, Outcome: outcome.String(), WouldSend: wouldSend}
 		wouldSend = nil
 		_, _ = fmt.Fprintf(w, "  %d 回目の Tick → Outcome: %s\n", n, outcome)

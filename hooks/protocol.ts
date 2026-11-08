@@ -392,10 +392,6 @@ export const definitions = {
       "reason": {
         "type": "string",
         "description": "届かなかった理由。戻せなかったときはその理由も続ける"
-      },
-      "warning": {
-        "type": "string",
-        "description": "届いたうえでの注意 (TellResult.warning と同じ)"
       }
     }
   },
@@ -842,10 +838,6 @@ export const definitions = {
       "pane_id": {
         "type": "string",
         "description": "打った pane の ID"
-      },
-      "warning": {
-        "type": "string",
-        "description": "文面が上限の検知語を含み、入力欄に残る間は daemon の誤検知の種になりうるときの注意。送ってはある"
       }
     }
   },

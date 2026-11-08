@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
-	"github.com/usadamasa/agents-daemon/internal/runtime/detect"
 )
 
 // geometryOf は pane ごとに固定の Geometry を返す fake。無い pane は error。
@@ -26,24 +27,51 @@ func geometryOf(m map[string]multiplexer.Geometry) *multiplexerfake.Client {
 	}
 }
 
-// pane 一覧は Claude の pane ごとに block の高さと screen を出し、高さが実測の下限 (detect.MinDetectableRows)
-// 未満なら「検知できないことがある」と ⚠ を出す。取れなければ理由を出して pane の行は残す。
+// writeClaudeConfig は Claude Code の設定ディレクトリの形で、登録簿 (sessions/<pid>.json) と transcript
+// (projects/<project>/<sid>.jsonl) を一時ディレクトリに置く。
+func writeClaudeConfig(t *testing.T, registry map[int]string, transcripts map[string]string) string {
+	t.Helper()
+	dir := t.TempDir()
+	for pid, sid := range registry {
+		path := filepath.Join(dir, "sessions", strconv.Itoa(pid)+".json")
+		writeFile(t, path, `{"pid":`+strconv.Itoa(pid)+`,"sessionId":"`+sid+`","name":"peer"}`)
+	}
+	for sid, line := range transcripts {
+		writeFile(t, filepath.Join(dir, "projects", "-work", sid+".jsonl"), line+"\n")
+	}
+	return dir
+}
+
+func writeFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+const (
+	limitedEntry = `{"type":"assistant","uuid":"u-limit","timestamp":"2026-10-04T08:32:13.884Z","message":{"role":"assistant","content":[{"type":"text","text":"You've hit your session limit"}]},"quotaLimits":{"status":"rejected","resetsAt":1791117000,"rateLimitType":"five_hour"},"error":"rate_limit","isApiErrorMessage":true,"apiErrorStatus":429,"version":"2.1.289"}`
+	idleEntry    = `{"type":"user","uuid":"u-user","timestamp":"2026-10-04T08:20:53.022Z","message":{"role":"user","content":"続けて"},"version":"2.1.289"}`
+)
+
+// pane 一覧は Claude の pane ごとに block の高さと screen を出す。取れなければ理由を出して pane の行は残す。
 func TestReportPanes_Geometry(t *testing.T) {
 	client := geometryOf(map[string]multiplexer.Geometry{
-		"tall":  {Rows: 52, Columns: 139, AlternateScreen: true},
-		"short": {Rows: detect.MinDetectableRows - 1, Columns: 139, AlternateScreen: true},
+		"tall": {Rows: 52, Columns: 139, AlternateScreen: true},
 	})
 	rep := collectPanes(context.Background(), client, []multiplexer.Pane{
 		{PaneID: "tall", CWD: "/w", Agent: "claude", AgentStatus: multiplexer.AgentStatusIdle},
-		{PaneID: "short", CWD: "/w", Agent: "claude", AgentStatus: multiplexer.AgentStatusIdle},
 		{PaneID: "gone", CWD: "/w", Agent: "claude", AgentStatus: multiplexer.AgentStatusIdle},
 		{PaneID: "shell", CWD: "/w", Agent: ""},
-	})
-	if len(rep.Claude) != 3 || rep.Claude[0].Geometry == nil || rep.Claude[0].Geometry.Rows != 52 {
+	}, "")
+	if len(rep.Claude) != 2 || rep.Claude[0].Geometry == nil || rep.Claude[0].Geometry.Rows != 52 {
 		t.Fatalf("Claude = %+v", rep.Claude)
 	}
-	if rep.Claude[2].Geometry != nil || rep.Claude[2].GeometryError == "" {
-		t.Errorf("取れない pane = %+v, want geometry 無しで理由あり", rep.Claude[2])
+	if rep.Claude[1].Geometry != nil || rep.Claude[1].GeometryError == "" {
+		t.Errorf("取れない pane = %+v, want geometry 無しで理由あり", rep.Claude[1])
 	}
 	if strings.Contains(strings.Join(client.Calls, " "), "PaneGeometry:shell") {
 		t.Errorf("Claude でない pane に size / modes を打っている: %v", client.Calls)
@@ -52,13 +80,69 @@ func TestReportPanes_Geometry(t *testing.T) {
 	var buf bytes.Buffer
 	writePanes(&buf, *rep)
 	out := buf.String()
-	for _, want := range []string{"rows=52", "screen=alternate", "rows=" + strconv.Itoa(detect.MinDetectableRows-1), "block call", "⚠"} {
+	for _, want := range []string{"rows=52", "screen=alternate", "block call"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("出力に %q が無い:\n%s", want, out)
 		}
 	}
-	if strings.Count(out, "⚠") != 1 {
-		t.Errorf("⚠ は高さの足りない pane の 1 件だけのはず:\n%s", out)
+}
+
+// pane 一覧は daemon と同じ順で session を引き (statusline の記録、無ければ前景の pid で登録簿)、その transcript の
+// 末尾と分類を出す。引けない pane には ⚠ を出す (daemon はその pane の上限を判定できない)。
+func TestReportPanes_SessionAndTranscript(t *testing.T) {
+	claudeDir := writeClaudeConfig(t,
+		map[int]string{4242: "sid-reg"},
+		map[string]string{"sid-ctx": idleEntry, "sid-reg": limitedEntry},
+	)
+	rep := collectPanes(context.Background(), geometryOf(nil), []multiplexer.Pane{
+		{PaneID: "b1", CWD: "/w", Agent: "claude", AgentStatus: multiplexer.AgentStatusIdle, SessionID: "sid-ctx", PID: 1111},
+		{PaneID: "b2", CWD: "/w", Agent: "claude", AgentStatus: multiplexer.AgentStatusError, PID: 4242},
+		{PaneID: "b3", CWD: "/w", Agent: "claude", AgentStatus: multiplexer.AgentStatusIdle, PID: 9999},
+		{PaneID: "b4", CWD: "/w", Agent: "claude", AgentStatus: multiplexer.AgentStatusIdle, SessionID: "sid-none"},
+	}, claudeDir)
+
+	byPane := map[string]PaneReport{}
+	for _, p := range rep.Claude {
+		byPane[p.PaneID] = p
+	}
+	if p := byPane["b1"]; p.SessionSource != SessionFromStatusline || p.Transcript.LastEntry == nil || p.Transcript.LastEntry.Kind != "none" {
+		t.Errorf("b1 = %+v, want statusline の session と none", p)
+	}
+	if p := byPane["b2"]; p.SessionID != "sid-reg" || p.SessionSource != SessionFromRegistry || p.Transcript.LastEntry == nil || p.Transcript.LastEntry.Kind != "limit" {
+		t.Errorf("b2 = %+v, want 登録簿の session と limit", p)
+	}
+	if p := byPane["b3"]; p.SessionID != "" || p.Transcript.LastEntry != nil || !strings.Contains(p.Transcript.Reason, "session_id") {
+		t.Errorf("b3 = %+v, want session 無しの理由", p)
+	}
+	if p := byPane["b4"]; p.Transcript.LastEntry != nil || !strings.Contains(p.Transcript.Reason, "見つからない") {
+		t.Errorf("b4 = %+v, want transcript が無い理由", p)
+	}
+
+	var buf bytes.Buffer
+	writePanes(&buf, *rep)
+	out := buf.String()
+	for _, want := range []string{
+		"session_id=sid-ctx (statusline)", "session_id=sid-reg (registry)", "session_id=(なし)",
+		"末尾の entry: type=assistant error=rate_limit at 2026-10-04T08:32:13Z → limit",
+		"末尾の entry: type=user at 2026-10-04T08:20:53Z → none",
+		"⚠ transcript を読めないため上限を判定できない",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("出力に %q が無い:\n%s", want, out)
+		}
+	}
+	if strings.Count(out, "⚠") != 2 {
+		t.Errorf("⚠ は判定できない 2 pane の分だけのはず:\n%s", out)
+	}
+}
+
+// 設定ディレクトリが決まらなければ、全 pane が transcript を読めない理由付きになる (登録簿も引かない)。
+func TestReportPanes_WithoutClaudeConfigDir(t *testing.T) {
+	rep := collectPanes(context.Background(), geometryOf(nil), []multiplexer.Pane{
+		{PaneID: "b1", Agent: "claude", AgentStatus: multiplexer.AgentStatusIdle, SessionID: "sid", PID: 1},
+	}, "")
+	if p := rep.Claude[0]; p.SessionSource != SessionFromStatusline || p.Transcript.LastEntry != nil || p.Transcript.Reason == "" {
+		t.Errorf("pane = %+v", p)
 	}
 }
 
@@ -70,12 +154,12 @@ func TestReportPanes_UnknownReason(t *testing.T) {
 	writePanes(&buf, *collectPanes(context.Background(), geometryOf(nil), []multiplexer.Pane{
 		{PaneID: "b1", CWD: "/w", Agent: "claude", AgentStatus: multiplexer.AgentStatusUnknown, UnknownReason: reason},
 		{PaneID: "b2", CWD: "/w", Agent: "claude", AgentStatus: multiplexer.AgentStatusIdle},
-	}))
+	}, ""))
 	out := buf.String()
 	if !strings.Contains(out, reason) {
 		t.Errorf("理由が出ていない:\n%s", out)
 	}
-	if strings.Count(out, "理由") != 1 {
+	if strings.Count(out, "unknown の理由") != 1 {
 		t.Errorf("理由の無い pane にも理由の欄が出ている:\n%s", out)
 	}
 }
@@ -86,7 +170,7 @@ func TestReportPanes_RecordKindAndMessage(t *testing.T) {
 	writePanes(&buf, *collectPanes(context.Background(), geometryOf(nil), []multiplexer.Pane{
 		{PaneID: "b1", CWD: "/w", Agent: "claude", AgentStatus: multiplexer.AgentStatusBlocked, AgentKind: "permission", AgentMessage: "approve Bash: rm"},
 		{PaneID: "b2", CWD: "/w", Agent: "claude", AgentStatus: multiplexer.AgentStatusWorking},
-	}))
+	}, ""))
 	out := buf.String()
 	for _, want := range []string{"kind=permission", `msg="approve Bash: rm"`} {
 		if !strings.Contains(out, want) {

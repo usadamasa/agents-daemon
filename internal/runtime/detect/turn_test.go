@@ -77,6 +77,15 @@ func TestKind_Limited(t *testing.T) {
 	}
 }
 
+// Windowed はウィンドウの解除時刻 (quotaLimits.resetsAt) を持ち、その解除を待つ種類。
+func TestKind_Windowed(t *testing.T) {
+	for k, want := range map[Kind]bool{KindNone: false, KindLimit: true, KindWeeklyLimit: true, KindTransient: false, KindSpendLimit: false} {
+		if got := k.Windowed(); got != want {
+			t.Errorf("%v.Windowed() = %v, want %v", k, got, want)
+		}
+	}
+}
+
 func TestKind_String_AllDistinct(t *testing.T) {
 	seen := map[string]Kind{}
 	for _, k := range []Kind{KindNone, KindLimit, KindWeeklyLimit, KindTransient, KindSpendLimit} {

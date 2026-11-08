@@ -50,7 +50,8 @@ func randomTurn(r *rand.Rand, now time.Time) Turn {
 		if r.IntN(3) == 0 {
 			uuid = uuidLimit2
 		}
-		turn = limitedTurn(uuid, now.Add(time.Duration(r.IntN(12*3600)-6*3600)*time.Second))
+		// 解除は 30 時間前から 6 時間先まで (解除から 24 時間より経った entry を含む)。
+		turn = limitedTurn(uuid, now.Add(time.Duration(r.IntN(36*3600)-30*3600)*time.Second))
 	}
 	// entry の時刻は今から 36 時間前までの間か、読めない (ゼロ値)。
 	switch r.IntN(6) {
@@ -252,8 +253,10 @@ func checkSend(cfg config.Config, st step, tr tickResult) string {
 		return "auto-continue の予約中に送った"
 	case tr.observed.Hint == detect.HintResumeReady && tr.sentText():
 		return "Enter 待ちの画面へテキストを送った (新しい依頼になる)"
-	case tr.observed.Kind == detect.KindLimit && tr.pre.TurnUUID != st.turn.Entry.UUID && st.turn.Entry.Quota.ResetsAt.After(st.now):
+	case tr.observed.Kind.Windowed() && tr.pre.TurnUUID != st.turn.Entry.UUID && st.turn.Entry.Quota.ResetsAt.After(st.now):
 		return "新しい上限の entry の解除時刻が未来なのに送った"
+	case tr.observed.Kind == detect.KindWeeklyLimit && weeklyFar(st.turn.Entry, st.now):
+		return "解除が 24 時間より先の週の上限へ送った"
 	case (tr.observed.Kind != detect.KindTransient || tr.observed.Hint == detect.HintResumeReady) && tr.pre.Attempts >= cfg.MaxRetries:
 		return "maxRetries に達した後も送った"
 	case tr.post.Attempts != tr.pre.Attempts+1:
@@ -274,9 +277,13 @@ func checkState(st step, tr tickResult) string {
 	case tr.post.Status == StatusWaiting && tr.post.TurnUUID == "":
 		return "待機中なのに根拠の entry の uuid が無い"
 	case tr.pre.Status == StatusMonitoring && tr.post.Status == StatusWaiting && StaleTurn(st.turn.Entry, st.now):
-		return "24 時間より古い (か時刻の無い) entry で待機に入った"
+		return "解除 (か entry) から 24 時間より経った、または時刻の無い entry で待機に入った"
 	case tr.outcome == OutcomeStaleTurn && (tr.post.Status != StatusMonitoring || tr.sent() || !StaleTurn(st.turn.Entry, st.now)):
 		return "stale-turn なのに待機に入ったか送ったか、entry が古くない"
+	case tr.post.Status == StatusWaiting && tr.observed.Kind == detect.KindWeeklyLimit && weeklyFar(st.turn.Entry, st.now):
+		return "解除が 24 時間より先の週の上限で待機に入った (続けた)"
+	case tr.outcome == OutcomeWeeklyCap && (tr.observed.Kind != detect.KindWeeklyLimit || !weeklyFar(st.turn.Entry, st.now)):
+		return "weekly-cap なのに週の上限でないか、解除が 24 時間以内"
 	case tr.outcome == OutcomeStillWaiting && (len(tr.calls) != 0 || tr.post != tr.pre):
 		return "期限前なのに画面を読んだか状態を変えた"
 	case slices.Contains(monitoringOutcomes, tr.outcome) && (tr.post.Status != StatusMonitoring || tr.sent()):

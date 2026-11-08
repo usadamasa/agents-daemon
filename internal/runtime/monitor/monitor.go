@@ -12,9 +12,9 @@
 //  1. pane の session_id が無い、transcript が読めない → 検知の対象外 (理由を Observe に渡す)
 //  2. record (OSC 7501) が working → 何もしない。turn の途中、retry watchdog の待機中、lower-priority mode の作業中は
 //     どれも working で申告される。transcript が上限なのに working なら、その食い違いを記録する
-//  3. transcript の末尾が上限 (5 時間ウィンドウ) なら、その entry の resetsAt + margin まで待つ。一時エラーなら短い
-//     バックオフ。週の上限と待っても解けない上限は待たず記録だけ残す。entry が 24 時間より古い (daemon の起動前や
-//     `claude --resume` の前に止まった) ものも待たず記録だけ残す
+//  3. transcript の末尾が上限なら、その entry の resetsAt + margin まで待つ。週の上限は解除が 24 時間以内のときだけ
+//     (それより先なら待たず記録だけ残し、毎 tick 見直す)。一時エラーなら短いバックオフ。待っても解けない上限は待たず
+//     記録だけ残す。解除 (解除時刻の無い一時エラーは entry) から 24 時間より経ったものも待たない (Decide)
 //  4. 待機明けに transcript がまだ同じ上限なら、画面を 1 回だけ読んで送るキーを選ぶ (detect.ClassifyScreen)。
 //     本体がリトライ中・auto-continue の予約中・lower-priority で作業中なら手を引き、解除済みで Enter 待ちなら Enter だけ、
 //     どれでもなければ esc → retryMessage → enter
@@ -73,8 +73,9 @@ const (
 	// OutcomeWorkingSuppressed は transcript の末尾が上限なのに record が working で、手を出さなかったことを表す。
 	// 書き込みの遅れか、「上限で止まった pane は working でなくなる」前提が外れたかの実測になる。
 	OutcomeWorkingSuppressed
-	// OutcomeStaleTurn は transcript の末尾が上限か一時エラーだが entry が maxTurnAge より古い (か時刻が読めない) ため、
-	// 待機に入らなかったことを表す。何日も前に止まったまま開いている pane や、`claude --resume` で戻した会話に送らない。
+	// OutcomeStaleTurn は transcript の末尾が上限か一時エラーだが、解除 (解除時刻の無い一時エラーは entry) から
+	// maxTurnAge より経った (か時刻が読めない) ため、待機に入らなかったことを表す。何日も前に止まったまま開いている pane や、
+	// `claude --resume` で戻した会話に送らない。
 	OutcomeStaleTurn
 	// OutcomeRecoveredByUser は待機中にセッションが上限から戻った (次の turn が始まった、record が working になった) と
 	// 判断し、送信せず監視状態へ戻したことを表す。
@@ -106,7 +107,8 @@ const (
 	// OutcomeHardCap は待っても解除されない上限 (spend limit / usage credit / Fable のモデル単位の上限) を
 	// 検知し、待機に入らなかったことを表す。
 	OutcomeHardCap
-	// OutcomeWeeklyCap は週のウィンドウの上限を検知し、待機に入らなかったことを表す。解除は数日先になりうる (#338)。
+	// OutcomeWeeklyCap は週のウィンドウの上限で解除が maxWeeklyWait より先のため、待機に入らなかったことを表す (#338)。
+	// 監視のまま毎 tick 見直し、解除が近づいたら待機に入る。
 	OutcomeWeeklyCap
 	// OutcomeBlockedByPrompt は待機明けに Claude Code が利用者の答えを待つ prompt (permission / question /
 	// auth) を開いていたため、送らずに待機を延長したことを表す。
@@ -156,16 +158,94 @@ const (
 	// retryWaitAfterSend は通常の (transient でない) 再送信後、次に画面を
 	// 確認するまでの待ち時間。
 	retryWaitAfterSend = 30 * time.Second
-	// maxTurnAge は監視から待機へ入るときに entry に許す古さ。これより前に止まった pane は daemon が見ていなかった間に
-	// 止まったもの (daemon の起動前、`claude --resume` で戻した会話) で、利用者が戻るのを待つ。本体の auto-continue が
-	// 待つ上限 (解除が 24 時間より先なら降りる) と同じ線。見るのは待機に入る時点だけで、待機明けには見ない
-	// (待っている間に 24 時間を越える経路を止めない)。
+	// maxTurnAge は監視から待機へ入るときに、解除から (解除時刻の無い一時エラーは entry から) 経った時間に許す長さ。
+	// これより長く再開できたのに誰も再開していない pane は、daemon が見ていなかった間に止まったもの (daemon の起動前、
+	// `claude --resume` で戻した会話) で、利用者が戻るのを待つ。entry の時刻ではなく解除時刻で測るのは、週の上限では
+	// 踏んでから解除まで数日あり、entry の古さで止めると解除が近づいた頃には必ず古くなっているため。見るのは待機に入る
+	// 時点だけで、待機明けには見ない (待っている間に 24 時間を越える経路を止めない)。
 	maxTurnAge = 24 * time.Hour
+	// maxWeeklyWait は週の上限で待機に入る解除までの長さの上限。本体の auto-continue が降りる線 (解除が 24 時間より先)
+	// と同じ。それより先は待たず、監視のまま毎 tick 見直して近づいたら待機に入る。
+	maxWeeklyWait = 24 * time.Hour
 )
 
-// StaleTurn は entry が maxTurnAge より古いか、時刻が読めないかを返す。inspect が同じ判定を説明するのに使う。
+// Plan は監視中の pane の末尾の entry を daemon がどう扱うか (Decide の結果)。
+type Plan int
+
+const (
+	// PlanNone は上限でも一時エラーでもなく、何もしない。
+	PlanNone Plan = iota
+	// PlanWait は待機に入る。
+	PlanWait
+	// PlanWeeklyFar は週の上限で解除が maxWeeklyWait より先。待たず記録だけ残し、毎 tick 見直す。
+	PlanWeeklyFar
+	// PlanStale は解除 (か entry) から maxTurnAge より経った、または時刻が読めない。待たない。
+	PlanStale
+	// PlanHardCap は待っても解除されない上限。待たない。
+	PlanHardCap
+)
+
+// planIDs は Plan の JSON とログ向けの識別子。
+var planIDs = map[Plan]string{
+	PlanNone: "none", PlanWait: "wait", PlanWeeklyFar: "weekly-far", PlanStale: "stale-turn", PlanHardCap: "hard-cap",
+}
+
+// ID は Plan を JSON 向けの識別子にする。
+func (p Plan) ID() string {
+	if id, ok := planIDs[p]; ok {
+		return id
+	}
+	return "unknown"
+}
+
+// String は Plan を診断表示向けの日本語にする。
+func (p Plan) String() string {
+	switch p {
+	case PlanWait:
+		return "待機に入る"
+	case PlanWeeklyFar:
+		return "解除が 24 時間より先なので待たない (近づいたら待機に入る)"
+	case PlanStale:
+		return "解除 (か entry) から 24 時間より経った (か時刻が無い) ので待機に入らない (stale-turn)"
+	case PlanHardCap:
+		return "待っても解除されない上限なので待機に入らない"
+	default:
+		return "上限でも一時エラーでもないので何もしない"
+	}
+}
+
+// Decide は監視中の pane の末尾の entry (kind は detect.ClassifyTurn の結果) を daemon がどう扱うかを決める。
+// 一時エラーを扱うかの設定 (handleTransient) は見ない (呼ぶ側が先に外す)。tickMonitoring のほか、doctor と inspect が
+// 同じ判断を説明するのに呼ぶ。ここ以外に待つかどうかの判断を書くと、診断の説明が実際の挙動とずれる。
+func Decide(kind detect.Kind, e *transcript.Entry, now time.Time) Plan {
+	switch {
+	case kind == detect.KindSpendLimit:
+		return PlanHardCap
+	case !kind.Limited():
+		return PlanNone
+	case kind == detect.KindWeeklyLimit && weeklyFar(e, now):
+		return PlanWeeklyFar
+	case StaleTurn(e, now):
+		return PlanStale
+	default:
+		return PlanWait
+	}
+}
+
+// StaleTurn は解除 (resetsAt が無ければ entry の時刻) から maxTurnAge より経ったか、時刻が読めないかを返す。
 func StaleTurn(e *transcript.Entry, now time.Time) bool {
-	return e == nil || e.Timestamp.IsZero() || now.Sub(e.Timestamp) > maxTurnAge
+	if e == nil || e.Timestamp.IsZero() {
+		return true
+	}
+	if e.Quota != nil && !e.Quota.ResetsAt.IsZero() {
+		return now.Sub(e.Quota.ResetsAt) > maxTurnAge
+	}
+	return now.Sub(e.Timestamp) > maxTurnAge
+}
+
+// weeklyFar は週の上限の解除が maxWeeklyWait より先かを返す。
+func weeklyFar(e *transcript.Entry, now time.Time) bool {
+	return e != nil && e.Quota != nil && e.Quota.ResetsAt.Sub(now) > maxWeeklyWait
 }
 
 // Client は Tick が pane に対して使う操作。多重化ツールの全部入りの multiplexer.Client のうち、画面を読む・送る
@@ -280,30 +360,24 @@ func standDown(ps *PaneState) {
 
 // tickMonitoring は監視状態での 1 tick を処理する。上限でも一時エラーでもない turn には何もしない。
 func tickMonitoring(deps Deps, ps *PaneState, ev Evidence, now time.Time) Outcome {
-	switch ev.Kind {
-	case detect.KindSpendLimit:
+	if ev.Kind == detect.KindTransient && !deps.Config.HandleTransient {
+		return OutcomeMonitoring
+	}
+	switch Decide(ev.Kind, ev.Turn.Entry, now) {
+	case PlanHardCap:
 		return OutcomeHardCap
-	case detect.KindWeeklyLimit:
-		// 解除が数日先になりうる。待たずに記録だけ残す (#338)。
+	case PlanWeeklyFar:
 		return OutcomeWeeklyCap
-	case detect.KindTransient:
-		if !deps.Config.HandleTransient {
-			return OutcomeMonitoring
-		}
-		if StaleTurn(ev.Turn.Entry, now) {
-			return OutcomeStaleTurn
-		}
+	case PlanStale:
+		return OutcomeStaleTurn
+	case PlanWait:
 		ps.Status = StatusWaiting
 		ps.TurnUUID = ev.Turn.Entry.UUID
-		ps.WaitUntil = now.Add(time.Duration(deps.Config.TransientWaitSeconds) * time.Second)
-		return OutcomeWaiting
-	case detect.KindLimit:
-		if StaleTurn(ev.Turn.Entry, now) {
-			return OutcomeStaleTurn
+		if ev.Kind == detect.KindTransient {
+			ps.WaitUntil = now.Add(time.Duration(deps.Config.TransientWaitSeconds) * time.Second)
+		} else {
+			ps.WaitUntil, _ = ComputeLimitWake(deps.Config, ev.Turn.Entry, now)
 		}
-		ps.Status = StatusWaiting
-		ps.TurnUUID = ev.Turn.Entry.UUID
-		ps.WaitUntil, _ = ComputeLimitWake(deps.Config, ev.Turn.Entry, now)
 		return OutcomeWaiting
 	default:
 		return OutcomeMonitoring
@@ -320,8 +394,11 @@ func tickWaiting(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *Pane
 		standDown(ps)
 		return OutcomeHardCap, nil
 	case detect.KindWeeklyLimit:
-		standDown(ps)
-		return OutcomeWeeklyCap, nil
+		if weeklyFar(ev.Turn.Entry, now) {
+			// 待っている間に別の依頼が週の上限に当たり、解除が 24 時間より先へ移った。
+			standDown(ps)
+			return OutcomeWeeklyCap, nil
+		}
 	case detect.KindTransient:
 		if !deps.Config.HandleTransient {
 			// 待っている間に上限から一時エラーへ変わった。設定で扱わないものなので本体と利用者に任せる。
@@ -343,7 +420,7 @@ func tickWaiting(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *Pane
 	}
 
 	entry := ev.Turn.Entry
-	if ev.Kind == detect.KindLimit && entry.UUID != ps.TurnUUID {
+	if ev.Kind.Windowed() && entry.UUID != ps.TurnUUID {
 		// 待っている間に新しい依頼がまた上限に当たった。解除時刻が先に移っていれば送らず待ち直す。試行回数は持ち越す。
 		if entry.Quota.ResetsAt.After(now) {
 			ps.TurnUUID = entry.UUID

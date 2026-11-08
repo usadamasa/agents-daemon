@@ -1,5 +1,23 @@
 # Changelog
 
+## [2026.1108.2](https://github.com/usadamasa/agents-daemon/compare/2026.1108.1...2026.1108.2) - 2026-11-08
+
+### Features
+- 依存図の拡大縮小の操作を図の領域の右上へ移す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/517
+### Bug Fixes
+- statusline の effort を CLAUDE_CONFIG_DIR の settings.json から読む by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/507
+- 全列挙の途中で閉じた session の block ls の exit 3 を読み飛ばす by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/508
+- 依存図: 進行中の作業が無い生きているセッションをノードで出す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/509
+- macOS の deployment target を 13.0 に上げる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/511
+- 生きているセッションの作業の記録を保持期間で消さない by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/514
+- peer の起動手順を rex session new に揃える by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/513
+- fix: .envrc から PATH_add bin を外す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/515
+- 依存図: 線の無い終了したセッションの置き場を載せない by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/516
+### Refactoring
+- docs: mod が無くなったと読める表現を今の主体に直す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/519
+### Other
+- [from now] 2026/11/08 20:02:43 by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/504
+
 ## [2026.1108.1](https://github.com/usadamasa/agents-daemon/compare/2026.1108.0...2026.1108.1) - 2026-11-08
 
 ### Features

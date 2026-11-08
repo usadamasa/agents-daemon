@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -309,5 +310,62 @@ func TestList_Remove_Prune(t *testing.T) {
 	}
 	if list, err := (Store{}).List(); list != nil || err != nil {
 		t.Errorf("ゼロ値の List() = %v, %v", list, err)
+	}
+}
+
+// Touch した記録は Prune で消えず、中身も変わらない。触っていない記録は消え、無い記録は作らない。
+func TestTouch_keepsRecordFromPrune(t *testing.T) {
+	s := New(t.TempDir())
+	mustIngest(t, s, hook("UserPromptSubmit", `"prompt": "a"`), now)
+	mustIngest(t, s, []byte(`{"session_id": "s2", "cwd": "/w", "hook_event_name": "Stop", "last_assistant_message": "b"}`), now)
+	before := mustGet(t, s, "s1")
+
+	old := now.Add(-Retention - time.Hour)
+	for _, name := range []string{"s1.json", "s2.json"} {
+		if err := os.Chtimes(filepath.Join(s.Dir, name), old, old); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.Touch([]string{"s1", "absent"}, now); err != nil {
+		t.Fatalf("Touch() = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(s.Dir, "absent.json")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("無い記録を作った (err=%v)", err)
+	}
+	if after := mustGet(t, s, "s1"); !reflect.DeepEqual(before, after) {
+		t.Errorf("Touch で中身が変わった: %+v → %+v", before, after)
+	}
+
+	n, err := s.Prune(now)
+	if err != nil || n != 1 {
+		t.Errorf("Prune() = %d, %v, want 1 (触っていない s2 だけ)", n, err)
+	}
+	if _, ok := s.Get("s1"); !ok {
+		t.Error("Touch した記録が消えた")
+	}
+	if _, ok := s.Get("s2"); ok {
+		t.Error("触っていない記録が残った")
+	}
+}
+
+func TestTouch_rejectsInvalidIDAndContinues(t *testing.T) {
+	s := New(t.TempDir())
+	mustIngest(t, s, hook("UserPromptSubmit", `"prompt": "a"`), now)
+	old := now.Add(-time.Hour)
+	if err := os.Chtimes(filepath.Join(s.Dir, "s1.json"), old, old); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Touch([]string{"../escape", "s1"}, now); err == nil {
+		t.Error("ファイル名に使えない ID の Touch が通った")
+	}
+	info, err := os.Stat(filepath.Join(s.Dir, "s1.json"))
+	if err != nil || !info.ModTime().Equal(now) {
+		t.Errorf("後ろの ID を触っていない: %v, %v", info, err)
+	}
+}
+
+func TestTouch_zeroStore(t *testing.T) {
+	if err := (Store{}).Touch([]string{"s1"}, now); err != nil {
+		t.Errorf("ゼロ値の Touch() = %v", err)
 	}
 }

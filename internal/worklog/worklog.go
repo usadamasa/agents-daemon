@@ -34,7 +34,8 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
 
-// Retention は記録を残す期間。生きているセッションの記録は Stop ごとに触るので消えず、消えるのは終了してからの経過。
+// Retention はセッションの終了後に記録を残す期間。daemon が pane の見えているセッションの mtime を tick ごとに進める
+// (Touch) ので、mtime からの経過は pane が見えなくなってからの経過になる。
 // 終了したセッションの作業を未完了のまま残す (パーキングへ移すか外すかを決める) 期間で、終了したセッションの未完了の
 // タスク (tasklog.Retention) と揃える。計測 (#368) では 7 日に 117 のセッションがタスク無しで終わるので、同じ数の
 // 終了したノードが依存図に残る。多すぎればここを縮める (アプリの「終了したセッションの作業を外す」でもまとめて消せる)。
@@ -298,6 +299,29 @@ func (s Store) Remove(sessionID string) error {
 		}
 		return nil
 	})
+}
+
+// Touch は生きているセッションの記録の mtime を now に進める。中身は変えず (依存図は UpdatedAt で並べる)、無い記録は
+// 作らない。ファイル名に使えない ID は飛ばして残りを進め、エラーにまとめて返す。
+func (s Store) Touch(sessionIDs []string, now time.Time) error {
+	if s.Dir == "" {
+		return nil
+	}
+	var errs []error
+	for _, id := range sessionIDs {
+		path, err := statefile.SessionPath(s.Dir, id, ".json")
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		if path == "" {
+			continue
+		}
+		if err := os.Chtimes(path, now, now); err != nil && !errors.Is(err, os.ErrNotExist) {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // Prune は Retention のあいだ更新されなかった記録 (と壊れたファイル、消し損ねた一時ファイル) を mtime で消し、消した数を

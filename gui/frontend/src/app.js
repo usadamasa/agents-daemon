@@ -3,10 +3,10 @@
 // オブジェクトはタスク (図の箱) とメモ (下の一覧の行)。選ぶとそのそばにポップアップで単体ビューが開く。
 import * as dagre from "./vendor/dagre.esm.js";
 import { Graph } from "./graph.js";
-import { partition } from "./column.js";
+import { GROUP_W, groupBySession, partition, placeGroups } from "./column.js";
 import { fitEdges, spreadPorts } from "./ports.js";
 import { findJumps, jumpPath } from "./jumps.js";
-import { STATE_LABEL, STATE_TONE, emphasis } from "./card.js";
+import { STATE_LABEL, STATE_TONE, cardText, emphasis } from "./card.js";
 import { isStale, kindLabel, lastPlacedAt, stamp } from "./memo.js";
 import { canAdopt, canDismiss, canRename, canTell, candidates, destinationLabel, isOwnTask, issueDestinations, pathDestination, peerDestinations, spawnDestinations, spawnLabel, taskDestinations } from "./ops.js";
 import { addBlocker, adopt, askUnlink, discard, discardStale, dismissAll, dismissOne, handOff, handOffTask, instruct, rename, setStatus, start, toParking, unlink } from "./actions.js";
@@ -195,8 +195,8 @@ const MARGIN_Y = 24;
 const GAP_X = 48;
 const GAP_Y = 44;
 
-// layout は辺でつながるノード (connected) を dagre で配置する。辺の無いノードは図の外の右の列に並べる (renderColumn)。
-// depth は key → 段 (Graph.view の depth)。返すのは key → { x, y } (中心) と、全体の width、height、辺の経路を持つ
+// layout は辺でつながるノード (connected) を dagre で配置する。辺の無いノードは図の下のセッションの枠 (renderGroups) か
+// 右の列 (renderColumn) に並べる。depth は key → 段 (Graph.view の depth)。返すのは key → { x, y } (中心) と、全体の width、height、辺の経路を持つ
 // dagre の graph。
 function layout(connected, links, depth) {
   const g = new dagre.graphlib.Graph();
@@ -211,7 +211,7 @@ function layout(connected, links, depth) {
   return { g, pos, width: g.graph().width, height: g.graph().height };
 }
 
-function nodeCard(n, highlight) {
+function nodeCard(n, highlight, grouped = false) {
   const b = document.createElement("button");
   b.type = "button";
   b.className = "node";
@@ -231,11 +231,11 @@ function nodeCard(n, highlight) {
 
   const lb = document.createElement("span");
   lb.className = "lb";
+  const text = cardText(n, stateLabel(n), grouped);
   const title = document.createElement("b");
-  title.textContent = n.title;
+  title.textContent = text.title;
   const sub = document.createElement("small");
-  // 副題はセッション名 (題と違うとき)、状態、今の作業 (タスクの無いセッションと進行中の作業にだけ付く) の順。
-  sub.textContent = [n.session !== n.title ? n.session : "", stateLabel(n), n.summary].filter(Boolean).join(" · ");
+  sub.textContent = text.sub;
   if (n.summary) b.title = n.summary;
   lb.append(title, sub);
   b.append(dot, lb);
@@ -308,24 +308,33 @@ function renderGraph() {
   const host = el("graph");
   const graph = state.data.graph;
   const { nodes, links, depth } = state.graph.view(state.showCompleted);
-  const { connected, column } = partition(nodes, links, graph.column_order);
+  const { connected, free, ended } = partition(nodes, links, graph.column_order);
   const highlight = highlightKeys();
-  renderColumn(column, highlight);
+  renderColumn(ended, highlight);
   const scroll = { left: host.scrollLeft, top: host.scrollTop };
   host.replaceChildren();
-  if (connected.length === 0) {
+  if (connected.length === 0 && free.length === 0) {
     const empty = document.createElement("div");
     empty.className = "empty";
-    empty.textContent = nodes.length === 0 ? "タスクが無い" : "依存のあるタスクは無い";
+    empty.textContent = nodes.length === 0 ? "タスクが無い" : "動いている作業は無い";
     host.append(empty);
     return;
   }
-  const { g, pos, width, height } = layout(connected, links, depth);
 
   const canvas = document.createElement("div");
   canvas.className = "canvas";
-  canvas.style.width = `${Math.ceil(width)}px`;
-  canvas.style.height = `${Math.ceil(height)}px`;
+  const graphSize = connected.length > 0 ? renderLinked(canvas, connected, links, depth, graph, highlight) : { width: 0, height: 0 };
+  const groups = renderGroups(canvas, free, highlight, graphSize, host.clientWidth);
+  canvas.style.width = `${Math.ceil(Math.max(graphSize.width, groups.width))}px`;
+  canvas.style.height = `${Math.ceil(Math.max(graphSize.height, groups.height))}px`;
+  canvas.dataset.linked = String(connected.length > 0);
+  host.append(canvas);
+  host.scrollTo(scroll.left, scroll.top);
+}
+
+// renderLinked は辺でつながるノードを線と箱で canvas に描き、その大きさを返す。
+function renderLinked(canvas, connected, links, depth, graph, highlight) {
+  const { g, pos, width, height } = layout(connected, links, depth);
 
   const svg = document.createElementNS(SVG, "svg");
   svg.setAttribute("class", "edges");
@@ -354,17 +363,40 @@ function renderGraph() {
     card.style.top = `${Math.round(p.y - NODE_H / 2)}px`;
     canvas.append(card);
   }
-  host.append(canvas);
-  host.scrollTo(scroll.left, scroll.top);
+  return { width, height };
 }
 
-// renderColumn は辺の無いノードを右の列に縦 1 列で並べる。列は拡大縮小の外にあり、独立してスクロールする。
+// renderGroups は辺の無い動いているノードをセッションの枠にして、線のあるかたまりの下に並べる。折り返しは見える領域の
+// 幅 (線のあるかたまりの方が広ければそちら) で決める。枠が無ければ大きさは 0。
+function renderGroups(canvas, free, highlight, graphSize, viewWidth) {
+  if (free.length === 0) return { width: 0, height: 0 };
+  const groups = groupBySession(free);
+  const top = graphSize.height > 0 ? graphSize.height : MARGIN_Y;
+  const { places, right, bottom } = placeGroups(groups, MARGIN_X, top, Math.max(graphSize.width, viewWidth));
+  groups.forEach((g, i) => {
+    const section = document.createElement("section");
+    section.className = "group";
+    section.setAttribute("aria-label", g.label);
+    section.style.left = `${places[i].x}px`;
+    section.style.top = `${places[i].y}px`;
+    section.style.width = `${GROUP_W}px`;
+    const head = document.createElement("h2");
+    head.textContent = g.label;
+    section.append(head, ...g.nodes.map((n) => nodeCard(n, highlight, true)));
+    canvas.append(section);
+  });
+  return { width: right + MARGIN_X, height: bottom + MARGIN_Y };
+}
+
+// renderColumn は辺の無い終わったノードを右の列に縦 1 列で並べる。列は拡大縮小の外にあり、独立してスクロールする。
 // 無ければ列ごと隠して、依存図に幅を返す。
-function renderColumn(column, highlight) {
+function renderColumn(ended, highlight) {
   const host = el("column");
   const scroll = host.scrollTop;
-  host.hidden = column.length === 0;
-  host.replaceChildren(...column.map((n) => nodeCard(n, highlight)));
+  host.hidden = ended.length === 0;
+  const head = document.createElement("h2");
+  head.textContent = `終わった作業 · ${ended.length}`;
+  host.replaceChildren(head, ...ended.map((n) => nodeCard(n, highlight)));
   host.scrollTop = scroll;
 }
 
@@ -1226,7 +1258,8 @@ function zoomByUser(next, pointer) {
   setZoom(next, pointer);
 }
 
-// fitAll は図全体が見える領域に収まる拡大率にする (100% を超えて拡大せず、下限で止める)。拡大率が変わったときと
+// fitAll は図全体が見える領域に収まる拡大率にする (100% を超えて拡大せず、下限で止める)。線が 1 本も無い図は枠を折り返して
+// スクロールで見られるので、カードが読める 100% のままにする。拡大率が変わったときと
 // force のときは、下限で止まってはみ出した分のうち上 (根の側) と横の中心を見せる。拡大率の変わらない描き直しでは
 // 今のスクロールを保ち、数秒ごとの読み直しで位置を揺らさない。
 function fitAll(force) {
@@ -1234,7 +1267,7 @@ function fitAll(force) {
   const canvas = host.querySelector(".canvas");
   if (canvas === null) return;
   const size = canvasSize(canvas);
-  const next = fitZoom(size.width, size.height, host.clientWidth, host.clientHeight);
+  const next = canvas.dataset.linked === "true" ? fitZoom(size.width, size.height, host.clientWidth, host.clientHeight) : 1;
   const changed = next !== zoom;
   zoom = next;
   applyZoom();
@@ -1310,6 +1343,8 @@ document.addEventListener("keydown", (e) => {
 // スクロールと窓の大きさの変化でポップアップの位置を追わせる。
 for (const target of [el("graph"), el("column"), el("park-list")]) target.addEventListener("scroll", () => { if (state.selected !== null) renderPopup(); });
 window.addEventListener("resize", () => {
+  // 枠の折り返しは見える領域の幅で決まるので、描き直す。
+  if (state.data !== null) renderGraph();
   if (fitOn) fitAll(false);
   else applyZoom();
   if (state.selected !== null) renderPopup();

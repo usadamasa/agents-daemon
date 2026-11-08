@@ -28,6 +28,16 @@ export const STATE_TONE = {
   dropped: "drop",
 };
 
+// cardText はカードの題と副題。grouped はセッションの枠の中のカードで、見出しが持つセッション名を繰り返さない。題が
+// セッション名のまま (作業の記録に題が無い) のカードは、今の作業があればそれを題にする。label は状態の語。
+export function cardText(n, label, grouped) {
+  const summaryAsTitle = Boolean(grouped && n.title === n.session && n.summary);
+  return {
+    title: summaryAsTitle ? n.summary : n.title,
+    sub: [!grouped && n.session !== n.title ? n.session : "", label, summaryAsTitle ? "" : n.summary].filter(Boolean).join(" · "),
+  };
+}
+
 // 人の手当てが要る状態。作業中より目立たせる。取りやめの参照は、待っていた下流を人が付け替えるまで止める。
 const ATTENTION = new Set(["question", "permission", "limit", "error", "dropped"]);
 

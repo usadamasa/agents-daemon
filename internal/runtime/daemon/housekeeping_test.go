@@ -136,13 +136,18 @@ func TestHousekeep_keepsCompletedTasksOfExitedSession(t *testing.T) {
 		t.Errorf("作業の記録の無いセッションの完了タスクは消えるべき (err=%v)", err)
 	}
 
-	// 作業の記録が保持期間で消えた次の回に、残した完了タスクも消える。
-	if err := os.Remove(exitedWork); err != nil {
-		t.Fatalf("Remove: %v", err)
+	// 作業の記録が保持期間で消える回に、残した完了タスクも一緒に消える。次の回まで残すと、その間に resume した
+	// セッションの活動の置き場が無くなる (models/card の LivePlace)。
+	expiredAt := now.Add(worklog.Retention + time.Hour)
+	if err := os.Chtimes(exitedWork, now, now); err != nil {
+		t.Fatalf("Chtimes: %v", err)
 	}
-	r.housekeep(logPath, now.Add(time.Hour))
+	r.housekeep(logPath, expiredAt)
+	if _, err := os.Stat(exitedWork); !os.IsNotExist(err) {
+		t.Errorf("保持期間を過ぎた作業の記録は消えるべき (err=%v)", err)
+	}
 	if _, err := os.Stat(exitedTask); !os.IsNotExist(err) {
-		t.Errorf("作業の記録が消えた後の完了タスクは消えるべき (err=%v)", err)
+		t.Errorf("作業の記録が消える回に完了タスクも消えるべき (err=%v)", err)
 	}
 }
 

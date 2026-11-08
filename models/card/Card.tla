@@ -4,7 +4,7 @@
    セッション 1 つとその記録 (tasks/、work/)、そのセッションを before に持つ辺 1 本を追う。カードの状態は実装と同じ式で導く
    (SessionCard は deps の collect、NodeState は graph の nodeState、UpstreamState は graph の sinkHub と sessionKeys)。
    経過は保持期間の区切りだけを写す (0 は 1 日未満、1 は 7 日未満、2 は 7 日以上)。
-   housekeeping はタスク、作業の記録、辺の順に消す。PruneWork と PruneTask の前提でこの順を写す。 *)
+   housekeeping は作業の記録、辺、タスクの順に 1 回で消す。作業の記録が消える回の順は PruneWork が 1 ステップで写す。 *)
 EXTENDS Naturals, FiniteSets
 
 CONSTANTS
@@ -51,10 +51,10 @@ AllDone == HasTask /\ \A t \in TaskKeys : tasks[t] = "completed"
 \* collect。"work" は作業の記録から、"pane" は pane から作るセッションのカード、"none" は作らない。
 SessionCard ==
   IF work /\ ~(HasTask /\ (InProgress \/ ~alive)) THEN "work"
-  ELSE IF alive /\ ~InProgress /\ ~work THEN "pane"
+  ELSE IF alive /\ ~HasTask /\ ~work THEN "pane"
   ELSE "none"
 
-StatusOnly == SessionCard /= "none" /\ HasTask
+StatusOnly == SessionCard = "work" /\ HasTask
 
 \* nodeState
 NodeState(p) ==
@@ -141,18 +141,20 @@ PrunableTask(t) ==
   \/ (tasks[t] = "completed" /\ taskAge >= 1 /\ ~KeptCompleted)
   \/ (tasks[t] \in {"pending", "in_progress"} /\ taskAge = 2)
 
-\* 期限の来た辺は、同じ回の housekeeping で作業の記録の後に消える。次の回に走るタスクの掃除より先。
 PruneTask(t) ==
   /\ PrunableTask(t)
-  /\ KeepCompleted /\ ~work /\ ~alive => ~(edge /\ edgeAge = 2)
   /\ tasks' = [tasks EXCEPT ![t] = "none"]
   /\ UNCHANGED <<alive, act, work, taskAge, workAge, edgeAge, edge, resumes, exitedAllDone>>
 
+\* housekeeping は作業の記録、辺、タスクの順に 1 回で消す。作業の記録が消える回に、期限の来た辺と、残していた完了タスクも消える。
 PruneWork ==
   /\ work /\ workAge = 2
-  /\ \A t \in Tasks : ~PrunableTask(t)
   /\ work' = FALSE
-  /\ UNCHANGED <<alive, act, tasks, taskAge, workAge, edgeAge, edge, resumes, exitedAllDone>>
+  /\ edge' = (edge /\ edgeAge < 2)
+  /\ tasks' = [t \in Tasks |->
+                 IF (tasks[t] = "completed" /\ taskAge >= 1) \/ (tasks[t] \in {"pending", "in_progress"} /\ taskAge = 2)
+                 THEN "none" ELSE tasks[t]]
+  /\ UNCHANGED <<alive, act, taskAge, workAge, edgeAge, resumes, exitedAllDone>>
 
 PruneEdge ==
   /\ edge /\ edgeAge = 2

@@ -17,7 +17,7 @@
 
 | 性質 | テスト |
 | ---- | ---- |
-| `LivePlace` | `deps/work_test.go` の `TestBuild_liveSessionWithoutInProgressWork`、`TestBuild_liveSessionWithoutWorkRecord` |
+| `LivePlace` | `deps/work_test.go` の `TestBuild_liveSessionWithoutInProgressWork` |
 | `NoResurrectedExited` / `SatisfiedStays` | `daemon/housekeeping_test.go` の `TestHousekeep_keepsCompletedTasksOfExitedSession`、`tasklog/prune_test.go` の `TestPrune_keepCompleted` |
 
 ## 前提
@@ -26,4 +26,5 @@
 - daemon は動いている前提。止まっている間はカードが全部 exited になる (`deps.Write` のコメント)。
 - 辺は終了の前に書かれたものだけを写す。終了の後に足した辺は、作業の記録より長く残りうる。
 - blockedBy は置かない。記録のあるタスクは全部が末端になる。
-- housekeeping の順 (タスク、作業の記録、辺) は `PruneWork` と `PruneTask` の前提で写す。
+- housekeeping は作業の記録、辺、タスクの順に 1 回で消す。逆にすると、作業の記録が消えて完了タスクだけが残る窓ができ、
+  その間に resume したセッションの活動の置き場が無くなる (`LivePlace` の反例で見つけた)。

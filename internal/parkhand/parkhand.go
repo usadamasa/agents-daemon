@@ -82,7 +82,7 @@ func (r Runner) tell(ctx context.Context, req Request, item parking.Item, names 
 	if err != nil {
 		return r.revert(req.ID, Result{To: req.ToSession, Reason: err.Error()})
 	}
-	return Result{Delivered: true, Status: parking.StatusHanded, To: req.ToSession, PaneID: told.PaneID, Warning: told.Warning}
+	return Result{Delivered: true, Status: parking.StatusHanded, To: req.ToSession, PaneID: told.PaneID}
 }
 
 // spawn は取ったメモを新しく起こすセッションへ渡す。起こせなければ戻す。session はできたが claude が前景になるのを待ち切れた

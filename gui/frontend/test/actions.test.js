@@ -36,11 +36,11 @@ test("handOff は park hand を 1 回呼び、宛先と補足と操作主体を�
   assert.deepEqual(res, { ok: true, message: "fix-lint へ送り、メモを渡しました" });
 });
 
-test("handOff は新しいセッションへは to_repo で渡し、注意があれば添える", async () => {
-  const io = fakeIO({ run: [json({ delivered: true, status: "handed", to: "s9", pane_id: "p1", warning: "検知語" })] });
+test("handOff は新しいセッションへは to_repo で渡す", async () => {
+  const io = fakeIO({ run: [json({ delivered: true, status: "handed", to: "s9", pane_id: "p1" })] });
   const res = await handOff(memo, spawnTo, "task", "", io);
   assert.equal(io.calls[0][1].to_repo, "/r/a");
-  assert.deepEqual(res, { ok: true, message: "a で新しいセッションを起こし、メモを渡しました (検知語)" });
+  assert.deepEqual(res, { ok: true, message: "a で新しいセッションを起こし、メモを渡しました" });
 });
 
 test("handOff は届かず open に戻ったことを文面にする", async () => {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,7 +35,44 @@ func newTestRuntime(t *testing.T, client multiplexerClient, startedAt time.Time)
 	r := newDaemonRuntime(client, log, statusPath, sessionstate.New(dir), func(time.Duration) {}, startedAt)
 	r.limits = limitlog.New(dir)
 	r.turnFailures = turnfailure.New(dir)
+	// Claude Code の設定ディレクトリ (登録簿と transcript) も一時ディレクトリの下に置く。
+	r.attachClaudeConfigDir(filepath.Join(dir, "claude"))
 	return r, statusPath
+}
+
+// transcript の末尾に置く entry (transcript/testdata と同じ形)。
+const (
+	// transcriptLimited は 5 時間ウィンドウの上限で止まった turn。resetsAt は 2026-10-04T12:30:00Z。
+	transcriptLimited = `{"type":"assistant","uuid":"cae11b0e-b253-403c-8cd6-7cf350809a97","timestamp":"2026-10-04T08:32:13.884Z","message":{"role":"assistant","content":[{"type":"text","text":"You've hit your session limit · resets 9:30pm (Asia/Tokyo)"}]},"quotaLimits":{"status":"rejected","resetsAt":1791117000,"rateLimitType":"five_hour","overageStatus":"rejected"},"error":"rate_limit","isApiErrorMessage":true,"apiErrorStatus":429,"version":"2.1.289"}`
+	// transcriptIdle は普通に終わった turn。
+	transcriptIdle = `{"type":"assistant","uuid":"7a1f0c2e-5d3b-4e8f-9a6c-1b2d3e4f5a6b","timestamp":"2026-10-04T08:20:53.022Z","message":{"role":"assistant","content":[{"type":"text","text":"done"}]},"version":"2.1.289"}`
+)
+
+// transcriptResetsAt は transcriptLimited の resetsAt。
+var transcriptResetsAt = time.Unix(1791117000, 0)
+
+// writeTranscript は sessionID の transcript を Claude Code の置き場に置く。
+func writeTranscript(t *testing.T, r *daemonRuntime, sessionID string, lines ...string) {
+	t.Helper()
+	dir := filepath.Join(r.transcripts.Dir, "-work-project")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, sessionID+".jsonl"), []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// writeSessionRegistry は Claude Code の登録簿 (sessions/<pid>.json) を置く。
+func writeSessionRegistry(t *testing.T, r *daemonRuntime, pid int, sessionID string) {
+	t.Helper()
+	if err := os.MkdirAll(r.claudeSessions.Dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := fmt.Sprintf(`{"pid":%d,"sessionId":%q,"name":"peer"}`, pid, sessionID)
+	if err := os.WriteFile(filepath.Join(r.claudeSessions.Dir, fmt.Sprintf("%d.json", pid)), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // writeContextSidecar は statusline が書く生の形で context/<sid>.json を置く。
@@ -170,68 +208,125 @@ func TestDaemonRuntimeTick_NonClaudePaneNeverGetsEntry(t *testing.T) {
 	}
 }
 
-// TestDaemonRuntimeTick_RateStateLoadedOnceIsSharedAcrossPanes は、1 tick 内で
-// rate-limits.json を読み込むのが 1 回だけであり、その結果 (*limitstate.State) が
-// 全 pane の monitor.Tick 呼び出しへそのまま使い回されることを検証する。
-//
-// pane 単位で毎回読み直す実装だと、1 pane 目の処理中にファイルが書き換わった
-// (あるいは消えた) 場合、同じ tick 内の 2 pane 目が別の瞬間の state を見てしまう。
-// これを検出するため、1 pane 目の PaneRead 呼び出し (screen 読み取り自体が
-// tick 処理の一部) の副作用として rate-limits.json を削除し、2 pane 目の判定が
-// 削除前の値のまま (= 1回だけ読み込んだ値を使い回している) であることを確認する。
-// TestDaemonRuntimeTick_MissingSessionStateDoesNotLeakToOtherPanes は、片方の
-// セッションの state が無い (statusline がまだ書いていない) ときに、もう片方の判定が
-// 巻き込まれないことを確かめる。
-//
-// state をセッションごとに分ける前は 1 ファイルを全 pane で共有していたため、
-// 片方の事情がもう片方の判定を左右した。
-func TestDaemonRuntimeTick_MissingSessionStateDoesNotLeakToOtherPanes(t *testing.T) {
-	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
-
-	const limitScreen = "Try again in 5 minutes"
-
-	paneA := claudePaneWithSession("pane-a", "session-a", multiplexer.AgentStatusIdle)
+// 上限かどうかは pane ごとに、そのセッションの transcript の末尾で決める。片方の transcript が上限でも、もう片方は巻き込まれない。
+func TestDaemonRuntimeTick_LimitIsDecidedPerSessionTranscript(t *testing.T) {
+	now := time.Date(2026, 10, 4, 9, 0, 0, 0, time.UTC)
+	paneA := claudePaneWithSession("pane-a", "session-a", multiplexer.AgentStatusError)
 	paneB := claudePaneWithSession("pane-b", "session-b", multiplexer.AgentStatusIdle)
-
 	client := &multiplexerfake.Client{
-		PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) {
-			return []multiplexer.Pane{paneA, paneB}, nil
-		},
-		PaneReadFunc: func(context.Context, string, multiplexer.PaneReadOptions) (string, error) {
-			return limitScreen, nil
-		},
+		PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) { return []multiplexer.Pane{paneA, paneB}, nil },
 	}
-
 	r, _ := newTestRuntime(t, client, now)
-	// session-a の state だけ書く。session-b には対応するファイルが無い。
-	writeSessionRateState(t, r.store.RateLimits.Dir, "session-a", 10, now, now.Add(time.Hour))
+	writeTranscript(t, r, "session-a", transcriptIdle, transcriptLimited)
+	writeTranscript(t, r, "session-b", transcriptLimited, transcriptIdle)
 
 	if _, _, err := r.tick(context.Background(), missingConfigPath(t), now); err != nil {
 		t.Fatalf("tick() error = %v", err)
 	}
 
-	if got := r.panes["pane-a"].state.Status; got != monitor.StatusMonitoring {
-		t.Errorf("pane-a の state.Status = %v, want Monitoring (自分の state が 10%% なのでゲートで抑制されるべき)", got)
+	a := r.panes["pane-a"].state
+	if a.Status != monitor.StatusWaiting || !a.WaitUntil.Equal(transcriptResetsAt.Add(60*time.Second)) {
+		t.Errorf("pane-a の state = %+v, want transcript の resetsAt + margin まで待機", a)
 	}
-	if got := r.panes["pane-b"].state.Status; got != monitor.StatusWaiting {
-		t.Errorf("pane-b の state.Status = %v, want Waiting (state が無いならゲートを適用せず画面の判定に従うべき)", got)
+	if got := r.panes["pane-b"].state.Status; got != monitor.StatusMonitoring {
+		t.Errorf("pane-b の state.Status = %v, want Monitoring (最後の turn は普通に終わっている)", got)
+	}
+	// 検知の tick では画面を読まない。
+	for _, call := range client.Calls {
+		if strings.HasPrefix(call, "PaneRead") {
+			t.Errorf("検知の tick で画面を読んだ: %v", client.Calls)
+		}
 	}
 }
 
-// record の kind / msg は status.json と、待機に入る行のログに出す。上限到達時に Claude Code が何を
-// 自己申告するかは未実測で (#77)、次に上限を踏んだときの記録がここになる。
+// statusline の記録から session_id の引けない pane は、前景の pid で Claude Code の登録簿から補う。
+// 補えなければ検知の対象外で、理由を status.json に書く。
+func TestDaemonRuntimeTick_SessionIDFromRegistryPID(t *testing.T) {
+	now := time.Date(2026, 10, 4, 9, 0, 0, 0, time.UTC)
+	known := claudePane("pane-a", multiplexer.AgentStatusError)
+	known.PID = 4242
+	unknown := claudePane("pane-b", multiplexer.AgentStatusIdle)
+	unknown.PID = 9999
+	client := &multiplexerfake.Client{
+		PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) { return []multiplexer.Pane{known, unknown}, nil },
+	}
+	r, statusPath := newTestRuntime(t, client, now)
+	writeSessionRegistry(t, r, 4242, "session-a")
+	writeTranscript(t, r, "session-a", transcriptLimited)
+
+	if _, _, err := r.tick(context.Background(), missingConfigPath(t), now); err != nil {
+		t.Fatalf("tick() error = %v", err)
+	}
+
+	if got := r.panes["pane-a"].state.Status; got != monitor.StatusWaiting {
+		t.Errorf("pane-a の state.Status = %v, want Waiting (登録簿の pid で session を引いて transcript を読む)", got)
+	}
+	snap, err := daemonstate.ReadStatusSnapshot(statusPath)
+	if err != nil || snap == nil || len(snap.Panes) != 2 {
+		t.Fatalf("ReadStatusSnapshot() = %+v, %v", snap, err)
+	}
+	byPane := map[string]daemonstate.PaneStatus{}
+	for _, p := range snap.Panes {
+		byPane[p.PaneID] = p
+	}
+	if got := byPane["pane-a"]; got.SessionID != "session-a" || got.DetectReason != "" {
+		t.Errorf("pane-a の status = %+v, want session_id が補われ理由無し", got)
+	}
+	if got := byPane["pane-b"]; got.SessionID != "" || got.LastOutcome != "no-session" || !strings.Contains(got.DetectReason, "session_id") {
+		t.Errorf("pane-b の status = %+v, want no-session と理由", got)
+	}
+	log := readLog(t, statusPath)
+	if !strings.Contains(log, "pane pane-b") || !strings.Contains(log, "session_id を引けない") {
+		t.Errorf("判定できない理由がログに無い:\n%s", log)
+	}
+	// 同じ理由が続く間は書き直さない。
+	if _, _, err := r.tick(context.Background(), missingConfigPath(t), now.Add(5*time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(readLog(t, statusPath), "session_id を引けない"); n != 1 {
+		t.Errorf("理由のログが %d 回 (want 1)", n)
+	}
+}
+
+// StopFailure の記録が rate_limit なのに transcript が上限と読めなければ、transcript の形が変わった疑いとしてログに残す。
+func TestDaemonRuntimeTick_LogsMismatchWithTurnFailure(t *testing.T) {
+	now := time.Date(2026, 10, 4, 9, 0, 0, 0, time.UTC)
+	pane := claudePaneWithSession("pane-a", "session-a", multiplexer.AgentStatusError)
+	client := &multiplexerfake.Client{
+		PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) { return []multiplexer.Pane{pane}, nil },
+	}
+	r, statusPath := newTestRuntime(t, client, now)
+	writeTranscript(t, r, "session-a", transcriptIdle)
+	input := `{"session_id": "session-a", "hook_event_name": "StopFailure", "error": "rate_limit"}`
+	if err := r.turnFailures.Ingest([]byte(input), now.Add(-time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+
+	for i := range 2 {
+		if _, _, err := r.tick(context.Background(), missingConfigPath(t), now.Add(time.Duration(i)*5*time.Second)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	log := readLog(t, statusPath)
+	if n := strings.Count(log, "transcript の形が変わった疑い"); n != 1 {
+		t.Errorf("食い違いのログが %d 回 (want 1):\n%s", n, log)
+	}
+	if got := r.panes["pane-a"].state.Status; got != monitor.StatusMonitoring {
+		t.Errorf("state.Status = %v, want Monitoring (hook の記録だけでは待機に入らない)", got)
+	}
+}
+
+// record の kind / msg は status.json と、待機に入る行のログに出す。
 func TestDaemonRuntimeTick_RecordInStatusAndLog(t *testing.T) {
-	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
-	pane := claudePane("p1", multiplexer.AgentStatusBlocked)
+	now := time.Date(2026, 10, 4, 9, 0, 0, 0, time.UTC)
+	pane := claudePaneWithSession("p1", "session-a", multiplexer.AgentStatusBlocked)
 	pane.AgentKind = "permission"
 	pane.AgentMessage = "approve Bash: rm -rf ./tmp/junk"
 	client := &multiplexerfake.Client{
 		PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) { return []multiplexer.Pane{pane}, nil },
-		PaneReadFunc: func(context.Context, string, multiplexer.PaneReadOptions) (string, error) {
-			return "Try again in 5 minutes", nil
-		},
 	}
 	r, statusPath := newTestRuntime(t, client, now)
+	writeTranscript(t, r, "session-a", transcriptLimited)
 
 	if _, _, err := r.tick(context.Background(), missingConfigPath(t), now); err != nil {
 		t.Fatalf("tick() error = %v", err)
@@ -409,68 +504,4 @@ func claudePaneWithSession(paneID, sessionID string, status multiplexer.AgentSta
 	pane := claudePane(paneID, status)
 	pane.SessionID = sessionID
 	return pane
-}
-
-// writeSessionRateState は 1 セッション分の rate-limits state を dir へ書く。
-func writeSessionRateState(t *testing.T, dir, sessionID string, usedPercentage float64, observedAt, resetsAt time.Time) {
-	t.Helper()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatalf("state ディレクトリの作成に失敗: %v", err)
-	}
-	// statusline.sh が書く生の形をそのまま組む (ratelimit が読む側の唯一の実装なので、
-	// テストの入力を Go の型から作ると wire format のずれを検出できなくなる)。
-	data, err := json.Marshal(map[string]any{
-		"five_hour":   map[string]any{"used_percentage": usedPercentage, "resets_at": resetsAt.Unix()},
-		"observed_at": observedAt.Unix(),
-		"session_id":  sessionID,
-	})
-	if err != nil {
-		t.Fatalf("state の JSON 化に失敗: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, sessionID+".json"), data, 0o644); err != nil {
-		t.Fatalf("state の書き込みに失敗: %v", err)
-	}
-}
-
-// TestDaemonRuntimeTick_RateStateIsMatchedPerSession は、statusline が書く
-// 利用上限 state が pane ごとに正しいセッションのものへ対応付けられることを確かめる。
-//
-// rate-limits state は「そのセッションの」使用率とリセット時刻であって、全 pane に
-// 共通の値ではない。1 ファイルを全 pane で共有すると、別セッションの使用率で
-// ゲートが働いて上限に達した pane を取りこぼす (2026-08-19 の取りこぼしの原因)。
-func TestDaemonRuntimeTick_RateStateIsMatchedPerSession(t *testing.T) {
-	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
-	resetsAt := now.Add(time.Hour)
-
-	const limitScreen = "Try again in 5 minutes"
-
-	paneA := claudePaneWithSession("pane-a", "session-a", multiplexer.AgentStatusIdle)
-	paneB := claudePaneWithSession("pane-b", "session-b", multiplexer.AgentStatusIdle)
-
-	client := &multiplexerfake.Client{
-		PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) {
-			return []multiplexer.Pane{paneA, paneB}, nil
-		},
-		PaneReadFunc: func(context.Context, string, multiplexer.PaneReadOptions) (string, error) {
-			return limitScreen, nil
-		},
-	}
-
-	r, _ := newTestRuntime(t, client, now)
-	// session-a は使い切っている。session-b はまだ余裕がある。
-	writeSessionRateState(t, r.store.RateLimits.Dir, "session-a", 100, now, resetsAt)
-	writeSessionRateState(t, r.store.RateLimits.Dir, "session-b", 10, now, resetsAt)
-
-	if _, _, err := r.tick(context.Background(), missingConfigPath(t), now); err != nil {
-		t.Fatalf("tick() error = %v", err)
-	}
-
-	if got := r.panes["pane-a"].state.Status; got != monitor.StatusWaiting {
-		t.Errorf("pane-a の state.Status = %v, want Waiting "+
-			"(session-a は 100%% 消化済みなのでゲートで抑制されてはいけない)", got)
-	}
-	if got := r.panes["pane-b"].state.Status; got != monitor.StatusMonitoring {
-		t.Errorf("pane-b の state.Status = %v, want Monitoring "+
-			"(session-b は 10%% なのでゲートで抑制されるべき)", got)
-	}
 }

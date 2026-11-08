@@ -4,8 +4,9 @@
 // 利用者の指示なので、peer メッセージではなく入力欄に打った文面としてそのターンの指示にする。アプリはどのセッションにも
 // 属さず engine の送信を持たないので、多重化ツールへの操作は mod や hook から叩かない決めごとどおり daemon のバイナリが担う。
 //
-// 送る前に pane を読み、利用者の答えを待つ prompt が開いている (Enter が承認になる)、上限の画面 (monitor の再開の経路と
-// 取り違える)、入力欄に打ちかけの文がある (後ろに連結される) のどれかなら送らない。Claude Code が入力欄に出す次の prompt の
+// 送る前に pane を読み、利用者の答えを待つ prompt が開いている (Enter が承認になる)、宛先のセッションの最後の turn が
+// 上限で終わっている (送っても弾かれ、monitor の再開の経路と取り合う)、Claude Code 本体の通知欄が出ている (Enter が
+// 継続になる)、入力欄に打ちかけの文がある (後ろに連結される) のどれかなら送らない。Claude Code が入力欄に出す次の prompt の
 // 提案 (薄字) は打つと消えるので、打ちかけの文には数えない。上限からの再開 (monitor) と違って
 // Escape は送らない。Escape は `/rate-limit-options` のメニューを閉じるためのもので、ターンの途中のセッションに送ると
 // 中断になる。ターンの途中の pane には送り、文面は入力欄に溜まって次のターンになる。
@@ -68,14 +69,17 @@ type Request struct {
 // Result は送った結果。JSON で stdout に出す。形は protocol の schema が持つ。
 type Result = protocol.TellResult
 
-// Runner は送る手段。テストは Host と Blocks と Screen を差し替える。
+// Runner は送る手段。テストは Host と Blocks と Limited と Hint を差し替える。
 type Runner struct {
 	Host Host
 	// Blocks は block の ID から session_id への対応 (sessioncontext.Store.ListMultiplexerBlocks)。
 	Blocks func() (map[string]string, error)
-	// Screen は画面 (か文面) が上限の画面のどの種類に当たるかの名前 (detect.Kind の String)。当たらなければ空。
-	// nil なら調べない。
-	Screen func(text string) string
+	// Limited は宛先のセッションの最後の turn が上限か一時エラーで終わっているときその種類の名前 (detect.Kind の String)。
+	// 終わっていなければ空。nil なら調べない。
+	Limited func(sessionID string) string
+	// Hint は画面に Claude Code 本体の通知欄 (Enter 待ち、auto-continue の予約、リトライ中、lower-priority) が
+	// あるときその名前 (detect.Hint の String)。無ければ空。nil なら調べない。
+	Hint func(screen string) string
 	// Sleep は文面と Enter の間の待ち。nil なら time.Sleep。
 	Sleep func(time.Duration)
 	// SubmitDelay は文面と Enter の間の待ちの長さ。零なら既定。
@@ -98,6 +102,11 @@ func (r Runner) Run(ctx context.Context, req Request) (Result, error) {
 	if multiplexer.WaitingOnPrompt(pane) {
 		return Result{}, fmt.Errorf("pane %s は利用者の答えを待つ prompt が開いている (%s) ので送らない", pane.PaneID, multiplexer.RecordLabel(pane))
 	}
+	if r.Limited != nil {
+		if kind := r.Limited(req.ToSession); kind != "" {
+			return Result{}, fmt.Errorf("セッション %s の最後の turn が上限 (%s) で終わっているので送らない", req.ToSession, kind)
+		}
+	}
 	lines := r.ReadLines
 	if lines <= 0 {
 		lines = defaultReadLines
@@ -106,8 +115,10 @@ func (r Runner) Run(ctx context.Context, req Request) (Result, error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("pane %s の画面を読めない: %w", pane.PaneID, err)
 	}
-	if kind := r.classify(screen); kind != "" {
-		return Result{}, fmt.Errorf("pane %s は上限の画面 (%s) なので送らない", pane.PaneID, kind)
+	if r.Hint != nil {
+		if hint := r.Hint(screen); hint != "" {
+			return Result{}, fmt.Errorf("pane %s に Claude Code の通知欄 (%s) が出ているので送らない", pane.PaneID, hint)
+		}
 	}
 	rest, found := inputRemainder(screen)
 	if !found {
@@ -125,15 +136,11 @@ func (r Runner) Run(ctx context.Context, req Request) (Result, error) {
 			return Result{}, fmt.Errorf("宛先のセッションの端末の入力欄に、Enter を押していない打ちかけの文 (%d 文字) があるので送らない (pane %s。その端末で送るか消してから、もう一度押す)", utf8.RuneCountInString(typed), pane.PaneID)
 		}
 	}
-	res := Result{PaneID: pane.PaneID}
-	if kind := r.classify(req.Text); kind != "" {
-		res.Warning = fmt.Sprintf("文面が上限の検知語 (%s) を含む。入力欄に残る間は daemon が上限と取り違えることがある", kind)
-	}
 	if err := r.submit(ctx, pane.PaneID, req.Text); err != nil {
 		// 文面を打ちかけた pane は、送れなかった記録にも残す。
 		return Result{PaneID: pane.PaneID}, err
 	}
-	return res, nil
+	return Result{PaneID: pane.PaneID}, nil
 }
 
 // find は session の block のうち claude が前景のものを返す。複数あれば ID の順で最後 (block の ID は時刻順なので
@@ -167,13 +174,6 @@ func (r Runner) find(ctx context.Context, sessionID string) (multiplexer.Pane, e
 		return multiplexer.Pane{}, fmt.Errorf("セッション %s の pane (%s) で claude が前景でないので送らない", sessionID, strings.Join(ids, ", "))
 	}
 	return *found, nil
-}
-
-func (r Runner) classify(text string) string {
-	if r.Screen == nil {
-		return ""
-	}
-	return r.Screen(text)
 }
 
 // stripControls は文面の制御文字 (改行とタブ以外の C0、DEL、C1) を落とす。文面はメモ (セッションが park tool で書いた

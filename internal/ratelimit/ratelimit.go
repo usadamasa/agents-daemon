@@ -1,6 +1,7 @@
 // Package ratelimit は rate-limits/<session_id>.json (statusline が観測した利用上限) の
 // 書式を読み書き両方で持つ。書くのは statusline の stdin を受ける sessionstate.IngestStatusline、
-// 読むのは daemon と診断 (verify、simulate)。
+// 読むのは doctor (statusline が配線されているかの確認) だけで、daemon の判定には使わない。解除時刻は transcript の
+// entry から取る。
 //
 // JSON の生の形 (rateLimitFile) と、それを読む関数は非公開にしてある。外から要るのは
 // domain の型 (State) と、その解釈だけだったため。生の形を公開すると epoch 秒の
@@ -71,37 +72,9 @@ type State struct {
 	FiveHourResetsAt time.Time
 }
 
-// IsFresh は観測が maxAge 以内かを返す。
-// statusline は画面に変化が無いと再描画を止めるため、古い state を検出できる必要がある。
-func (r *State) IsFresh(now time.Time, maxAge time.Duration) bool {
-	if r == nil {
-		return false
-	}
-	return fresh(r.ObservedAt, now, maxAge)
-}
-
 // HasFiveHour は 5 時間ウィンドウの有効な値を持つかを返す。
 func (r *State) HasFiveHour() bool {
 	return r != nil && !r.FiveHourResetsAt.IsZero()
-}
-
-// FiveHourExhausted は 5 時間ウィンドウの使用率が threshold 以上かを返す。
-// 「上限に達していそうか」の判定に使う。
-func (r *State) FiveHourExhausted(threshold float64) bool {
-	return r != nil && r.FiveHourUsed >= threshold
-}
-
-// futureTolerance は fresh が受け付ける未来の observed_at の幅。読み手が now を取った後に
-// statusline が state を書き直すと age が負になる (doctor を Bash から回すと、そのセッションの
-// statusline が再描画される)。その競合は 1 回の読み込みのあいだに収まるので数秒で足り、
-// これを超える未来はクロックスキューとして信用しない。
-const futureTolerance = 5 * time.Second
-
-// fresh は観測時刻 observedAt が now から maxAge 以内かを返す。
-// observedAt が now より futureTolerance を超えて未来 (クロックスキュー等) の場合は信用せず false を返す。
-func fresh(observedAt, now time.Time, maxAge time.Duration) bool {
-	age := now.Sub(observedAt)
-	return age >= -futureTolerance && age <= maxAge
 }
 
 // file は sessionID に対応する利用上限 state のパスを返す。
@@ -180,57 +153,4 @@ func readState(path string) (*State, error) {
 		state.FiveHourResetsAt = time.Unix(raw.FiveHour.ResetsAt, 0)
 	}
 	return state, nil
-}
-
-// maxResetAhead は LatestWindow が候補として受け付ける resets_at の上限 (now からの距離)。
-// 5 時間ウィンドウの解除が 5 時間より先になることは無い。他セッションの state まで
-// 信用する以上、1 ファイルのゴミが全 pane の起床時刻を汚さないよう、あり得ない値は弾く。
-const maxResetAhead = 6 * time.Hour
-
-// LatestWindow は全セッションの state のうち、5 時間ウィンドウの resets_at が
-// 最大のものを返す (同値なら observed_at が新しい方)。
-//
-// resets_at はアカウント全体で共通の値で、同じウィンドウ内に観測された全セッションが
-// 同じ resets_at を持つ (rate-limits/ 配下の実ファイルで確認済み)。だで自分の state を
-// 持たない pane (上限中に開いた新規セッション、429 で弾かれた turn は state を書かない)
-// でも、他セッションの state から現在のウィンドウの解除時刻を引ける。
-//
-// 壊れたファイル、five_hour が null のファイル、now+maxResetAhead より先の resets_at を
-// 持つファイルは飛ばす。1 ファイルの不良で走査全体を失敗させない。ディレクトリが無い、
-// または有効なファイルが無ければ (nil, nil) を返す。
-func (s Store) LatestWindow(now time.Time) (*State, error) {
-	entries, err := os.ReadDir(s.Dir)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("rate-limits ディレクトリの走査に失敗: %w", err)
-	}
-
-	limit := now.Add(maxResetAhead)
-	var best *State
-	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
-			continue
-		}
-		state, loadErr := readState(filepath.Join(s.Dir, entry.Name()))
-		if loadErr != nil || !state.HasFiveHour() {
-			continue
-		}
-		if state.FiveHourResetsAt.After(limit) {
-			continue
-		}
-		if best == nil || newerWindow(state, best) {
-			best = state
-		}
-	}
-	return best, nil
-}
-
-// newerWindow は a が b より新しいウィンドウ (resets_at が後、同値なら観測が後) かを返す。
-func newerWindow(a, b *State) bool {
-	if !a.FiveHourResetsAt.Equal(b.FiveHourResetsAt) {
-		return a.FiveHourResetsAt.After(b.FiveHourResetsAt)
-	}
-	return a.ObservedAt.After(b.ObservedAt)
 }

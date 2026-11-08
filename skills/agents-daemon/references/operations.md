@@ -182,7 +182,7 @@ error で止まる。flag の組み合わせで JSON にできないもの (`dae
 | `doctor` | 節ごとの診断 |
 | `status` | 稼働状況、snapshot、ログの末尾 |
 | `logs` | ログのパスと末尾の行 (`lines`) |
-| `inspect` | 判定 (`kind`)、走査した行、record、ゲート判定 (`gate`)、起床時刻と出所 (`wake`) |
+| `inspect` | transcript の末尾 (`transcript`) とその判定 (`kind`)、起床時刻と出所 (`wake`)、record、画面の通知欄の判定 (`hint`) と走査した行 |
 | `simulate` | 作った pane、観測した agent、各 Tick の outcome と送るはずだったもの (`ticks`)、後始末 |
 | `stop` | 止めた daemon (`was_running`、`pid`) |
 | `daemon --ensure` | 何をしたか (`action`: `started` / `already_running` / `outside_rex`) |
@@ -195,7 +195,7 @@ error で止まる。flag の組み合わせで JSON にできないもの (`dae
 ```sh
 agents-daemon --json doctor | jq '.premises.findings'   # rex CLI の前提の点検だけを取り出す
 agents-daemon --json status | jq '.snapshot.panes'      # 監視中の pane
-agents-daemon --json inspect --pane <block id> | jq '{kind, gate: .gate.id, wake: .wake.wake_at}'
+agents-daemon --json inspect --pane <block id> | jq '{kind, hint, entry: .transcript.last_entry.error, wake: .wake.wake_at}'
 ```
 
 ### 診断
@@ -223,20 +223,16 @@ issue にする。
 | `enabled` | `true` | 全体スイッチ |
 | `pollIntervalSeconds` | `5` | 各 pane を見る間隔 |
 | `marginSeconds` | `60` | 解除時刻に足す余裕 |
-| `fallbackWaitHours` | `5` | 解除時刻がどこからも取れないときの待ち |
 | `maxRetries` | `5` | クールダウンに入るまでの再開試行回数 |
 | `retryMessage` | `Continue where you left off.` | 再開時に送る文面 |
-| `readLines` | `25` | 1 回に読む行数 (可視領域の末尾から) |
-| `detectionTailLines` | `15` | 判定に使う末尾行数 |
-| `usedPercentageThreshold` | `90` | ゲートの閾値 (これ未満なら発火しない) |
-| `stateMaxAgeSeconds` | `900` | ゲート判定で使用率を信用する上限の古さ (`resets_at` には効かない) |
+| `readLines` | `25` | 待機明けに画面を読む行数 (可視領域の末尾から) |
+| `detectionTailLines` | `15` | 通知欄の判定に使う末尾行数 |
 | `handleTransient` | `true` | 一時的なサーバーエラーも扱う |
 | `transientWaitSeconds` | `60` | 一時エラーのバックオフ基準 |
 | `transientMaxWaitSeconds` | `300` | バックオフの上限 |
 | `dismissMenu` | `true` | 送信前に Escape を送る |
 | `menuDismissDelayMs` | `300` | Escape の後の待ち |
 | `submitDelayMs` | `400` | テキストと Enter の間の待ち |
-| `customPatterns` | `[]` | 上限として扱う追加の正規表現 |
 | `idleShutdownMinutes` | `30` | Claude pane が 0 のまま続いたら自己終了する |
 | `deferToNativeAutoContinue` | `true` | ネイティブの auto-continue が再開を予約している間は手を出さない |
 
@@ -245,8 +241,8 @@ issue にする。
 `retryMessage` で変える。上限の検知語 (`limit` / `rate` 等) を含めてはいけない。
 送った文面が画面に残り、daemon がそれを上限と読み違える。
 
-Claude Code の画面の文言は安定した API ではない。変わって検知が止まったら
-`customPatterns` に新しい表現を足せば、コードを変えずに追随できる。
+上限かどうかは画面ではなく transcript の末尾の entry で決めるので、画面に残った文面で待機に入ることは無い。
+ただし待機明けに通知欄 (Enter 待ち、auto-continue の予約) を読むので、その 2 行の形は避ける。
 
 ## 既知の制約
 
@@ -262,14 +258,13 @@ Claude Code の画面の文言は安定した API ではない。変わって検
   `go` が PATH に無ければ `$STATE/logs/build.log` に ERROR を残し、デーモンは起きない。
 - **rex が要る。** rex の server に到達できないときデーモンは起動せず、`REX_SESSION` の無いセッションの
   SessionStart では起こさない。Ghostty 単体では pane へキーを送る手段が無いため、この機能は成立しない。
-- **statusline を切っていると state ファイルが作られない。** `statusLine.command` がバイナリの `statusline` を
-  指しているか、利用者の statusline が stdin を `agents-daemon ingest-statusline` へ渡していなければ、
-  ゲートは働かず、待機時刻は画面かフォールバックから決まる。
-- **block にセッション ID が紐づいていないと own state を引けない。** `context/<sid>.json` の
-  `multiplexer` (statusline が環境変数の `REX_BLOCK` から書く) で紐づける。statusline が
-  配線されていないと session_id が引けない (`doctor` で `session_id=(なし)`)。対応する
-  ファイルが決まらないためゲートは適用されず、画面の分類だけで判定する。起床時刻は
-  画面の絶対時刻かアカウント全体の state から決まる。
+- **session_id が引けない pane は上限を判定しない。** block とセッションの対応は `context/<sid>.json` の
+  `multiplexer` (statusline が環境変数の `REX_BLOCK` から書く) で引き、無ければ rex の前景の pid で Claude Code の
+  登録簿 (`~/.claude/sessions/<pid>.json`) から補う。どちらも引けなければ transcript を読めないので手を出さない
+  (`doctor` の pane 一覧に `⚠`、status.json に `detect_reason`)。claude を wrapper の shell から起動すると
+  pid が合わず、statusline の配線が要る。
+- **statusline を切っていても判定は変わらない。** 上限かどうかと解除時刻は transcript の末尾の entry から取る。
+  `rate-limits/` の state は daemon が読まない (statusline の配線の確認に `doctor` が出すだけ)。
 - **SessionStart から statusline の初回描画までの数秒は対応が無い。** sidecar は statusline が書くため。
   daemon は tick ごとに引き直すので、その後の tick から見える。
 - **上限中に開いた新規セッションは、プロンプトを打って弾かれていないと再開しても
@@ -285,8 +280,8 @@ Claude Code の画面の文言は安定した API ではない。変わって検
   (`tmux -L claude-swarm-*`) を開いたセッションの pane に `send-text` すると、
   文字列は tmux 側でフォーカスを持つペイン (teammate 一覧など) に吸われ、Claude の
   入力行は空のままになる (実測)。この形の pane には再開が届かない。
-- **rex は常に可視領域だけを読む。** scrollback を読む手段が無い。
-  小さい block では上限の文言が流れた時点で検知が効かなくなる (`doctor` が高さの足りない block に `⚠` を出す)。
+- **rex は常に可視領域だけを読む。** scrollback を読む手段が無い。画面を読むのは待機明けに送るキーを選ぶ
+  通知欄 (prompt のすぐ上の 2 行) だけなので、block の高さで検知が変わることは無い。
 - **待機中のラベルは出ない。** 表示に使える `block rename` は利用者が付けた label を潰すため。
   待機の状況は `agents-daemon status` で見る。
 - **rex の送信は実機で測っていない。** `send` / `send-key` の組み立ては fake の rex で確かめただけで、

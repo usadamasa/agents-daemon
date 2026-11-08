@@ -102,11 +102,12 @@ func TestDaemon_json(t *testing.T) {
 	}
 }
 
-// inspect --file --json は判定と走査した行、ゲート、起床時刻の根拠を 1 つの JSON で出す。
+// inspect --file --json は transcript の判定と、画面の通知欄の判定と走査した行を 1 つの JSON で出す。
+// --session が無ければ transcript を引けないので kind は none で、理由が載る。
 func TestInspect_json(t *testing.T) {
 	isolate(t)
 	file := filepath.Join(t.TempDir(), "screen.txt")
-	screen := "⏺ You've hit your session limit · resets 12:30pm (Asia/Tokyo)\n  /upgrade to increase your usage limit.\n"
+	screen := "────────\n❯ \n────────\n  ⚠ Your usage limit has reset\n      Press enter to continue\n"
 	if err := os.WriteFile(file, []byte(screen), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +117,8 @@ func TestInspect_json(t *testing.T) {
 	}
 	var rep verify.InspectReport
 	decode(t, out, &rep)
-	if rep.Kind != "limit" || rep.Source != "file:"+file || len(rep.ScannedLines) == 0 || rep.Gate.ID != "no-state" || rep.Wake == nil {
+	if rep.Kind != "none" || rep.Hint != "resume-ready" || rep.Source != "file:"+file || len(rep.ScannedLines) == 0 ||
+		!strings.Contains(rep.Transcript.Reason, "session_id") || rep.Wake != nil {
 		t.Errorf("inspect = %s", out)
 	}
 }

@@ -11,67 +11,72 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/runtime/detect"
 )
 
-// Deps.Observe は画面を読んで分類するたびに、分類した画面そのものと kind を受け取る。
-// daemon が上限の出来事の記録に「判定した画面」を添えるための口で、判定には関わらない。
-func TestTick_ObserveReceivesClassifiedScreen(t *testing.T) {
-	tests := []struct {
-		name     string
-		screen   string
-		wantKind detect.Kind
-	}{
-		{"limit の画面", limitAndRelativeScreen, detect.KindLimit},
-		{"通常の画面", cleanScreen, detect.KindNone},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			client := &multiplexerfake.Client{PaneReadFunc: readReturning(tt.screen, nil)}
-			deps := newTestDeps(t, config.Default(), client)
-			var got struct {
-				pane   multiplexer.Pane
-				kind   detect.Kind
-				screen string
-				calls  int
-			}
-			deps.Observe = func(pane multiplexer.Pane, kind detect.Kind, screen string) {
-				got.pane, got.kind, got.screen = pane, kind, screen
-				got.calls++
-			}
-			pane := newTestPane(multiplexer.AgentStatusWorking, true)
+// Deps.Observe は判定の根拠 (読んだ transcript の末尾と分類、待機明けに読んだ画面と通知欄の判定) を受け取る。
+// daemon が上限の出来事の記録に写すための口で、判定には関わらない。
+func TestTick_ObserveReceivesEvidence(t *testing.T) {
+	now := time.Date(2026, 10, 4, 10, 0, 0, 0, time.UTC)
+	turn := limitedTurn(uuidLimit, now.Add(-time.Minute))
 
-			if _, err := Tick(context.Background(), deps, pane, &PaneState{}, nil, time.Now()); err != nil {
-				t.Fatalf("Tick() error = %v", err)
-			}
-			if got.calls != 1 {
-				t.Fatalf("Observe の呼び出し = %d 回, want 1", got.calls)
-			}
-			if got.pane.PaneID != pane.PaneID || got.kind != tt.wantKind || got.screen != tt.screen {
-				t.Errorf("Observe(%q, %v, %q), want (%q, %v, %q)", got.pane.PaneID, got.kind, got.screen, pane.PaneID, tt.wantKind, tt.screen)
-			}
-		})
-	}
+	t.Run("検知時は transcript だけ", func(t *testing.T) {
+		client := &multiplexerfake.Client{PaneReadFunc: readReturning(cleanScreen, nil)}
+		deps := newTestDeps(t, config.Default(), client, turn)
+		var got Evidence
+		calls := 0
+		deps.Observe = func(_ multiplexer.Pane, ev Evidence) { got, calls = ev, calls+1 }
+
+		if _, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), &PaneState{}, now); err != nil {
+			t.Fatalf("Tick() error = %v", err)
+		}
+		if calls != 1 {
+			t.Fatalf("Observe の呼び出し = %d 回, want 1", calls)
+		}
+		if got.Turn.Entry == nil || got.Turn.Entry.UUID != uuidLimit || got.Turn.Path != turn.Path || got.Kind != detect.KindLimit {
+			t.Errorf("Evidence = %+v, want 読んだ transcript と limit", got)
+		}
+		if got.ScreenRead || got.Screen != "" {
+			t.Errorf("ScreenRead = %v Screen = %q, want 検知時は画面を読まない", got.ScreenRead, got.Screen)
+		}
+	})
+
+	t.Run("待機明けは画面と通知欄の判定も", func(t *testing.T) {
+		client := &multiplexerfake.Client{PaneReadFunc: readReturning(resumeReadyScreen, nil)}
+		deps := newTestDeps(t, config.Default(), client, turn)
+		var got Evidence
+		deps.Observe = func(_ multiplexer.Pane, ev Evidence) { got = ev }
+
+		if _, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), waitingState(now, 0), now); err != nil {
+			t.Fatalf("Tick() error = %v", err)
+		}
+		if !got.ScreenRead || got.Screen != resumeReadyScreen || got.Hint != detect.HintResumeReady {
+			t.Errorf("Evidence = %+v, want 画面と resume-ready", got)
+		}
+	})
+
+	t.Run("読めない transcript は理由ごと渡す", func(t *testing.T) {
+		deps := newTestDeps(t, config.Default(), &multiplexerfake.Client{}, unreadableTurn)
+		var got Evidence
+		deps.Observe = func(_ multiplexer.Pane, ev Evidence) { got = ev }
+
+		if _, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusIdle, true), &PaneState{}, now); err != nil {
+			t.Fatalf("Tick() error = %v", err)
+		}
+		if got.Turn.Reason != unreadableTurn.Reason || got.Kind != detect.KindNone {
+			t.Errorf("Evidence = %+v, want 理由", got)
+		}
+	})
 }
 
-// 画面を読まなかった tick (起床前、読み取り失敗) では Observe を呼ばない。
-func TestTick_ObserveNotCalledWithoutScreen(t *testing.T) {
+// 起床前の tick では transcript を読まないので Observe も呼ばない。
+func TestTick_ObserveNotCalledBeforeWake(t *testing.T) {
+	now := time.Date(2026, 10, 4, 10, 0, 0, 0, time.UTC)
 	calls := 0
-	observe := func(multiplexer.Pane, detect.Kind, string) { calls++ }
-	now := time.Now()
+	deps := newTestDeps(t, config.Default(), &multiplexerfake.Client{}, limitedTurn(uuidLimit, now.Add(time.Hour)))
+	deps.Observe = func(multiplexer.Pane, Evidence) { calls++ }
 
-	client := &multiplexerfake.Client{PaneReadFunc: readReturning(limitAndRelativeScreen, nil)}
-	deps := newTestDeps(t, config.Default(), client)
-	deps.Observe = observe
 	if _, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusIdle, true),
-		&PaneState{Status: StatusWaiting, WaitUntil: now.Add(time.Hour)}, nil, now); err != nil {
+		&PaneState{Status: StatusWaiting, WaitUntil: now.Add(time.Hour)}, now); err != nil {
 		t.Fatalf("Tick() error = %v", err)
 	}
-
-	failing := &multiplexerfake.Client{PaneReadFunc: readReturning("", context.DeadlineExceeded)}
-	deps = newTestDeps(t, config.Default(), failing)
-	deps.Observe = observe
-	if _, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusIdle, true), &PaneState{}, nil, now); err == nil {
-		t.Fatal("読み取り失敗で error が無い")
-	}
-
 	if calls != 0 {
 		t.Errorf("Observe の呼び出し = %d 回, want 0", calls)
 	}

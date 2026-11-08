@@ -6,12 +6,14 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/daemonstate"
 	"github.com/usadamasa/agents-daemon/internal/ledger"
-	"github.com/usadamasa/agents-daemon/internal/runtime/daemon/claudesessions"
+	"github.com/usadamasa/agents-daemon/internal/runtime/claudesessions"
+	"github.com/usadamasa/agents-daemon/internal/transcript"
 )
 
-// attachClaudeConfigDir は台帳に書く名前を引く Claude Code のセッションの登録簿を配線する。
+// attachClaudeConfigDir は Claude Code の設定ディレクトリから読むもの (セッションの登録簿、transcript) を配線する。
 func (r *daemonRuntime) attachClaudeConfigDir(dir string) {
 	r.claudeSessions = claudesessions.New(dir)
+	r.transcripts = transcript.New(dir)
 }
 
 // observeSessions は tick で見えたセッションを、pane が見えている間進める記録 (台帳、作業の記録、未完了のタスク、辺) へ反映する。

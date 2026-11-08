@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
-	"regexp"
 	"strings"
 )
 
@@ -21,26 +20,21 @@ type Config struct {
 	Enabled             bool
 	PollIntervalSeconds int
 	MarginSeconds       int
-	FallbackWaitHours   float64
 	MaxRetries          int
 	// RetryMessage は resume 時にペインへ送るテキスト。入力行へエコーされるため、
 	// limit / rate / overloaded のような検知語を含めてはいけない。含めると
 	// 監視が自分自身の送信を再検知して無限ループする。
 	RetryMessage string
-	// ReadLines は pane の画面を末尾から何行読むか。判定は更に末尾 DetectionTailLines 行だけを見るので、
-	// それ以上あれば判定は変わらない。Claude Code は alternate screen で描き、rex の capture は可視の
-	// 行数で頭打ちになるため、block が低いと判定に要る行が溢れる。下限の実測は pane-io.md にある。
+	// ReadLines は待機明けに pane の画面を末尾から何行読むか。通知欄の判定は更に末尾 DetectionTailLines 行だけを
+	// 見るので、それ以上あれば判定は変わらない。上限かどうかは画面ではなく transcript で決める (detect)。
 	ReadLines               int
 	DetectionTailLines      int
-	UsedPercentageThreshold float64
-	StateMaxAgeSeconds      int
 	HandleTransient         bool
 	TransientWaitSeconds    int
 	TransientMaxWaitSeconds int
 	DismissMenu             bool
 	MenuDismissDelayMs      int
 	SubmitDelayMs           int
-	CustomPatterns          []string
 	IdleShutdownMinutes     int
 	// DeferToNativeAutoContinue が true のとき、Claude Code 自身の auto-continue
 	// (2.1.234 の autoContinueAtUsageLimit) がカウントダウン中の pane には手を出さない。
@@ -54,20 +48,16 @@ func Default() Config {
 		Enabled:                 true,
 		PollIntervalSeconds:     5,
 		MarginSeconds:           60,
-		FallbackWaitHours:       5,
 		MaxRetries:              5,
 		RetryMessage:            defaultRetryMessage,
 		ReadLines:               25,
 		DetectionTailLines:      15,
-		UsedPercentageThreshold: 90,
-		StateMaxAgeSeconds:      900,
 		HandleTransient:         true,
 		TransientWaitSeconds:    60,
 		TransientMaxWaitSeconds: 300,
 		DismissMenu:             true,
 		MenuDismissDelayMs:      300,
 		SubmitDelayMs:           400,
-		CustomPatterns:          []string{},
 		IdleShutdownMinutes:     30,
 
 		DeferToNativeAutoContinue: true,
@@ -79,24 +69,20 @@ func Default() Config {
 // validate で弾かれる) を区別するため。bool のように 0 値が意味を持つ型では
 // 非ポインタだと「省略」と「明示的な false/0」を取り違えてしまう。
 type rawConfig struct {
-	Enabled                 *bool     `json:"enabled"`
-	PollIntervalSeconds     *int      `json:"pollIntervalSeconds"`
-	MarginSeconds           *int      `json:"marginSeconds"`
-	FallbackWaitHours       *float64  `json:"fallbackWaitHours"`
-	MaxRetries              *int      `json:"maxRetries"`
-	RetryMessage            *string   `json:"retryMessage"`
-	ReadLines               *int      `json:"readLines"`
-	DetectionTailLines      *int      `json:"detectionTailLines"`
-	UsedPercentageThreshold *float64  `json:"usedPercentageThreshold"`
-	StateMaxAgeSeconds      *int      `json:"stateMaxAgeSeconds"`
-	HandleTransient         *bool     `json:"handleTransient"`
-	TransientWaitSeconds    *int      `json:"transientWaitSeconds"`
-	TransientMaxWaitSeconds *int      `json:"transientMaxWaitSeconds"`
-	DismissMenu             *bool     `json:"dismissMenu"`
-	MenuDismissDelayMs      *int      `json:"menuDismissDelayMs"`
-	SubmitDelayMs           *int      `json:"submitDelayMs"`
-	CustomPatterns          *[]string `json:"customPatterns"`
-	IdleShutdownMinutes     *int      `json:"idleShutdownMinutes"`
+	Enabled                 *bool   `json:"enabled"`
+	PollIntervalSeconds     *int    `json:"pollIntervalSeconds"`
+	MarginSeconds           *int    `json:"marginSeconds"`
+	MaxRetries              *int    `json:"maxRetries"`
+	RetryMessage            *string `json:"retryMessage"`
+	ReadLines               *int    `json:"readLines"`
+	DetectionTailLines      *int    `json:"detectionTailLines"`
+	HandleTransient         *bool   `json:"handleTransient"`
+	TransientWaitSeconds    *int    `json:"transientWaitSeconds"`
+	TransientMaxWaitSeconds *int    `json:"transientMaxWaitSeconds"`
+	DismissMenu             *bool   `json:"dismissMenu"`
+	MenuDismissDelayMs      *int    `json:"menuDismissDelayMs"`
+	SubmitDelayMs           *int    `json:"submitDelayMs"`
+	IdleShutdownMinutes     *int    `json:"idleShutdownMinutes"`
 
 	DeferToNativeAutoContinue *bool `json:"deferToNativeAutoContinue"`
 }
@@ -149,9 +135,6 @@ func applyRawBasics(cfg *Config, raw *rawConfig) {
 	if v := raw.MarginSeconds; v != nil && *v >= 0 {
 		cfg.MarginSeconds = *v
 	}
-	if v := raw.FallbackWaitHours; v != nil && *v >= 0.1 {
-		cfg.FallbackWaitHours = *v
-	}
 	if v := raw.MaxRetries; v != nil && *v >= 1 {
 		cfg.MaxRetries = *v
 	}
@@ -160,22 +143,13 @@ func applyRawBasics(cfg *Config, raw *rawConfig) {
 	}
 }
 
-// applyRawDetection は「上限に当たったと判断してよいか」に関わる設定を反映する。
+// applyRawDetection は待機明けの画面の読み方 (通知欄の判定) に関わる設定を反映する。
 func applyRawDetection(cfg *Config, raw *rawConfig) {
 	if v := raw.ReadLines; v != nil && *v >= 5 {
 		cfg.ReadLines = *v
 	}
 	if v := raw.DetectionTailLines; v != nil && *v >= 1 {
 		cfg.DetectionTailLines = *v
-	}
-	if v := raw.UsedPercentageThreshold; v != nil && *v >= 0 && *v <= 100 {
-		cfg.UsedPercentageThreshold = *v
-	}
-	if v := raw.StateMaxAgeSeconds; v != nil && *v >= 1 {
-		cfg.StateMaxAgeSeconds = *v
-	}
-	if v := raw.CustomPatterns; v != nil {
-		cfg.CustomPatterns = sanitizePatterns(*v)
 	}
 }
 
@@ -207,17 +181,4 @@ func applyRawRecovery(cfg *Config, raw *rawConfig) {
 	if v := raw.SubmitDelayMs; v != nil && *v >= 0 {
 		cfg.SubmitDelayMs = *v
 	}
-}
-
-// sanitizePatterns はコンパイルできない正規表現を除外する。不正な 1 件のために
-// 設定全体を破棄しない。
-func sanitizePatterns(patterns []string) []string {
-	filtered := make([]string, 0, len(patterns))
-	for _, p := range patterns {
-		if _, err := regexp.Compile(p); err != nil {
-			continue
-		}
-		filtered = append(filtered, p)
-	}
-	return filtered
 }

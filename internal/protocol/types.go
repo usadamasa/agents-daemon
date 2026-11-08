@@ -140,8 +140,6 @@ type ParkHandResult struct {
 	PaneID string `json:"pane_id,omitempty"`
 	// 届かなかった理由。戻せなかったときはその理由も続ける。
 	Reason string `json:"reason,omitempty"`
-	// 届いたうえでの注意 (TellResult.warning と同じ)。
-	Warning string `json:"warning,omitempty"`
 }
 
 // TaskDismissRequest は task dismiss の stdin。終了したセッションのタスク (完了しているかを問わない。task:) か、セッションの作業 (sid:) の記録と端点の辺を消して依存図から外し、{} を出す。セッションの終了は park adopt と同じく status.json で確かめ、確かめられなければ消さずに exit 1 で理由を返す。
@@ -300,8 +298,6 @@ type SpawnResult struct {
 type TellResult struct {
 	// 打った pane の ID。
 	PaneID string `json:"pane_id"`
-	// 文面が上限の検知語を含み、入力欄に残る間は daemon の誤検知の種になりうるときの注意。送ってはある。
-	Warning string `json:"warning,omitempty"`
 }
 
 // DepsData は deps の出力。依存の DAG と、repo ごとの生きているセッションと open のメモ。

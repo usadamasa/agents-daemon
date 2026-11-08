@@ -1,0 +1,2 @@
+{"type":"queue-operation","operation":"enqueue","timestamp":"2026-10-04T08:20:23.754Z","sessionId":"11111111-2222-4333-8444-555555555555","content":"x"}
+{"type":"file-history-snapshot","messageId":"8f0c2d1e-1a2b-4c3d-9e8f-7a6b5c4d3e2f","snapshot":{"trackedFileBackups":{},"timestamp":"2026-10-04T08:20:24.000Z"},"isSnapshotUpdate":false}

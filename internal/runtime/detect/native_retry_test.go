@@ -17,25 +17,23 @@ var nativeRetryLines = []string{
 	"⚠ API Error: 529 overloaded · Retrying in 12s · attempt 2/10",
 }
 
-func TestClassify_Claude_Codeがリトライ中なら上限の行が残っていても手を出さない(t *testing.T) {
-	c := newTestClassifier(t)
+const sessionLimitLine = "⏺ You've hit your session limit · resets 5:00pm (Asia/Tokyo)"
 
+func TestClassifyScreen_Claude_Codeがリトライ中なら手を出さない(t *testing.T) {
 	for i, retry := range nativeRetryLines {
 		t.Run(fmt.Sprintf("retry-%d", i), func(t *testing.T) {
 			// 前の request が上限で終わった行が transcript に残っている。今の request は本体が待っているので、
 			// Escape を送ると待機ごと取り消す。
 			screen := strings.Join([]string{sessionLimitLine, "", retry, "", "❯ "}, "\n")
 
-			if got := c.Classify(screen, 15); got != KindNone {
-				t.Errorf("Classify() = %v, want %v", got, KindNone)
+			if got := ClassifyScreen(screen, 15); got != HintNativeRetrying {
+				t.Errorf("ClassifyScreen() = %v, want %v", got, HintNativeRetrying)
 			}
 		})
 	}
 }
 
-func TestClassify_リトライのスピナーが折り返されても拾う(t *testing.T) {
-	c := newTestClassifier(t)
-
+func TestClassifyScreen_リトライのスピナーが折り返されても拾う(t *testing.T) {
 	// 狭い pane では attempt の手前で折り返される。
 	screen := strings.Join([]string{
 		sessionLimitLine,
@@ -44,18 +42,23 @@ func TestClassify_リトライのスピナーが折り返されても拾う(t *t
 		"attempt 4/10",
 	}, "\n")
 
-	if got := c.Classify(screen, 15); got != KindNone {
-		t.Errorf("Classify() = %v, want %v", got, KindNone)
+	if got := ClassifyScreen(screen, 15); got != HintNativeRetrying {
+		t.Errorf("ClassifyScreen() = %v, want %v", got, HintNativeRetrying)
 	}
 }
 
-func TestClassify_attemptの無いRetrying_inは上限を取り消さない(t *testing.T) {
-	c := newTestClassifier(t)
-
-	// スピナーの形をしていない文章。上限で止まっている画面のまま扱う。
+func TestClassifyScreen_attemptの無いRetrying_inはリトライ中と見なさない(t *testing.T) {
+	// スピナーの形をしていない文章。
 	screen := strings.Join([]string{sessionLimitLine, "", "⏺ The client logs: Retrying in 5 seconds."}, "\n")
 
-	if got := c.Classify(screen, 15); got != KindLimit {
-		t.Errorf("Classify() = %v, want %v", got, KindLimit)
+	if got := ClassifyScreen(screen, 15); got != HintNone {
+		t.Errorf("ClassifyScreen() = %v, want %v", got, HintNone)
+	}
+}
+
+func TestClassifyScreen_リトライ中は通知欄の予約より優先する(t *testing.T) {
+	screen := strings.Join([]string{nativeArmedBanners[0], nativeRetryLines[0]}, "\n")
+	if got := ClassifyScreen(screen, 15); got != HintNativeRetrying {
+		t.Errorf("ClassifyScreen() = %v, want %v", got, HintNativeRetrying)
 	}
 }

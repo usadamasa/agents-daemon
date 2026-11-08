@@ -1,7 +1,8 @@
 // Package doctor は `doctor` サブコマンド (daemon が動作するための前提条件の診断) の実装を提供する。
-// 多重化ツールへの到達性、pane の見え方、rex CLI の前提、statusline の state、設定、daemon の稼働、
-// peer messaging、解決済みパスを Report に集めてから書く。文字の出力 (write) と `--json` の出力が同じ判定を
-// 見るためで、JSON の形は Report の json tag が決める。他の読むだけの診断 (inspect / status / logs) は verify パッケージ。
+// 多重化ツールへの到達性、pane の見え方 (session の出どころと transcript の末尾を含む)、rex CLI の前提、statusline の
+// state、設定、daemon の稼働、peer messaging、解決済みパスを Report に集めてから書く。文字の出力 (write) と `--json` の
+// 出力が同じ判定を見るためで、JSON の形は Report の json tag が決める。他の読むだけの診断 (inspect / status / logs) は
+// verify パッケージ。
 package doctor
 
 import (
@@ -19,8 +20,10 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/daemonstate"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/ratelimit"
+	"github.com/usadamasa/agents-daemon/internal/runtime/claudesessions"
 	"github.com/usadamasa/agents-daemon/internal/runtime/config"
 	"github.com/usadamasa/agents-daemon/internal/runtime/detect"
+	"github.com/usadamasa/agents-daemon/internal/transcript"
 )
 
 // Client は doctor が多重化ツールに対して使う操作。到達性と pane の一覧と端末の大きさだけで、画面を読まず送らない (#301)。
@@ -39,8 +42,11 @@ type Input struct {
 	Client Client
 	Kind   string // Client の多重化ツール (backend.Detect の結果)
 	Paths  apppath.Paths
-	Now    time.Time
-	Getenv func(string) string // peer messaging と rex CLI の前提 (REX_BLOCK / REX_SESSION) に使う環境 (通常は os.Getenv)
+	// ClaudeConfigDir は Claude Code の設定ディレクトリ (apppath.ClaudeConfigDir)。セッションの登録簿と transcript を読む。
+	// 空なら pane の session を補えず、transcript も読めない。
+	ClaudeConfigDir string
+	Now             time.Time
+	Getenv          func(string) string // peer messaging と rex CLI の前提 (REX_BLOCK / REX_SESSION) に使う環境 (通常は os.Getenv)
 	// Premises は rex CLI の前提の点検。Client がその口を持たなければ nil。
 	Premises multiplexer.PremiseChecker
 }
@@ -70,26 +76,53 @@ type PanesReport struct {
 	Total  int          `json:"total"`
 	// Error は server には到達できるのに一覧を取れなかったとき (診断として機能しない状態)。
 	Error string `json:"error,omitempty"`
+	// RegistryError は Claude Code の登録簿を読めなかったとき。session の補いだけができない。
+	RegistryError string `json:"registry_error,omitempty"`
 }
+
+// session の出どころ。
+const (
+	// SessionFromStatusline は statusline の記録 (context/) から backend が引いた。
+	SessionFromStatusline = "statusline"
+	// SessionFromRegistry は前景の pid で Claude Code の登録簿から補った。
+	SessionFromRegistry = "registry"
+)
 
 // PaneReport は Claude agent の pane 1 つ。
 type PaneReport struct {
 	PaneID       string                  `json:"pane_id"`
 	CWD          string                  `json:"cwd"`
+	PID          int                     `json:"pid,omitempty"`
 	AgentStatus  multiplexer.AgentStatus `json:"agent_status"`
 	AgentKind    string                  `json:"agent_kind,omitempty"`
 	AgentMessage string                  `json:"agent_message,omitempty"`
 	SessionID    string                  `json:"session_id,omitempty"`
+	// SessionSource は SessionID の出どころ (statusline / registry)。引けなければ空。
+	SessionSource string `json:"session_source,omitempty"`
 	// UnknownReason は record があるのに使えず agent_status が unknown になった理由。
 	UnknownReason string `json:"unknown_reason,omitempty"`
+	// Transcript は daemon が上限の判定に読む transcript の末尾。
+	Transcript TranscriptReport `json:"transcript"`
 	// Geometry は block の高さと screen (size と modes)。取れなければ GeometryError に理由。
 	Geometry      *multiplexer.Geometry `json:"geometry,omitempty"`
 	GeometryError string                `json:"geometry_error,omitempty"`
 }
 
-// tooShort は block の高さが上限の画面を検知できる下限に満たないかを返す。
-func (p PaneReport) tooShort() bool {
-	return p.Geometry != nil && p.Geometry.Rows < detect.MinDetectableRows
+// TranscriptReport は transcript の末尾の読み取り。読めなければ Reason に理由 (daemon はこの pane の上限を判定できない)。
+type TranscriptReport struct {
+	Path   string `json:"path,omitempty"`
+	Reason string `json:"reason,omitempty"`
+	// LastEntry は最後の会話の entry。
+	LastEntry *EntryReport `json:"last_entry,omitempty"`
+}
+
+// EntryReport は transcript の末尾の会話の entry の要約と、その分類 (detect.Kind の String)。
+type EntryReport struct {
+	UUID      string    `json:"uuid"`
+	Type      string    `json:"type"`
+	Timestamp time.Time `json:"timestamp"`
+	Error     string    `json:"error,omitempty"`
+	Kind      string    `json:"kind"`
 }
 
 // PremisesReport は rex CLI の前提の点検。点検しなかったときは Skipped に理由が入り Findings は空。
@@ -99,10 +132,9 @@ type PremisesReport struct {
 }
 
 // RateLimitsReport は Claude agent の pane ごとの利用上限 state (statusline が書く rate-limits/)。
+// daemon は読まない。statusline が配線されているかの確認に出す。
 type RateLimitsReport struct {
-	// ConfigError は設定を読めず既定の鮮度閾値で判定したときの理由。
-	ConfigError string                   `json:"config_error,omitempty"`
-	Sessions    []SessionRateLimitReport `json:"sessions"`
+	Sessions []SessionRateLimitReport `json:"sessions"`
 }
 
 // SessionRateLimitReport は 1 pane (1 セッション) ぶんの state。State が nil ならファイルがまだ無い。
@@ -113,15 +145,11 @@ type SessionRateLimitReport struct {
 	State     *RateLimitStateReport `json:"state"`
 }
 
-// RateLimitStateReport は state ファイルの中身と、鮮度・閾値の判定。
+// RateLimitStateReport は state ファイルの中身。
 type RateLimitStateReport struct {
 	ObservedAt       time.Time `json:"observed_at"`
 	AgeSeconds       int64     `json:"age_seconds"`
-	Fresh            bool      `json:"fresh"`
-	MaxAgeSeconds    int       `json:"max_age_seconds"`
 	FiveHourUsed     float64   `json:"five_hour_used_percentage"`
-	Threshold        float64   `json:"used_percentage_threshold"`
-	Exhausted        bool      `json:"exhausted"`
 	FiveHourResetsAt time.Time `json:"five_hour_resets_at"`
 	// SessionIDMismatch はファイル名と中身の session_id が食い違うときの中身の値。
 	SessionIDMismatch string `json:"session_id_mismatch,omitempty"`
@@ -172,12 +200,14 @@ type PeerMessagingReport struct {
 
 // PathsReport は daemon / CLI が触るランタイムファイルの解決済み絶対パス。
 type PathsReport struct {
-	Config     string `json:"config"`
-	StateDir   string `json:"state_dir"`
-	RateLimits string `json:"rate_limits"`
-	PIDFile    string `json:"pid_file"`
-	StatusFile string `json:"status_file"`
-	LogFile    string `json:"log_file"`
+	Config      string `json:"config"`
+	StateDir    string `json:"state_dir"`
+	RateLimits  string `json:"rate_limits"`
+	Transcripts string `json:"transcripts"`
+	Registry    string `json:"registry"`
+	PIDFile     string `json:"pid_file"`
+	StatusFile  string `json:"status_file"`
+	LogFile     string `json:"log_file"`
 }
 
 // Run は各前提条件を順に確認し w へ報告する。
@@ -205,34 +235,61 @@ func Collect(ctx context.Context, in Input) (Report, error) {
 		rep.Panes = &PanesReport{Error: err.Error()}
 		return rep, fmt.Errorf("%s の pane 一覧の取得に失敗しました (%s には到達できるのに異常): %w", in.Kind, in.Kind, err)
 	}
-	rep.Panes = collectPanes(ctx, in.Client, panes)
+	rep.Panes = collectPanes(ctx, in.Client, panes, in.ClaudeConfigDir)
 	rep.Premises = collectPremises(ctx, in.Premises, in.Getenv)
-	rep.RateLimits = collectRateLimitStates(in.Paths, panes, in.Now)
+	rep.RateLimits = collectRateLimitStates(in.Paths, rep.Panes.Claude, in.Now)
 	rep.Config = collectConfigState(in.Paths)
 	rep.Daemon = collectDaemonState(in.Paths, in.Now)
 	rep.PeerMessaging = collectPeerMessaging(in.Getenv)
-	rep.Paths = collectPaths(in.Paths)
+	rep.Paths = collectPaths(in.Paths, in.ClaudeConfigDir)
 	return rep, nil
 }
 
-// collectPanes は pane 一覧のうち Claude agent と判定されたものを写し、その block の高さと screen を添える
-// (小さく分割した block で検知が黙って効かなくなるのを、上限を踏む前に見るため)。
-func collectPanes(ctx context.Context, client Client, panes []multiplexer.Pane) *PanesReport {
+// collectPanes は pane 一覧のうち Claude agent と判定されたものを写し、daemon と同じ順で session を引き
+// (statusline の記録、無ければ前景の pid で登録簿)、その transcript の末尾を読む。block の高さと screen も添える。
+func collectPanes(ctx context.Context, client Client, panes []multiplexer.Pane, claudeConfigDir string) *PanesReport {
 	rep := &PanesReport{Claude: []PaneReport{}, Total: len(panes)}
+	var registry map[int]string
+	var transcripts transcript.Store
+	if claudeConfigDir != "" {
+		transcripts = transcript.New(claudeConfigDir)
+		ids, err := claudesessions.New(claudeConfigDir).SessionIDs()
+		if err != nil {
+			rep.RegistryError = err.Error()
+		}
+		registry = ids
+	}
 	for _, pane := range panes {
 		if !multiplexer.IsClaudeAgent(pane) {
 			continue
 		}
 		p := PaneReport{
-			PaneID: pane.PaneID, CWD: pane.CWD, AgentStatus: pane.AgentStatus, AgentKind: pane.AgentKind,
+			PaneID: pane.PaneID, CWD: pane.CWD, PID: pane.PID, AgentStatus: pane.AgentStatus, AgentKind: pane.AgentKind,
 			AgentMessage: pane.AgentMessage, SessionID: pane.SessionID, UnknownReason: pane.UnknownReason,
 		}
+		switch {
+		case p.SessionID != "":
+			p.SessionSource = SessionFromStatusline
+		case registry[pane.PID] != "":
+			p.SessionID, p.SessionSource = registry[pane.PID], SessionFromRegistry
+		}
+		p.Transcript = collectTranscript(transcripts, p.SessionID)
 		if geom, err := client.PaneGeometry(ctx, pane.PaneID); err != nil {
 			p.GeometryError = err.Error()
 		} else {
 			p.Geometry = &geom
 		}
 		rep.Claude = append(rep.Claude, p)
+	}
+	return rep
+}
+
+// collectTranscript は daemon と同じ経路 (transcript.Store.Tail、detect.ClassifyTurn) で末尾の entry を読む。
+func collectTranscript(store transcript.Store, sessionID string) TranscriptReport {
+	tail := store.Tail(sessionID)
+	rep := TranscriptReport{Path: tail.Path, Reason: tail.Reason}
+	if e := tail.Entry; e != nil {
+		rep.LastEntry = &EntryReport{UUID: e.UUID, Type: e.Type, Timestamp: e.Timestamp, Error: e.Error, Kind: detect.ClassifyTurn(e).String()}
 	}
 	return rep
 }
@@ -260,27 +317,18 @@ func collectPremises(ctx context.Context, checker multiplexer.PremiseChecker, ge
 	return rep
 }
 
-// collectRateLimitStates は ingest-statusline が書き出す rate-limits.json の有無、鮮度、
-// 5 時間ウィンドウの使用率を集める。ファイルが無いこと自体は異常ではない
-// (statusline から ingest-statusline がまだ 1 度も rate_limits を受け取っていない)。
-func collectRateLimitStates(p apppath.Paths, panes []multiplexer.Pane, now time.Time) *RateLimitsReport {
+// collectRateLimitStates は ingest-statusline が書き出す rate-limits.json の有無と中身を集める。ファイルが無いこと自体は
+// 異常ではない (statusline から ingest-statusline がまだ 1 度も rate_limits を受け取っていない)。
+func collectRateLimitStates(p apppath.Paths, panes []PaneReport, now time.Time) *RateLimitsReport {
 	rep := &RateLimitsReport{Sessions: []SessionRateLimitReport{}}
-	cfg, cfgErr := config.Load(p.ConfigFile())
-	if cfgErr != nil {
-		rep.ConfigError = cfgErr.Error()
-		cfg = config.Default()
-	}
 	for _, pane := range panes {
-		if !multiplexer.IsClaudeAgent(pane) {
-			continue
-		}
-		rep.Sessions = append(rep.Sessions, collectSessionRateLimitState(cfg, p, pane, now))
+		rep.Sessions = append(rep.Sessions, collectSessionRateLimitState(p, pane, now))
 	}
 	return rep
 }
 
 // collectSessionRateLimitState は 1 セッションぶんの state を集める。
-func collectSessionRateLimitState(cfg config.Config, p apppath.Paths, pane multiplexer.Pane, now time.Time) SessionRateLimitReport {
+func collectSessionRateLimitState(p apppath.Paths, pane PaneReport, now time.Time) SessionRateLimitReport {
 	rep := SessionRateLimitReport{PaneID: pane.PaneID, SessionID: pane.SessionID}
 	state, err := ratelimit.New(p.StateDir()).Load(pane.SessionID)
 	if err != nil {
@@ -290,15 +338,10 @@ func collectSessionRateLimitState(cfg config.Config, p apppath.Paths, pane multi
 	if state == nil {
 		return rep
 	}
-	maxAge := time.Duration(cfg.StateMaxAgeSeconds) * time.Second
 	rep.State = &RateLimitStateReport{
 		ObservedAt:       state.ObservedAt,
 		AgeSeconds:       roundSeconds(now.Sub(state.ObservedAt)),
-		Fresh:            state.IsFresh(now, maxAge),
-		MaxAgeSeconds:    cfg.StateMaxAgeSeconds,
 		FiveHourUsed:     state.FiveHourUsed,
-		Threshold:        cfg.UsedPercentageThreshold,
-		Exhausted:        state.FiveHourExhausted(cfg.UsedPercentageThreshold),
 		FiveHourResetsAt: state.FiveHourResetsAt,
 	}
 	// ファイル名と中身の session_id は必ず一致するはずなので、一致しているときは
@@ -349,20 +392,16 @@ func configFields(cfg, def config.Config) []ConfigFieldReport {
 		{"enabled", cfg.Enabled, def.Enabled},
 		{"pollIntervalSeconds", cfg.PollIntervalSeconds, def.PollIntervalSeconds},
 		{"marginSeconds", cfg.MarginSeconds, def.MarginSeconds},
-		{"fallbackWaitHours", cfg.FallbackWaitHours, def.FallbackWaitHours},
 		{"maxRetries", cfg.MaxRetries, def.MaxRetries},
 		{"retryMessage", cfg.RetryMessage, def.RetryMessage},
 		{"readLines", cfg.ReadLines, def.ReadLines},
 		{"detectionTailLines", cfg.DetectionTailLines, def.DetectionTailLines},
-		{"usedPercentageThreshold", cfg.UsedPercentageThreshold, def.UsedPercentageThreshold},
-		{"stateMaxAgeSeconds", cfg.StateMaxAgeSeconds, def.StateMaxAgeSeconds},
 		{"handleTransient", cfg.HandleTransient, def.HandleTransient},
 		{"transientWaitSeconds", cfg.TransientWaitSeconds, def.TransientWaitSeconds},
 		{"transientMaxWaitSeconds", cfg.TransientMaxWaitSeconds, def.TransientMaxWaitSeconds},
 		{"dismissMenu", cfg.DismissMenu, def.DismissMenu},
 		{"menuDismissDelayMs", cfg.MenuDismissDelayMs, def.MenuDismissDelayMs},
 		{"submitDelayMs", cfg.SubmitDelayMs, def.SubmitDelayMs},
-		{"customPatterns", cfg.CustomPatterns, def.CustomPatterns},
 		{"idleShutdownMinutes", cfg.IdleShutdownMinutes, def.IdleShutdownMinutes},
 		{"deferToNativeAutoContinue", cfg.DeferToNativeAutoContinue, def.DeferToNativeAutoContinue},
 	}
@@ -437,13 +476,15 @@ func isUnder(path, dir string) bool {
 }
 
 // collectPaths は daemon / CLI が触るランタイムファイルの解決済み絶対パスを集める。
-func collectPaths(p apppath.Paths) *PathsReport {
+func collectPaths(p apppath.Paths, claudeConfigDir string) *PathsReport {
 	return &PathsReport{
-		Config:     p.ConfigFile(),
-		StateDir:   p.StateDir(),
-		RateLimits: ratelimit.New(p.StateDir()).Dir + "/<session_id>.json",
-		PIDFile:    p.PIDFile(),
-		StatusFile: p.StatusFile(),
-		LogFile:    p.LogFile(),
+		Config:      p.ConfigFile(),
+		StateDir:    p.StateDir(),
+		RateLimits:  ratelimit.New(p.StateDir()).Dir + "/<session_id>.json",
+		Transcripts: transcript.New(claudeConfigDir).Dir + "/*/<session_id>.jsonl",
+		Registry:    claudesessions.New(claudeConfigDir).Dir + "/<pid>.json",
+		PIDFile:     p.PIDFile(),
+		StatusFile:  p.StatusFile(),
+		LogFile:     p.LogFile(),
 	}
 }

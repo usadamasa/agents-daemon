@@ -56,20 +56,16 @@ func TestLoad(t *testing.T) {
 			"enabled": false,
 			"pollIntervalSeconds": 10,
 			"marginSeconds": 30,
-			"fallbackWaitHours": 2.5,
 			"maxRetries": 3,
 			"retryMessage": "resume please",
 			"readLines": 40,
 			"detectionTailLines": 20,
-			"usedPercentageThreshold": 50,
-			"stateMaxAgeSeconds": 120,
 			"handleTransient": false,
 			"transientWaitSeconds": 10,
 			"transientMaxWaitSeconds": 20,
 			"dismissMenu": false,
 			"menuDismissDelayMs": 100,
 			"submitDelayMs": 200,
-			"customPatterns": ["foo.*bar"],
 			"idleShutdownMinutes": 15,
 			"deferToNativeAutoContinue": false
 		}`)
@@ -81,20 +77,16 @@ func TestLoad(t *testing.T) {
 			Enabled:                 false,
 			PollIntervalSeconds:     10,
 			MarginSeconds:           30,
-			FallbackWaitHours:       2.5,
 			MaxRetries:              3,
 			RetryMessage:            "resume please",
 			ReadLines:               40,
 			DetectionTailLines:      20,
-			UsedPercentageThreshold: 50,
-			StateMaxAgeSeconds:      120,
 			HandleTransient:         false,
 			TransientWaitSeconds:    10,
 			TransientMaxWaitSeconds: 20,
 			DismissMenu:             false,
 			MenuDismissDelayMs:      100,
 			SubmitDelayMs:           200,
-			CustomPatterns:          []string{"foo.*bar"},
 			IdleShutdownMinutes:     15,
 
 			DeferToNativeAutoContinue: false,
@@ -123,7 +115,7 @@ func TestLoad(t *testing.T) {
 			"maxRetries": "not-a-number",
 			"readLines": 2,
 			"retryMessage": "",
-			"usedPercentageThreshold": 150
+			"detectionTailLines": 0
 		}`)
 		cfg, err := Load(path)
 		if err != nil {
@@ -145,20 +137,21 @@ func TestLoad(t *testing.T) {
 		if cfg.RetryMessage != def.RetryMessage {
 			t.Errorf("retryMessage: got %q, want default %q", cfg.RetryMessage, def.RetryMessage)
 		}
-		if cfg.UsedPercentageThreshold != def.UsedPercentageThreshold {
-			t.Errorf("usedPercentageThreshold: got %v, want default %v", cfg.UsedPercentageThreshold, def.UsedPercentageThreshold)
+		if cfg.DetectionTailLines != def.DetectionTailLines {
+			t.Errorf("detectionTailLines: got %v, want default %v", cfg.DetectionTailLines, def.DetectionTailLines)
 		}
 	})
 
-	t.Run("customPatterns の不正な正規表現だけ除外する", func(t *testing.T) {
-		path := writeTestFile(t, `{"customPatterns": ["valid.*", "["]}`)
+	t.Run("旧判定の設定キー (usedPercentageThreshold / stateMaxAgeSeconds / customPatterns / fallbackWaitHours) は知らないキーとして無視する", func(t *testing.T) {
+		path := writeTestFile(t, `{"usedPercentageThreshold": 50, "stateMaxAgeSeconds": 120, "customPatterns": ["foo"], "fallbackWaitHours": 2.5, "marginSeconds": 45}`)
 		cfg, err := Load(path)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		want := []string{"valid.*"}
-		if !reflect.DeepEqual(cfg.CustomPatterns, want) {
-			t.Errorf("got %v, want %v", cfg.CustomPatterns, want)
+		want := Default()
+		want.MarginSeconds = 45
+		if !reflect.DeepEqual(cfg, want) {
+			t.Errorf("got %+v, want %+v", cfg, want)
 		}
 	})
 

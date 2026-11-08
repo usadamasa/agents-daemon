@@ -83,6 +83,7 @@ func ToPane(blockID string, ps ProgramStatus, proc Process, sessionID string) mu
 	}
 	if proc.Foreground != nil {
 		pane.CWD = proc.Foreground.CWD
+		pane.PID = proc.Foreground.PID
 	}
 	root := rootRecord(ps.Records)
 	switch {

@@ -32,23 +32,10 @@ var nativeStoodDownBanners = []string{
 	"Automatic continue stopped after repeated usage-limit hits · this task will not resume on its own (/rate-limit-options to try again)",
 }
 
-func newTestClassifier(t *testing.T) *Classifier {
-	t.Helper()
-	c, err := NewClassifier(nil)
-	if err != nil {
-		t.Fatalf("NewClassifier: %v", err)
-	}
-	return c
-}
-
-func TestClassify_ネイティブauto_continueがカウントダウン中なら手を出さない(t *testing.T) {
-	c := newTestClassifier(t)
-
+func TestClassifyScreen_ネイティブauto_continueがカウントダウン中なら手を出さない(t *testing.T) {
 	for i, banner := range nativeArmedBanners {
 		t.Run(fmt.Sprintf("armed-%d", i), func(t *testing.T) {
-			// 上限に当たった元の行はバナーの上に残っている。二重シグナルが揃った
-			// 画面でもバナーが勝つことを確かめる (勝たないと daemon が待機に入り、
-			// 解除時刻に Escape を送ってネイティブの継続を取り消してしまう)。
+			// 上限に当たった元の行はバナーの上に残っている。
 			screen := strings.Join([]string{
 				"⏺ You've hit your session limit · resets 5:00pm (Asia/Tokyo)",
 				"  /upgrade to increase your usage limit.",
@@ -56,16 +43,14 @@ func TestClassify_ネイティブauto_continueがカウントダウン中なら�
 				banner,
 			}, "\n")
 
-			if got := c.Classify(screen, 15); got != KindAutoContinueArmed {
-				t.Errorf("Classify() = %v, want %v", got, KindAutoContinueArmed)
+			if got := ClassifyScreen(screen, 15); got != HintNativeArmed {
+				t.Errorf("ClassifyScreen() = %v, want %v", got, HintNativeArmed)
 			}
 		})
 	}
 }
 
-func TestClassify_ネイティブが降りた画面は通常のlimitとして扱う(t *testing.T) {
-	c := newTestClassifier(t)
-
+func TestClassifyScreen_ネイティブが降りた画面は通常の再開を送る(t *testing.T) {
 	for i, banner := range nativeStoodDownBanners {
 		t.Run(fmt.Sprintf("stood-down-%d", i), func(t *testing.T) {
 			screen := strings.Join([]string{
@@ -74,16 +59,14 @@ func TestClassify_ネイティブが降りた画面は通常のlimitとして扱
 				banner,
 			}, "\n")
 
-			if got := c.Classify(screen, 15); got != KindLimit {
-				t.Errorf("Classify() = %v, want %v", got, KindLimit)
+			if got := ClassifyScreen(screen, 15); got != HintNone {
+				t.Errorf("ClassifyScreen() = %v, want %v", got, HintNone)
 			}
 		})
 	}
 }
 
-func TestClassify_解除済みでenter待ちならresume_ready(t *testing.T) {
-	c := newTestClassifier(t)
-
+func TestClassifyScreen_解除済みでenter待ちならresume_ready(t *testing.T) {
 	// ネイティブは解除まで待ったが、継続の窓を過ぎたため人間のキー入力を待つ。
 	// ここは daemon の出番だが、送るべきは Enter だけ (プロンプトを打ち込むと
 	// 中断された turn ではなく新しい依頼として走ってしまう)。
@@ -92,56 +75,14 @@ func TestClassify_解除済みでenter待ちならresume_ready(t *testing.T) {
 		"Your usage limit has reset · press enter to continue",
 	} {
 		t.Run(line, func(t *testing.T) {
-			if got := c.Classify(line, 0); got != KindResumeReady {
-				t.Errorf("Classify() = %v, want %v", got, KindResumeReady)
+			if got := ClassifyScreen(line, 0); got != HintResumeReady {
+				t.Errorf("ClassifyScreen() = %v, want %v", got, HintResumeReady)
 			}
 		})
 	}
 }
 
-func TestClassify_恒久的な上限は待機に入らせない(t *testing.T) {
-	c := newTestClassifier(t)
-
-	// 2.1.239: 月次 spend limit を使い切ったときの上限メッセージにも
-	// session / weekly のリセット時刻が載るようになった。二重シグナル要件を
-	// 満たしてしまうが、待っても解除されない上限なので待機に入ってはいけない。
-	cases := map[string][]string{
-		"monthly spend limit": {
-			"⏺ You've hit your monthly spend limit · Your session limit resets 5:00pm",
-			"  /usage-credits to adjust your monthly spend limit.",
-		},
-		"org's monthly spend limit": {
-			"⏺ You've hit your org's monthly spend limit · Your weekly limit resets 5:00pm",
-		},
-		"usage credit limit": {
-			"⏺ You've hit your usage credit limit · Your session limit resets 5:00pm",
-		},
-		"spend limit reached (daily)": {
-			"⏺ API Error: spend limit reached (daily; resets 2026-08-08 00:00 UTC)",
-		},
-	}
-
-	for name, lines := range cases {
-		t.Run(name, func(t *testing.T) {
-			if got := c.Classify(strings.Join(lines, "\n"), 15); got != KindSpendLimit {
-				t.Errorf("Classify() = %v, want %v", got, KindSpendLimit)
-			}
-		})
-	}
-}
-
-func TestClassify_通常のsession_limitはspend_limitに巻き込まれない(t *testing.T) {
-	c := newTestClassifier(t)
-
-	screen := "⏺ You've hit your session limit · resets 5:00pm (Asia/Tokyo)"
-	if got := c.Classify(screen, 0); got != KindLimit {
-		t.Errorf("Classify() = %v, want %v", got, KindLimit)
-	}
-}
-
-func TestClassify_取り消しの通知が同じ画面にあれば予約中扱いしない(t *testing.T) {
-	c := newTestClassifier(t)
-
+func TestClassifyScreen_取り消しの通知が同じ画面にあれば予約中扱いしない(t *testing.T) {
 	// 予約中のバナーは画面下部で描き直される要素なので、取り消されても直前の
 	// フレームがスクロールバックに残ることがある。古いバナーを見て手を引き続けると、
 	// ネイティブも動かずこのツールも動かない状態で固まる。
@@ -154,8 +95,8 @@ func TestClassify_取り消しの通知が同じ画面にあれば予約中扱�
 				standDown,
 			}, "\n")
 
-			if got := c.Classify(screen, 15); got != KindLimit {
-				t.Errorf("Classify() = %v, want %v", got, KindLimit)
+			if got := ClassifyScreen(screen, 15); got != HintNone {
+				t.Errorf("ClassifyScreen() = %v, want %v", got, HintNone)
 			}
 		})
 	}

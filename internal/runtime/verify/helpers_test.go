@@ -7,10 +7,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/daemonstate"
-	"github.com/usadamasa/agents-daemon/internal/ratelimit"
-	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
 
 // writeFile は path に content を書く (親ディレクトリも作る)。
@@ -32,17 +29,6 @@ func writeJSONFile(t *testing.T, path string, v any) {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
 	writeFile(t, path, string(data))
-}
-
-// mustRateLimitFile は sessionID に対応する利用上限 state のパスを返す。
-// ファイル名の組み立ては statefile.SessionPath が唯一の実装元なので、テストもそこを通す。
-func mustRateLimitFile(t *testing.T, p apppath.Paths, sessionID string) string {
-	t.Helper()
-	path, err := statefile.SessionPath(ratelimit.New(p.StateDir()).Dir, sessionID, ".json")
-	if err != nil {
-		t.Fatalf("SessionPath(%q) error = %v", sessionID, err)
-	}
-	return path
 }
 
 // writeFixturePIDFile / writeFixtureSnapshot は status が読む状態を作る。

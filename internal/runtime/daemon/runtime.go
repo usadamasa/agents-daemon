@@ -21,7 +21,6 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/ledger"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/parking"
-	"github.com/usadamasa/agents-daemon/internal/ratelimit"
 	"github.com/usadamasa/agents-daemon/internal/refstate"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend"
 	"github.com/usadamasa/agents-daemon/internal/runtime/claudesessions"
@@ -154,15 +153,7 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 	r.consecutiveFailures = 0
 	r.resolveSessionIDs(panes)
 
-	// アカウント全体で最新のウィンドウは tick ごとに 1 回だけ読み、全 pane で共有する。transcript の entry に
-	// 解除時刻が無い (古い形) ときの起床時刻の予備。
-	account, accountErr := r.store.RateLimits.LatestWindow(now)
-	if accountErr != nil {
-		r.log.Logf("アカウント全体の利用上限 state の走査に失敗、無しとして継続します: %v", accountErr)
-		account = nil
-	}
-
-	deps := monitor.Deps{Client: r.client, Config: cfg, Sleep: r.sleep, Account: account, Turns: r.transcripts.Tail}
+	deps := monitor.Deps{Client: r.client, Config: cfg, Sleep: r.sleep, Turns: r.transcripts.Tail}
 
 	seen := make(map[string]bool, len(panes))
 	claudeCount := 0
@@ -174,7 +165,7 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 		}
 		claudeCount++
 		seen[pane.PaneID] = true
-		statusPanes = append(statusPanes, r.tickPane(ctx, deps, pane, account, cfg, now))
+		statusPanes = append(statusPanes, r.tickPane(ctx, deps, pane, cfg, now))
 	}
 
 	r.forgetUnseen(seen)
@@ -201,7 +192,7 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 
 // tickPane は Claude の pane 1 枚の tick。状態機械を回し、出来事をログと limit-events に残し、status.json の 1 行を返す。
 // Tick が判定に使った根拠 (Observe) は pane ごとに受け、読まなかった tick では nil のまま。
-func (r *daemonRuntime) tickPane(ctx context.Context, deps monitor.Deps, pane multiplexer.Pane, account *ratelimit.State, cfg config.Config, now time.Time) daemonstate.PaneStatus {
+func (r *daemonRuntime) tickPane(ctx context.Context, deps monitor.Deps, pane multiplexer.Pane, cfg config.Config, now time.Time) daemonstate.PaneStatus {
 	var observed *monitor.Evidence
 	deps.Observe = func(_ multiplexer.Pane, ev monitor.Evidence) { observed = &ev }
 	entry, ok := r.panes[pane.PaneID]
@@ -212,14 +203,7 @@ func (r *daemonRuntime) tickPane(ctx context.Context, deps monitor.Deps, pane mu
 	entry.lastSeenAt = now
 	r.logUnknownReason(pane, entry)
 
-	// state はセッションごとに別ファイル。pane に対応するものだけを読む。
-	rateState, stateErr := r.store.RateLimits.Load(pane.SessionID)
-	if stateErr != nil {
-		r.log.Logf("pane %s の利用上限 state の読み込みに失敗、state 無しとして継続します: %v", pane.PaneID, stateErr)
-		rateState = nil
-	}
-
-	outcome, tickErr := monitor.Tick(ctx, deps, pane, entry.state, rateState, now)
+	outcome, tickErr := monitor.Tick(ctx, deps, pane, entry.state, now)
 	failure, failureErr := r.turnFailures.Load(pane.SessionID)
 	if failureErr != nil {
 		r.log.Logf("pane %s: turn の失敗の記録の読み込みに失敗、無しとして扱います: %v", pane.PaneID, failureErr)
@@ -228,7 +212,7 @@ func (r *daemonRuntime) tickPane(ctx context.Context, deps monitor.Deps, pane mu
 		r.logMismatch(pane, entry, *observed, failure)
 	}
 	if r.logOutcome(pane, outcome, tickErr) && observed != nil && isLimitEvent(outcome) {
-		r.recordLimitEvent(ctx, pane, entry, outcome, *observed, failure, rateState, account, cfg, now)
+		r.recordLimitEvent(ctx, pane, entry, outcome, *observed, failure, cfg, now)
 	}
 	return paneStatus(pane, entry, outcome, observed, now)
 }
@@ -402,10 +386,9 @@ func isLimitEvent(outcome monitor.Outcome) bool {
 // recordLimitEvent は上限の出来事 1 件を limit-events/ へ残す。block の高さと screen はこのときだけ打つ
 // (毎 tick に 2 fork 足さない)。取れなくても出来事は残す。書けなくても tick は止めない。
 func (r *daemonRuntime) recordLimitEvent(ctx context.Context, pane multiplexer.Pane, entry *paneEntry, outcome monitor.Outcome,
-	observed monitor.Evidence, failure *turnfailure.Record, rateState, account *ratelimit.State, cfg config.Config, now time.Time) {
+	observed monitor.Evidence, failure *turnfailure.Record, cfg config.Config, now time.Time) {
 	ev := limitlog.Build(limitlog.Input{
-		At: now, Pane: pane, Outcome: outcome, State: *entry.state, Evidence: observed,
-		TurnFailure: failure, RateLimit: rateState, Account: account, Config: cfg,
+		At: now, Pane: pane, Outcome: outcome, State: *entry.state, Evidence: observed, TurnFailure: failure, Config: cfg,
 	})
 	if geom, err := r.client.PaneGeometry(ctx, pane.PaneID); err != nil {
 		ev.GeometryError = err.Error()

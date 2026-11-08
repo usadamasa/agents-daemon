@@ -63,10 +63,6 @@ type Event struct {
 	// Geometry は出来事の瞬間に打った size と modes。取れなければ GeometryError に理由。
 	Geometry      *multiplexer.Geometry `json:"geometry,omitempty"`
 	GeometryError string                `json:"geometry_error,omitempty"`
-	// RateLimit はその pane のセッションの statusline の state (own)、Account はアカウント全体で最新のウィンドウ。
-	// transcript に解除時刻が無いときの起床時刻の判断を再現するために残す。
-	RateLimit *Window `json:"rate_limit,omitempty"`
-	Account   *Window `json:"account,omitempty"`
 	// TurnFailure はその pane のセッションの最後の turn を終わらせた API error (turnfailure.Record の写し)。
 	// 記録は次の turn で消えるので、あれば「最後の turn が API error で終わり、まだ次が始まっていない」。
 	// transcript の判定と食い違えば、transcript の形が変わった疑い。
@@ -106,14 +102,6 @@ type Quota struct {
 
 // TextLimit は Transcript.Text に残す本文の長さ (rune)。上限の文は 1 行で、会話の応答を丸ごと写す理由は無い。
 const TextLimit = 200
-
-// Window は利用上限 state の 5 時間ウィンドウ (ratelimit.State の写し)。
-type Window struct {
-	UsedPercentage float64   `json:"used_percentage"`
-	ResetsAt       time.Time `json:"resets_at"`
-	ObservedAt     time.Time `json:"observed_at"`
-	SessionID      string    `json:"session_id,omitempty"`
-}
 
 // TurnFailure は StopFailure hook が受けた error。欄の名前は hook の入力に揃える。
 type TurnFailure struct {

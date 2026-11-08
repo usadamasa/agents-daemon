@@ -30,7 +30,6 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
-	"github.com/usadamasa/agents-daemon/internal/ratelimit"
 	"github.com/usadamasa/agents-daemon/internal/runtime/config"
 	"github.com/usadamasa/agents-daemon/internal/runtime/detect"
 	"github.com/usadamasa/agents-daemon/internal/transcript"
@@ -206,21 +205,15 @@ type Deps struct {
 	Sleep func(time.Duration)
 	// Turns は session の transcript の末尾を読む。daemon は transcript.Store.Tail を渡す。
 	Turns func(sessionID string) Turn
-	// Account はアカウント全体で最も新しい 5 時間ウィンドウの statusline の state (ratelimit.Store.LatestWindow)。
-	// transcript の entry に解除時刻が無い (quotaLimits の無い古い形) ときの起床時刻の予備。無ければ nil。
-	Account *ratelimit.State
 	// Observe は判定の根拠を受け取る (nil なら呼ばない)。起床前の tick では呼ばない。
 	Observe func(pane multiplexer.Pane, ev Evidence)
 }
 
 // Tick は pane 1 枚ぶんの 1 tick を処理し、ps を必要に応じて書き換える。
 //
-// rateState は statusline が書く、この pane のセッションぶんの利用上限 state。transcript の entry に解除時刻が無いときの
-// 起床時刻の予備で、無ければ nil を渡してよい。
-//
 // Client の呼び出しがエラーを返しても panic や状態破壊はしない。エラーは
 // Outcome と共に返すので、呼び出し元は連続失敗のカウント等に使うこと。
-func Tick(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *PaneState, rateState *ratelimit.State, now time.Time) (Outcome, error) {
+func Tick(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *PaneState, now time.Time) (Outcome, error) {
 	if ps.Status == StatusWaiting && now.Before(ps.WaitUntil) {
 		return OutcomeStillWaiting, nil
 	}
@@ -244,12 +237,12 @@ func Tick(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *PaneState, 
 	}
 
 	if ps.Status == StatusWaiting {
-		outcome, err := tickWaiting(ctx, deps, pane, ps, &ev, rateState, now)
+		outcome, err := tickWaiting(ctx, deps, pane, ps, &ev, now)
 		observe()
 		return outcome, err
 	}
 	observe()
-	return tickMonitoring(deps, ps, ev, rateState, now), nil
+	return tickMonitoring(deps, ps, ev, now), nil
 }
 
 // unavailable は session_id が無い、または transcript を読めない pane の tick。監視中なら何もせず、待機中なら
@@ -286,7 +279,7 @@ func standDown(ps *PaneState) {
 }
 
 // tickMonitoring は監視状態での 1 tick を処理する。上限でも一時エラーでもない turn には何もしない。
-func tickMonitoring(deps Deps, ps *PaneState, ev Evidence, rateState *ratelimit.State, now time.Time) Outcome {
+func tickMonitoring(deps Deps, ps *PaneState, ev Evidence, now time.Time) Outcome {
 	switch ev.Kind {
 	case detect.KindSpendLimit:
 		return OutcomeHardCap
@@ -310,7 +303,7 @@ func tickMonitoring(deps Deps, ps *PaneState, ev Evidence, rateState *ratelimit.
 		}
 		ps.Status = StatusWaiting
 		ps.TurnUUID = ev.Turn.Entry.UUID
-		ps.WaitUntil, _ = ComputeLimitWake(deps.Config, ev.Turn.Entry, rateState, deps.Account, now)
+		ps.WaitUntil, _ = ComputeLimitWake(deps.Config, ev.Turn.Entry, now)
 		return OutcomeWaiting
 	default:
 		return OutcomeMonitoring
@@ -318,7 +311,7 @@ func tickMonitoring(deps Deps, ps *PaneState, ev Evidence, rateState *ratelimit.
 }
 
 // tickWaiting は待機明けの 1 tick を処理する。transcript がまだ上限なら画面を読んでキーを選ぶ。
-func tickWaiting(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *PaneState, ev *Evidence, rateState *ratelimit.State, now time.Time) (Outcome, error) {
+func tickWaiting(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *PaneState, ev *Evidence, now time.Time) (Outcome, error) {
 	switch ev.Kind {
 	case detect.KindNone:
 		standDown(ps)
@@ -352,9 +345,9 @@ func tickWaiting(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *Pane
 	entry := ev.Turn.Entry
 	if ev.Kind == detect.KindLimit && entry.UUID != ps.TurnUUID {
 		// 待っている間に新しい依頼がまた上限に当たった。解除時刻が先に移っていれば送らず待ち直す。試行回数は持ち越す。
-		if entry.Quota != nil && entry.Quota.ResetsAt.After(now) {
+		if entry.Quota.ResetsAt.After(now) {
 			ps.TurnUUID = entry.UUID
-			ps.WaitUntil, _ = ComputeLimitWake(deps.Config, entry, rateState, deps.Account, now)
+			ps.WaitUntil, _ = ComputeLimitWake(deps.Config, entry, now)
 			return OutcomeWaiting, nil
 		}
 	}
@@ -423,42 +416,16 @@ func sendAtWake(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *PaneS
 	return OutcomeRetried, nil
 }
 
-// ComputeLimitWake は上限検知時の起床時刻を優先順位に従って計算する。
-//  1. transcript の entry の quotaLimits.resetsAt が未来 → その時刻 + margin。過去なら now + margin
-//     (解除時刻を過ぎても Claude Code は上限の画面のままキー入力を待つ)
-//  2. その pane のセッションの statusline の state (own) の resets_at が未来 → その時刻 + margin
-//  3. アカウント全体で最も新しいウィンドウ (account) の resets_at が未来 → その時刻 + margin
-//  4. own / account の resets_at が過去 → now + margin (5 時間ウィンドウは既に切り替わっている)
-//  5. どれも無い → FallbackWaitHours + margin
-//
-// 1 が本命。2.1.234 以降の rate_limit の entry は必ず resetsAt を持つ (実測 159 件)。2 以降は quotaLimits の無い
-// 古い形の entry のための予備で、statusline の state は 429 で弾かれた turn では書かれないため、
-// 上限中に開いた新規セッションでは own が無く account に頼る。2 と 4 に鮮度を要求しないのは、resets_at が
-// 絶対時刻で使用率のように腐らないため。
-func ComputeLimitWake(cfg config.Config, entry *transcript.Entry, rateState, account *ratelimit.State, now time.Time) (time.Time, WakeSource) {
+// ComputeLimitWake は上限検知時の起床時刻を計算する。transcript の entry の quotaLimits.resetsAt が未来ならその時刻 + margin、
+// 過去なら now + margin (解除時刻を過ぎても Claude Code は上限の画面のままキー入力を待つ)。
+// 2.1.234 以降の rate_limit の entry は必ず resetsAt を持つ (実測 159 件)。resetsAt の無い entry は
+// detect.ClassifyTurn が limit にしないので、ここには来ない (来たら即起床として扱う)。
+func ComputeLimitWake(cfg config.Config, entry *transcript.Entry, now time.Time) (time.Time, WakeSource) {
 	margin := time.Duration(cfg.MarginSeconds) * time.Second
-
-	if entry != nil && entry.Quota != nil && !entry.Quota.ResetsAt.IsZero() {
-		if entry.Quota.ResetsAt.After(now) {
-			return entry.Quota.ResetsAt.Add(margin), WakeFromTranscript
-		}
-		return now.Add(margin), WakeTranscriptAlreadyReset
+	if entry != nil && entry.Quota != nil && entry.Quota.ResetsAt.After(now) {
+		return entry.Quota.ResetsAt.Add(margin), WakeFromTranscript
 	}
-
-	ownHas := rateState != nil && rateState.HasFiveHour()
-	if ownHas && rateState.FiveHourResetsAt.After(now) {
-		return rateState.FiveHourResetsAt.Add(margin), WakeFromStatusline
-	}
-	accountHas := account != nil && account.HasFiveHour()
-	if accountHas && account.FiveHourResetsAt.After(now) {
-		return account.FiveHourResetsAt.Add(margin), WakeFromAccount
-	}
-	if ownHas || accountHas {
-		return now.Add(margin), WakeAlreadyReset
-	}
-
-	fallback := time.Duration(cfg.FallbackWaitHours * float64(time.Hour))
-	return now.Add(fallback).Add(margin), WakeFromFallback
+	return now.Add(margin), WakeTranscriptAlreadyReset
 }
 
 // WakeSource は起床時刻をどの情報源から決めたかを表す。inspect が判断過程を
@@ -471,14 +438,6 @@ const (
 	WakeFromTranscript WakeSource = iota
 	// WakeTranscriptAlreadyReset は transcript の entry の resetsAt が既に過ぎており、待たずに起こすことを表す。
 	WakeTranscriptAlreadyReset
-	// WakeFromStatusline は自セッションの statusline の state の resets_at (未来) を採用したことを表す。
-	WakeFromStatusline
-	// WakeFromAccount はアカウント全体で最も新しいウィンドウの resets_at (未来) を採用したことを表す。
-	WakeFromAccount
-	// WakeAlreadyReset は statusline の state の resets_at が既に過ぎており、待たずに起こすことを表す。
-	WakeAlreadyReset
-	// WakeFromFallback は情報源が無く FallbackWaitHours に頼ったことを表す。
-	WakeFromFallback
 )
 
 // String は WakeSource を診断表示向けの日本語にする。
@@ -488,14 +447,6 @@ func (s WakeSource) String() string {
 		return "transcript の entry の resetsAt (未来)"
 	case WakeTranscriptAlreadyReset:
 		return "transcript の entry の resetsAt (既に経過。解除済みとみなして即起床)"
-	case WakeFromStatusline:
-		return "自セッションの statusline の resets_at (未来)"
-	case WakeFromAccount:
-		return "他セッションの statusline の resets_at (アカウント全体で最新のウィンドウ、未来)"
-	case WakeAlreadyReset:
-		return "statusline の resets_at (既に経過。解除済みとみなして即起床)"
-	case WakeFromFallback:
-		return "フォールバック (transcript にも statusline にも解除時刻が無い)"
 	default:
 		return "不明"
 	}
@@ -505,10 +456,6 @@ func (s WakeSource) String() string {
 var wakeSourceIDs = map[WakeSource]string{
 	WakeFromTranscript:         "transcript",
 	WakeTranscriptAlreadyReset: "transcript-already-reset",
-	WakeFromStatusline:         "statusline",
-	WakeFromAccount:            "account",
-	WakeAlreadyReset:           "already-reset",
-	WakeFromFallback:           "fallback",
 }
 
 // ID は WakeSource を JSON 向けの識別子にする (`inspect --json`)。String は日本語の説明。

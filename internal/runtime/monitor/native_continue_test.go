@@ -35,7 +35,7 @@ func TestTick_待機明けに本体が待っていれば送らず監視へ戻る
 			deps := newTestDeps(t, config.Default(), client, limitedTurn(uuidLimit, now.Add(-time.Minute)))
 			ps := waitingState(now, 2)
 
-			outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, nil, now)
+			outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, now)
 
 			if err != nil {
 				t.Fatalf("Tick() error = %v", err)
@@ -59,7 +59,7 @@ func TestTick_deferToNativeAutoContinueをoffにすると予約中でも送る(t
 	deps := newTestDeps(t, cfg, client, limitedTurn(uuidLimit, now.Add(-time.Minute)))
 	ps := waitingState(now, 0)
 
-	outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, nil, now)
+	outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, now)
 
 	if err != nil || outcome != OutcomeRetried || ps.Attempts != 1 {
 		t.Errorf("Tick() = %v, %v, ps = %+v; want retried", outcome, err, ps)
@@ -75,7 +75,7 @@ func TestTick_リトライ中はdeferToNativeAutoContinueに従わない(t *test
 	deps := newTestDeps(t, cfg, client, limitedTurn(uuidLimit, now.Add(-time.Minute)))
 	ps := waitingState(now, 0)
 
-	outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, nil, now)
+	outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, now)
 
 	if err != nil || outcome != OutcomeNativeAutoContinue {
 		t.Errorf("Tick() = %v, %v; want native-auto-continue", outcome, err)
@@ -100,7 +100,7 @@ func TestTick_enter待ちにはenterだけを送る(t *testing.T) {
 	deps := newTestDeps(t, config.Default(), client, limitedTurn(uuidLimit, now.Add(-time.Minute)))
 	ps := waitingState(now, 0)
 
-	outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, nil, now)
+	outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, now)
 
 	if err != nil {
 		t.Fatalf("Tick() error = %v", err)
@@ -126,7 +126,7 @@ func TestTick_enterが効かないままなら最終的に打ち切る(t *testin
 	ps := waitingState(now, 0)
 
 	for range cfg.MaxRetries + 5 {
-		outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, nil, now)
+		outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, now)
 		if err != nil {
 			t.Fatalf("Tick() error = %v", err)
 		}

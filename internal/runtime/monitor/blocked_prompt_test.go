@@ -29,7 +29,7 @@ func TestTick_BlockedByPrompt_NoSend(t *testing.T) {
 			deps := newTestDeps(t, cfg, client, limitedTurn(uuidLimit, now.Add(-time.Minute)))
 			ps := waitingState(now, 2)
 
-			outcome, err := Tick(context.Background(), deps, blockedPane(kind, "approve Bash: rm"), ps, nil, now)
+			outcome, err := Tick(context.Background(), deps, blockedPane(kind, "approve Bash: rm"), ps, now)
 
 			if err != nil {
 				t.Fatalf("Tick() error = %v", err)
@@ -56,7 +56,7 @@ func TestTick_BlockedWithoutKind_StillSends(t *testing.T) {
 	deps := newTestDeps(t, config.Default(), client, limitedTurn(uuidLimit, now.Add(-time.Minute)))
 	ps := waitingState(now, 0)
 
-	outcome, err := Tick(context.Background(), deps, blockedPane("", ""), ps, nil, now)
+	outcome, err := Tick(context.Background(), deps, blockedPane("", ""), ps, now)
 
 	if err != nil {
 		t.Fatalf("Tick() error = %v", err)
@@ -76,7 +76,7 @@ func TestTick_BlockedByPrompt_DetectionUnaffected(t *testing.T) {
 	deps := newTestDeps(t, config.Default(), client, limitedTurn(uuidLimit, now.Add(time.Hour)))
 	ps := &PaneState{}
 
-	outcome, err := Tick(context.Background(), deps, blockedPane("permission", "approve Bash: rm"), ps, nil, now)
+	outcome, err := Tick(context.Background(), deps, blockedPane("permission", "approve Bash: rm"), ps, now)
 
 	if err != nil {
 		t.Fatalf("Tick() error = %v", err)

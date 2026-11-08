@@ -148,7 +148,7 @@ func writeSessionRateLimitState(w io.Writer, rep SessionRateLimitReport) {
 	}
 	_, _ = fmt.Fprintf(w, "  observed_at: %s (%s 前)\n", st.ObservedAt.Format(time.RFC3339), time.Duration(st.AgeSeconds)*time.Second)
 	_, _ = fmt.Fprintf(w, "  five_hour.used_percentage: %.1f%%\n", st.FiveHourUsed)
-	_, _ = fmt.Fprintf(w, "  five_hour.resets_at: %s (transcript の entry に解除時刻が無いときの予備)\n", st.FiveHourResetsAt.Format(time.RFC3339))
+	_, _ = fmt.Fprintf(w, "  five_hour.resets_at: %s (daemon は読まない。statusline の配線の確認用)\n", st.FiveHourResetsAt.Format(time.RFC3339))
 	if st.SessionIDMismatch != "" {
 		_, _ = fmt.Fprintf(w, "  ⚠ ファイル名と中身の session_id が食い違っています (中身: %s)\n", st.SessionIDMismatch)
 	}

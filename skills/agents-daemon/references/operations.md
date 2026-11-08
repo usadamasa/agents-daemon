@@ -223,7 +223,6 @@ issue にする。
 | `enabled` | `true` | 全体スイッチ |
 | `pollIntervalSeconds` | `5` | 各 pane を見る間隔 |
 | `marginSeconds` | `60` | 解除時刻に足す余裕 |
-| `fallbackWaitHours` | `5` | 解除時刻がどこからも取れないときの待ち |
 | `maxRetries` | `5` | クールダウンに入るまでの再開試行回数 |
 | `retryMessage` | `Continue where you left off.` | 再開時に送る文面 |
 | `readLines` | `25` | 待機明けに画面を読む行数 (可視領域の末尾から) |
@@ -265,7 +264,7 @@ issue にする。
   (`doctor` の pane 一覧に `⚠`、status.json に `detect_reason`)。claude を wrapper の shell から起動すると
   pid が合わず、statusline の配線が要る。
 - **statusline を切っていても判定は変わらない。** 上限かどうかと解除時刻は transcript の末尾の entry から取る。
-  `rate-limits/` の state は、解除時刻の無い古い形の entry のときの予備になるだけ。
+  `rate-limits/` の state は daemon が読まない (statusline の配線の確認に `doctor` が出すだけ)。
 - **SessionStart から statusline の初回描画までの数秒は対応が無い。** sidecar は statusline が書くため。
   daemon は tick ごとに引き直すので、その後の tick から見える。
 - **上限中に開いた新規セッションは、プロンプトを打って弾かれていないと再開しても

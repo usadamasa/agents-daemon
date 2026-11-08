@@ -50,7 +50,7 @@ func TestClassifyTurn(t *testing.T) {
 		{"Fable のモデル単位の上限は hard cap", apiError("rate_limit", fableLimitText), KindSpendLimit},
 		{"spend limit は hard cap", apiError("rate_limit", "You've hit your monthly spend limit · Your session limit resets 5:00pm"), KindSpendLimit},
 		{"usage credit limit は hard cap", apiError("rate_limit", "You've hit your usage credit limit · Your session limit resets 5:00pm"), KindSpendLimit},
-		{"quotaLimits も無く本文が上限の文 (古い版) は limit", apiError("rate_limit", "You've hit your session limit · resets 5:50pm (Asia/Tokyo)"), KindLimit},
+		{"quotaLimits も無く本文が上限の文 (2.1.233 以前の形) は追わない", apiError("rate_limit", "You've hit your session limit · resets 5:50pm (Asia/Tokyo)"), KindNone},
 		{"resetsAt の無い quotaLimits は無いものとして本文で分ける", &transcript.Entry{Type: "assistant", Error: "rate_limit", IsAPIError: true, Text: requestRejected429, Quota: &transcript.Quota{Status: "rejected"}}, KindTransient},
 		// rate_limit 以外の error。
 		{"server_error は transient", apiError("server_error", sleepServerError), KindTransient},

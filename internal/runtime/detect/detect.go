@@ -79,7 +79,8 @@ var apiErrorTextPattern = regexp.MustCompile(`^\s*API Error\b`)
 //   - error が rate_limit で quotaLimits に resetsAt があれば、rateLimitType が seven_day 系なら KindWeeklyLimit、
 //     それ以外 (five_hour) は KindLimit
 //   - error が rate_limit で quotaLimits が無ければ本文で分ける。spend limit / credits / Fable の形なら KindSpendLimit、
-//     `API Error` で始まれば KindTransient、どちらでもなければ KindLimit (解除時刻は statusline かフォールバック)
+//     `API Error` で始まれば KindTransient。どちらでもなければ KindNone (2.1.233 以前の形は追わない。解除時刻が無いので
+//     待てず、見逃しは StopFailure の記録との食い違いのログで気づく)
 //   - error が overloaded / server_error なら KindTransient
 //   - それ以外の error (invalid_request、billing_error、unknown) は daemon が送って直るものではないので KindNone
 func ClassifyTurn(e *transcript.Entry) Kind {
@@ -104,7 +105,7 @@ func ClassifyTurn(e *transcript.Entry) Kind {
 	case apiErrorTextPattern.MatchString(e.Text):
 		return KindTransient
 	default:
-		return KindLimit
+		return KindNone
 	}
 }
 

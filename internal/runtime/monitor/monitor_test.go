@@ -8,7 +8,6 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
-	"github.com/usadamasa/agents-daemon/internal/ratelimit"
 	"github.com/usadamasa/agents-daemon/internal/runtime/config"
 	"github.com/usadamasa/agents-daemon/internal/runtime/detect"
 	"github.com/usadamasa/agents-daemon/internal/transcript"
@@ -37,8 +36,7 @@ func datedTurn(turn Turn, at time.Time) Turn {
 	return Turn{Path: turn.Path, Entry: &e}
 }
 
-// legacyLimitedTurn は quotaLimits の無い古い形の上限の entry (2.1.233 以前)。解除時刻は statusline かフォールバック。
-// 時刻は now (テストの基準の時刻) に置く。
+// legacyLimitedTurn は quotaLimits の無い古い形の上限の entry (2.1.233 以前)。解除時刻が無いので上限として追わない。
 func legacyLimitedTurn(now time.Time) Turn {
 	return Turn{Path: "/t.jsonl", Entry: &transcript.Entry{
 		UUID: "legacy", Type: "assistant", Error: "rate_limit", IsAPIError: true, Version: "2.1.224", Timestamp: now,
@@ -166,7 +164,7 @@ func TestTick_WorkingPaneIsNeverTouched(t *testing.T) {
 			deps := newTestDeps(t, config.Default(), client, tt.turn)
 			ps := &PaneState{}
 
-			outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusWorking, true), ps, nil, now)
+			outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusWorking, true), ps, now)
 
 			if err != nil {
 				t.Fatalf("Tick() error = %v", err)
@@ -186,7 +184,7 @@ func TestTick_WorkingDuringWait_IsRecovered(t *testing.T) {
 	deps := newTestDeps(t, config.Default(), client, limitedTurn(uuidLimit, now.Add(-time.Hour)))
 	ps := &PaneState{Status: StatusWaiting, WaitUntil: now.Add(-time.Second), Attempts: 2, TurnUUID: uuidLimit}
 
-	outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusWorking, true), ps, nil, now)
+	outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusWorking, true), ps, now)
 
 	if err != nil {
 		t.Fatalf("Tick() error = %v", err)
@@ -218,7 +216,7 @@ func TestTick_UnavailableTurn(t *testing.T) {
 			pane.SessionID = tt.sessionID
 			ps := &PaneState{}
 
-			outcome, err := Tick(context.Background(), deps, pane, ps, nil, now)
+			outcome, err := Tick(context.Background(), deps, pane, ps, now)
 
 			if err != nil {
 				t.Fatalf("Tick() error = %v", err)
@@ -235,7 +233,7 @@ func TestTick_UnavailableTurn(t *testing.T) {
 			pane.SessionID = tt.sessionID
 			ps := &PaneState{Status: StatusWaiting, Attempts: 2, TurnUUID: uuidLimit}
 
-			outcome, err := Tick(context.Background(), deps, pane, ps, nil, now)
+			outcome, err := Tick(context.Background(), deps, pane, ps, now)
 
 			if err != nil {
 				t.Fatalf("Tick() error = %v", err)
@@ -259,7 +257,7 @@ func TestTick_StillWaiting_ReadsNothing(t *testing.T) {
 	deps.Turns = func(string) Turn { turns++; return limitedTurn(uuidLimit, now.Add(time.Hour)) }
 	ps := &PaneState{Status: StatusWaiting, WaitUntil: now.Add(time.Hour)}
 
-	outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusIdle, true), ps, nil, now)
+	outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusIdle, true), ps, now)
 
 	if err != nil || outcome != OutcomeStillWaiting {
 		t.Fatalf("Tick() = %v, %v, want still-waiting", outcome, err)
@@ -278,7 +276,7 @@ func TestTick_LimitDetected_WaitsForResetsAt(t *testing.T) {
 	deps := newTestDeps(t, cfg, client, limitedTurn(uuidLimit, resetsAt))
 	ps := &PaneState{}
 
-	outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, nil, now)
+	outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, now)
 
 	if err != nil {
 		t.Fatalf("Tick() error = %v", err)
@@ -303,7 +301,7 @@ func TestTick_PastResetsAt_WakesImmediately(t *testing.T) {
 	deps := newTestDeps(t, cfg, client, limitedTurn(uuidLimit, now.Add(-time.Hour)))
 	ps := &PaneState{}
 
-	outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusIdle, true), ps, nil, now)
+	outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusIdle, true), ps, now)
 
 	if err != nil || outcome != OutcomeWaiting {
 		t.Fatalf("Tick() = %v, %v, want waiting", outcome, err)
@@ -313,33 +311,20 @@ func TestTick_PastResetsAt_WakesImmediately(t *testing.T) {
 	}
 }
 
-// quotaLimits の無い古い形の entry では statusline の state、無ければフォールバックで待つ。
-func TestTick_LegacyEntry_UsesStatuslineThenFallback(t *testing.T) {
+// quotaLimits の無い古い形の上限の entry (2.1.233 以前) は解除時刻が無いので追わない。待つ理由が決められないまま
+// フォールバックで寝るより、見逃して StopFailure の記録との食い違いのログで気づく側に倒す。
+func TestTick_LegacyEntry_IsNotLimit(t *testing.T) {
 	now := time.Date(2026, 10, 4, 10, 0, 0, 0, time.UTC)
-	cfg := config.Default()
-	margin := time.Duration(cfg.MarginSeconds) * time.Second
+	client := &multiplexerfake.Client{}
+	deps := newTestDeps(t, config.Default(), client, legacyLimitedTurn(now))
+	ps := &PaneState{}
 
-	t.Run("own の state の resets_at", func(t *testing.T) {
-		own := &ratelimit.State{FiveHourUsed: 100, FiveHourResetsAt: now.Add(90 * time.Minute), ObservedAt: now.Add(-3 * time.Hour)}
-		deps := newTestDeps(t, cfg, &multiplexerfake.Client{}, legacyLimitedTurn(now))
-		ps := &PaneState{}
-		if _, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusIdle, true), ps, own, now); err != nil {
-			t.Fatal(err)
-		}
-		if want := now.Add(90 * time.Minute).Add(margin); !ps.WaitUntil.Equal(want) {
-			t.Errorf("WaitUntil = %v, want %v", ps.WaitUntil, want)
-		}
-	})
-	t.Run("何も無ければ fallbackWaitHours", func(t *testing.T) {
-		deps := newTestDeps(t, cfg, &multiplexerfake.Client{}, legacyLimitedTurn(now))
-		ps := &PaneState{}
-		if _, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusIdle, true), ps, nil, now); err != nil {
-			t.Fatal(err)
-		}
-		if want := now.Add(time.Duration(cfg.FallbackWaitHours * float64(time.Hour))).Add(margin); !ps.WaitUntil.Equal(want) {
-			t.Errorf("WaitUntil = %v, want %v", ps.WaitUntil, want)
-		}
-	})
+	outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, now)
+
+	if err != nil || outcome != OutcomeMonitoring || ps.Status != StatusMonitoring {
+		t.Errorf("Tick() = %v, %v, ps = %+v; want monitoring", outcome, err, ps)
+	}
+	assertNoRead(t, client)
 }
 
 // 待機明けに transcript がまだ同じ上限なら、画面を 1 回読み、通知欄が無ければ esc → 文面 → enter の順に送る。
@@ -356,7 +341,7 @@ func TestTick_Wake_SendsEscTextEnterInOrder(t *testing.T) {
 	deps := newTestDeps(t, cfg, client, limitedTurn(uuidLimit, now.Add(-2*time.Minute)))
 	ps := &PaneState{Status: StatusWaiting, WaitUntil: now.Add(-time.Second), TurnUUID: uuidLimit}
 
-	outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, nil, now)
+	outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, now)
 
 	if err != nil {
 		t.Fatalf("Tick() error = %v", err)
@@ -388,7 +373,7 @@ func TestTick_Wake_UserResumed(t *testing.T) {
 	deps := newTestDeps(t, config.Default(), client, resumedTurn())
 	ps := &PaneState{Status: StatusWaiting, WaitUntil: now.Add(-time.Second), Attempts: 3, TurnUUID: uuidLimit}
 
-	outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusIdle, true), ps, nil, now)
+	outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusIdle, true), ps, now)
 
 	if err != nil {
 		t.Fatalf("Tick() error = %v", err)
@@ -411,7 +396,7 @@ func TestTick_Wake_NewErrorEntry(t *testing.T) {
 		deps := newTestDeps(t, cfg, client, limitedTurn(uuidLimit2, now.Add(4*time.Hour)))
 		ps := &PaneState{Status: StatusWaiting, WaitUntil: now.Add(-time.Second), Attempts: 2, TurnUUID: uuidLimit}
 
-		outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, nil, now)
+		outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, now)
 
 		if err != nil || outcome != OutcomeWaiting {
 			t.Fatalf("Tick() = %v, %v, want waiting", outcome, err)
@@ -426,7 +411,7 @@ func TestTick_Wake_NewErrorEntry(t *testing.T) {
 		deps := newTestDeps(t, cfg, client, limitedTurn(uuidLimit2, now.Add(-time.Minute)))
 		ps := &PaneState{Status: StatusWaiting, WaitUntil: now.Add(-time.Second), Attempts: 2, TurnUUID: uuidLimit}
 
-		outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, nil, now)
+		outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, now)
 
 		if err != nil || outcome != OutcomeRetried {
 			t.Fatalf("Tick() = %v, %v, want retried", outcome, err)
@@ -444,7 +429,7 @@ func TestTick_MaxRetriesReached_NoSend(t *testing.T) {
 	deps := newTestDeps(t, cfg, client, limitedTurn(uuidLimit, now.Add(-time.Hour)))
 	ps := &PaneState{Status: StatusWaiting, Attempts: cfg.MaxRetries, TurnUUID: uuidLimit}
 
-	outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusIdle, true), ps, nil, now)
+	outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusIdle, true), ps, now)
 
 	if err != nil {
 		t.Fatalf("Tick() error = %v", err)
@@ -465,7 +450,7 @@ func TestTick_NotClaudeAgent_DuringWait_NoSend(t *testing.T) {
 	deps := newTestDeps(t, cfg, client, limitedTurn(uuidLimit, now.Add(-time.Hour)))
 	ps := &PaneState{Status: StatusWaiting, TurnUUID: uuidLimit}
 
-	outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusIdle, false), ps, nil, now)
+	outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusIdle, false), ps, now)
 
 	if err != nil {
 		t.Fatalf("Tick() error = %v", err)
@@ -493,7 +478,7 @@ func TestTick_Wake_ScreenUnreadable_StaysWaiting(t *testing.T) {
 			before := PaneState{Status: StatusWaiting, WaitUntil: now.Add(-time.Second), Attempts: 2, TurnUUID: uuidLimit}
 			ps := before
 
-			outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusIdle, true), &ps, nil, now)
+			outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusIdle, true), &ps, now)
 
 			if outcome != OutcomeReadError {
 				t.Errorf("outcome = %v, want %v", outcome, OutcomeReadError)
@@ -518,7 +503,7 @@ func TestTick_Transient(t *testing.T) {
 		deps := newTestDeps(t, cfg, client, transientTurn(now))
 		ps := &PaneState{}
 
-		outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, nil, now)
+		outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, now)
 
 		if err != nil || outcome != OutcomeWaiting {
 			t.Fatalf("Tick() = %v, %v, want waiting", outcome, err)
@@ -536,7 +521,7 @@ func TestTick_Transient(t *testing.T) {
 		deps := newTestDeps(t, cfg, client, transientTurn(now))
 		ps := &PaneState{}
 
-		outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, nil, now)
+		outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, now)
 
 		if err != nil || outcome != OutcomeMonitoring || ps.Status != StatusMonitoring {
 			t.Errorf("Tick() = %v, %v, ps = %+v; want monitoring", outcome, err, ps)
@@ -552,7 +537,7 @@ func TestTick_Transient(t *testing.T) {
 
 		tickNow := now
 		for i, wantDelta := range wantDeltas {
-			outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, nil, tickNow)
+			outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, tickNow)
 			if err != nil || outcome != OutcomeRetried {
 				t.Fatalf("Tick()[%d] = %v, %v, want retried", i, outcome, err)
 			}
@@ -585,7 +570,7 @@ func TestTick_StaleTurnDoesNotWait(t *testing.T) {
 			deps := newTestDeps(t, config.Default(), client, tt.turn)
 			ps := &PaneState{}
 
-			outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, nil, now)
+			outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, now)
 
 			if err != nil {
 				t.Fatalf("Tick() error = %v", err)
@@ -600,7 +585,7 @@ func TestTick_StaleTurnDoesNotWait(t *testing.T) {
 	t.Run("24 時間ちょうどまでは待機に入る", func(t *testing.T) {
 		deps := newTestDeps(t, config.Default(), &multiplexerfake.Client{}, datedTurn(limitedTurn(uuidLimit, now.Add(time.Hour)), now.Add(-maxTurnAge)))
 		ps := &PaneState{}
-		outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, nil, now)
+		outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, now)
 		if err != nil || outcome != OutcomeWaiting {
 			t.Errorf("Tick() = %v, %v, want waiting", outcome, err)
 		}
@@ -611,7 +596,7 @@ func TestTick_StaleTurnDoesNotWait(t *testing.T) {
 		turn := datedTurn(limitedTurn(uuidLimit, now.Add(-time.Minute)), now.Add(-30*time.Hour))
 		deps := newTestDeps(t, config.Default(), client, turn)
 		ps := waitingState(now, 0)
-		outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, nil, now)
+		outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, now)
 		if err != nil || outcome != OutcomeRetried {
 			t.Errorf("Tick() = %v, %v, want retried", outcome, err)
 		}
@@ -635,7 +620,7 @@ func TestTick_CapsDoNotWait(t *testing.T) {
 			client := &multiplexerfake.Client{}
 			deps := newTestDeps(t, config.Default(), client, tt.turn)
 			ps := &PaneState{}
-			outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, nil, now)
+			outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, now)
 			if err != nil || outcome != tt.want || ps.Status != StatusMonitoring {
 				t.Errorf("Tick() = %v, %v, ps = %+v; want %v / monitoring", outcome, err, ps, tt.want)
 			}
@@ -645,7 +630,7 @@ func TestTick_CapsDoNotWait(t *testing.T) {
 			client := &multiplexerfake.Client{PaneReadFunc: readReturning(cleanScreen, nil)}
 			deps := newTestDeps(t, config.Default(), client, tt.turn)
 			ps := &PaneState{Status: StatusWaiting, Attempts: 1, TurnUUID: uuidLimit}
-			outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, nil, now)
+			outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, now)
 			if err != nil || outcome != tt.want || *ps != (PaneState{}) {
 				t.Errorf("Tick() = %v, %v, ps = %+v; want %v / ゼロ値", outcome, err, ps, tt.want)
 			}
@@ -663,7 +648,7 @@ func TestFixtures_ClassifyAsExpected(t *testing.T) {
 		want detect.Kind
 	}{
 		{"limitedTurn", limitedTurn(uuidLimit, now), detect.KindLimit},
-		{"legacyLimitedTurn", legacyLimitedTurn(now), detect.KindLimit},
+		{"legacyLimitedTurn", legacyLimitedTurn(now), detect.KindNone},
 		{"weeklyTurn", weeklyTurn(now), detect.KindWeeklyLimit},
 		{"transientTurn", transientTurn(now), detect.KindTransient},
 		{"hardCapTurn", hardCapTurn(), detect.KindSpendLimit},

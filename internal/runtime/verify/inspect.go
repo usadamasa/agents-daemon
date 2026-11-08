@@ -17,7 +17,6 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
-	"github.com/usadamasa/agents-daemon/internal/ratelimit"
 	"github.com/usadamasa/agents-daemon/internal/runtime/claudesessions"
 	"github.com/usadamasa/agents-daemon/internal/runtime/config"
 	"github.com/usadamasa/agents-daemon/internal/runtime/detect"
@@ -66,9 +65,7 @@ type InspectReport struct {
 	// StaleTurn は kind が limit / transient でも entry が古く (か時刻が無く) daemon が待機に入らないとき true。
 	StaleTurn bool `json:"stale_turn,omitempty"`
 	// Wake は kind が limit のときの起床時刻と、その算出に使った情報源。
-	Wake         *WakeReport `json:"wake,omitempty"`
-	StateError   string      `json:"state_error,omitempty"`
-	AccountError string      `json:"account_error,omitempty"`
+	Wake *WakeReport `json:"wake,omitempty"`
 	// HandleTransient は kind が transient のときだけ、その扱いを決める設定。
 	HandleTransient *bool `json:"handle_transient,omitempty"`
 	// 画面の通知欄。Hint は detect.Hint の String。待機明けのキー選択にだけ効く。
@@ -120,10 +117,6 @@ type WakeReport struct {
 	SourceDescription  string     `json:"source_description"`
 	MarginSeconds      int        `json:"margin_seconds"`
 	TranscriptResetsAt *time.Time `json:"transcript_resets_at,omitempty"`
-	StateResetsAt      *time.Time `json:"state_resets_at,omitempty"`
-	AccountResetsAt    *time.Time `json:"account_resets_at,omitempty"`
-	AccountSessionID   string     `json:"account_session_id,omitempty"`
-	AccountObservedAt  *time.Time `json:"account_observed_at,omitempty"`
 	WakeAt             time.Time  `json:"wake_at"`
 }
 
@@ -177,21 +170,9 @@ func CollectInspect(ctx context.Context, in InspectInput) (InspectReport, error)
 	rep.kind = detect.ClassifyTurn(tail.Entry)
 	rep.Kind = rep.kind.String()
 
-	store := ratelimit.New(in.Paths.StateDir())
-	rateState, stateErr := store.Load(rep.SessionID)
-	if stateErr != nil {
-		rep.StateError = stateErr.Error()
-		rateState = nil
-	}
-	account, accountErr := store.LatestWindow(in.Now)
-	if accountErr != nil {
-		rep.AccountError = accountErr.Error()
-		account = nil
-	}
-
 	switch rep.kind {
 	case detect.KindLimit:
-		wake := collectWake(cfg, tail.Entry, rateState, account, in.Now)
+		wake := collectWake(cfg, tail.Entry, in.Now)
 		rep.Wake = &wake
 		rep.StaleTurn = monitor.StaleTurn(tail.Entry, in.Now)
 	case detect.KindTransient:
@@ -284,12 +265,6 @@ func writeInspect(w io.Writer, rep InspectReport) {
 	_, _ = fmt.Fprintln(w, "\n--- transcript の末尾 (上限かどうかはここで決まる) ---")
 	writeTranscript(w, rep.Transcript)
 	_, _ = fmt.Fprintf(w, "\n判定結果: %s\n", rep.Kind)
-	if rep.StateError != "" {
-		_, _ = fmt.Fprintf(w, "利用上限 state の読み込みに失敗、state 無しとして扱います: %s\n", rep.StateError)
-	}
-	if rep.AccountError != "" {
-		_, _ = fmt.Fprintf(w, "アカウント全体の利用上限 state の走査に失敗、無しとして扱います: %s\n", rep.AccountError)
-	}
 	if rep.StaleTurn {
 		_, _ = fmt.Fprintln(w, "entry が 24 時間より古い (か時刻が無い) ので、daemon は監視中なら待機に入りません (stale-turn)。")
 	}
@@ -383,20 +358,14 @@ func scannedLines(screen string, tailN int) (total int, scanned []string) {
 	return len(lines), scanned
 }
 
-// collectWake は monitor.ComputeLimitWake の結果と、その優先順位の判断に使った情報源を集める。
-func collectWake(cfg config.Config, entry *transcript.Entry, rateState, account *ratelimit.State, now time.Time) WakeReport {
+// collectWake は monitor.ComputeLimitWake の結果と、その判断に使った情報源を集める。
+func collectWake(cfg config.Config, entry *transcript.Entry, now time.Time) WakeReport {
 	// 計算そのものは daemon と同じ monitor.ComputeLimitWake に任せる。ここで
 	// 計算を書き直すと、診断の説明が実際の挙動とずれて嘘をつくようになる。
-	wake, source := monitor.ComputeLimitWake(cfg, entry, rateState, account, now)
+	wake, source := monitor.ComputeLimitWake(cfg, entry, now)
 	rep := WakeReport{SourceID: source.ID(), SourceDescription: source.String(), MarginSeconds: cfg.MarginSeconds, WakeAt: wake}
 	if entry != nil && entry.Quota != nil && !entry.Quota.ResetsAt.IsZero() {
 		rep.TranscriptResetsAt = new(entry.Quota.ResetsAt)
-	}
-	if rateState != nil && rateState.HasFiveHour() {
-		rep.StateResetsAt = new(rateState.FiveHourResetsAt)
-	}
-	if account != nil && account.HasFiveHour() {
-		rep.AccountResetsAt, rep.AccountSessionID, rep.AccountObservedAt = new(account.FiveHourResetsAt), account.SessionID, new(account.ObservedAt)
 	}
 	return rep
 }
@@ -407,20 +376,6 @@ func writeWake(w io.Writer, wake WakeReport) {
 	_, _ = fmt.Fprintf(w, "  出所: %s + margin %s\n", wake.SourceDescription, margin)
 	if wake.TranscriptResetsAt != nil {
 		_, _ = fmt.Fprintf(w, "  transcript の entry の resetsAt: %s\n", wake.TranscriptResetsAt.Format(time.RFC3339))
-	} else {
-		_, _ = fmt.Fprintln(w, "  transcript の entry の resetsAt: 無し (quotaLimits の無い古い形)")
-	}
-	if wake.StateResetsAt != nil {
-		_, _ = fmt.Fprintf(w, "  自セッションの statusline の resets_at: %s\n", wake.StateResetsAt.Format(time.RFC3339))
-	} else {
-		_, _ = fmt.Fprintln(w, "  自セッションの statusline の state: 無し")
-	}
-	if wake.AccountResetsAt != nil {
-		_, _ = fmt.Fprintf(w, "  アカウント全体で最新のウィンドウ: resets_at %s (session %s が %s に観測)\n",
-			wake.AccountResetsAt.Format(time.RFC3339), wake.AccountSessionID,
-			wake.AccountObservedAt.Format(time.RFC3339))
-	} else {
-		_, _ = fmt.Fprintln(w, "  アカウント全体で最新のウィンドウ: 無し")
 	}
 	_, _ = fmt.Fprintf(w, "  起床時刻: %s\n", wake.WakeAt.Format(time.RFC3339))
 }

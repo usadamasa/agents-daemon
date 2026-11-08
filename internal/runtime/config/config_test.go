@@ -56,7 +56,6 @@ func TestLoad(t *testing.T) {
 			"enabled": false,
 			"pollIntervalSeconds": 10,
 			"marginSeconds": 30,
-			"fallbackWaitHours": 2.5,
 			"maxRetries": 3,
 			"retryMessage": "resume please",
 			"readLines": 40,
@@ -78,7 +77,6 @@ func TestLoad(t *testing.T) {
 			Enabled:                 false,
 			PollIntervalSeconds:     10,
 			MarginSeconds:           30,
-			FallbackWaitHours:       2.5,
 			MaxRetries:              3,
 			RetryMessage:            "resume please",
 			ReadLines:               40,
@@ -144,8 +142,8 @@ func TestLoad(t *testing.T) {
 		}
 	})
 
-	t.Run("旧判定の設定キー (usedPercentageThreshold / stateMaxAgeSeconds / customPatterns) は知らないキーとして無視する", func(t *testing.T) {
-		path := writeTestFile(t, `{"usedPercentageThreshold": 50, "stateMaxAgeSeconds": 120, "customPatterns": ["foo"], "marginSeconds": 45}`)
+	t.Run("旧判定の設定キー (usedPercentageThreshold / stateMaxAgeSeconds / customPatterns / fallbackWaitHours) は知らないキーとして無視する", func(t *testing.T) {
+		path := writeTestFile(t, `{"usedPercentageThreshold": 50, "stateMaxAgeSeconds": 120, "customPatterns": ["foo"], "fallbackWaitHours": 2.5, "marginSeconds": 45}`)
 		cfg, err := Load(path)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)

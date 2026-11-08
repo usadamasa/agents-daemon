@@ -20,7 +20,6 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
-	"github.com/usadamasa/agents-daemon/internal/ratelimit"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend"
 	"github.com/usadamasa/agents-daemon/internal/runtime/config"
 	"github.com/usadamasa/agents-daemon/internal/runtime/detect"
@@ -334,12 +333,6 @@ func runSimulateTicks(ctx context.Context, w io.Writer, p apppath.Paths, ownedPa
 	res.Turn = TurnReport{Source: source, UUID: turn.Entry.UUID, Kind: detect.ClassifyTurn(turn.Entry).String()}
 	_, _ = fmt.Fprintf(w, "\ntranscript の末尾として渡す entry: %s (uuid=%s, 判定=%s)\n", source, res.Turn.UUID, res.Turn.Kind)
 
-	account, accountErr := ratelimit.New(p.StateDir()).LatestWindow(time.Now())
-	if accountErr != nil {
-		_, _ = fmt.Fprintf(w, "アカウント全体の利用上限 state の走査に失敗、無しとして扱います: %v\n", accountErr)
-		account = nil
-	}
-
 	guarded := newScopedClient(execClient, ownedPaneID)
 	var tickClient monitor.Client = guarded
 	var wouldSend []Sent
@@ -362,13 +355,10 @@ func runSimulateTicks(ctx context.Context, w io.Writer, p apppath.Paths, ownedPa
 	res.Agent, res.AgentStatus = pane.Agent, pane.AgentStatus
 	_, _ = fmt.Fprintf(w, "  観測した pane: agent=%s agent_status=%s\n", pane.Agent, pane.AgentStatus)
 
-	deps := monitor.Deps{
-		Client: tickClient, Config: cfg, Sleep: time.Sleep, Account: account,
-		Turns: func(string) monitor.Turn { return turn },
-	}
+	deps := monitor.Deps{Client: tickClient, Config: cfg, Sleep: time.Sleep, Turns: func(string) monitor.Turn { return turn }}
 	ps := &monitor.PaneState{}
 	tick := func(n int, now time.Time) monitor.Outcome {
-		outcome, tickErr := monitor.Tick(ctx, deps, pane, ps, nil, now)
+		outcome, tickErr := monitor.Tick(ctx, deps, pane, ps, now)
 		report := TickReport{Now: now, Outcome: outcome.String(), WouldSend: wouldSend}
 		wouldSend = nil
 		_, _ = fmt.Fprintf(w, "  %d 回目の Tick → Outcome: %s\n", n, outcome)

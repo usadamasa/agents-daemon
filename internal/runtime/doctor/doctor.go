@@ -132,7 +132,7 @@ type PremisesReport struct {
 }
 
 // RateLimitsReport は Claude agent の pane ごとの利用上限 state (statusline が書く rate-limits/)。
-// 上限の判定には使わず、transcript の entry に解除時刻が無い (古い形) ときの起床時刻の予備。
+// daemon は読まない。statusline が配線されているかの確認に出す。
 type RateLimitsReport struct {
 	Sessions []SessionRateLimitReport `json:"sessions"`
 }
@@ -392,7 +392,6 @@ func configFields(cfg, def config.Config) []ConfigFieldReport {
 		{"enabled", cfg.Enabled, def.Enabled},
 		{"pollIntervalSeconds", cfg.PollIntervalSeconds, def.PollIntervalSeconds},
 		{"marginSeconds", cfg.MarginSeconds, def.MarginSeconds},
-		{"fallbackWaitHours", cfg.FallbackWaitHours, def.FallbackWaitHours},
 		{"maxRetries", cfg.MaxRetries, def.MaxRetries},
 		{"retryMessage", cfg.RetryMessage, def.RetryMessage},
 		{"readLines", cfg.ReadLines, def.ReadLines},

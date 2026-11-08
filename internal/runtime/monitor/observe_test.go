@@ -24,7 +24,7 @@ func TestTick_ObserveReceivesEvidence(t *testing.T) {
 		calls := 0
 		deps.Observe = func(_ multiplexer.Pane, ev Evidence) { got, calls = ev, calls+1 }
 
-		if _, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), &PaneState{}, nil, now); err != nil {
+		if _, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), &PaneState{}, now); err != nil {
 			t.Fatalf("Tick() error = %v", err)
 		}
 		if calls != 1 {
@@ -44,7 +44,7 @@ func TestTick_ObserveReceivesEvidence(t *testing.T) {
 		var got Evidence
 		deps.Observe = func(_ multiplexer.Pane, ev Evidence) { got = ev }
 
-		if _, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), waitingState(now, 0), nil, now); err != nil {
+		if _, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), waitingState(now, 0), now); err != nil {
 			t.Fatalf("Tick() error = %v", err)
 		}
 		if !got.ScreenRead || got.Screen != resumeReadyScreen || got.Hint != detect.HintResumeReady {
@@ -57,7 +57,7 @@ func TestTick_ObserveReceivesEvidence(t *testing.T) {
 		var got Evidence
 		deps.Observe = func(_ multiplexer.Pane, ev Evidence) { got = ev }
 
-		if _, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusIdle, true), &PaneState{}, nil, now); err != nil {
+		if _, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusIdle, true), &PaneState{}, now); err != nil {
 			t.Fatalf("Tick() error = %v", err)
 		}
 		if got.Turn.Reason != unreadableTurn.Reason || got.Kind != detect.KindNone {
@@ -74,7 +74,7 @@ func TestTick_ObserveNotCalledBeforeWake(t *testing.T) {
 	deps.Observe = func(multiplexer.Pane, Evidence) { calls++ }
 
 	if _, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusIdle, true),
-		&PaneState{Status: StatusWaiting, WaitUntil: now.Add(time.Hour)}, nil, now); err != nil {
+		&PaneState{Status: StatusWaiting, WaitUntil: now.Add(time.Hour)}, now); err != nil {
 		t.Fatalf("Tick() error = %v", err)
 	}
 	if calls != 0 {

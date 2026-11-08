@@ -24,7 +24,6 @@ func TestAppend(t *testing.T) {
 		Attempts:  0,
 		Record:    Record{AgentStatus: "working", Msg: "長い作業"},
 		Geometry:  &multiplexer.Geometry{Rows: 11, Columns: 139, AlternateScreen: true},
-		RateLimit: &Window{UsedPercentage: 100, ResetsAt: at.Add(time.Hour), ObservedAt: at.Add(-time.Minute), SessionID: "sid-1"},
 		Settings:  Settings{ReadLines: 25, DetectionTailLines: 15},
 		Screen:    "line 1\nline 2\n",
 		Hint:      "none",
@@ -63,9 +62,6 @@ func TestAppend(t *testing.T) {
 	if got.Outcome != "waiting" || got.Kind != "limit" || got.Screen != "line 1\nline 2\n" || got.Geometry == nil || got.Geometry.Rows != 11 {
 		t.Errorf("読み戻した Event = %+v", got)
 	}
-	if got.RateLimit == nil || !got.RateLimit.ResetsAt.Equal(at.Add(time.Hour)) {
-		t.Errorf("rate_limit が往復していない: %+v", got.RateLimit)
-	}
 	if got.Transcript == nil || got.Transcript.UUID != "u1" || got.Transcript.Quota == nil || !got.Transcript.Quota.ResetsAt.Equal(at.Add(time.Hour)) {
 		t.Errorf("transcript が往復していない: %+v", got.Transcript)
 	}
@@ -79,7 +75,7 @@ func TestAppend(t *testing.T) {
 		t.Errorf("翌日のファイルが無い: %v", err)
 	}
 	// 無いものは書かない (後から読む人が「欄が無い = 取れなかった」と読めるように)。
-	if strings.Contains(lines[0], `"account"`) || strings.Contains(lines[0], `"geometry_error"`) || strings.Contains(lines[0], `"reason"`) {
+	if strings.Contains(lines[0], `"turn_failure"`) || strings.Contains(lines[0], `"geometry_error"`) || strings.Contains(lines[0], `"reason"`) {
 		t.Errorf("無い欄が出ている: %s", lines[0])
 	}
 	// 検知の tick (画面を読んでいない) では screen と hint も出ない。

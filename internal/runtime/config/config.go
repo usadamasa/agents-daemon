@@ -20,7 +20,6 @@ type Config struct {
 	Enabled             bool
 	PollIntervalSeconds int
 	MarginSeconds       int
-	FallbackWaitHours   float64
 	MaxRetries          int
 	// RetryMessage は resume 時にペインへ送るテキスト。入力行へエコーされるため、
 	// limit / rate / overloaded のような検知語を含めてはいけない。含めると
@@ -49,7 +48,6 @@ func Default() Config {
 		Enabled:                 true,
 		PollIntervalSeconds:     5,
 		MarginSeconds:           60,
-		FallbackWaitHours:       5,
 		MaxRetries:              5,
 		RetryMessage:            defaultRetryMessage,
 		ReadLines:               25,
@@ -71,21 +69,20 @@ func Default() Config {
 // validate で弾かれる) を区別するため。bool のように 0 値が意味を持つ型では
 // 非ポインタだと「省略」と「明示的な false/0」を取り違えてしまう。
 type rawConfig struct {
-	Enabled                 *bool    `json:"enabled"`
-	PollIntervalSeconds     *int     `json:"pollIntervalSeconds"`
-	MarginSeconds           *int     `json:"marginSeconds"`
-	FallbackWaitHours       *float64 `json:"fallbackWaitHours"`
-	MaxRetries              *int     `json:"maxRetries"`
-	RetryMessage            *string  `json:"retryMessage"`
-	ReadLines               *int     `json:"readLines"`
-	DetectionTailLines      *int     `json:"detectionTailLines"`
-	HandleTransient         *bool    `json:"handleTransient"`
-	TransientWaitSeconds    *int     `json:"transientWaitSeconds"`
-	TransientMaxWaitSeconds *int     `json:"transientMaxWaitSeconds"`
-	DismissMenu             *bool    `json:"dismissMenu"`
-	MenuDismissDelayMs      *int     `json:"menuDismissDelayMs"`
-	SubmitDelayMs           *int     `json:"submitDelayMs"`
-	IdleShutdownMinutes     *int     `json:"idleShutdownMinutes"`
+	Enabled                 *bool   `json:"enabled"`
+	PollIntervalSeconds     *int    `json:"pollIntervalSeconds"`
+	MarginSeconds           *int    `json:"marginSeconds"`
+	MaxRetries              *int    `json:"maxRetries"`
+	RetryMessage            *string `json:"retryMessage"`
+	ReadLines               *int    `json:"readLines"`
+	DetectionTailLines      *int    `json:"detectionTailLines"`
+	HandleTransient         *bool   `json:"handleTransient"`
+	TransientWaitSeconds    *int    `json:"transientWaitSeconds"`
+	TransientMaxWaitSeconds *int    `json:"transientMaxWaitSeconds"`
+	DismissMenu             *bool   `json:"dismissMenu"`
+	MenuDismissDelayMs      *int    `json:"menuDismissDelayMs"`
+	SubmitDelayMs           *int    `json:"submitDelayMs"`
+	IdleShutdownMinutes     *int    `json:"idleShutdownMinutes"`
 
 	DeferToNativeAutoContinue *bool `json:"deferToNativeAutoContinue"`
 }
@@ -137,9 +134,6 @@ func applyRawBasics(cfg *Config, raw *rawConfig) {
 	}
 	if v := raw.MarginSeconds; v != nil && *v >= 0 {
 		cfg.MarginSeconds = *v
-	}
-	if v := raw.FallbackWaitHours; v != nil && *v >= 0.1 {
-		cfg.FallbackWaitHours = *v
 	}
 	if v := raw.MaxRetries; v != nil && *v >= 1 {
 		cfg.MaxRetries = *v

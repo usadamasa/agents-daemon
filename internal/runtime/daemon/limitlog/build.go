@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
-	"github.com/usadamasa/agents-daemon/internal/ratelimit"
 	"github.com/usadamasa/agents-daemon/internal/runtime/config"
 	"github.com/usadamasa/agents-daemon/internal/runtime/monitor"
 	"github.com/usadamasa/agents-daemon/internal/turnfailure"
@@ -21,10 +20,7 @@ type Input struct {
 	Evidence monitor.Evidence
 	// TurnFailure はそのセッションの StopFailure の記録。無ければ nil。
 	TurnFailure *turnfailure.Record
-	// RateLimit は own、Account はアカウント全体の statusline の state。無ければ nil。
-	RateLimit *ratelimit.State
-	Account   *ratelimit.State
-	Config    config.Config
+	Config      config.Config
 }
 
 // Build は tick の結果から出来事を組む。端末の大きさ (Geometry) は呼び手が後から足す。
@@ -41,8 +37,6 @@ func Build(in Input) Event {
 		Record:      Record{AgentStatus: string(in.Pane.AgentStatus), Kind: in.Pane.AgentKind, Msg: in.Pane.AgentMessage},
 		Transcript:  transcriptOf(in.Evidence.Turn),
 		Reason:      in.Evidence.Turn.Reason,
-		RateLimit:   windowOf(in.RateLimit),
-		Account:     windowOf(in.Account),
 		TurnFailure: turnFailureOf(in.TurnFailure),
 		Settings:    Settings{ReadLines: in.Config.ReadLines, DetectionTailLines: in.Config.DetectionTailLines},
 	}
@@ -66,19 +60,6 @@ func transcriptOf(turn monitor.Turn) *Transcript {
 		out.Quota = &Quota{Status: q.Status, RateLimitType: q.RateLimitType, OverageStatus: q.OverageStatus, ResetsAt: zeroableTime(q.ResetsAt)}
 	}
 	return out
-}
-
-// windowOf は利用上限 state を記録の形に写す。無ければ nil (欄ごと出さない)。
-func windowOf(state *ratelimit.State) *Window {
-	if state == nil {
-		return nil
-	}
-	return &Window{
-		UsedPercentage: state.FiveHourUsed,
-		ResetsAt:       state.FiveHourResetsAt,
-		ObservedAt:     state.ObservedAt,
-		SessionID:      state.SessionID,
-	}
 }
 
 // turnFailureOf は turn の失敗の記録を出来事の形に写す。無ければ nil (欄ごと出さない)。

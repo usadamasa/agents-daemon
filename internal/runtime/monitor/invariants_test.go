@@ -15,7 +15,6 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
-	"github.com/usadamasa/agents-daemon/internal/ratelimit"
 	"github.com/usadamasa/agents-daemon/internal/runtime/config"
 	"github.com/usadamasa/agents-daemon/internal/runtime/detect"
 )
@@ -69,8 +68,6 @@ type step struct {
 	readErr error
 	sendErr error
 	pane    multiplexer.Pane
-	rate    *ratelimit.State
-	account *ratelimit.State
 	now     time.Time
 }
 
@@ -83,12 +80,10 @@ func randomStep(r *rand.Rand, prev time.Time) step {
 	advances := []time.Duration{0, time.Second, 10 * time.Second, 31 * time.Second, 2 * time.Minute, 10 * time.Minute, time.Hour, 6 * time.Hour}
 	now := prev.Add(advances[r.IntN(len(advances))])
 	st := step{
-		turn:    randomTurn(r, now),
-		screen:  traceScreens[r.IntN(len(traceScreens))],
-		pane:    randomPane(r),
-		rate:    randomRateState(r, now),
-		account: randomRateState(r, now),
-		now:     now,
+		turn:   randomTurn(r, now),
+		screen: traceScreens[r.IntN(len(traceScreens))],
+		pane:   randomPane(r),
+		now:    now,
 	}
 	if st.turn.Reason == noSessionTurn.Reason {
 		st.pane.SessionID = ""
@@ -115,22 +110,6 @@ func randomPane(r *rand.Rand) multiplexer.Pane {
 		Agent:       agents[r.IntN(len(agents))],
 		AgentStatus: statuses[r.IntN(len(statuses))],
 		AgentKind:   kinds[r.IntN(len(kinds))],
-	}
-}
-
-// randomRateState は state 無し、five_hour が null、過去または未来の resets_at を持つ state を引く。
-func randomRateState(r *rand.Rand, now time.Time) *ratelimit.State {
-	switch r.IntN(4) {
-	case 0:
-		return nil
-	case 1:
-		return &ratelimit.State{ObservedAt: now}
-	default:
-		return &ratelimit.State{
-			FiveHourUsed:     r.Float64() * 100,
-			FiveHourResetsAt: now.Add(time.Duration(r.IntN(12*3600)-6*3600) * time.Second),
-			ObservedAt:       now.Add(-time.Duration(r.IntN(1800)) * time.Second),
-		}
 	}
 }
 
@@ -201,10 +180,9 @@ func TestTick_不変条件を乱択のtick列で破らない(t *testing.T) {
 		for tick := range traceTicks {
 			cur = randomStep(r, now)
 			now = cur.now
-			deps.Account = cur.account
 			tr = tickResult{pre: *ps}
 			before := len(client.Calls)
-			tr.outcome, tr.err = Tick(context.Background(), deps, cur.pane, ps, cur.rate, now)
+			tr.outcome, tr.err = Tick(context.Background(), deps, cur.pane, ps, now)
 			tr.post, tr.calls = *ps, client.Calls[before:]
 			reached[tr.outcome] = true
 			if msg := checkTick(cfg, cur, tr); msg != "" {
@@ -274,7 +252,7 @@ func checkSend(cfg config.Config, st step, tr tickResult) string {
 		return "auto-continue の予約中に送った"
 	case tr.observed.Hint == detect.HintResumeReady && tr.sentText():
 		return "Enter 待ちの画面へテキストを送った (新しい依頼になる)"
-	case tr.observed.Kind == detect.KindLimit && tr.pre.TurnUUID != st.turn.Entry.UUID && st.turn.Entry.Quota != nil && st.turn.Entry.Quota.ResetsAt.After(st.now):
+	case tr.observed.Kind == detect.KindLimit && tr.pre.TurnUUID != st.turn.Entry.UUID && st.turn.Entry.Quota.ResetsAt.After(st.now):
 		return "新しい上限の entry の解除時刻が未来なのに送った"
 	case (tr.observed.Kind != detect.KindTransient || tr.observed.Hint == detect.HintResumeReady) && tr.pre.Attempts >= cfg.MaxRetries:
 		return "maxRetries に達した後も送った"
@@ -323,29 +301,23 @@ func TestComputeLimitWake_不変条件(t *testing.T) {
 		r := rand.New(rand.NewPCG(uint64(seed), 1)) // #nosec G115 -- seed は非負
 		cfg := config.Default()
 		cfg.MarginSeconds = r.IntN(600)
-		cfg.FallbackWaitHours = r.Float64() * 6
 		margin := time.Duration(cfg.MarginSeconds) * time.Second
 		now := base.Add(time.Duration(r.IntN(48*3600)) * time.Second)
-		own, account := randomRateState(r, now), randomRateState(r, now)
 		entry := randomTurn(r, now).Entry
 
-		wake, src := ComputeLimitWake(cfg, entry, own, account, now)
+		wake, src := ComputeLimitWake(cfg, entry, now)
 
 		fail := func(msg string) {
-			t.Fatalf("seed %d: %s\n  now=%v entry=%+v own=%+v account=%+v\n  wake=%v source=%v", seed, msg, now, entry, own, account, wake, src)
+			t.Fatalf("seed %d: %s\n  now=%v entry=%+v\n  wake=%v source=%v", seed, msg, now, entry, wake, src)
 		}
-		hasQuota := entry != nil && entry.Quota != nil && !entry.Quota.ResetsAt.IsZero()
+		future := entry != nil && entry.Quota != nil && entry.Quota.ResetsAt.After(now)
 		switch {
 		case wake.Before(now.Add(margin)):
 			fail("now + margin より前に起こす")
-		case hasQuota && entry.Quota.ResetsAt.After(now) && (src != WakeFromTranscript || !wake.Equal(entry.Quota.ResetsAt.Add(margin))):
+		case future && (src != WakeFromTranscript || !wake.Equal(entry.Quota.ResetsAt.Add(margin))):
 			fail("transcript の resetsAt が未来なのに採らなかった")
-		case hasQuota && !entry.Quota.ResetsAt.After(now) && (src != WakeTranscriptAlreadyReset || !wake.Equal(now.Add(margin))):
-			fail("transcript の resetsAt が過去なのに即起床しなかった")
-		case src == WakeFromFallback && (hasQuota || own.HasFiveHour() || account.HasFiveHour()):
-			fail("解除時刻の情報源があるのに fallback へ落ちた")
-		case src == WakeFromFallback && !wake.Equal(now.Add(time.Duration(cfg.FallbackWaitHours*float64(time.Hour))).Add(margin)):
-			fail("fallback の起床時刻が FallbackWaitHours + margin でない")
+		case !future && (src != WakeTranscriptAlreadyReset || !wake.Equal(now.Add(margin))):
+			fail("resetsAt が過去か無いのに即起床しなかった")
 		}
 	}
 }

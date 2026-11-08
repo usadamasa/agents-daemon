@@ -276,9 +276,9 @@ func checkState(st step, tr tickResult) string {
 		return "監視中なのに Attempts か TurnUUID が残っている"
 	case tr.post.Status == StatusWaiting && tr.post.TurnUUID == "":
 		return "待機中なのに根拠の entry の uuid が無い"
-	case tr.pre.Status == StatusMonitoring && tr.post.Status == StatusWaiting && StaleTurn(st.turn.Entry, st.now):
+	case tr.pre.Status == StatusMonitoring && tr.post.Status == StatusWaiting && staleTurn(st.turn.Entry, st.now):
 		return "解除 (か entry) から 24 時間より経った、または時刻の無い entry で待機に入った"
-	case tr.outcome == OutcomeStaleTurn && (tr.post.Status != StatusMonitoring || tr.sent() || !StaleTurn(st.turn.Entry, st.now)):
+	case tr.outcome == OutcomeStaleTurn && (tr.post.Status != StatusMonitoring || tr.sent() || !staleTurn(st.turn.Entry, st.now)):
 		return "stale-turn なのに待機に入ったか送ったか、entry が古くない"
 	case tr.post.Status == StatusWaiting && tr.observed.Kind == detect.KindWeeklyLimit && weeklyFar(st.turn.Entry, st.now):
 		return "解除が 24 時間より先の週の上限で待機に入った (続けた)"

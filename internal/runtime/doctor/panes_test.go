@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
@@ -52,10 +53,15 @@ func writeFile(t *testing.T, path, content string) {
 	}
 }
 
+// transcript の末尾の entry。limitedEntry の解除は 2026-10-04T12:30:00Z、weeklyEntry の解除は 2026-10-07T04:00:00Z。
 const (
 	limitedEntry = `{"type":"assistant","uuid":"u-limit","timestamp":"2026-10-04T08:32:13.884Z","message":{"role":"assistant","content":[{"type":"text","text":"You've hit your session limit"}]},"quotaLimits":{"status":"rejected","resetsAt":1791117000,"rateLimitType":"five_hour"},"error":"rate_limit","isApiErrorMessage":true,"apiErrorStatus":429,"version":"2.1.289"}`
+	weeklyEntry  = `{"type":"assistant","uuid":"u-weekly","timestamp":"2026-10-04T08:40:00.000Z","message":{"role":"assistant","content":[{"type":"text","text":"You've hit your weekly limit · progress saved"}]},"quotaLimits":{"status":"rejected","resetsAt":1791345600,"rateLimitType":"seven_day"},"error":"rate_limit","isApiErrorMessage":true,"apiErrorStatus":429,"version":"2.1.289"}`
 	idleEntry    = `{"type":"user","uuid":"u-user","timestamp":"2026-10-04T08:20:53.022Z","message":{"role":"user","content":"続けて"},"version":"2.1.289"}`
 )
+
+// panesNow は pane 一覧のテストの現在時刻。limitedEntry の解除の 3 時間半前、weeklyEntry の解除の 3 日近く前。
+var panesNow = time.Date(2026, 10, 4, 9, 0, 0, 0, time.UTC)
 
 // pane 一覧は Claude の pane ごとに block の高さと screen を出す。取れなければ理由を出して pane の行は残す。
 func TestReportPanes_Geometry(t *testing.T) {
@@ -66,7 +72,7 @@ func TestReportPanes_Geometry(t *testing.T) {
 		{PaneID: "tall", CWD: "/w", Agent: "claude", AgentStatus: multiplexer.AgentStatusIdle},
 		{PaneID: "gone", CWD: "/w", Agent: "claude", AgentStatus: multiplexer.AgentStatusIdle},
 		{PaneID: "shell", CWD: "/w", Agent: ""},
-	}, "")
+	}, "", panesNow)
 	if len(rep.Claude) != 2 || rep.Claude[0].Geometry == nil || rep.Claude[0].Geometry.Rows != 52 {
 		t.Fatalf("Claude = %+v", rep.Claude)
 	}
@@ -88,28 +94,33 @@ func TestReportPanes_Geometry(t *testing.T) {
 }
 
 // pane 一覧は daemon と同じ順で session を引き (statusline の記録、無ければ前景の pid で登録簿)、その transcript の
-// 末尾と分類を出す。引けない pane には ⚠ を出す (daemon はその pane の上限を判定できない)。
+// 末尾と分類、daemon の扱い (monitor.Decide) を出す。引けない pane には ⚠ を出す (daemon はその pane の上限を判定できない)。
 func TestReportPanes_SessionAndTranscript(t *testing.T) {
 	claudeDir := writeClaudeConfig(t,
 		map[int]string{4242: "sid-reg"},
-		map[string]string{"sid-ctx": idleEntry, "sid-reg": limitedEntry},
+		map[string]string{"sid-ctx": idleEntry, "sid-reg": limitedEntry, "sid-weekly": weeklyEntry},
 	)
 	rep := collectPanes(context.Background(), geometryOf(nil), []multiplexer.Pane{
 		{PaneID: "b1", CWD: "/w", Agent: "claude", AgentStatus: multiplexer.AgentStatusIdle, SessionID: "sid-ctx", PID: 1111},
 		{PaneID: "b2", CWD: "/w", Agent: "claude", AgentStatus: multiplexer.AgentStatusError, PID: 4242},
 		{PaneID: "b3", CWD: "/w", Agent: "claude", AgentStatus: multiplexer.AgentStatusIdle, PID: 9999},
 		{PaneID: "b4", CWD: "/w", Agent: "claude", AgentStatus: multiplexer.AgentStatusIdle, SessionID: "sid-none"},
-	}, claudeDir)
+		{PaneID: "b5", CWD: "/w", Agent: "claude", AgentStatus: multiplexer.AgentStatusError, SessionID: "sid-weekly"},
+	}, claudeDir, panesNow)
 
 	byPane := map[string]PaneReport{}
 	for _, p := range rep.Claude {
 		byPane[p.PaneID] = p
 	}
-	if p := byPane["b1"]; p.SessionSource != SessionFromStatusline || p.Transcript.LastEntry == nil || p.Transcript.LastEntry.Kind != "none" {
+	if p := byPane["b1"]; p.SessionSource != SessionFromStatusline || p.Transcript.LastEntry == nil || p.Transcript.LastEntry.Kind != "none" || p.Transcript.LastEntry.Plan != "none" {
 		t.Errorf("b1 = %+v, want statusline の session と none", p)
 	}
-	if p := byPane["b2"]; p.SessionID != "sid-reg" || p.SessionSource != SessionFromRegistry || p.Transcript.LastEntry == nil || p.Transcript.LastEntry.Kind != "limit" {
-		t.Errorf("b2 = %+v, want 登録簿の session と limit", p)
+	if p := byPane["b2"]; p.SessionID != "sid-reg" || p.SessionSource != SessionFromRegistry || p.Transcript.LastEntry == nil || p.Transcript.LastEntry.Kind != "limit" || p.Transcript.LastEntry.Plan != "wait" {
+		t.Errorf("b2 = %+v, want 登録簿の session と limit / wait", p)
+	}
+	if p := byPane["b5"]; p.Transcript.LastEntry == nil || p.Transcript.LastEntry.Kind != "weekly-limit" || p.Transcript.LastEntry.Plan != "weekly-far" ||
+		p.Transcript.LastEntry.ResetsAt == nil || !p.Transcript.LastEntry.ResetsAt.Equal(time.Unix(1791345600, 0)) {
+		t.Errorf("b5 = %+v, want weekly-limit / weekly-far / 解除時刻", p)
 	}
 	if p := byPane["b3"]; p.SessionID != "" || p.Transcript.LastEntry != nil || !strings.Contains(p.Transcript.Reason, "session_id") {
 		t.Errorf("b3 = %+v, want session 無しの理由", p)
@@ -121,10 +132,12 @@ func TestReportPanes_SessionAndTranscript(t *testing.T) {
 	var buf bytes.Buffer
 	writePanes(&buf, *rep)
 	out := buf.String()
+	// 解除時刻は entry の epoch 秒から time.Unix で組み立てるので、表示はローカルの tz になる。
 	for _, want := range []string{
 		"session_id=sid-ctx (statusline)", "session_id=sid-reg (registry)", "session_id=(なし)",
-		"末尾の entry: type=assistant error=rate_limit at 2026-10-04T08:32:13Z → limit",
-		"末尾の entry: type=user at 2026-10-04T08:20:53Z → none",
+		"末尾の entry: type=assistant error=rate_limit at 2026-10-04T08:32:13Z → limit (解除 " + time.Unix(1791117000, 0).Format(time.RFC3339) + ")\n      daemon の扱い: 待機に入る",
+		"末尾の entry: type=assistant error=rate_limit at 2026-10-04T08:40:00Z → weekly-limit (解除 " + time.Unix(1791345600, 0).Format(time.RFC3339) + ")\n      daemon の扱い: 解除が 24 時間より先なので待たない",
+		"末尾の entry: type=user at 2026-10-04T08:20:53Z → none\n",
 		"⚠ transcript を読めないため上限を判定できない",
 	} {
 		if !strings.Contains(out, want) {
@@ -134,13 +147,16 @@ func TestReportPanes_SessionAndTranscript(t *testing.T) {
 	if strings.Count(out, "⚠") != 2 {
 		t.Errorf("⚠ は判定できない 2 pane の分だけのはず:\n%s", out)
 	}
+	if strings.Count(out, "daemon の扱い") != 2 {
+		t.Errorf("daemon の扱いは上限の 2 pane の分だけのはず (none の pane には出さない):\n%s", out)
+	}
 }
 
 // 設定ディレクトリが決まらなければ、全 pane が transcript を読めない理由付きになる (登録簿も引かない)。
 func TestReportPanes_WithoutClaudeConfigDir(t *testing.T) {
 	rep := collectPanes(context.Background(), geometryOf(nil), []multiplexer.Pane{
 		{PaneID: "b1", Agent: "claude", AgentStatus: multiplexer.AgentStatusIdle, SessionID: "sid", PID: 1},
-	}, "")
+	}, "", panesNow)
 	if p := rep.Claude[0]; p.SessionSource != SessionFromStatusline || p.Transcript.LastEntry != nil || p.Transcript.Reason == "" {
 		t.Errorf("pane = %+v", p)
 	}
@@ -154,7 +170,7 @@ func TestReportPanes_UnknownReason(t *testing.T) {
 	writePanes(&buf, *collectPanes(context.Background(), geometryOf(nil), []multiplexer.Pane{
 		{PaneID: "b1", CWD: "/w", Agent: "claude", AgentStatus: multiplexer.AgentStatusUnknown, UnknownReason: reason},
 		{PaneID: "b2", CWD: "/w", Agent: "claude", AgentStatus: multiplexer.AgentStatusIdle},
-	}, ""))
+	}, "", panesNow))
 	out := buf.String()
 	if !strings.Contains(out, reason) {
 		t.Errorf("理由が出ていない:\n%s", out)
@@ -170,7 +186,7 @@ func TestReportPanes_RecordKindAndMessage(t *testing.T) {
 	writePanes(&buf, *collectPanes(context.Background(), geometryOf(nil), []multiplexer.Pane{
 		{PaneID: "b1", CWD: "/w", Agent: "claude", AgentStatus: multiplexer.AgentStatusBlocked, AgentKind: "permission", AgentMessage: "approve Bash: rm"},
 		{PaneID: "b2", CWD: "/w", Agent: "claude", AgentStatus: multiplexer.AgentStatusWorking},
-	}, ""))
+	}, "", panesNow))
 	out := buf.String()
 	for _, want := range []string{"kind=permission", `msg="approve Bash: rm"`} {
 		if !strings.Contains(out, want) {

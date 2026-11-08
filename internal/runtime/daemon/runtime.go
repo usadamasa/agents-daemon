@@ -357,7 +357,7 @@ var outcomeMessages = map[monitor.Outcome]string{
 	monitor.OutcomeNoSession:             "session_id を引けないため上限を判定しません (statusline の記録も登録簿の pid も無い)",
 	monitor.OutcomeTranscriptUnavailable: "transcript を読めないため上限を判定しません (session %s)",
 	monitor.OutcomeWorkingSuppressed:     "transcript の末尾は上限ですが record が working のため手を出しません",
-	monitor.OutcomeStaleTurn:             "transcript の末尾は上限ですが entry が 24 時間より古い (か時刻が無い) ため待機に入りません",
+	monitor.OutcomeStaleTurn:             "transcript の末尾は上限ですが解除 (か entry) から 24 時間より経った (か時刻が無い) ため待機に入りません",
 	monitor.OutcomeWaiting:               "利用上限/一時エラーを検知し待機に入りました",
 	monitor.OutcomeRetried:               "再開メッセージを送信しました (%d 回目)",
 	monitor.OutcomeRecoveredByUser:       "セッションが上限から戻ったため監視状態へ戻します",
@@ -368,7 +368,7 @@ var outcomeMessages = map[monitor.Outcome]string{
 	monitor.OutcomeLowerPriority:         "lower-priority mode で作業中のため手を引きます",
 	monitor.OutcomeResumeEnter:           "上限が解除済みで Enter 待ちだったため Enter を送りました",
 	monitor.OutcomeHardCap:               "待っても解除されない上限 (spend limit / usage credit / Fable) のため待機に入りません",
-	monitor.OutcomeWeeklyCap:             "週の上限のため待機に入りません",
+	monitor.OutcomeWeeklyCap:             "週の上限で解除が 24 時間より先のため待機に入りません (近づいたら待機に入ります)",
 	monitor.OutcomeBlockedByPrompt:       "Claude Code が利用者の答えを待つ prompt を開いているため送信を見送り待機を延長します",
 }
 

@@ -182,7 +182,7 @@ error で止まる。flag の組み合わせで JSON にできないもの (`dae
 | `doctor` | 節ごとの診断 |
 | `status` | 稼働状況、snapshot、ログの末尾 |
 | `logs` | ログのパスと末尾の行 (`lines`) |
-| `inspect` | transcript の末尾 (`transcript`) とその判定 (`kind`)、起床時刻と出所 (`wake`)、record、画面の通知欄の判定 (`hint`) と走査した行 |
+| `inspect` | transcript の末尾 (`transcript`) とその判定 (`kind`)、daemon の扱い (`plan`: `wait` / `weekly-far` / `stale-turn` / `hard-cap` / `none`)、起床時刻と出所 (`wake`)、record、画面の通知欄の判定 (`hint`) と走査した行 |
 | `simulate` | 作った pane、観測した agent、各 Tick の outcome と送るはずだったもの (`ticks`)、後始末 |
 | `stop` | 止めた daemon (`was_running`、`pid`) |
 | `daemon --ensure` | 何をしたか (`action`: `started` / `already_running` / `outside_rex`) |
@@ -195,7 +195,7 @@ error で止まる。flag の組み合わせで JSON にできないもの (`dae
 ```sh
 agents-daemon --json doctor | jq '.premises.findings'   # rex CLI の前提の点検だけを取り出す
 agents-daemon --json status | jq '.snapshot.panes'      # 監視中の pane
-agents-daemon --json inspect --pane <block id> | jq '{kind, hint, entry: .transcript.last_entry.error, wake: .wake.wake_at}'
+agents-daemon --json inspect --pane <block id> | jq '{kind, plan, hint, entry: .transcript.last_entry.error, wake: .wake.wake_at}'
 ```
 
 ### 診断
@@ -272,6 +272,10 @@ issue にする。
   続きが無い。弾かれたプロンプトがあればそれが会話に残っているので進む。
 - **ネイティブの auto-continue が再開を予約している間は何もしない。** 既定ではそちらに任せる
   (`deferToNativeAutoContinue`)。ネイティブが降りた画面から改めて拾う。
+- **週の上限は解除が 24 時間以内のときだけ待つ。** それより先なら待たず記録だけ残し (`weekly-cap`)、毎 tick 見直して
+  24 時間以内に入った tick で待機に入る。本体の auto-continue が降りる線と同じ。
+- **解除から 24 時間より経った上限には送らない。** daemon の起動前や `claude --resume` の前に止まったまま誰も戻っていない
+  pane に再開の文面を送らないため (`stale-turn`)。解除時刻の無い一時エラーは entry の時刻で見る。
 - **spend limit / usage credit では待機に入らない。** 待っても解除されないため。
   `/usage-credits` での引き上げは人間の操作なので、このツールは何もしない。
 - **Fable の週次上限でも待機に入らない。** 5 時間ウィンドウの解除では解けず、続きを別モデルにするか

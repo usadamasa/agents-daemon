@@ -225,15 +225,15 @@ func Decide(kind detect.Kind, e *transcript.Entry, now time.Time) Plan {
 		return PlanNone
 	case kind == detect.KindWeeklyLimit && weeklyFar(e, now):
 		return PlanWeeklyFar
-	case StaleTurn(e, now):
+	case staleTurn(e, now):
 		return PlanStale
 	default:
 		return PlanWait
 	}
 }
 
-// StaleTurn は解除 (resetsAt が無ければ entry の時刻) から maxTurnAge より経ったか、時刻が読めないかを返す。
-func StaleTurn(e *transcript.Entry, now time.Time) bool {
+// staleTurn は解除 (resetsAt が無ければ entry の時刻) から maxTurnAge より経ったか、時刻が読めないかを返す。
+func staleTurn(e *transcript.Entry, now time.Time) bool {
 	if e == nil || e.Timestamp.IsZero() {
 		return true
 	}

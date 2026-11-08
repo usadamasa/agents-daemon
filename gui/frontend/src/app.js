@@ -12,7 +12,7 @@ import { canAdopt, canDismiss, canRename, canTell, candidates, destinationLabel,
 import { addBlocker, adopt, askUnlink, discard, discardStale, dismissAll, dismissOne, handOff, handOffTask, instruct, rename, setStatus, start, toParking, unlink } from "./actions.js";
 import { openTarget, pickFolder } from "./daemon.js";
 import { segments } from "./links.js";
-import { MAX_ZOOM, MIN_ZOOM, centerOffset, clampZoom, fitZoom, overflowCenter, percent, scrollAfterZoom, stepZoom, wheelZoomer } from "./zoom.js";
+import { CONTROLS_BAND, MAX_ZOOM, MIN_ZOOM, centerOffset, clampZoom, fitZoom, overflowCenter, percent, scaledFrame, scrollAfterZoom, stepZoom, topOffset, wheelZoomer } from "./zoom.js";
 import { restore, scrollView, watchUpgrade } from "./restore.js";
 
 const NODE_W = 240;
@@ -1255,12 +1255,12 @@ function applyZoom() {
     frame.append(canvas);
   }
   const size = canvasSize(canvas);
-  const width = Math.ceil(size.width * zoom);
-  const height = Math.ceil(size.height * zoom);
+  const width = scaledFrame(size.width, zoom);
+  const height = scaledFrame(size.height, zoom);
   frame.style.width = `${width}px`;
   frame.style.height = `${height}px`;
   frame.style.marginLeft = `${centerOffset(width, host.clientWidth)}px`;
-  frame.style.marginTop = `${centerOffset(height, host.clientHeight)}px`;
+  frame.style.marginTop = `${topOffset(height, host.clientHeight)}px`;
   canvas.style.transform = zoom === 1 ? "" : `scale(${zoom})`;
   // カードの強調の枠を縮小しても細くしすぎないよう、style.css が拡大率で割る。
   canvas.style.setProperty("--zoom", String(zoom));
@@ -1280,7 +1280,7 @@ function setZoom(next, pointer) {
   const size = canvasSize(canvas);
   const p = pointer ?? { x: host.clientWidth / 2, y: host.clientHeight / 2 };
   const left = scrollAfterZoom(host.scrollLeft, p.x, zoom, to, size.width, host.clientWidth);
-  const top = scrollAfterZoom(host.scrollTop, p.y, zoom, to, size.height, host.clientHeight);
+  const top = scrollAfterZoom(host.scrollTop, p.y, zoom, to, size.height, host.clientHeight, topOffset);
   zoom = to;
   applyZoom();
   host.scrollTo(left, top);
@@ -1303,11 +1303,11 @@ function fitAll(force) {
   const canvas = host.querySelector(".canvas");
   if (canvas === null) return;
   const size = canvasSize(canvas);
-  const next = canvas.dataset.linked === "true" ? fitZoom(size.width, size.height, host.clientWidth, host.clientHeight) : 1;
+  const next = canvas.dataset.linked === "true" ? fitZoom(size.width, size.height, host.clientWidth, host.clientHeight - CONTROLS_BAND) : 1;
   const changed = next !== zoom;
   zoom = next;
   applyZoom();
-  if (changed || force) host.scrollTo(overflowCenter(Math.ceil(size.width * zoom), host.clientWidth), 0);
+  if (changed || force) host.scrollTo(overflowCenter(scaledFrame(size.width, zoom), host.clientWidth), 0);
   renderZoom();
 }
 

@@ -20,6 +20,8 @@ const FIXTURE = path.join(here, "fixtures", "deps.json");
 const SHOTS = path.resolve(process.env.SNAPSHOT_DIR || path.join(here, "..", "..", "..", "tmp", "gui-snapshots"));
 // 窓 1280 × 800 から header・右の列・凡例・メモの一覧・footer を除いた #graph の大きさ。
 const HOST = { width: 1000, height: 520 };
+// 図の上端に空ける拡大縮小の操作の置き場の高さ。
+const CONTROLS_BAND = 48;
 // メモの古さ (stale_memo_days) を数える現在時刻。
 const NOW = new Date("2026-11-07T12:00:00+09:00");
 
@@ -289,6 +291,67 @@ test("header: 見せ方は依存図だけなので、見せ方の切り替えの
   assert.equal(count('header.bar [aria-label="見せ方"]'), 0);
 });
 
+test("拡大縮小の操作: header ではなく図の領域の外枠に置き、図のスクロールと描き直しの外に出す", () => {
+  const zoom = q('.zoom[aria-label="拡大縮小"]');
+  // 要素を assert に渡すと、失敗の文面を作るときに DOM 全体を整形して止まる。
+  assert.ok(zoom.closest("header.bar") === null, "header の外");
+  // #graph はスクロールする領域で、描き直しのたびに中身を作り直すので、その中には置かない。
+  assert.ok(zoom.closest("#graph") === null, "#graph の外");
+  assert.ok(zoom.parentElement === q("#graph").parentElement, "#graph と同じ親");
+  assert.ok(zoom.parentElement.classList.contains("main"));
+});
+
+test("拡大縮小の操作: 図の右上に絶対配置で重ね、図の領域と同じ色の背景を持ち、単体ビューより下に置く", () => {
+  assert.match(css, /\.stage > \.main \{[^}]*position: relative/);
+  const rule = css.match(/^\.zoom \{([^}]*)\}/m)[1];
+  assert.match(rule, /position: absolute/);
+  assert.match(rule, /top: \d+px/);
+  assert.match(rule, /right: \d+px/);
+  // 置き場を別の面に見せない。#graph は背景を持たず、body の --bg が見えている。--bg と同じ色の半透明なら、
+  // 何も無い所では --bg と見分けが付かず、カードの上でだけ透けてぼける。
+  assert.match(rule, /background: var\(--bg-veil\)/);
+  assert.doesNotMatch(rule, /box-shadow|border:/);
+  assert.match(rule, /-webkit-backdrop-filter: blur\(\d+px\)/);
+  const [, r, g, b, alpha] = css.match(/--bg-veil: rgba\((\d+), (\d+), (\d+), ([\d.]+)\)/);
+  const hex = [r, g, b].map((v) => Number(v).toString(16).padStart(2, "0")).join("");
+  assert.match(css, new RegExp(`--bg: #${hex};`));
+  assert.ok(Number(alpha) > 0 && Number(alpha) < 1, `alpha ${alpha}`);
+  // ボタンも透かさないと、ぼけが隙間にしか見えない。.tb:hover に負けるよう詳細度を上げない。
+  assert.match(css, /:where\(\.zoom\) \.tb \{[^}]*background: var\(--panel-veil\)/);
+  const z = Number(rule.match(/z-index: (\d+)/)[1]);
+  assert.ok(z > 0 && z < 10, `z-index ${z}`);
+});
+
+test("拡大縮小の操作: 「全体を表示」は − / + と同じボタンの形で、オンの間も hover と押下で反応する", () => {
+  assert.ok(["tb", "sm"].every((c) => q("#zoom-fit").classList.contains(c)), q("#zoom-fit").className);
+  assert.equal(q("#zoom-fit").tagName, "BUTTON");
+  // .tb:hover と .tb.on は同じ詳細度なので、オンの間の hover は別に書かないと効かない。
+  assert.match(css, /\.tb\.on:hover \{[^}]*background:/);
+  assert.match(css, /\.tb\.on:active[^{]*\{[^}]*background:/);
+  assert.match(css, /\.tb:active[^{]*\{[^}]*background:/);
+});
+
+test("拡大縮小の操作: 「全体を表示」は文字を出さないアイコンのボタンで、名前は aria-label と title で伝える", () => {
+  const fit = q("#zoom-fit");
+  assert.equal(fit.textContent.trim(), "");
+  assert.equal(count("#zoom-fit svg"), 1);
+  assert.equal(fit.getAttribute("aria-label"), "全体を表示");
+  assert.match(fit.getAttribute("title"), /^全体を表示/);
+  assert.match(css, /\.zoom #zoom-fit \{[^}]*width: 28px/);
+});
+
+test("拡大縮小の操作: 図を描き直しても残り、押すと拡大率が変わる", () => {
+  q("#completed-check").click();
+  q("#completed-check").click();
+  const before = q("#zoom-reset").textContent;
+  q("#zoom-in").click();
+  try {
+    assert.notEqual(q("#zoom-reset").textContent, before);
+  } finally {
+    q("#zoom-fit").click();
+  }
+});
+
 test("ノードを選ぶと単体ビューを開き、待っている先と待たれている先を並べる", async () => {
   q('.node[data-key="task:beta/1"]').click();
   const pop = q("#pop");
@@ -476,14 +539,14 @@ function view() {
   };
 }
 
-// assertFitted は枠が size に収まり、余った分を左右と上下に等しく空けて中心に置いていることを確かめる。
+// assertFitted は枠が size から操作の置き場を除いた領域に収まり、左右は中心に、上は中心の余白と操作の置き場の
+// 大きい方を空けていることを確かめる。
 function assertFitted(v, size) {
   assert.equal(v.fit, "true");
   assert.ok(v.width <= size.width, `枠の幅 ${v.width}`);
-  assert.ok(v.height <= size.height, `枠の高さ ${v.height}`);
+  assert.ok(v.height <= size.height - CONTROLS_BAND, `枠の高さ ${v.height}`);
   assert.equal(v.marginLeft, (size.width - v.width) / 2);
-  assert.equal(v.marginTop, (size.height - v.height) / 2);
-  assert.ok(v.marginLeft > 0 || v.marginTop > 0, "どちらかの向きに余白が残る");
+  assert.equal(v.marginTop, Math.max(CONTROLS_BAND, (size.height - v.height) / 2));
 }
 
 test("既定の図: 全体を表示はオンで、図を見える領域に収めて中心に置く", () => {
@@ -517,7 +580,7 @@ test("下限より小さくしないと収まらない図: 下限で止め、上
     assert.equal(v.fit, "true");
     assert.ok(v.width > tiny.width && v.height > tiny.height, `枠 ${v.width} × ${v.height}`);
     assert.equal(v.marginLeft, 0);
-    assert.equal(v.marginTop, 0);
+    assert.equal(v.marginTop, CONTROLS_BAND);
     assert.equal(v.scrollTop, 0);
     assert.equal(v.scrollLeft, (v.width - tiny.width) / 2);
     // 拡大率の変わらない描き直しでは、利用者が動かしたスクロールを保つ。
@@ -528,6 +591,21 @@ test("下限より小さくしないと収まらない図: 下限で止め、上
     await snapshot("graph-fit-min");
   } finally {
     resize(HOST);
+  }
+});
+
+test("拡大した図: 操作の置き場の余白を差し引いて、見えている領域の中央の点を同じ画面位置に残す", () => {
+  q("#zoom-reset").click();
+  q("#graph").scrollTo(0, 0);
+  try {
+    const canvas = q("#graph .canvas");
+    assert.equal(view().marginTop, CONTROLS_BAND);
+    q("#zoom-in").click();
+    // 窓の中央 (260) が指す図の点は余白を引いた 212。1.2 倍の位置に余白を足して窓の中央へ戻す。
+    assert.ok(Math.abs(view().scrollTop - (212 * 1.2 + CONTROLS_BAND - 260)) < 1e-9, `scrollTop ${view().scrollTop}`);
+    assert.equal(canvas.style.transform, "scale(1.2)");
+  } finally {
+    q("#zoom-fit").click();
   }
 });
 

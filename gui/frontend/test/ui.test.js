@@ -23,6 +23,9 @@ const HOST = { width: 1000, height: 520 };
 const NOW = new Date("2026-11-07T12:00:00+09:00");
 
 let css;
+// answers は window.wails の Call.ByName が返す値。fixtureDeps は fixture の deps の文字列。
+const answers = {};
+let fixtureDeps;
 
 // setHost は #graph の見える領域の大きさを決める。「全体を表示」の拡大率がこれで決まる。
 function setHost({ width, height }) {
@@ -31,14 +34,21 @@ function setHost({ width, height }) {
   Object.defineProperty(host, "clientHeight", { configurable: true, value: height });
 }
 
+// resize は #graph の見える領域を size にし、窓の大きさが変わったことを知らせる。
+function resize(size) {
+  setHost(size);
+  window.dispatchEvent(new Event("resize"));
+}
+
 before(async () => {
   const [html, deps] = await Promise.all([readFile(path.join(SRC, "index.html"), "utf8"), readFile(FIXTURE, "utf8"), mkdir(SHOTS, { recursive: true })]);
+  fixtureDeps = deps;
   css = await readFile(path.join(SRC, "style.css"), "utf8");
   mock.timers.enable({ apis: ["Date"], now: NOW });
   GlobalRegistrator.register({ url: "http://agent-tasks.test/", width: 1280, height: 800 });
   document.body.innerHTML = html.match(/<body>([\s\S]*)<\/body>/)[1];
   setHost(HOST);
-  const answers = { "main.Daemon.Deps": deps, "main.Daemon.Restore": "", "main.Daemon.PickFolder": "" };
+  Object.assign(answers, { "main.Daemon.Deps": deps, "main.Daemon.Restore": "", "main.Daemon.PickFolder": "" });
   window.wails = {
     Call: {
       ByName: async (name) => {
@@ -133,10 +143,19 @@ test("完了を隠した既定の図: 見える辺と隠した完了を通り抜
   assert.deepEqual(hints.sort(), ["API の形が決まるのを待つ", "PR #254 のマージを待つ", "テストを直す を経由"]);
 });
 
-test("完了を隠した既定の図: 辺でつながるノードを段の浅い順に上から描き、辺の無いノードを右の列に column_order の順で並べる", () => {
+// groups は図の領域のセッションの枠を、見出しとカードの key で返す。
+function groups() {
+  return [...document.querySelectorAll("#graph .group")].map((g) => ({
+    label: g.querySelector("h2").textContent,
+    keys: [...g.querySelectorAll(".node")].map((e) => e.dataset.key),
+  }));
+}
+
+test("完了を隠した既定の図: 辺でつながるノードを段の浅い順に上から描き、辺の無い動いているノードをセッションの枠に、終わったノードを右の列に並べる", () => {
   const graph = cards("#graph");
   assert.deepEqual([...graph.keys()].sort(), [
     "pr:usadamasa/agents-daemon#254",
+    "sid:zeta",
     "task:alpha/2",
     "task:alpha/4",
     "task:alpha/5",
@@ -150,8 +169,85 @@ test("完了を隠した既定の図: 辺でつながるノードを段の浅い
   assert.ok(top("task:beta/1") < top("task:beta/2"));
   assert.ok(top("task:beta/2") < top("task:beta/3"));
   assert.equal(q("#column").hidden, false);
-  // nodes では gamma (終了) が先に来るが、column_order は作業中の zeta を先に並べる。
-  assert.deepEqual([...cards("#column").keys()], ["sid:zeta", "sid:gamma"]);
+  assert.deepEqual([...cards("#column").keys()], ["sid:gamma"]);
+  assert.equal(q("#column h2").textContent, "終わった作業 · 1");
+  assert.deepEqual(groups(), [{ label: "zeta", keys: ["sid:zeta"] }]);
+  // 枠は線のあるかたまりの下に置く。
+  const lowest = Math.max(...[...graph.values()].filter((c) => !Number.isNaN(c.top)).map((c) => c.top));
+  assert.ok(parseFloat(q("#graph .group").style.top) >= lowest + 72);
+});
+
+test("完了を隠した既定の図: 枠の中のカードはセッション名を繰り返さず、題がセッション名なら今の作業を題にする", () => {
+  const card = q('#graph .group .node[data-key="sid:zeta"]');
+  assert.equal(card.querySelector("b").textContent, "issue を読んでいる");
+  assert.equal(card.querySelector("small").textContent, "作業中");
+});
+
+// loadDeps はアプリに deps を読み直させる。窓が前に出たときの読み直し (visibilitychange) を使う。
+async function loadDeps(text) {
+  answers["main.Daemon.Deps"] = text;
+  document.dispatchEvent(new Event("visibilitychange"));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+// withoutLinks は fixture から線を全部除いた deps。
+function withoutLinks() {
+  const data = JSON.parse(fixtureDeps);
+  data.graph.links = [];
+  data.graph.folded.links = [];
+  return data;
+}
+
+test("線が 1 本も無い図: 動いているカードをセッションの枠に並べ、全体表示でも 100% のまま縮めない", async () => {
+  const narrow = { width: 600, height: 200 };
+  setHost(narrow);
+  await loadDeps(JSON.stringify(withoutLinks()));
+  try {
+    assert.equal(count(EDGE), 0);
+    assert.equal(count("#graph .empty"), 0);
+    assert.deepEqual(groups().map((g) => g.label).sort(), ["alpha", "beta", "zeta", "参照"]);
+    assert.deepEqual(groups().find((g) => g.label === "参照").keys, ["pr:usadamasa/agents-daemon#254"]);
+    assert.deepEqual([...cards("#column").keys()], ["sid:gamma"]);
+    assert.equal(q("#legend").hidden, false);
+    const frame = q("#graph .zoom-frame");
+    assert.ok(parseFloat(frame.style.height) > narrow.height, "枠の高さが見える領域を超える");
+    assert.equal(q("#zoom-reset").textContent, "100%");
+    assert.equal(q("#zoom-fit").getAttribute("aria-pressed"), "true");
+    assert.equal(q("#graph .canvas").style.transform, "");
+    await snapshot("graph-no-links");
+  } finally {
+    setHost(HOST);
+    await loadDeps(fixtureDeps);
+  }
+});
+
+test("線が 1 本も無い図: 窓の幅に合わせて枠を折り返し直す", async () => {
+  await loadDeps(JSON.stringify(withoutLinks()));
+  const rows = () => new Set([...document.querySelectorAll("#graph .group")].map((g) => g.style.top)).size;
+  try {
+    assert.ok(rows() < 4, `広い窓の行数 ${rows()}`);
+    resize({ width: 400, height: 320 });
+    assert.equal(rows(), 4);
+  } finally {
+    resize(HOST);
+    await loadDeps(fixtureDeps);
+  }
+});
+
+test("動いているカードが無い図: 図の領域にその旨を出し、終わったカードは右の列に残す", async () => {
+  const data = JSON.parse(fixtureDeps);
+  const onlyEnded = (n) => n.key === "sid:gamma";
+  data.graph.nodes = data.graph.nodes.filter(onlyEnded);
+  data.graph.links = [];
+  data.graph.folded.nodes = data.graph.folded.nodes.filter(onlyEnded);
+  data.graph.folded.links = [];
+  await loadDeps(JSON.stringify(data));
+  try {
+    assert.equal(q("#graph .empty").textContent, "動いている作業は無い");
+    assert.deepEqual([...cards("#column").keys()], ["sid:gamma"]);
+  } finally {
+    await loadDeps(fixtureDeps);
+  }
 });
 
 test("完了を隠した既定の図: 止まったノードに下流の数を、メモを置いたノードにメモの数を添える", () => {
@@ -259,7 +355,7 @@ test("完了も表示した図: 完了したノードも描き、通り抜けて
     assert.deepEqual(keysWith(byKey, "gone"), ["sid:gamma", "task:alpha/1", "task:alpha/3"]);
     assert.equal(count(EDGE), 7);
     assert.equal(count(`${EDGE}.folded`), 0);
-    assert.equal(cards("#graph").size, 9);
+    assert.equal(cards("#graph").size, 10);
     assert.ok(byKey.get("task:alpha/1").top < byKey.get("task:alpha/2").top);
     assert.ok(byKey.get("task:alpha/3").top < byKey.get("task:alpha/4").top);
     await snapshot("graph-completed");
@@ -268,12 +364,6 @@ test("完了も表示した図: 完了したノードも描き、通り抜けて
   }
   assert.equal(cards().size, 9);
 });
-
-// resize は #graph の見える領域を size にし、窓の大きさが変わったことを知らせる。
-function resize(size) {
-  setHost(size);
-  window.dispatchEvent(new Event("resize"));
-}
 
 // view は拡大縮小の今の見え方: 拡大率の表示、全体表示のオンオフ、枠の大きさと中心の余白、スクロール量。
 function view() {

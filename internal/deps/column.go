@@ -11,7 +11,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/worklog"
 )
 
-// columnTier は依存図の右の列 (依存の無いノード) の段。小さいほど上に出す (#420)。
+// columnTier は依存の無いノードを並べる段 (図の領域のセッションの枠と右の列)。小さいほど先に出す (#420、#467)。
 // 不明は手当てを要すると決められないので返事待ちに、外部の参照 (open と引けたものを含む) は手元では動かないが
 // まだ動きうるものとして未着手の下に並べる。終了したセッションに残ったものは手を入れる余地が無いので、
 // 「完了も表示」で利用者が求めて出す完了よりも下に置く (#446)。
@@ -48,7 +48,7 @@ func lastActive(tasks []record.Task, todos []record.TodoList, works []worklog.Re
 	return out
 }
 
-// columnOrder は全ノードの key を右の列に並べる順にする。どのノードが依存を持たないかは完了の表示で変わるので、
+// columnOrder は全ノードの key を依存の無いノードの並ぶ順にする。どのノードが依存を持たないかは完了の表示で変わるので、
 // 選ぶのはアプリに任せ、ここは順だけを決める。同じ段は最後に動いた時刻の新しい順 (時刻の無いものは後ろ)、
 // それも同じなら repo、セッション名、key の順。
 func columnOrder(nodes []protocol.GraphNode, active map[string]time.Time, repo func(cwd string) string) []string {

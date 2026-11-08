@@ -93,6 +93,15 @@ select { font: inherit; color: inherit; }
   border-left: 1px solid var(--line); background: var(--panel-soft);
 }
 .column .node { position: relative; flex: 0 0 auto; }
+.column h2 { margin: 0 0 2px; font-size: 14px; font-weight: 700; }
+/* 辺の無い動いているカードのセッションの枠。寸法は column.js の GROUP_W と groupHeight が同じ数を持つ */
+.group {
+  position: absolute; box-sizing: border-box; padding: 12px;
+  display: flex; flex-direction: column; gap: 10px;
+  background: var(--panel-soft); border: 1px solid var(--line); border-radius: 12px;
+}
+.group h2 { margin: 0; font-size: 12px; font-weight: 700; line-height: 16px; color: var(--ink-soft); }
+.group .node { position: relative; flex: 0 0 auto; }
 .graph .canvas { position: relative; transform-origin: 0 0; }
 /* 拡大縮小した canvas を包む枠。transform はレイアウトの大きさを変えないので、拡大率を掛けた大きさを枠に持たせて
    スクロールの範囲を図に合わせる (WKWebView では CSS の zoom が文字の大きさに効かなかった) */

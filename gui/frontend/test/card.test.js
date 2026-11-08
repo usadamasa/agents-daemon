@@ -1,6 +1,25 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { STATE_LABEL, STATE_TONE, emphasis } from "../src/card.js";
+import { STATE_LABEL, STATE_TONE, cardText, emphasis } from "../src/card.js";
+
+test("線でつながるカードの副題はセッション名、状態、今の作業の順", () => {
+  const n = { title: "API を実装する", session: "alpha", summary: "テストを書いている" };
+  assert.deepEqual(cardText(n, "作業中", false), { title: "API を実装する", sub: "alpha · 作業中 · テストを書いている" });
+});
+
+test("枠の中のカードの副題は、見出しが持つセッション名を繰り返さない", () => {
+  const n = { title: "API を実装する", session: "alpha", summary: "テストを書いている" };
+  assert.deepEqual(cardText(n, "作業中", true), { title: "API を実装する", sub: "作業中 · テストを書いている" });
+});
+
+test("枠の中で題がセッション名と同じカードは、今の作業を題にして見出しとの重なりを避ける", () => {
+  const n = { title: "zeta", session: "zeta", summary: "issue を読んでいる" };
+  assert.deepEqual(cardText(n, "作業中", true), { title: "issue を読んでいる", sub: "作業中" });
+});
+
+test("枠の中で題がセッション名と同じでも、今の作業が無ければ題はそのまま", () => {
+  assert.deepEqual(cardText({ title: "zeta", session: "zeta" }, "返事待ち (idle)", true), { title: "zeta", sub: "返事待ち (idle)" });
+});
 
 test("作業中のノードはカード全体を working で強調する", () => {
   assert.deepEqual(emphasis({ state: "working" }), ["working"]);

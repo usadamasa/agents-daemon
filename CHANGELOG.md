@@ -1,5 +1,12 @@
 # Changelog
 
+## [2026.1108.1](https://github.com/usadamasa/agents-daemon/compare/2026.1108.0...2026.1108.1) - 2026-11-08
+
+### Features
+- TaskCreate と TaskUpdate を prompt の tool 一覧へ置く by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/500
+### Bug Fixes
+- 依存図のアプリのスワイプで余白が見えないようにする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/501
+
 ## [2026.1108.0](https://github.com/usadamasa/agents-daemon/compare/2026.1107.6...2026.1108.0) - 2026-11-08
 
 ### Features

@@ -6,7 +6,7 @@ import { Graph } from "./graph.js";
 import { GROUP_W, groupBySession, partition, placeGroups } from "./column.js";
 import { fitEdges, spreadPorts } from "./ports.js";
 import { findJumps, jumpPath } from "./jumps.js";
-import { STATE_LABEL, STATE_TONE, cardText, emphasis } from "./card.js";
+import { STATE_LABEL, STATE_TONE, cardHint, cardText, emphasis } from "./card.js";
 import { isStale, kindLabel, lastPlacedAt, stamp } from "./memo.js";
 import { bulkDismissable, canAdopt, canDismiss, canRename, canTell, candidates, destinationLabel, isOwnTask, issueDestinations, pathDestination, peerDestinations, spawnDestinations, spawnLabel, taskDestinations } from "./ops.js";
 import { addBlocker, adopt, askUnlink, discard, discardStale, dismissAll, dismissOne, handOff, handOffTask, instruct, rename, setStatus, start, toParking, unlink } from "./actions.js";
@@ -272,7 +272,8 @@ function nodeCard(n, highlight, grouped = false) {
   title.textContent = text.title;
   const sub = document.createElement("small");
   sub.textContent = text.sub;
-  if (n.summary) b.title = n.summary;
+  const hint = cardHint(n);
+  if (hint) b.title = hint;
   lb.append(title, sub);
   b.append(dot, lb);
 

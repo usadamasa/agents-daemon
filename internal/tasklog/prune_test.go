@@ -71,6 +71,53 @@ func TestPrune_keepCompleted(t *testing.T) {
 	}
 }
 
+// Touch は生きているセッションの未完了のタスクと TodoWrite のリストの mtime を進める。完了したタスクは進めず、
+// CompletedRetention で消えるままにする。ほかのセッションは触らない。
+func TestTouch(t *testing.T) {
+	s := New(t.TempDir())
+	ingest(t, s, "task-create-alpha", "task-create-beta", "task-update-in-progress", "task-update-completed")
+	dir := filepath.Join(s.Dir, fixtureSession)
+	other := filepath.Join(s.Dir, "other", "1.json")
+	if err := os.MkdirAll(filepath.Dir(other), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(other, []byte(`{"id":"1","status":"pending"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	todos := filepath.Join(dir, todosFile)
+	if err := os.WriteFile(todos, []byte(`{"session_id":"x","todos":[]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().Truncate(time.Second)
+	old := now.Add(-8 * 24 * time.Hour)
+	completed, pending := filepath.Join(dir, "1.json"), filepath.Join(dir, "2.json")
+	for _, p := range []string{completed, pending, todos, other} {
+		setMtime(t, p, old)
+	}
+
+	if err := s.Touch([]string{fixtureSession, "no-record"}, now); err != nil {
+		t.Fatalf("Touch() = %v", err)
+	}
+	for path, want := range map[string]time.Time{pending: now, todos: now, completed: old, other: old} {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !info.ModTime().Equal(want) {
+			t.Errorf("%s の mtime = %v, want %v", filepath.Base(path), info.ModTime(), want)
+		}
+	}
+}
+
+func TestTouch_invalidSessionID(t *testing.T) {
+	if err := New(t.TempDir()).Touch([]string{"../x"}, time.Now()); err == nil {
+		t.Error("ファイル名に使えない ID はエラーになる")
+	}
+	if err := (Store{}).Touch([]string{"a"}, time.Now()); err != nil {
+		t.Errorf("ゼロ値の Store は何もしない: %v", err)
+	}
+}
+
 func TestPrune_nothingYet(t *testing.T) {
 	if removed, err := New(t.TempDir()).Prune(time.Now(), nil); err != nil || removed != 0 {
 		t.Errorf("Prune() = %d, %v, want 0, nil", removed, err)

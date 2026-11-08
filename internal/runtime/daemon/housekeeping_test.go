@@ -151,6 +151,65 @@ func TestHousekeep_keepsCompletedTasksOfExitedSession(t *testing.T) {
 	}
 }
 
+// pane が見えているセッションの未完了のタスクと辺は、何週間書かれていなくても housekeeping で消えない。終了したセッションの
+// 分は消える。見えなくなってから Retention が経つと、生きていたセッションの分も消える (#483)。
+func TestHousekeep_keepsTasksAndEdgesOfLiveSession(t *testing.T) {
+	now := time.Date(2026, 8, 28, 12, 0, 0, 0, time.UTC)
+	var panes []multiplexer.Pane
+	client := &multiplexerfake.Client{
+		PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) { return panes, nil },
+	}
+	panes = []multiplexer.Pane{claudePaneWithSession("p1", "s-live", multiplexer.AgentStatusIdle)}
+	r, statusPath := newTestRuntime(t, client, now)
+	dir := filepath.Dir(statusPath)
+	r.attachStateDir(dir)
+	logPath := filepath.Join(dir, "logs", "daemon.log")
+	old := 8 * 24 * time.Hour
+
+	task := func(session string) string {
+		path := filepath.Join(r.tasks.Dir, session, "1.json")
+		writeAged(t, path, `{"id":"1","session_id":"`+session+`","status":"in_progress"}`, old, now)
+		return path
+	}
+	edgeOf := func(session string) string {
+		added, err := r.edges.Add(edge.Endpoint{Ref: "sid:" + session, CWD: "/w"}, edge.Endpoint{Ref: "task:down/1", CWD: "/w"}, "", now)
+		if err != nil {
+			t.Fatalf("Add: %v", err)
+		}
+		path := filepath.Join(r.edges.Dir, added.Edge.ID+".json")
+		mtime := now.Add(-old)
+		if err := os.Chtimes(path, mtime, mtime); err != nil {
+			t.Fatalf("Chtimes: %v", err)
+		}
+		return path
+	}
+	liveTask, deadTask := task("s-live"), task("s-dead")
+	liveEdge, deadEdge := edgeOf("s-live"), edgeOf("s-dead")
+
+	if _, _, err := r.tick(context.Background(), missingConfigPath(t), now); err != nil {
+		t.Fatalf("tick() error = %v", err)
+	}
+	r.housekeep(logPath, now)
+
+	for _, path := range []string{liveTask, liveEdge} {
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("生きているセッションの記録は残るべき: %v", err)
+		}
+	}
+	for _, path := range []string{deadTask, deadEdge} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("終了したセッションの記録は消えるべき: %s (err=%v)", path, err)
+		}
+	}
+
+	r.housekeep(logPath, now.Add(tasklog.Retention+time.Hour))
+	for _, path := range []string{liveTask, liveEdge} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("見えなくなってから Retention を過ぎた記録は消えるべき: %s (err=%v)", path, err)
+		}
+	}
+}
+
 func TestHousekeep(t *testing.T) {
 	now := time.Date(2026, 8, 28, 12, 0, 0, 0, time.UTC)
 

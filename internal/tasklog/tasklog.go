@@ -31,7 +31,8 @@ import (
 // 保持期間。消すのは daemon の housekeeping (Prune) で、mtime で判定する。
 const (
 	// CompletedRetention は完了したタスクを残す期間。依存図の Show completed で今日の進み具合が
-	// 見えれば足りる。
+	// 見えれば足りる。終了したセッションの分は、作業の記録が消えるまで残す (Prune の keepCompleted)。
+	// 先に消すと、依存図がタスクの無いセッションと読み、全部終えたセッションを終了のカードで戻す (models/card)。
 	CompletedRetention = 24 * time.Hour
 	// Retention は 1 週間更新されなかったタスクと TodoWrite のリストを残す期間。終了したセッションの
 	// 未完了のタスクを、その間にパーキングへ移すか捨てるかを決める。生きているセッションで消えても、

@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -55,18 +56,26 @@ type sidecar struct {
 }
 
 // sidecars は保持期間を書式のパッケージが持つ記録の一覧。並びがそのままログの並びになる。
-// 記録を足すときはここに 1 行足す (housekeep は変えない)。
+// 記録を足すときはここに 1 行足す (housekeep は変えない)。タスクの記録は作業の記録と辺の後に消す。作業の記録が消える回に
+// 残していた完了タスクも消し、作業の記録の無いセッションに完了タスクだけが残る窓を作らない (models/card)。
 func (r *daemonRuntime) sidecars() []sidecar {
 	return []sidecar{
-		{"タスクの記録", r.tasks.Prune},
 		{"作業の記録", r.works.Prune},
 		{"パーキング", r.parking.Prune},
 		{"辺", r.edges.Prune},
+		{"タスクの記録", func(now time.Time) (int, error) { return r.tasks.Prune(now, r.keepCompletedTasks) }},
 		{"上限の出来事", r.limits.Prune},
 		{"セッション台帳", r.sessions.Prune},
 		{"turn の失敗", r.turnFailures.Prune},
 		{"外部の参照", r.refs.Prune},
 	}
+}
+
+// keepCompletedTasks はセッションの完了タスクを残すか。終了したセッションの分は、作業の記録が消えるまで残す。起動直後の掃除は
+// tick の前で liveSessions が空なので、生きているセッションの分も残り、次の掃除で消える。
+func (r *daemonRuntime) keepCompletedTasks(sessionID string) bool {
+	_, found := r.works.Get(sessionID)
+	return found && !slices.Contains(r.liveSessions, sessionID)
 }
 
 // housekeep は保持期間を過ぎた rotated ログと sidecar file を消す。何かを

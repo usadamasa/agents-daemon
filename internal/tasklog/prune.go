@@ -9,8 +9,9 @@ import (
 
 // Prune は保持期間を過ぎた記録を mtime で消し、空になったセッションのディレクトリも消す。消した
 // ファイルの数を返す。完了したタスクは CompletedRetention、それ以外のタスクと TodoWrite のリスト、
-// 消し損ねた一時ファイルは Retention で消す。
-func (s Store) Prune(now time.Time) (int, error) {
+// 消し損ねた一時ファイルは Retention で消す。keepCompleted が true を返すセッションの完了タスクは消さない。
+// nil はどのセッションも残さない。
+func (s Store) Prune(now time.Time, keepCompleted func(sessionID string) bool) (int, error) {
 	if s.Dir == "" {
 		return 0, nil
 	}
@@ -27,7 +28,8 @@ func (s Store) Prune(now time.Time) (int, error) {
 		if !session.IsDir() {
 			continue
 		}
-		n, err := pruneSession(filepath.Join(s.Dir, session.Name()), now)
+		keep := keepCompleted != nil && keepCompleted(session.Name())
+		n, err := pruneSession(filepath.Join(s.Dir, session.Name()), now, keep)
 		removed += n
 		if err != nil {
 			errs = append(errs, err)
@@ -37,7 +39,7 @@ func (s Store) Prune(now time.Time) (int, error) {
 }
 
 // pruneSession はセッション 1 つぶんのディレクトリを掃除する。
-func pruneSession(dir string, now time.Time) (int, error) {
+func pruneSession(dir string, now time.Time, keepCompleted bool) (int, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return 0, err
@@ -53,7 +55,7 @@ func pruneSession(dir string, now time.Time) (int, error) {
 		if err != nil {
 			continue
 		}
-		if !expired(path, e.Name(), now.Sub(info.ModTime())) {
+		if !expired(path, e.Name(), now.Sub(info.ModTime()), keepCompleted) {
 			continue
 		}
 		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -68,13 +70,11 @@ func pruneSession(dir string, now time.Time) (int, error) {
 }
 
 // expired は age 経ったファイルが保持期間を過ぎたかを返す。
-func expired(path, name string, age time.Duration) bool {
-	if age >= Retention {
-		return true
+func expired(path, name string, age time.Duration, keepCompleted bool) bool {
+	if name != todosFile && filepath.Ext(name) == ".json" && name[0] != '.' {
+		if t, ok := readTask(path); ok && t.Status == "completed" {
+			return !keepCompleted && age >= CompletedRetention
+		}
 	}
-	if name == todosFile || filepath.Ext(name) != ".json" || name[0] == '.' {
-		return false
-	}
-	t, ok := readTask(path)
-	return ok && t.Status == "completed" && age >= CompletedRetention
+	return age >= Retention
 }

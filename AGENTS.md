@@ -20,7 +20,7 @@ README の「役割」が持つ。機能を足す・外す判断はそこに照�
 | `.claude-plugin/plugin.json` | plugin manifest。version の実体はここ 1 箇所 |
 | `hooks/hooks.json` | hook の配線と mod の読み込み |
 | `hooks/*.sh`, `hooks/lib/` | SessionStart・Stop・PostToolUse の hook。stdin をバイナリへ渡すだけ |
-| `hooks/*.ts`, `hooks/*.tsx` | mod (依存図の pane、park の tool、メモと辺の通知)。入口は `hooks/register.ts` |
+| `hooks/*.ts`, `hooks/*.tsx` | mod (park の tool、メモと辺の通知、作業の題の推定、Task 系ツールの配置、アプリを開く command)。入口は `hooks/register.ts` |
 | `hooks/protocol.ts` | 実行時に要る schema (park の tool の inputSchema)。`task protocol:generate` が生成する |
 | `types/index.d.ts` | mod が `$.state` に置く値の型と、生成の印の間に schema から生成した JSON の型 |
 | `skills/` | plugin が配る利用者向けの skill |

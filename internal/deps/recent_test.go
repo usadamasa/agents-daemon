@@ -37,7 +37,7 @@ func TestBuild_recentRepos(t *testing.T) {
 	}
 }
 
-// 台帳が空でも recent_repos は空の配列 (null にしない。mod が配列として読む)。
+// 台帳が空でも recent_repos は空の配列 (null にしない。アプリが配列として読む)。
 func TestBuild_recentReposEmpty(t *testing.T) {
 	d := build(input{Locate: places(nil)})
 	if d.RecentRepos == nil || len(d.RecentRepos) != 0 {

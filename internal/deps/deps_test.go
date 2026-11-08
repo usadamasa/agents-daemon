@@ -14,7 +14,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/tasklog/record"
 )
 
-// 型は schema から生成したものでも、空の slice を null で書くと mod が配列として読めない。空の依存図と中身のある依存図の
+// 型は schema から生成したものでも、空の slice を null で書くと読み手 (アプリ、handoff-notice の mod) が配列として読めない。空の依存図と中身のある依存図の
 // 実際の JSON を schema で確かめる。
 func TestDepsOutputIsValid(t *testing.T) {
 	for name, in := range map[string]input{

@@ -250,7 +250,7 @@ func TestParkListAndSet(t *testing.T) {
 	if _, _, err := runPark(t, "list", `{"status": "done"}`); err == nil {
 		t.Errorf("範囲外の status が通った")
 	}
-	// from は元の status が違えば書き換えない (mod が送る前に取る)。
+	// from は元の status が違えば書き換えない (park hand が送る前に取る)。
 	if _, _, err := runPark(t, "set", req(t, map[string]any{"id": first.ID, "status": "handed", "from": "open", "to_session": "S2"})); err == nil {
 		t.Errorf("discarded のメモを from open で取れた")
 	}

@@ -7,9 +7,10 @@ model の `SendMessage` の結果に添える辺の書き方の通知 (mod)。�
 ## mod の束ね方
 
 `hooks/hooks.json` の `modules` に書ける module は 1 つなので、`hooks/register.ts` が
-`hooks/park.tsx`、`hooks/notice.ts`、`hooks/handoff-notice.ts` の hook を束ね、皆が使う `session.start` を持つ。
-依存図を描く mod (`/deps` の pane) は #364 でアプリに移して外した。mod に残るのは tool の結果に添える経路で、
-セッションの中にしか置けないものだけ。
+`hooks/park.tsx`、`hooks/notice.ts`、`hooks/handoff-notice.ts`、`hooks/work-infer.ts`、`hooks/task-tools.ts`、
+`hooks/open-app.ts` の hook を束ね、皆が使う `session.start` を持つ。
+依存図を描く mod (`/deps` の pane) は #364 でアプリに移して外した。mod に残るのはセッションの中にしか置けないもの
+(model が呼ぶ tool の登録、tool の結果に添える通知、`$.model.fork`、`tool.describe`、slash command) だけ。
 
 ## 依存図の JSON (`deps`)
 

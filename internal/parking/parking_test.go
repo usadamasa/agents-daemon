@@ -350,7 +350,7 @@ func TestSet(t *testing.T) {
 	}
 }
 
-// from を渡した Set は、ファイルの status が from のときだけ書き換える。2 つの mod が同じ open のメモを渡そうとしても、
+// from を渡した Set は、ファイルの status が from のときだけ書き換える。2 つの park hand が同じ open のメモを渡そうとしても、
 // 取れるのは先に書いた 1 つだけ (models/handoff の Claim)。
 func TestSet_from(t *testing.T) {
 	s := New(t.TempDir())

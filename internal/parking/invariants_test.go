@@ -1,11 +1,12 @@
 package parking
 
 // メモの受け渡しの不変条件 (models/handoff の Handoff.tla) を、実物の Store を goroutine で交錯させて確かめる。
-// 個々のテストが 1 場面ずつ固定するのに対し、ここでは「どの mod がどの順で取っても、送っても、捨てても破ってはいけないこと」を
-// 書く。seed が固定するのは各 mod の選択 (どのメモを、取るか捨てるか、届くか) で、goroutine の交錯はスケジューラが決める。
-// 全 mod が同じ依存図 (open) を読み終えてから一斉に取りに行かせ、取り合いを毎回起こす。取るときは宛先を同じ Set で書き、
+// 個々のテストが 1 場面ずつ固定するのに対し、ここでは「どの操作者がどの順で取っても、送っても、捨てても破ってはいけないこと」を
+// 書く。操作者 (コードでは mod) は依存図を開いて取る・捨てるを押す 1 つの手で、今はアプリの park hand と park discard。
+// seed が固定するのは各操作者の選択 (どのメモを、取るか捨てるか、届くか) で、goroutine の交錯はスケジューラが決める。
+// 全操作者が同じ依存図 (open) を読み終えてから一斉に取りに行かせ、取り合いを毎回起こす。取るときは宛先を同じ Set で書き、
 // 宛先がメモの status と届いた先に合っていること (HandedHasDestination ほか) も見る。
-// 反例が出たら seed と mod を出す。反例が出たらコードを直すか挙動を正当化する。性質を弱めて通さない。
+// 反例が出たら seed と操作者の番号を出す。反例が出たらコードを直すか挙動を正当化する。性質を弱めて通さない。
 
 import (
 	"fmt"
@@ -205,7 +206,7 @@ func checkHandoff(item Item, c *memoCounts, held bool) string {
 	return ""
 }
 
-// handoffMod は依存図を開いた 1 つのセッションの mod (hooks/parking.ts の handOff と discard)。
+// handoffMod は依存図を開いて取る・捨てるを押す 1 つの操作者 (アプリの park hand と park discard。parkhand が同じ公開 API で行う)。
 type handoffMod struct {
 	s       Store
 	r       *rand.Rand

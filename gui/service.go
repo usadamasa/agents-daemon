@@ -109,7 +109,7 @@ func daemonBin() string {
 	return filepath.Join(cache, "agents-daemon", "bin", "agents-daemon")
 }
 
-// runTimeout は mod の runDaemon と同じ 10 秒。spawnTimeout は claude が前景になるまでバイナリが待つ分 (mod と同じ 30 秒)。
+// runTimeout は mod の runDaemon と同じ 10 秒。spawnTimeout は claude が前景になるまでバイナリが待つ分 (30 秒)。
 // tellTimeout は rex を数回叩いて文面と Enter の間に待つ分 (rex 1 回は 10 秒で切れる)。
 const (
 	runTimeout   = 10 * time.Second

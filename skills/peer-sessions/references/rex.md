@@ -54,7 +54,7 @@ help と同じ役。docs と feedback の代わりにはならない。
 - 背景の作業は `--focus=false` を付ける。`run` も `split` も既定ではフォーカスを奪う。
 - `send` `send-key` `capture` `wait` `block call` には `-b <target>` を明示する。省くと「フォーカス中の
   ブロック」になり、それはユーザーが見ているブロックかもしれない。`capture` と `zoom` と `block call` は
-  `REX_BLOCK` を既定にするが、`send` はそうとは書かれていない。
+  `REX_BLOCK` を既定にするが、`send` はそうとは書かれていない。block が 1 つの session は `-s <session>` だけで指せる。
 - `--json` を付けて ID を結果から読む。`split` と `run` は `block_ids[0]` に新しいブロックを返す。
   `session new` は `session_id` と `initial_windows[0].window_id`、`initial_windows[0].block_ids[0]` を返す。
 - `split` は同じ window に並べ、`run` は新しい window を作る。別のエージェントを立てるときは `session new`

@@ -239,8 +239,7 @@ idle 通知は、子が報告しないまま止まった、ユーザーへの質
 複数 PR を 1 セッションへ束ねるなら、束ねた全部が閉じるまでが寿命。渡すときからこれを前提に
 スコープを切る。
 
-**1 エージェント = 1 rex session**。指示者セッションも独立した rex session に置く。同じ session に
-同居させると、起きた claude が rex の案内どおりにその session を rename する。
+**1 エージェント = 1 rex session**。指示者セッションも独立した rex session に置く。理由は `references/rex.md`。
 
 ## 届く範囲
 

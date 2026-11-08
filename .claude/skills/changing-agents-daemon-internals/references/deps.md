@@ -53,7 +53,8 @@ exec して stdout を返すだけで、JSON はフロントエンド (`gui/fron
 - `graph.js` は DAG の索引、`ops.js` は操作の判定 (`candidates`、`canDismiss`、`canAdopt`、`canTell`、`isOwnTask`)、
   宛先の並べ方、タスクへ頼む文面の雛形。`actions.js` は操作 (結果の文面を返す)。`app.js` が描く
 - バイナリだけで済む操作: 依存を足す・外す (`edge add` / `rm`)、メモを捨てる (`park set` / `park discard`)、
-  終了したセッションのタスクを外す (`task dismiss`)・メモにする (`park adopt`)
+  終了したセッションのタスクを外す (`task dismiss`)・メモにする (`park adopt`)。`sid:` を外すとそのセッションを端点に持つ辺も
+  消す。一括は完了でも終了でもない下流が待っている `sid:` のカードを除き、単体の操作に残す (`bulkDismissable`)
 - 送達を伴う操作: 生きているセッションのノードへ指示を送る、未完了のタスクを渡す (生きているセッションか新しく起こす
   repo)、着手・完了・削除・メモにする (持ち主のセッションに TaskUpdate を頼む)、同じセッションの blockedBy の
   解消を頼む。どれも `tell` で届け、タスクを渡すときは相手へ送ってから持ち主に消すよう頼む (新しく起こすときは

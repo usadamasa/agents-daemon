@@ -131,6 +131,28 @@ func (s Store) Remove(before, after Endpoint) (Removed, error) {
 	return removed, err
 }
 
+// RemoveByEndpoint は今の参照がどちらかの端点に一致する辺を消し、消した辺を返す。
+func (s Store) RemoveByEndpoint(r string) ([]Edge, error) {
+	var removed []Edge
+	err := s.locked(func(dir string) error {
+		var errs []error
+		for _, e := range readAll(dir) {
+			if !touches(e, "", r) {
+				continue
+			}
+			if err := os.Remove(filepath.Join(dir, e.ID+".json")); err != nil {
+				if !errors.Is(err, os.ErrNotExist) {
+					errs = append(errs, err)
+				}
+				continue
+			}
+			removed = append(removed, e)
+		}
+		return errors.Join(errs...)
+	})
+	return removed, err
+}
+
 // Pick は session:<名前> の端点を結びつけるセッションを選ぶ。createdAt は辺を書いた時刻。結びつけるセッションが
 // まだ無ければ ok が false。
 type Pick func(name string, createdAt time.Time) (sessionID string, ok bool)

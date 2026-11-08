@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Graph } from "../src/graph.js";
-import { canAdopt, canDismiss, canRename, candidates, canTell, destinationLabel, isOwnTask, issueDestinations, pathDestination, peerDestinations, spawnDestinations, spawnLabel, taskDestinations } from "../src/ops.js";
+import { bulkDismissable, canAdopt, canDismiss, canRename, candidates, canTell, destinationLabel, isOwnTask, issueDestinations, pathDestination, peerDestinations, spawnDestinations, spawnLabel, taskDestinations } from "../src/ops.js";
 
 const node = (key, extra = {}) => ({ key, kind: "task", state: "pending", title: key, live: true, depth: 0, downstream: 0, parked: 0, memos: [], blocked_by: [], deadlock: false, halted: false, stuck: false, endpoint: true, session_id: "s1", ...extra });
 
@@ -18,6 +18,41 @@ test("candidates は端点にできるノードから自分、上流、下流、
   assert.deepEqual(candidates(g, g.node("D")).map((n) => n.key), ["A", "B", "C"]);
 });
 
+test("bulkDismissable は生きた待ちのある sid: のカードを除き、task: と待ちの済んだカードは含める", () => {
+  const data = { updated_at: "2026-11-06T00:00:00Z" };
+  const gone = { live: false, kind: "ref", state: "exited" };
+  const g = new Graph({
+    nodes: [
+      node("sid:waited", gone),
+      node("sid:done", gone),
+      node("sid:work", { live: false, kind: "session", state: "exited" }),
+      node("task:s1/1", { live: false, state: "exited" }),
+      node("task:s2/live"),
+      node("pr:o/r#1", { state: "completed", session_id: undefined }),
+      node("task:s3/gone", { live: false, state: "exited" }),
+    ],
+    links: [
+      { before: "sid:waited", after: "task:s2/live", kind: "edge" },
+      { before: "sid:done", after: "pr:o/r#1", kind: "edge" },
+      { before: "sid:done", after: "task:s3/gone", kind: "edge" },
+      { before: "sid:work", after: "task:s2/live", kind: "edge" },
+      { before: "task:s1/1", after: "task:s2/live", kind: "edge" },
+    ],
+  });
+  assert.equal(bulkDismissable(g.node("sid:waited"), g, data), false);
+  assert.equal(bulkDismissable(g.node("sid:work"), g, data), false);
+  assert.equal(bulkDismissable(g.node("sid:done"), g, data), true);
+  assert.equal(bulkDismissable(g.node("task:s1/1"), g, data), true);
+  assert.equal(bulkDismissable(g.node("task:s2/live"), g, data), false);
+});
+
+test("辺の端点だけの置き場のカードは外せるが、メモにはできない", () => {
+  const data = { updated_at: "2026-11-06T00:00:00Z" };
+  const placeholder = node("sid:gone", { live: false, kind: "ref", state: "exited" });
+  assert.equal(canDismiss(placeholder, data), true);
+  assert.equal(canAdopt(placeholder, data), false);
+});
+
 test("canDismiss は daemon が書いた依存図の、終了したセッションのタスクと作業だけ", () => {
   const data = { updated_at: "2026-11-06T00:00:00Z" };
   assert.equal(canDismiss(node("t", { live: false }), data), true);
@@ -26,7 +61,8 @@ test("canDismiss は daemon が書いた依存図の、終了したセッショ�
   assert.equal(canDismiss(node("t", { live: true }), data), false);
   assert.equal(canDismiss(node("sid:s1", { live: true, kind: "session" }), data), false);
   assert.equal(canDismiss(node("t", { live: false, kind: "todo" }), data), false);
-  assert.equal(canDismiss(node("t", { live: false, kind: "ref" }), data), false);
+  assert.equal(canDismiss(node("pr:o/r#1", { live: false, kind: "ref", state: "dropped", session_id: "" }), data), false);
+  assert.equal(canDismiss(node("pr:o/r#1", { live: false, kind: "ref", state: "exited", session_id: undefined }), data), false);
   assert.equal(canDismiss(node("t", { live: false, session_id: undefined }), data), false);
   assert.equal(canDismiss(node("t", { live: false }), {}), false);
 });

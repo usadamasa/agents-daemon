@@ -505,6 +505,28 @@ test("作業のノード: 題そのものを押すとその場で直せ、自動
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
 });
 
+test("辺の端点だけの置き場のカード: 単体で外せてメモにはできず、生きた下流が待つものは一括の数に入らない", async () => {
+  const data = JSON.parse(fixtureDeps);
+  const gamma = data.graph.nodes.find((n) => n.key === "sid:gamma");
+  for (const key of ["sid:ghost-idle", "sid:ghost-waited"]) {
+    data.graph.nodes.push({ ...gamma, key, kind: "ref", title: key, origin: undefined, session_id: key.slice(4) });
+    data.graph.folded.nodes.push({ key, depth: 0 });
+  }
+  gamma.depth = 1;
+  data.graph.folded.nodes.find((n) => n.key === "sid:gamma").depth = 1;
+  data.graph.links.push({ before: "sid:ghost-waited", after: "task:beta/1", kind: "edge" }, { before: "sid:ghost-idle", after: "sid:gamma", kind: "edge" });
+  await loadDeps(JSON.stringify(data));
+  try {
+    assert.equal(q("#dismiss-ended").textContent, "終了したセッションのタスクと作業 2 件を外す");
+    q('.node[data-key="sid:ghost-waited"]').click();
+    const verbs = [...q("#pop").querySelectorAll(".acts .act")].map((b) => b.textContent);
+    assert.ok(verbs.includes("一覧から外す") && !verbs.includes("メモにする"), verbs.join(" / "));
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+  } finally {
+    await loadDeps(fixtureDeps);
+  }
+});
+
 test("完了も表示した図: 完了したノードも描き、通り抜けていた辺を元の辺で描く", async () => {
   q("#completed-check").click();
   try {

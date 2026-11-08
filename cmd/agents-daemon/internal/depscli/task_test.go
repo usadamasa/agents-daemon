@@ -2,12 +2,14 @@ package depscli
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 	"github.com/usadamasa/agents-daemon/internal/worklog"
 )
@@ -61,10 +63,10 @@ func TestDismiss_eventLog(t *testing.T) {
 	now := time.Now()
 	exited := func(string, time.Time) error { return nil }
 	for _, r := range []string{"task:dead/4", "sid:gone"} {
-		if err := dismiss(dir, tasks, works, "viewer", r, exited, now); err != nil {
+		if err := dismiss(dir, tasks, works, edge.New(dir), "viewer", r, exited, now); err != nil {
 			t.Fatal(err)
 		}
-		if err := dismiss(dir, tasks, works, "viewer", r, exited, now); err == nil {
+		if err := dismiss(dir, tasks, works, edge.New(dir), "viewer", r, exited, now); err == nil {
 			t.Fatalf("%s: 消した記録をもう一度消せた", r)
 		}
 	}
@@ -77,10 +79,77 @@ func TestDismiss_eventLog(t *testing.T) {
 	equalLines(t, got, []string{
 		"task.dismiss session=viewer from_session=dead task=4",
 		`task.dismiss.failed session=viewer ref=task:dead/4 reason="タスク dead/4 が無い"`,
-		"work.dismiss session=viewer from_session=gone",
+		"work.dismiss session=viewer from_session=gone edges=0",
 		`work.dismiss.failed session=viewer ref=sid:gone reason="セッション gone の作業の記録が無い"`,
 	})
 	if strings.Contains(strings.Join(got, "\n"), "秘密") {
 		t.Errorf("subject をログに書いた:\n%s", strings.Join(got, "\n"))
+	}
+}
+
+// sid: を外すと、before でも after でもそのセッションを端点に持つ辺が消える。ほかの辺は残る。
+// 作業の記録が無く辺の端点だけで残っているセッションも外せる (#484)。
+func TestDismiss_sessionEdges(t *testing.T) {
+	for name, withWork := range map[string]bool{"辺の端点だけ": false, "作業の記録あり": true} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			edges := edge.New(dir)
+			addEdge(t, edges, "sid:gone", "pr:o/r#1")
+			addEdge(t, edges, "sid:peer", "sid:gone")
+			addEdge(t, edges, "sid:peer", "pr:o/r#1")
+			work := filepath.Join(dir, "work", "gone.json")
+			if withWork {
+				writeFile(t, work, `{"session_id": "gone", "cwd": "/w", "subject": "s", "turns": 1, "started_at": "2026-10-18T09:00:00Z", "updated_at": "2026-10-18T09:00:00Z"}`)
+			}
+			exited := func(string, time.Time) error { return nil }
+			if err := dismiss(dir, tasklog.New(dir), worklog.New(dir), edges, "viewer", "sid:gone", exited, time.Now()); err != nil {
+				t.Fatal(err)
+			}
+			got, err := edges.Find("", "")
+			if err != nil || len(got) != 1 || got[0].Before.Ref != "sid:peer" || got[0].After.Ref != "pr:o/r#1" {
+				t.Errorf("残った辺 = %+v, %v", got, err)
+			}
+			if _, err := os.Stat(work); !os.IsNotExist(err) {
+				t.Errorf("作業の記録が残った: %v", err)
+			}
+			equalLines(t, eventLines(t, dir), []string{"work.dismiss session=viewer from_session=gone edges=2"})
+		})
+	}
+}
+
+// 終了を確かめられないセッションの辺と作業の記録は消さない。確かめる時刻には端点の辺の最も新しい created_at を渡す
+// (辺を書いた後に status.json が更新されていなければ、終了したとは言えない)。
+func TestDismiss_sessionEdgesKeptUnlessExited(t *testing.T) {
+	dir := t.TempDir()
+	edges := edge.New(dir)
+	addEdge(t, edges, "sid:alive", "pr:o/r#1")
+	writeFile(t, filepath.Join(dir, "work", "alive.json"), `{"session_id": "alive", "cwd": "/w", "subject": "s", "turns": 1, "started_at": "2026-10-18T09:00:00Z", "updated_at": "2026-10-18T09:00:00Z"}`)
+	var checked []time.Time
+	exited := func(_ string, after time.Time) error {
+		checked = append(checked, after)
+		return errors.New("生きている")
+	}
+	err := dismiss(dir, tasklog.New(dir), worklog.New(dir), edges, "viewer", "sid:alive", exited, time.Now())
+	if err == nil || !strings.Contains(err.Error(), "生きている") {
+		t.Fatalf("error = %v", err)
+	}
+	if got, _ := edges.Find("", ""); len(got) != 1 {
+		t.Errorf("辺が消えた: %+v", got)
+	}
+	if _, ok := worklog.New(dir).Get("alive"); !ok {
+		t.Errorf("作業の記録が消えた")
+	}
+	if len(checked) == 0 || !checked[0].Equal(testEdgeTime) {
+		t.Errorf("確かめた時刻 = %v, want %v", checked, testEdgeTime)
+	}
+}
+
+// testEdgeTime は addEdge が辺に書く created_at。
+var testEdgeTime = time.Date(2026, 11, 7, 9, 0, 0, 0, time.UTC)
+
+func addEdge(t *testing.T, s edge.Store, before, after string) {
+	t.Helper()
+	if _, err := s.Add(edge.Endpoint{Ref: before, CWD: "/w"}, edge.Endpoint{Ref: after, CWD: "/w"}, "", testEdgeTime); err != nil {
+		t.Fatal(err)
 	}
 }

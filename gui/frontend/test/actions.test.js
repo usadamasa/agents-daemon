@@ -179,6 +179,13 @@ test("dismissOne と adopt は作業のノード (sid:) も key をそのまま�
   assert.deepEqual(io.calls, [["park adopt", { ref: "sid:s9" }]]);
 });
 
+test("dismissOne は辺の端点だけの置き場のカードをセッションと呼ぶ", async () => {
+  const placeholder = { key: "sid:s9", kind: "ref", title: "deps-app", session_id: "s9", live: false, state: "exited" };
+  const io = fakeIO({});
+  assert.equal(await dismissOne(placeholder, io), "セッション「deps-app」を一覧から外しました");
+  assert.deepEqual(io.calls, [["task dismiss", { ref: "sid:s9" }]]);
+});
+
 test("rename は work set に session_id と題を渡す", async () => {
   const work = { key: "sid:s9", kind: "session", title: "推定の題", session_id: "s9", origin: "inferred" };
   let io = fakeIO({});

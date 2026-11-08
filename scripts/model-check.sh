@@ -73,5 +73,9 @@ run models/refstate RefState RefStateDroppedAsDone.cfg violated
 run models/refstate RefState RefStateNoRefetch.cfg violated
 # 済んだ状態に変わった引き直しのときだけ辺を消すと、済んだ PR へ後から書いた辺が残り続ける (EdgeRemoved の反例、#422)。
 run models/refstate RefState RefStateSweepOnTransition.cfg violated
+# rex の全列挙で block ls の exit 3 を、ls の後に閉じた session として読み飛ばす形 (#302)。
+run models/rexlist PaneList PaneList.cfg holds
+# exit 3 を全列挙の失敗にすると、session を閉じただけで失敗する (FailOnlyWhenDown の反例)。
+run models/rexlist PaneList PaneListNoSkip.cfg violated
 
 exit "$failed"

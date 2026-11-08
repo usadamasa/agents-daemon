@@ -63,12 +63,16 @@ func buildView(ledger spend.Ledger, in input, layout mode, spendCap int, home st
 		input:  in,
 		Mode:   layout,
 		Home:   home,
-		Effort: readEffort(home),
 		Branch: gitBranch(in.CurrentDir),
 	}
 	if outsideProject(in.CurrentDir, in.ProjectDir) {
 		v.ProjectBranch = projectBranch(in.ProjectDir)
 	}
+	configDir, err := apppath.ClaudeConfigDir()
+	if err != nil {
+		return v, err
+	}
+	v.Effort = readEffort(configDir)
 	if layout != ModeFull {
 		return v, nil
 	}

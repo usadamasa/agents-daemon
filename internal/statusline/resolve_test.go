@@ -85,9 +85,9 @@ func TestOutsideProject(t *testing.T) {
 
 func TestReadEffort(t *testing.T) {
 	t.Run("settings.json の effortLevel", func(t *testing.T) {
-		home := t.TempDir()
-		writeSettings(t, home, `{"effortLevel": "high"}`)
-		if got := readEffort(home); got != "high" {
+		configDir := t.TempDir()
+		writeSettings(t, configDir, `{"effortLevel": "high"}`)
+		if got := readEffort(configDir); got != "high" {
 			t.Errorf("ReadEffort() = %q, want high", got)
 		}
 	})
@@ -95,25 +95,21 @@ func TestReadEffort(t *testing.T) {
 		if got := readEffort(t.TempDir()); got != "" {
 			t.Errorf("ReadEffort(無し) = %q", got)
 		}
-		home := t.TempDir()
-		writeSettings(t, home, `{}`)
-		if got := readEffort(home); got != "" {
+		configDir := t.TempDir()
+		writeSettings(t, configDir, `{}`)
+		if got := readEffort(configDir); got != "" {
 			t.Errorf("ReadEffort(キー無し) = %q", got)
 		}
-		writeSettings(t, home, `{`)
-		if got := readEffort(home); got != "" {
+		writeSettings(t, configDir, `{`)
+		if got := readEffort(configDir); got != "" {
 			t.Errorf("ReadEffort(壊れた JSON) = %q", got)
 		}
 	})
 }
 
-func writeSettings(t *testing.T, home, content string) {
+func writeSettings(t *testing.T, configDir, content string) {
 	t.Helper()
-	dir := filepath.Join(home, ".claude")
-	if err := os.MkdirAll(dir, 0o750); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte(content), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(configDir, "settings.json"), []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
 }

@@ -388,7 +388,7 @@ export type DepsGraph = {
   column_order: string[]
 }
 
-// 依存の DAG のノード 1 つ (タスク 1 つ、タスクの無いセッションの作業、端点の参照だけの置き場)
+// 依存の DAG のノード 1 つ (タスク 1 つ、タスクか進行中の作業の無いセッションの作業、端点の参照だけの置き場)
 export type GraphNode = {
   // Ref (task:、todo:、sid:、session:、issue:、pr:)。mod は切り出さずに不透明な文字列として扱う
   key: string

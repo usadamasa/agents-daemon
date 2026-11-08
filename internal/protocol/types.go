@@ -144,7 +144,7 @@ type ParkHandResult struct {
 	Warning string `json:"warning,omitempty"`
 }
 
-// TaskDismissRequest は task dismiss の stdin。終了したセッションのタスク (完了しているかを問わない。task:) か、タスクの無いセッションの作業 (sid:) の記録を消して依存図から外し、{} を出す。セッションの終了は park adopt と同じく status.json で確かめ、確かめられなければ消さずに exit 1 で理由を返す。
+// TaskDismissRequest は task dismiss の stdin。終了したセッションのタスク (完了しているかを問わない。task:) か、セッションの作業 (sid:) の記録と端点の辺を消して依存図から外し、{} を出す。セッションの終了は park adopt と同じく status.json で確かめ、確かめられなければ消さずに exit 1 で理由を返す。
 type TaskDismissRequest struct {
 	// 依存図のノードの key (task:<session_id>/<task_id> か sid:<session_id>)。
 	Ref string `json:"ref"`

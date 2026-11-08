@@ -22,8 +22,9 @@ export async function unlink(link, io = defaultIO) {
   return "failure" in ran ? `依存を外せませんでした: ${ran.failure}` : `依存を外しました: ${e.before.ref} → ${e.after.ref}`;
 }
 
-// noun はノードの呼び名。タスクの無いセッションのノードは「作業」(#368)。
+// noun はノードの呼び名。タスクの無いセッションのノードは「作業」(#368)、辺の端点だけの置き場は「セッション」(#484)。
 function noun(node) {
+  if (node.kind === "ref") return "セッション";
   return node.kind === "session" ? "作業" : "タスク";
 }
 

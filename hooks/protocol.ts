@@ -400,7 +400,7 @@ export const definitions = {
     }
   },
   "TaskDismissRequest": {
-    "description": "task dismiss の stdin。終了したセッションのタスク (完了しているかを問わない。task:) か、タスクの無いセッションの作業 (sid:) の記録を消して依存図から外し、{} を出す。セッションの終了は park adopt と同じく status.json で確かめ、確かめられなければ消さずに exit 1 で理由を返す",
+    "description": "task dismiss の stdin。終了したセッションのタスク (完了しているかを問わない。task:) か、セッションの作業 (sid:) の記録と端点の辺を消して依存図から外し、{} を出す。セッションの終了は park adopt と同じく status.json で確かめ、確かめられなければ消さずに exit 1 で理由を返す",
     "type": "object",
     "additionalProperties": false,
     "required": [

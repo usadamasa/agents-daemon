@@ -11,17 +11,26 @@ export function candidates(g, selected) {
   );
 }
 
-// canDismiss はノードを一覧から外せるか。終了したセッションのタスク (完了しているかを問わない) と作業 (タスクの無い
-// セッション、#368) だけ。TodoWrite の項目はセッションの 1 リストなので 1 項目では消せず、置き場のノードには消す記録が
-// 無い。daemon が status.json を書いていない依存図は生きているセッションも live でないと描くので出さない。
+// canDismiss はノードを一覧から外せるか。終了したセッションのタスク (完了しているかを問わない)、作業 (タスクの無い
+// セッション、#368)、辺の端点だけで残ったセッションの置き場 (#484)。TodoWrite の項目はセッションの 1 リストなので
+// 1 項目では消せず、issue / PR の置き場は session_id を持たない。daemon が status.json を書いていない依存図は生きている
+// セッションも live でないと描くので出さない。
 export function canDismiss(node, data) {
-  return data.updated_at !== undefined && (node.kind === "task" || node.kind === "session") && !node.live && node.session_id !== undefined;
+  return data.updated_at !== undefined && node.kind !== "todo" && !node.live && node.session_id !== undefined;
 }
 
-// canAdopt はタスクか作業のノードをパーキングへ移せるか。外せるもののうち未完了のものだけ。押した後の判定はバイナリが
-// status.json で改めて行う (`park adopt`)。
+// bulkDismissable は一括で外す対象か。sid: を外すと端点の辺も消えるので、完了でも終了でもない下流が待っているカードは
+// 単体の操作に残す (押した一覧に見えない待ちを、ひと押しで消さない)。
+export function bulkDismissable(node, graph, data) {
+  if (!canDismiss(node, data)) return false;
+  if (node.kind === "task") return true;
+  return graph.after(node.key).every((n) => n.state === "completed" || n.state === "exited");
+}
+
+// canAdopt はタスクか作業のノードをパーキングへ移せるか。外せるもののうち未完了のものだけで、記録の無い置き場は移せない。
+// 押した後の判定はバイナリが status.json で改めて行う (`park adopt`)。
 export function canAdopt(node, data) {
-  return canDismiss(node, data) && node.state !== "completed";
+  return node.kind !== "ref" && canDismiss(node, data) && node.state !== "completed";
 }
 
 // canRename は作業の題を人が直せるか。作業の記録のあるセッションのノード (origin が pane でないもの) だけで、生きていても

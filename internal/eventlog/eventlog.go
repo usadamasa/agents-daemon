@@ -16,7 +16,7 @@
 //	ingest-work.failed        作業を記録できなかった (event、reason)
 //	work.set                  作業の題を書き換えた (origin=human は人が直した、inferred=true は companion の推定)
 //	work.set.failed           書き換えられなかった (origin / inferred、reason)
-//	work.dismiss              終了したセッションの作業の記録を消した (from_session)
+//	work.dismiss              終了したセッションの作業の記録と端点の辺を消した (from_session、edges)
 //	work.dismiss.failed       作業の記録を消さなかった (ref、reason)
 //	park.add                  メモを置いた (memo、kind、created、task)
 //	park.set                  メモの status を書き換えた (memo、from、to)

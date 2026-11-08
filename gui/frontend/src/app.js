@@ -8,7 +8,7 @@ import { fitEdges, spreadPorts } from "./ports.js";
 import { findJumps, jumpPath } from "./jumps.js";
 import { STATE_LABEL, STATE_TONE, cardText, emphasis } from "./card.js";
 import { isStale, kindLabel, lastPlacedAt, stamp } from "./memo.js";
-import { canAdopt, canDismiss, canRename, canTell, candidates, destinationLabel, isOwnTask, issueDestinations, pathDestination, peerDestinations, spawnDestinations, spawnLabel, taskDestinations } from "./ops.js";
+import { bulkDismissable, canAdopt, canDismiss, canRename, canTell, candidates, destinationLabel, isOwnTask, issueDestinations, pathDestination, peerDestinations, spawnDestinations, spawnLabel, taskDestinations } from "./ops.js";
 import { addBlocker, adopt, askUnlink, discard, discardStale, dismissAll, dismissOne, handOff, handOffTask, instruct, rename, setStatus, start, toParking, unlink } from "./actions.js";
 import { openTarget, pickFolder } from "./daemon.js";
 import { segments } from "./links.js";
@@ -1186,7 +1186,7 @@ function renderFoot() {
 
 // renderBulk はまとめて行う操作のボタン: 終了したセッションのタスクを外す、古いメモを捨てる。該当があるときだけ出す。
 function renderBulk() {
-  const ended = visibleNodes().filter((n) => canDismiss(n, state.data));
+  const ended = visibleNodes().filter((n) => bulkDismissable(n, state.graph, state.data));
   const dismissBtn = el("dismiss-ended");
   dismissBtn.hidden = ended.length === 0;
   dismissBtn.textContent = `終了したセッションのタスクと作業 ${ended.length} 件を外す`;

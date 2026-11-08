@@ -146,7 +146,7 @@ printf '%s' '{"id":"<id>","status":"open"}' | agents-daemon park set            
 
 ```sh
 printf '%s' '{"ref":"task:<session_id>/<task_id>"}' | agents-daemon task dismiss   # TaskDismissRequest → {}
-printf '%s' '{"ref":"sid:<session_id>"}' | agents-daemon task dismiss              # タスクの無いセッションの作業
+printf '%s' '{"ref":"sid:<session_id>"}' | agents-daemon task dismiss              # セッションの作業と、それを端点に持つ辺
 ```
 
 - アプリの「一覧から外す」と「終了したセッションのタスクと作業 n 件を外す」(1 つずつ呼ぶ) が使う。終了したセッションの

@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+
+	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 )
 
 func write(t *testing.T, dir, name, body string) {
@@ -60,6 +62,35 @@ func TestSessionIDs(t *testing.T) {
 	want := map[int]string{100: "S1", 300: "S3"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("SessionIDs() = %v, want %v", got, want)
+	}
+}
+
+// Fill は session の無い Claude の pane だけを前景の pid で補う。statusline の記録のある pane と Claude でない pane は触らない。
+func TestFill(t *testing.T) {
+	config := t.TempDir()
+	dir := filepath.Join(config, "sessions")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write(t, dir, "100.json", `{"pid":100,"sessionId":"S1"}`)
+	panes := []multiplexer.Pane{
+		{PaneID: "a", Agent: "claude", PID: 100},
+		{PaneID: "b", Agent: "claude", PID: 100, SessionID: "from-statusline"},
+		{PaneID: "c", Agent: "claude", PID: 999},
+		{PaneID: "d", Agent: "", PID: 100},
+	}
+	if err := New(config).Fill(panes); err != nil {
+		t.Fatalf("Fill() error = %v", err)
+	}
+	want := []string{"S1", "from-statusline", "", ""}
+	for i, p := range panes {
+		if p.SessionID != want[i] {
+			t.Errorf("panes[%d] (%s).SessionID = %q, want %q", i, p.PaneID, p.SessionID, want[i])
+		}
+	}
+	// 補う pane が無ければ登録簿を読まない (無い Store でも error にならない)。
+	if err := (Store{Dir: filepath.Join(config, "none")}).Fill([]multiplexer.Pane{{Agent: "claude", SessionID: "x", PID: 1}}); err != nil {
+		t.Errorf("Fill() error = %v", err)
 	}
 }
 

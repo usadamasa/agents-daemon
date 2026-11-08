@@ -68,11 +68,11 @@ type Tail struct {
 	Reason string
 }
 
-// Locate は sessionID の transcript のパスを返す。無ければ ("", nil)。
+// locate は sessionID の transcript のパスを返す。無ければ ("", nil)。
 // Claude Code は起動時の cwd ごとの project ディレクトリに書き、EnterWorktree で cwd が変わると
 // 別の project ディレクトリへ移す (実測)。そのため毎回 projects/*/<sid>.jsonl を引き、複数あれば mtime が新しいものを採る。
 // subagent の transcript は <sid>/subagents/ の下で、ここでは見ない。
-func (s Store) Locate(sessionID string) (string, error) {
+func (s Store) locate(sessionID string) (string, error) {
 	if s.Dir == "" || sessionID == "" {
 		return "", nil
 	}
@@ -102,7 +102,7 @@ func (s Store) Tail(sessionID string) Tail {
 	if sessionID == "" {
 		return Tail{Reason: "pane に session_id が無い (statusline の記録も Claude Code の登録簿の pid も合わない)"}
 	}
-	path, err := s.Locate(sessionID)
+	path, err := s.locate(sessionID)
 	if err != nil {
 		return Tail{Reason: err.Error()}
 	}
@@ -206,6 +206,12 @@ func ReadTail(path string) (Entry, bool, error) {
 		}
 	}
 	return Entry{}, false, nil
+}
+
+// Parse は transcript の 1 行を読み、会話の entry なら Entry にする。空行、壊れた行、会話でない行は false。
+// simulate が fixture の 1 行から Entry を作るのに使う。
+func Parse(line []byte) (Entry, bool) {
+	return conversationEntry(line)
 }
 
 // conversationEntry は 1 行を読み、会話の entry なら Entry にする。空行、壊れた行、会話でない行は false。

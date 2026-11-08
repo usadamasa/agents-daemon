@@ -1,13 +1,12 @@
-// Package limitlog は daemon が上限の出来事 (検知して待機に入った、送った、抑制した、ネイティブに譲った) を
+// Package limitlog は daemon が上限の出来事 (検知して待機に入った、送った、手を引いた、判定できなかった) を
 // 踏んだ瞬間に、後から検証に要る材料を 1 出来事 1 行の JSON で残す。
 //
 //	limit-events/<YYYY-MM-DD>.jsonl
 //
-// daemon.log の行は「何をしたか」だけで、判定した画面そのものと record と block の高さは残らない。上限は
-// 起こさないと測れず、次に踏んだときに手で見に行くには遅いので、daemon が踏んだ瞬間の材料をここへ写す。
-// 読み方と、どの欄が #39 / #77 のどの問いに答えるかは
-// .claude/skills/changing-agents-daemon-internals/references/verification.md「次に上限を踏んだとき」。画面の文面 (上限の文言と reset 時刻) をそのまま含むので、監視中の pane に
-// cat しない (daemon がそれを limit と判定する)。
+// daemon.log の行は「何をしたか」だけで、判定の根拠 (読んだ transcript の entry、record、待機明けに読んだ画面) は
+// 残らない。上限は起こさないと測れず、次に踏んだときに手で見に行くには遅いので、daemon が踏んだ瞬間の材料をここへ写す。
+// 読み方は .claude/skills/changing-agents-daemon-internals/references/verification.md「次に上限を踏んだとき」。
+// 待機明けに読んだ画面 (上限の文言と通知欄) をそのまま含むので、監視中の pane に cat しない。
 package limitlog
 
 import (
@@ -52,22 +51,28 @@ type Event struct {
 	Attempts int    `json:"attempts"`
 	// WaitUntil は待機中の起床時刻。待機していなければ無い。
 	WaitUntil *time.Time `json:"wait_until,omitempty"`
-	// Record は同じ tick の PaneList が返した Claude Code の自己申告 (#77 の実測になる)。
+	// Record は同じ tick の PaneList が返した Claude Code の自己申告。
 	Record Record `json:"record"`
+	// Transcript は判定の根拠にした transcript の末尾の entry。読めなければ無く、Reason に理由。
+	Transcript *Transcript `json:"transcript,omitempty"`
+	Reason     string      `json:"reason,omitempty"`
+	// Screen と Hint は待機明けに読んだ画面 (末尾 readLines 行) と、その通知欄の判定 (detect.Hint の String())。
+	// 検知の tick では読まないので無い。
+	Screen string `json:"screen,omitempty"`
+	Hint   string `json:"hint,omitempty"`
 	// Geometry は出来事の瞬間に打った size と modes。取れなければ GeometryError に理由。
 	Geometry      *multiplexer.Geometry `json:"geometry,omitempty"`
 	GeometryError string                `json:"geometry_error,omitempty"`
-	// RateLimit はその pane のセッションの state (own)、Account はアカウント全体で最新のウィンドウ。
-	// ゲートと起床時刻の判断を再現するために残す。
+	// RateLimit はその pane のセッションの statusline の state (own)、Account はアカウント全体で最新のウィンドウ。
+	// transcript に解除時刻が無いときの起床時刻の判断を再現するために残す。
 	RateLimit *Window `json:"rate_limit,omitempty"`
 	Account   *Window `json:"account,omitempty"`
 	// TurnFailure はその pane のセッションの最後の turn を終わらせた API error (turnfailure.Record の写し)。
-	// 記録は次の turn で消えるので、あれば「最後の turn が API error で終わり、まだ次が始まっていない」(#77)。
+	// 記録は次の turn で消えるので、あれば「最後の turn が API error で終わり、まだ次が始まっていない」。
+	// transcript の判定と食い違えば、transcript の形が変わった疑い。
 	TurnFailure *TurnFailure `json:"turn_failure,omitempty"`
 	// Settings は判定に効いた設定値。
 	Settings Settings `json:"settings"`
-	// Screen は分類した画面そのもの (PaneRead が返した末尾 readLines 行)。`inspect --file` に渡せる。
-	Screen string `json:"screen"`
 }
 
 // Record は Claude Code の自己申告 (multiplexer.Pane の AgentStatus / AgentKind / AgentMessage)。
@@ -76,6 +81,31 @@ type Record struct {
 	Kind        string `json:"kind,omitempty"`
 	Msg         string `json:"msg,omitempty"`
 }
+
+// Transcript は transcript の末尾の entry (transcript.Entry の写し) と、そのファイルのパス。
+type Transcript struct {
+	Path           string    `json:"path"`
+	UUID           string    `json:"uuid"`
+	Type           string    `json:"type"`
+	Timestamp      time.Time `json:"timestamp"`
+	Version        string    `json:"version,omitempty"`
+	Error          string    `json:"error,omitempty"`
+	APIErrorStatus int       `json:"api_error_status,omitempty"`
+	Quota          *Quota    `json:"quota_limits,omitempty"`
+	// Text は本文の頭 (textLimit 文字まで)。
+	Text string `json:"text,omitempty"`
+}
+
+// Quota は entry の quotaLimits のうち読んだ欄。
+type Quota struct {
+	Status        string     `json:"status"`
+	RateLimitType string     `json:"rate_limit_type,omitempty"`
+	ResetsAt      *time.Time `json:"resets_at,omitempty"`
+	OverageStatus string     `json:"overage_status,omitempty"`
+}
+
+// TextLimit は Transcript.Text に残す本文の長さ (rune)。上限の文は 1 行で、会話の応答を丸ごと写す理由は無い。
+const TextLimit = 200
 
 // Window は利用上限 state の 5 時間ウィンドウ (ratelimit.State の写し)。
 type Window struct {

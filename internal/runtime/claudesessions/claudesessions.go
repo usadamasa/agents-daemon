@@ -13,6 +13,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 )
 
 // Store は登録簿の置き場所を持つ。ゼロ値は Dir が空で、読み込みは空になる。
@@ -63,6 +65,26 @@ func (s Store) SessionIDs() (map[int]string, error) {
 		}
 	}
 	return ids, nil
+}
+
+// Fill は SessionID の無い Claude の pane に、前景の pid で登録簿から session ID を補う (無ければそのまま)。
+// 登録簿を読むのは補う pane があるときだけ (tick ごとに sessions/ を走査しない)。
+func (s Store) Fill(panes []multiplexer.Pane) error {
+	var ids map[int]string
+	for i := range panes {
+		pane := &panes[i]
+		if pane.SessionID != "" || pane.PID == 0 || !multiplexer.IsClaudeAgent(*pane) {
+			continue
+		}
+		if ids == nil {
+			var err error
+			if ids, err = s.SessionIDs(); err != nil {
+				return err
+			}
+		}
+		pane.SessionID = ids[pane.PID]
+	}
+	return nil
 }
 
 // readAll は登録簿の .json を全部読む。壊れたものは読み飛ばす。ディレクトリが無い・ゼロ値の Store なら空。

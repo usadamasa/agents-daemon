@@ -226,17 +226,14 @@ issue にする。
 | `fallbackWaitHours` | `5` | 解除時刻がどこからも取れないときの待ち |
 | `maxRetries` | `5` | クールダウンに入るまでの再開試行回数 |
 | `retryMessage` | `Continue where you left off.` | 再開時に送る文面 |
-| `readLines` | `25` | 1 回に読む行数 (可視領域の末尾から) |
-| `detectionTailLines` | `15` | 判定に使う末尾行数 |
-| `usedPercentageThreshold` | `90` | ゲートの閾値 (これ未満なら発火しない) |
-| `stateMaxAgeSeconds` | `900` | ゲート判定で使用率を信用する上限の古さ (`resets_at` には効かない) |
+| `readLines` | `25` | 待機明けに画面を読む行数 (可視領域の末尾から) |
+| `detectionTailLines` | `15` | 通知欄の判定に使う末尾行数 |
 | `handleTransient` | `true` | 一時的なサーバーエラーも扱う |
 | `transientWaitSeconds` | `60` | 一時エラーのバックオフ基準 |
 | `transientMaxWaitSeconds` | `300` | バックオフの上限 |
 | `dismissMenu` | `true` | 送信前に Escape を送る |
 | `menuDismissDelayMs` | `300` | Escape の後の待ち |
 | `submitDelayMs` | `400` | テキストと Enter の間の待ち |
-| `customPatterns` | `[]` | 上限として扱う追加の正規表現 |
 | `idleShutdownMinutes` | `30` | Claude pane が 0 のまま続いたら自己終了する |
 | `deferToNativeAutoContinue` | `true` | ネイティブの auto-continue が再開を予約している間は手を出さない |
 
@@ -245,8 +242,8 @@ issue にする。
 `retryMessage` で変える。上限の検知語 (`limit` / `rate` 等) を含めてはいけない。
 送った文面が画面に残り、daemon がそれを上限と読み違える。
 
-Claude Code の画面の文言は安定した API ではない。変わって検知が止まったら
-`customPatterns` に新しい表現を足せば、コードを変えずに追随できる。
+上限かどうかは画面ではなく transcript の末尾の entry で決めるので、画面に残った文面で待機に入ることは無い。
+ただし待機明けに通知欄 (Enter 待ち、auto-continue の予約) を読むので、その 2 行の形は避ける。
 
 ## 既知の制約
 

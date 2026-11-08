@@ -27,6 +27,12 @@ func TestAppend(t *testing.T) {
 		RateLimit: &Window{UsedPercentage: 100, ResetsAt: at.Add(time.Hour), ObservedAt: at.Add(-time.Minute), SessionID: "sid-1"},
 		Settings:  Settings{ReadLines: 25, DetectionTailLines: 15},
 		Screen:    "line 1\nline 2\n",
+		Hint:      "none",
+		Transcript: &Transcript{
+			Path: "/home/x/.claude/projects/-w/sid-1.jsonl", UUID: "u1", Type: "assistant", Timestamp: at.Add(-time.Minute),
+			Version: "2.1.319", Error: "rate_limit", APIErrorStatus: 429, Text: "You've hit your session limit",
+			Quota: &Quota{Status: "rejected", RateLimitType: "five_hour", ResetsAt: new(at.Add(time.Hour))},
+		},
 	}
 	if err := s.Append(ev); err != nil {
 		t.Fatalf("Append() error = %v", err)
@@ -60,6 +66,12 @@ func TestAppend(t *testing.T) {
 	if got.RateLimit == nil || !got.RateLimit.ResetsAt.Equal(at.Add(time.Hour)) {
 		t.Errorf("rate_limit が往復していない: %+v", got.RateLimit)
 	}
+	if got.Transcript == nil || got.Transcript.UUID != "u1" || got.Transcript.Quota == nil || !got.Transcript.Quota.ResetsAt.Equal(at.Add(time.Hour)) {
+		t.Errorf("transcript が往復していない: %+v", got.Transcript)
+	}
+	if !strings.Contains(lines[0], `"quota_limits":{"status":"rejected","rate_limit_type":"five_hour"`) {
+		t.Errorf("quota_limits の欄の名前が違う: %s", lines[0])
+	}
 	if !strings.Contains(lines[1], `"attempts":1`) {
 		t.Errorf("2 行目に attempts が無い: %s", lines[1])
 	}
@@ -67,8 +79,21 @@ func TestAppend(t *testing.T) {
 		t.Errorf("翌日のファイルが無い: %v", err)
 	}
 	// 無いものは書かない (後から読む人が「欄が無い = 取れなかった」と読めるように)。
-	if strings.Contains(lines[0], `"account"`) || strings.Contains(lines[0], `"geometry_error"`) {
+	if strings.Contains(lines[0], `"account"`) || strings.Contains(lines[0], `"geometry_error"`) || strings.Contains(lines[0], `"reason"`) {
 		t.Errorf("無い欄が出ている: %s", lines[0])
+	}
+	// 検知の tick (画面を読んでいない) では screen と hint も出ない。
+	quiet := Event{At: at, Outcome: "no-session", Kind: "none", Reason: "pane に session_id が無い"}
+	if err := s.Append(quiet); err != nil {
+		t.Fatal(err)
+	}
+	data, err = os.ReadFile(filepath.Join(s.Dir, "2026-10-20.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	last := strings.Split(strings.TrimRight(string(data), "\n"), "\n")[2]
+	if strings.Contains(last, `"screen"`) || strings.Contains(last, `"hint"`) || strings.Contains(last, `"transcript"`) || !strings.Contains(last, `"reason"`) {
+		t.Errorf("判定できなかった出来事の欄: %s", last)
 	}
 }
 

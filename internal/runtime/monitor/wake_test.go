@@ -1,22 +1,17 @@
 package monitor
 
 import (
-	"context"
 	"testing"
 	"time"
 
-	"github.com/usadamasa/agents-daemon/internal/multiplexer"
-	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
 	"github.com/usadamasa/agents-daemon/internal/ratelimit"
 	"github.com/usadamasa/agents-daemon/internal/runtime/config"
+	"github.com/usadamasa/agents-daemon/internal/transcript"
 )
 
-// 起床時刻の情報源は 3 つある: その pane のセッションの state (own)、画面の絶対時刻、
-// アカウント全体で最も新しいウィンドウの state (account)。優先順位は
-// ComputeLimitWake のコメントにあり、ここではその順位を表で固定する。
-//
-// テストの時刻は全て JST で組む。画面の絶対時刻は tz 付き (Asia/Tokyo) で、
-// ComputeLimitWake は daemon のローカル tz を使うため、テストは local を差し込む。
+// 起床時刻の情報源は 3 つある: transcript の entry の resetsAt、その pane のセッションの statusline の state (own)、
+// アカウント全体で最も新しいウィンドウの state (account)。優先順位は ComputeLimitWake のコメントにあり、
+// ここではその順位を表で固定する。
 
 var tokyo = time.FixedZone("Asia/Tokyo", 9*60*60)
 
@@ -25,113 +20,96 @@ func jst(hh, mm int) time.Time {
 }
 
 func stateAt(resetsAt time.Time, used float64) *ratelimit.State {
-	return &ratelimit.State{
-		FiveHourUsed:     used,
-		FiveHourResetsAt: resetsAt,
-		ObservedAt:       resetsAt.Add(-4 * time.Hour),
-	}
+	return &ratelimit.State{FiveHourUsed: used, FiveHourResetsAt: resetsAt, ObservedAt: resetsAt.Add(-4 * time.Hour)}
 }
 
 func TestComputeLimitWake_Priority(t *testing.T) {
 	cfg := config.Default()
 	margin := time.Duration(cfg.MarginSeconds) * time.Second
 	now := jst(7, 35)
-	screen810 := "⏺ You've hit your session limit · resets 8:10am (Asia/Tokyo)"
-	screen310 := "⏺ You've hit your session limit · resets 3:10am (Asia/Tokyo)"
 
 	tests := []struct {
 		name       string
+		entry      *transcript.Entry
 		own        *ratelimit.State
 		account    *ratelimit.State
-		screen     string
 		wantWake   time.Time
 		wantSource WakeSource
 	}{
 		{
-			name:       "1. own の resets_at が未来ならそれ (画面や account より優先)",
+			name:       "1. transcript の resetsAt が未来ならそれ (statusline より優先)",
+			entry:      limitedTurn(uuidLimit, jst(8, 10)).Entry,
+			own:        stateAt(jst(13, 10), 100),
+			account:    stateAt(jst(13, 10), 5),
+			wantWake:   jst(8, 10).Add(margin),
+			wantSource: WakeFromTranscript,
+		},
+		{
+			name:       "1'. transcript の resetsAt が過去なら今すぐ (解除後に止まったままの pane)",
+			entry:      limitedTurn(uuidLimit, jst(3, 10)).Entry,
+			own:        stateAt(jst(13, 10), 100),
+			account:    stateAt(jst(13, 10), 5),
+			wantWake:   now.Add(margin),
+			wantSource: WakeTranscriptAlreadyReset,
+		},
+		{
+			name:       "2. resetsAt の無い entry なら own の resets_at (未来)",
+			entry:      legacyLimitedTurn().Entry,
 			own:        stateAt(jst(8, 10), 100),
 			account:    stateAt(jst(13, 10), 5),
-			screen:     screen310,
 			wantWake:   jst(8, 10).Add(margin),
-			wantSource: WakeFromResetsAt,
+			wantSource: WakeFromStatusline,
 		},
 		{
-			name:       "2. own が過去でも画面の絶対時刻が未来ならそれ (2026-08-28 07:34 の誤射を塞ぐ)",
-			own:        stateAt(jst(3, 10), 100),
-			account:    stateAt(jst(8, 10), 96),
-			screen:     screen810,
-			wantWake:   jst(8, 10).Add(margin),
-			wantSource: WakeFromScreenAbsolute,
-		},
-		{
-			name:       "2'. 画面の絶対時刻が過去なら今すぐ (account が次のウィンドウでも待たない)",
-			own:        stateAt(jst(3, 10), 100),
-			account:    stateAt(jst(13, 10), 5),
-			screen:     screen310,
-			wantWake:   now.Add(margin),
-			wantSource: WakeScreenAlreadyReset,
-		},
-		{
-			name:       "3. own 無し・画面に絶対時刻無し → account の resets_at (新規セッションの本命)",
+			name:       "3. own 無し → account の resets_at (上限中に開いた新規セッション)",
+			entry:      legacyLimitedTurn().Entry,
 			own:        nil,
 			account:    stateAt(jst(8, 10), 96),
-			screen:     limitAbsoluteScreen,
 			wantWake:   jst(8, 10).Add(margin),
 			wantSource: WakeFromAccount,
 		},
 		{
-			name:       "3'. own が過去・画面に絶対時刻無し → account の resets_at",
+			name:       "3'. own が過去 → account の resets_at",
+			entry:      legacyLimitedTurn().Entry,
 			own:        stateAt(jst(3, 10), 100),
 			account:    stateAt(jst(8, 10), 96),
-			screen:     limitAbsoluteScreen,
 			wantWake:   jst(8, 10).Add(margin),
 			wantSource: WakeFromAccount,
 		},
 		{
 			name:       "4. own も account も過去 → 今すぐ",
+			entry:      legacyLimitedTurn().Entry,
 			own:        stateAt(jst(3, 10), 100),
 			account:    stateAt(jst(3, 10), 100),
-			screen:     limitAbsoluteScreen,
 			wantWake:   now.Add(margin),
 			wantSource: WakeAlreadyReset,
 		},
 		{
-			name:       "4'. own 無し・account が過去 → 今すぐ (fallback に落とさない)",
-			own:        nil,
-			account:    stateAt(jst(3, 10), 100),
-			screen:     limitAbsoluteScreen,
-			wantWake:   now.Add(margin),
-			wantSource: WakeAlreadyReset,
-		},
-		{
-			name:       "5. state が無ければ画面の相対表現",
-			own:        nil,
-			account:    nil,
-			screen:     limitAndRelativeScreen,
-			wantWake:   now.Add(5 * time.Minute).Add(margin),
-			wantSource: WakeFromRelative,
-		},
-		{
-			name:       "6. どれも無ければ fallback",
-			own:        nil,
-			account:    nil,
-			screen:     limitAbsoluteScreen,
+			name:       "5. どれも無ければ fallback",
+			entry:      legacyLimitedTurn().Entry,
 			wantWake:   now.Add(time.Duration(cfg.FallbackWaitHours * float64(time.Hour))).Add(margin),
 			wantSource: WakeFromFallback,
 		},
 		{
-			name:       "five_hour が null の account は無いものとして扱う",
-			own:        nil,
+			name:       "five_hour が null の state は無いものとして扱う",
+			entry:      legacyLimitedTurn().Entry,
+			own:        &ratelimit.State{ObservedAt: now},
 			account:    &ratelimit.State{ObservedAt: now},
-			screen:     limitAndRelativeScreen,
-			wantWake:   now.Add(5 * time.Minute).Add(margin),
-			wantSource: WakeFromRelative,
+			wantWake:   now.Add(time.Duration(cfg.FallbackWaitHours * float64(time.Hour))).Add(margin),
+			wantSource: WakeFromFallback,
+		},
+		{
+			name:       "entry が nil でも落ちない (statusline へ)",
+			entry:      nil,
+			own:        stateAt(jst(8, 10), 100),
+			wantWake:   jst(8, 10).Add(margin),
+			wantSource: WakeFromStatusline,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, source := computeLimitWakeIn(cfg, tt.own, tt.account, tt.screen, now, tokyo)
+			got, source := ComputeLimitWake(cfg, tt.entry, tt.own, tt.account, now)
 			if source != tt.wantSource {
 				t.Errorf("source = %v, want %v", source, tt.wantSource)
 			}
@@ -142,57 +120,10 @@ func TestComputeLimitWake_Priority(t *testing.T) {
 	}
 }
 
-// 上限中に開いた新規セッションには state ファイルが無い。2026-08-28 07:35:55 に
-// 実際にこの形の pane を検知し、起床時刻が fallback (5 時間後) に落ちた。
-// アカウント全体の state を渡せば現在のウィンドウの解除時刻で起きる。
-func TestTick_FreshSession_NoOwnState_UsesAccountWindow(t *testing.T) {
-	now := jst(7, 35)
-	account := stateAt(jst(8, 10), 96)
-
-	client := &multiplexerfake.Client{
-		PaneReadFunc: readReturning(limitAbsoluteScreen, nil), // 相対表現も am/pm も無い
-	}
-	cfg := config.Default()
-	deps := newTestDeps(t, cfg, client)
-	deps.Account = account
-	pane := newTestPane(multiplexer.AgentStatusIdle, true)
-	ps := &PaneState{}
-
-	outcome, err := Tick(context.Background(), deps, pane, ps, nil, now)
-
-	if err != nil {
-		t.Fatalf("Tick() error = %v", err)
-	}
-	if outcome != OutcomeWaiting {
-		t.Fatalf("outcome = %v, want %v", outcome, OutcomeWaiting)
-	}
-	want := jst(8, 10).Add(time.Duration(cfg.MarginSeconds) * time.Second)
-	if !ps.WaitUntil.Equal(want) {
-		t.Errorf("WaitUntil = %v, want %v (own state が無くても account のウィンドウで起きるべき)", ps.WaitUntil, want)
-	}
-}
-
-// 画面の絶対時刻は daemon のローカル tz で読む。ComputeLimitWake (公開版) が
-// time.Local を使うことを、tz 付き画面で確かめる (tz 付きなら local に依らない)。
-func TestComputeLimitWake_ScreenAbsoluteWithTZ(t *testing.T) {
-	cfg := config.Default()
-	now := jst(7, 35)
-	got, source := ComputeLimitWake(cfg, nil, nil, limitAmPmScreen, now)
-	if source != WakeFromScreenAbsolute {
-		t.Fatalf("source = %v, want %v", source, WakeFromScreenAbsolute)
-	}
-	want := jst(8, 10).Add(time.Duration(cfg.MarginSeconds) * time.Second)
-	if !got.Equal(want) {
-		t.Errorf("wake = %v, want %v", got, want)
-	}
-}
-
 func TestWakeSource_String_AllDistinct(t *testing.T) {
-	sources := []WakeSource{
-		WakeFromResetsAt, WakeAlreadyReset, WakeFromScreenAbsolute,
-		WakeScreenAlreadyReset, WakeFromAccount, WakeFromRelative, WakeFromFallback,
-	}
+	sources := []WakeSource{WakeFromTranscript, WakeTranscriptAlreadyReset, WakeFromStatusline, WakeFromAccount, WakeAlreadyReset, WakeFromFallback}
 	seen := map[string]WakeSource{}
+	ids := map[string]WakeSource{}
 	for _, s := range sources {
 		str := s.String()
 		if str == "不明" || str == "" {
@@ -202,5 +133,9 @@ func TestWakeSource_String_AllDistinct(t *testing.T) {
 			t.Errorf("%d と %d の String() が同じ %q", prev, s, str)
 		}
 		seen[str] = s
+		if prev, dup := ids[s.ID()]; dup || s.ID() == "unknown" {
+			t.Errorf("%d と %d の ID() が同じ %q", prev, s, s.ID())
+		}
+		ids[s.ID()] = s
 	}
 }

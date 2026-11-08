@@ -24,7 +24,10 @@ type PaneStatus struct {
 	WaitUntil     *time.Time `json:"wait_until,omitempty"`
 	Attempts      int        `json:"attempts"`
 	LastOutcome   string     `json:"last_outcome"`
-	LastTickAt    time.Time  `json:"last_tick_at"`
+	// DetectReason は上限を判定できない理由 (session_id が引けない、transcript が読めない)。判定できていれば省く。
+	// doctor がそのまま出す。
+	DetectReason string    `json:"detect_reason,omitempty"`
+	LastTickAt   time.Time `json:"last_tick_at"`
 }
 
 // StatusSnapshot は status.json (XDG state 配下、apppath.StatusFile) の内容。daemon が

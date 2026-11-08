@@ -38,47 +38,39 @@ func footerScreen(footer []string) string {
 	return strings.Join(append(lines, footer...), "\n")
 }
 
-func TestClassify_通知欄の2行で予約中なら手を出さない(t *testing.T) {
-	c := newTestClassifier(t)
-
+func TestClassifyScreen_通知欄の2行で予約中なら手を出さない(t *testing.T) {
 	for i, footer := range footerArmedScreens {
 		t.Run(fmt.Sprintf("armed-%d", i), func(t *testing.T) {
-			if got := c.Classify(footerScreen(footer), 15); got != KindAutoContinueArmed {
-				t.Errorf("Classify() = %v, want %v", got, KindAutoContinueArmed)
+			if got := ClassifyScreen(footerScreen(footer), 15); got != HintNativeArmed {
+				t.Errorf("ClassifyScreen() = %v, want %v", got, HintNativeArmed)
 			}
 		})
 	}
 }
 
-func TestClassify_通知欄の2行で解除済みならresume_ready(t *testing.T) {
-	c := newTestClassifier(t)
-
+func TestClassifyScreen_通知欄の2行で解除済みならresume_ready(t *testing.T) {
 	for i, footer := range footerStaleScreens {
 		t.Run(fmt.Sprintf("stale-%d", i), func(t *testing.T) {
-			if got := c.Classify(footerScreen(footer), 15); got != KindResumeReady {
-				t.Errorf("Classify() = %v, want %v", got, KindResumeReady)
+			if got := ClassifyScreen(footerScreen(footer), 15); got != HintResumeReady {
+				t.Errorf("ClassifyScreen() = %v, want %v", got, HintResumeReady)
 			}
 		})
 	}
 }
 
-func TestClassify_取り消しの通知が同じ画面にあれば通知欄の予約中より優先する(t *testing.T) {
-	c := newTestClassifier(t)
-
+func TestClassifyScreen_取り消しの通知が同じ画面にあれば通知欄の予約中より優先する(t *testing.T) {
 	for i, standDown := range nativeStoodDownBanners {
 		t.Run(fmt.Sprintf("stood-down-%d", i), func(t *testing.T) {
 			screen := footerScreen(append([]string{standDown}, footerArmedScreens[0]...))
 
-			if got := c.Classify(screen, 15); got != KindLimit {
-				t.Errorf("Classify() = %v, want %v", got, KindLimit)
+			if got := ClassifyScreen(screen, 15); got != HintNone {
+				t.Errorf("ClassifyScreen() = %v, want %v", got, HintNone)
 			}
 		})
 	}
 }
 
-func TestClassify_行の途中に引用された通知欄の文は組とみなさない(t *testing.T) {
-	c := newTestClassifier(t)
-
+func TestClassifyScreen_行の途中に引用された通知欄の文は組とみなさない(t *testing.T) {
 	// テストのコードや文書が画面に出ても、行頭から始まらない文は通知欄の行ではない。
 	// (status と next を同じ行に引用したものは 1 行の文のパターンの担当なので、ここでは別の行に置く。)
 	cases := map[string][]string{
@@ -97,17 +89,14 @@ func TestClassify_行の途中に引用された通知欄の文は組とみな�
 	}
 	for name, lines := range cases {
 		t.Run(name, func(t *testing.T) {
-			got := c.Classify(strings.Join(lines, "\n"), 15)
-			if got == KindAutoContinueArmed || got == KindResumeReady {
-				t.Errorf("Classify() = %v, want 通知欄の組でない判定", got)
+			if got := ClassifyScreen(strings.Join(lines, "\n"), 15); got != HintNone {
+				t.Errorf("ClassifyScreen() = %v, want %v (通知欄の組でない)", got, HintNone)
 			}
 		})
 	}
 }
 
-func TestClassify_通知欄のstatusとnextが離れていれば組とみなさない(t *testing.T) {
-	c := newTestClassifier(t)
-
+func TestClassifyScreen_通知欄のstatusとnextが離れていれば組とみなさない(t *testing.T) {
 	screen := strings.Join([]string{
 		"  ⚠ Your usage limit has reset",
 		"",
@@ -115,7 +104,7 @@ func TestClassify_通知欄のstatusとnextが離れていれば組とみなさ�
 		"",
 		"      Press enter to continue",
 	}, "\n")
-	if got := c.Classify(screen, 15); got == KindResumeReady {
-		t.Errorf("Classify() = %v, want resume-ready でない", got)
+	if got := ClassifyScreen(screen, 15); got != HintNone {
+		t.Errorf("ClassifyScreen() = %v, want %v", got, HintNone)
 	}
 }

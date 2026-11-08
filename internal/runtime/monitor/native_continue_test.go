@@ -10,78 +10,81 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/runtime/config"
 )
 
-const (
-	// nativeArmedScreen は Claude Code 自身の auto-continue がカウントダウン中の画面。
-	// 上限に当たった元の行も残っているので、二重シグナルは揃っている。
-	nativeArmedScreen = "⏺ You've hit your session limit · resets 5:00pm (Asia/Tokyo)\n\n" +
-		"Usage limit reached · continuing automatically at 5:00pm · esc or type to cancel"
-	// resumeReadyScreen は解除済みで Enter だけを待っている画面。
-	resumeReadyScreen = "Usage limit has reset · press enter to continue"
-	// hardCapScreen は待っても解除されない上限。2.1.239 でリセット時刻が併記される
-	// ようになり、二重シグナル要件を満たしてしまう。
-	hardCapScreen = "⏺ You've hit your monthly spend limit · Your session limit resets 5:00pm"
-)
-
-func TestTick_ネイティブauto_continue中は送信も待機もしない(t *testing.T) {
-	client := &multiplexerfake.Client{PaneReadFunc: readReturning(nativeArmedScreen, nil)}
-	deps := newTestDeps(t, config.Default(), client)
-	pane := newTestPane(multiplexer.AgentStatusWorking, true)
-	ps := &PaneState{}
-
-	outcome, err := Tick(context.Background(), deps, pane, ps, nil, time.Now())
-	if err != nil {
-		t.Fatalf("Tick() error = %v", err)
-	}
-	if outcome != OutcomeNativeAutoContinue {
-		t.Errorf("Outcome = %v, want %v", outcome, OutcomeNativeAutoContinue)
-	}
-	if ps.Status != StatusMonitoring {
-		t.Errorf("Status = %v, want %v (ネイティブに任せる間は待機に入らない)", ps.Status, StatusMonitoring)
-	}
-	assertNoSend(t, client)
+// waitingState は起床時刻に達した待機状態。
+func waitingState(now time.Time, attempts int) *PaneState {
+	return &PaneState{Status: StatusWaiting, WaitUntil: now.Add(-time.Second), Attempts: attempts, TurnUUID: uuidLimit}
 }
 
-func TestTick_待機中にネイティブが再度予約したら送らず監視へ戻る(t *testing.T) {
-	// ここで Escape を送るとネイティブの継続そのものが取り消される
-	// ("esc or type to cancel")。起床時刻に達していても手を出さない。
-	client := &multiplexerfake.Client{PaneReadFunc: readReturning(nativeArmedScreen, nil)}
-	deps := newTestDeps(t, config.Default(), client)
-	pane := newTestPane(multiplexer.AgentStatusWorking, true)
-	now := time.Now()
-	ps := &PaneState{Status: StatusWaiting, WaitUntil: now.Add(-time.Second), Attempts: 2}
+func TestTick_待機明けに本体が待っていれば送らず監視へ戻る(t *testing.T) {
+	now := time.Date(2026, 10, 4, 10, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name   string
+		screen string
+		want   Outcome
+	}{
+		// ここで Escape を送るとネイティブの継続そのものが取り消される ("esc or type to cancel")。
+		{"auto-continue の予約", nativeArmedScreen, OutcomeNativeAutoContinue},
+		// Escape は request の中の待機ごと取り消す。
+		{"request の中のリトライ", nativeRetryingScreen, OutcomeNativeAutoContinue},
+		// pane は低優先度で動いている (#251)。
+		{"lower-priority mode", lowerPriorityScreen, OutcomeLowerPriority},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &multiplexerfake.Client{PaneReadFunc: readReturning(tt.screen, nil)}
+			deps := newTestDeps(t, config.Default(), client, limitedTurn(uuidLimit, now.Add(-time.Minute)))
+			ps := waitingState(now, 2)
 
-	outcome, err := Tick(context.Background(), deps, pane, ps, nil, now)
-	if err != nil {
-		t.Fatalf("Tick() error = %v", err)
+			outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, nil, now)
+
+			if err != nil {
+				t.Fatalf("Tick() error = %v", err)
+			}
+			if outcome != tt.want {
+				t.Errorf("Outcome = %v, want %v", outcome, tt.want)
+			}
+			if *ps != (PaneState{}) {
+				t.Errorf("ps = %+v, want ゼロ値 (本体に任せる間は待機しない)", ps)
+			}
+			assertNoSend(t, client)
+		})
 	}
-	if outcome != OutcomeNativeAutoContinue {
-		t.Errorf("Outcome = %v, want %v", outcome, OutcomeNativeAutoContinue)
-	}
-	if ps.Status != StatusMonitoring || ps.Attempts != 0 {
-		t.Errorf("Status = %v Attempts = %d, want monitoring / 0", ps.Status, ps.Attempts)
-	}
-	assertNoSend(t, client)
 }
 
-func TestTick_deferToNativeAutoContinueをoffにすると自前で待機する(t *testing.T) {
+func TestTick_deferToNativeAutoContinueをoffにすると予約中でも送る(t *testing.T) {
+	now := time.Date(2026, 10, 4, 10, 0, 0, 0, time.UTC)
 	cfg := config.Default()
 	cfg.DeferToNativeAutoContinue = false
-
 	client := &multiplexerfake.Client{PaneReadFunc: readReturning(nativeArmedScreen, nil)}
-	deps := newTestDeps(t, cfg, client)
-	pane := newTestPane(multiplexer.AgentStatusWorking, true)
-	ps := &PaneState{}
+	deps := newTestDeps(t, cfg, client, limitedTurn(uuidLimit, now.Add(-time.Minute)))
+	ps := waitingState(now, 0)
 
-	outcome, err := Tick(context.Background(), deps, pane, ps, nil, time.Now())
-	if err != nil {
-		t.Fatalf("Tick() error = %v", err)
+	outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, nil, now)
+
+	if err != nil || outcome != OutcomeRetried || ps.Attempts != 1 {
+		t.Errorf("Tick() = %v, %v, ps = %+v; want retried", outcome, err, ps)
 	}
-	if outcome != OutcomeWaiting || ps.Status != StatusWaiting {
-		t.Errorf("Outcome = %v Status = %v, want waiting", outcome, ps.Status)
+}
+
+func TestTick_リトライ中はdeferToNativeAutoContinueに従わない(t *testing.T) {
+	// watchdog は auto-continue とは別の opt-in で、この設定を切っても待機を潰してよい理由にならない。
+	now := time.Date(2026, 10, 4, 10, 0, 0, 0, time.UTC)
+	cfg := config.Default()
+	cfg.DeferToNativeAutoContinue = false
+	client := &multiplexerfake.Client{PaneReadFunc: readReturning(nativeRetryingScreen, nil)}
+	deps := newTestDeps(t, cfg, client, limitedTurn(uuidLimit, now.Add(-time.Minute)))
+	ps := waitingState(now, 0)
+
+	outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, nil, now)
+
+	if err != nil || outcome != OutcomeNativeAutoContinue {
+		t.Errorf("Tick() = %v, %v; want native-auto-continue", outcome, err)
 	}
+	assertNoSend(t, client)
 }
 
 func TestTick_enter待ちにはenterだけを送る(t *testing.T) {
+	now := time.Date(2026, 10, 4, 10, 0, 0, 0, time.UTC)
 	var sentKeys []string
 	client := &multiplexerfake.Client{
 		PaneReadFunc: readReturning(resumeReadyScreen, nil),
@@ -94,24 +97,11 @@ func TestTick_enter待ちにはenterだけを送る(t *testing.T) {
 			return nil
 		},
 	}
-	deps := newTestDeps(t, config.Default(), client)
-	pane := newTestPane(multiplexer.AgentStatusIdle, true)
-	ps := &PaneState{}
-	now := time.Now()
+	deps := newTestDeps(t, config.Default(), client, limitedTurn(uuidLimit, now.Add(-time.Minute)))
+	ps := waitingState(now, 0)
 
-	// 通常の上限と同じ状態機械に乗せる。待つ理由は無いので即座に起床時刻になる。
-	outcome, err := Tick(context.Background(), deps, pane, ps, nil, now)
-	if err != nil {
-		t.Fatalf("Tick() error = %v", err)
-	}
-	if outcome != OutcomeWaiting || ps.Status != StatusWaiting {
-		t.Fatalf("Outcome = %v Status = %v, want waiting", outcome, ps.Status)
-	}
-	if ps.WaitUntil.After(now) {
-		t.Errorf("WaitUntil = %v, want %v 以前 (解除済みなので待つ理由が無い)", ps.WaitUntil, now)
-	}
+	outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, nil, now)
 
-	outcome, err = Tick(context.Background(), deps, pane, ps, nil, now)
 	if err != nil {
 		t.Fatalf("Tick() error = %v", err)
 	}
@@ -127,17 +117,16 @@ func TestTick_enter待ちにはenterだけを送る(t *testing.T) {
 }
 
 func TestTick_enterが効かないままなら最終的に打ち切る(t *testing.T) {
-	// Enter を押しても画面が変わらないことがある。ここで数え上げが効かないと
+	// Enter を押しても transcript が変わらないことがある。ここで数え上げが効かないと
 	// 30 秒おきに永久に Enter を押し続ける pane ができる。
+	now := time.Date(2026, 10, 4, 10, 0, 0, 0, time.UTC)
 	client := &multiplexerfake.Client{PaneReadFunc: readReturning(resumeReadyScreen, nil)}
 	cfg := config.Default()
-	deps := newTestDeps(t, cfg, client)
-	pane := newTestPane(multiplexer.AgentStatusIdle, true)
-	ps := &PaneState{}
-	now := time.Now()
+	deps := newTestDeps(t, cfg, client, limitedTurn(uuidLimit, now.Add(-time.Minute)))
+	ps := waitingState(now, 0)
 
 	for range cfg.MaxRetries + 5 {
-		outcome, err := Tick(context.Background(), deps, pane, ps, nil, now)
+		outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, nil, now)
 		if err != nil {
 			t.Fatalf("Tick() error = %v", err)
 		}
@@ -147,58 +136,4 @@ func TestTick_enterが効かないままなら最終的に打ち切る(t *testin
 		now = now.Add(time.Hour)
 	}
 	t.Errorf("maxRetries=%d を超えても打ち切られなかった (Attempts=%d)", cfg.MaxRetries, ps.Attempts)
-}
-
-func TestTick_恒久的な上限では待機に入らない(t *testing.T) {
-	client := &multiplexerfake.Client{PaneReadFunc: readReturning(hardCapScreen, nil)}
-	deps := newTestDeps(t, config.Default(), client)
-	pane := newTestPane(multiplexer.AgentStatusIdle, true)
-	ps := &PaneState{}
-
-	outcome, err := Tick(context.Background(), deps, pane, ps, nil, time.Now())
-	if err != nil {
-		t.Fatalf("Tick() error = %v", err)
-	}
-	if outcome != OutcomeHardCap {
-		t.Errorf("Outcome = %v, want %v", outcome, OutcomeHardCap)
-	}
-	if ps.Status != StatusMonitoring {
-		t.Errorf("Status = %v, want monitoring (待っても解除されない上限)", ps.Status)
-	}
-	assertNoSend(t, client)
-}
-
-func TestTick_待機中にFableの上限へ変わったら送らず監視へ戻る(t *testing.T) {
-	// 5 時間ウィンドウの解除で起きても Fable の上限は週次なので解除されていない。送ると再び弾かれ、
-	// 開いたダイアログでは Enter がクレジットを使う選択肢を選びうる。
-	screen := "⏺ You've hit your Fable limit · resets 3pm (Asia/Tokyo)\n\n" +
-		"You've reached your Fable limit\n" +
-		"❯ 1. Continue with Opus 5.5"
-	client := &multiplexerfake.Client{PaneReadFunc: readReturning(screen, nil)}
-	deps := newTestDeps(t, config.Default(), client)
-	pane := newTestPane(multiplexer.AgentStatusIdle, true)
-	now := time.Now()
-	ps := &PaneState{Status: StatusWaiting, WaitUntil: now.Add(-time.Second), Attempts: 1}
-
-	outcome, err := Tick(context.Background(), deps, pane, ps, nil, now)
-	if err != nil {
-		t.Fatalf("Tick() error = %v", err)
-	}
-	if outcome != OutcomeHardCap {
-		t.Errorf("Outcome = %v, want %v", outcome, OutcomeHardCap)
-	}
-	if ps.Status != StatusMonitoring || ps.Attempts != 0 {
-		t.Errorf("Status = %v Attempts = %d, want monitoring / 0", ps.Status, ps.Attempts)
-	}
-	assertNoSend(t, client)
-}
-
-func assertNoSend(t *testing.T, client *multiplexerfake.Client) {
-	t.Helper()
-	for _, call := range client.Calls {
-		if call == "SendText:pane-1" || call == "SendKeys:pane-1" {
-			t.Errorf("送信が発生した: %v", client.Calls)
-			return
-		}
-	}
 }

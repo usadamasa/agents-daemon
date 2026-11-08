@@ -24,14 +24,15 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/ratelimit"
 	"github.com/usadamasa/agents-daemon/internal/refstate"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend"
+	"github.com/usadamasa/agents-daemon/internal/runtime/claudesessions"
 	"github.com/usadamasa/agents-daemon/internal/runtime/config"
-	"github.com/usadamasa/agents-daemon/internal/runtime/daemon/claudesessions"
 	"github.com/usadamasa/agents-daemon/internal/runtime/daemon/limitlog"
 	"github.com/usadamasa/agents-daemon/internal/runtime/daemon/refpoll"
 	"github.com/usadamasa/agents-daemon/internal/runtime/detect"
 	"github.com/usadamasa/agents-daemon/internal/runtime/monitor"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
+	"github.com/usadamasa/agents-daemon/internal/transcript"
 	"github.com/usadamasa/agents-daemon/internal/turnfailure"
 	"github.com/usadamasa/agents-daemon/internal/worklog"
 )
@@ -48,6 +49,8 @@ type paneEntry struct {
 	lastLogKey string // 直前にログへ書いた内容の識別子 (同じ状態が続く間の重複を抑える)
 	// loggedUnknownReason は最後にログへ書いた Pane.UnknownReason。同じ理由が続く間は書かない。
 	loggedUnknownReason string
+	// loggedMismatch は最後にログへ書いた「StopFailure の記録と transcript の判定の食い違い」の鍵。同じ間は書かない。
+	loggedMismatch string
 }
 
 // multiplexerClient は daemon が多重化ツールに対して使う操作。monitor へ渡す 3 つ (読む・送る) に、tick の pane の列挙、
@@ -86,9 +89,12 @@ type daemonRuntime struct {
 	// sessions はセッション台帳 (ledger)。daemon だけが tick ごとに書き、housekeeping で消す。
 	// ゼロ値は書かない。
 	sessions ledger.Store
-	// claudeSessions は Claude Code のセッションの登録簿 (claudesessions)。台帳に書く名前 (ListAgents の名前) を
-	// ここから引く。ゼロ値は名前無しで台帳を書く。
+	// claudeSessions は Claude Code のセッションの登録簿 (claudesessions)。台帳に書く名前 (ListAgents の名前) と、
+	// statusline の記録から session の引けない pane の session_id (前景の pid から) をここから引く。ゼロ値はどちらも引かない。
 	claudeSessions claudesessions.Store
+	// transcripts は Claude Code の transcript の置き場 (transcript)。上限の判定はこの末尾の entry で行う。
+	// ゼロ値は全 pane が「transcript が読めない」になる。
+	transcripts transcript.Store
 	// parking は `park add` が書くパーキングのメモ (parking)。daemon は housekeeping で消すだけ。
 	// ゼロ値は何も消さない。
 	parking parking.Store
@@ -136,11 +142,6 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 		r.log.Logf("設定の読み込みでエラー、デフォルト値で継続します: %v", cfgErr)
 	}
 
-	classifier, err := detect.NewClassifier(cfg.CustomPatterns)
-	if err != nil {
-		return false, cfg, fmt.Errorf("分類器の構築に失敗: %w", err)
-	}
-
 	panes, err := r.client.PaneList(ctx)
 	if err != nil {
 		r.consecutiveFailures++
@@ -151,28 +152,17 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 		return false, cfg, fmt.Errorf("pane list の取得に失敗 (%d 回連続): %w", r.consecutiveFailures, err)
 	}
 	r.consecutiveFailures = 0
+	r.resolveSessionIDs(panes)
 
-	// アカウント全体で最新のウィンドウは tick ごとに 1 回だけ読み、全 pane で共有する。
-	// 自分の state を持たない pane (上限中に開いた新規セッション) の起床時刻はここから引く。
+	// アカウント全体で最新のウィンドウは tick ごとに 1 回だけ読み、全 pane で共有する。transcript の entry に
+	// 解除時刻が無い (古い形) ときの起床時刻の予備。
 	account, accountErr := r.store.RateLimits.LatestWindow(now)
 	if accountErr != nil {
 		r.log.Logf("アカウント全体の利用上限 state の走査に失敗、無しとして継続します: %v", accountErr)
 		account = nil
 	}
 
-	// Tick が分類した画面は pane ごとに 1 つ。pane は順に処理するので、直前の pane の観測を持ち越さないよう
-	// pane ごとに捨てる。
-	var observed *observation
-	deps := monitor.Deps{
-		Client:     r.client,
-		Classifier: classifier,
-		Config:     cfg,
-		Sleep:      r.sleep,
-		Account:    account,
-		Observe: func(_ multiplexer.Pane, kind detect.Kind, screen string) {
-			observed = &observation{kind: kind, screen: screen}
-		},
-	}
+	deps := monitor.Deps{Client: r.client, Config: cfg, Sleep: r.sleep, Account: account, Turns: r.transcripts.Tail}
 
 	seen := make(map[string]bool, len(panes))
 	claudeCount := 0
@@ -184,28 +174,7 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 		}
 		claudeCount++
 		seen[pane.PaneID] = true
-
-		entry, ok := r.panes[pane.PaneID]
-		if !ok {
-			entry = &paneEntry{state: &monitor.PaneState{}}
-			r.panes[pane.PaneID] = entry
-		}
-		entry.lastSeenAt = now
-		r.logUnknownReason(pane, entry)
-
-		// state はセッションごとに別ファイル。pane に対応するものだけを読む。
-		rateState, stateErr := r.store.RateLimits.Load(pane.SessionID)
-		if stateErr != nil {
-			r.log.Logf("pane %s の利用上限 state の読み込みに失敗、state 無しとして継続します: %v", pane.PaneID, stateErr)
-			rateState = nil
-		}
-
-		observed = nil
-		outcome, tickErr := monitor.Tick(ctx, deps, pane, entry.state, rateState, now)
-		if r.logOutcome(pane, outcome, tickErr) && observed != nil && isLimitEvent(outcome) {
-			r.recordLimitEvent(ctx, pane, entry, outcome, observed, rateState, account, cfg, now)
-		}
-		statusPanes = append(statusPanes, paneStatus(pane, entry, outcome, now))
+		statusPanes = append(statusPanes, r.tickPane(ctx, deps, pane, account, cfg, now))
 	}
 
 	r.forgetUnseen(seen)
@@ -230,6 +199,81 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 	return false, cfg, nil
 }
 
+// tickPane は Claude の pane 1 枚の tick。状態機械を回し、出来事をログと limit-events に残し、status.json の 1 行を返す。
+// Tick が判定に使った根拠 (Observe) は pane ごとに受け、読まなかった tick では nil のまま。
+func (r *daemonRuntime) tickPane(ctx context.Context, deps monitor.Deps, pane multiplexer.Pane, account *ratelimit.State, cfg config.Config, now time.Time) daemonstate.PaneStatus {
+	var observed *monitor.Evidence
+	deps.Observe = func(_ multiplexer.Pane, ev monitor.Evidence) { observed = &ev }
+	entry, ok := r.panes[pane.PaneID]
+	if !ok {
+		entry = &paneEntry{state: &monitor.PaneState{}}
+		r.panes[pane.PaneID] = entry
+	}
+	entry.lastSeenAt = now
+	r.logUnknownReason(pane, entry)
+
+	// state はセッションごとに別ファイル。pane に対応するものだけを読む。
+	rateState, stateErr := r.store.RateLimits.Load(pane.SessionID)
+	if stateErr != nil {
+		r.log.Logf("pane %s の利用上限 state の読み込みに失敗、state 無しとして継続します: %v", pane.PaneID, stateErr)
+		rateState = nil
+	}
+
+	outcome, tickErr := monitor.Tick(ctx, deps, pane, entry.state, rateState, now)
+	failure := r.loadTurnFailure(pane)
+	if observed != nil {
+		r.logMismatch(pane, entry, *observed, failure)
+	}
+	if r.logOutcome(pane, outcome, tickErr) && observed != nil && isLimitEvent(outcome) {
+		r.recordLimitEvent(ctx, pane, entry, outcome, *observed, failure, rateState, account, cfg, now)
+	}
+	return paneStatus(pane, entry, outcome, observed, now)
+}
+
+// resolveSessionIDs は statusline の記録 (context/) から session の引けなかった Claude の pane の SessionID を、
+// 前景の pid で Claude Code の登録簿から補う。statusline を配線していないセッションでも transcript を引けるようにする。
+func (r *daemonRuntime) resolveSessionIDs(panes []multiplexer.Pane) {
+	if err := r.claudeSessions.Fill(panes); err != nil {
+		r.log.Logf("Claude Code の登録簿の読み込みに失敗、pid から session_id を補いません: %v", err)
+	}
+}
+
+// loadTurnFailure は pane のセッションの StopFailure の記録を読む。無ければ nil、読めなければログに残して nil。
+func (r *daemonRuntime) loadTurnFailure(pane multiplexer.Pane) *turnfailure.Record {
+	failure, err := r.turnFailures.Load(pane.SessionID)
+	if err != nil {
+		r.log.Logf("pane %s: turn の失敗の記録の読み込みに失敗、無しとして扱います: %v", pane.PaneID, err)
+		return nil
+	}
+	return failure
+}
+
+// logMismatch は StopFailure hook の記録 (最後の turn が rate_limit で終わった) があるのに transcript の末尾が
+// 上限でないとき、理由が変わったときだけログに残す。transcript の形が変わって読めなくなった疑いを、daemon が
+// 黙って何もしない形で終わらせないため。hook が走らないセッションでは記録が無く、ここには来ない。
+func (r *daemonRuntime) logMismatch(pane multiplexer.Pane, entry *paneEntry, ev monitor.Evidence, failure *turnfailure.Record) {
+	key := ""
+	if failure != nil && failure.Error == "rate_limit" && !ev.Kind.Limited() && ev.Kind != detect.KindSpendLimit {
+		key = failure.ObservedAt.Format(time.RFC3339) + "|" + ev.Turn.Reason
+	}
+	if key == entry.loggedMismatch {
+		return
+	}
+	entry.loggedMismatch = key
+	if key != "" {
+		r.log.Logf("pane %s: StopFailure の記録は rate_limit (%s) なのに transcript では上限と読めません。transcript の形が変わった疑い: %s",
+			pane.PaneID, failure.ObservedAt.Format(time.RFC3339), transcriptDetail(ev.Turn))
+	}
+}
+
+// transcriptDetail は食い違いのログに添える、読んだ transcript の末尾の要約。
+func transcriptDetail(turn monitor.Turn) string {
+	if turn.Entry == nil {
+		return turn.Reason
+	}
+	return fmt.Sprintf("末尾の entry は type=%s error=%q (%s)", turn.Entry.Type, turn.Entry.Error, turn.Path)
+}
+
 // logUnknownReason は record があるのに使えず unknown になった理由を、理由が変わったときだけログに残す。
 // 理由が無いと「静かに止まった」ように見える。
 func (r *daemonRuntime) logUnknownReason(pane multiplexer.Pane, entry *paneEntry) {
@@ -252,9 +296,10 @@ func (r *daemonRuntime) forgetUnseen(seen map[string]bool) {
 	}
 }
 
-// paneStatus は status.json に書く pane 1 枚ぶんのスナップショットを組む。
-func paneStatus(pane multiplexer.Pane, entry *paneEntry, outcome monitor.Outcome, now time.Time) daemonstate.PaneStatus {
-	return daemonstate.PaneStatus{
+// paneStatus は status.json に書く pane 1 枚ぶんのスナップショットを組む。observed は Tick が判定に使った根拠で、
+// 判定できなかった理由 (session_id が引けない、transcript が読めない) をそこから写す。読まなかった tick では nil。
+func paneStatus(pane multiplexer.Pane, entry *paneEntry, outcome monitor.Outcome, observed *monitor.Evidence, now time.Time) daemonstate.PaneStatus {
+	st := daemonstate.PaneStatus{
 		PaneID:        pane.PaneID,
 		SessionID:     pane.SessionID,
 		CWD:           pane.CWD,
@@ -267,6 +312,10 @@ func paneStatus(pane multiplexer.Pane, entry *paneEntry, outcome monitor.Outcome
 		LastOutcome:   outcome.String(),
 		LastTickAt:    now,
 	}
+	if observed != nil && observed.Turn.Entry == nil {
+		st.DetectReason = observed.Turn.Reason
+	}
+	return st
 }
 
 // monitorStatusString は monitor.Status を status.json 向けの識別子文字列にする。
@@ -308,82 +357,62 @@ func (r *daemonRuntime) logOutcome(pane multiplexer.Pane, outcome monitor.Outcom
 		r.log.Logf("pane %s (%s): %s でエラー: %v", pane.PaneID, pane.CWD, outcome, err)
 		return true
 	}
-	// 上限の検知と送信の行には Claude Code の自己申告 (record) を添える。上限到達時に record が何になるかは
-	// 未実測で (#77)、ここと limit-events/ が実測の記録になる。logKey には混ぜない (msg が変わるだけで同じ出来事を
-	// 書き直さない)。
-	record := multiplexer.RecordLabel(pane)
-	switch outcome {
-	case monitor.OutcomeMonitoring, monitor.OutcomeStillWaiting:
+	if outcome == monitor.OutcomeMonitoring || outcome == monitor.OutcomeStillWaiting {
 		return false
-	case monitor.OutcomeWaiting:
-		r.log.Logf("pane %s (%s): 利用上限/一時エラーを検知し待機に入りました (%s)", pane.PaneID, pane.CWD, record)
-	case monitor.OutcomeRetried:
-		r.log.Logf("pane %s (%s): 再開メッセージを送信しました (%d 回目) (%s)", pane.PaneID, pane.CWD, entry.state.Attempts, record)
-	case monitor.OutcomeRecoveredByUser:
-		r.log.Logf("pane %s (%s): ユーザー自身が復帰したため監視状態へ戻します", pane.PaneID, pane.CWD)
-	case monitor.OutcomeMaxRetries:
-		r.log.Logf("pane %s (%s): 再試行上限に達したためクールダウンに入ります", pane.PaneID, pane.CWD)
-	case monitor.OutcomeGateSuppressed:
-		r.log.Logf("pane %s (%s): 画面は上限に見えましたが statusline の使用率が閾値未満のため抑制しました (%s)", pane.PaneID, pane.CWD, record)
-	case monitor.OutcomeNotClaudeAgent:
-		r.log.Logf("pane %s (%s): Claude agent でなくなったため待機を延長します", pane.PaneID, pane.CWD)
-	case monitor.OutcomeNativeAutoContinue:
-		r.log.Logf("pane %s (%s): Claude Code 自身の auto-continue が解除を待っているため手を引きます (%s)", pane.PaneID, pane.CWD, record)
-	case monitor.OutcomeResumeEnter:
-		r.log.Logf("pane %s (%s): 上限が解除済みで Enter 待ちだったため Enter を送りました (%s)", pane.PaneID, pane.CWD, record)
-	case monitor.OutcomeHardCap:
-		r.log.Logf("pane %s (%s): 待っても解除されない上限 (spend limit / usage credit) のため待機に入りません (%s)", pane.PaneID, pane.CWD, record)
-	case monitor.OutcomeBlockedByPrompt:
-		r.log.Logf("pane %s (%s): Claude Code が利用者の答えを待つ prompt を開いているため送信を見送り待機を延長します (%s)", pane.PaneID, pane.CWD, record)
-	default:
-		r.log.Logf("pane %s (%s): %s", pane.PaneID, pane.CWD, outcome)
 	}
+	msg, ok := outcomeMessages[outcome]
+	switch {
+	case !ok:
+		msg = outcome.String()
+	case outcome == monitor.OutcomeRetried:
+		msg = fmt.Sprintf(msg, entry.state.Attempts)
+	case outcome == monitor.OutcomeTranscriptUnavailable:
+		msg = fmt.Sprintf(msg, pane.SessionID)
+	}
+	// 行には Claude Code の自己申告 (record) を添える。logKey には混ぜない (msg が変わるだけで同じ出来事を書き直さない)。
+	// 判定の根拠 (transcript の entry、画面) は limit-events/ にある。
+	r.log.Logf("pane %s (%s): %s (%s)", pane.PaneID, pane.CWD, msg, multiplexer.RecordLabel(pane))
 	return true
 }
 
-// observation は Tick が分類した画面と kind (monitor.Deps.Observe が渡す)。
-type observation struct {
-	kind   detect.Kind
-	screen string
+// outcomeMessages は Outcome ごとのログの文。retried は試行回数、transcript-unavailable は session_id を %s / %d で受ける。
+var outcomeMessages = map[monitor.Outcome]string{
+	monitor.OutcomeNoSession:             "session_id を引けないため上限を判定しません (statusline の記録も登録簿の pid も無い)",
+	monitor.OutcomeTranscriptUnavailable: "transcript を読めないため上限を判定しません (session %s)",
+	monitor.OutcomeWorkingSuppressed:     "transcript の末尾は上限ですが record が working のため手を出しません",
+	monitor.OutcomeWaiting:               "利用上限/一時エラーを検知し待機に入りました",
+	monitor.OutcomeRetried:               "再開メッセージを送信しました (%d 回目)",
+	monitor.OutcomeRecoveredByUser:       "セッションが上限から戻ったため監視状態へ戻します",
+	monitor.OutcomeMaxRetries:            "再試行上限に達したためクールダウンに入ります",
+	monitor.OutcomeNotClaudeAgent:        "Claude agent でなくなったため待機を延長します",
+	monitor.OutcomeReadError:             "待機明けに画面を読めないため送らず待機を続けます",
+	monitor.OutcomeNativeAutoContinue:    "Claude Code 自身が解除を待っているため手を引きます",
+	monitor.OutcomeLowerPriority:         "lower-priority mode で作業中のため手を引きます",
+	monitor.OutcomeResumeEnter:           "上限が解除済みで Enter 待ちだったため Enter を送りました",
+	monitor.OutcomeHardCap:               "待っても解除されない上限 (spend limit / usage credit / Fable) のため待機に入りません",
+	monitor.OutcomeWeeklyCap:             "週の上限のため待機に入りません",
+	monitor.OutcomeBlockedByPrompt:       "Claude Code が利用者の答えを待つ prompt を開いているため送信を見送り待機を延長します",
 }
 
 // isLimitEvent は outcome が上限の出来事 (後から検証する材料を残す価値があるもの) かを返す。
-// 静かな結果、読めなかった tick、Claude でなくなった pane は対象外。
+// 静かな結果、Claude でなくなった pane は対象外。判定できなかった理由と、上限なのに working の食い違いは残す。
 func isLimitEvent(outcome monitor.Outcome) bool {
 	switch outcome {
-	case monitor.OutcomeWaiting, monitor.OutcomeRetried, monitor.OutcomeRecoveredByUser, monitor.OutcomeMaxRetries,
-		monitor.OutcomeGateSuppressed, monitor.OutcomeNativeAutoContinue, monitor.OutcomeResumeEnter,
-		monitor.OutcomeHardCap, monitor.OutcomeBlockedByPrompt, monitor.OutcomeSendError:
-		return true
-	default:
+	case monitor.OutcomeMonitoring, monitor.OutcomeStillWaiting, monitor.OutcomeNotClaudeAgent:
 		return false
+	default:
+		return true
 	}
 }
 
 // recordLimitEvent は上限の出来事 1 件を limit-events/ へ残す。block の高さと screen はこのときだけ打つ
 // (毎 tick に 2 fork 足さない)。取れなくても出来事は残す。書けなくても tick は止めない。
 func (r *daemonRuntime) recordLimitEvent(ctx context.Context, pane multiplexer.Pane, entry *paneEntry, outcome monitor.Outcome,
-	observed *observation, rateState, account *ratelimit.State, cfg config.Config, now time.Time) {
-	ev := limitlog.Event{
-		At:        now,
-		PaneID:    pane.PaneID,
-		SessionID: pane.SessionID,
-		CWD:       pane.CWD,
-		Outcome:   outcome.String(),
-		Kind:      observed.kind.String(),
-		Attempts:  entry.state.Attempts,
-		WaitUntil: zeroableTime(entry.state.WaitUntil),
-		Record:    limitlog.Record{AgentStatus: string(pane.AgentStatus), Kind: pane.AgentKind, Msg: pane.AgentMessage},
-		RateLimit: limitWindow(rateState),
-		Account:   limitWindow(account),
-		Settings:  limitlog.Settings{ReadLines: cfg.ReadLines, DetectionTailLines: cfg.DetectionTailLines},
-		Screen:    observed.screen,
-	}
-	if failure, err := r.turnFailures.Load(pane.SessionID); err != nil {
-		r.log.Logf("pane %s: turn の失敗の記録の読み込みに失敗、無しとして残します: %v", pane.PaneID, err)
-	} else {
-		ev.TurnFailure = limitTurnFailure(failure)
-	}
+	observed monitor.Evidence, failure *turnfailure.Record, rateState, account *ratelimit.State, cfg config.Config, now time.Time) {
+	ev := limitlog.Build(limitlog.Input{
+		At: now, Pane: pane, Outcome: outcome, State: *entry.state, Evidence: observed,
+		TurnFailure: failure, RateLimit: rateState, Account: account, Config: cfg,
+	})
 	if geom, err := r.client.PaneGeometry(ctx, pane.PaneID); err != nil {
 		ev.GeometryError = err.Error()
 	} else {
@@ -391,32 +420,6 @@ func (r *daemonRuntime) recordLimitEvent(ctx context.Context, pane multiplexer.P
 	}
 	if err := r.limits.Append(ev); err != nil {
 		r.log.Logf("pane %s: 上限の出来事の記録に失敗: %v", pane.PaneID, err)
-	}
-}
-
-// limitWindow は利用上限 state を記録の形に写す。無ければ nil (欄ごと出さない)。
-func limitWindow(state *ratelimit.State) *limitlog.Window {
-	if state == nil {
-		return nil
-	}
-	return &limitlog.Window{
-		UsedPercentage: state.FiveHourUsed,
-		ResetsAt:       state.FiveHourResetsAt,
-		ObservedAt:     state.ObservedAt,
-		SessionID:      state.SessionID,
-	}
-}
-
-// limitTurnFailure は turn の失敗の記録を出来事の形に写す。無ければ nil (欄ごと出さない)。
-func limitTurnFailure(rec *turnfailure.Record) *limitlog.TurnFailure {
-	if rec == nil {
-		return nil
-	}
-	return &limitlog.TurnFailure{
-		Error:        rec.Error,
-		ErrorDetails: rec.ErrorDetails,
-		Message:      rec.Message,
-		ObservedAt:   rec.ObservedAt,
 	}
 }
 
@@ -607,7 +610,7 @@ func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 	runtime.attachStateDir(p.StateDir())
 	runtime.refPoll = refpoll.New(runtime.edges, runtime.refs, refpoll.GH, log)
 	if claudeConfig, err := apppath.ClaudeConfigDir(); err != nil {
-		log.Logf("Claude Code の設定ディレクトリを決められないため、台帳にセッション名を書きません: %v", err)
+		log.Logf("Claude Code の設定ディレクトリを決められないため、transcript を読めず上限を判定できません。台帳にセッション名も書きません: %v", err)
 	} else {
 		runtime.attachClaudeConfigDir(claudeConfig)
 	}

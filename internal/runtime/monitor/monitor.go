@@ -5,19 +5,21 @@
 // 想定である。このパッケージ自身は PaneList を呼ばない。pane の発見・列挙は
 // daemon の責務であり、ここでは渡された 1 pane を判断するだけに徹する。
 //
-// 参考実装は https://github.com/mo-arvan/herdr-claude-auto-retry の
-// src/monitor-core.js (processOneTick)。方式はそこから借りているが、以下の点は
-// 意図的に変えている。
+// 上限かどうかは、そのセッションの transcript の末尾の会話の entry (detect.ClassifyTurn) で決める。画面の文字列では
+// 決めない。pane の画面には tool の出力に引用された任意の文章が並び、本物の上限の文と見分けられない (#257)。
+// 判定の順は次のとおり。
 //
-//   - 多重化ツールの agent_status を検知に使わない。参考実装は working な pane を対象外に
-//     するが、上限で止まった pane は出力が止まらない pane と区別できず working と
-//     報告され続けることがある (実測)。判定は画面テキストの分類だけで行う。agent_status を見るのは
-//     待機明けの送信を止めるときだけ (利用者の答えを待つ prompt が開いていれば送らない)。
-//   - statusline 由来の 5 時間ウィンドウ使用率によるゲート (fresh かつ閾値未満なら
-//     limit 発火を見送る) は参考実装に無い、このツール独自の安全策。
-//   - 遷移結果を文字列ではなく Outcome という列挙型で返す。
-//   - Client の呼び出しがエラーを返しても状態機械を壊さず、型付きの Outcome と
-//     error を両方返して呼び出し元 (daemon) が連続失敗をカウントできるようにする。
+//  1. pane の session_id が無い、transcript が読めない → 検知の対象外 (理由を Observe に渡す)
+//  2. record (OSC 7501) が working → 何もしない。turn の途中、retry watchdog の待機中、lower-priority mode の作業中は
+//     どれも working で申告される。transcript が上限なのに working なら、その食い違いを記録する
+//  3. transcript の末尾が上限 (5 時間ウィンドウ) なら、その entry の resetsAt + margin まで待つ。一時エラーなら短い
+//     バックオフ。週の上限と待っても解けない上限は待たず記録だけ残す
+//  4. 待機明けに transcript がまだ同じ上限なら、画面を 1 回だけ読んで送るキーを選ぶ (detect.ClassifyScreen)。
+//     本体がリトライ中・auto-continue の予約中・lower-priority で作業中なら手を引き、解除済みで Enter 待ちなら Enter だけ、
+//     どれでもなければ esc → retryMessage → enter
+//
+// 参考実装は https://github.com/mo-arvan/herdr-claude-auto-retry の src/monitor-core.js (processOneTick)。
+// 状態機械の形 (待機 → 送信 → maxRetries で打ち切り、transient の指数バックオフ) はそこから借りている。
 package monitor
 
 import (
@@ -30,6 +32,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/ratelimit"
 	"github.com/usadamasa/agents-daemon/internal/runtime/config"
 	"github.com/usadamasa/agents-daemon/internal/runtime/detect"
+	"github.com/usadamasa/agents-daemon/internal/transcript"
 )
 
 // Status は pane 1 枚の状態機械が取りうる状態。
@@ -48,6 +51,9 @@ type PaneState struct {
 	Status    Status
 	WaitUntil time.Time
 	Attempts  int
+	// TurnUUID は待機に入る根拠にした transcript の entry の uuid。待機明けに別の uuid の上限の entry があれば、
+	// 待っている間に新しい依頼 (peer の SendMessage など) がまた上限に当たったので、その解除時刻で待ち直す。
+	TurnUUID string
 }
 
 // Outcome は Tick が 1 tick ぶんに行った (あるいは行わなかった) ことを表す。
@@ -57,10 +63,17 @@ type Outcome int
 const (
 	// OutcomeStillWaiting は待機中でまだ起床時刻に達していないため何もしなかったことを表す。
 	OutcomeStillWaiting Outcome = iota
-	// OutcomeScreenUnreadable は待機中に画面が空、または読み取りに失敗したため
-	// 何もせず待機を継続したことを表す。ユーザーが resume したとは判断しない。
-	OutcomeScreenUnreadable
-	// OutcomeRecoveredByUser は待機中にユーザー自身が limit/transient から復帰したと
+	// OutcomeMonitoring は監視中で異常が無かったことを表す。
+	OutcomeMonitoring
+	// OutcomeNoSession は pane の session_id が引けず、検知の対象外だったことを表す。
+	OutcomeNoSession
+	// OutcomeTranscriptUnavailable は session は分かるが transcript の末尾を読めず、判定できなかったことを表す。
+	// 待機中なら待機を続ける (読めないことは再開の証拠にならない)。
+	OutcomeTranscriptUnavailable
+	// OutcomeWorkingSuppressed は transcript の末尾が上限なのに record が working で、手を出さなかったことを表す。
+	// 書き込みの遅れか、「上限で止まった pane は working でなくなる」前提が外れたかの実測になる。
+	OutcomeWorkingSuppressed
+	// OutcomeRecoveredByUser は待機中にセッションが上限から戻った (次の turn が始まった、record が working になった) と
 	// 判断し、送信せず監視状態へ戻したことを表す。
 	OutcomeRecoveredByUser
 	// OutcomeNotClaudeAgent は待機中に pane が Claude agent でなくなったため、
@@ -72,27 +85,26 @@ const (
 	// OutcomeRetried は再開メッセージを送信し、待機を継続したことを表す
 	// (通常の上限待ちと transient の両方で使う)。
 	OutcomeRetried
-	// OutcomeMonitoring は監視中で異常が無かったことを表す。
-	OutcomeMonitoring
-	// OutcomeGateSuppressed は画面は limit に見えたが、fresh な statusline state が
-	// 閾値未満だったため発火を見送ったことを表す。
-	OutcomeGateSuppressed
-	// OutcomeWaiting は監視中から待機状態へ入ったことを表す。
+	// OutcomeWaiting は監視中から待機状態へ入った、または待機中に新しい上限の entry で待ち直したことを表す。
 	OutcomeWaiting
-	// OutcomeReadError は PaneRead がエラーを返したことを表す (監視中)。
+	// OutcomeReadError は待機明けの画面の読み取りに失敗 (エラーか空) し、送らず待機を続けたことを表す。
 	OutcomeReadError
 	// OutcomeSendError は待機中の回復送信 (esc/送信/enter) の途中でエラーが
 	// 発生したことを表す。状態遷移自体は行われている。
 	OutcomeSendError
-	// OutcomeNativeAutoContinue は Claude Code 自身の auto-continue が解除を
-	// 待っているため、このツールが手を引いたことを表す。
+	// OutcomeNativeAutoContinue は Claude Code 自身が解除を待っている (auto-continue の予約か request の中のリトライ)
+	// ため、このツールが手を引いたことを表す。
 	OutcomeNativeAutoContinue
+	// OutcomeLowerPriority は lower-priority mode で作業中の通知が画面にあり、手を引いたことを表す (#251)。
+	OutcomeLowerPriority
 	// OutcomeResumeEnter は上限が解除済みで Enter 待ちの pane へ Enter を
 	// 送ったことを表す。
 	OutcomeResumeEnter
-	// OutcomeHardCap は待っても解除されない上限 (spend limit / usage credit) を
+	// OutcomeHardCap は待っても解除されない上限 (spend limit / usage credit / Fable のモデル単位の上限) を
 	// 検知し、待機に入らなかったことを表す。
 	OutcomeHardCap
+	// OutcomeWeeklyCap は週のウィンドウの上限を検知し、待機に入らなかったことを表す。解除は数日先になりうる (#338)。
+	OutcomeWeeklyCap
 	// OutcomeBlockedByPrompt は待機明けに Claude Code が利用者の答えを待つ prompt (permission / question /
 	// auth) を開いていたため、送らずに待機を延長したことを表す。
 	OutcomeBlockedByPrompt
@@ -100,21 +112,24 @@ const (
 
 // outcomeNames は Outcome のログ向けの識別子。
 var outcomeNames = map[Outcome]string{
-	OutcomeStillWaiting:       "still-waiting",
-	OutcomeScreenUnreadable:   "screen-unreadable",
-	OutcomeRecoveredByUser:    "recovered-by-user",
-	OutcomeNotClaudeAgent:     "not-claude-agent",
-	OutcomeMaxRetries:         "max-retries",
-	OutcomeRetried:            "retried",
-	OutcomeMonitoring:         "monitoring",
-	OutcomeGateSuppressed:     "gate-suppressed",
-	OutcomeWaiting:            "waiting",
-	OutcomeReadError:          "read-error",
-	OutcomeSendError:          "send-error",
-	OutcomeNativeAutoContinue: "native-auto-continue",
-	OutcomeResumeEnter:        "resume-enter",
-	OutcomeHardCap:            "hard-cap",
-	OutcomeBlockedByPrompt:    "blocked-by-prompt",
+	OutcomeStillWaiting:          "still-waiting",
+	OutcomeMonitoring:            "monitoring",
+	OutcomeNoSession:             "no-session",
+	OutcomeTranscriptUnavailable: "transcript-unavailable",
+	OutcomeWorkingSuppressed:     "suppressed-working",
+	OutcomeRecoveredByUser:       "recovered-by-user",
+	OutcomeNotClaudeAgent:        "not-claude-agent",
+	OutcomeMaxRetries:            "max-retries",
+	OutcomeRetried:               "retried",
+	OutcomeWaiting:               "waiting",
+	OutcomeReadError:             "read-error",
+	OutcomeSendError:             "send-error",
+	OutcomeNativeAutoContinue:    "native-auto-continue",
+	OutcomeLowerPriority:         "lower-priority",
+	OutcomeResumeEnter:           "resume-enter",
+	OutcomeHardCap:               "hard-cap",
+	OutcomeWeeklyCap:             "weekly-cap",
+	OutcomeBlockedByPrompt:       "blocked-by-prompt",
 }
 
 // String は Outcome をログ向けの識別子文字列にする。
@@ -128,8 +143,8 @@ func (o Outcome) String() string {
 // 以下は参考実装 (monitor-core.js) が config に無い値として直書きしている定数を、
 // そのまま同じ倍率で移植したもの。個別の設定項目にする理由が無いため定数のままにする。
 const (
-	// notClaudeBackoffMultiplier は「pane が Claude agent でなくなった」ときの
-	// 再チェック間隔を PollIntervalSeconds の何倍にするか。
+	// notClaudeBackoffMultiplier は「pane が Claude agent でなくなった」「prompt が開いている」「transcript を読めない」
+	// ときの再チェック間隔を PollIntervalSeconds の何倍にするか。
 	notClaudeBackoffMultiplier = 6
 	// maxRetriesCooldownMultiplier は再試行上限到達後のクールダウンを
 	// PollIntervalSeconds の何倍にするか。
@@ -151,32 +166,42 @@ type Client interface {
 	SendKeys(ctx context.Context, paneID string, keys ...string) error
 }
 
+// Turn はセッションの transcript の末尾の会話の entry。Entry が nil なら Reason に読めなかった理由 (transcript.Tail と同じ形)。
+type Turn = transcript.Tail
+
+// Evidence は Tick が判定に使った根拠。daemon が上限の出来事の記録 (daemon/limitlog) に写す。判定には関わらない。
+type Evidence struct {
+	// Turn は読んだ transcript の末尾。
+	Turn Turn
+	// Kind は Turn の分類。
+	Kind detect.Kind
+	// ScreenRead は画面を読んだか (待機明けだけ)。読んだときの画面と通知欄の判定が Screen と Hint。
+	ScreenRead bool
+	Screen     string
+	Hint       detect.Hint
+}
+
 // Deps は状態遷移に必要な依存をまとめたもの。テストでは Client に
 // multiplexerfake.Client を、Sleep に記録用のダミー関数を注入する。
 type Deps struct {
-	Client     Client
-	Classifier *detect.Classifier
-	Config     config.Config
+	Client Client
+	Config config.Config
 	// Sleep は recover 中の一時停止に使う。本番では time.Sleep を渡す想定。
 	// テストは実際に待たないよう no-op またはログ記録用の関数を渡す。
 	Sleep func(time.Duration)
-	// 以下は tick ごとに daemon が読み直して全 pane で共有する state。
-	// Account はアカウント全体で最も新しい 5 時間ウィンドウの state
-	// (ratelimit.Store.LatestWindow)。resets_at はアカウント共通なので、自分の state を
-	// 持たない pane の起床時刻をここから引く。Config と同じく tick ごとに daemon が
-	// 読み直して全 pane で共有する。無ければ nil。
+	// Turns は session の transcript の末尾を読む。daemon は transcript.Store.Tail を渡す。
+	Turns func(sessionID string) Turn
+	// Account はアカウント全体で最も新しい 5 時間ウィンドウの statusline の state (ratelimit.Store.LatestWindow)。
+	// transcript の entry に解除時刻が無い (quotaLimits の無い古い形) ときの起床時刻の予備。無ければ nil。
 	Account *ratelimit.State
-	// Observe は画面を読んで分類するたびに、分類した画面そのものと kind を受け取る (nil なら呼ばない)。
-	// daemon が上限の出来事の記録 (daemon/limitlog) に「判定した画面」を添えるための口で、判定には関わらない。
-	// 後から読み直すとき、数秒後に読み直した画面は同じ証拠にならないのでここで渡す。
-	Observe func(pane multiplexer.Pane, kind detect.Kind, screen string)
+	// Observe は判定の根拠を受け取る (nil なら呼ばない)。起床前の tick では呼ばない。
+	Observe func(pane multiplexer.Pane, ev Evidence)
 }
 
 // Tick は pane 1 枚ぶんの 1 tick を処理し、ps を必要に応じて書き換える。
 //
-// rateState は statusline.sh が書く、この pane のセッションぶんの利用上限 state。
-// セッションごとに別ファイルなので daemon が pane ごとに読み込んで渡す。
-// 対応する state が無い場合は nil を渡してよい。
+// rateState は statusline が書く、この pane のセッションぶんの利用上限 state。transcript の entry に解除時刻が無いときの
+// 起床時刻の予備で、無ければ nil を渡してよい。
 //
 // Client の呼び出しがエラーを返しても panic や状態破壊はしない。エラーは
 // Outcome と共に返すので、呼び出し元は連続失敗のカウント等に使うこと。
@@ -185,76 +210,56 @@ func Tick(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *PaneState, 
 		return OutcomeStillWaiting, nil
 	}
 
-	screen, err := deps.Client.PaneRead(ctx, pane.PaneID, multiplexer.PaneReadOptions{Lines: deps.Config.ReadLines})
-	if err != nil {
-		if ps.Status == StatusWaiting {
-			// 読み取り失敗をユーザーの resume と取り違えない。待機はそのまま継続する。
-			return OutcomeScreenUnreadable, fmt.Errorf("pane %s の読み取りに失敗: %w", pane.PaneID, err)
+	ev := Evidence{Turn: deps.Turns(pane.SessionID)}
+	ev.Kind = detect.ClassifyTurn(ev.Turn.Entry)
+	observe := func() {
+		if deps.Observe != nil {
+			deps.Observe(pane, ev)
 		}
-		return OutcomeReadError, fmt.Errorf("pane %s の読み取りに失敗: %w", pane.PaneID, err)
 	}
 
-	if ps.Status == StatusWaiting && strings.TrimSpace(screen) == "" {
-		// 空画面はユーザーが resume した証拠にならない。待機を継続する。
-		return OutcomeScreenUnreadable, nil
+	if ev.Turn.Entry == nil {
+		observe()
+		return unavailable(deps, pane, ps, now), nil
 	}
 
-	kind := deps.Classifier.Classify(screen, deps.Config.DetectionTailLines)
-	if kind == detect.KindAutoContinueArmed && !deps.Config.DeferToNativeAutoContinue {
-		// ネイティブへ譲る設定を切ったときは、同じ画面を通常の上限として扱う。
-		kind = detect.KindLimit
+	if pane.AgentStatus == multiplexer.AgentStatusWorking {
+		observe()
+		return working(ps, ev.Kind), nil
 	}
-	if deps.Observe != nil {
-		deps.Observe(pane, kind, screen)
-	}
-
-	if outcome, handled, err := tickNative(ps, kind); handled {
-		return outcome, err
-	}
-
-	limited := kind == detect.KindLimit ||
-		(kind == detect.KindTransient && deps.Config.HandleTransient) ||
-		kind == detect.KindResumeReady
 
 	if ps.Status == StatusWaiting {
-		// 待機明けにはゲートを掛けない。解除時刻を過ぎると 5 時間ウィンドウは
-		// 切り替わって使用率は下がるが、Claude Code は上限の画面のままキー入力を
-		// 待つ。ここで fresh な低使用率を理由に見送ると「ユーザー自身が復帰した」と
-		// 取り違えて監視へ戻り、state が古くなってから改めて検知して次のウィンドウの
-		// resets_at (5 時間先) まで寝てしまう。ゲートは待機に入るときの誤検知よけであって、
-		// 待機明けの送信を止めるものではない。
-		return tickWaiting(ctx, deps, pane, ps, kind, limited, now)
+		outcome, err := tickWaiting(ctx, deps, pane, ps, &ev, rateState, now)
+		observe()
+		return outcome, err
 	}
-
-	gateSuppressed := kind == detect.KindLimit && LimitGate(deps.Config, rateState, now).suppresses()
-	return tickMonitoring(deps, ps, kind, limited && !gateSuppressed, gateSuppressed, rateState, screen, now)
+	observe()
+	return tickMonitoring(deps, ps, ev, rateState, now), nil
 }
 
-// tickNative は「このツールが待機に入ってはいけない」画面を処理する。
-// handled=true を返したら、通常の待機/再開の経路には進まない。
-//
-// Enter 待ち (KindResumeReady) はここでは扱わない。あれは待機して送る状態なので、
-// 通常の状態機械 (待機 → 送信 → maxRetries で打ち切り) にそのまま乗せる。
-func tickNative(ps *PaneState, kind detect.Kind) (Outcome, bool, error) {
-	switch kind {
-	case detect.KindAutoContinueArmed:
-		// ネイティブがカウントダウン中。この状態では Escape が取り消しキーなので
-		// (画面に "esc or type to cancel" と出ている)、待機明けに送ると継続そのものを
-		// 潰す。ネイティブが降りた画面は別の文言になり、そのとき改めて拾える。
-		// (この分岐へ来るのは deferToNativeAutoContinue が有効なときだけ。
-		// 無効なら呼び出し元が KindLimit へ落としてある。)
-		standDown(ps)
-		return OutcomeNativeAutoContinue, true, nil
-
-	case detect.KindSpendLimit:
-		// 待っても解除されない上限。待機に入ると解除時刻に送信 → 再び弾かれる、を
-		// maxRetries まで繰り返すだけになる。
-		standDown(ps)
-		return OutcomeHardCap, true, nil
-
-	default:
-		return 0, false, nil
+// unavailable は session_id が無い、または transcript を読めない pane の tick。監視中なら何もせず、待機中なら
+// 読めないことを再開の証拠にせず待機を延長する。
+func unavailable(deps Deps, pane multiplexer.Pane, ps *PaneState, now time.Time) Outcome {
+	if ps.Status == StatusWaiting {
+		ps.WaitUntil = now.Add(time.Duration(deps.Config.PollIntervalSeconds*notClaudeBackoffMultiplier) * time.Second)
 	}
+	if pane.SessionID == "" {
+		return OutcomeNoSession
+	}
+	return OutcomeTranscriptUnavailable
+}
+
+// working は record が working の pane の tick。作業中の pane には絶対に割り込まない。待機中だったなら、
+// 誰か (利用者、peer、本体の auto-continue) が再開したので監視へ戻る。
+func working(ps *PaneState, kind detect.Kind) Outcome {
+	if ps.Status == StatusWaiting {
+		standDown(ps)
+		return OutcomeRecoveredByUser
+	}
+	if kind != detect.KindNone {
+		return OutcomeWorkingSuppressed
+	}
+	return OutcomeMonitoring
 }
 
 // standDown は待機中だった pane を監視状態へ戻す。
@@ -262,113 +267,110 @@ func standDown(ps *PaneState) {
 	if ps.Status != StatusWaiting {
 		return
 	}
-	ps.Status = StatusMonitoring
-	ps.Attempts = 0
+	*ps = PaneState{}
 }
 
-// Gate は limit 検知に対するゲートの判定結果と、その根拠を表す。inspect が
-// 判断過程を説明するために使う。WakeSource と同じ理由で、判定は LimitGate の
-// 1 箇所だけに置き、inspect もそれを呼ぶ (説明と実際の挙動がずれないように)。
-type Gate int
-
-const (
-	// GateNoState は state ファイルが無いことを表す。
-	GateNoState Gate = iota
-	// GateNoFiveHour は five_hour が null で書かれていることを表す。
-	GateNoFiveHour
-	// GateStale は観測が古いことを表す。
-	GateStale
-	// GateAboveThreshold は fresh な観測が使用率閾値以上であることを表す。
-	GateAboveThreshold
-	// GateBelowThreshold は fresh な観測が使用率閾値未満であることを表す。
-	// ゲートが働くのはこの場合だけ。
-	GateBelowThreshold
-)
-
-// suppresses は limit 検知を抑制するかを返す。判定は Tick の中だけで使い、inspect は
-// String の説明文を出す。
-func (g Gate) suppresses() bool {
-	return g == GateBelowThreshold
-}
-
-// String は Gate を診断表示向けの日本語にする。
-func (g Gate) String() string {
-	switch g {
-	case GateNoState:
-		return "state ファイルが無いため、ゲートは働きません (画面判定をそのまま通します)"
-	case GateNoFiveHour:
-		return "state の five_hour が null (ウィンドウ切り替わり瞬間の描画) のため、ゲートは働きません (画面判定をそのまま通します)"
-	case GateStale:
-		return "state は古いため、ゲートは働きません (画面判定をそのまま通します)"
-	case GateAboveThreshold:
-		return "閾値以上: limit 検知時にゲートで抑制しません (発火を通します)"
-	case GateBelowThreshold:
-		return "閾値未満: limit と判定されても fresh な間はゲートで抑制されます (送信しません)"
+// tickMonitoring は監視状態での 1 tick を処理する。上限でも一時エラーでもない turn には何もしない。
+func tickMonitoring(deps Deps, ps *PaneState, ev Evidence, rateState *ratelimit.State, now time.Time) Outcome {
+	switch ev.Kind {
+	case detect.KindSpendLimit:
+		return OutcomeHardCap
+	case detect.KindWeeklyLimit:
+		// 解除が数日先になりうる。待たずに記録だけ残す (#338)。
+		return OutcomeWeeklyCap
+	case detect.KindTransient:
+		if !deps.Config.HandleTransient {
+			return OutcomeMonitoring
+		}
+		ps.Status = StatusWaiting
+		ps.TurnUUID = ev.Turn.Entry.UUID
+		ps.WaitUntil = now.Add(time.Duration(deps.Config.TransientWaitSeconds) * time.Second)
+		return OutcomeWaiting
+	case detect.KindLimit:
+		ps.Status = StatusWaiting
+		ps.TurnUUID = ev.Turn.Entry.UUID
+		ps.WaitUntil, _ = ComputeLimitWake(deps.Config, ev.Turn.Entry, rateState, deps.Account, now)
+		return OutcomeWaiting
 	default:
-		return "不明"
+		return OutcomeMonitoring
 	}
 }
 
-// gateIDs は Gate の JSON 向けの識別子。
-var gateIDs = map[Gate]string{
-	GateNoState:        "no-state",
-	GateNoFiveHour:     "no-five-hour",
-	GateStale:          "stale",
-	GateAboveThreshold: "above-threshold",
-	GateBelowThreshold: "below-threshold",
-}
-
-// ID は Gate を JSON 向けの識別子にする (`inspect --json`)。String は日本語の説明。
-func (g Gate) ID() string {
-	if id, ok := gateIDs[g]; ok {
-		return id
-	}
-	return "unknown"
-}
-
-// LimitGate は statusline state による limit 検知のゲートを判定する。
-// 抑制するのは fresh な観測が使用率閾値未満のときだけで、state が無い、
-// five_hour が null で書かれている、または古い場合は判断材料が無いので
-// 画面テキストだけによる検知をそのまま通す。
-func LimitGate(cfg config.Config, rateState *ratelimit.State, now time.Time) Gate {
-	if rateState == nil {
-		return GateNoState
-	}
-	if !rateState.HasFiveHour() {
-		return GateNoFiveHour
-	}
-	maxAge := time.Duration(cfg.StateMaxAgeSeconds) * time.Second
-	if !rateState.IsFresh(now, maxAge) {
-		return GateStale
-	}
-	if rateState.FiveHourExhausted(cfg.UsedPercentageThreshold) {
-		return GateAboveThreshold
-	}
-	return GateBelowThreshold
-}
-
-// tickWaiting は待機状態での 1 tick を処理する。
-func tickWaiting(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *PaneState, kind detect.Kind, limited bool, now time.Time) (Outcome, error) {
-	if !limited {
-		ps.Status = StatusMonitoring
-		ps.Attempts = 0
+// tickWaiting は待機明けの 1 tick を処理する。transcript がまだ上限なら画面を読んでキーを選ぶ。
+func tickWaiting(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *PaneState, ev *Evidence, rateState *ratelimit.State, now time.Time) (Outcome, error) {
+	switch ev.Kind {
+	case detect.KindNone:
+		standDown(ps)
 		return OutcomeRecoveredByUser, nil
+	case detect.KindSpendLimit:
+		standDown(ps)
+		return OutcomeHardCap, nil
+	case detect.KindWeeklyLimit:
+		standDown(ps)
+		return OutcomeWeeklyCap, nil
+	case detect.KindTransient:
+		if !deps.Config.HandleTransient {
+			// 待っている間に上限から一時エラーへ変わった。設定で扱わないものなので本体と利用者に任せる。
+			standDown(ps)
+			return OutcomeRecoveredByUser, nil
+		}
 	}
 
+	backoff := time.Duration(deps.Config.PollIntervalSeconds*notClaudeBackoffMultiplier) * time.Second
 	if !multiplexer.IsClaudeAgent(pane) {
-		ps.WaitUntil = now.Add(time.Duration(deps.Config.PollIntervalSeconds*notClaudeBackoffMultiplier) * time.Second)
+		ps.WaitUntil = now.Add(backoff)
 		return OutcomeNotClaudeAgent, nil
 	}
-
-	// 画面に上限の文言が残ったまま permission prompt などが開いていることがある。esc は prompt を断り、
-	// Enter は承認するので、利用者が答えるまで送らない。agent_status を見るのはこの送信の抑止だけで、
-	// 検知には使わない (上限で止まった pane は working と申告され続けることがある)。
+	// 上限のまま permission prompt などが開いていることがある。esc は prompt を断り、Enter は承認するので、
+	// 利用者が答えるまで送らない。
 	if multiplexer.WaitingOnPrompt(pane) {
-		ps.WaitUntil = now.Add(time.Duration(deps.Config.PollIntervalSeconds*notClaudeBackoffMultiplier) * time.Second)
+		ps.WaitUntil = now.Add(backoff)
 		return OutcomeBlockedByPrompt, nil
 	}
 
-	if kind == detect.KindTransient {
+	entry := ev.Turn.Entry
+	if ev.Kind == detect.KindLimit && entry.UUID != ps.TurnUUID {
+		// 待っている間に新しい依頼がまた上限に当たった。解除時刻が先に移っていれば送らず待ち直す。試行回数は持ち越す。
+		if entry.Quota != nil && entry.Quota.ResetsAt.After(now) {
+			ps.TurnUUID = entry.UUID
+			ps.WaitUntil, _ = ComputeLimitWake(deps.Config, entry, rateState, deps.Account, now)
+			return OutcomeWaiting, nil
+		}
+	}
+	return sendAtWake(ctx, deps, pane, ps, ev, now)
+}
+
+// sendAtWake は待機明けの送信。画面を 1 回読んで本体の通知欄からキーを選び、送る。
+func sendAtWake(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *PaneState, ev *Evidence, now time.Time) (Outcome, error) {
+	screen, err := deps.Client.PaneRead(ctx, pane.PaneID, multiplexer.PaneReadOptions{Lines: deps.Config.ReadLines})
+	if err != nil {
+		return OutcomeReadError, fmt.Errorf("pane %s の読み取りに失敗: %w", pane.PaneID, err)
+	}
+	if strings.TrimSpace(screen) == "" {
+		// 空の画面は capture の失敗で、キーを選べない。次の tick で読み直す。
+		return OutcomeReadError, nil
+	}
+	ev.ScreenRead, ev.Screen = true, screen
+	ev.Hint = detect.ClassifyScreen(screen, deps.Config.DetectionTailLines)
+	ps.TurnUUID = ev.Turn.Entry.UUID
+
+	switch ev.Hint {
+	case detect.HintNativeRetrying:
+		// 本体が request の中で待っている。Escape は待機ごと request を取り消す。
+		standDown(ps)
+		return OutcomeNativeAutoContinue, nil
+	case detect.HintNativeArmed:
+		if deps.Config.DeferToNativeAutoContinue {
+			// ネイティブがカウントダウン中。Escape が取り消しキーなので、送ると継続そのものを潰す。
+			standDown(ps)
+			return OutcomeNativeAutoContinue, nil
+		}
+	case detect.HintLowerPriority:
+		standDown(ps)
+		return OutcomeLowerPriority, nil
+	}
+
+	if ev.Kind == detect.KindTransient && ev.Hint != detect.HintResumeReady {
 		ps.Attempts++
 		ps.WaitUntil = now.Add(transientBackoff(ps.Attempts, deps.Config))
 		if err := recoverPane(ctx, deps, pane); err != nil {
@@ -385,8 +387,8 @@ func tickWaiting(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *Pane
 	ps.Attempts++
 	ps.WaitUntil = now.Add(retryWaitAfterSend)
 
-	if kind == detect.KindResumeReady {
-		// 上限は解除済みで、Claude Code は Enter だけを待っている。テキストを打つと
+	if ev.Hint == detect.HintResumeReady {
+		// Claude Code は Enter だけを待っている (上限の種類によらず)。テキストを打つと
 		// 中断された turn の続きではなく新しい依頼として走ってしまう。
 		if err := deps.Client.SendKeys(ctx, pane.PaneID, "enter"); err != nil {
 			return OutcomeSendError, fmt.Errorf("pane %s への Enter 送信に失敗: %w", pane.PaneID, err)
@@ -400,97 +402,38 @@ func tickWaiting(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *Pane
 	return OutcomeRetried, nil
 }
 
-// tickMonitoring は監視状態での 1 tick を処理する。上限でも一時エラーでもない画面には何もしない。
-func tickMonitoring(deps Deps, ps *PaneState, kind detect.Kind, limited bool, gateSuppressed bool, rateState *ratelimit.State, screen string, now time.Time) (Outcome, error) {
-	if gateSuppressed {
-		return OutcomeGateSuppressed, nil
-	}
-	if !limited {
-		return OutcomeMonitoring, nil
-	}
-
-	ps.Status = StatusWaiting
-	switch kind {
-	case detect.KindTransient:
-		ps.WaitUntil = now.Add(time.Duration(deps.Config.TransientWaitSeconds) * time.Second)
-	case detect.KindResumeReady:
-		// 上限は既に解除済みで、Claude Code はキー入力だけを待っている。待つ理由が
-		// 無いので次の tick で送る。
-		ps.WaitUntil = now
-	default:
-		ps.WaitUntil, _ = ComputeLimitWake(deps.Config, rateState, deps.Account, screen, now)
-	}
-	return OutcomeWaiting, nil
-}
-
 // ComputeLimitWake は上限検知時の起床時刻を優先順位に従って計算する。
-//  1. その pane のセッションの state (own) の resets_at が未来 → その時刻 + margin
-//  2. 画面の絶対時刻 (`resets 8:10am (Asia/Tokyo)`) が読める → 未来ならそれ + margin、
-//     過去なら now + margin
+//  1. transcript の entry の quotaLimits.resetsAt が未来 → その時刻 + margin。過去なら now + margin
+//     (解除時刻を過ぎても Claude Code は上限の画面のままキー入力を待つ)
+//  2. その pane のセッションの statusline の state (own) の resets_at が未来 → その時刻 + margin
 //  3. アカウント全体で最も新しいウィンドウ (account) の resets_at が未来 → その時刻 + margin
 //  4. own / account の resets_at が過去 → now + margin (5 時間ウィンドウは既に切り替わっている)
-//  5. 画面の相対表現 (「12 分後」等) が読み取れる → それ + margin
-//  6. どれも無い → FallbackWaitHours + margin
+//  5. どれも無い → FallbackWaitHours + margin
 //
-// 1 と 4 に鮮度 (IsFresh) を要求しない。resets_at は絶対時刻で、使用率のように時間で
-// 腐る値ではない。むしろ上限で止まったセッションは statusline を再描画しないため、
-// state は「一番必要なタイミングで必ず古い」。鮮度を要求すると、正確な解除時刻を
-// 持っているのに捨てて後段へ後退してしまう。
-//
-// 2 と 3 が要るのは、own state を持たない pane があるため。上限中に開いた新規セッションは
-// statusline がまだ何も書いておらず、429 で弾かれた turn も state を書かない。own だけを
-// 見ると 6 (5 時間待ち) に落ちる (2026-08-28 07:35 に実測)。resets_at はアカウント全体で
-// 共通なので他セッションの state から引ける (3)。画面の時刻はその pane が止まった
-// ウィンドウを直接示す (2)。
-//
-// 2 を 3 より上に置くのは、解除後に上限の画面のまま止まっている pane (ネイティブの
-// auto-continue が取り消された等) のため。他セッションが次のウィンドウで動き出すと
-// account は「次のウィンドウの終わり」を指すが、画面の時刻は過去のままなので今すぐ
-// 突ける。逆に own が過去で画面が未来のときは、own が前ウィンドウの残骸で、pane は
-// 現在のウィンドウで弾かれている (2026-08-28 07:34 の誤射がこれ)。
-//
-// 4 が要るのは、解除時刻を過ぎても画面が上限表示のまま止まっていることがあるため
-// (Claude Code はキー入力を待つ)。ここで 6 へ落ちると、待つ理由が無いのに
-// FallbackWaitHours ぶん寝てしまう。
-//
-// 見ているのは 5 時間ウィンドウだけ。週次上限で止まっている pane はこの計算では
-// 正しく扱えず、送信 → 再度上限 → 再試行を maxRetries まで繰り返してクールダウンに入る。
-func ComputeLimitWake(cfg config.Config, rateState, account *ratelimit.State, screen string, now time.Time) (time.Time, WakeSource) {
-	return computeLimitWakeIn(cfg, rateState, account, screen, now, time.Local)
-}
-
-// computeLimitWakeIn は ComputeLimitWake の本体。画面の絶対時刻に tz 表記が無いときの
-// 解釈に使う local を差し替えられるようにしてある (テスト用)。
-func computeLimitWakeIn(cfg config.Config, rateState, account *ratelimit.State, screen string, now time.Time, local *time.Location) (time.Time, WakeSource) {
+// 1 が本命。2.1.234 以降の rate_limit の entry は必ず resetsAt を持つ (実測 159 件)。2 以降は quotaLimits の無い
+// 古い形の entry のための予備で、statusline の state は 429 で弾かれた turn では書かれないため、
+// 上限中に開いた新規セッションでは own が無く account に頼る。2 と 4 に鮮度を要求しないのは、resets_at が
+// 絶対時刻で使用率のように腐らないため。
+func ComputeLimitWake(cfg config.Config, entry *transcript.Entry, rateState, account *ratelimit.State, now time.Time) (time.Time, WakeSource) {
 	margin := time.Duration(cfg.MarginSeconds) * time.Second
 
+	if entry != nil && entry.Quota != nil && !entry.Quota.ResetsAt.IsZero() {
+		if entry.Quota.ResetsAt.After(now) {
+			return entry.Quota.ResetsAt.Add(margin), WakeFromTranscript
+		}
+		return now.Add(margin), WakeTranscriptAlreadyReset
+	}
+
 	ownHas := rateState != nil && rateState.HasFiveHour()
-	if ownHas {
-		if resetsAt := rateState.FiveHourResetsAt; resetsAt.After(now) {
-			return resetsAt.Add(margin), WakeFromResetsAt
-		}
+	if ownHas && rateState.FiveHourResetsAt.After(now) {
+		return rateState.FiveHourResetsAt.Add(margin), WakeFromStatusline
 	}
-
-	if at, ok := detect.ParseAbsoluteReset(screen, cfg.DetectionTailLines, now, local); ok {
-		if at.After(now) {
-			return at.Add(margin), WakeFromScreenAbsolute
-		}
-		return now.Add(margin), WakeScreenAlreadyReset
-	}
-
 	accountHas := account != nil && account.HasFiveHour()
-	if accountHas {
-		if resetsAt := account.FiveHourResetsAt; resetsAt.After(now) {
-			return resetsAt.Add(margin), WakeFromAccount
-		}
+	if accountHas && account.FiveHourResetsAt.After(now) {
+		return account.FiveHourResetsAt.Add(margin), WakeFromAccount
 	}
-
 	if ownHas || accountHas {
 		return now.Add(margin), WakeAlreadyReset
-	}
-
-	if wait, ok := detect.ParseRelativeWait(screen, cfg.DetectionTailLines); ok {
-		return now.Add(wait).Add(margin), WakeFromRelative
 	}
 
 	fallback := time.Duration(cfg.FallbackWaitHours * float64(time.Hour))
@@ -503,20 +446,16 @@ func computeLimitWakeIn(cfg config.Config, rateState, account *ratelimit.State, 
 type WakeSource int
 
 const (
-	// WakeFromResetsAt は自セッションの state の resets_at (未来) を採用したことを表す。
-	WakeFromResetsAt WakeSource = iota
-	// WakeAlreadyReset は自セッションまたはアカウント全体の state の resets_at が既に
-	// 過ぎており、待たずに起こすことを表す。
-	WakeAlreadyReset
-	// WakeFromScreenAbsolute は画面の絶対時刻 (未来) を採用したことを表す。
-	WakeFromScreenAbsolute
-	// WakeScreenAlreadyReset は画面の絶対時刻が既に過ぎており、待たずに起こすことを表す。
-	WakeScreenAlreadyReset
-	// WakeFromAccount はアカウント全体で最も新しいウィンドウの resets_at (未来) を
-	// 採用したことを表す (自セッションの state が無い / 古い)。
+	// WakeFromTranscript は transcript の entry の resetsAt (未来) を採用したことを表す。
+	WakeFromTranscript WakeSource = iota
+	// WakeTranscriptAlreadyReset は transcript の entry の resetsAt が既に過ぎており、待たずに起こすことを表す。
+	WakeTranscriptAlreadyReset
+	// WakeFromStatusline は自セッションの statusline の state の resets_at (未来) を採用したことを表す。
+	WakeFromStatusline
+	// WakeFromAccount はアカウント全体で最も新しいウィンドウの resets_at (未来) を採用したことを表す。
 	WakeFromAccount
-	// WakeFromRelative は画面の相対表現を採用したことを表す。
-	WakeFromRelative
+	// WakeAlreadyReset は statusline の state の resets_at が既に過ぎており、待たずに起こすことを表す。
+	WakeAlreadyReset
 	// WakeFromFallback は情報源が無く FallbackWaitHours に頼ったことを表す。
 	WakeFromFallback
 )
@@ -524,20 +463,18 @@ const (
 // String は WakeSource を診断表示向けの日本語にする。
 func (s WakeSource) String() string {
 	switch s {
-	case WakeFromResetsAt:
+	case WakeFromTranscript:
+		return "transcript の entry の resetsAt (未来)"
+	case WakeTranscriptAlreadyReset:
+		return "transcript の entry の resetsAt (既に経過。解除済みとみなして即起床)"
+	case WakeFromStatusline:
 		return "自セッションの statusline の resets_at (未来)"
-	case WakeAlreadyReset:
-		return "statusline の resets_at (既に経過。解除済みとみなして即起床)"
-	case WakeFromScreenAbsolute:
-		return "画面の絶対時刻 (未来)"
-	case WakeScreenAlreadyReset:
-		return "画面の絶対時刻 (既に経過。解除済みとみなして即起床)"
 	case WakeFromAccount:
 		return "他セッションの statusline の resets_at (アカウント全体で最新のウィンドウ、未来)"
-	case WakeFromRelative:
-		return "画面の相対時刻表現"
+	case WakeAlreadyReset:
+		return "statusline の resets_at (既に経過。解除済みとみなして即起床)"
 	case WakeFromFallback:
-		return "フォールバック (state も画面の相対表現も無い)"
+		return "フォールバック (transcript にも statusline にも解除時刻が無い)"
 	default:
 		return "不明"
 	}
@@ -545,13 +482,12 @@ func (s WakeSource) String() string {
 
 // wakeSourceIDs は WakeSource の JSON 向けの識別子。
 var wakeSourceIDs = map[WakeSource]string{
-	WakeFromResetsAt:       "resets-at",
-	WakeAlreadyReset:       "already-reset",
-	WakeFromScreenAbsolute: "screen-absolute",
-	WakeScreenAlreadyReset: "screen-already-reset",
-	WakeFromAccount:        "account",
-	WakeFromRelative:       "relative",
-	WakeFromFallback:       "fallback",
+	WakeFromTranscript:         "transcript",
+	WakeTranscriptAlreadyReset: "transcript-already-reset",
+	WakeFromStatusline:         "statusline",
+	WakeFromAccount:            "account",
+	WakeAlreadyReset:           "already-reset",
+	WakeFromFallback:           "fallback",
 }
 
 // ID は WakeSource を JSON 向けの識別子にする (`inspect --json`)。String は日本語の説明。

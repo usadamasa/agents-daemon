@@ -197,7 +197,7 @@ func TestReadTail_読める範囲に会話のentryが無ければokはfalse(t *t
 	}
 }
 
-func TestStore_Locate(t *testing.T) {
+func TestStore_locate(t *testing.T) {
 	dir := t.TempDir()
 	s := Store{Dir: dir}
 	write := func(project, name string, mtime time.Time) string {
@@ -222,37 +222,37 @@ func TestStore_Locate(t *testing.T) {
 	write("-Users-x-repo", filepath.Join("sid-c", "subagents", "agent-1.jsonl"), base)
 
 	t.Run("EnterWorktree で project dir が変わっても mtime が新しい方を採る", func(t *testing.T) {
-		got, err := s.Locate("sid-a")
+		got, err := s.locate("sid-a")
 		if err != nil {
 			t.Fatal(err)
 		}
 		if got != moved {
-			t.Errorf("Locate = %s, want %s (古い方 %s ではない)", got, moved, old)
+			t.Errorf("locate = %s, want %s (古い方 %s ではない)", got, moved, old)
 		}
 	})
 	t.Run("1 つだけならそれ", func(t *testing.T) {
-		got, err := s.Locate("sid-b")
+		got, err := s.locate("sid-b")
 		if err != nil || !strings.HasSuffix(got, "sid-b.jsonl") {
-			t.Errorf("Locate = %s, %v", got, err)
+			t.Errorf("locate = %s, %v", got, err)
 		}
 	})
 	t.Run("無ければ空", func(t *testing.T) {
-		got, err := s.Locate("sid-c")
+		got, err := s.locate("sid-c")
 		if err != nil || got != "" {
-			t.Errorf("Locate = %q, %v, want 空 (subagents の下は見ない)", got, err)
+			t.Errorf("locate = %q, %v, want 空 (subagents の下は見ない)", got, err)
 		}
 	})
 	t.Run("ファイル名に使えない session ID は error", func(t *testing.T) {
-		if _, err := s.Locate("../etc"); err == nil {
+		if _, err := s.locate("../etc"); err == nil {
 			t.Error("error = nil, want ディレクトリの外へ出る ID を弾く")
 		}
 	})
 	t.Run("空の session ID と空の Store は空", func(t *testing.T) {
-		if got, err := s.Locate(""); got != "" || err != nil {
-			t.Errorf("Locate(\"\") = %q, %v", got, err)
+		if got, err := s.locate(""); got != "" || err != nil {
+			t.Errorf("locate(\"\") = %q, %v", got, err)
 		}
-		if got, err := (Store{}).Locate("sid-a"); got != "" || err != nil {
-			t.Errorf("Store{}.Locate = %q, %v", got, err)
+		if got, err := (Store{}).locate("sid-a"); got != "" || err != nil {
+			t.Errorf("Store{}.locate = %q, %v", got, err)
 		}
 	})
 }

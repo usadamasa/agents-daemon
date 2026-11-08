@@ -17,32 +17,6 @@ func TestNew_ディレクトリ名が固定されている(t *testing.T) {
 	}
 }
 
-// fresh は IsFresh の本体。許容幅を超える未来の観測を拒むことが要点で、
-// 拒まないとクロックスキューのある state で送信が起きる。許容幅以内の未来は
-// now を取った後に statusline が書き直した state なので fresh に数える。
-func Test_fresh(t *testing.T) {
-	now := time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)
-	maxAge := 5 * time.Minute
-
-	for _, tt := range []struct {
-		name       string
-		observedAt time.Time
-		want       bool
-	}{
-		{"maxAge 以内は fresh", now.Add(-time.Minute), true},
-		{"境界ちょうどは fresh", now.Add(-maxAge), true},
-		{"maxAge を超えたら古い", now.Add(-maxAge - time.Second), false},
-		{"now と同時刻は fresh", now, true},
-		{"書き込みとの競合で生じる数秒先の観測は fresh", now.Add(time.Second), true},
-		{"許容幅ちょうどの未来は fresh", now.Add(futureTolerance), true},
-		{"許容幅を超える未来の観測は信用しない", now.Add(futureTolerance + time.Second), false},
-	} {
-		if got := fresh(tt.observedAt, now, maxAge); got != tt.want {
-			t.Errorf("%s: fresh() = %v, want %v", tt.name, got, tt.want)
-		}
-	}
-}
-
 func TestWrite(t *testing.T) {
 	observedAt := time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC)
 
@@ -192,31 +166,12 @@ func TestLoad(t *testing.T) {
 	})
 }
 
-func TestStateJudgements(t *testing.T) {
-	now := time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)
-
-	t.Run("nil の State はどの判定も false", func(t *testing.T) {
-		var r *State
-		if r.IsFresh(now, time.Minute) || r.HasFiveHour() || r.FiveHourExhausted(0) {
-			t.Error("nil の State が true を返した")
-		}
-	})
-
-	t.Run("FiveHourExhausted は閾値以上で true", func(t *testing.T) {
-		for _, tt := range []struct {
-			used, threshold float64
-			want            bool
-		}{
-			{95, 90, true},
-			{90, 90, true},
-			{89.9, 90, false},
-		} {
-			r := &State{FiveHourUsed: tt.used}
-			if got := r.FiveHourExhausted(tt.threshold); got != tt.want {
-				t.Errorf("FiveHourExhausted(%v) with used %v = %v, want %v", tt.threshold, tt.used, got, tt.want)
-			}
-		}
-	})
+// nil の State (state 無し) でも HasFiveHour は呼べて false。
+func TestHasFiveHour_nil(t *testing.T) {
+	var r *State
+	if r.HasFiveHour() {
+		t.Error("nil の State が true を返した")
+	}
 }
 
 func TestLatestWindow(t *testing.T) {

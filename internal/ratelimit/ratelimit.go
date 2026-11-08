@@ -1,6 +1,7 @@
 // Package ratelimit は rate-limits/<session_id>.json (statusline が観測した利用上限) の
 // 書式を読み書き両方で持つ。書くのは statusline の stdin を受ける sessionstate.IngestStatusline、
-// 読むのは daemon と診断 (verify、simulate)。
+// 読むのは daemon と診断 (verify、doctor、simulate)。上限の判定には使わず、transcript の entry に解除時刻が無い
+// (quotaLimits の無い古い形) ときの起床時刻の予備。
 //
 // JSON の生の形 (rateLimitFile) と、それを読む関数は非公開にしてある。外から要るのは
 // domain の型 (State) と、その解釈だけだったため。生の形を公開すると epoch 秒の
@@ -71,37 +72,9 @@ type State struct {
 	FiveHourResetsAt time.Time
 }
 
-// IsFresh は観測が maxAge 以内かを返す。
-// statusline は画面に変化が無いと再描画を止めるため、古い state を検出できる必要がある。
-func (r *State) IsFresh(now time.Time, maxAge time.Duration) bool {
-	if r == nil {
-		return false
-	}
-	return fresh(r.ObservedAt, now, maxAge)
-}
-
 // HasFiveHour は 5 時間ウィンドウの有効な値を持つかを返す。
 func (r *State) HasFiveHour() bool {
 	return r != nil && !r.FiveHourResetsAt.IsZero()
-}
-
-// FiveHourExhausted は 5 時間ウィンドウの使用率が threshold 以上かを返す。
-// 「上限に達していそうか」の判定に使う。
-func (r *State) FiveHourExhausted(threshold float64) bool {
-	return r != nil && r.FiveHourUsed >= threshold
-}
-
-// futureTolerance は fresh が受け付ける未来の observed_at の幅。読み手が now を取った後に
-// statusline が state を書き直すと age が負になる (doctor を Bash から回すと、そのセッションの
-// statusline が再描画される)。その競合は 1 回の読み込みのあいだに収まるので数秒で足り、
-// これを超える未来はクロックスキューとして信用しない。
-const futureTolerance = 5 * time.Second
-
-// fresh は観測時刻 observedAt が now から maxAge 以内かを返す。
-// observedAt が now より futureTolerance を超えて未来 (クロックスキュー等) の場合は信用せず false を返す。
-func fresh(observedAt, now time.Time, maxAge time.Duration) bool {
-	age := now.Sub(observedAt)
-	return age >= -futureTolerance && age <= maxAge
 }
 
 // file は sessionID に対応する利用上限 state のパスを返す。

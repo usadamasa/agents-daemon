@@ -11,56 +11,107 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/ratelimit"
 	"github.com/usadamasa/agents-daemon/internal/runtime/config"
 	"github.com/usadamasa/agents-daemon/internal/runtime/detect"
+	"github.com/usadamasa/agents-daemon/internal/transcript"
 )
 
-// 画面テキストのテストフィクスチャ。
-// detect パッケージの二重シグナル要件 (limit パターン + 近傍の reset パターン) を
-// 満たすものだけを使う。単発の "limit" という単語だけでは KindLimit にならない。
+// transcript の末尾のフィクスチャ。本文は実機で踏んだ上限の entry から写した (transcript/testdata)。
 const (
-	// limitAndRelativeScreen は 1 行で limit + 相対時刻表現の両方を満たす。
-	// classify では KindLimit、ParseRelativeWait では 5 分と解釈される。
-	limitAndRelativeScreen = "Try again in 5 minutes"
-	// limitAbsoluteScreen は limit フレーズと、相対表現でも am/pm の絶対時刻でもない
-	// reset 表現の組み合わせ。ParseRelativeWait も ParseAbsoluteReset も解釈できない
-	// (fallback 経路のテストに使う)。
-	limitAbsoluteScreen = "Claude usage limit reached.\nYour limit resets at 15:00."
-	// limitAmPmScreen は実機と同じ形の絶対時刻 (am/pm + tz) を含む。
-	// ParseAbsoluteReset が読める (相対表現は無い)。
-	limitAmPmScreen = "⏺ You've hit your session limit · resets 8:10am (Asia/Tokyo)"
-	// transientScreen は直近出力ブロック内の 5xx エラー文言。
-	transientScreen = "⏺ API Error: 500 Internal Server Error"
-	// cleanScreen は limit にも transient にも該当しない通常の画面。
-	cleanScreen = "$ some normal claude output\n⏺ done"
+	uuidLimit  = "cae11b0e-b253-403c-8cd6-7cf350809a97"
+	uuidLimit2 = "0f3c9a7e-2b4d-4c6e-8a1b-3d5f7e9a1c2b"
 )
 
-func newTestClassifier(t *testing.T) *detect.Classifier {
-	t.Helper()
-	c, err := detect.NewClassifier(nil)
-	if err != nil {
-		t.Fatalf("NewClassifier() error = %v", err)
-	}
-	return c
+// limitedTurn は 5 時間ウィンドウの上限で止まった transcript の末尾。
+func limitedTurn(uuid string, resetsAt time.Time) Turn {
+	return Turn{Path: "/home/x/.claude/projects/-work/sid.jsonl", Entry: &transcript.Entry{
+		UUID: uuid, Type: "assistant", Error: "rate_limit", IsAPIError: true, APIErrorStatus: 429, Version: "2.1.289",
+		Text:  "You've hit your session limit · resets 7:50pm (Asia/Tokyo)",
+		Quota: &transcript.Quota{Status: "rejected", RateLimitType: "five_hour", ResetsAt: resetsAt, OverageStatus: "rejected"},
+	}}
 }
+
+// legacyLimitedTurn は quotaLimits の無い古い形の上限の entry (2.1.233 以前)。解除時刻は statusline かフォールバック。
+func legacyLimitedTurn() Turn {
+	return Turn{Path: "/t.jsonl", Entry: &transcript.Entry{
+		UUID: "legacy", Type: "assistant", Error: "rate_limit", IsAPIError: true, Version: "2.1.224",
+		Text: "You've hit your session limit · resets 5:50pm (Asia/Tokyo)",
+	}}
+}
+
+func weeklyTurn(resetsAt time.Time) Turn {
+	return Turn{Path: "/t.jsonl", Entry: &transcript.Entry{
+		UUID: "weekly", Type: "assistant", Error: "rate_limit", IsAPIError: true, APIErrorStatus: 429,
+		Text:  "You've hit your weekly limit · resets Aug 25 at 1pm (Asia/Tokyo) · progress saved",
+		Quota: &transcript.Quota{Status: "rejected", RateLimitType: "seven_day", ResetsAt: resetsAt},
+	}}
+}
+
+// transientTurn は server_error で終わった turn。
+func transientTurn() Turn {
+	return Turn{Path: "/t.jsonl", Entry: &transcript.Entry{
+		UUID: "transient", Type: "assistant", Error: "server_error", IsAPIError: true,
+		Text: "API Error: Your computer went to sleep mid-response. The response above may be incomplete.",
+	}}
+}
+
+// hardCapTurn は Fable のモデル単位の上限 (quotaLimits 無し)。
+func hardCapTurn() Turn {
+	return Turn{Path: "/t.jsonl", Entry: &transcript.Entry{
+		UUID: "fable", Type: "assistant", Error: "rate_limit", IsAPIError: true, APIErrorStatus: 429,
+		Text: "You've reached your Fable 5 limit. Run /usage-credits to continue or switch models with /model.",
+	}}
+}
+
+// resumedTurn は利用者 (か daemon) の次の prompt が最後の turn。
+func resumedTurn() Turn {
+	return Turn{Path: "/t.jsonl", Entry: &transcript.Entry{UUID: "user-1", Type: "user", Text: "続けて"}}
+}
+
+// noSessionTurn と unreadableTurn は transcript が読めなかった結果。
+var (
+	noSessionTurn  = Turn{Reason: "pane に session_id が無い"}
+	unreadableTurn = Turn{Reason: "transcript が見つからない"}
+)
+
+// 画面のフィクスチャ。上限の判定には使わず、待機明けのキー選択だけに効く。
+const (
+	// cleanScreen は通知欄に何も無い画面 (上限の文は transcript の 1 行として残っている)。
+	cleanScreen = "⏺ You've hit your session limit · resets 7:50pm (Asia/Tokyo)\n\n❯ \n"
+	// nativeArmedScreen は Claude Code 自身の auto-continue がカウントダウン中の画面。
+	nativeArmedScreen = "⏺ You've hit your session limit · resets 5:00pm (Asia/Tokyo)\n\n" +
+		"Usage limit reached · continuing automatically at 5:00pm · esc or type to cancel"
+	// nativeRetryingScreen は unattended retry mode が request の中で待っている画面。
+	nativeRetryingScreen = "⚠ Session limit reached · Retrying in 3h 12m (5pm) · attempt 4/10"
+	// resumeReadyScreen は解除済みで Enter だけを待っている画面。
+	resumeReadyScreen = "  ⚠ Your usage limit has reset\n      Press enter to continue"
+	// lowerPriorityScreen は /low-priority で作業を続けている画面。
+	lowerPriorityScreen = "⏺ You've hit your session limit · resets 5:00pm (Asia/Tokyo)\n\n" +
+		"Continuing now at lower priority until your limit resets at 5pm. Your weekly limit still applies. Run /low-priority to stop."
+)
 
 func newTestPane(status multiplexer.AgentStatus, isClaude bool) multiplexer.Pane {
 	agent := "bash"
 	if isClaude {
 		agent = "claude-code"
 	}
-	return multiplexer.Pane{
-		Agent:       agent,
-		AgentStatus: status,
-		PaneID:      "pane-1",
+	return multiplexer.Pane{Agent: agent, AgentStatus: status, PaneID: "pane-1", SessionID: "sid-1"}
+}
+
+// turnsReturning は session_id が空なら noSessionTurn、それ以外は turn を返す Turns。
+func turnsReturning(turn Turn) func(string) Turn {
+	return func(sessionID string) Turn {
+		if sessionID == "" {
+			return noSessionTurn
+		}
+		return turn
 	}
 }
 
-func newTestDeps(t *testing.T, cfg config.Config, client *multiplexerfake.Client) Deps {
-	t.Helper()
+func newTestDeps(_ *testing.T, cfg config.Config, client *multiplexerfake.Client, turn Turn) Deps {
 	return Deps{
-		Client:     client,
-		Classifier: newTestClassifier(t),
-		Config:     cfg,
-		Sleep:      func(time.Duration) {},
+		Client: client,
+		Config: cfg,
+		Sleep:  func(time.Duration) {},
+		Turns:  turnsReturning(turn),
 	}
 }
 
@@ -70,402 +121,233 @@ func readReturning(screen string, err error) func(ctx context.Context, paneID st
 	}
 }
 
-func TestTick_AgentStatusNeverGatesDetection(t *testing.T) {
-	// agent_status は Claude Code の自己申告 (OSC 7501) で、上限で止まった pane が
-	// working のまま申告され続けることがある (上限の画面は turn の途中で止まるため)。
-	//
-	// 上限で止まった pane は「working に見える pane」と区別できないため、
-	// agent_status を判定に使うと上限を取りこぼす。判定は画面テキストの分類
-	// (detect.Classifier) だけで行う。
-	for _, status := range []multiplexer.AgentStatus{
-		multiplexer.AgentStatusWorking,
-		multiplexer.AgentStatusIdle,
-		multiplexer.AgentStatusBlocked,
-		multiplexer.AgentStatusDone,
-		multiplexer.AgentStatusUnknown,
-	} {
-		t.Run(string(status), func(t *testing.T) {
-			client := &multiplexerfake.Client{
-				PaneReadFunc: readReturning(limitAndRelativeScreen, nil),
-			}
-			deps := newTestDeps(t, config.Default(), client)
-			pane := newTestPane(status, true)
+func assertNoSend(t *testing.T, client *multiplexerfake.Client) {
+	t.Helper()
+	for _, call := range client.Calls {
+		if call == "SendText:pane-1" || call == "SendKeys:pane-1" {
+			t.Errorf("送信が発生した: %v", client.Calls)
+			return
+		}
+	}
+}
+
+func assertNoRead(t *testing.T, client *multiplexerfake.Client) {
+	t.Helper()
+	if len(client.Calls) != 0 {
+		t.Errorf("Calls = %v, want 空 (画面を読むのは待機明けだけ)", client.Calls)
+	}
+}
+
+// record が working の pane には、transcript が何と言っていても触らない。上限なのに working なら食い違いを記録する。
+func TestTick_WorkingPaneIsNeverTouched(t *testing.T) {
+	now := time.Date(2026, 10, 4, 10, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name string
+		turn Turn
+		want Outcome
+	}{
+		{"普通の turn", resumedTurn(), OutcomeMonitoring},
+		{"上限の entry (書き込みの遅れか前提の崩れ)", limitedTurn(uuidLimit, now.Add(time.Hour)), OutcomeWorkingSuppressed},
+		{"一時エラーの entry", transientTurn(), OutcomeWorkingSuppressed},
+		{"hard cap の entry", hardCapTurn(), OutcomeWorkingSuppressed},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &multiplexerfake.Client{PaneReadFunc: readReturning(cleanScreen, nil)}
+			deps := newTestDeps(t, config.Default(), client, tt.turn)
 			ps := &PaneState{}
-			now := time.Now()
+
+			outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusWorking, true), ps, nil, now)
+
+			if err != nil {
+				t.Fatalf("Tick() error = %v", err)
+			}
+			if outcome != tt.want || ps.Status != StatusMonitoring {
+				t.Errorf("outcome = %v status = %v, want %v / monitoring", outcome, ps.Status, tt.want)
+			}
+			assertNoRead(t, client)
+		})
+	}
+}
+
+// 待機中に record が working になったら、誰かが再開したので監視へ戻る。
+func TestTick_WorkingDuringWait_IsRecovered(t *testing.T) {
+	now := time.Date(2026, 10, 4, 10, 0, 0, 0, time.UTC)
+	client := &multiplexerfake.Client{}
+	deps := newTestDeps(t, config.Default(), client, limitedTurn(uuidLimit, now.Add(-time.Hour)))
+	ps := &PaneState{Status: StatusWaiting, WaitUntil: now.Add(-time.Second), Attempts: 2, TurnUUID: uuidLimit}
+
+	outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusWorking, true), ps, nil, now)
+
+	if err != nil {
+		t.Fatalf("Tick() error = %v", err)
+	}
+	if outcome != OutcomeRecoveredByUser || *ps != (PaneState{}) {
+		t.Errorf("outcome = %v ps = %+v, want recovered-by-user / ゼロ値", outcome, ps)
+	}
+	assertNoRead(t, client)
+}
+
+// session_id が引けない、transcript が読めない pane は検知の対象外。待機中なら読めないことを再開の証拠にせず延長する。
+func TestTick_UnavailableTurn(t *testing.T) {
+	now := time.Date(2026, 10, 4, 10, 0, 0, 0, time.UTC)
+	cfg := config.Default()
+	tests := []struct {
+		name      string
+		sessionID string
+		turn      Turn
+		want      Outcome
+	}{
+		{"session_id が無い", "", noSessionTurn, OutcomeNoSession},
+		{"transcript が読めない", "sid-1", unreadableTurn, OutcomeTranscriptUnavailable},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name+"/監視中", func(t *testing.T) {
+			client := &multiplexerfake.Client{}
+			deps := newTestDeps(t, cfg, client, tt.turn)
+			pane := newTestPane(multiplexer.AgentStatusIdle, true)
+			pane.SessionID = tt.sessionID
+			ps := &PaneState{}
 
 			outcome, err := Tick(context.Background(), deps, pane, ps, nil, now)
 
 			if err != nil {
 				t.Fatalf("Tick() error = %v", err)
 			}
-			if outcome != OutcomeWaiting {
-				t.Errorf("outcome = %v, want %v (agent_status によらず上限を検知すべき)", outcome, OutcomeWaiting)
+			if outcome != tt.want || *ps != (PaneState{}) {
+				t.Errorf("outcome = %v ps = %+v, want %v / 監視のまま", outcome, ps, tt.want)
 			}
-			if ps.Status != StatusWaiting {
-				t.Errorf("ps.Status = %v, want StatusWaiting", ps.Status)
-			}
+			assertNoRead(t, client)
 		})
-	}
-}
-
-func TestTick_StillWaiting_NoRead(t *testing.T) {
-	client := &multiplexerfake.Client{
-		PaneReadFunc: readReturning(limitAndRelativeScreen, nil),
-	}
-	deps := newTestDeps(t, config.Default(), client)
-	pane := newTestPane(multiplexer.AgentStatusIdle, true)
-	now := time.Now()
-	ps := &PaneState{Status: StatusWaiting, WaitUntil: now.Add(time.Hour)}
-
-	outcome, err := Tick(context.Background(), deps, pane, ps, nil, now)
-
-	if err != nil {
-		t.Fatalf("Tick() error = %v", err)
-	}
-	if outcome != OutcomeStillWaiting {
-		t.Errorf("outcome = %v, want %v", outcome, OutcomeStillWaiting)
-	}
-	if len(client.Calls) != 0 {
-		t.Errorf("Calls = %v, want 空 (起床時刻前は画面すら読まない)", client.Calls)
-	}
-}
-
-func TestTick_LimitDetected_ResetsAtWinsOverFallback(t *testing.T) {
-	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
-	resetsAt := now.Add(2 * time.Hour)
-	rateState := &ratelimit.State{
-		FiveHourUsed:     95,
-		FiveHourResetsAt: resetsAt,
-		ObservedAt:       now.Add(-time.Minute),
-	}
-
-	client := &multiplexerfake.Client{
-		PaneReadFunc: readReturning(limitAndRelativeScreen, nil),
-	}
-	cfg := config.Default()
-	deps := newTestDeps(t, cfg, client)
-	pane := newTestPane(multiplexer.AgentStatusIdle, true)
-	ps := &PaneState{}
-
-	outcome, err := Tick(context.Background(), deps, pane, ps, rateState, now)
-
-	if err != nil {
-		t.Fatalf("Tick() error = %v", err)
-	}
-	if outcome != OutcomeWaiting {
-		t.Fatalf("outcome = %v, want %v", outcome, OutcomeWaiting)
-	}
-	want := resetsAt.Add(time.Duration(cfg.MarginSeconds) * time.Second)
-	if !ps.WaitUntil.Equal(want) {
-		t.Errorf("WaitUntil = %v, want %v (画面の相対表現やfallbackではなくresets_atが優先されるべき)", ps.WaitUntil, want)
-	}
-	if ps.Status != StatusWaiting {
-		t.Errorf("Status = %v, want %v", ps.Status, StatusWaiting)
-	}
-}
-
-func TestTick_StaleState_StillUsesResetsAt(t *testing.T) {
-	// 上限で止まったセッションは statusline を再描画しないため、state は必ず古くなる。
-	// resets_at は絶対時刻なので古くても正しい。ここで捨てると、正確な解除時刻を
-	// 持っているのに画面スクレイプへ後退してしまう。
-	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
-	rateState := &ratelimit.State{
-		FiveHourUsed:     95,
-		FiveHourResetsAt: now.Add(2 * time.Hour),
-		ObservedAt:       now.Add(-2 * time.Hour), // StateMaxAgeSeconds (既定 900s) を超え陳腐化
-	}
-
-	client := &multiplexerfake.Client{
-		PaneReadFunc: readReturning(limitAndRelativeScreen, nil), // 「5分後」を含む
-	}
-	cfg := config.Default()
-	deps := newTestDeps(t, cfg, client)
-	pane := newTestPane(multiplexer.AgentStatusIdle, true)
-	ps := &PaneState{}
-
-	outcome, err := Tick(context.Background(), deps, pane, ps, rateState, now)
-
-	if err != nil {
-		t.Fatalf("Tick() error = %v", err)
-	}
-	if outcome != OutcomeWaiting {
-		t.Fatalf("outcome = %v, want %v", outcome, OutcomeWaiting)
-	}
-	want := now.Add(2 * time.Hour).Add(time.Duration(cfg.MarginSeconds) * time.Second)
-	if !ps.WaitUntil.Equal(want) {
-		t.Errorf("WaitUntil = %v, want %v (state が古くても resets_at は使うべき)", ps.WaitUntil, want)
-	}
-}
-
-func TestTick_NoStateNoRelative_FallsBackToFallbackHours(t *testing.T) {
-	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
-
-	client := &multiplexerfake.Client{
-		PaneReadFunc: readReturning(limitAbsoluteScreen, nil), // 相対表現を含まない
-	}
-	cfg := config.Default()
-	deps := newTestDeps(t, cfg, client)
-	pane := newTestPane(multiplexer.AgentStatusIdle, true)
-	ps := &PaneState{}
-
-	outcome, err := Tick(context.Background(), deps, pane, ps, nil, now)
-
-	if err != nil {
-		t.Fatalf("Tick() error = %v", err)
-	}
-	if outcome != OutcomeWaiting {
-		t.Fatalf("outcome = %v, want %v", outcome, OutcomeWaiting)
-	}
-	fallback := time.Duration(cfg.FallbackWaitHours * float64(time.Hour))
-	want := now.Add(fallback).Add(time.Duration(cfg.MarginSeconds) * time.Second)
-	if !ps.WaitUntil.Equal(want) {
-		t.Errorf("WaitUntil = %v, want %v (state も相対表現も無ければ FallbackWaitHours)", ps.WaitUntil, want)
-	}
-}
-
-func TestTick_Gate_FreshStateThreshold(t *testing.T) {
-	// ゲートは「fresh な state があり、かつ使用率が閾値未満」の場合だけ発火を見送る。
-	// state が陳腐化していれば使用率に関わらず判断材料が無いとみなし、画面だけで判定する。
-	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
-	cfg := config.Default() // UsedPercentageThreshold = 90, StateMaxAgeSeconds = 900
-
-	tests := []struct {
-		name        string
-		fresh       bool
-		usedPercent float64
-		want        Outcome
-	}{
-		{"fresh_閾値未満_見送り", true, 50, OutcomeGateSuppressed},
-		{"fresh_閾値以上_発火", true, 95, OutcomeWaiting},
-		{"stale_閾値未満_見送らず発火", false, 50, OutcomeWaiting},
-		{"stale_閾値以上_発火", false, 95, OutcomeWaiting},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			observedAt := now.Add(-time.Minute)
-			if !tt.fresh {
-				observedAt = now.Add(-2 * time.Hour)
-			}
-			rateState := &ratelimit.State{
-				FiveHourUsed:     tt.usedPercent,
-				FiveHourResetsAt: now.Add(2 * time.Hour),
-				ObservedAt:       observedAt,
-			}
-			client := &multiplexerfake.Client{
-				PaneReadFunc: readReturning(limitAndRelativeScreen, nil),
-			}
-			deps := newTestDeps(t, cfg, client)
+		t.Run(tt.name+"/待機中", func(t *testing.T) {
+			client := &multiplexerfake.Client{}
+			deps := newTestDeps(t, cfg, client, tt.turn)
 			pane := newTestPane(multiplexer.AgentStatusIdle, true)
-			ps := &PaneState{}
+			pane.SessionID = tt.sessionID
+			ps := &PaneState{Status: StatusWaiting, Attempts: 2, TurnUUID: uuidLimit}
 
-			outcome, err := Tick(context.Background(), deps, pane, ps, rateState, now)
+			outcome, err := Tick(context.Background(), deps, pane, ps, nil, now)
 
 			if err != nil {
 				t.Fatalf("Tick() error = %v", err)
 			}
-			if outcome != tt.want {
-				t.Errorf("outcome = %v, want %v", outcome, tt.want)
+			if outcome != tt.want || ps.Status != StatusWaiting || ps.Attempts != 2 {
+				t.Errorf("outcome = %v ps = %+v, want %v / 待機を続ける", outcome, ps, tt.want)
 			}
-			wantStatus := StatusMonitoring
-			if tt.want == OutcomeWaiting {
-				wantStatus = StatusWaiting
+			if want := now.Add(time.Duration(cfg.PollIntervalSeconds*notClaudeBackoffMultiplier) * time.Second); !ps.WaitUntil.Equal(want) {
+				t.Errorf("WaitUntil = %v, want %v", ps.WaitUntil, want)
 			}
-			if ps.Status != wantStatus {
-				t.Errorf("Status = %v, want %v", ps.Status, wantStatus)
-			}
+			assertNoRead(t, client)
 		})
 	}
 }
 
-// TestTick_Gate_NullFiveHour_DoesNotSuppress は five_hour が null で書かれた state
-// (5 時間ウィンドウの切り替わり瞬間の statusline 描画) を「fresh な 0%」と読んで
-// ゲートで抑制しないことを確かめる。判断材料が無いのだから、state 無しと同じ扱いで
-// 画面判定をそのまま通す。
-func TestTick_Gate_NullFiveHour_DoesNotSuppress(t *testing.T) {
-	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
-	rateState := &ratelimit.State{
-		// five_hour が null で書かれた state。FiveHourResetsAt がゼロ値のままになる。
-		ObservedAt: now.Add(-time.Minute), // fresh
+func TestTick_StillWaiting_ReadsNothing(t *testing.T) {
+	now := time.Date(2026, 10, 4, 10, 0, 0, 0, time.UTC)
+	client := &multiplexerfake.Client{}
+	deps := newTestDeps(t, config.Default(), client, limitedTurn(uuidLimit, now.Add(time.Hour)))
+	turns := 0
+	deps.Turns = func(string) Turn { turns++; return limitedTurn(uuidLimit, now.Add(time.Hour)) }
+	ps := &PaneState{Status: StatusWaiting, WaitUntil: now.Add(time.Hour)}
+
+	outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusIdle, true), ps, nil, now)
+
+	if err != nil || outcome != OutcomeStillWaiting {
+		t.Fatalf("Tick() = %v, %v, want still-waiting", outcome, err)
 	}
-	client := &multiplexerfake.Client{
-		PaneReadFunc: readReturning(limitAndRelativeScreen, nil),
+	if turns != 0 || len(client.Calls) != 0 {
+		t.Errorf("Turns %d 回、Calls %v: 起床時刻前は transcript も画面も読まない", turns, client.Calls)
 	}
-	deps := newTestDeps(t, config.Default(), client)
-	pane := newTestPane(multiplexer.AgentStatusIdle, true)
+}
+
+// 上限の検知は transcript の entry の resetsAt で待つ。画面は読まない。
+func TestTick_LimitDetected_WaitsForResetsAt(t *testing.T) {
+	now := time.Date(2026, 10, 4, 10, 0, 0, 0, time.UTC)
+	resetsAt := now.Add(2 * time.Hour)
+	cfg := config.Default()
+	client := &multiplexerfake.Client{PaneReadFunc: readReturning(cleanScreen, nil)}
+	deps := newTestDeps(t, cfg, client, limitedTurn(uuidLimit, resetsAt))
 	ps := &PaneState{}
 
-	outcome, err := Tick(context.Background(), deps, pane, ps, rateState, now)
+	outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, nil, now)
 
 	if err != nil {
 		t.Fatalf("Tick() error = %v", err)
 	}
-	if outcome != OutcomeWaiting {
-		t.Errorf("outcome = %v, want %v (five_hour が null なら使用率 0%% として抑制してはいけない)", outcome, OutcomeWaiting)
+	if outcome != OutcomeWaiting || ps.Status != StatusWaiting {
+		t.Fatalf("outcome = %v status = %v, want waiting", outcome, ps.Status)
 	}
+	if want := resetsAt.Add(time.Duration(cfg.MarginSeconds) * time.Second); !ps.WaitUntil.Equal(want) {
+		t.Errorf("WaitUntil = %v, want %v (resetsAt + margin)", ps.WaitUntil, want)
+	}
+	if ps.TurnUUID != uuidLimit {
+		t.Errorf("TurnUUID = %q, want %q", ps.TurnUUID, uuidLimit)
+	}
+	assertNoRead(t, client)
 }
 
-// TestTick_WakeWithLimitScreen_SendsDespiteFreshGate は待機明けに画面がまだ上限表示の
-// とき、fresh な state の使用率が閾値未満でも送信することを確かめる。
-//
-// 解除時刻を過ぎると 5 時間ウィンドウは切り替わり使用率は下がるが、Claude Code は
-// 上限の画面のままキー入力を待つ。ここでゲートを効かせると「ユーザー自身が復帰した」と
-// 取り違えて監視へ戻り、15 分後に state が古くなってから改めて検知して、次のウィンドウの
-// resets_at (5 時間先) まで寝てしまう (2026-08-28 03:11 の取りこぼし)。
-// ゲートは待機に入るときの誤検知よけであって、待機明けの送信を止めるものではない。
-func TestTick_WakeWithLimitScreen_SendsDespiteFreshGate(t *testing.T) {
-	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
-	rateState := &ratelimit.State{
-		FiveHourUsed:     5,
-		FiveHourResetsAt: now.Add(5 * time.Hour),
-		ObservedAt:       now.Add(-time.Minute), // fresh かつ閾値未満
-	}
-	client := &multiplexerfake.Client{
-		PaneReadFunc: readReturning(limitAbsoluteScreen, nil),
-	}
-	deps := newTestDeps(t, config.Default(), client)
-	pane := newTestPane(multiplexer.AgentStatusIdle, true)
-	ps := &PaneState{Status: StatusWaiting, WaitUntil: now.Add(-time.Second)}
-
-	outcome, err := Tick(context.Background(), deps, pane, ps, rateState, now)
-
-	if err != nil {
-		t.Fatalf("Tick() error = %v", err)
-	}
-	if outcome != OutcomeRetried {
-		t.Fatalf("outcome = %v, want %v (待機明けの上限画面には送信すべき)", outcome, OutcomeRetried)
-	}
-	if ps.Status != StatusWaiting {
-		t.Errorf("Status = %v, want %v (送信後は結果確認のため待機を継続)", ps.Status, StatusWaiting)
-	}
-	if ps.Attempts != 1 {
-		t.Errorf("Attempts = %d, want 1", ps.Attempts)
-	}
-	sent := false
-	for _, call := range client.Calls {
-		if call == "SendText:pane-1" {
-			sent = true
-		}
-	}
-	if !sent {
-		t.Errorf("Calls = %v, SendText が呼ばれていない", client.Calls)
-	}
-}
-
-func TestTick_UserResumedDuringWait(t *testing.T) {
-	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
-	client := &multiplexerfake.Client{
-		PaneReadFunc: readReturning(cleanScreen, nil),
-	}
-	deps := newTestDeps(t, config.Default(), client)
-	pane := newTestPane(multiplexer.AgentStatusIdle, true)
-	ps := &PaneState{Status: StatusWaiting, Attempts: 3, WaitUntil: now.Add(-time.Second)}
-
-	outcome, err := Tick(context.Background(), deps, pane, ps, nil, now)
-
-	if err != nil {
-		t.Fatalf("Tick() error = %v", err)
-	}
-	if outcome != OutcomeRecoveredByUser {
-		t.Errorf("outcome = %v, want %v", outcome, OutcomeRecoveredByUser)
-	}
-	if ps.Status != StatusMonitoring {
-		t.Errorf("Status = %v, want %v", ps.Status, StatusMonitoring)
-	}
-	if ps.Attempts != 0 {
-		t.Errorf("Attempts = %d, want 0 (ユーザー自身の resume では nudge しない)", ps.Attempts)
-	}
-	for _, call := range client.Calls {
-		if call == "SendText:pane-1" || call == "SendKeys:pane-1" {
-			t.Errorf("Calls = %v, ユーザーが自力で resume したときは何も送ってはいけない", client.Calls)
-		}
-	}
-}
-
-func TestTick_TransientBackoff_DoublesAndCaps(t *testing.T) {
-	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
-	client := &multiplexerfake.Client{
-		PaneReadFunc: readReturning(transientScreen, nil),
-	}
-	cfg := config.Default() // TransientWaitSeconds=60, TransientMaxWaitSeconds=300
-	deps := newTestDeps(t, cfg, client)
-	pane := newTestPane(multiplexer.AgentStatusIdle, true)
-	ps := &PaneState{Status: StatusWaiting} // WaitUntil ゼロ値なので初回から必ず進む
-
-	wantDeltas := []time.Duration{
-		120 * time.Second, // 60 * 2^1
-		240 * time.Second, // 60 * 2^2
-		300 * time.Second, // 60 * 2^3 = 480 は cap の 300 に切り詰め
-	}
-
-	tickNow := now
-	for i, wantDelta := range wantDeltas {
-		outcome, err := Tick(context.Background(), deps, pane, ps, nil, tickNow)
-		if err != nil {
-			t.Fatalf("Tick() [%d] error = %v", i, err)
-		}
-		if outcome != OutcomeRetried {
-			t.Fatalf("outcome[%d] = %v, want %v", i, outcome, OutcomeRetried)
-		}
-		gotDelta := ps.WaitUntil.Sub(tickNow)
-		if gotDelta != wantDelta {
-			t.Errorf("attempt %d: delta = %v, want %v", i+1, gotDelta, wantDelta)
-		}
-		tickNow = ps.WaitUntil // 次の tick はちょうど起床時刻に進める
-	}
-	if ps.Attempts != len(wantDeltas) {
-		t.Errorf("Attempts = %d, want %d", ps.Attempts, len(wantDeltas))
-	}
-}
-
-func TestTick_MaxRetriesReached_NoSend(t *testing.T) {
-	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
-	client := &multiplexerfake.Client{
-		PaneReadFunc: readReturning(limitAndRelativeScreen, nil), // KindLimit (transient ではない)
-	}
+// 解除時刻を過ぎても Claude Code はキー入力を待って止まったままになる。待つ理由は無いので margin 後に起こす。
+func TestTick_PastResetsAt_WakesImmediately(t *testing.T) {
+	now := time.Date(2026, 10, 4, 10, 0, 0, 0, time.UTC)
 	cfg := config.Default()
-	deps := newTestDeps(t, cfg, client)
-	pane := newTestPane(multiplexer.AgentStatusIdle, true)
-	ps := &PaneState{Status: StatusWaiting, Attempts: cfg.MaxRetries}
+	client := &multiplexerfake.Client{}
+	deps := newTestDeps(t, cfg, client, limitedTurn(uuidLimit, now.Add(-time.Hour)))
+	ps := &PaneState{}
 
-	outcome, err := Tick(context.Background(), deps, pane, ps, nil, now)
+	outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusIdle, true), ps, nil, now)
 
-	if err != nil {
-		t.Fatalf("Tick() error = %v", err)
+	if err != nil || outcome != OutcomeWaiting {
+		t.Fatalf("Tick() = %v, %v, want waiting", outcome, err)
 	}
-	if outcome != OutcomeMaxRetries {
-		t.Errorf("outcome = %v, want %v", outcome, OutcomeMaxRetries)
-	}
-	want := now.Add(time.Duration(cfg.PollIntervalSeconds*maxRetriesCooldownMultiplier) * time.Second)
-	if !ps.WaitUntil.Equal(want) {
-		t.Errorf("WaitUntil = %v, want %v", ps.WaitUntil, want)
-	}
-	for _, call := range client.Calls {
-		if call == "SendText:pane-1" || call == "SendKeys:pane-1" {
-			t.Errorf("Calls = %v, MaxRetries 到達後は送信してはいけない", client.Calls)
-		}
+	if want := now.Add(time.Duration(cfg.MarginSeconds) * time.Second); !ps.WaitUntil.Equal(want) {
+		t.Errorf("WaitUntil = %v, want %v (now + margin)", ps.WaitUntil, want)
 	}
 }
 
-func TestTick_Recovery_SendsEscTextEnterInOrder(t *testing.T) {
-	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
-	const wantMessage = "作業を再開してください"
+// quotaLimits の無い古い形の entry では statusline の state、無ければフォールバックで待つ。
+func TestTick_LegacyEntry_UsesStatuslineThenFallback(t *testing.T) {
+	now := time.Date(2026, 10, 4, 10, 0, 0, 0, time.UTC)
+	cfg := config.Default()
+	margin := time.Duration(cfg.MarginSeconds) * time.Second
 
+	t.Run("own の state の resets_at", func(t *testing.T) {
+		own := &ratelimit.State{FiveHourUsed: 100, FiveHourResetsAt: now.Add(90 * time.Minute), ObservedAt: now.Add(-3 * time.Hour)}
+		deps := newTestDeps(t, cfg, &multiplexerfake.Client{}, legacyLimitedTurn())
+		ps := &PaneState{}
+		if _, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusIdle, true), ps, own, now); err != nil {
+			t.Fatal(err)
+		}
+		if want := now.Add(90 * time.Minute).Add(margin); !ps.WaitUntil.Equal(want) {
+			t.Errorf("WaitUntil = %v, want %v", ps.WaitUntil, want)
+		}
+	})
+	t.Run("何も無ければ fallbackWaitHours", func(t *testing.T) {
+		deps := newTestDeps(t, cfg, &multiplexerfake.Client{}, legacyLimitedTurn())
+		ps := &PaneState{}
+		if _, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusIdle, true), ps, nil, now); err != nil {
+			t.Fatal(err)
+		}
+		if want := now.Add(time.Duration(cfg.FallbackWaitHours * float64(time.Hour))).Add(margin); !ps.WaitUntil.Equal(want) {
+			t.Errorf("WaitUntil = %v, want %v", ps.WaitUntil, want)
+		}
+	})
+}
+
+// 待機明けに transcript がまだ同じ上限なら、画面を 1 回読み、通知欄が無ければ esc → 文面 → enter の順に送る。
+func TestTick_Wake_SendsEscTextEnterInOrder(t *testing.T) {
+	now := time.Date(2026, 10, 4, 10, 0, 0, 0, time.UTC)
+	const wantMessage = "作業を再開してください"
 	var gotText string
 	client := &multiplexerfake.Client{
-		PaneReadFunc: readReturning(limitAndRelativeScreen, nil),
-		SendTextFunc: func(_ context.Context, _ string, text string) error {
-			gotText = text
-			return nil
-		},
+		PaneReadFunc: readReturning(cleanScreen, nil),
+		SendTextFunc: func(_ context.Context, _ string, text string) error { gotText = text; return nil },
 	}
 	cfg := config.Default()
 	cfg.RetryMessage = wantMessage
-	deps := newTestDeps(t, cfg, client)
-	pane := newTestPane(multiplexer.AgentStatusIdle, true)
-	ps := &PaneState{Status: StatusWaiting}
+	deps := newTestDeps(t, cfg, client, limitedTurn(uuidLimit, now.Add(-2*time.Minute)))
+	ps := &PaneState{Status: StatusWaiting, WaitUntil: now.Add(-time.Second), TurnUUID: uuidLimit}
 
-	outcome, err := Tick(context.Background(), deps, pane, ps, nil, now)
+	outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, nil, now)
 
 	if err != nil {
 		t.Fatalf("Tick() error = %v", err)
@@ -473,7 +355,6 @@ func TestTick_Recovery_SendsEscTextEnterInOrder(t *testing.T) {
 	if outcome != OutcomeRetried {
 		t.Fatalf("outcome = %v, want %v", outcome, OutcomeRetried)
 	}
-
 	wantCalls := []string{"PaneRead:pane-1", "SendKeys:pane-1", "SendText:pane-1", "SendKeys:pane-1"}
 	if len(client.Calls) != len(wantCalls) {
 		t.Fatalf("Calls = %v, want %v", client.Calls, wantCalls)
@@ -486,19 +367,96 @@ func TestTick_Recovery_SendsEscTextEnterInOrder(t *testing.T) {
 	if gotText != wantMessage {
 		t.Errorf("送信テキスト = %q, want %q (RetryMessage を改変せずそのまま送るべき)", gotText, wantMessage)
 	}
+	if ps.Status != StatusWaiting || ps.Attempts != 1 || !ps.WaitUntil.Equal(now.Add(retryWaitAfterSend)) {
+		t.Errorf("ps = %+v, want 待機を続け attempts 1、%s 後に確認", ps, retryWaitAfterSend)
+	}
+}
+
+// 待機明けに transcript の末尾が利用者の prompt になっていれば、利用者が再開した。何も送らず監視へ戻る。
+func TestTick_Wake_UserResumed(t *testing.T) {
+	now := time.Date(2026, 10, 4, 10, 0, 0, 0, time.UTC)
+	client := &multiplexerfake.Client{PaneReadFunc: readReturning(cleanScreen, nil)}
+	deps := newTestDeps(t, config.Default(), client, resumedTurn())
+	ps := &PaneState{Status: StatusWaiting, WaitUntil: now.Add(-time.Second), Attempts: 3, TurnUUID: uuidLimit}
+
+	outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusIdle, true), ps, nil, now)
+
+	if err != nil {
+		t.Fatalf("Tick() error = %v", err)
+	}
+	if outcome != OutcomeRecoveredByUser || *ps != (PaneState{}) {
+		t.Errorf("outcome = %v ps = %+v, want recovered-by-user / ゼロ値 (ユーザー自身の resume では nudge しない)", outcome, ps)
+	}
+	assertNoRead(t, client)
+}
+
+// 待っている間に新しい依頼 (peer の SendMessage など) がまた上限に当たると、別の uuid の entry になる。
+// 解除時刻が先なら送らず待ち直し、試行回数は持ち越す。過ぎていればそのまま送る。
+func TestTick_Wake_NewErrorEntry(t *testing.T) {
+	now := time.Date(2026, 10, 4, 10, 0, 0, 0, time.UTC)
+	cfg := config.Default()
+	margin := time.Duration(cfg.MarginSeconds) * time.Second
+
+	t.Run("解除時刻が未来なら待ち直す", func(t *testing.T) {
+		client := &multiplexerfake.Client{PaneReadFunc: readReturning(cleanScreen, nil)}
+		deps := newTestDeps(t, cfg, client, limitedTurn(uuidLimit2, now.Add(4*time.Hour)))
+		ps := &PaneState{Status: StatusWaiting, WaitUntil: now.Add(-time.Second), Attempts: 2, TurnUUID: uuidLimit}
+
+		outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, nil, now)
+
+		if err != nil || outcome != OutcomeWaiting {
+			t.Fatalf("Tick() = %v, %v, want waiting", outcome, err)
+		}
+		if ps.TurnUUID != uuidLimit2 || ps.Attempts != 2 || !ps.WaitUntil.Equal(now.Add(4*time.Hour).Add(margin)) {
+			t.Errorf("ps = %+v, want 新しい uuid、attempts 2 のまま、新しい解除時刻 + margin", ps)
+		}
+		assertNoRead(t, client)
+	})
+	t.Run("解除時刻が過去ならそのまま送る", func(t *testing.T) {
+		client := &multiplexerfake.Client{PaneReadFunc: readReturning(cleanScreen, nil)}
+		deps := newTestDeps(t, cfg, client, limitedTurn(uuidLimit2, now.Add(-time.Minute)))
+		ps := &PaneState{Status: StatusWaiting, WaitUntil: now.Add(-time.Second), Attempts: 2, TurnUUID: uuidLimit}
+
+		outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, nil, now)
+
+		if err != nil || outcome != OutcomeRetried {
+			t.Fatalf("Tick() = %v, %v, want retried", outcome, err)
+		}
+		if ps.TurnUUID != uuidLimit2 || ps.Attempts != 3 {
+			t.Errorf("ps = %+v, want 新しい uuid、attempts 3", ps)
+		}
+	})
+}
+
+func TestTick_MaxRetriesReached_NoSend(t *testing.T) {
+	now := time.Date(2026, 10, 4, 10, 0, 0, 0, time.UTC)
+	client := &multiplexerfake.Client{PaneReadFunc: readReturning(cleanScreen, nil)}
+	cfg := config.Default()
+	deps := newTestDeps(t, cfg, client, limitedTurn(uuidLimit, now.Add(-time.Hour)))
+	ps := &PaneState{Status: StatusWaiting, Attempts: cfg.MaxRetries, TurnUUID: uuidLimit}
+
+	outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusIdle, true), ps, nil, now)
+
+	if err != nil {
+		t.Fatalf("Tick() error = %v", err)
+	}
+	if outcome != OutcomeMaxRetries {
+		t.Errorf("outcome = %v, want %v", outcome, OutcomeMaxRetries)
+	}
+	if want := now.Add(time.Duration(cfg.PollIntervalSeconds*maxRetriesCooldownMultiplier) * time.Second); !ps.WaitUntil.Equal(want) {
+		t.Errorf("WaitUntil = %v, want %v", ps.WaitUntil, want)
+	}
+	assertNoSend(t, client)
 }
 
 func TestTick_NotClaudeAgent_DuringWait_NoSend(t *testing.T) {
-	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
-	client := &multiplexerfake.Client{
-		PaneReadFunc: readReturning(limitAndRelativeScreen, nil),
-	}
+	now := time.Date(2026, 10, 4, 10, 0, 0, 0, time.UTC)
+	client := &multiplexerfake.Client{PaneReadFunc: readReturning(cleanScreen, nil)}
 	cfg := config.Default()
-	deps := newTestDeps(t, cfg, client)
-	pane := newTestPane(multiplexer.AgentStatusIdle, false) // Claude agent ではなくなった
-	ps := &PaneState{Status: StatusWaiting}
+	deps := newTestDeps(t, cfg, client, limitedTurn(uuidLimit, now.Add(-time.Hour)))
+	ps := &PaneState{Status: StatusWaiting, TurnUUID: uuidLimit}
 
-	outcome, err := Tick(context.Background(), deps, pane, ps, nil, now)
+	outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusIdle, false), ps, nil, now)
 
 	if err != nil {
 		t.Fatalf("Tick() error = %v", err)
@@ -506,240 +464,170 @@ func TestTick_NotClaudeAgent_DuringWait_NoSend(t *testing.T) {
 	if outcome != OutcomeNotClaudeAgent {
 		t.Errorf("outcome = %v, want %v", outcome, OutcomeNotClaudeAgent)
 	}
-	want := now.Add(time.Duration(cfg.PollIntervalSeconds*notClaudeBackoffMultiplier) * time.Second)
-	if !ps.WaitUntil.Equal(want) {
+	if want := now.Add(time.Duration(cfg.PollIntervalSeconds*notClaudeBackoffMultiplier) * time.Second); !ps.WaitUntil.Equal(want) {
 		t.Errorf("WaitUntil = %v, want %v", ps.WaitUntil, want)
 	}
-	if len(client.Calls) != 1 || client.Calls[0] != "PaneRead:pane-1" {
-		t.Errorf("Calls = %v, want [PaneRead:pane-1] のみ (Claude agent でなければ送信しない)", client.Calls)
-	}
+	assertNoRead(t, client)
 }
 
-func TestTick_ScreenUnreadable_DuringWait_StaysWaiting(t *testing.T) {
-	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
-	client := &multiplexerfake.Client{
-		PaneReadFunc: readReturning("", nil), // 空画面
-	}
-	deps := newTestDeps(t, config.Default(), client)
-	pane := newTestPane(multiplexer.AgentStatusIdle, true)
-	ps := &PaneState{Status: StatusWaiting, Attempts: 3}
-
-	outcome, err := Tick(context.Background(), deps, pane, ps, nil, now)
-
-	if err != nil {
-		t.Fatalf("Tick() error = %v", err)
-	}
-	if outcome != OutcomeScreenUnreadable {
-		t.Errorf("outcome = %v, want %v", outcome, OutcomeScreenUnreadable)
-	}
-	if ps.Status != StatusWaiting || ps.Attempts != 3 {
-		t.Errorf("ps = %+v, 空画面は resume の証拠にならないので状態を変えてはいけない", ps)
-	}
-}
-
-func TestTick_ReadError_DoesNotKillMachine(t *testing.T) {
-	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
+// 待機明けに画面を読めない (エラーか空) ときはキーを選べないので送らず、状態も変えない。
+func TestTick_Wake_ScreenUnreadable_StaysWaiting(t *testing.T) {
+	now := time.Date(2026, 10, 4, 10, 0, 0, 0, time.UTC)
 	boom := errors.New("rex unreachable")
+	for name, read := range map[string]func(context.Context, string, multiplexer.PaneReadOptions) (string, error){
+		"エラー": readReturning("", boom),
+		"空":   readReturning("  \n", nil),
+	} {
+		t.Run(name, func(t *testing.T) {
+			client := &multiplexerfake.Client{PaneReadFunc: read}
+			deps := newTestDeps(t, config.Default(), client, limitedTurn(uuidLimit, now.Add(-time.Hour)))
+			before := PaneState{Status: StatusWaiting, WaitUntil: now.Add(-time.Second), Attempts: 2, TurnUUID: uuidLimit}
+			ps := before
 
-	t.Run("監視中", func(t *testing.T) {
-		client := &multiplexerfake.Client{PaneReadFunc: readReturning("", boom)}
-		deps := newTestDeps(t, config.Default(), client)
-		pane := newTestPane(multiplexer.AgentStatusIdle, true)
-		ps := &PaneState{}
+			outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusIdle, true), &ps, nil, now)
 
-		outcome, err := Tick(context.Background(), deps, pane, ps, nil, now)
-
-		if err == nil {
-			t.Fatal("err = nil, want non-nil (呼び出し元が連続失敗をカウントできるようにエラーを返すべき)")
-		}
-		if outcome != OutcomeReadError {
-			t.Errorf("outcome = %v, want %v", outcome, OutcomeReadError)
-		}
-		if ps.Status != StatusMonitoring {
-			t.Errorf("Status = %v, want %v (エラーで状態を破壊してはいけない)", ps.Status, StatusMonitoring)
-		}
-	})
-
-	t.Run("待機中", func(t *testing.T) {
-		client := &multiplexerfake.Client{PaneReadFunc: readReturning("", boom)}
-		deps := newTestDeps(t, config.Default(), client)
-		pane := newTestPane(multiplexer.AgentStatusIdle, true)
-		ps := &PaneState{Status: StatusWaiting, Attempts: 2}
-
-		outcome, err := Tick(context.Background(), deps, pane, ps, nil, now)
-
-		if err == nil {
-			t.Fatal("err = nil, want non-nil")
-		}
-		if outcome != OutcomeScreenUnreadable {
-			t.Errorf("outcome = %v, want %v", outcome, OutcomeScreenUnreadable)
-		}
-		if ps.Status != StatusWaiting || ps.Attempts != 2 {
-			t.Errorf("ps = %+v, 読み取りエラーで待機状態を崩してはいけない", ps)
-		}
-	})
-}
-
-func TestTick_TransientFromMonitoring_NoMarginAdded(t *testing.T) {
-	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
-	client := &multiplexerfake.Client{
-		PaneReadFunc: readReturning(transientScreen, nil),
-	}
-	cfg := config.Default()
-	deps := newTestDeps(t, cfg, client)
-	pane := newTestPane(multiplexer.AgentStatusIdle, true)
-	ps := &PaneState{}
-
-	outcome, err := Tick(context.Background(), deps, pane, ps, nil, now)
-
-	if err != nil {
-		t.Fatalf("Tick() error = %v", err)
-	}
-	if outcome != OutcomeWaiting {
-		t.Fatalf("outcome = %v, want %v", outcome, OutcomeWaiting)
-	}
-	want := now.Add(time.Duration(cfg.TransientWaitSeconds) * time.Second)
-	if !ps.WaitUntil.Equal(want) {
-		t.Errorf("WaitUntil = %v, want %v (transient の初回待機に margin は乗せない)", ps.WaitUntil, want)
-	}
-}
-
-func TestTick_HandleTransientDisabled_StaysMonitoring(t *testing.T) {
-	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
-	client := &multiplexerfake.Client{
-		PaneReadFunc: readReturning(transientScreen, nil),
-	}
-	cfg := config.Default()
-	cfg.HandleTransient = false
-	deps := newTestDeps(t, cfg, client)
-	pane := newTestPane(multiplexer.AgentStatusIdle, true)
-	ps := &PaneState{}
-
-	outcome, err := Tick(context.Background(), deps, pane, ps, nil, now)
-
-	if err != nil {
-		t.Fatalf("Tick() error = %v", err)
-	}
-	if outcome != OutcomeMonitoring {
-		t.Errorf("outcome = %v, want %v", outcome, OutcomeMonitoring)
-	}
-	if ps.Status != StatusMonitoring {
-		t.Errorf("Status = %v, want %v", ps.Status, StatusMonitoring)
-	}
-	if len(client.Calls) != 1 || client.Calls[0] != "PaneRead:pane-1" {
-		t.Errorf("Calls = %v, want [PaneRead:pane-1] のみ", client.Calls)
-	}
-}
-
-func TestTick_CleanScreen_StaysMonitoring(t *testing.T) {
-	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
-	client := &multiplexerfake.Client{
-		PaneReadFunc: readReturning(cleanScreen, nil),
-	}
-	deps := newTestDeps(t, config.Default(), client)
-	pane := newTestPane(multiplexer.AgentStatusIdle, true)
-	ps := &PaneState{}
-
-	outcome, err := Tick(context.Background(), deps, pane, ps, nil, now)
-
-	if err != nil {
-		t.Fatalf("Tick() error = %v", err)
-	}
-	if outcome != OutcomeMonitoring {
-		t.Errorf("outcome = %v, want %v", outcome, OutcomeMonitoring)
-	}
-	if ps.Status != StatusMonitoring {
-		t.Errorf("Status = %v, want %v", ps.Status, StatusMonitoring)
-	}
-}
-
-// detect.Kind を直接参照して分類フィクスチャの前提が崩れていないことを確認する。
-// フィクスチャの文言を変えたときに、意図した Kind から静かにズレるのを防ぐ。
-func TestFixtures_ClassifyAsExpected(t *testing.T) {
-	c := newTestClassifier(t)
-	tests := []struct {
-		name   string
-		screen string
-		want   detect.Kind
-	}{
-		{"limitAndRelativeScreen", limitAndRelativeScreen, detect.KindLimit},
-		{"limitAbsoluteScreen", limitAbsoluteScreen, detect.KindLimit},
-		{"transientScreen", transientScreen, detect.KindTransient},
-		{"cleanScreen", cleanScreen, detect.KindNone},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := c.Classify(tt.screen, 0); got != tt.want {
-				t.Errorf("Classify(%q) = %v, want %v", tt.screen, got, tt.want)
+			if outcome != OutcomeReadError {
+				t.Errorf("outcome = %v, want %v", outcome, OutcomeReadError)
 			}
+			if (name == "エラー") != (err != nil) {
+				t.Errorf("err = %v", err)
+			}
+			if ps != before {
+				t.Errorf("ps = %+v, 読めないことで状態を変えてはいけない", ps)
+			}
+			assertNoSend(t, client)
 		})
 	}
 }
 
-// TestTick_PastResetsAt_WakesImmediately は resets_at を過ぎているのに画面が上限
-// 表示のまま止まっている pane を、待たずに起こすことを確かめる。
-//
-// 解除時刻を過ぎても Claude Code はキー入力を待って止まったままになる。ここで
-// fallbackWaitHours へ落ちると、待つ理由が無いのに数時間寝てしまう
-// (2026-08-19 の pane が実際にこの状態だった)。
-func TestTick_PastResetsAt_WakesImmediately(t *testing.T) {
-	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
-	rateState := &ratelimit.State{
-		FiveHourUsed:     100,
-		FiveHourResetsAt: now.Add(-time.Hour),
-		ObservedAt:       now.Add(-3 * time.Hour), // 上限で描画が止まったので state も古い
-	}
+func TestTick_Transient(t *testing.T) {
+	now := time.Date(2026, 10, 4, 10, 0, 0, 0, time.UTC)
 
-	client := &multiplexerfake.Client{
-		PaneReadFunc: readReturning(limitAndRelativeScreen, nil), // 「5分後」を含む
-	}
-	cfg := config.Default()
-	deps := newTestDeps(t, cfg, client)
-	pane := newTestPane(multiplexer.AgentStatusIdle, true)
-	ps := &PaneState{}
+	t.Run("検知時は TransientWaitSeconds だけ待つ (margin 無し)", func(t *testing.T) {
+		cfg := config.Default()
+		client := &multiplexerfake.Client{}
+		deps := newTestDeps(t, cfg, client, transientTurn())
+		ps := &PaneState{}
 
-	outcome, err := Tick(context.Background(), deps, pane, ps, rateState, now)
+		outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, nil, now)
 
-	if err != nil {
-		t.Fatalf("Tick() error = %v", err)
+		if err != nil || outcome != OutcomeWaiting {
+			t.Fatalf("Tick() = %v, %v, want waiting", outcome, err)
+		}
+		if want := now.Add(time.Duration(cfg.TransientWaitSeconds) * time.Second); !ps.WaitUntil.Equal(want) {
+			t.Errorf("WaitUntil = %v, want %v", ps.WaitUntil, want)
+		}
+		assertNoRead(t, client)
+	})
+
+	t.Run("handleTransient が off なら監視のまま", func(t *testing.T) {
+		cfg := config.Default()
+		cfg.HandleTransient = false
+		client := &multiplexerfake.Client{}
+		deps := newTestDeps(t, cfg, client, transientTurn())
+		ps := &PaneState{}
+
+		outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, nil, now)
+
+		if err != nil || outcome != OutcomeMonitoring || ps.Status != StatusMonitoring {
+			t.Errorf("Tick() = %v, %v, ps = %+v; want monitoring", outcome, err, ps)
+		}
+	})
+
+	t.Run("待機明けの再送は指数バックオフで、上限で頭打ち", func(t *testing.T) {
+		cfg := config.Default() // TransientWaitSeconds=60, TransientMaxWaitSeconds=300
+		client := &multiplexerfake.Client{PaneReadFunc: readReturning(cleanScreen, nil)}
+		deps := newTestDeps(t, cfg, client, transientTurn())
+		ps := &PaneState{Status: StatusWaiting, TurnUUID: "transient"} // WaitUntil ゼロ値なので初回から必ず進む
+		wantDeltas := []time.Duration{120 * time.Second, 240 * time.Second, 300 * time.Second}
+
+		tickNow := now
+		for i, wantDelta := range wantDeltas {
+			outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, nil, tickNow)
+			if err != nil || outcome != OutcomeRetried {
+				t.Fatalf("Tick()[%d] = %v, %v, want retried", i, outcome, err)
+			}
+			if got := ps.WaitUntil.Sub(tickNow); got != wantDelta {
+				t.Errorf("attempt %d: delta = %v, want %v", i+1, got, wantDelta)
+			}
+			tickNow = ps.WaitUntil
+		}
+		if ps.Attempts != len(wantDeltas) {
+			t.Errorf("Attempts = %d, want %d", ps.Attempts, len(wantDeltas))
+		}
+	})
+}
+
+// 待っても解けない上限と週の上限は待機に入らない。待機中に変わったら監視へ戻る。
+func TestTick_CapsDoNotWait(t *testing.T) {
+	now := time.Date(2026, 10, 4, 10, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name string
+		turn Turn
+		want Outcome
+	}{
+		{"Fable のモデル単位の上限", hardCapTurn(), OutcomeHardCap},
+		{"週の上限 (解除が 3 日先)", weeklyTurn(now.Add(72 * time.Hour)), OutcomeWeeklyCap},
+		{"週の上限 (解除が 1 時間先)", weeklyTurn(now.Add(time.Hour)), OutcomeWeeklyCap},
 	}
-	if outcome != OutcomeWaiting {
-		t.Fatalf("outcome = %v, want %v", outcome, OutcomeWaiting)
-	}
-	want := now.Add(time.Duration(cfg.MarginSeconds) * time.Second)
-	if !ps.WaitUntil.Equal(want) {
-		t.Errorf("WaitUntil = %v, want %v (解除済みなら画面の相対表現より優先して即起床すべき)", ps.WaitUntil, want)
+	for _, tt := range tests {
+		t.Run(tt.name+"/監視中", func(t *testing.T) {
+			client := &multiplexerfake.Client{}
+			deps := newTestDeps(t, config.Default(), client, tt.turn)
+			ps := &PaneState{}
+			outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, nil, now)
+			if err != nil || outcome != tt.want || ps.Status != StatusMonitoring {
+				t.Errorf("Tick() = %v, %v, ps = %+v; want %v / monitoring", outcome, err, ps, tt.want)
+			}
+			assertNoRead(t, client)
+		})
+		t.Run(tt.name+"/待機中", func(t *testing.T) {
+			client := &multiplexerfake.Client{PaneReadFunc: readReturning(cleanScreen, nil)}
+			deps := newTestDeps(t, config.Default(), client, tt.turn)
+			ps := &PaneState{Status: StatusWaiting, Attempts: 1, TurnUUID: uuidLimit}
+			outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, nil, now)
+			if err != nil || outcome != tt.want || *ps != (PaneState{}) {
+				t.Errorf("Tick() = %v, %v, ps = %+v; want %v / ゼロ値", outcome, err, ps, tt.want)
+			}
+			assertNoSend(t, client)
+		})
 	}
 }
 
-// TestTick_StateWithoutResetsAt_FallsBackToRelativeParse は resets_at を持たない
-// state (7 日ウィンドウしか入っていない等) では画面の相対表現へ落ちることを確かめる。
-// epoch 0 を「過去の解除時刻」と読み違えて即起床させないための境界。
-func TestTick_StateWithoutResetsAt_FallsBackToRelativeParse(t *testing.T) {
-	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
-	rateState := &ratelimit.State{
-		FiveHourUsed: 100,
-		ObservedAt:   now,
+// detect.Kind を直接参照して分類フィクスチャの前提が崩れていないことを確認する。
+func TestFixtures_ClassifyAsExpected(t *testing.T) {
+	now := time.Now()
+	tests := []struct {
+		name string
+		turn Turn
+		want detect.Kind
+	}{
+		{"limitedTurn", limitedTurn(uuidLimit, now), detect.KindLimit},
+		{"legacyLimitedTurn", legacyLimitedTurn(), detect.KindLimit},
+		{"weeklyTurn", weeklyTurn(now), detect.KindWeeklyLimit},
+		{"transientTurn", transientTurn(), detect.KindTransient},
+		{"hardCapTurn", hardCapTurn(), detect.KindSpendLimit},
+		{"resumedTurn", resumedTurn(), detect.KindNone},
 	}
-
-	client := &multiplexerfake.Client{
-		PaneReadFunc: readReturning(limitAndRelativeScreen, nil), // 「5分後」を含む
+	for _, tt := range tests {
+		if got := detect.ClassifyTurn(tt.turn.Entry); got != tt.want {
+			t.Errorf("%s: ClassifyTurn = %v, want %v", tt.name, got, tt.want)
+		}
 	}
-	cfg := config.Default()
-	deps := newTestDeps(t, cfg, client)
-	pane := newTestPane(multiplexer.AgentStatusIdle, true)
-	ps := &PaneState{}
-
-	outcome, err := Tick(context.Background(), deps, pane, ps, rateState, now)
-
-	if err != nil {
-		t.Fatalf("Tick() error = %v", err)
+	screens := []struct {
+		name   string
+		screen string
+		want   detect.Hint
+	}{
+		{"cleanScreen", cleanScreen, detect.HintNone},
+		{"nativeArmedScreen", nativeArmedScreen, detect.HintNativeArmed},
+		{"nativeRetryingScreen", nativeRetryingScreen, detect.HintNativeRetrying},
+		{"resumeReadyScreen", resumeReadyScreen, detect.HintResumeReady},
+		{"lowerPriorityScreen", lowerPriorityScreen, detect.HintLowerPriority},
 	}
-	if outcome != OutcomeWaiting {
-		t.Fatalf("outcome = %v, want %v", outcome, OutcomeWaiting)
-	}
-	want := now.Add(5 * time.Minute).Add(time.Duration(cfg.MarginSeconds) * time.Second)
-	if !ps.WaitUntil.Equal(want) {
-		t.Errorf("WaitUntil = %v, want %v (resets_at が無いなら相対表現へ落ちるべき)", ps.WaitUntil, want)
+	for _, tt := range screens {
+		if got := detect.ClassifyScreen(tt.screen, 0); got != tt.want {
+			t.Errorf("%s: ClassifyScreen = %v, want %v", tt.name, got, tt.want)
+		}
 	}
 }

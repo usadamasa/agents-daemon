@@ -104,6 +104,33 @@ func TestRemove(t *testing.T) {
 	}
 }
 
+// RemoveByEndpoint は今の参照がどちらかの端点に一致する辺だけを消し、消した辺を返す。無ければ空で失敗しない。
+func TestRemoveByEndpoint(t *testing.T) {
+	s := New(t.TempDir())
+	dead := Endpoint{Ref: "sid:dead", CWD: "/home/a"}
+	asBefore := mustAdd(t, s, dead, Endpoint{Ref: "pr:o/r#1", CWD: "/home/b"}, "", testNow).Edge
+	asAfter := mustAdd(t, s, Endpoint{Ref: "sid:peer", CWD: "/home/b"}, dead, "", testNow).Edge
+	other := mustAdd(t, s, Endpoint{Ref: "sid:peer", CWD: "/home/b"}, Endpoint{Ref: "pr:o/r#1", CWD: "/home/b"}, "", testNow).Edge
+
+	removed, err := s.RemoveByEndpoint("sid:dead")
+	if err != nil {
+		t.Fatalf("RemoveByEndpoint() error = %v", err)
+	}
+	ids := map[string]bool{}
+	for _, e := range removed {
+		ids[e.ID] = true
+	}
+	if len(removed) != 2 || !ids[asBefore.ID] || !ids[asAfter.ID] {
+		t.Errorf("消した辺 = %+v", removed)
+	}
+	if got, _ := s.Find("", ""); len(got) != 1 || got[0].ID != other.ID {
+		t.Errorf("残った辺 = %+v", got)
+	}
+	if again, err := s.RemoveByEndpoint("sid:dead"); err != nil || len(again) != 0 {
+		t.Errorf("2 回目 = %+v, %v", again, err)
+	}
+}
+
 // Find は repo (どちらかの端点) と参照 (どちらかの端点) で絞り、登録の順に返す。該当なしは空の配列。
 func TestFind(t *testing.T) {
 	s := New(t.TempDir())

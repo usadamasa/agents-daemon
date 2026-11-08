@@ -5,6 +5,7 @@ package gitrepo
 import (
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -41,6 +42,29 @@ func Locate(cwd string) Place {
 		branch = ""
 	}
 	return Place{Repo: common, Branch: branch}
+}
+
+var githubRemote = regexp.MustCompile(`^(?:[a-z+]+://(?:[^@/]+@)?|[^@/]+@)?github\.com[:/]([\w.-]+/[\w.-]+?)(?:\.git)?/?$`)
+
+// ownerRepo は remote の URL の owner/repo。GitHub の URL でなければ空。
+func ownerRepo(url string) string {
+	m := githubRemote.FindStringSubmatch(url)
+	if m == nil {
+		return ""
+	}
+	return m[1]
+}
+
+// GitHubRepo は dir の repo の origin が GitHub なら owner/repo を返す。git の外や origin が無ければ空。
+func GitHubRepo(dir string) string {
+	if !filepath.IsAbs(dir) {
+		return ""
+	}
+	out, err := exec.Command("git", "-C", dir, "remote", "get-url", "origin").Output() // #nosec G204 -- shell を通さず、dir は引数 1 つとして渡る
+	if err != nil {
+		return ""
+	}
+	return ownerRepo(strings.TrimSpace(string(out)))
 }
 
 // Key は p を求めた cwd の repo の鍵。git の外なら cwd そのものにする。依存図のセッションとパーキングのメモが

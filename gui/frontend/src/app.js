@@ -10,7 +10,8 @@ import { STATE_LABEL, STATE_TONE, cardText, emphasis } from "./card.js";
 import { isStale, kindLabel, lastPlacedAt, stamp } from "./memo.js";
 import { canAdopt, canDismiss, canRename, canTell, candidates, destinationLabel, isOwnTask, issueDestinations, pathDestination, peerDestinations, spawnDestinations, spawnLabel, taskDestinations } from "./ops.js";
 import { addBlocker, adopt, askUnlink, discard, discardStale, dismissAll, dismissOne, handOff, handOffTask, instruct, rename, setStatus, start, toParking, unlink } from "./actions.js";
-import { pickFolder } from "./daemon.js";
+import { openTarget, pickFolder } from "./daemon.js";
+import { segments } from "./links.js";
 import { MAX_ZOOM, MIN_ZOOM, centerOffset, clampZoom, fitZoom, overflowCenter, percent, scrollAfterZoom, stepZoom, wheelZoomer } from "./zoom.js";
 import { restore, scrollView, watchUpgrade } from "./restore.js";
 
@@ -89,6 +90,41 @@ async function act(run) {
 }
 
 const el = (id) => document.getElementById(id);
+
+// openLink は本文のリンクを開く。単体ビューの選択と打ちかけの文面に触らないよう act を通さず、失敗だけを footer に出す。
+async function openLink(target) {
+  const failure = await openTarget(target);
+  if (failure === "") return;
+  state.notice = failure;
+  state.noticeUntil = Date.now() + NOTICE_MS;
+  renderFoot();
+  setTimeout(renderFoot, NOTICE_MS + 100);
+}
+
+// linkContext は repo の鍵 (owner/repo を引く) と base (相対パスの基準) を segments の ctx にする。
+function linkContext(repo, base) {
+  return { githubRepo: state.data.repos.find((r) => r.repo === repo)?.github_repo, base };
+}
+
+// appendLinked は text の URL、issue / PR の参照、ファイルパスをリンクにして parent に足す。
+function appendLinked(parent, text, ctx) {
+  for (const s of segments(text, ctx)) {
+    if (s.target === undefined) {
+      parent.append(s.text);
+      continue;
+    }
+    const a = document.createElement("a");
+    a.className = "ref";
+    a.href = "#";
+    a.title = s.target;
+    a.textContent = s.text;
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      void openLink(s.target);
+    });
+    parent.append(a);
+  }
+}
 
 function stateLabel(n) {
   // 下流が全部完了した idle の peer は報告を済ませていて、こちらの返事を要さない。
@@ -526,7 +562,7 @@ function nodeRow(n, mark, link, owner) {
   if (link?.edge?.note) {
     const note = document.createElement("span");
     note.className = "note";
-    note.textContent = link.edge.note;
+    appendLinked(note, link.edge.note, linkContext(link.edge.after.repo, link.edge.after.cwd));
     row.append(note);
   }
   // `edge add` で書いた辺 (kind edge) は元の記録を消せる。同じセッションの blockedBy はそのセッションの TaskUpdate のもの。
@@ -940,7 +976,7 @@ function nodePopup(n) {
   for (const text of [n.description, n.summary ? `今の作業: ${n.summary}` : ""]) {
     if (!text) continue;
     const p = document.createElement("p");
-    p.textContent = text;
+    appendLinked(p, text, linkContext(n.repo, n.cwd));
     parts.push(p);
   }
 
@@ -1012,7 +1048,7 @@ function memoPopup({ memo, repo }) {
 
   if (memo.detail) {
     const p = document.createElement("p");
-    p.textContent = memo.detail;
+    appendLinked(p, memo.detail, linkContext(repo.repo, repo.repo));
     parts.push(p);
   }
   if (memo.default_taken || memo.files?.length) {

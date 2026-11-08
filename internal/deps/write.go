@@ -71,6 +71,7 @@ func Write(w io.Writer, p apppath.Paths) error {
 		Parking:      memos,
 		Edges:        edges,
 		Locate:       gitrepo.Locate,
+		GitHubRepo:   gitrepo.GitHubRepo,
 		SessionNames: names,
 		Sessions:     sessions,
 		RefStates:    refs,

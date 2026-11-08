@@ -269,7 +269,8 @@ select { font: inherit; color: inherit; }
 .pop .title .edit { display: flex; align-items: center; gap: 8px; }
 .pop .title .edit input { flex: 1 1 auto; min-width: 0; font: inherit; padding: 2px 6px; border: 1px solid var(--line); border-radius: 6px; }
 .pop .chips { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-.pop p { margin: 0; font-size: 12.5px; line-height: 1.6; color: var(--ink-soft); white-space: pre-wrap; }
+.pop p { margin: 0; font-size: 12.5px; line-height: 1.6; color: var(--ink-soft); white-space: pre-wrap; overflow-wrap: anywhere; }
+.pop a.ref { color: var(--green-ink); text-decoration: underline; }
 .pop .grp { display: flex; flex-direction: column; gap: 2px; }
 .pop .x { position: absolute; right: 12px; top: 12px; width: 28px; height: 28px; border-radius: 6px; color: var(--muted); font-size: 16px; line-height: 28px; text-align: center; }
 .pop .x:hover { background: var(--hover); }

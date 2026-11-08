@@ -60,6 +60,9 @@ exec して stdout を返すだけで、JSON はフロントエンド (`gui/fron
 - メモを渡す (タスクにする・issue にする): 宛先は生きているセッションと新しく起こす repo。`park hand` 1 回で
   取る・送る・戻すまで行う ([parking.md](parking.md))
 - 送達が拒まれたとき (下の `tell` の判定) は開いている選択と打った文面を残し、理由を文面の下に出す
+- 単体ビューの本文 (タスクの説明、今の作業、メモの detail、辺の note) の URL、issue / PR の参照、ファイルパスは `links.js` が
+  リンクにし、Go の `Daemon.Open` が http / https の URL と在る絶対パスだけを `/usr/bin/open` へ渡す。ファイルは既定のアプリで
+  開くので行番号は使わない。`#123` は `DepsRepo.github_repo` で補い、GitHub の repo でなければ素の文字のまま
 
 ### セッションへの送達 (`tell`)
 

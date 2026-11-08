@@ -6,6 +6,7 @@
     {
       "repo": "/repo/agents-daemon",
       "title": "agents-daemon",
+      "github_repo": "usadamasa/agents-daemon",
       "sessions": [
         { "session_id": "sid-alpha", "session": "alpha", "subject": "API を実装する", "live": true },
         { "session_id": "sid-beta", "session": "beta", "subject": "画面を描く", "live": true }
@@ -28,6 +29,7 @@
           "kind": "scope",
           "origin": "placed",
           "title": "ラベルの文言も揃えるか",
+          "detail": "gui/main.go:5 の文言と #7 を見る",
           "default_taken": "やらない",
           "sources": [
             { "session_id": "sid-beta", "task_ref": "task:beta/1", "session": "beta", "live": true, "at": "2026-11-07T02:10:00Z" }
@@ -83,7 +85,8 @@
       },
       {
         "key": "task:beta/2", "kind": "task", "state": "pending", "title": "スクリーンショットを撮る",
-        "endpoint": true, "cwd": "/repo/agents-daemon", "task_id": "2",
+        "endpoint": true, "cwd": "/repo/agents-daemon", "repo": "/repo/agents-daemon", "task_id": "2",
+        "description": "https://example.com/a と #12 と gui/main.go:5 を見る",
         "session_id": "sid-beta", "session": "beta", "session_name": "beta", "live": true,
         "depth": 3, "downstream": 1, "parked": 0, "memos": [], "blocked_by": ["task:beta/1"], "deadlock": false, "halted": false, "stuck": false
       },

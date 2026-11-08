@@ -27,6 +27,9 @@ let css;
 // answers は window.wails の Call.ByName が返す値。fixtureDeps は fixture の deps の文字列。
 const answers = {};
 let fixtureDeps;
+// main.Daemon.Open に渡された target。openFailure が空でなければ呼び出しをその理由で失敗させる。
+const opened = [];
+let openFailure = "";
 
 // setHost は #graph の見える領域の大きさを決める。「全体を表示」の拡大率がこれで決まる。
 function setHost({ width, height }) {
@@ -52,7 +55,12 @@ before(async () => {
   Object.assign(answers, { "main.Daemon.Deps": deps, "main.Daemon.Restore": "", "main.Daemon.PickFolder": "" });
   window.wails = {
     Call: {
-      ByName: async (name) => {
+      ByName: async (name, ...args) => {
+        if (name === "main.Daemon.Open") {
+          opened.push(args[0]);
+          if (openFailure !== "") throw new Error(openFailure);
+          return "";
+        }
         if (!(name in answers)) throw new Error(`fixture に無い呼び出し: ${name}`);
         return answers[name];
       },
@@ -296,6 +304,58 @@ test("ノードを選ぶと単体ビューを開き、待っている先と待�
   await snapshot("graph-popup");
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
   assert.equal(pop.hidden, true);
+});
+
+const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+const escape = () => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+
+test("タスクの説明: URL、#123、相対パスをリンクにし、押すと target を開いて単体ビューは閉じない", async () => {
+  q('.node[data-key="task:beta/2"]').click();
+  const pop = q("#pop");
+  const as = [...pop.querySelectorAll("p a.ref")];
+  assert.deepEqual(as.map((a) => a.textContent), ["https://example.com/a", "#12", "gui/main.go:5"]);
+  assert.equal(pop.querySelector("p").textContent, "https://example.com/a と #12 と gui/main.go:5 を見る");
+  opened.length = 0;
+  for (const a of as) a.click();
+  await flush();
+  assert.deepEqual(opened, ["https://example.com/a", "https://github.com/usadamasa/agents-daemon/issues/12", "/repo/agents-daemon/gui/main.go"]);
+  assert.equal(pop.hidden, false);
+  await snapshot("graph-popup-links");
+  escape();
+});
+
+test("リンクを開けなかったら理由を footer に出す", async () => {
+  q('.node[data-key="task:beta/2"]').click();
+  openFailure = "開けない: /repo/agents-daemon/gui/main.go";
+  try {
+    q("#pop p a.ref").click();
+    await flush();
+    assert.ok(q("#foot-text").textContent.includes(openFailure), q("#foot-text").textContent);
+  } finally {
+    openFailure = "";
+    escape();
+  }
+});
+
+test("メモの detail: repo を基準にリンクにする", async () => {
+  q('.mrow[data-memo="memo-2"]').click();
+  const as = [...q("#pop").querySelectorAll("p a.ref")];
+  opened.length = 0;
+  for (const a of as) a.click();
+  await flush();
+  assert.deepEqual(opened, ["/repo/agents-daemon/gui/main.go", "https://github.com/usadamasa/agents-daemon/issues/7"]);
+  escape();
+});
+
+test("辺の note: 辺の待つ側の repo を基準にリンクにする", async () => {
+  q('.node[data-key="pr:usadamasa/agents-daemon#254"]').click();
+  const a = q("#pop .lk .note a.ref");
+  assert.equal(a.textContent, "#254");
+  opened.length = 0;
+  a.click();
+  await flush();
+  assert.deepEqual(opened, ["https://github.com/usadamasa/agents-daemon/issues/254"]);
+  escape();
 });
 
 test("PR のノードの単体ビュー: 見出しは PR の題で、番号と repo は状態の chip に残す", async () => {

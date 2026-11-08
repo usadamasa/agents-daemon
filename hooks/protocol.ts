@@ -933,6 +933,10 @@ export const definitions = {
       "title": {
         "type": "string"
       },
+      "github_repo": {
+        "type": "string",
+        "description": "origin が GitHub のときの owner/repo。本文の #123 をリンクにする材料"
+      },
       "sessions": {
         "type": "array",
         "items": {
@@ -1215,6 +1219,10 @@ export const definitions = {
       },
       "cwd": {
         "type": "string"
+      },
+      "repo": {
+        "type": "string",
+        "description": "cwd の repo の鍵 (DepsRepo.repo と同じ規則)"
       },
       "task_id": {
         "type": "string",

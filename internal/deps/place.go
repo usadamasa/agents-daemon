@@ -6,10 +6,25 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 )
 
-// locator は cwd ごとの Place を 1 回だけ求めて覚える。
+// locator は cwd ごとの Place と、repo の鍵ごとの owner/repo を 1 回だけ求めて覚える。
 type locator struct {
-	locate func(cwd string) gitrepo.Place
-	cache  map[string]gitrepo.Place
+	locate      func(cwd string) gitrepo.Place
+	cache       map[string]gitrepo.Place
+	gitHubRepo  func(repo string) string
+	gitHubRepos map[string]string
+}
+
+// github は repo の鍵の owner/repo。GitHub の repo でなければ空。
+func (l locator) github(repo string) string {
+	if l.gitHubRepo == nil || repo == "" {
+		return ""
+	}
+	r, ok := l.gitHubRepos[repo]
+	if !ok {
+		r = l.gitHubRepo(repo)
+		l.gitHubRepos[repo] = r
+	}
+	return r
 }
 
 func (l locator) place(cwd string) gitrepo.Place {

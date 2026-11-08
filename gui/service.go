@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,6 +21,8 @@ import (
 // 状態の読み書きはバイナリが持ち、ここは exec して結果を返すだけにする。
 type Daemon struct {
 	bin string
+	// open は検査を通った target を既定のアプリで開く。
+	open func(target string) error
 	// 以下は開いたまま新しいバージョンへ切り替えるためのもの (upgrade.go)。window は main が窓を作った後に入れる。
 	upgrader *upgrader
 	window   *application.WebviewWindow
@@ -27,7 +30,42 @@ type Daemon struct {
 }
 
 func newDaemon() *Daemon {
-	return &Daemon{bin: daemonBin()}
+	return &Daemon{bin: daemonBin(), open: openWithSystem}
+}
+
+// Open は単体ビューの本文のリンク (http / https の URL か、在る絶対パス) を既定のアプリで開く。
+func (d *Daemon) Open(target string) error {
+	if err := checkOpenTarget(target); err != nil {
+		return err
+	}
+	return d.open(target)
+}
+
+// checkOpenTarget は開いてよい target かを確かめる。`open` はスキームでアプリを起こすので、本文 (セッションが書いた文字列)
+// から渡せる URL を http と https に絞る。
+func checkOpenTarget(target string) error {
+	if filepath.IsAbs(target) {
+		if _, err := os.Stat(target); err != nil {
+			return fmt.Errorf("開けない: %w", err)
+		}
+		return nil
+	}
+	u, err := url.Parse(target)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return fmt.Errorf("開けない: %q", target)
+	}
+	return nil
+}
+
+func openWithSystem(target string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), runTimeout)
+	defer cancel()
+	// target は checkOpenTarget を通った URL か絶対パスで、- で始まらない。
+	out, err := exec.CommandContext(ctx, "/usr/bin/open", target).CombinedOutput() // #nosec G204 -- shell を通さず、target は引数 1 つとして渡る
+	if err != nil {
+		return fmt.Errorf("開けない: %s: %s", target, strings.TrimSpace(string(out)))
+	}
+	return nil
 }
 
 // Restore は切り替える前の窓の位置と大きさを戻し、画面の状態 (restore.js が詰めた JSON の object) を返す。

@@ -329,10 +329,12 @@ type RecentRepo struct {
 // DepsRepo は repo 1 つ。sessions は表示名の順、memos は open のメモを置いた順。
 type DepsRepo struct {
 	// 鍵 (main worktree のパス、git の外なら cwd)。パーキングのメモの repo と同じ規則。
-	Repo     string        `json:"repo"`
-	Title    string        `json:"title"`
-	Sessions []DepsSession `json:"sessions"`
-	Memos    []ParkingCard `json:"memos"`
+	Repo  string `json:"repo"`
+	Title string `json:"title"`
+	// origin が GitHub のときの owner/repo。本文の #123 をリンクにする材料。
+	GithubRepo string        `json:"github_repo,omitempty"`
+	Sessions   []DepsSession `json:"sessions"`
+	Memos      []ParkingCard `json:"memos"`
 }
 
 // DepsSession は repo で生きているセッション 1 つ (メモを渡す宛先)。
@@ -408,6 +410,8 @@ type GraphNode struct {
 	// key をそのまま edge add の端点に書けるか (TodoWrite の項目は書けない)。
 	Endpoint bool   `json:"endpoint"`
 	CWD      string `json:"cwd,omitempty"`
+	// cwd の repo の鍵 (DepsRepo.repo と同じ規則)。
+	Repo string `json:"repo,omitempty"`
 	// kind task のノードのタスクの ID (TaskUpdate に書く形)。
 	TaskID string `json:"task_id,omitempty"`
 	// kind task のノードのタスクの description。

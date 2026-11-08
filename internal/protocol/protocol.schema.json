@@ -393,6 +393,7 @@
       "properties": {
         "repo": { "type": "string", "description": "鍵 (main worktree のパス、git の外なら cwd)。パーキングのメモの repo と同じ規則" },
         "title": { "type": "string" },
+        "github_repo": { "type": "string", "description": "origin が GitHub のときの owner/repo。本文の #123 をリンクにする材料" },
         "sessions": { "type": "array", "items": { "$ref": "#/$defs/DepsSession" } },
         "memos": { "type": "array", "items": { "$ref": "#/$defs/ParkingCard" } }
       }
@@ -471,6 +472,7 @@
         "detail": { "type": "string", "description": "状態の補足 (上限の解除時刻)" },
         "endpoint": { "type": "boolean", "description": "key をそのまま edge add の端点に書けるか (TodoWrite の項目は書けない)" },
         "cwd": { "type": "string" },
+        "repo": { "type": "string", "description": "cwd の repo の鍵 (DepsRepo.repo と同じ規則)" },
         "task_id": { "type": "string", "description": "kind task のノードのタスクの ID (TaskUpdate に書く形)" },
         "description": { "type": "string", "description": "kind task のノードのタスクの description" },
         "session_id": { "type": "string" },

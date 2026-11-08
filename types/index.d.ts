@@ -331,6 +331,8 @@ export type DepsRepo = {
   // 鍵 (main worktree のパス、git の外なら cwd)。パーキングのメモの repo と同じ規則
   repo: string
   title: string
+  // origin が GitHub のときの owner/repo。本文の #123 をリンクにする材料
+  github_repo?: string
   sessions: DepsSession[]
   memos: ParkingCard[]
 }
@@ -408,6 +410,8 @@ export type GraphNode = {
   // key をそのまま edge add の端点に書けるか (TodoWrite の項目は書けない)
   endpoint: boolean
   cwd?: string
+  // cwd の repo の鍵 (DepsRepo.repo と同じ規則)
+  repo?: string
   // kind task のノードのタスクの ID (TaskUpdate に書く形)
   task_id?: string
   // kind task のノードのタスクの description

@@ -47,6 +47,8 @@ type input struct {
 	Edges []edge.Edge
 	// Locate は cwd の repo を決める。同じ cwd では 1 回だけ呼ぶ。
 	Locate func(cwd string) gitrepo.Place
+	// GitHubRepo は repo の鍵の owner/repo を決める。同じ repo では 1 回だけ呼ぶ。
+	GitHubRepo func(repo string) string
 	// SessionNames は session ID → セッション名 (statusline の session_name、sessioncontext.ListSessionNames)。
 	SessionNames map[string]string
 	// Sessions はセッション台帳 (ledger)。新しいセッションを起こす repo の候補 (Deps.RecentRepos) と、ノードの
@@ -69,7 +71,7 @@ func build(in input) Deps {
 	for i := range cards {
 		cards[i].Session = names[cards[i].SessionID]
 	}
-	l := locator{locate: in.Locate, cache: map[string]gitrepo.Place{}}
+	l := locator{locate: in.Locate, cache: map[string]gitrepo.Place{}, gitHubRepo: in.GitHubRepo, gitHubRepos: map[string]string{}}
 	d.Repos = arrange(cards, open, panes, names, in.SessionNames, l)
 	d.RecentRepos = recentRepos(in.Sessions)
 	d.Graph = graph.Build(graph.Input{
@@ -84,6 +86,9 @@ func build(in input) Deps {
 		RefStates:    in.RefStates,
 		RefTitles:    in.RefTitles,
 	})
+	for i := range d.Graph.Nodes {
+		d.Graph.Nodes[i].Repo, _ = l.row(d.Graph.Nodes[i].CWD)
+	}
 	d.Graph.ColumnOrder = columnOrder(d.Graph.Nodes, lastActive(in.Tasks, in.Todos, in.Works), func(cwd string) string {
 		key, _ := l.row(cwd)
 		return key
@@ -270,6 +275,7 @@ func arrange(cards []graph.Card, memos []parking.Item, panes map[string]*daemons
 	}
 	out := make([]protocol.DepsRepo, 0, len(byRepo))
 	for _, e := range byRepo {
+		e.repo.GithubRepo = l.github(e.repo.Repo)
 		for id, pick := range e.subjects {
 			subject := pick.title
 			if !pick.found {

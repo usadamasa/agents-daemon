@@ -28,8 +28,9 @@ const (
 // traceScreens は待機明けに読む画面。detect が返す全ての Hint と空画面を含む。
 var traceScreens = []string{cleanScreen, "", nativeArmedScreen, nativeRetryingScreen, resumeReadyScreen, lowerPriorityScreen}
 
-// randomTurn は transcript の末尾。読めない、detect が返す全ての Kind、同じ上限の別の entry を含む。
+// randomTurn は transcript の末尾。読めない、detect が返す全ての Kind、同じ上限の別の entry、古い entry と時刻の無い entry を含む。
 func randomTurn(r *rand.Rand, now time.Time) Turn {
+	var turn Turn
 	switch r.IntN(14) {
 	case 0:
 		return noSessionTurn
@@ -38,19 +39,26 @@ func randomTurn(r *rand.Rand, now time.Time) Turn {
 	case 2:
 		return resumedTurn()
 	case 3:
-		return legacyLimitedTurn()
+		turn = legacyLimitedTurn(now)
 	case 4:
-		return weeklyTurn(now.Add(time.Duration(r.IntN(96*3600)-3600) * time.Second))
+		turn = weeklyTurn(now.Add(time.Duration(r.IntN(96*3600)-3600) * time.Second))
 	case 5:
-		return transientTurn()
+		turn = transientTurn(now)
 	case 6:
-		return hardCapTurn()
+		turn = hardCapTurn()
 	default:
 		uuid := uuidLimit
 		if r.IntN(3) == 0 {
 			uuid = uuidLimit2
 		}
-		return limitedTurn(uuid, now.Add(time.Duration(r.IntN(12*3600)-6*3600)*time.Second))
+		turn = limitedTurn(uuid, now.Add(time.Duration(r.IntN(12*3600)-6*3600)*time.Second))
+	}
+	// entry の時刻は今から 36 時間前までの間か、読めない (ゼロ値)。
+	switch r.IntN(6) {
+	case 0:
+		return datedTurn(turn, time.Time{})
+	default:
+		return datedTurn(turn, now.Add(-time.Duration(r.IntN(36*3600))*time.Second))
 	}
 }
 
@@ -279,7 +287,7 @@ func checkSend(cfg config.Config, st step, tr tickResult) string {
 // checkState は状態と Outcome の整合に関する不変条件。
 func checkState(st step, tr tickResult) string {
 	monitoringOutcomes := []Outcome{
-		OutcomeMonitoring, OutcomeWorkingSuppressed, OutcomeRecoveredByUser,
+		OutcomeMonitoring, OutcomeWorkingSuppressed, OutcomeRecoveredByUser, OutcomeStaleTurn,
 		OutcomeNativeAutoContinue, OutcomeLowerPriority, OutcomeHardCap, OutcomeWeeklyCap,
 	}
 	switch {
@@ -287,6 +295,10 @@ func checkState(st step, tr tickResult) string {
 		return "監視中なのに Attempts か TurnUUID が残っている"
 	case tr.post.Status == StatusWaiting && tr.post.TurnUUID == "":
 		return "待機中なのに根拠の entry の uuid が無い"
+	case tr.pre.Status == StatusMonitoring && tr.post.Status == StatusWaiting && StaleTurn(st.turn.Entry, st.now):
+		return "24 時間より古い (か時刻の無い) entry で待機に入った"
+	case tr.outcome == OutcomeStaleTurn && (tr.post.Status != StatusMonitoring || tr.sent() || !StaleTurn(st.turn.Entry, st.now)):
+		return "stale-turn なのに待機に入ったか送ったか、entry が古くない"
 	case tr.outcome == OutcomeStillWaiting && (len(tr.calls) != 0 || tr.post != tr.pre):
 		return "期限前なのに画面を読んだか状態を変えた"
 	case slices.Contains(monitoringOutcomes, tr.outcome) && (tr.post.Status != StatusMonitoring || tr.sent()):

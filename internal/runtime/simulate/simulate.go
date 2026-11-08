@@ -295,14 +295,16 @@ func cleanupSimulatePane(ctx context.Context, w io.Writer, host simulateHost, ow
 }
 
 // loadSimulateTurn は monitor へ渡す transcript の末尾を決める。--turn-file があればその末尾の会話の entry、
-// 無ければ内蔵の上限の entry。
+// 無ければ内蔵の上限の entry。内蔵の entry は時刻だけ今に置き直す (24 時間より古い entry では待機に入らないため)。
+// --turn-file の entry はそのまま渡すので、古ければ stale-turn がそのまま見える。
 func loadSimulateTurn(turnFile string) (monitor.Turn, string, error) {
 	if turnFile == "" {
 		entry, ok := transcript.Parse([]byte(defaultSimulateTurn))
 		if !ok {
 			return monitor.Turn{}, "", errors.New("内蔵の transcript の entry を読めません")
 		}
-		return monitor.Turn{Path: "(内蔵: 2.1.289 の five_hour の上限)", Entry: &entry}, "builtin", nil
+		entry.Timestamp = time.Now()
+		return monitor.Turn{Path: "(内蔵: 2.1.289 の five_hour の上限。時刻は今)", Entry: &entry}, "builtin", nil
 	}
 	entry, ok, err := transcript.ReadTail(turnFile)
 	if err != nil {

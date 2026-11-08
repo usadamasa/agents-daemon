@@ -20,35 +20,44 @@ const (
 	uuidLimit2 = "0f3c9a7e-2b4d-4c6e-8a1b-3d5f7e9a1c2b"
 )
 
-// limitedTurn は 5 時間ウィンドウの上限で止まった transcript の末尾。
+// limitedTurn は 5 時間ウィンドウの上限で止まった transcript の末尾。entry の時刻は解除時刻の 5 時間前 (窓の頭で踏んだ形)。
 func limitedTurn(uuid string, resetsAt time.Time) Turn {
 	return Turn{Path: "/home/x/.claude/projects/-work/sid.jsonl", Entry: &transcript.Entry{
 		UUID: uuid, Type: "assistant", Error: "rate_limit", IsAPIError: true, APIErrorStatus: 429, Version: "2.1.289",
-		Text:  "You've hit your session limit · resets 7:50pm (Asia/Tokyo)",
-		Quota: &transcript.Quota{Status: "rejected", RateLimitType: "five_hour", ResetsAt: resetsAt, OverageStatus: "rejected"},
+		Timestamp: resetsAt.Add(-5 * time.Hour),
+		Text:      "You've hit your session limit · resets 7:50pm (Asia/Tokyo)",
+		Quota:     &transcript.Quota{Status: "rejected", RateLimitType: "five_hour", ResetsAt: resetsAt, OverageStatus: "rejected"},
 	}}
 }
 
+// datedTurn は turn の entry の時刻を at にしたもの。
+func datedTurn(turn Turn, at time.Time) Turn {
+	e := *turn.Entry
+	e.Timestamp = at
+	return Turn{Path: turn.Path, Entry: &e}
+}
+
 // legacyLimitedTurn は quotaLimits の無い古い形の上限の entry (2.1.233 以前)。解除時刻は statusline かフォールバック。
-func legacyLimitedTurn() Turn {
+// 時刻は now (テストの基準の時刻) に置く。
+func legacyLimitedTurn(now time.Time) Turn {
 	return Turn{Path: "/t.jsonl", Entry: &transcript.Entry{
-		UUID: "legacy", Type: "assistant", Error: "rate_limit", IsAPIError: true, Version: "2.1.224",
+		UUID: "legacy", Type: "assistant", Error: "rate_limit", IsAPIError: true, Version: "2.1.224", Timestamp: now,
 		Text: "You've hit your session limit · resets 5:50pm (Asia/Tokyo)",
 	}}
 }
 
 func weeklyTurn(resetsAt time.Time) Turn {
 	return Turn{Path: "/t.jsonl", Entry: &transcript.Entry{
-		UUID: "weekly", Type: "assistant", Error: "rate_limit", IsAPIError: true, APIErrorStatus: 429,
+		UUID: "weekly", Type: "assistant", Error: "rate_limit", IsAPIError: true, APIErrorStatus: 429, Timestamp: resetsAt.Add(-time.Hour),
 		Text:  "You've hit your weekly limit · resets Aug 25 at 1pm (Asia/Tokyo) · progress saved",
 		Quota: &transcript.Quota{Status: "rejected", RateLimitType: "seven_day", ResetsAt: resetsAt},
 	}}
 }
 
-// transientTurn は server_error で終わった turn。
-func transientTurn() Turn {
+// transientTurn は server_error で終わった turn (時刻は at)。
+func transientTurn(at time.Time) Turn {
 	return Turn{Path: "/t.jsonl", Entry: &transcript.Entry{
-		UUID: "transient", Type: "assistant", Error: "server_error", IsAPIError: true,
+		UUID: "transient", Type: "assistant", Error: "server_error", IsAPIError: true, Timestamp: at,
 		Text: "API Error: Your computer went to sleep mid-response. The response above may be incomplete.",
 	}}
 }
@@ -148,7 +157,7 @@ func TestTick_WorkingPaneIsNeverTouched(t *testing.T) {
 	}{
 		{"普通の turn", resumedTurn(), OutcomeMonitoring},
 		{"上限の entry (書き込みの遅れか前提の崩れ)", limitedTurn(uuidLimit, now.Add(time.Hour)), OutcomeWorkingSuppressed},
-		{"一時エラーの entry", transientTurn(), OutcomeWorkingSuppressed},
+		{"一時エラーの entry", transientTurn(now), OutcomeWorkingSuppressed},
 		{"hard cap の entry", hardCapTurn(), OutcomeWorkingSuppressed},
 	}
 	for _, tt := range tests {
@@ -312,7 +321,7 @@ func TestTick_LegacyEntry_UsesStatuslineThenFallback(t *testing.T) {
 
 	t.Run("own の state の resets_at", func(t *testing.T) {
 		own := &ratelimit.State{FiveHourUsed: 100, FiveHourResetsAt: now.Add(90 * time.Minute), ObservedAt: now.Add(-3 * time.Hour)}
-		deps := newTestDeps(t, cfg, &multiplexerfake.Client{}, legacyLimitedTurn())
+		deps := newTestDeps(t, cfg, &multiplexerfake.Client{}, legacyLimitedTurn(now))
 		ps := &PaneState{}
 		if _, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusIdle, true), ps, own, now); err != nil {
 			t.Fatal(err)
@@ -322,7 +331,7 @@ func TestTick_LegacyEntry_UsesStatuslineThenFallback(t *testing.T) {
 		}
 	})
 	t.Run("何も無ければ fallbackWaitHours", func(t *testing.T) {
-		deps := newTestDeps(t, cfg, &multiplexerfake.Client{}, legacyLimitedTurn())
+		deps := newTestDeps(t, cfg, &multiplexerfake.Client{}, legacyLimitedTurn(now))
 		ps := &PaneState{}
 		if _, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusIdle, true), ps, nil, now); err != nil {
 			t.Fatal(err)
@@ -506,7 +515,7 @@ func TestTick_Transient(t *testing.T) {
 	t.Run("検知時は TransientWaitSeconds だけ待つ (margin 無し)", func(t *testing.T) {
 		cfg := config.Default()
 		client := &multiplexerfake.Client{}
-		deps := newTestDeps(t, cfg, client, transientTurn())
+		deps := newTestDeps(t, cfg, client, transientTurn(now))
 		ps := &PaneState{}
 
 		outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, nil, now)
@@ -524,7 +533,7 @@ func TestTick_Transient(t *testing.T) {
 		cfg := config.Default()
 		cfg.HandleTransient = false
 		client := &multiplexerfake.Client{}
-		deps := newTestDeps(t, cfg, client, transientTurn())
+		deps := newTestDeps(t, cfg, client, transientTurn(now))
 		ps := &PaneState{}
 
 		outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, nil, now)
@@ -537,7 +546,7 @@ func TestTick_Transient(t *testing.T) {
 	t.Run("待機明けの再送は指数バックオフで、上限で頭打ち", func(t *testing.T) {
 		cfg := config.Default() // TransientWaitSeconds=60, TransientMaxWaitSeconds=300
 		client := &multiplexerfake.Client{PaneReadFunc: readReturning(cleanScreen, nil)}
-		deps := newTestDeps(t, cfg, client, transientTurn())
+		deps := newTestDeps(t, cfg, client, transientTurn(now))
 		ps := &PaneState{Status: StatusWaiting, TurnUUID: "transient"} // WaitUntil ゼロ値なので初回から必ず進む
 		wantDeltas := []time.Duration{120 * time.Second, 240 * time.Second, 300 * time.Second}
 
@@ -554,6 +563,57 @@ func TestTick_Transient(t *testing.T) {
 		}
 		if ps.Attempts != len(wantDeltas) {
 			t.Errorf("Attempts = %d, want %d", ps.Attempts, len(wantDeltas))
+		}
+	})
+}
+
+// 何日も前に止まったままの pane (daemon の起動直後、`claude --resume` の後) に再開の文面を送らないよう、監視から待機へ入る
+// ときは entry が 24 時間以内のものに限る。時刻の読めない entry も送らない側に倒す。
+func TestTick_StaleTurnDoesNotWait(t *testing.T) {
+	now := time.Date(2026, 10, 4, 10, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name string
+		turn Turn
+	}{
+		{"上限の entry が 24 時間より古い", datedTurn(limitedTurn(uuidLimit, now.Add(-30*time.Hour)), now.Add(-25*time.Hour))},
+		{"一時エラーの entry が 24 時間より古い", transientTurn(now.Add(-25 * time.Hour))},
+		{"時刻の無い entry", datedTurn(limitedTurn(uuidLimit, now.Add(time.Hour)), time.Time{})},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &multiplexerfake.Client{PaneReadFunc: readReturning(cleanScreen, nil)}
+			deps := newTestDeps(t, config.Default(), client, tt.turn)
+			ps := &PaneState{}
+
+			outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, nil, now)
+
+			if err != nil {
+				t.Fatalf("Tick() error = %v", err)
+			}
+			if outcome != OutcomeStaleTurn || *ps != (PaneState{}) {
+				t.Errorf("outcome = %v ps = %+v, want stale-turn / 監視のまま", outcome, ps)
+			}
+			assertNoRead(t, client)
+		})
+	}
+
+	t.Run("24 時間ちょうどまでは待機に入る", func(t *testing.T) {
+		deps := newTestDeps(t, config.Default(), &multiplexerfake.Client{}, datedTurn(limitedTurn(uuidLimit, now.Add(time.Hour)), now.Add(-maxTurnAge)))
+		ps := &PaneState{}
+		outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, nil, now)
+		if err != nil || outcome != OutcomeWaiting {
+			t.Errorf("Tick() = %v, %v, want waiting", outcome, err)
+		}
+	})
+
+	t.Run("待機明けには古さで止めない (待っている間に 24 時間を越える経路のため)", func(t *testing.T) {
+		client := &multiplexerfake.Client{PaneReadFunc: readReturning(cleanScreen, nil)}
+		turn := datedTurn(limitedTurn(uuidLimit, now.Add(-time.Minute)), now.Add(-30*time.Hour))
+		deps := newTestDeps(t, config.Default(), client, turn)
+		ps := waitingState(now, 0)
+		outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, nil, now)
+		if err != nil || outcome != OutcomeRetried {
+			t.Errorf("Tick() = %v, %v, want retried", outcome, err)
 		}
 	})
 }
@@ -603,9 +663,9 @@ func TestFixtures_ClassifyAsExpected(t *testing.T) {
 		want detect.Kind
 	}{
 		{"limitedTurn", limitedTurn(uuidLimit, now), detect.KindLimit},
-		{"legacyLimitedTurn", legacyLimitedTurn(), detect.KindLimit},
+		{"legacyLimitedTurn", legacyLimitedTurn(now), detect.KindLimit},
 		{"weeklyTurn", weeklyTurn(now), detect.KindWeeklyLimit},
-		{"transientTurn", transientTurn(), detect.KindTransient},
+		{"transientTurn", transientTurn(now), detect.KindTransient},
 		{"hardCapTurn", hardCapTurn(), detect.KindSpendLimit},
 		{"resumedTurn", resumedTurn(), detect.KindNone},
 	}

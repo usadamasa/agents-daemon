@@ -220,7 +220,10 @@ func (r *daemonRuntime) tickPane(ctx context.Context, deps monitor.Deps, pane mu
 	}
 
 	outcome, tickErr := monitor.Tick(ctx, deps, pane, entry.state, rateState, now)
-	failure := r.loadTurnFailure(pane)
+	failure, failureErr := r.turnFailures.Load(pane.SessionID)
+	if failureErr != nil {
+		r.log.Logf("pane %s: turn の失敗の記録の読み込みに失敗、無しとして扱います: %v", pane.PaneID, failureErr)
+	}
 	if observed != nil {
 		r.logMismatch(pane, entry, *observed, failure)
 	}
@@ -236,16 +239,6 @@ func (r *daemonRuntime) resolveSessionIDs(panes []multiplexer.Pane) {
 	if err := r.claudeSessions.Fill(panes); err != nil {
 		r.log.Logf("Claude Code の登録簿の読み込みに失敗、pid から session_id を補いません: %v", err)
 	}
-}
-
-// loadTurnFailure は pane のセッションの StopFailure の記録を読む。無ければ nil、読めなければログに残して nil。
-func (r *daemonRuntime) loadTurnFailure(pane multiplexer.Pane) *turnfailure.Record {
-	failure, err := r.turnFailures.Load(pane.SessionID)
-	if err != nil {
-		r.log.Logf("pane %s: turn の失敗の記録の読み込みに失敗、無しとして扱います: %v", pane.PaneID, err)
-		return nil
-	}
-	return failure
 }
 
 // logMismatch は StopFailure hook の記録 (最後の turn が rate_limit で終わった) があるのに transcript の末尾が
@@ -380,6 +373,7 @@ var outcomeMessages = map[monitor.Outcome]string{
 	monitor.OutcomeNoSession:             "session_id を引けないため上限を判定しません (statusline の記録も登録簿の pid も無い)",
 	monitor.OutcomeTranscriptUnavailable: "transcript を読めないため上限を判定しません (session %s)",
 	monitor.OutcomeWorkingSuppressed:     "transcript の末尾は上限ですが record が working のため手を出しません",
+	monitor.OutcomeStaleTurn:             "transcript の末尾は上限ですが entry が 24 時間より古い (か時刻が無い) ため待機に入りません",
 	monitor.OutcomeWaiting:               "利用上限/一時エラーを検知し待機に入りました",
 	monitor.OutcomeRetried:               "再開メッセージを送信しました (%d 回目)",
 	monitor.OutcomeRecoveredByUser:       "セッションが上限から戻ったため監視状態へ戻します",

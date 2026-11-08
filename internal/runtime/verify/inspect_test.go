@@ -137,6 +137,25 @@ func TestRunInspect_判定はtranscriptで決まる(t *testing.T) {
 		}
 	})
 
+	t.Run("entry が 24 時間より古ければ待機に入らない旨を出す", func(t *testing.T) {
+		env := newInspectEnv(t)
+		file := writeInspectFixture(t, env.home, "normal.txt", inspectSampleNormalScreen)
+		env.transcript(t, inspectTestSessionID, inspectLimitedEntry)
+
+		rep, err := CollectInspect(context.Background(), env.input(nil, "", file, inspectTestSessionID, fixedNow.Add(48*time.Hour)))
+		if err != nil {
+			t.Fatalf("CollectInspect() error = %v", err)
+		}
+		if rep.Kind != "limit" || !rep.StaleTurn {
+			t.Errorf("report = kind %s stale_turn %v, want limit / true", rep.Kind, rep.StaleTurn)
+		}
+		var buf bytes.Buffer
+		writeInspect(&buf, rep)
+		if !strings.Contains(buf.String(), "stale-turn") {
+			t.Errorf("出力に stale-turn が無い:\n%s", buf.String())
+		}
+	})
+
 	t.Run("transcript が無ければ理由を出して none", func(t *testing.T) {
 		env := newInspectEnv(t)
 		file := writeInspectFixture(t, env.home, "normal.txt", inspectSampleNormalScreen)

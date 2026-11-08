@@ -54,7 +54,7 @@ func TestComputeLimitWake_Priority(t *testing.T) {
 		},
 		{
 			name:       "2. resetsAt の無い entry なら own の resets_at (未来)",
-			entry:      legacyLimitedTurn().Entry,
+			entry:      legacyLimitedTurn(now).Entry,
 			own:        stateAt(jst(8, 10), 100),
 			account:    stateAt(jst(13, 10), 5),
 			wantWake:   jst(8, 10).Add(margin),
@@ -62,7 +62,7 @@ func TestComputeLimitWake_Priority(t *testing.T) {
 		},
 		{
 			name:       "3. own 無し → account の resets_at (上限中に開いた新規セッション)",
-			entry:      legacyLimitedTurn().Entry,
+			entry:      legacyLimitedTurn(now).Entry,
 			own:        nil,
 			account:    stateAt(jst(8, 10), 96),
 			wantWake:   jst(8, 10).Add(margin),
@@ -70,7 +70,7 @@ func TestComputeLimitWake_Priority(t *testing.T) {
 		},
 		{
 			name:       "3'. own が過去 → account の resets_at",
-			entry:      legacyLimitedTurn().Entry,
+			entry:      legacyLimitedTurn(now).Entry,
 			own:        stateAt(jst(3, 10), 100),
 			account:    stateAt(jst(8, 10), 96),
 			wantWake:   jst(8, 10).Add(margin),
@@ -78,7 +78,7 @@ func TestComputeLimitWake_Priority(t *testing.T) {
 		},
 		{
 			name:       "4. own も account も過去 → 今すぐ",
-			entry:      legacyLimitedTurn().Entry,
+			entry:      legacyLimitedTurn(now).Entry,
 			own:        stateAt(jst(3, 10), 100),
 			account:    stateAt(jst(3, 10), 100),
 			wantWake:   now.Add(margin),
@@ -86,13 +86,13 @@ func TestComputeLimitWake_Priority(t *testing.T) {
 		},
 		{
 			name:       "5. どれも無ければ fallback",
-			entry:      legacyLimitedTurn().Entry,
+			entry:      legacyLimitedTurn(now).Entry,
 			wantWake:   now.Add(time.Duration(cfg.FallbackWaitHours * float64(time.Hour))).Add(margin),
 			wantSource: WakeFromFallback,
 		},
 		{
 			name:       "five_hour が null の state は無いものとして扱う",
-			entry:      legacyLimitedTurn().Entry,
+			entry:      legacyLimitedTurn(now).Entry,
 			own:        &ratelimit.State{ObservedAt: now},
 			account:    &ratelimit.State{ObservedAt: now},
 			wantWake:   now.Add(time.Duration(cfg.FallbackWaitHours * float64(time.Hour))).Add(margin),

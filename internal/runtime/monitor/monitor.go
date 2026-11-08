@@ -13,7 +13,8 @@
 //  2. record (OSC 7501) が working → 何もしない。turn の途中、retry watchdog の待機中、lower-priority mode の作業中は
 //     どれも working で申告される。transcript が上限なのに working なら、その食い違いを記録する
 //  3. transcript の末尾が上限 (5 時間ウィンドウ) なら、その entry の resetsAt + margin まで待つ。一時エラーなら短い
-//     バックオフ。週の上限と待っても解けない上限は待たず記録だけ残す
+//     バックオフ。週の上限と待っても解けない上限は待たず記録だけ残す。entry が 24 時間より古い (daemon の起動前や
+//     `claude --resume` の前に止まった) ものも待たず記録だけ残す
 //  4. 待機明けに transcript がまだ同じ上限なら、画面を 1 回だけ読んで送るキーを選ぶ (detect.ClassifyScreen)。
 //     本体がリトライ中・auto-continue の予約中・lower-priority で作業中なら手を引き、解除済みで Enter 待ちなら Enter だけ、
 //     どれでもなければ esc → retryMessage → enter
@@ -73,6 +74,9 @@ const (
 	// OutcomeWorkingSuppressed は transcript の末尾が上限なのに record が working で、手を出さなかったことを表す。
 	// 書き込みの遅れか、「上限で止まった pane は working でなくなる」前提が外れたかの実測になる。
 	OutcomeWorkingSuppressed
+	// OutcomeStaleTurn は transcript の末尾が上限か一時エラーだが entry が maxTurnAge より古い (か時刻が読めない) ため、
+	// 待機に入らなかったことを表す。何日も前に止まったまま開いている pane や、`claude --resume` で戻した会話に送らない。
+	OutcomeStaleTurn
 	// OutcomeRecoveredByUser は待機中にセッションが上限から戻った (次の turn が始まった、record が working になった) と
 	// 判断し、送信せず監視状態へ戻したことを表す。
 	OutcomeRecoveredByUser
@@ -117,6 +121,7 @@ var outcomeNames = map[Outcome]string{
 	OutcomeNoSession:             "no-session",
 	OutcomeTranscriptUnavailable: "transcript-unavailable",
 	OutcomeWorkingSuppressed:     "suppressed-working",
+	OutcomeStaleTurn:             "stale-turn",
 	OutcomeRecoveredByUser:       "recovered-by-user",
 	OutcomeNotClaudeAgent:        "not-claude-agent",
 	OutcomeMaxRetries:            "max-retries",
@@ -152,7 +157,17 @@ const (
 	// retryWaitAfterSend は通常の (transient でない) 再送信後、次に画面を
 	// 確認するまでの待ち時間。
 	retryWaitAfterSend = 30 * time.Second
+	// maxTurnAge は監視から待機へ入るときに entry に許す古さ。これより前に止まった pane は daemon が見ていなかった間に
+	// 止まったもの (daemon の起動前、`claude --resume` で戻した会話) で、利用者が戻るのを待つ。本体の auto-continue が
+	// 待つ上限 (解除が 24 時間より先なら降りる) と同じ線。見るのは待機に入る時点だけで、待機明けには見ない
+	// (待っている間に 24 時間を越える経路を止めない)。
+	maxTurnAge = 24 * time.Hour
 )
+
+// StaleTurn は entry が maxTurnAge より古いか、時刻が読めないかを返す。inspect が同じ判定を説明するのに使う。
+func StaleTurn(e *transcript.Entry, now time.Time) bool {
+	return e == nil || e.Timestamp.IsZero() || now.Sub(e.Timestamp) > maxTurnAge
+}
 
 // Client は Tick が pane に対して使う操作。多重化ツールの全部入りの multiplexer.Client のうち、画面を読む・送る
 // の 3 つだけを要る側で切り出したもの (#301)。daemon はこれに列挙・端末の大きさ・到達性を足した自分の interface を持ち、
@@ -282,11 +297,17 @@ func tickMonitoring(deps Deps, ps *PaneState, ev Evidence, rateState *ratelimit.
 		if !deps.Config.HandleTransient {
 			return OutcomeMonitoring
 		}
+		if StaleTurn(ev.Turn.Entry, now) {
+			return OutcomeStaleTurn
+		}
 		ps.Status = StatusWaiting
 		ps.TurnUUID = ev.Turn.Entry.UUID
 		ps.WaitUntil = now.Add(time.Duration(deps.Config.TransientWaitSeconds) * time.Second)
 		return OutcomeWaiting
 	case detect.KindLimit:
+		if StaleTurn(ev.Turn.Entry, now) {
+			return OutcomeStaleTurn
+		}
 		ps.Status = StatusWaiting
 		ps.TurnUUID = ev.Turn.Entry.UUID
 		ps.WaitUntil, _ = ComputeLimitWake(deps.Config, ev.Turn.Entry, rateState, deps.Account, now)

@@ -63,6 +63,8 @@ type InspectReport struct {
 	// Transcript は daemon が上限の判定に読む末尾の entry。Kind はその分類 (detect.Kind の String)。
 	Transcript TranscriptReport `json:"transcript"`
 	Kind       string           `json:"kind"`
+	// StaleTurn は kind が limit / transient でも entry が古く (か時刻が無く) daemon が待機に入らないとき true。
+	StaleTurn bool `json:"stale_turn,omitempty"`
 	// Wake は kind が limit のときの起床時刻と、その算出に使った情報源。
 	Wake         *WakeReport `json:"wake,omitempty"`
 	StateError   string      `json:"state_error,omitempty"`
@@ -191,8 +193,10 @@ func CollectInspect(ctx context.Context, in InspectInput) (InspectReport, error)
 	case detect.KindLimit:
 		wake := collectWake(cfg, tail.Entry, rateState, account, in.Now)
 		rep.Wake = &wake
+		rep.StaleTurn = monitor.StaleTurn(tail.Entry, in.Now)
 	case detect.KindTransient:
 		rep.HandleTransient = &cfg.HandleTransient
+		rep.StaleTurn = monitor.StaleTurn(tail.Entry, in.Now)
 	}
 	return rep, nil
 }
@@ -285,6 +289,9 @@ func writeInspect(w io.Writer, rep InspectReport) {
 	}
 	if rep.AccountError != "" {
 		_, _ = fmt.Fprintf(w, "アカウント全体の利用上限 state の走査に失敗、無しとして扱います: %s\n", rep.AccountError)
+	}
+	if rep.StaleTurn {
+		_, _ = fmt.Fprintln(w, "entry が 24 時間より古い (か時刻が無い) ので、daemon は監視中なら待機に入りません (stale-turn)。")
 	}
 	switch rep.kind {
 	case detect.KindLimit:

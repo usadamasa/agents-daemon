@@ -165,6 +165,40 @@ func TestBuild_liveSessionWithoutInProgressWork(t *testing.T) {
 	}
 }
 
+// 作業の記録が無くても、生きていて進行中の作業が無いセッションには pane からノードを作り、活動の置き場にする。
+// 完了タスクを残している間に記録だけが保持期間で消え、そのセッションを resume した形 (#483)。辺はタスクへ解く。
+func TestBuild_liveSessionWithoutWorkRecord(t *testing.T) {
+	const main = "/src/home/agents-daemon"
+	d := build(input{
+		PID: 42,
+		Snapshot: snapshot(
+			daemonstate.PaneStatus{PaneID: "p1", SessionID: "R", CWD: main, AgentStatus: "blocked", AgentKind: "permission"},
+			daemonstate.PaneStatus{PaneID: "p2", SessionID: "T", CWD: main, AgentStatus: "working"},
+		),
+		Tasks: []record.Task{
+			task("R", "1", "済んだ", "completed", main),
+			task("T", "1", "進行中", "in_progress", main),
+			task("D", "1", "下流", "pending", main),
+		},
+		Edges:  []edge.Edge{{ID: "e", Before: edge.Endpoint{Ref: "sid:R", CWD: main}, After: edge.Endpoint{Ref: "task:D/1", CWD: main}}},
+		Locate: places(map[string]gitrepo.Place{main: {Repo: main, Branch: "main"}}),
+	})
+
+	got := map[string]protocol.GraphNode{}
+	for _, n := range d.Graph.Nodes {
+		got[n.Key] = n
+	}
+	if n, ok := got["sid:R"]; !ok || n.State != graph.StatePermission || n.Origin != "pane" {
+		t.Errorf("sid:R = %+v (ok %v), want pane から作った permission のノード", n, ok)
+	}
+	if _, ok := got["sid:T"]; ok {
+		t.Errorf("進行中のタスクのあるセッションに pane のノードを作らない: %v", keys(d.Graph.Nodes))
+	}
+	if len(d.Graph.Links) != 1 || d.Graph.Links[0].Before != "task:R/1" {
+		t.Errorf("links = %+v, want 辺はタスクへ解く", d.Graph.Links)
+	}
+}
+
 // 活動の置き場のノードは辺の端点にしない。タスクのあるセッションの sid: の辺は、ノードの有無によらず同じタスクへ解く。
 // 末端がすべて完了なら下流を止めないよう末端からつなぎ、未完了の末端が複数あれば置き場のノードに集める (#405)。
 func TestGraph_statusNodeKeepsEdges(t *testing.T) {

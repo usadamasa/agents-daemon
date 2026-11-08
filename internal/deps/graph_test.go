@@ -702,12 +702,13 @@ func TestGraph_folded(t *testing.T) {
 	})
 	f := b.Graph.Folded
 	// A/5 は生きている peer を上流に持つ末端なので残る。X/1 の上流は終了した置き場、A/7 の上流は完了なので隠す。
+	// X/1 だけを待たせていた終了した置き場 sid:G も、待っている作業が無いので隠す (#455)。
 	// 段はこの図の辺で数え直す (#395)。A/4 は全部の図では 3 段目だが、畳んだ辺で A/1 の次の段になる。
 	got := map[string]int{}
 	for _, n := range f.Nodes {
 		got[n.Key] = n.Depth
 	}
-	if want := map[string]int{"sid:P": 0, "task:A/1": 0, "task:A/4": 1, "task:A/5": 1, "sid:G": 0}; !reflect.DeepEqual(got, want) {
+	if want := map[string]int{"sid:P": 0, "task:A/1": 0, "task:A/4": 1, "task:A/5": 1}; !reflect.DeepEqual(got, want) {
 		t.Errorf("folded nodes = %v, want %v", got, want)
 	}
 	if n := nodes(b.Graph)["task:A/4"]; n.Depth != 3 {
@@ -717,7 +718,7 @@ func TestGraph_folded(t *testing.T) {
 		t.Errorf("folded links = %+v, want %+v", f.Links, want)
 	}
 	// 畳んだ辺 (A/1 → A/4) と残した末端 (P → A/5) は、それぞれ同じレーンの続く行になる。
-	if got, want := drawRows(b.Graph.Rows), "* task:A/1\n* task:A/4\n* sid:G\n* sid:P\n* task:A/5"; got != want {
+	if got, want := drawRows(b.Graph.Rows), "* task:A/1\n* task:A/4\n* sid:P\n* task:A/5"; got != want {
 		t.Errorf("rows =\n%s\nwant\n%s", got, want)
 	}
 	// ノードが無ければ空の配列 (JSON で null にしない)。

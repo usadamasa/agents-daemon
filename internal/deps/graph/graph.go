@@ -75,7 +75,7 @@ var halted = map[string]bool{StateQuestion: true, StatePermission: true, StateLi
 //   - BlockedBy は完了していない上流を、止まっているもの、進行中のものの順に選ぶ。Memos は消えたメモの id を落とす
 //   - before 側の sid: の端点が末端のタスクを複数持つと、末端をセッションのノード (sid:) に集め、辺の記録は
 //     そのノードからの 1 本にする (#405)。after 側の sid: は根のタスクの数だけの Link になる
-//   - 線の 1 本も引かれない終了したセッションの置き場のノードは図に載せない (#455)
+//   - 線の 1 本も引かれない終了したセッションの置き場のノードは図に載せない。相手がすべて完了した置き場は完了を隠した図から外す (#455)
 type (
 	// Graph はセッションをまたぐタスクの依存の DAG (#134)。
 	Graph = protocol.DepsGraph
@@ -470,6 +470,9 @@ func (g *builder) fold(a *dag.Graph, order []string, pairs [][2]string) (protoco
 // 無く、完了も終了もしていない上流を直接持つものは残す。peer に渡した作業の報告を受けて完了にしたタスクがこれで、
 // 隠すと peer が線を持たずに浮く。上流が完了・終了したら隠す。
 func (g *builder) shownWhenFolded(a *dag.Graph, key string) bool {
+	if n := g.nodes[key]; n.Kind == KindRef && n.State == StateExited {
+		return g.exitedInUse(a, key)
+	}
 	if g.nodes[key].State != StateCompleted {
 		return true
 	}
@@ -484,6 +487,26 @@ func (g *builder) shownWhenFolded(a *dag.Graph, key string) bool {
 			continue
 		}
 		if s := g.nodes[l.Before].State; s != StateCompleted && s != StateExited && s != StateExternal {
+			return true
+		}
+	}
+	return false
+}
+
+// exitedInUse は終了したセッションの置き場に完了していない相手が残っているか (#455)。下流があれば下流で、無ければ
+// 直接の上流で決める。全部済んでいると、完了を隠した図では相手が畳まれて線の無いカードになる。
+func (g *builder) exitedInUse(a *dag.Graph, key string) bool {
+	down, _ := a.Reach(key)
+	for k := range down {
+		if g.nodes[k].State != StateCompleted {
+			return true
+		}
+	}
+	if len(down) > 0 {
+		return false
+	}
+	for _, l := range g.links {
+		if l.After == key && g.nodes[l.Before].State != StateCompleted {
 			return true
 		}
 	}

@@ -199,6 +199,11 @@ func (c *execClient) snapshot(ctx context.Context) (map[string]*blockstate.State
 	for _, s := range ls.Sessions {
 		shells, err := c.shellBlocks(ctx, s.SessionID)
 		if err != nil {
+			// ls の後に閉じた session は読み飛ばす。block の場合と同じく、失敗を返すと session の close だけで
+			// daemon が PaneList の連続失敗に数える。
+			if isTargetNotFound(err) {
+				continue
+			}
 			return nil, err
 		}
 		for _, id := range shells {

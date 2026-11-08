@@ -75,6 +75,7 @@ var halted = map[string]bool{StateQuestion: true, StatePermission: true, StateLi
 //   - BlockedBy は完了していない上流を、止まっているもの、進行中のものの順に選ぶ。Memos は消えたメモの id を落とす
 //   - before 側の sid: の端点が末端のタスクを複数持つと、末端をセッションのノード (sid:) に集め、辺の記録は
 //     そのノードからの 1 本にする (#405)。after 側の sid: は根のタスクの数だけの Link になる
+//   - 線の 1 本も引かれない終了したセッションの置き場のノードは図に載せない。相手がすべて完了した置き場は完了を隠した図から外す (#455)
 type (
 	// Graph はセッションをまたぐタスクの依存の DAG (#134)。
 	Graph = protocol.DepsGraph
@@ -154,6 +155,7 @@ func Build(in Input) Graph {
 	}
 	g.linkBlockedBy()
 	g.linkEdges()
+	g.dropUnlinkedExited()
 	return g.finish()
 }
 
@@ -225,6 +227,20 @@ func (g *builder) linkEdges() {
 	}
 }
 
+// dropUnlinkedExited は線の引かれなかった終了したセッションの置き場のノードを図から外す (#455)。辺の記録は消さない。
+// 作業の記録やタスクから作ったノード (Kind が KindRef でない) は線が無くても残す。
+func (g *builder) dropUnlinkedExited() {
+	linked := map[string]bool{}
+	for _, l := range g.links {
+		linked[l.Before], linked[l.After] = true, true
+	}
+	for key, n := range g.nodes {
+		if n.Kind == KindRef && n.State == StateExited && !linked[key] {
+			delete(g.nodes, key)
+		}
+	}
+}
+
 // link は before → after を足す。どちらかのノードが無い辺、自分自身への辺、既にある辺は足さない。
 func (g *builder) link(before, after, kind string, via *protocol.EdgeRecord) {
 	pair := [2]string{before, after}
@@ -276,7 +292,7 @@ func (g *builder) sessionKeys(sessionID, cwd string, pick func(sessionID string)
 	if keys := g.bySession[sessionID]; len(keys) > 0 {
 		return keys
 	}
-	// タスクを作らずに終了したセッション。辺は残し、下流が止まっていることを見せる。
+	// タスクを作らずに終了したセッション。下流が止まっていることを見せる。線が引かれなければ dropUnlinkedExited が外す。
 	key := ref.SessionID(sessionID)
 	title := g.in.SessionNames[sessionID]
 	if title == "" {
@@ -454,6 +470,9 @@ func (g *builder) fold(a *dag.Graph, order []string, pairs [][2]string) (protoco
 // 無く、完了も終了もしていない上流を直接持つものは残す。peer に渡した作業の報告を受けて完了にしたタスクがこれで、
 // 隠すと peer が線を持たずに浮く。上流が完了・終了したら隠す。
 func (g *builder) shownWhenFolded(a *dag.Graph, key string) bool {
+	if n := g.nodes[key]; n.Kind == KindRef && n.State == StateExited {
+		return g.exitedInUse(a, key)
+	}
 	if g.nodes[key].State != StateCompleted {
 		return true
 	}
@@ -468,6 +487,26 @@ func (g *builder) shownWhenFolded(a *dag.Graph, key string) bool {
 			continue
 		}
 		if s := g.nodes[l.Before].State; s != StateCompleted && s != StateExited && s != StateExternal {
+			return true
+		}
+	}
+	return false
+}
+
+// exitedInUse は終了したセッションの置き場に完了していない相手が残っているか (#455)。下流があれば下流で、無ければ
+// 直接の上流で決める。全部済んでいると、完了を隠した図では相手が畳まれて線の無いカードになる。
+func (g *builder) exitedInUse(a *dag.Graph, key string) bool {
+	down, _ := a.Reach(key)
+	for k := range down {
+		if g.nodes[k].State != StateCompleted {
+			return true
+		}
+	}
+	if len(down) > 0 {
+		return false
+	}
+	for _, l := range g.links {
+		if l.After == key && g.nodes[l.Before].State != StateCompleted {
 			return true
 		}
 	}

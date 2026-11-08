@@ -14,6 +14,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/protocol"
 	"github.com/usadamasa/agents-daemon/internal/tasklog/record"
+	"github.com/usadamasa/agents-daemon/internal/worklog"
 )
 
 // nodes はグラフのノードを Key で引けるようにする。
@@ -302,6 +303,95 @@ func TestGraph_refEndpoints(t *testing.T) {
 	for _, l := range b.Graph.Links {
 		if l.Before == "task:N/1" && (l.Edge == nil || l.Edge.Before.Ref != "sid:N" || l.Edge.Before.BoundFrom != "session:dup") {
 			t.Errorf("辺の元の参照 = %+v", l.Edge)
+		}
+	}
+}
+
+// タスクを作らずに終了したセッションの置き場のノードは、線が 1 本でも引かれる間だけ図に載る (#455)。もう片方の端点の
+// 記録が消えた辺は残っていても線にならず、置き場だけが浮くので作らない。
+func TestGraph_exitedPlaceholderNeedsLink(t *testing.T) {
+	const cwd = "/w/a"
+	e := func(id, before, after string) edge.Edge {
+		return edge.Edge{ID: id, Before: edge.Endpoint{Ref: before, CWD: cwd}, After: edge.Endpoint{Ref: after, CWD: cwd}}
+	}
+	b := build(input{
+		Tasks: []record.Task{task("A", "1", "a", "pending", cwd)},
+		Edges: []edge.Edge{
+			e("drawn", "sid:G", "task:A/1"),
+			e("after-gone", "sid:Z", "task:A/9"),
+			e("before-gone", "task:A/9", "sid:Y"),
+			// 同じ置き場に線の引かれない辺と引かれる辺があれば、線の引かれる辺で残る。
+			e("mixed-gone", "sid:M", "task:A/9"),
+			e("mixed-drawn", "sid:M", "task:A/1"),
+		},
+	})
+	got := nodes(b.Graph)
+	for _, key := range []string{"sid:G", "sid:M"} {
+		if n := got[key]; n.Kind != graph.KindRef || n.State != graph.StateExited {
+			t.Errorf("%s = %+v, want 線のある終了したセッションの置き場", key, n)
+		}
+	}
+	for _, key := range []string{"sid:Z", "sid:Y"} {
+		if n, ok := got[key]; ok {
+			t.Errorf("%s = %+v, 線の無い置き場は図に載らない", key, n)
+		}
+	}
+	for _, row := range b.Graph.ColumnOrder {
+		if row == "sid:Z" || row == "sid:Y" {
+			t.Errorf("column_order に線の無い置き場 %s がある", row)
+		}
+	}
+	want := []string{"sid:G>task:A/1", "sid:M>task:A/1"}
+	if !reflect.DeepEqual(links(b.Graph), want) {
+		t.Errorf("links = %v, want %v", links(b.Graph), want)
+	}
+}
+
+// 終了したセッションの置き場は、待っている作業がすべて済むと完了を隠した図から消える (#455)。全部の図には線と一緒に残る。
+func TestGraph_exitedPlaceholderFolded(t *testing.T) {
+	const cwd = "/w/a"
+	e := func(id, before, after string) edge.Edge {
+		return edge.Edge{ID: id, Before: edge.Endpoint{Ref: before, CWD: cwd}, After: edge.Endpoint{Ref: after, CWD: cwd}}
+	}
+	b := build(input{
+		Tasks: []record.Task{
+			task("A", "1", "a", "completed", cwd),
+			task("B", "1", "b", "pending", cwd),
+			task("C", "1", "c", "completed", cwd),
+			task("D", "1", "d", "pending", cwd),
+			task("F", "1", "f", "completed", cwd),
+			task("J", "1", "j", "pending", cwd),
+			task("K", "1", "k", "completed", cwd),
+		},
+		Works: []worklog.Record{{SessionID: "W", CWD: cwd, Subject: "終わった作業"}},
+		Edges: []edge.Edge{
+			e("done", "sid:G", "task:A/1"),
+			e("open", "sid:H", "task:B/1"),
+			e("mixed-done", "sid:M", "task:C/1"),
+			e("mixed-open", "sid:M", "task:D/1"),
+			// 下流が無い置き場は上流で決まる。
+			e("from-done", "task:F/1", "sid:Y"),
+			e("from-open", "task:J/1", "sid:Z"),
+			// 作業の記録から作ったノードは置き場ではない。
+			e("work", "sid:W", "task:K/1"),
+		},
+	})
+	folded := map[string]bool{}
+	for _, n := range b.Graph.Folded.Nodes {
+		folded[n.Key] = true
+	}
+	all := nodes(b.Graph)
+	for key, want := range map[string]bool{"sid:G": false, "sid:Y": false, "sid:H": true, "sid:M": true, "sid:Z": true, "sid:W": true} {
+		if folded[key] != want {
+			t.Errorf("完了を隠した図の %s = %v, want %v", key, folded[key], want)
+		}
+		if n, ok := all[key]; !ok || n.State != graph.StateExited {
+			t.Errorf("全部の図の %s = %+v, want exited のノード", key, n)
+		}
+	}
+	for _, want := range []string{"sid:G>task:A/1", "task:F/1>sid:Y"} {
+		if !strings.Contains(strings.Join(links(b.Graph), " "), want) {
+			t.Errorf("全部の図に線 %s が無い: %v", want, links(b.Graph))
 		}
 	}
 }
@@ -612,12 +702,13 @@ func TestGraph_folded(t *testing.T) {
 	})
 	f := b.Graph.Folded
 	// A/5 は生きている peer を上流に持つ末端なので残る。X/1 の上流は終了した置き場、A/7 の上流は完了なので隠す。
+	// X/1 だけを待たせていた終了した置き場 sid:G も、待っている作業が無いので隠す (#455)。
 	// 段はこの図の辺で数え直す (#395)。A/4 は全部の図では 3 段目だが、畳んだ辺で A/1 の次の段になる。
 	got := map[string]int{}
 	for _, n := range f.Nodes {
 		got[n.Key] = n.Depth
 	}
-	if want := map[string]int{"sid:P": 0, "task:A/1": 0, "task:A/4": 1, "task:A/5": 1, "sid:G": 0}; !reflect.DeepEqual(got, want) {
+	if want := map[string]int{"sid:P": 0, "task:A/1": 0, "task:A/4": 1, "task:A/5": 1}; !reflect.DeepEqual(got, want) {
 		t.Errorf("folded nodes = %v, want %v", got, want)
 	}
 	if n := nodes(b.Graph)["task:A/4"]; n.Depth != 3 {
@@ -627,7 +718,7 @@ func TestGraph_folded(t *testing.T) {
 		t.Errorf("folded links = %+v, want %+v", f.Links, want)
 	}
 	// 畳んだ辺 (A/1 → A/4) と残した末端 (P → A/5) は、それぞれ同じレーンの続く行になる。
-	if got, want := drawRows(b.Graph.Rows), "* task:A/1\n* task:A/4\n* sid:G\n* sid:P\n* task:A/5"; got != want {
+	if got, want := drawRows(b.Graph.Rows), "* task:A/1\n* task:A/4\n* sid:P\n* task:A/5"; got != want {
 		t.Errorf("rows =\n%s\nwant\n%s", got, want)
 	}
 	// ノードが無ければ空の配列 (JSON で null にしない)。

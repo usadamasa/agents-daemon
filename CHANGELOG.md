@@ -1,5 +1,16 @@
 # Changelog
 
+## [2026.1108.0](https://github.com/usadamasa/agents-daemon/compare/2026.1107.6...2026.1108.0) - 2026-11-08
+
+### Features
+- 依存図の右の列で終了したセッションを一番下に並べる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/493
+- 依存図の領域にセッションの枠で動いている作業を並べる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/495
+- 依存図: 単体ビューの本文の URL、issue / PR、ファイルパスを押して開けるようにする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/497
+### Bug Fixes
+- fix: 依存図のポップアップの「セッション終了」の丸を灰で出す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/496
+### Refactoring
+- 依存図: 使えない「一覧」の切り替えを header から消す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/492
+
 ## [2026.1107.6](https://github.com/usadamasa/agents-daemon/compare/2026.1107.5...2026.1107.6) - 2026-11-07
 
 ### Features

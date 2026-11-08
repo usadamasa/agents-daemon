@@ -44,10 +44,10 @@ func outsideProject(cur, project string) bool {
 	return !strings.HasPrefix(cur, project+"/")
 }
 
-// readEffort は ~/.claude/settings.json の effortLevel を返す。statusline の stdin には
-// 含まれず、/effort コマンドがここへ書く。無ければ空。
-func readEffort(home string) string {
-	data, err := os.ReadFile(filepath.Join(home, ".claude", "settings.json")) // #nosec G304 -- HOME 配下の固定パス
+// readEffort は Claude Code の設定ディレクトリの settings.json から effortLevel を返す。
+// statusline の stdin には含まれず、/effort コマンドがここへ書く。無ければ空。
+func readEffort(configDir string) string {
+	data, err := os.ReadFile(filepath.Join(configDir, "settings.json")) // #nosec G304 -- Claude Code の設定ディレクトリの固定のファイル名
 	if err != nil {
 		return ""
 	}

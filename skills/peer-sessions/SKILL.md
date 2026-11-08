@@ -11,11 +11,11 @@ description: >-
 
 同じマシンで動いている Claude Code のセッション同士が、`ListAgents` で互いを発見し
 `SendMessage` で本文を送り合う。各セッションが unix domain socket を bind し、Claude Code 本体が
-その上で配送する。peer を立てる器は端末多重化ツール (rex) の window で、その操作は reference に置く。
+その上で配送する。peer を立てる器は端末多重化ツール (rex) の session で、その操作は reference に置く。
 
 | reference | 内容 |
 | ---- | ---- |
-| `references/rex.md` | rex の block / window 操作と実測の挙動、docs と feedback (MCP) の引き方 |
+| `references/rex.md` | rex の session / block / window 操作と実測の挙動、docs と feedback (MCP) の引き方 |
 | `references/troubleshooting.md` | 送ったのに届かない、ツールが無い、といった症状の切り分け |
 
 ## 言われる前に渡すべきとき
@@ -39,14 +39,15 @@ printenv REX_SESSION
 
 | 結果 | 次にすること |
 | ---- | ---- |
-| 値が出る | `references/rex.md` の手順で `rex run` から claude を起動する |
-| 空 | window を作れないので、ユーザーへ起動を頼む (下の「モデルの指定」の形でコマンドを渡す) |
+| 値が出る | `references/rex.md` の手順で `rex session new` から claude を起動する |
+| 空 | rex の session を作れないので、ユーザーへ起動を頼む (下の「モデルの指定」の形でコマンドを渡す) |
 
 起動してから渡すまでを 1 ターンでやりきる。
 
-1. window を、フォーカスを奪わずに作る。渡す先が別リポジトリなら
+1. peer 専用の rex session を作る。渡す先が別リポジトリなら
    cwd をそのパスにする。自分の worktree は渡さない
-2. そこで `claude --name <name> --model "${CLAUDE_CODE_SUBAGENT_MODEL:?}"` を起動する
+2. その session で `claude --name <name> --model "${CLAUDE_CODE_SUBAGENT_MODEL:?}"` を起動する
+   (`rex session new` の `--` の後に渡す)
 3. `ListAgents` に `<name>` が並ぶのを確かめる
 4. 渡す作業に「これが済まないと始められない」相手 (別の peer の作業、マージ待ちの PR) があれば、
    送る前に辺を書く (下の「依存の辺を書く」)
@@ -60,14 +61,14 @@ printenv REX_SESSION
 渡した peer が、ほかの作業の後でないと始められない向き:
 
 ```sh
-printf '%s' '{"before":{"ref":"session:<待つ相手の name>","cwd":"<その window に渡した cwd>"},"after":{"ref":"session:<name>","cwd":"<この window に渡した cwd>"},"note":"<何の後か>"}' \
+printf '%s' '{"before":{"ref":"session:<待つ相手の name>","cwd":"<その session に渡した cwd>"},"after":{"ref":"session:<name>","cwd":"<この session に渡した cwd>"},"note":"<何の後か>"}' \
   | "${XDG_CACHE_HOME:-$HOME/.cache}/agents-daemon/bin/agents-daemon" edge add
 ```
 
 自分のタスクが、渡した peer の完了を待つ向き (peer の成果を受けてから進める):
 
 ```sh
-printf '%s' '{"before":{"ref":"session:<name>","cwd":"<この window に渡した cwd>"},"after":{"task":"<自分のタスクの id>"},"note":"<何の後か>"}' \
+printf '%s' '{"before":{"ref":"session:<name>","cwd":"<この session に渡した cwd>"},"after":{"task":"<自分のタスクの id>"},"note":"<何の後か>"}' \
   | "${XDG_CACHE_HOME:-$HOME/.cache}/agents-daemon/bin/agents-daemon" edge add
 ```
 
@@ -81,9 +82,9 @@ peer の成果が PR になったら、報告を受けて PR 番号が分かっ�
 `edge rm` し、PR を挟んだ鎖に書き直す:
 
 ```sh
-printf '%s' '{"before":{"ref":"session:<name>","cwd":"<この window に渡した cwd>"},"after":{"ref":"pr:<owner>/<repo>#<番号>","cwd":"<この window に渡した cwd>"},"note":"PR #<番号>"}' \
+printf '%s' '{"before":{"ref":"session:<name>","cwd":"<この session に渡した cwd>"},"after":{"ref":"pr:<owner>/<repo>#<番号>","cwd":"<この session に渡した cwd>"},"note":"PR #<番号>"}' \
   | "${XDG_CACHE_HOME:-$HOME/.cache}/agents-daemon/bin/agents-daemon" edge add
-printf '%s' '{"before":{"ref":"pr:<owner>/<repo>#<番号>","cwd":"<この window に渡した cwd>"},"after":{"task":"<自分のタスクの id>"},"note":"PR #<番号> のマージの後"}' \
+printf '%s' '{"before":{"ref":"pr:<owner>/<repo>#<番号>","cwd":"<この session に渡した cwd>"},"after":{"task":"<自分のタスクの id>"},"note":"PR #<番号> のマージの後"}' \
   | "${XDG_CACHE_HOME:-$HOME/.cache}/agents-daemon/bin/agents-daemon" edge add
 ```
 
@@ -161,6 +162,7 @@ settings の `env` は Claude Code のプロセスにだけ注入されるので
 ```
 
 `[ref]` を付けるのは、listing に同じ名前が 2 行あるか、エラーが付けろと言ったときだけ。
+同じ名前で interactive と Remote Control の 2 行が出たら、interactive の行の `[ref]` を付けて送る。
 `ref` は listing かエラーが出したものだけが解決する。以前のターンで見た値や、自分で組み立てた
 値は使えない。
 
@@ -231,14 +233,14 @@ idle 通知は、子が報告しないまま止まった、ユーザーへの質
 
 ## 委譲先セッションの寿命
 
-寿命は担当 PR に揃える。担当 PR がクローズ (マージ含む) されたら、window ごと畳む。
+寿命は担当 PR に揃える。担当 PR がクローズ (マージ含む) されたら、rex の session ごと畳む。
 閉じるコマンドは reference にある。空いたセッションを次のタスクへ使い回さず、依頼が出たその時点で
-立て直す。開いている window の数がそのまま進行中の作業の数になる。
+立て直す。開いている rex の session の数がそのまま進行中の作業の数になる。
 複数 PR を 1 セッションへ束ねるなら、束ねた全部が閉じるまでが寿命。渡すときからこれを前提に
 スコープを切る。
 
-**1 エージェント = 1 window**。指示者セッションも独立した window に置く。同じ window へ block
-分割で並べると 1 枚が小さすぎて中身が読めず、ユーザーが進捗を追えない。
+**1 エージェント = 1 rex session**。指示者セッションも独立した rex session に置く。同じ session に
+同居させると、起きた claude が rex の案内どおりにその session を rename する。
 
 ## 届く範囲
 

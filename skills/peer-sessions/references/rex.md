@@ -1,4 +1,4 @@
-# rex の block / window 操作
+# rex の session / block / window 操作
 
 rex はターミナルマルチプレクサで、`rex` CLI が unix socket 経由でサーバーを操作する。
 構文の正は `rex <command> -h`。ここには help に書かれていない実測の挙動だけを置く。
@@ -37,12 +37,17 @@ help と同じ役。docs と feedback の代わりにはならない。
 
 | 単位 | 説明 | 作るコマンド |
 | ---- | ---- | ---- |
-| session | 1 つの作業空間。`rex ls` で一覧 | `rex new` |
+| session | 1 つの作業空間。`rex ls` で一覧 | `rex session new` |
 | window | session 内のタブ。1 つ以上の block を持つ | `rex run`、`rex window new` |
 | block | 1 つのターミナル (ペイン)。`REX_BLOCK` が自分 | `rex split`、`rex block new` |
 
 ターゲットは完全 ID (`block:01a1…`)、`rex block ls` が出す末尾 6 桁、`--label` で付けた名前の
 どれでも通る。作ったブロックには `--label` を付け、以後はラベルで指す。
+
+別の session の block と window は、`capture` `send` `send-key` `window close` に `-s <session>` を添えて指す。
+`-s` は session の label と完全 ID のどちらでも通る。
+
+<!-- rex-premise: preview.26 cli 別 session の block と window は -s が無いと not found (exit 3)。-s は label を受ける -->
 
 ## 作法
 
@@ -51,24 +56,33 @@ help と同じ役。docs と feedback の代わりにはならない。
   ブロック」になり、それはユーザーが見ているブロックかもしれない。`capture` と `zoom` と `block call` は
   `REX_BLOCK` を既定にするが、`send` はそうとは書かれていない。
 - `--json` を付けて ID を結果から読む。`split` と `run` は `block_ids[0]` に新しいブロックを返す。
-- `split` は同じ window に並べ、`run` は新しい window を作る。別のエージェントを立てるときは `run`
-  (1 エージェント = 1 window)。
+  `session new` は `session_id` と `initial_windows[0].window_id`、`initial_windows[0].block_ids[0]` を返す。
+- `split` は同じ window に並べ、`run` は新しい window を作る。別のエージェントを立てるときは `session new`
+  (1 エージェント = 1 session)。起こした側の session に同居させると、起きた claude が rex の案内どおりに
+  その session を rename する。
 - コマンドはログインシェルの環境で動く。PATH は効くが alias は効かない。
 
 ## peer の Claude セッションを立てる
 
 ```sh
-rex run --focus=false --cwd "$PWD" --label peer-b --json -- \
+rex session new peer-b --cwd "$PWD" --json -- \
   claude --name peer-b --model "${CLAUDE_CODE_SUBAGENT_MODEL:?}"
 ```
 
+<!-- rex-premise: preview.26 cli session new は --focus を持たず、起きたコマンドの REX_SESSION は新しい session になる -->
+
+`session new` は選択中の pane を動かさない。
+
 数秒後に `ListAgents` へ `peer-b` として現れる。本文は `SendMessage` で送る。rex には Claude の
-入力欄へ本文を渡す専用のコマンドが無く、画面へ直接投入するなら `send -b peer-b '<本文>'` と
-`send-key -b peer-b enter` を使う。
+入力欄へ本文を渡す専用のコマンドが無く、画面へ直接投入するなら `send -s peer-b '<本文>'` と
+`send-key -s peer-b enter` を使う。
 
 ### 畳む
 
-`rex window close <window>` で window ごと畳む。`run --json` が返した `window_id` を使う。
+`rex session kill peer-b` で session ごと畳む。`rex window close` で最後の window を閉じると、
+window が 0 の session が一覧に残る。
+
+<!-- rex-premise: preview.26 cli session kill は label を受ける。最後の window を閉じても session は残る -->
 
 ## 別ブロックでコマンドを走らせて結果を読む
 
@@ -110,15 +124,15 @@ rex block call -b work process
 ## やらないこと
 
 - `rex kill` `rex server stop`: 自分のセッションも巻き込む。ユーザーが明示したときだけ
-- 自分が作っていない block や window を閉じる
+- 自分が作っていない session、block、window を閉じる
 
 ## 症状と対処
 
 | 症状 | 対処 |
 | ---- | ---- |
 | `connect: operation not permitted` | sandbox が socket を塞いでいる。ハーネス側の設定の問題で CLI の問題ではない。`agents-daemon:setup` skill の「多重化ツールの到達性」 |
-| `block target "<label>" not found` | コマンドが終わってブロックが閉じた。`--keep-open` を付けて作り直す |
-| `window target "<id>" not found` | ID の桁を間違えている。`rex window ls` の ID 列をそのまま使う |
+| `block target "<label>" not found` | 別の session の block なら `-s <session>` を付ける。それ以外はコマンドが終わってブロックが閉じたので、`--keep-open` を付けて作り直す |
+| `window target "<id>" not found` | 別の session の window なら `-s <session>` を付ける。それ以外は ID の桁の間違いで、`rex window ls` の ID 列をそのまま使う |
 | `send` したのに動かない | `send-key -b <target> enter` を送っていない |
 | `wait` が Usage を出して終わる | 子が非 0 で終わっただけ。exit code と `--json` の 1 行目が結果 |
 | `split` `run` `new` が上限を理由に拒否される | server の資源上限 (既定: session 64、block 合計 1024、window 64 / session、pane 64 / window) に当たっている。`--keep-open` で作った block の閉じ忘れが溜まりやすいので `rex block ls` で数えて閉じる。上限は `rex server start --max-*` で変えられるが server の再起動が要る |

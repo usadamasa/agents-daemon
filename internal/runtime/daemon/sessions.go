@@ -19,8 +19,8 @@ func (r *daemonRuntime) observeSessions(panes []daemonstate.PaneStatus, now time
 	r.touchWorks(panes, now)
 }
 
-// touchWorks は tick で見えたセッションの作業の記録の mtime を進める。開いたまま何も打たないセッションの記録を
-// 保持期間で消さないため。進められなくても tick は止めない。
+// touchWorks は tick で見えたセッションの作業の記録の mtime を進め、見えたセッションを liveSessions に控える。開いたまま
+// 何も打たないセッションの記録を保持期間で消さないため。進められなくても tick は止めない。
 func (r *daemonRuntime) touchWorks(panes []daemonstate.PaneStatus, now time.Time) {
 	ids := make([]string, 0, len(panes))
 	for _, p := range panes {
@@ -28,6 +28,7 @@ func (r *daemonRuntime) touchWorks(panes []daemonstate.PaneStatus, now time.Time
 			ids = append(ids, p.SessionID)
 		}
 	}
+	r.liveSessions = ids
 	if err := r.works.Touch(ids, now); err != nil {
 		r.log.Logf("作業の記録の mtime を進められません: %v", err)
 	}

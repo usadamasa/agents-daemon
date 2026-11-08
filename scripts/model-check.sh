@@ -77,5 +77,11 @@ run models/refstate RefState RefStateSweepOnTransition.cfg violated
 run models/rexlist PaneList PaneList.cfg holds
 # exit 3 を全列挙の失敗にすると、session を閉じただけで失敗する (FailOnlyWhenDown の反例)。
 run models/rexlist PaneList PaneListNoSkip.cfg violated
+# 終了したセッションの完了タスクを作業の記録が消えるまで掃除しない形 (#483)。カードの状態を実装の式で導く。liveness も見る。
+run models/card Card Card.cfg holds
+# 完了タスクを 24 時間で消すと、全部終えて終了したセッションが終了のカードで図に戻る (NoResurrectedExited の反例)。
+run models/card Card CardNoKeep.cfg violated
+# 同じく、そのセッションを待つ辺の上流が完了から終了へ変わる (SatisfiedStays の反例)。
+run models/card Card CardNoKeepEdge.cfg violated
 
 exit "$failed"

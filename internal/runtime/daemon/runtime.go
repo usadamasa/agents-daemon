@@ -110,6 +110,8 @@ type daemonRuntime struct {
 	consecutiveFailures int
 	idleSince           time.Time // ゼロ値は「非アイドル (Claude pane が存在する)」
 	lastHousekeepAt     time.Time // ゼロ値は「まだ 1 度も掃除していない」
+	// liveSessions は最後の tick で pane が見えたセッション。housekeeping が終了したセッションを見分けるのに使う。
+	liveSessions []string
 }
 
 func newDaemonRuntime(client multiplexerClient, log *applog.Logger, statusPath string, store sessionstate.Store, sleep func(time.Duration), startedAt time.Time) *daemonRuntime {

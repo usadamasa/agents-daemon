@@ -77,6 +77,80 @@ func TestHousekeep_keepsWorkOfLiveSession(t *testing.T) {
 	}
 }
 
+// writeAged は content を path に書き、mtime を age だけ前にする。
+func writeAged(t *testing.T, path, content string, age time.Duration, now time.Time) {
+	t.Helper()
+	touchAged(t, path, age, now)
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	mtime := now.Add(-age)
+	if err := os.Chtimes(path, mtime, mtime); err != nil {
+		t.Fatalf("Chtimes: %v", err)
+	}
+}
+
+// 終了したセッションの完了タスクは、作業の記録が残っている間は消さない。消すと依存図がタスクの無いセッションと読み、
+// 全部終えたセッションを終了のカードで図に戻す (#483)。生きているセッションと、作業の記録の無いセッションの完了タスクは
+// 今までどおり消す。
+func TestHousekeep_keepsCompletedTasksOfExitedSession(t *testing.T) {
+	now := time.Date(2026, 8, 28, 12, 0, 0, 0, time.UTC)
+	client := &multiplexerfake.Client{
+		PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) {
+			return []multiplexer.Pane{claudePaneWithSession("p1", "s-live", multiplexer.AgentStatusIdle)}, nil
+		},
+	}
+	r, statusPath := newTestRuntime(t, client, now)
+	dir := filepath.Dir(statusPath)
+	r.attachStateDir(dir)
+	logPath := filepath.Join(dir, "logs", "daemon.log")
+
+	completed := func(session string) string {
+		path := filepath.Join(r.tasks.Dir, session, "1.json")
+		writeAged(t, path, `{"id":"1","session_id":"`+session+`","status":"completed"}`, 25*time.Hour, now)
+		return path
+	}
+	work := func(session string) string {
+		path := filepath.Join(r.works.Dir, session+".json")
+		writeAged(t, path, `{"session_id":"`+session+`"}`, time.Hour, now)
+		return path
+	}
+	liveTask := completed("s-live")
+	exitedTask := completed("s-exited")
+	noWorkTask := completed("s-no-work")
+	work("s-live")
+	exitedWork := work("s-exited")
+
+	if _, _, err := r.tick(context.Background(), missingConfigPath(t), now); err != nil {
+		t.Fatalf("tick() error = %v", err)
+	}
+	r.housekeep(logPath, now)
+
+	if _, err := os.Stat(exitedTask); err != nil {
+		t.Errorf("作業の記録が残っている終了したセッションの完了タスクは残るべき: %v", err)
+	}
+	if _, err := os.Stat(liveTask); !os.IsNotExist(err) {
+		t.Errorf("生きているセッションの完了タスクは消えるべき (err=%v)", err)
+	}
+	if _, err := os.Stat(noWorkTask); !os.IsNotExist(err) {
+		t.Errorf("作業の記録の無いセッションの完了タスクは消えるべき (err=%v)", err)
+	}
+
+	// 作業の記録が保持期間で消える回に、残した完了タスクも一緒に消える。次の回まで残すと、その間に resume した
+	// セッションの活動の置き場が無くなる (models/card の LivePlace)。
+	expiredAt := now.Add(worklog.Retention + time.Hour)
+	if err := os.Chtimes(exitedWork, now, now); err != nil {
+		t.Fatalf("Chtimes: %v", err)
+	}
+	r.housekeep(logPath, expiredAt)
+	if _, err := os.Stat(exitedWork); !os.IsNotExist(err) {
+		t.Errorf("保持期間を過ぎた作業の記録は消えるべき (err=%v)", err)
+	}
+	if _, err := os.Stat(exitedTask); !os.IsNotExist(err) {
+		t.Errorf("作業の記録が消える回に完了タスクも消えるべき (err=%v)", err)
+	}
+}
+
 func TestHousekeep(t *testing.T) {
 	now := time.Date(2026, 8, 28, 12, 0, 0, 0, time.UTC)
 

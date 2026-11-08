@@ -154,6 +154,7 @@ func Build(in Input) Graph {
 	}
 	g.linkBlockedBy()
 	g.linkEdges()
+	g.dropUnlinkedExited()
 	return g.finish()
 }
 
@@ -225,6 +226,20 @@ func (g *builder) linkEdges() {
 	}
 }
 
+// dropUnlinkedExited は線の引かれなかった終了したセッションの置き場のノードを図から外す (#455)。辺の記録は消さない。
+// 作業の記録やタスクから作ったノード (Kind が KindRef でない) は線が無くても残す。
+func (g *builder) dropUnlinkedExited() {
+	linked := map[string]bool{}
+	for _, l := range g.links {
+		linked[l.Before], linked[l.After] = true, true
+	}
+	for key, n := range g.nodes {
+		if n.Kind == KindRef && n.State == StateExited && !linked[key] {
+			delete(g.nodes, key)
+		}
+	}
+}
+
 // link は before → after を足す。どちらかのノードが無い辺、自分自身への辺、既にある辺は足さない。
 func (g *builder) link(before, after, kind string, via *protocol.EdgeRecord) {
 	pair := [2]string{before, after}
@@ -276,7 +291,7 @@ func (g *builder) sessionKeys(sessionID, cwd string, pick func(sessionID string)
 	if keys := g.bySession[sessionID]; len(keys) > 0 {
 		return keys
 	}
-	// タスクを作らずに終了したセッション。辺は残し、下流が止まっていることを見せる。
+	// タスクを作らずに終了したセッション。下流が止まっていることを見せる。線が引かれなければ dropUnlinkedExited が外す。
 	key := ref.SessionID(sessionID)
 	title := g.in.SessionNames[sessionID]
 	if title == "" {

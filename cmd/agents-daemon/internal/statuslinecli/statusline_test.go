@@ -15,7 +15,13 @@ import (
 // 引数で毎回決める (work profile の settings が上限を入れているため、空で「未設定」にする)。
 func runStatuslineCmd(t *testing.T, stdin, columns, spendCap string) (stdout, stderr, stateDir string) {
 	t.Helper()
-	root := t.TempDir()
+	return runStatuslineCmdIn(t, t.TempDir(), "", stdin, columns, spendCap)
+}
+
+// runStatuslineCmdIn は HOME を root、CLAUDE_CONFIG_DIR を configDir (空なら未設定) にして statusline を実行する。
+func runStatuslineCmdIn(t *testing.T, root, configDir, stdin, columns, spendCap string) (stdout, stderr, stateDir string) {
+	t.Helper()
+	t.Setenv("CLAUDE_CONFIG_DIR", configDir)
 	t.Setenv("HOME", root)
 	t.Setenv("XDG_STATE_HOME", root)
 	t.Setenv("COLUMNS", columns)
@@ -34,6 +40,17 @@ func runStatuslineCmd(t *testing.T, stdin, columns, spendCap string) (stdout, st
 		t.Fatalf("Execute() error = %v, want nil (statusline は fail-silent)", err)
 	}
 	return out.String(), errBuf.String(), filepath.Join(root, "agents-daemon")
+}
+
+// writeEffortSettings は effortLevel が high の settings.json を dir に置く。
+func writeEffortSettings(t *testing.T, dir string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte(`{"effortLevel": "high"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
 }
 
 const statuslineInput = `{"model": {"display_name": "Opus"}, "workspace": {"current_dir": "/tmp"}, "session_id": "sess-1",
@@ -63,6 +80,30 @@ func TestNewStatuslineCmd(t *testing.T) {
 		}
 		if _, err := os.Stat(filepath.Join(stateDir, "cost")); !os.IsNotExist(err) {
 			t.Errorf("上限が無いのに cost/ が作られている: %v", err)
+		}
+	})
+
+	t.Run("effort は CLAUDE_CONFIG_DIR の settings.json から読む", func(t *testing.T) {
+		configDir := t.TempDir()
+		writeEffortSettings(t, configDir)
+		stdout, stderr, _ := runStatuslineCmdIn(t, t.TempDir(), configDir, statuslineInput, "200", "")
+		if stderr != "" {
+			t.Errorf("stderr = %q, want empty", stderr)
+		}
+		if !strings.Contains(stdout, "⚡ high") {
+			t.Errorf("stdout に effort が無い:\n%q", stdout)
+		}
+	})
+
+	t.Run("CLAUDE_CONFIG_DIR が無ければ effort は ~/.claude/settings.json から読む", func(t *testing.T) {
+		root := t.TempDir()
+		writeEffortSettings(t, filepath.Join(root, ".claude"))
+		stdout, stderr, _ := runStatuslineCmdIn(t, root, "", statuslineInput, "200", "")
+		if stderr != "" {
+			t.Errorf("stderr = %q, want empty", stderr)
+		}
+		if !strings.Contains(stdout, "⚡ high") {
+			t.Errorf("stdout に effort が無い:\n%q", stdout)
 		}
 	})
 

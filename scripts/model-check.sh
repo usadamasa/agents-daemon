@@ -83,5 +83,11 @@ run models/card Card Card.cfg holds
 run models/card Card CardNoKeep.cfg violated
 # 同じく、そのセッションを待つ辺の上流が完了から終了へ変わる (SatisfiedStays の反例)。
 run models/card Card CardNoKeepEdge.cfg violated
+# tick で mtime を進めないと、生きているセッションの未完了のタスクが 7 日で消える (LiveTaskKept の反例)。
+run models/card Card CardNoTouchTask.cfg violated
+# 同じく、生きているセッションの辺が 7 日で消える (LiveEdgeKept の反例)。
+run models/card Card CardNoTouchEdge.cfg violated
+# 同じく、open の PR の辺が 7 日で消える (OpenRefEdgeKept の反例)。
+run models/card Card CardNoTouchRef.cfg violated
 
 exit "$failed"

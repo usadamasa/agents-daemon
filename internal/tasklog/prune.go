@@ -2,9 +2,12 @@ package tasklog
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
 
 // Prune は保持期間を過ぎた記録を mtime で消し、空になったセッションのディレクトリも消す。消した
@@ -36,6 +39,34 @@ func (s Store) Prune(now time.Time, keepCompleted func(sessionID string) bool) (
 		}
 	}
 	return removed, errors.Join(errs...)
+}
+
+// Touch は生きているセッションの未完了のタスクと TodoWrite のリストの mtime を now に進める。中身は変えない。完了したタスクは
+// 進めず、CompletedRetention で消えるままにする。ファイル名に使えない ID は飛ばして残りを進め、エラーにまとめて返す。
+func (s Store) Touch(sessionIDs []string, now time.Time) error {
+	if s.Dir == "" {
+		return nil
+	}
+	var errs []error
+	for _, id := range sessionIDs {
+		if !statefile.ValidSessionID(id) {
+			errs = append(errs, fmt.Errorf("session ID %q はファイル名に使えない", id))
+			continue
+		}
+		dir := filepath.Join(s.Dir, id)
+		paths := []string{filepath.Join(dir, todosFile)}
+		for _, name := range taskFiles(dir) {
+			if t, ok := readTask(filepath.Join(dir, name)); ok && t.Status != "completed" {
+				paths = append(paths, filepath.Join(dir, name))
+			}
+		}
+		for _, path := range paths {
+			if err := os.Chtimes(path, now, now); err != nil && !errors.Is(err, os.ErrNotExist) {
+				errs = append(errs, err)
+			}
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // pruneSession はセッション 1 つぶんのディレクトリを掃除する。

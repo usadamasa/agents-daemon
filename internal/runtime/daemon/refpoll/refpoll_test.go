@@ -249,6 +249,42 @@ func TestRefresh_済んでいない参照の辺は残す(t *testing.T) {
 
 // gh の state (と issue の stateReason) を写しの状態にする。PR はマージしたかで、issue は閉じた理由で、済んだか
 // 取りやめかを分ける (models/refstate の NoFalseComplete。CLOSED だけを見ると取りやめを完了と見せる)。
+// 写しが open の参照を before に持つ辺は、Refresh のたびに mtime が進み、保持期間で消えない。引けていない参照の辺は進めない。
+func TestRefresh_openの参照の辺の保持期間を数え直す(t *testing.T) {
+	remote := &fakeRemote{
+		states: map[string]string{"pr:o/r#1": "open"},
+		errs:   map[string]error{"pr:o/r#2": errors.New("gh が失敗")},
+	}
+	f, add := newFixture(t, remote)
+	add("pr:o/r#1", "task:a/1")
+	add("pr:o/r#2", "task:a/2")
+	edges, err := f.edges.Find("", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stale := t0.Add(-edge.Retention - time.Hour)
+	paths := map[string]string{}
+	for _, e := range edges {
+		paths[e.Before.Ref] = filepath.Join(f.edges.Dir, e.ID+".json")
+		if err := os.Chtimes(paths[e.Before.Ref], stale, stale); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// 1 回に 1 つ引くので、2 回で両方を引く。
+	f.p.Refresh(context.Background(), t0)
+	f.p.Refresh(context.Background(), t0)
+
+	info, err := os.Stat(paths["pr:o/r#1"])
+	if err != nil || !info.ModTime().Equal(t0) {
+		t.Errorf("open の参照の辺の mtime = %v, %v, want %v", info.ModTime(), err, t0)
+	}
+	info, err = os.Stat(paths["pr:o/r#2"])
+	if err != nil || !info.ModTime().Equal(stale) {
+		t.Errorf("引けていない参照の辺の mtime = %v, %v, want %v", info.ModTime(), err, stale)
+	}
+}
+
 func TestGHState(t *testing.T) {
 	cases := []struct {
 		kind, state, reason, want string

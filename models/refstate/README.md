@@ -37,6 +37,8 @@
   消えるまで閉じたまま残る (daemon は閉じた参照を引き直さない)。
 - gh が無い・未認証のまま直されない間は、参照は外部のまま残る (safety は成り立ち、liveness は前提の外)。
 - 間引きの間隔 (時間) は置かず、公平性 (gh の呼び出しはいずれ成功する) で表す。
+- 保持期間の掃除は写していない。写しが open の参照を before に持つ辺は `refpoll` が mtime を進めるので消えない
+  (`models/card` の `OpenRefEdgeKept`)。
 - 書くのは daemon の 1 つの goroutine だけで、写しの書き込みは `statefile.WriteJSONAtomic` なので 1 ステップ。
 - 辺は参照 1 つを before に持つ 1 本で、`edge add` は `MaxAdds` 回まで書き直せる。辺の before は結びつけで書き換わらない
   (`session:` の端点だけが結びつく) ので、消すかは写しだけで決まり、`edge add` との交錯は `edges/.lock` の中の 1 ステップ

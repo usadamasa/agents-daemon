@@ -1127,7 +1127,7 @@ export const definitions = {
     }
   },
   "GraphNode": {
-    "description": "依存の DAG のノード 1 つ (タスク 1 つ、タスクの無いセッションの作業、端点の参照だけの置き場)",
+    "description": "依存の DAG のノード 1 つ (タスク 1 つ、タスクか進行中の作業の無いセッションの作業、端点の参照だけの置き場)",
     "type": "object",
     "additionalProperties": false,
     "required": [

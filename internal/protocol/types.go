@@ -388,7 +388,7 @@ type DepsGraph struct {
 	ColumnOrder []string `json:"column_order"`
 }
 
-// GraphNode は依存の DAG のノード 1 つ (タスク 1 つ、タスクの無いセッションの作業、端点の参照だけの置き場)。
+// GraphNode は依存の DAG のノード 1 つ (タスク 1 つ、タスクか進行中の作業の無いセッションの作業、端点の参照だけの置き場)。
 type GraphNode struct {
 	// Ref (task:、todo:、sid:、session:、issue:、pr:)。mod は切り出さずに不透明な文字列として扱う。
 	Key  string `json:"key"`

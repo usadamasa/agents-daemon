@@ -32,7 +32,8 @@ SessionEnd hook の `ingest-work` が書く)、`status.json`、`$STATE/edges/`�
 どれを見せているかを持つ (アプリは inferred に「会話から自動で付けた題 · 直す」の chip を添え、押すと題を直す欄が開く。
 箱の副題には出どころを出さない)。summary は生きていれば pane の今の作業、終了して
 いれば最後のターンの応答の 1 行目。記録の無い生きているセッション (plugin の更新前に起きたもの) は今まで通り pane の
-名前から付ける (origin pane)。タスクのあるセッションには作業のノードを作らず、辺の端点の解き方は変えない。
+名前から付ける (origin pane)。タスクのあるセッションには、生きていて進行中のタスクと TodoWrite の項目が無いときだけ、
+活動の置き場として作業のノードを作る (#489)。辺の端点の解き方は変えない。
 <!-- cc-premise: 2.1.319 hooks UserPromptSubmit の prompt (peer の delivery は cross-session-message の包みごと)、Stop の last_assistant_message、SessionStart の source、SessionEnd の reason -->
 
 **出どころの優先順と上書き**: 人の直した題 > 推定の題 > prompt の題は見せる順で、記録の上では subject (prompt か human) と

@@ -143,13 +143,16 @@ func livePanes(in input) (running bool, updatedAt *time.Time, panes map[string]*
 
 // collect はタスク、TodoWrite の項目、タスクの無いセッションの作業をノードの材料にする。表示名 (Session) は
 // 呼び手が付ける。タスクの無いセッションは作業の記録 (work) から作り、生きていても終了していても載る (#368)。記録の無い
-// 生きているセッション (plugin の更新前に起きたもの) は pane から作る。
+// 生きているセッション (plugin の更新前に起きたもの) は pane から作る。タスクがあっても生きていて進行中の作業が無ければ、
+// セッションの活動の置き場として作業の記録からノードを作る (#489)。
 func collect(in input, panes map[string]*daemonstate.PaneStatus) []graph.Card {
 	var cards []graph.Card
 	acts := activities(panes, in.Works)
 	withTasks := map[string]bool{}
+	inProgress := map[string]bool{}
 	for _, t := range in.Tasks {
 		withTasks[t.SessionID] = true
+		inProgress[t.SessionID] = inProgress[t.SessionID] || t.Status == "in_progress"
 		a, live := acts[t.SessionID]
 		cards = append(cards, graph.Card{Key: ref.Task(t.SessionID, t.ID), Kind: graph.KindTask, TaskID: t.ID, Description: t.Description, Title: t.Subject, SessionID: t.SessionID,
 			CWD: t.CWD, Live: live, Status: t.Status, Activity: a.act, Detail: a.detail, Summary: a.summaryFor(t.Status)})
@@ -158,23 +161,24 @@ func collect(in input, panes map[string]*daemonstate.PaneStatus) []graph.Card {
 		withTasks[list.SessionID] = true
 		a, live := acts[list.SessionID]
 		for i, todo := range list.Todos {
+			inProgress[list.SessionID] = inProgress[list.SessionID] || todo.Status == "in_progress"
 			cards = append(cards, graph.Card{Key: ref.Todo(list.SessionID, i), Kind: graph.KindTodo, Title: todo.Content, SessionID: list.SessionID,
 				CWD: list.CWD, Live: live, Status: todo.Status, Activity: a.act, Detail: a.detail, Summary: a.summaryFor(todo.Status)})
 		}
 	}
 	withWork := map[string]bool{}
 	for _, w := range in.Works {
-		if withTasks[w.SessionID] {
+		a, live := acts[w.SessionID]
+		if withTasks[w.SessionID] && (inProgress[w.SessionID] || !live) {
 			continue
 		}
 		withWork[w.SessionID] = true
-		a, live := acts[w.SessionID]
 		summary := w.Summary
 		if live {
 			summary = a.msg
 		}
 		cards = append(cards, graph.Card{Key: ref.SessionID(w.SessionID), Kind: graph.KindSession, Origin: workOrigin(w), Title: workTitle(w, in.SessionNames[w.SessionID]), Summary: summary,
-			SessionID: w.SessionID, CWD: w.CWD, Live: live, Status: "in_progress", Activity: a.act, Detail: a.detail})
+			SessionID: w.SessionID, CWD: w.CWD, Live: live, Status: "in_progress", Activity: a.act, Detail: a.detail, StatusOnly: withTasks[w.SessionID]})
 	}
 	for id, p := range panes {
 		if withTasks[id] || withWork[id] {

@@ -31,7 +31,7 @@ daemon.log の検知と送信の行に `agent_status=… kind=… msg="…"` の
 `unknown` の pane のノードは working に倒さず、`unknown` の状態として idle の節に出す。
 
 `blocked` のうち kind が `permission` / `question` / `auth` の pane には、待機明けでも再開を送らない
-(esc は prompt を断り、Enter は承認する。`monitor` の `waitingOnPrompt`)。kind の無い `blocked` (dialog 一般) は
+(esc は prompt を断り、Enter は承認する。`multiplexer.WaitingOnPrompt`)。kind の無い `blocked` (dialog 一般) は
 上限の画面がこの形で来るかを実測していないので送信を止めない。
 
 ## 上限で止まった pane の record (#77)
@@ -50,8 +50,10 @@ daemon.log の検知と送信の行に `agent_status=… kind=… msg="…"` の
 | session limit の後に lower-priority mode へ入った画面 (2026-10-25、limit-events に 1 件) | `idle` | 実測。バイナリの読みでは説明できていない |
 | 一時エラー (過負荷、5xx) で retry を諦めた | `error` (`msg` は `API Error: …`) | バイナリの読み |
 
-画面の読み取りの前段を `error` / `blocked` に絞ると、実測の `idle` の 1 件を取りこぼす。実測が 1 件しか無い間は
-前段のゲートを入れない。
+daemon が record から読むのは「`working` なら触らない」だけで、上限かどうかは transcript の末尾の entry で決める
+([rate-limit.md](rate-limit.md))。`error` / `idle` / `done` / `blocked` のどれで来ても判定は同じで、実測の
+`idle` の 1 件も取りこぼさない。上限で止まった pane が `working` のまま申告される (書き込みの遅れか、上の読みが
+外れた) ときは、transcript が上限なのに触らなかった食い違いを `suppressed-working` として limit-events に残す。
 
 同じ turn の終わりで StopFailure hook も走る (上限は `error=rate_limit`、5xx は `server_error`)。record の `error` は
 turn の結果を見て、StopFailure は API error の応答を見るので、条件は同じではない。daemon は StopFailure の記録を

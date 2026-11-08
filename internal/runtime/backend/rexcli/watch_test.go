@@ -116,7 +116,7 @@ func TestWatch_PaneListFromCache(t *testing.T) {
 		t.Fatalf("PaneList() error = %v", err)
 	}
 	want := []multiplexer.Pane{{
-		PaneID: blockOwn, CWD: cwdOwn, Agent: "claude", AgentStatus: multiplexer.AgentStatusWorking,
+		PaneID: blockOwn, CWD: cwdOwn, PID: pidOwn, Agent: "claude", AgentStatus: multiplexer.AgentStatusWorking,
 		AgentMessage: "Close probe block after its program exits", SessionID: sidOwn,
 	}}
 	if !slices.Equal(panes, want) {
@@ -176,7 +176,7 @@ func TestWatch_NewSessionBlocks(t *testing.T) {
 		return ok && len(panes) == 1 && panes[0].AgentStatus == multiplexer.AgentStatusDone
 	})
 	panes, _ := c.watch.panes(nil)
-	want := multiplexer.Pane{PaneID: blockClaudeDone, CWD: "/b", Agent: "claude", AgentStatus: multiplexer.AgentStatusDone, AgentMessage: "できた"}
+	want := multiplexer.Pane{PaneID: blockClaudeDone, CWD: "/b", PID: pidClaudeDone, Agent: "claude", AgentStatus: multiplexer.AgentStatusDone, AgentMessage: "できた"}
 	if panes[0] != want {
 		t.Errorf("panes = %+v, want %+v", panes[0], want)
 	}

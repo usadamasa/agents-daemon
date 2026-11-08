@@ -52,9 +52,11 @@ type Pane struct {
 	// AgentKind は monitor が再開送信を見送る判断にも使う。
 	AgentKind    string
 	AgentMessage string
-	// SessionID は pane で動いている Claude セッションの ID (CLAUDE_CODE_SESSION_ID)。
-	// pane と Claude セッションの唯一の対応付けで、紐づいていなければ空。
-	SessionID     string
+	// SessionID は pane で動いている Claude セッションの ID (CLAUDE_CODE_SESSION_ID)。backend は statusline の記録
+	// (context/) から埋め、紐づいていなければ空。daemon は空のものを PID で Claude Code の登録簿から補う。
+	SessionID string
+	// PID は pane の前景の process の pid。無ければ 0。Claude Code の登録簿 (sessions/<pid>.json) を引く鍵。
+	PID           int
 	TerminalTitle string
 	// UnknownReason は agent の record があるのに使えず AgentStatus が unknown になった理由。空なら該当しない。
 	// rex の版が変わって record の形が崩れたときに判定が黙って止まらないよう、daemon はログに、

@@ -109,7 +109,7 @@ func TestToPane(t *testing.T) {
 			// kind と msg の写像は TestToPane_KindAndMessage で見る。
 			got.AgentKind, got.AgentMessage = "", ""
 			want := multiplexer.Pane{
-				PaneID: "block:x", CWD: "/w",
+				PaneID: "block:x", CWD: "/w", PID: tt.pid,
 				Agent: tt.wantAgent, AgentStatus: tt.wantStatus, SessionID: "sid", UnknownReason: tt.wantReason,
 			}
 			if got != want {

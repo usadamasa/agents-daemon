@@ -25,6 +25,7 @@ const (
 const (
 	sessionOwn  = "session:01a17d3f-df41-7910-a1ba-34bf3c9384f2"
 	blockOwn    = "block:01a17d3f-df41-7a0a-b43a-445fabff2f4f"
+	pidOwn      = 79724
 	pidOwnShell = 79054
 	sidOwn      = "8c798e60-d1c2-4967-b62a-a1b2a4be9fc3"
 	cwdOwn      = "/Users/usadamasa/src/github.com/usadamasa/agents-daemon"

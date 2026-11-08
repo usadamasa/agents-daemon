@@ -120,7 +120,7 @@ func TestCache_ReplaysMeasuredStream(t *testing.T) {
 	}
 	got := c.Panes(map[string]string{blockOwn: sidOwn})
 	want := []multiplexer.Pane{{
-		PaneID: blockOwn, CWD: cwdOwn, Agent: "claude", AgentStatus: multiplexer.AgentStatusWorking,
+		PaneID: blockOwn, CWD: cwdOwn, PID: pidOwn, Agent: "claude", AgentStatus: multiplexer.AgentStatusWorking,
 		AgentMessage: "Close probe block after its program exits", SessionID: sidOwn,
 	}}
 	if !slices.Equal(got, want) {
@@ -205,7 +205,7 @@ func TestCache_ForegroundChange(t *testing.T) {
 	}
 	applyAll(t, c, []string{procChangedLine(sessionOwn, blockOwn, 2, pidOwnShell, "-zsh", "/elsewhere")})
 	got := c.Panes(nil)
-	want := []multiplexer.Pane{{PaneID: blockOwn, CWD: "/elsewhere", AgentStatus: multiplexer.AgentStatusUnknown}}
+	want := []multiplexer.Pane{{PaneID: blockOwn, CWD: "/elsewhere", PID: pidOwnShell, AgentStatus: multiplexer.AgentStatusUnknown}}
 	if !slices.Equal(got, want) {
 		t.Errorf("panes() = %+v, want %+v (done の record は残るが前景の shell の pane)", got, want)
 	}

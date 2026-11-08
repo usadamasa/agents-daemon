@@ -76,9 +76,9 @@ if ! tmp_bin=$(mktemp "$DAEMON_BIN_DIR/.agent-tasks.XXXXXX"); then
   log_error "mktemp failed in $DAEMON_BIN_DIR"
   exit 1
 fi
-# deployment target は wails3 CLI の darwin の build と同じ 12.0 (Taskfile の gui:build と揃える)。
+# deployment target は Go 1.27 が要求する macOS の下限 13.0 (Taskfile の gui:build と揃える)。下げると ld が警告する。
 # version は窓の title に出す (gui/main.go の version)。
-if ! CGO_CFLAGS=-mmacosx-version-min=12.0 CGO_LDFLAGS=-mmacosx-version-min=12.0 MACOSX_DEPLOYMENT_TARGET=12.0 \
+if ! CGO_CFLAGS=-mmacosx-version-min=13.0 CGO_LDFLAGS=-mmacosx-version-min=13.0 MACOSX_DEPLOYMENT_TARGET=13.0 \
   go build -C "$PLUGIN_ROOT/gui" -ldflags "-X main.version=$version" -o "$tmp_bin" .; then
   log_error "go build failed"
   exit 1

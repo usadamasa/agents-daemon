@@ -194,6 +194,14 @@ test("完了を隠した既定の図: 枠の中のカードはセッション名
   assert.equal(card.querySelector("small").textContent, "作業中");
 });
 
+test("完了を隠した既定の図: タスクのカードは description の 1 行を tooltip に出し、カードの高さの要る副題には足さない", () => {
+  const card = (key) => q(`.node[data-key="${key}"]`);
+  assert.equal(card("task:beta/1").title, "依存図の箱と線を描く");
+  assert.equal(card("task:beta/1").querySelector("small").textContent.includes("依存図の箱と線を描く"), false);
+  assert.equal(card("sid:zeta").title, "issue を読んでいる");
+  assert.equal(card("pr:usadamasa/agents-daemon#254").title, "");
+});
+
 // loadDeps はアプリに deps を読み直させる。窓が前に出たときの読み直し (visibilitychange) を使う。
 async function loadDeps(text) {
   answers["main.Daemon.Deps"] = text;

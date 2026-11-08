@@ -306,6 +306,46 @@ func TestGraph_refEndpoints(t *testing.T) {
 	}
 }
 
+// タスクを作らずに終了したセッションの置き場のノードは、線が 1 本でも引かれる間だけ図に載る (#455)。もう片方の端点の
+// 記録が消えた辺は残っていても線にならず、置き場だけが浮くので作らない。
+func TestGraph_exitedPlaceholderNeedsLink(t *testing.T) {
+	const cwd = "/w/a"
+	e := func(id, before, after string) edge.Edge {
+		return edge.Edge{ID: id, Before: edge.Endpoint{Ref: before, CWD: cwd}, After: edge.Endpoint{Ref: after, CWD: cwd}}
+	}
+	b := build(input{
+		Tasks: []record.Task{task("A", "1", "a", "pending", cwd)},
+		Edges: []edge.Edge{
+			e("drawn", "sid:G", "task:A/1"),
+			e("after-gone", "sid:Z", "task:A/9"),
+			e("before-gone", "task:A/9", "sid:Y"),
+			// 同じ置き場に線の引かれない辺と引かれる辺があれば、線の引かれる辺で残る。
+			e("mixed-gone", "sid:M", "task:A/9"),
+			e("mixed-drawn", "sid:M", "task:A/1"),
+		},
+	})
+	got := nodes(b.Graph)
+	for _, key := range []string{"sid:G", "sid:M"} {
+		if n := got[key]; n.Kind != graph.KindRef || n.State != graph.StateExited {
+			t.Errorf("%s = %+v, want 線のある終了したセッションの置き場", key, n)
+		}
+	}
+	for _, key := range []string{"sid:Z", "sid:Y"} {
+		if n, ok := got[key]; ok {
+			t.Errorf("%s = %+v, 線の無い置き場は図に載らない", key, n)
+		}
+	}
+	for _, row := range b.Graph.ColumnOrder {
+		if row == "sid:Z" || row == "sid:Y" {
+			t.Errorf("column_order に線の無い置き場 %s がある", row)
+		}
+	}
+	want := []string{"sid:G>task:A/1", "sid:M>task:A/1"}
+	if !reflect.DeepEqual(links(b.Graph), want) {
+		t.Errorf("links = %v, want %v", links(b.Graph), want)
+	}
+}
+
 // daemon が引いた外部の参照の状態 (refstate) が merged / closed なら、issue / PR の置き場は完了 (completed) になり、
 // 完了を隠した図では畳まれる (#416)。open は待ち (waiting、#471)、まだ引いていない参照は外部 (external)。取りやめ (dropped) は
 // 完了にせず、待っている下流を止めている人の手当ての要るノード (halted、stuck) にし、原因の鎖に選ぶ。

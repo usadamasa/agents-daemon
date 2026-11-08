@@ -254,6 +254,29 @@ func TestExecClient_PaneList(t *testing.T) {
 	})
 }
 
+// ls の後に閉じた session (block ls が exit 3) を飛ばし、残りの session へ進む。
+func TestExecClient_PaneList_SkipsClosedSession(t *testing.T) {
+	f := newFakeRex(t)
+	f.put(t, "ls.json", lsJSON(sessionA, sessionB))
+	f.put(t, "block-ls-"+sessionB+".json", blockLsJSON([2]string{blockClaudeDone, blockstate.ShellFlavor}))
+	f.putBlock(t, blockClaudeDone, measured(t, measuredOct10, "program_status-done.json"), processJSON(pidClaudeDone, "claude", "/w/guard"))
+
+	panes, err := f.client(staticResolver(nil)).PaneList(context.Background())
+	if err != nil {
+		t.Fatalf("PaneList() error = %v (閉じた session は読み飛ばすべき)", err)
+	}
+	if len(panes) != 1 || panes[0].PaneID != blockClaudeDone {
+		t.Errorf("PaneList() = %+v, want %s の 1 件", panes, blockClaudeDone)
+	}
+	f.assertCalls(t,
+		"--autostart=false ls --json",
+		"--autostart=false block ls -s "+sessionA+" --json",
+		"--autostart=false block ls -s "+sessionB+" --json",
+		"--autostart=false block call -b "+blockClaudeDone+" program_status",
+		"--autostart=false block call -b "+blockClaudeDone+" process",
+	)
+}
+
 // not found 以外の失敗は block を飛ばさずエラーにする。
 func TestExecClient_PaneList_FailureIsError(t *testing.T) {
 	oneBlock := func(programStatus string) map[string]string {
@@ -271,7 +294,7 @@ func TestExecClient_PaneList_FailureIsError(t *testing.T) {
 		wantErr  string
 	}{
 		{"ls が失敗", nil, "not found"},
-		{"block ls が失敗", map[string]string{"ls.json": lsJSON(sessionA)}, "not found"},
+		{"block ls が exit 3 以外で失敗", map[string]string{"ls.json": lsJSON(sessionA), "fail-block-ls-" + sessionA + ".json": ""}, "server error"},
 		{"block call が exit 3 以外で失敗", failing, "server error"},
 		{"program_status が JSON でない", oneBlock("not json"), "応答の parse に失敗"},
 	}

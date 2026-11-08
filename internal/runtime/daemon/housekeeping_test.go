@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/eventlog"
 	"github.com/usadamasa/agents-daemon/internal/ledger"
+	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/refstate"
@@ -32,6 +34,46 @@ func touchAged(t *testing.T, path string, age time.Duration, now time.Time) {
 	mtime := now.Add(-age)
 	if err := os.Chtimes(path, mtime, mtime); err != nil {
 		t.Fatalf("Chtimes: %v", err)
+	}
+}
+
+// pane が見えているセッションの作業の記録は、何週間書かれていなくても housekeeping で消えない。見えなくなってから
+// Retention が経つと消える。
+func TestHousekeep_keepsWorkOfLiveSession(t *testing.T) {
+	now := time.Date(2026, 8, 28, 12, 0, 0, 0, time.UTC)
+	client := &multiplexerfake.Client{
+		PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) {
+			return []multiplexer.Pane{claudePaneWithSession("p1", "s-live", multiplexer.AgentStatusIdle)}, nil
+		},
+	}
+	r, statusPath := newTestRuntime(t, client, now)
+	dir := filepath.Dir(statusPath)
+	r.attachStateDir(dir)
+	logPath := filepath.Join(dir, "logs", "daemon.log")
+	liveFile := filepath.Join(r.works.Dir, "s-live.json")
+	deadFile := filepath.Join(r.works.Dir, "s-dead.json")
+	touchAged(t, liveFile, 8*24*time.Hour, now)
+	touchAged(t, deadFile, 8*24*time.Hour, now)
+
+	if _, _, err := r.tick(context.Background(), missingConfigPath(t), now); err != nil {
+		t.Fatalf("tick() error = %v", err)
+	}
+	r.housekeep(logPath, now)
+
+	if _, err := os.Stat(liveFile); err != nil {
+		t.Errorf("生きているセッションの作業の記録は残るべき: %v", err)
+	}
+	if _, err := os.Stat(deadFile); !os.IsNotExist(err) {
+		t.Errorf("終了したセッションの作業の記録は消えるべき (err=%v)", err)
+	}
+
+	r.housekeep(logPath, now.Add(worklog.Retention-time.Hour))
+	if _, err := os.Stat(liveFile); err != nil {
+		t.Errorf("見えなくなってから Retention 未満の記録は残るべき: %v", err)
+	}
+	r.housekeep(logPath, now.Add(worklog.Retention+time.Hour))
+	if _, err := os.Stat(liveFile); !os.IsNotExist(err) {
+		t.Errorf("見えなくなってから Retention を過ぎた記録は消えるべき (err=%v)", err)
 	}
 }
 

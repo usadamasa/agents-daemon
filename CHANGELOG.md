@@ -1,5 +1,13 @@
 # Changelog
 
+## [2026.1108.3](https://github.com/usadamasa/agents-daemon/compare/2026.1108.2...2026.1108.3) - 2026-11-08
+
+### Features
+- 依存図: 終了したセッションを外すとき端点の辺もまとめて消す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/521
+### Bug Fixes
+- 依存図: 全部終えて終了したセッションが終了のカードで戻らないようにする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/523
+- 依存図: 生きているセッションの辺と未完了タスク、open の PR の辺を保持期間で消さない by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/524
+
 ## [2026.1108.2](https://github.com/usadamasa/agents-daemon/compare/2026.1108.1...2026.1108.2) - 2026-11-08
 
 ### Features

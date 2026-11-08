@@ -26,6 +26,8 @@
   --gray-dot: #9aa49e;
   --exited: #b4bbb6;
 }
+/* overscroll-behavior は継承されないので全要素に置き、WKWebView の跳ね返りを窓とスクロールする領域のどれでも止める */
+* { overscroll-behavior: none; }
 html, body { height: 100%; }
 body {
   margin: 0;

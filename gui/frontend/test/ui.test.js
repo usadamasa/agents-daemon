@@ -380,6 +380,12 @@ test("状態の丸の色は .dot と .st で 1 つの規則を共有し、色の
   assert.doesNotMatch(css, /^\.(dot|st) \{[^}]*background: /m);
 });
 
+// スクロールの跳ね返りは WKWebView の描画でしか起きず、happy-dom では再現できないので規則の有無で確かめる。
+test("窓とスクロールする領域はどれも、端を越えたスワイプで跳ね返らない", () => {
+  assert.match(css, /^\* \{ overscroll-behavior: none; \}/m);
+  assert.doesNotMatch(css, /overscroll-behavior: (auto|contain)/);
+});
+
 test("単体ビューの状態の丸は、状態の色の鍵を class に持つ", () => {
   const chipDot = (key) => {
     q(`.node[data-key="${key}"]`).click();

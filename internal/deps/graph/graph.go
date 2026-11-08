@@ -75,6 +75,7 @@ var halted = map[string]bool{StateQuestion: true, StatePermission: true, StateLi
 //   - BlockedBy は完了していない上流を、止まっているもの、進行中のものの順に選ぶ。Memos は消えたメモの id を落とす
 //   - before 側の sid: の端点が末端のタスクを複数持つと、末端をセッションのノード (sid:) に集め、辺の記録は
 //     そのノードからの 1 本にする (#405)。after 側の sid: は根のタスクの数だけの Link になる
+//   - 線の 1 本も引かれない終了したセッションの置き場のノードは図に載せない (#455)
 type (
 	// Graph はセッションをまたぐタスクの依存の DAG (#134)。
 	Graph = protocol.DepsGraph

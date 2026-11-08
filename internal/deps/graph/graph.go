@@ -22,7 +22,7 @@ import (
 const (
 	KindTask    = "task"    // TaskCreate で作られたタスク
 	KindTodo    = "todo"    // TodoWrite のリストの 1 項目
-	KindSession = "session" // タスクを作っていないセッションの作業 (題は作業の記録から。記録が無ければセッションの名前)
+	KindSession = "session" // タスクの無い、または進行中の作業が無い生きているセッションの作業 (題は作業の記録から。記録が無ければセッションの名前)
 	// KindRef は辺の端点の参照だけがあるノード (まだ起きていないセッション、issue / PR、タスクを作らずに終了したセッション)。
 	// Key は端点の参照そのもの。終了したセッションは名前で引いても sid:<session_id> を Key にし、名前と session ID の
 	// どちらで書いた辺も同じノードに集める。
@@ -108,6 +108,8 @@ type Card struct {
 	// StateUnknown のどれか)。生きていなければ空。Detail はその補足 (上限の解除時刻)。
 	Activity string
 	Detail   string
+	// StatusOnly はタスクのあるセッションの活動の置き場のノード。辺の sid: の端点はタスクのノードへ解く。
+	StatusOnly bool
 }
 
 // Input はグラフを組む材料。
@@ -136,6 +138,8 @@ type builder struct {
 	nodes map[string]*Node
 	// bySession はセッションのタスク (と TodoWrite の項目、タスクの無いセッション) のノードの Key。
 	bySession map[string][]string
+	// statusOnly は末端を集めていない活動の置き場のノードの Key (Card.StatusOnly)。bySession には入れない。
+	statusOnly map[string]bool
 	// activity はセッションが生きていればその活動 (Card.Activity)。末端を集めるセッションのノードの状態に使う。
 	activity map[string]string
 	links    []protocol.GraphLink
@@ -144,7 +148,7 @@ type builder struct {
 
 // Build は Cards からノードを、blockedBy と辺の記録から Links を組み、段・下流・鎖を数える。
 func Build(in Input) Graph {
-	g := &builder{in: in, nodes: map[string]*Node{}, bySession: map[string][]string{}, activity: map[string]string{}, seen: map[[2]string]bool{}}
+	g := &builder{in: in, nodes: map[string]*Node{}, bySession: map[string][]string{}, statusOnly: map[string]bool{}, activity: map[string]string{}, seen: map[[2]string]bool{}}
 	for _, c := range in.Cards {
 		g.addCard(c)
 	}
@@ -161,7 +165,11 @@ func (g *builder) addCard(c Card) {
 		n.Detail = c.Detail
 	}
 	g.nodes[n.Key] = n
-	g.bySession[n.SessionID] = append(g.bySession[n.SessionID], n.Key)
+	if c.StatusOnly {
+		g.statusOnly[n.Key] = true
+	} else {
+		g.bySession[n.SessionID] = append(g.bySession[n.SessionID], n.Key)
+	}
 	if c.Live {
 		g.activity[c.SessionID] = c.Activity
 	}
@@ -296,10 +304,11 @@ func (g *builder) roots(sessionID string) []string {
 
 // sinkHub は before 側の sid: の端点のノード。末端が 1 つならそのノード、複数あるなら末端 (輪で末端が無ければ
 // セッションのノード全部) を sid:<id> のノードに集めてそれを返す。どの末端を待つ辺かは記録に無いので、末端の全部と
-// 組み合わせると辺の記録 1 つが末端の数だけ線になる (#405)。
+// 組み合わせると辺の記録 1 つが末端の数だけ線になる (#405)。活動の置き場のノードは、末端がすべて完了なら集めない。
+// 状態がセッションの活動のままなので、集めると済んだ作業の下流を止めてしまう。
 func (g *builder) sinkHub(sessionID string) []string {
 	key := ref.SessionID(sessionID)
-	if g.nodes[key] != nil {
+	if g.nodes[key] != nil && !g.statusOnly[key] {
 		// 集めたノード、タスクの無い生きているセッション、終了した置き場のどれか。
 		return []string{key}
 	}
@@ -317,11 +326,15 @@ func (g *builder) sinkHub(sessionID string) []string {
 			break
 		}
 	}
+	if state == StateCompleted && g.statusOnly[key] {
+		return keys
+	}
 	title := g.in.SessionNames[sessionID]
 	if title == "" {
 		title = key
 	}
 	hub := g.placeholder(key, g.nodes[keys[0]].CWD, title, sessionID, state)
+	delete(g.statusOnly, hub)
 	g.nodes[hub].Live = g.activity[sessionID] != ""
 	for _, k := range keys {
 		g.link(k, hub, LinkTask, nil)

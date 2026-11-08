@@ -2,9 +2,9 @@ package parking_test
 
 // Adopt の不変条件 (models/handoff の Handoff.tla の LiveTaskKept と AdoptLeavesOne) を、実物の Store と
 // daemonstate.SessionExited (daemon の pid と status.json を読む) を goroutine で交錯させて確かめる。
-// 外部テストパッケージにして、mod と同じく parking の公開 API だけで Adopt を押す。
+// 外部テストパッケージにして、アプリ (park adopt) と同じく parking の公開 API だけで Adopt を押す。
 // 世界 (セッションの終了、daemon の tick と停止と入れ替わり、タスクの記録の更新) は 1 本の goroutine が乱択の順で進め、
-// 依存図を開いた mod が複数本、好きなときに Adopt を押す。時刻は step ごとに進む作り物で、壁時計には頼らない。
+// 依存図を開いたアプリの操作者 (コードでは mod) が複数本、好きなときに Adopt を押す。時刻は step ごとに進む作り物で、壁時計には頼らない。
 // 反例が出たら seed を出す。反例が出たらコードを直すか挙動を正当化する。性質を弱めて通さない。
 
 import (

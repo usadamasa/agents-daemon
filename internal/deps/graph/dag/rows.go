@@ -215,7 +215,7 @@ func (b *line) pass(ln lane) {
 	b.put(" ", false)
 }
 
-// nodeRow はノードの行: idx に `*`、ほかの通り抜けるレーンは縦線。`*` には印を付けない (mod が記号に置き換える)。
+// nodeRow はノードの行: idx に `*`、ほかの通り抜けるレーンは縦線。`*` には印を付けない (記号への置き換えは読み手が行う)。
 func (l *layout) nodeRow(idx int) *line {
 	b := &line{}
 	for i, ln := range l.lanes {

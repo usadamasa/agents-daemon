@@ -233,7 +233,7 @@ func (s Store) Withdraw(id, sessionID string) (Item, error) {
 
 // DiscardBefore は open のメモのうち、最後に置かれた時刻 (sources の最大の at) が before より前の
 // ものを discarded にし、捨てたメモを id の順に返す。該当なしは空の配列。アプリの「古いメモをまとめて捨てる」が
-// 呼び、「古い」の日数は呼び出し側 (mod) が持つ。
+// 呼び、「古い」の日数は呼び出し側 (アプリ) が持つ。
 func (s Store) DiscardBefore(before time.Time) ([]Item, error) {
 	if s.Dir == "" {
 		return nil, errors.New("parking の置き場所が無い")

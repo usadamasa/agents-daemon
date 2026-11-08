@@ -532,7 +532,7 @@ func TestGraph_chains(t *testing.T) {
 			t.Errorf("%s halted/stuck = %v/%v, want %v", key, n.Halted, n.Stuck, want)
 		}
 	}
-	// ノードは下流の多い順 (同じなら Key の順) に並ぶ。mod はこの順で根を描く。
+	// ノードは下流の多い順 (同じなら Key の順) に並ぶ (出力の並びを固定する)。
 	var order []string
 	for _, n := range b.Graph.Nodes {
 		order = append(order, n.Key)

@@ -1,21 +1,6 @@
 import type { EngineInterface } from 'claude-code'
 
-import type {
-  DepsRequest,
-  EdgeAddRequest,
-  EdgeRemoveRequest,
-  EventLogRequest,
-  ParkAddRequest,
-  ParkAdoptRequest,
-  ParkDiscardRequest,
-  ParkListRequest,
-  ParkSetRequest,
-  ParkWithdrawRequest,
-  SpawnRequest,
-  TaskDismissRequest,
-  WorkGetRequest,
-  WorkSetRequest,
-} from '../types'
+import type { DepsRequest, EventLogRequest, ParkAddRequest, ParkListRequest, ParkWithdrawRequest, WorkGetRequest, WorkSetRequest } from '../types'
 
 // daemonBin は hooks/lib/daemon-bin.sh と同じ規則でバイナリの置き場を返す。
 export async function daemonBin($: EngineInterface): Promise<string> {
@@ -24,21 +9,15 @@ export async function daemonBin($: EngineInterface): Promise<string> {
   return `${cache}/agents-daemon/bin/agents-daemon`
 }
 
-// Requests は mod が呼ぶコマンドと、その stdin の型 (schema の def)。
+// Requests は mod が呼ぶコマンドと、その stdin の型 (schema の def)。送達を伴う操作 (park set / discard / adopt / hand、
+// edge、task dismiss、spawn、tell) はアプリ (gui/service.go) が呼び、mod は呼ばない。
 export type Requests = {
   deps: DepsRequest
   'park add': ParkAddRequest
-  'park set': ParkSetRequest
   'park list': ParkListRequest
-  'park discard': ParkDiscardRequest
   'park withdraw': ParkWithdrawRequest
-  'park adopt': ParkAdoptRequest
-  'edge add': EdgeAddRequest
-  'edge rm': EdgeRemoveRequest
-  'task dismiss': TaskDismissRequest
   'work get': WorkGetRequest
   'work set': WorkSetRequest
-  spawn: SpawnRequest
   'event-log': EventLogRequest
 }
 

@@ -894,7 +894,7 @@ function on(name) {
 function stateChip(n) {
   const tone = STATE_TONE[n.state];
   const chipTone = tone === "working" ? "ok" : tone === "exited" ? "" : tone ?? "";
-  return chip(stateLabel(n), chipTone, tone === "working" ? "" : tone ?? "off");
+  return chip(stateLabel(n), chipTone, tone ?? "");
 }
 
 function nodePopup(n) {
@@ -993,7 +993,7 @@ function memoPopup({ memo, repo }) {
   title.textContent = memo.title;
   const chips = document.createElement("div");
   chips.className = "chips";
-  chips.append(chip("open", "ok", ""));
+  chips.append(chip("open", "ok", "working"));
   const placedAt = memo.sources.map((s) => s.task_ref).find((k) => k && g.node(k));
   if (placedAt) chips.append(linkChip(`置いたとき: ${g.node(placedAt).title} ›`, () => select({ type: "node", key: placedAt })));
   head.append(ph, title, chips);
@@ -1140,7 +1140,7 @@ function renderFoot() {
     `タスク ${count((n) => n.kind === "task")} · メモ ${memoCount} · セッション ${sessions}`,
   ];
   if (state.error) parts.push("·", `読み直しに失敗: ${state.error}`);
-  dot.className = d.daemon_running ? "dot" : "dot off";
+  dot.className = d.daemon_running ? "dot working" : "dot";
   text.className = state.error ? "err-text" : "";
   // 操作の結果はしばらく footer を占め、その後に件数へ戻る。
   const noticed = state.notice !== "" && Date.now() < state.noticeUntil;

@@ -12,6 +12,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
+import { STATE_TONE } from "../src/card.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const SRC = path.join(here, "..", "src");
@@ -307,6 +308,34 @@ test("PR のノードの単体ビュー: 見出しは PR の題で、番号と r
   assert.ok(groups.some((t) => t.startsWith("この PR を待っている · ")), groups.join(" / "));
   assert.ok(groups.some((t) => t.startsWith("この PR が待っている · ")), groups.join(" / "));
   await snapshot("graph-popup-ref");
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+});
+
+test("状態の丸の色は .dot と .st で 1 つの規則を共有し、色の鍵の無い丸は灰で出る", () => {
+  for (const tone of new Set(Object.values(STATE_TONE))) {
+    assert.match(css, new RegExp(`^:is\\(\\.dot, \\.st\\)\\.${tone} \\{ background: `, "m"), tone);
+  }
+  assert.doesNotMatch(css, /^\.(dot|st)\.[\w-]+ \{ background: /m);
+  assert.match(css, /^:is\(\.dot, \.st\) \{[^}]*background: var\(--gray-dot\);/m);
+  assert.doesNotMatch(css, /^\.(dot|st) \{[^}]*background: /m);
+});
+
+test("単体ビューの状態の丸は、状態の色の鍵を class に持つ", () => {
+  const chipDot = (key) => {
+    q(`.node[data-key="${key}"]`).click();
+    const cls = q("#pop .chips .chip .dot").getAttribute("class");
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    return cls;
+  };
+  assert.equal(chipDot("task:alpha/2"), "dot working");
+  assert.equal(chipDot("sid:gamma"), "dot exited");
+  assert.equal(chipDot("task:beta/2"), "dot");
+});
+
+test("緑の丸は状態の丸と同じ working の鍵で描く: daemon が動いている footer と open のメモ", () => {
+  assert.equal(q("#foot .dot").getAttribute("class"), "dot working");
+  q(".mrow").click();
+  assert.equal(q("#pop .chips .chip .dot").getAttribute("class"), "dot working");
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
 });
 

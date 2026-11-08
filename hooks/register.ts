@@ -4,6 +4,7 @@ import { registerHandoffNotice } from './handoff-notice'
 import { registerNotice } from './notice'
 import { openOnStart, registerOpenApp, startOpenApp } from './open-app'
 import { registerPark, startPark } from './park'
+import { registerTaskTools } from './task-tools'
 import { registerWorkInfer, startWorkInfer } from './work-infer'
 
 // hooks.json の modules は 1 つしか書けず、matcher の無い hook は 1 つの plugin で 1 つの event に 1 つしか
@@ -22,4 +23,5 @@ export const register: Register = (on, options) => {
   registerNotice(on, options)
   registerHandoffNotice(on, options)
   registerWorkInfer(on, options)
+  registerTaskTools(on, options)
 }

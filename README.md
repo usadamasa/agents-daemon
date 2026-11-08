@@ -31,6 +31,7 @@ plugin が持つもの:
 | StopFailure / UserPromptSubmit hook | turn を終わらせた API error を `ingest-turn-failure` で記録し、次の turn で消す (#77)。UserPromptSubmit は最初の prompt を作業の記録の題として `ingest-work` で書く |
 | SessionEnd hook | 作業の記録に終了の時刻と理由を `ingest-work` で書く |
 | PostToolUse hook | Task 系ツール (TaskCreate / TaskUpdate / TaskList) と TodoWrite の呼び出しを `ingest-task` に渡し、セッションのタスクを記録する (#121) |
+| Task 系ツールの配置 (mod、`hooks/task-tools.ts`) | TaskCreate と TaskUpdate を ToolSearch の裏から prompt の一覧へ置く (#499) |
 | `agents-daemon:agents-daemon` skill | 運用と切り分けの手引き (症状から引く) |
 | `agents-daemon:setup` skill | 前提の確認と statusline の配線、peer messaging の切り分け |
 | `agents-daemon:peer-sessions` skill | 別セッション (peer) へ作業を渡す手順と、rex の block 操作 |

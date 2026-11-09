@@ -78,10 +78,37 @@ func TestAdd_invalidRefs(t *testing.T) {
 	if _, err := s.Add(ok, Endpoint{Ref: "session:a", CWD: "/home/b"}, "", testNow); err == nil {
 		t.Errorf("自分自身への辺が通った")
 	}
+	// sid:S は S のタスクへ解かれるので、S のタスクと sid:S の辺は S のタスクどうしの待ちの輪になる。
+	task, sid := Endpoint{Ref: "task:s1/3", CWD: "/home/a"}, Endpoint{Ref: "sid:s1", CWD: "/home/a"}
+	if _, err := s.Add(task, sid, "", testNow); err == nil {
+		t.Errorf("自分のセッションのタスクから自分のセッションへの辺が通った")
+	}
+	if _, err := s.Add(sid, task, "", testNow); err == nil {
+		t.Errorf("自分のセッションから自分のセッションのタスクへの辺が通った")
+	}
+	if _, err := s.Add(task, Endpoint{Ref: "sid:s2", CWD: "/home/b"}, "", testNow); err != nil {
+		t.Errorf("ほかのセッションへの辺: %v", err)
+	}
 	for _, ref := range []string{"session:ad-134-edges", "issue:usadamasa/agents-daemon#134", "pr:usadamasa/agents-config.x#7", "task:2e0b-11/3", "sid:2e0b-11"} {
 		if _, err := s.Add(ok, Endpoint{Ref: ref, CWD: "/home/b"}, "", testNow); err != nil {
 			t.Errorf("%s: %v", ref, err)
 		}
+	}
+}
+
+// Add が拒む同じセッションの task と sid: の辺でも、拒む前に書かれた記録は Remove で消せる。
+func TestRemove_ownSessionTask(t *testing.T) {
+	s := New(t.TempDir())
+	before, after := Endpoint{Ref: "task:s1/3", CWD: "/home/a"}, Endpoint{Ref: "sid:s1", CWD: "/home/a"}
+	if err := os.MkdirAll(s.Dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := write(s.Dir, Edge{ID: edgeID(before.Ref, after.Ref), Before: before, After: after, CreatedAt: testNow}); err != nil {
+		t.Fatal(err)
+	}
+	removed, err := s.Remove(before, after)
+	if err != nil || !removed.Removed {
+		t.Errorf("Remove() = %+v, %v, want removed", removed, err)
 	}
 }
 

@@ -22,8 +22,8 @@ const (
 	edgeSteps   = 5
 )
 
-// edgeRefs は端点に使う参照。
-var edgeRefs = []string{"session:a", "session:b", "issue:usadamasa/agents-daemon#1", "task:s1/2", "sid:s1"}
+// edgeRefs は端点に使う参照。task と sid は別のセッションにする (同じセッションの組は Add が拒む)。
+var edgeRefs = []string{"session:a", "session:b", "issue:usadamasa/agents-daemon#1", "task:s1/2", "sid:s2"}
 
 func TestStore_交錯しても参照の組ごとに1つの辺になる(t *testing.T) {
 	removedSome := 0

@@ -2,13 +2,27 @@
 // 区別は無く、生きている全セッションのタスクに同じ動詞が出る。
 
 // candidates は selected の「先に済ませるタスク」の候補: 辺の端点にできる (endpoint の) ノードのうち、自分、既にある上流、
-// 下流 (足すと輪になる)、完了と終了したものを除く。
+// 下流 (足すと輪になる)、完了と終了したもの、セッションのノード (sid:) と同じセッションのタスクの組を除く。
 export function candidates(g, selected) {
   const down = g.reach(selected.key);
   const already = new Set(g.blockers(selected.key).map((l) => l.before));
   return g.nodes.filter(
-    (n) => n.endpoint && n.key !== selected.key && !already.has(n.key) && !down.has(n.key) && n.state !== "completed" && n.state !== "exited",
+    (n) =>
+      n.endpoint &&
+      n.key !== selected.key &&
+      !already.has(n.key) &&
+      !down.has(n.key) &&
+      !ownSession(n, selected) &&
+      n.state !== "completed" &&
+      n.state !== "exited",
   );
+}
+
+// ownSession は片方がセッションのノード (sid:) で、もう片方が同じセッションのものか。sid: はバイナリがそのセッションの
+// タスクへ解くので、この組の辺はタスクどうしの待ちの輪になる (daemon の edge add も拒む)。
+function ownSession(a, b) {
+  const sid = a.key.startsWith("sid:") || b.key.startsWith("sid:");
+  return sid && a.session_id !== undefined && a.session_id === b.session_id;
 }
 
 // canDismiss はノードを一覧から外せるか。終了したセッションのタスク (完了しているかを問わない)、作業 (タスクの無い

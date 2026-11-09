@@ -163,8 +163,12 @@ async function fetchDeps() {
 function schedule() {
   const wait = document.hidden ? POLL_HIDDEN_MS : POLL_MS;
   setTimeout(async () => {
-    await fetchDeps();
-    schedule();
+    // 描画が例外を投げても読み直しを張り直す。張り直さないと、図がそれきり更新されない。
+    try {
+      await fetchDeps();
+    } finally {
+      schedule();
+    }
   }, wait);
 }
 
@@ -234,17 +238,29 @@ const GAP_Y = 44;
 // layout は辺でつながるノード (connected) を dagre で配置する。辺の無いノードは図の下のセッションの枠 (renderGroups) か
 // 右の列 (renderColumn) に並べる。depth は key → 段 (Graph.view の depth)。返すのは key → { x, y } (中心) と、全体の width、height、辺の経路を持つ
 // dagre の graph。
+// 待ちの輪の辺は段が下へ進まない (輪の両端をバイナリが同じ段か逆の段に数える)。rankByDepth の段で dagre に渡すと
+// layout が落ちるので、段が下へ進む辺だけを dagre に渡し、残り (back) は箱の中心どうしを結ぶ点列で返す。
 function layout(connected, links, depth) {
   const g = new dagre.graphlib.Graph();
   g.setGraph({ rankdir: "TB", ranker: rankByDepth(depth), nodesep: GAP_X, ranksep: GAP_Y, marginx: MARGIN_X, marginy: MARGIN_Y });
   g.setDefaultEdgeLabel(() => ({}));
   for (const n of connected) g.setNode(n.key, { width: NODE_W, height: NODE_H });
-  for (const l of links) if (g.hasNode(l.before) && g.hasNode(l.after)) g.setEdge(l.before, l.after);
+  const rest = [];
+  for (const l of links) {
+    if (!g.hasNode(l.before) || !g.hasNode(l.after)) continue;
+    if ((depth.get(l.after) ?? 0) > (depth.get(l.before) ?? 0)) g.setEdge(l.before, l.after);
+    else rest.push(l);
+  }
   dagre.layout(g);
   // renderGraph は connected が空なら layout を呼ばないので、ここでは空を見ない。
   fitEdges(g, MARGIN_X, MARGIN_Y);
   const pos = new Map(connected.map((n) => [n.key, g.node(n.key)]));
-  return { g, pos, width: g.graph().width, height: g.graph().height };
+  const back = rest.map((l) => {
+    const a = pos.get(l.before);
+    const b = pos.get(l.after);
+    return { ...l, points: [{ x: a.x, y: a.y }, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, { x: b.x, y: b.y }] };
+  });
+  return { g, pos, back, width: g.graph().width, height: g.graph().height };
 }
 
 function nodeCard(n, highlight, grouped = false) {
@@ -371,7 +387,7 @@ function renderGraph() {
 
 // renderLinked は辺でつながるノードを線と箱で canvas に描き、その大きさを返す。
 function renderLinked(canvas, connected, links, depth, graph, highlight) {
-  const { g, pos, width, height } = layout(connected, links, depth);
+  const { g, pos, back, width, height } = layout(connected, links, depth);
 
   const svg = document.createElementNS(SVG, "svg");
   svg.setAttribute("class", "edges");
@@ -382,7 +398,7 @@ function renderLinked(canvas, connected, links, depth, graph, highlight) {
   svg.append(defs);
 
   const chain = chainEdges(graph);
-  const drawn = links.filter((l) => g.hasEdge(l.before, l.after)).map((l) => ({ ...l, points: g.edge(l.before, l.after).points }));
+  const drawn = [...links.filter((l) => g.hasEdge(l.before, l.after)).map((l) => ({ ...l, points: g.edge(l.before, l.after).points })), ...back];
   const spread = spreadPorts(drawn, pos, NODE_W, NODE_H);
   const jumps = findJumps(spread.map((l) => l.points), { radius: JUMP_R, margin: JUMP_MARGIN });
   spread.forEach((l, i) => {

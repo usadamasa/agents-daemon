@@ -92,6 +92,10 @@ func (s Store) Add(before, after Endpoint, note string, now time.Time) (Added, e
 	if err := s.normalize(&before, &after); err != nil {
 		return Added{}, err
 	}
+	// Remove では拒まない。書き済みのこの形の辺を消せるようにする。
+	if id, ok := taskOwnSession(before.Ref, after.Ref); ok {
+		return Added{}, fmt.Errorf("セッション %s のタスクと sid:%s の辺は書かない (sid: はそのセッションのタスクへ解かれ、タスクどうしの待ちの輪になる)", id, id)
+	}
 	before.Repo, after.Repo = gitrepo.RepoKey(before.CWD), gitrepo.RepoKey(after.CWD)
 	var added Added
 	err := s.locked(func(dir string) error {
@@ -287,6 +291,18 @@ func (s Store) normalize(before, after *Endpoint) error {
 		return fmt.Errorf("%s から自分自身への辺は書かない", before.Ref)
 	}
 	return nil
+}
+
+// taskOwnSession は片方が task:S/x、もう片方が sid:S のとき S を返す。
+func taskOwnSession(a, b string) (string, bool) {
+	for _, pair := range [][2]string{{a, b}, {b, a}} {
+		owner, _, isTask := ref.ParseTask(pair[0])
+		sid, isSID := ref.ParseSessionID(pair[1])
+		if isTask && isSID && owner == sid {
+			return sid, true
+		}
+	}
+	return "", false
 }
 
 // normalizeEndpoint は参照の前後の空白を落とし、参照の形と cwd が絶対パスであることを確かめる。結びつけの記録は

@@ -96,8 +96,9 @@ select { font: inherit; color: inherit; }
 .stage { flex: 1 1 0; min-height: 0; display: flex; }
 .stage > .main { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; position: relative; }
 .graph { flex: 1 1 0; min-height: 160px; position: relative; overflow: auto; }
+/* 幅はカード (.node の 240px) に左右の余白と左の枠線を足した 273px。足りないとカードが横にはみ出してスクロールする */
 .column {
-  flex: 0 0 auto; width: 272px; box-sizing: border-box; overflow-y: auto;
+  flex: 0 0 auto; width: 273px; box-sizing: border-box; overflow-y: auto;
   display: flex; flex-direction: column; gap: 10px; padding: 16px;
   border-left: 1px solid var(--line); background: var(--panel-soft);
 }

@@ -490,6 +490,16 @@ test("スクロールしない箱には overscroll-behavior を置かず、ホ�
   assert.equal(css.match(/overscroll-behavior/g).length, 1);
 });
 
+// happy-dom はレイアウトを計算しないので、style.css の寸法から右の列の中の幅を求める。
+test("右の列の中の幅はカードの幅以上で、横にはみ出してスクロールしない", () => {
+  const px = (rule, prop) => Number(css.match(new RegExp(`^${rule} \\{[^}]*\\b${prop}: (\\d+)px`, "m"))[1]);
+  const column = css.match(/^\.column \{[^}]*\}/m)[0];
+  assert.match(column, /box-sizing: border-box/);
+  assert.match(column, /border-left: 1px /);
+  const inner = px("\\.column", "width") - 2 * px("\\.column", "padding") - 1;
+  assert.ok(inner >= px("\\.node", "width"), `右の列の中の幅 ${inner}`);
+});
+
 test("単体ビューの状態の丸は、状態の色の鍵を class に持つ", () => {
   const chipDot = (key) => {
     q(`.node[data-key="${key}"]`).click();

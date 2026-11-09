@@ -1,5 +1,12 @@
 # Changelog
 
+## [2026.1109.0](https://github.com/usadamasa/agents-daemon/compare/2026.1108.4...2026.1109.0) - 2026-11-09
+
+### Features
+- feat!: 上限の判定を画面の文字列から transcript の末尾の entry に切り替える by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/528
+### Bug Fixes
+- 待ちの輪のある依存図で agent-tasks が固まらないようにする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/533
+
 ## [2026.1108.4](https://github.com/usadamasa/agents-daemon/compare/2026.1108.3...2026.1108.4) - 2026-11-08
 
 ### Features

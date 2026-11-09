@@ -1,4 +1,5 @@
-/* 色は 1 つの鍵に 1 つの意味: 緑 進行中と longest chain / 橙 人の返事待ち / 紫 上限待ち / 赤 失敗 / 灰 それ以外 */
+/* 色は次の手: 赤 直す / 橙 人の返事を待つ / 青 押せば終わる / 紫 時間を待つ / 緑 機械が動いている (と longest chain) / 灰 次の手が無い。
+   形は手番: 太い枠と塗り 人 / 細い枠と動き 機械 / 枠なし 待つものが無い */
 :root {
   --ink: #1c211e;
   --ink-soft: #3f4642;
@@ -23,9 +24,10 @@
   --purple-soft: #ebe4f5;
   --purple-ink: #4f3a7a;
   --red: #a4343a;
-  --slate: #4a6b8c;
-  --slate-soft: #e4ebf2;
-  --slate-ink: #2f4a66;
+  --blue: #1f6fd1;
+  --blue-soft: #dcebfb;
+  --blue-ink: #174f96;
+  --closed: #8a928d;
   --gray-dot: #9aa49e;
   --exited: #b4bbb6;
 }
@@ -76,8 +78,8 @@ select { font: inherit; color: inherit; }
 .chip.warn { background: var(--orange-soft); color: var(--orange-ink); }
 .chip.limit { background: var(--purple-soft); color: var(--purple-ink); }
 .chip.err { background: #f3e0e1; color: #6e2328; }
-.chip.drop { background: var(--slate-soft); color: var(--slate-ink); }
-/* 会話から自動で付けた題 (companion)。状態の色 (ok / warn / limit / err / drop) と被らないよう、塗らずに破線の縁で「仮」を表す。 */
+.chip.merge { background: var(--blue-soft); color: var(--blue-ink); }
+/* 会話から自動で付けた題 (companion)。状態の色 (ok / warn / limit / err / merge) と被らないよう、塗らずに破線の縁で「仮」を表す。 */
 .chip.guess { background: transparent; border: 1px dashed var(--ink-soft); color: var(--ink-soft); padding: 2px 9px; }
 .chip.link { cursor: pointer; }
 .chip.link:hover { text-decoration: underline; }
@@ -88,7 +90,8 @@ select { font: inherit; color: inherit; }
 :is(.dot, .st).warn { background: var(--orange); }
 :is(.dot, .st).limit { background: var(--purple); }
 :is(.dot, .st).err { background: var(--red); }
-:is(.dot, .st).drop { background: var(--slate); }
+:is(.dot, .st).merge { background: var(--blue); }
+:is(.dot, .st).drop { background: var(--exited); }
 :is(.dot, .st).exited { background: var(--exited); }
 
 /* header と footer の間を、左 (依存図・凡例・メモの一覧) と右の列に分ける段。右の列は段の全高を取り、
@@ -200,9 +203,20 @@ select { font: inherit; color: inherit; }
 .node.attn.limit { --tone: var(--purple); background: var(--purple-soft); }
 .node.attn.err { --tone: var(--red); background: #f3e0e1; }
 /* 取りやめの参照は閉じていて自分では進まないので、枠を点線にして手当て待ちのセッションと分ける */
-.node.attn.drop { --tone: var(--slate); background: var(--slate-soft); outline-style: dashed; }
+.node.attn.drop { --tone: var(--closed); background: var(--panel); outline-style: dashed; }
+/* マージできる PR。押せば終わる人の手番 */
+.node.attn.merge { --tone: var(--blue); background: var(--blue-soft); }
+/* Draft の PR。下書きと読めるよう斜線で塗り、閉じた PR の取りやめ (破線) と分ける */
+.node.draft { border-color: var(--line-strong); background: repeating-linear-gradient(135deg, var(--panel) 0 8px, #e8eae8 8px 16px); }
+/* CI 実行中は丸だけを跳ねさせる。カードごと動かすと辺の線とずれる */
+.node.bounce .st { animation: stage-bounce 0.9s cubic-bezier(0.33, 0, 0.67, 1) infinite; }
+@keyframes stage-bounce {
+  0%, 100% { transform: translateY(5px); }
+  50% { transform: translateY(-7px); }
+}
 @media (prefers-reduced-motion: reduce) {
   .node.working::after { animation: none; opacity: 0.6; }
+  .node.bounce .st { animation: none; }
 }
 .node .bd { font-size: 11px; padding: 1px 6px; border-radius: 999px; background: var(--hover); color: var(--ink-soft); flex: 0 0 auto; }
 

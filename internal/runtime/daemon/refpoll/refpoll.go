@@ -30,9 +30,11 @@ const fetchTimeout = 10 * time.Second
 type Remote struct {
 	State string
 	Title string
+	// PR は open の PR の段。open でない PR と issue はゼロ値。
+	PR refstate.PR
 }
 
-// Fetcher は issue / PR の今の状態と題を引く。
+// Fetcher は issue / PR の今の状態と題と段を引く。
 type Fetcher func(ctx context.Context, it ref.Item) (Remote, error)
 
 // failure は gh が失敗した参照 1 つの、次に引ける時刻とログに書いた理由。
@@ -166,7 +168,7 @@ func (p *Poller) refresh(ctx context.Context, key string, prev refstate.Record, 
 		p.log.Logf("外部の参照の状態を引けるようになりました: %s", key)
 	}
 	state := remote.State
-	rec := refstate.Record{Ref: key, State: state, Title: remote.Title, CheckedAt: now}
+	rec := refstate.Record{Ref: key, State: state, Title: remote.Title, PR: remote.PR, CheckedAt: now}
 	if err := p.refs.Put(rec); err != nil {
 		p.log.Logf("外部の参照の写しの書き込みに失敗: %v", err)
 		return refstate.Record{}, false
@@ -181,7 +183,7 @@ func (p *Poller) refresh(ctx context.Context, key string, prev refstate.Record, 
 	return rec, true
 }
 
-// GH は gh で issue / PR の状態と題を引く。daemon は Claude Code の sandbox の外で動き、gh の認証 (~/.config/gh) と
+// GH は gh で issue / PR の状態と題と段を引く。daemon は Claude Code の sandbox の外で動き、gh の認証 (~/.config/gh) と
 // network をそのまま使う。gh は SessionStart の hook から継いだ PATH で探す。
 func GH(ctx context.Context, it ref.Item) (Remote, error) {
 	bin, err := exec.LookPath("gh")
@@ -190,7 +192,7 @@ func GH(ctx context.Context, it ref.Item) (Remote, error) {
 	}
 	sub, fields := "issue", "state,stateReason,title"
 	if it.Kind == "pr" {
-		sub, fields = "pr", "state,title"
+		sub, fields = "pr", "state,title,isDraft,statusCheckRollup,reviewDecision,mergeStateStatus,mergeable"
 	}
 	cmd := exec.CommandContext(ctx, bin, sub, "view", strconv.Itoa(it.Number), "--repo", it.Repo, "--json", fields) // #nosec G204 -- 固定の gh のサブコマンドと、ref.ParseItem で検証した repo と番号
 	var stderr bytes.Buffer
@@ -207,13 +209,33 @@ func GH(ctx context.Context, it ref.Item) (Remote, error) {
 	return decodeView(sub, out)
 }
 
-// decodeView は gh の view の JSON (sub は issue か pr) を状態と題にする。
+// view は gh の view の JSON のうち読む欄。PR の欄は issue には無い。
+type view struct {
+	State             string  `json:"state"`
+	StateReason       string  `json:"stateReason"`
+	Title             string  `json:"title"`
+	IsDraft           bool    `json:"isDraft"`
+	StatusCheckRollup []check `json:"statusCheckRollup"`
+	ReviewDecision    string  `json:"reviewDecision"`
+	MergeStateStatus  string  `json:"mergeStateStatus"`
+	Mergeable         string  `json:"mergeable"`
+}
+
+// check は statusCheckRollup の 1 行。CheckRun は WorkflowName、Name、Status、Conclusion を、StatusContext は Context と
+// State を持つ。
+type check struct {
+	WorkflowName string    `json:"workflowName"`
+	Name         string    `json:"name"`
+	Context      string    `json:"context"`
+	Status       string    `json:"status"`
+	Conclusion   string    `json:"conclusion"`
+	State        string    `json:"state"`
+	StartedAt    time.Time `json:"startedAt"`
+}
+
+// decodeView は gh の view の JSON (sub は issue か pr) を状態と題と、open の PR なら段にする。
 func decodeView(sub string, out []byte) (Remote, error) {
-	var v struct {
-		State       string `json:"state"`
-		StateReason string `json:"stateReason"`
-		Title       string `json:"title"`
-	}
+	var v view
 	if err := json.Unmarshal(out, &v); err != nil {
 		return Remote{}, fmt.Errorf("gh %s view の出力を読めない: %w", sub, err)
 	}
@@ -221,7 +243,91 @@ func decodeView(sub string, out []byte) (Remote, error) {
 	if err != nil {
 		return Remote{}, err
 	}
-	return Remote{State: state, Title: v.Title}, nil
+	r := Remote{State: state, Title: v.Title}
+	if sub == "pr" && state == refstate.StateOpen {
+		r.PR = refstate.PR{Draft: v.IsDraft, CI: ciOf(v.StatusCheckRollup), Review: reviewOf(v.ReviewDecision), Merge: mergeOf(v.Mergeable, v.MergeStateStatus)}
+	}
+	return r, nil
+}
+
+// ciOf は rollup を 1 語に畳む。check が無ければ空。
+func ciOf(checks []check) string {
+	ci := ""
+	for _, c := range latestChecks(checks) {
+		switch checkResult(c) {
+		case refstate.CIFailing:
+			return refstate.CIFailing
+		case refstate.CIRunning:
+			ci = refstate.CIRunning
+		default:
+			if ci == "" {
+				ci = refstate.CIPassing
+			}
+		}
+	}
+	return ci
+}
+
+// latestChecks は同じ check の最新の 1 行だけを残す。rollup は同じ commit の再実行の行も持ち、concurrency で
+// 取り消された先の run の CANCELLED が、後の run の成功と並ぶ。開始前の行は startedAt がゼロで、どの行より新しい。
+func latestChecks(checks []check) map[[3]string]check {
+	latest := map[[3]string]check{}
+	for _, c := range checks {
+		key := [3]string{c.WorkflowName, c.Name, c.Context}
+		if prev, ok := latest[key]; !ok || newerCheck(c, prev) {
+			latest[key] = c
+		}
+	}
+	return latest
+}
+
+func newerCheck(a, b check) bool {
+	return !b.StartedAt.IsZero() && (a.StartedAt.IsZero() || a.StartedAt.After(b.StartedAt))
+}
+
+// checkResult は check 1 行を語にする。分類は `gh pr checks` に合わせ、知らない語は通過にしない。
+func checkResult(c check) string {
+	result := c.State // StatusContext
+	if result == "" {
+		result = c.Status // CheckRun の実行中
+		if c.Status == "COMPLETED" {
+			result = c.Conclusion
+		}
+	}
+	switch result {
+	case "SUCCESS", "NEUTRAL", "SKIPPED":
+		return refstate.CIPassing
+	case "FAILURE", "ERROR", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE":
+		return refstate.CIFailing
+	}
+	return refstate.CIRunning
+}
+
+// reviewOf は reviewDecision を語にする。レビューを必須にしていない repo の PR は空。
+func reviewOf(decision string) string {
+	switch decision {
+	case "REVIEW_REQUIRED":
+		return refstate.ReviewRequired
+	case "CHANGES_REQUESTED":
+		return refstate.ReviewChangesRequested
+	case "APPROVED":
+		return refstate.ReviewApproved
+	}
+	return ""
+}
+
+// mergeOf はマージの段を語にする。衝突は Draft でも分かる mergeable で見る。CLEAN のほか (計算中の UNKNOWN、BLOCKED、
+// UNSTABLE) はマージ可と言わない。
+func mergeOf(mergeable, status string) string {
+	switch {
+	case mergeable == "CONFLICTING":
+		return refstate.MergeConflicting
+	case status == "BEHIND":
+		return refstate.MergeBehind
+	case status == "CLEAN":
+		return refstate.MergeClean
+	}
+	return ""
 }
 
 // ghState は gh の state (issue は stateReason も) を写しの状態にする。閉じた PR はマージしたかで、閉じた issue は

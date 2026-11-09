@@ -399,6 +399,8 @@ type GraphNode struct {
 	RefKind string `json:"ref_kind,omitempty"`
 	// issue: / pr: の置き場のノードの番号と repo (「PR #389 · owner/repo」)。題を引いた後も番号を読めるように残す。
 	RefLabel string `json:"ref_label,omitempty"`
+	// open の PR の段。次に手を動かすものから順で、先頭を箱に出す。段を引いていない PR と open でない参照には付かない。
+	PrStages []string `json:"pr_stages,omitempty"`
 	// セッションの今の作業。生きていれば Claude Code が申告したもの (OSC 7501 の msg)、終了していれば最後のターンの応答の 1 行目 (作業の記録)。kind session のノードと、進行中のタスクと TodoWrite の項目のノードに付く。
 	Summary string `json:"summary,omitempty"`
 	// 状態の補足 (上限の解除時刻)。

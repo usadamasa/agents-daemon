@@ -399,6 +399,8 @@ export type GraphNode = {
   ref_kind?: 'issue' | 'pr'
   // issue: / pr: の置き場のノードの番号と repo (「PR #389 · owner/repo」)。題を引いた後も番号を読めるように残す
   ref_label?: string
+  // open の PR の段。次に手を動かすものから順で、先頭を箱に出す。段を引いていない PR と open でない参照には付かない
+  pr_stages?: ('ci_failing' | 'conflicting' | 'draft' | 'changes_requested' | 'review_required' | 'ci_running' | 'behind' | 'mergeable' | 'ci_passing' | 'approved')[]
   // セッションの今の作業。生きていれば Claude Code が申告したもの (OSC 7501 の msg)、終了していれば最後のターンの応答の 1 行目 (作業の記録)。kind session のノードと、進行中のタスクと TodoWrite の項目のノードに付く
   summary?: string
   // 状態の補足 (上限の解除時刻)

@@ -122,6 +122,8 @@ agents-daemon edge list --cwd <dir> [--here | --repo <main worktree>] [--ref <�
   依存図で完了にする。その参照を before に持つ辺は daemon が消し、daemon.log に 1 行書く。after にあるだけの辺は残る
 - open と引けた参照は「open (待ち)」になり、待っている下流の `blocked_by` に載る。まだ引けていない参照は「外部 (未取得)」で、
   済んだか分からないので `blocked_by` に載らない
+- open の PR の箱は「open (待ち)」の代わりに、次に手を動かす段 (CI 失敗、衝突、Draft、変更要求、approve 待ち、CI 実行中、
+  base より古い、マージ可、CI 通過、approved の順で 1 つ) を出し、残りは単体ビューに並べる。段が分からない PR は「open (待ち)」のまま
 - マージせずに閉じた PR と、not planned / duplicate で閉じた issue は「取りやめ」になる。完了にはせず、待っていた下流を
   止めている手当ての要るノードとして出し、辺も残す。代わりの PR へ付け替える (`edge rm` してから `edge add`) か、
   待ちが要らなければ `edge rm` する

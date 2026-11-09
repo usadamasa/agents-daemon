@@ -2,7 +2,7 @@
 // だけで、gh で引いた状態を書く。読むのは依存図 (deps) で、merged / closed の参照を完了にし、dropped の参照を
 // 取りやめにし、引いた題を参照のノードの題にする。
 //
-//	refs/<id>.json   参照 1 つ (参照、状態、題、引いた時刻)
+//	refs/<id>.json   参照 1 つ (参照、状態、題、open の PR の段、引いた時刻)
 //
 // id は参照から決める (参照は / と # を含み、そのままではファイル名にできない)。引き直すかどうかは Due が決め、
 // 手順の性質は models/refstate が持つ。
@@ -44,12 +44,36 @@ const (
 	Retention = 7 * 24 * time.Hour
 )
 
+// open の PR の段の語。空は「分からない」か「当てはまらない」で、どちらも依存図に何も出さない。
+const (
+	CIFailing = "failing"
+	CIRunning = "running"
+	CIPassing = "passing"
+
+	ReviewRequired         = "required"
+	ReviewChangesRequested = "changes_requested"
+	ReviewApproved         = "approved"
+
+	MergeConflicting = "conflicting"
+	MergeBehind      = "behind"
+	MergeClean       = "clean"
+)
+
+// PR は open の PR の段。gh の値を畳んだ語で持つ。ゼロ値は段の欄ができる前の写しと同じで、何も断定しない。
+type PR struct {
+	Draft  bool   `json:"draft,omitempty"`
+	CI     string `json:"ci,omitempty"`
+	Review string `json:"review,omitempty"`
+	Merge  string `json:"merge,omitempty"`
+}
+
 // Record は参照 1 つの写し。
 type Record struct {
 	Ref   string `json:"ref"`
 	State string `json:"state"`
 	// Title は issue / PR の題。閉じた参照は引き直さないので、閉じた後に変わった題は写らない。
 	Title     string    `json:"title,omitempty"`
+	PR        PR        `json:"pr,omitzero"`
 	CheckedAt time.Time `json:"checked_at"`
 }
 
@@ -147,6 +171,21 @@ func (s Store) Titles() (map[string]string, error) {
 	for r, rec := range list {
 		if rec.Title != "" {
 			out[r] = rec.Title
+		}
+	}
+	return out, nil
+}
+
+// PRs は参照 → PR の段。段の無い写しは載せない。依存図が読む形。
+func (s Store) PRs() (map[string]PR, error) {
+	list, err := s.List()
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]PR{}
+	for r, rec := range list {
+		if rec.PR != (PR{}) {
+			out[r] = rec.PR
 		}
 	}
 	return out, nil

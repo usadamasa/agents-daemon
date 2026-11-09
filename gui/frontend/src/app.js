@@ -6,7 +6,7 @@ import { Graph } from "./graph.js";
 import { GROUP_W, fitLimit, groupBySession, partition, placeGroups } from "./column.js";
 import { fitEdges, spreadPorts } from "./ports.js";
 import { findJumps, jumpPath } from "./jumps.js";
-import { STATE_LABEL, STATE_TONE, cardHint, cardText, emphasis } from "./card.js";
+import { PR_STAGE, STATE_LABEL, cardHint, cardText, emphasis, leadStage, toneOf } from "./card.js";
 import { isStale, kindLabel, lastPlacedAt, stamp } from "./memo.js";
 import { bulkDismissable, canAdopt, canDismiss, canRename, canTell, candidates, destinationLabel, isOwnTask, issueDestinations, pathDestination, peerDestinations, spawnDestinations, spawnLabel, taskDestinations } from "./ops.js";
 import { addBlocker, adopt, askUnlink, discard, discardStale, dismissAll, dismissOne, handOff, handOffTask, instruct, rename, setStatus, start, toParking, unlink } from "./actions.js";
@@ -128,7 +128,7 @@ function appendLinked(parent, text, ctx) {
 
 function stateLabel(n) {
   // 下流が全部完了した idle の peer は報告を済ませていて、こちらの返事を要さない。
-  const label = n.state === "done" && state.graph.settled(n.key) ? "手が空いている (idle)" : (STATE_LABEL[n.state] ?? n.state);
+  const label = leadStage(n)?.label ?? (n.state === "done" && state.graph.settled(n.key) ? "手が空いている (idle)" : (STATE_LABEL[n.state] ?? n.state));
   // 題を引いた issue / PR は題が番号を含まないので、番号と repo を状態に添える。
   if (n.ref_label && n.ref_label !== n.title) return `${label} · ${n.ref_label}`;
   if (n.ref_kind) return `${label} · ${REF_KIND_LABEL[n.ref_kind] ?? n.ref_kind}`;
@@ -279,7 +279,7 @@ function nodeCard(n, highlight, grouped = false) {
   });
 
   const dot = document.createElement("span");
-  dot.className = `st ${STATE_TONE[n.state] ?? ""}`.trim();
+  dot.className = `st ${toneOf(n) ?? ""}`.trim();
 
   const lb = document.createElement("span");
   lb.className = "lb";
@@ -565,7 +565,7 @@ function nodeRow(n, mark, link, owner) {
   const row = document.createElement("div");
   row.className = "lk";
   const dot = document.createElement("span");
-  dot.className = `st ${STATE_TONE[n.state] ?? ""}`.trim();
+  dot.className = `st ${toneOf(n) ?? ""}`.trim();
   const b = document.createElement("button");
   b.type = "button";
   b.textContent = n.title;
@@ -676,7 +676,7 @@ function blockerPicker(n) {
     const row = document.createElement("div");
     row.className = "lk";
     const dot = document.createElement("span");
-    dot.className = `st ${STATE_TONE[c.state] ?? ""}`.trim();
+    dot.className = `st ${toneOf(c) ?? ""}`.trim();
     const b = document.createElement("button");
     b.type = "button";
     b.textContent = c.title;
@@ -945,10 +945,18 @@ function on(name) {
   return state.picker === name ? "on" : "";
 }
 
-function stateChip(n) {
-  const tone = STATE_TONE[n.state];
+function toneChip(text, tone) {
   const chipTone = tone === "working" ? "ok" : tone === "exited" ? "" : tone ?? "";
-  return chip(stateLabel(n), chipTone, tone ?? "");
+  return chip(text, chipTone, tone ?? "");
+}
+
+function stateChip(n) {
+  return toneChip(stateLabel(n), toneOf(n));
+}
+
+// restStageChips は箱に出さなかった PR の段の chip。stateChip が先頭の段を出す。
+function restStageChips(n) {
+  return (n.pr_stages ?? []).slice(1).flatMap((s) => (PR_STAGE[s] ? [toneChip(PR_STAGE[s].label, PR_STAGE[s].tone)] : []));
 }
 
 function nodePopup(n) {
@@ -962,7 +970,7 @@ function nodePopup(n) {
   const title = titleOf(n);
   const chips = document.createElement("div");
   chips.className = "chips";
-  chips.append(stateChip(n));
+  chips.append(stateChip(n), ...restStageChips(n));
   // 会話から自動で付けた題は、状態の色と被らない破線の chip (guess) で出どころを示す。直すのは題を押す。
   if (n.origin === "inferred") chips.append(chip(INFERRED_CHIP, "guess"));
   if (n.session) chips.append(chip(`${n.session} ›`, "", undefined));

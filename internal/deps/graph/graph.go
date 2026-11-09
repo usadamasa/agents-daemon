@@ -131,6 +131,8 @@ type Input struct {
 	RefStates map[string]string
 	// RefTitles は issue / PR の参照 → daemon が引いた題 (refstate)。
 	RefTitles map[string]string
+	// RefPRs は PR の参照 → daemon が引いた段 (refstate)。
+	RefPRs map[string]refstate.PR
 }
 
 // builder はグラフを組む途中の状態。
@@ -278,9 +280,36 @@ func (g *builder) resolve(ep edge.Endpoint, pick func(sessionID string) []string
 			n.State = StateDropped
 		case s == refstate.StateOpen:
 			n.State = StateWaiting
+			n.PrStages = prStages(g.in.RefPRs[ep.Ref])
 		}
 	}
 	return []string{key}
+}
+
+// prStages は open の PR の段を、次に手を動かすものから順に返す。先頭を箱に出す。段はノードの状態を変えない
+// (マージを待っているだけで、下流の止まり方は PR の中身によらない)。
+func prStages(p refstate.PR) []string {
+	var out []string
+	for _, s := range []struct {
+		on    bool
+		stage string
+	}{
+		{p.CI == refstate.CIFailing, "ci_failing"},
+		{p.Merge == refstate.MergeConflicting, "conflicting"},
+		{p.Draft, "draft"},
+		{p.Review == refstate.ReviewChangesRequested, "changes_requested"},
+		{p.Review == refstate.ReviewRequired, "review_required"},
+		{p.CI == refstate.CIRunning, "ci_running"},
+		{p.Merge == refstate.MergeBehind, "behind"},
+		{p.Merge == refstate.MergeClean && !p.Draft, "mergeable"}, // Draft でも mergeStateStatus は CLEAN を返す
+		{p.CI == refstate.CIPassing, "ci_passing"},
+		{p.Review == refstate.ReviewApproved, "approved"},
+	} {
+		if s.on {
+			out = append(out, s.stage)
+		}
+	}
+	return out
 }
 
 // sessionKeys はセッションのノードのうち pick が選んだものの Key。ノードが無ければ sid: の置き場のノードを作る。

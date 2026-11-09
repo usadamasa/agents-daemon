@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026.1109.2](https://github.com/usadamasa/agents-daemon/compare/2026.1109.1...2026.1109.2) - 2026-11-09
+
+### Bug Fixes
+- 依存図のアプリの右の列に横のスクロールバーが出ないようにする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/538
+
 ## [2026.1109.1](https://github.com/usadamasa/agents-daemon/compare/2026.1109.0...2026.1109.1) - 2026-11-09
 
 ### Bug Fixes

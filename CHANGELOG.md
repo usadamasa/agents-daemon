@@ -1,5 +1,13 @@
 # Changelog
 
+## [2026.1109.3](https://github.com/usadamasa/agents-daemon/compare/2026.1109.2...2026.1109.3) - 2026-11-09
+
+### Features
+- feat: 週の上限は解除が 24 時間以内なら待ち、stale-turn の基準を解除時刻に移す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/531
+- 依存図: open の PR のノードに Draft・CI・レビュー・マージ可否の段を出す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/541
+### Documentation
+- docs: 利用上限の references を transcript の判定と週の上限の待機に合わせる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/532
+
 ## [2026.1109.2](https://github.com/usadamasa/agents-daemon/compare/2026.1109.1...2026.1109.2) - 2026-11-09
 
 ### Bug Fixes

@@ -3,7 +3,7 @@
 // オブジェクトはタスク (図の箱) とメモ (下の一覧の行)。選ぶとそのそばにポップアップで単体ビューが開く。
 import * as dagre from "./vendor/dagre.esm.js";
 import { Graph } from "./graph.js";
-import { GROUP_W, groupBySession, partition, placeGroups } from "./column.js";
+import { GROUP_W, fitLimit, groupBySession, partition, placeGroups } from "./column.js";
 import { fitEdges, spreadPorts } from "./ports.js";
 import { findJumps, jumpPath } from "./jumps.js";
 import { STATE_LABEL, STATE_TONE, cardHint, cardText, emphasis } from "./card.js";
@@ -377,10 +377,9 @@ function renderGraph() {
   const canvas = document.createElement("div");
   canvas.className = "canvas";
   const graphSize = connected.length > 0 ? renderLinked(canvas, connected, links, depth, graph, highlight) : { width: 0, height: 0 };
-  const groups = renderGroups(canvas, free, highlight, graphSize, host.clientWidth);
+  const groups = renderGroups(canvas, free, highlight, graphSize, { width: host.clientWidth, height: host.clientHeight - CONTROLS_BAND });
   canvas.style.width = `${Math.ceil(Math.max(graphSize.width, groups.width))}px`;
   canvas.style.height = `${Math.ceil(Math.max(graphSize.height, groups.height))}px`;
-  canvas.dataset.linked = String(connected.length > 0);
   host.append(canvas);
   host.scrollTo(scroll.left, scroll.top);
 }
@@ -419,13 +418,15 @@ function renderLinked(canvas, connected, links, depth, graph, highlight) {
   return { width, height };
 }
 
-// renderGroups は辺の無い動いているノードをセッションの枠にして、線のあるかたまりの下に並べる。折り返しは見える領域の
-// 幅 (線のあるかたまりの方が広ければそちら) で決める。枠が無ければ大きさは 0。
-function renderGroups(canvas, free, highlight, graphSize, viewWidth) {
+// renderGroups は辺の無い動いているノードをセッションの枠にして、線のあるかたまりの下に並べる。折り返しは、図全体を
+// 見える領域 (view) に収める拡大率がいちばん大きくなる列の数で決める (fitLimit)。全体表示がオフでも同じ折り返しにし、
+// 拡大縮小で並びを動かさない。枠が無ければ大きさは 0。
+function renderGroups(canvas, free, highlight, graphSize, view) {
   if (free.length === 0) return { width: 0, height: 0 };
   const groups = groupBySession(free);
   const top = graphSize.height > 0 ? graphSize.height : MARGIN_Y;
-  const { places, right, bottom } = placeGroups(groups, MARGIN_X, top, Math.max(graphSize.width, viewWidth));
+  const limit = fitLimit(groups, { left: MARGIN_X, top, bottom: MARGIN_Y, graph: graphSize, view });
+  const { places, right, bottom } = placeGroups(groups, MARGIN_X, top, limit);
   groups.forEach((g, i) => {
     const section = document.createElement("section");
     section.className = "group";
@@ -1311,8 +1312,7 @@ function zoomByUser(next, pointer) {
   setZoom(next, pointer);
 }
 
-// fitAll は図全体が見える領域に収まる拡大率にする (100% を超えて拡大せず、下限で止める)。線が 1 本も無い図は枠を折り返して
-// スクロールで見られるので、カードが読める 100% のままにする。拡大率が変わったときと
+// fitAll は図全体が見える領域に収まる拡大率にする (100% を超えて拡大せず、下限で止める)。拡大率が変わったときと
 // force のときは、下限で止まってはみ出した分のうち上 (根の側) と横の中心を見せる。拡大率の変わらない描き直しでは
 // 今のスクロールを保ち、数秒ごとの読み直しで位置を揺らさない。
 function fitAll(force) {
@@ -1320,7 +1320,7 @@ function fitAll(force) {
   const canvas = host.querySelector(".canvas");
   if (canvas === null) return;
   const size = canvasSize(canvas);
-  const next = canvas.dataset.linked === "true" ? fitZoom(size.width, size.height, host.clientWidth, host.clientHeight - CONTROLS_BAND) : 1;
+  const next = fitZoom(size.width, size.height, host.clientWidth, host.clientHeight - CONTROLS_BAND);
   const changed = next !== zoom;
   zoom = next;
   applyZoom();

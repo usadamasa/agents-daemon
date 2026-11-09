@@ -217,6 +217,30 @@ function withoutLinks() {
   return data;
 }
 
+// withCycle は fixture へ、互いを待つ 2 つのタスク (待ちの輪) を足した deps。輪の 2 つはバイナリが同じ段に数える。
+function withCycle() {
+  const data = JSON.parse(fixtureDeps);
+  const base = data.graph.nodes.find((n) => n.key === "task:beta/2");
+  const loop = (id, other) => ({ ...base, key: `task:loop/${id}`, task_id: id, title: `輪のタスク ${id}`, session_id: "sid-loop", session: "loop", session_name: "loop", depth: 1, downstream: 1, blocked_by: [], deadlock: true, stuck: true, description: `task:loop/${other} を待つ` });
+  data.graph.nodes.push(loop("1", "2"), loop("2", "1"));
+  data.graph.links.push({ before: "task:loop/1", after: "task:loop/2", kind: "task" }, { before: "task:loop/2", after: "task:loop/1", kind: "task" });
+  data.graph.folded.nodes.push({ key: "task:loop/1", depth: 1 }, { key: "task:loop/2", depth: 1 });
+  return data;
+}
+
+test("待ちの輪のある図: 輪のノードと両向きの辺を描き、次の読み直しも続ける", async () => {
+  await loadDeps(JSON.stringify(withCycle()));
+  try {
+    const graph = cards("#graph");
+    assert.ok(graph.has("task:loop/1") && graph.has("task:loop/2"), [...graph.keys()].join(","));
+    assert.equal(count(EDGE), 7);
+    await loadDeps(JSON.stringify(withoutLinks()));
+    assert.equal(count(EDGE), 0);
+  } finally {
+    await loadDeps(fixtureDeps);
+  }
+});
+
 test("線が 1 本も無い図: 動いているカードをセッションの枠に並べ、全体表示でも 100% のまま縮めない", async () => {
   const narrow = { width: 600, height: 200 };
   setHost(narrow);

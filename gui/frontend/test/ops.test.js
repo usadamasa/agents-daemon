@@ -18,6 +18,20 @@ test("candidates は端点にできるノードから自分、上流、下流、
   assert.deepEqual(candidates(g, g.node("D")).map((n) => n.key), ["A", "B", "C"]);
 });
 
+test("candidates はセッションのノード (sid:) と同じセッションのタスクを互いに候補から除く", () => {
+  const g = new Graph({
+    nodes: [
+      node("sid:s1", { kind: "session", session_id: "s1" }),
+      node("task:s1/1", { session_id: "s1" }),
+      node("task:s1/2", { session_id: "s1" }),
+      node("task:s2/1", { session_id: "s2" }),
+    ],
+    links: [],
+  });
+  assert.deepEqual(candidates(g, g.node("sid:s1")).map((n) => n.key), ["task:s2/1"]);
+  assert.deepEqual(candidates(g, g.node("task:s1/1")).map((n) => n.key), ["task:s1/2", "task:s2/1"]);
+});
+
 test("bulkDismissable は生きた待ちのある sid: のカードを除き、task: と待ちの済んだカードは含める", () => {
   const data = { updated_at: "2026-11-06T00:00:00Z" };
   const gone = { live: false, kind: "ref", state: "exited" };

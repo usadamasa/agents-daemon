@@ -97,7 +97,7 @@ func TestTouchSessions(t *testing.T) {
 	s := New(t.TempDir())
 	sidBefore := agedEdge(t, s, "sid:live", "sid:gone")
 	taskAfter := agedEdge(t, s, "sid:gone", "task:live/1")
-	unrelated := agedEdge(t, s, "sid:gone", "task:gone/1")
+	unrelated := agedEdge(t, s, "sid:gone", "task:other/1")
 	unbound := agedEdge(t, s, "session:live", "pr:o/r#1")
 
 	if err := s.TouchSessions([]string{"live"}, testNow); err != nil {

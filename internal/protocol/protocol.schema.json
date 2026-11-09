@@ -466,6 +466,7 @@
         "origin": { "type": "string", "enum": ["prompt", "inferred", "human", "pane"], "description": "kind session のノードの題の出どころ。prompt は最初の prompt、inferred は companion の推定 (推定と分かるように見せる)、human は人が直した、pane は作業の記録が無く pane の名前から付けた" },
         "ref_kind": { "type": "string", "enum": ["issue", "pr"], "description": "issue: / pr: の置き場のノードの参照の種類" },
         "ref_label": { "type": "string", "description": "issue: / pr: の置き場のノードの番号と repo (「PR #389 · owner/repo」)。題を引いた後も番号を読めるように残す" },
+        "pr_stages": { "type": "array", "items": { "type": "string", "enum": ["ci_failing", "conflicting", "draft", "changes_requested", "review_required", "ci_running", "behind", "mergeable", "ci_passing", "approved"] }, "description": "open の PR の段。次に手を動かすものから順で、先頭を箱に出す。段を引いていない PR と open でない参照には付かない" },
         "summary": { "type": "string", "description": "セッションの今の作業。生きていれば Claude Code が申告したもの (OSC 7501 の msg)、終了していれば最後のターンの応答の 1 行目 (作業の記録)。kind session のノードと、進行中のタスクと TodoWrite の項目のノードに付く" },
         "detail": { "type": "string", "description": "状態の補足 (上限の解除時刻)" },
         "endpoint": { "type": "boolean", "description": "key をそのまま edge add の端点に書けるか (TodoWrite の項目は書けない)" },

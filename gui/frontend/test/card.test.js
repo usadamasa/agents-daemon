@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { STATE_LABEL, STATE_TONE, acceptanceLine, cardHint, cardText, emphasis } from "../src/card.js";
+import { PR_STAGE, STATE_LABEL, STATE_TONE, acceptanceLine, cardHint, cardText, emphasis, leadStage, toneOf } from "../src/card.js";
 
 test("acceptanceLine は受け入れ条件の行を選び、行の途中の印からを返す", () => {
   const task = (description) => ({ kind: "task", description });
@@ -78,6 +78,50 @@ test("ほかの状態はカードを強調しない", () => {
   for (const state of ["done", "unknown", "pending", "completed", "exited", "external", "waiting"]) {
     assert.deepEqual(emphasis({ state }), [], state);
   }
+});
+
+test("PR の段: カードの見た目は次の手で分ける", () => {
+  const lead = (...pr_stages) => emphasis({ state: "waiting", pr_stages });
+  // 自分で直す
+  for (const s of ["ci_failing", "conflicting", "changes_requested", "behind"]) assert.deepEqual(lead(s), ["attn", "err"], s);
+  // 仕上げる
+  assert.deepEqual(lead("draft"), ["draft"]);
+  // 人の返事を待つ
+  assert.deepEqual(lead("review_required"), ["attn", "warn"]);
+  // CI を待つ
+  assert.deepEqual(lead("ci_running"), ["working", "bounce"]);
+  // マージする
+  assert.deepEqual(lead("mergeable"), ["attn", "merge"]);
+  // 次の手が決まらない段は強調しない
+  for (const s of ["ci_passing", "approved", "someday_new"]) assert.deepEqual(lead(s), [], s);
+});
+
+test("PR の段: 丸の色は先頭の段で決め、段の無いノードと知らない語は状態の色のまま", () => {
+  const tone = (...pr_stages) => toneOf({ state: "waiting", pr_stages });
+  assert.equal(tone("ci_failing", "ci_running"), "err");
+  assert.equal(tone("conflicting"), "err");
+  assert.equal(tone("review_required"), "warn");
+  assert.equal(tone("changes_requested"), "err");
+  assert.equal(tone("behind"), "err");
+  assert.equal(tone("ci_running"), "working");
+  // 緑は機械が動いている色なので、人がマージする段には使わない。
+  assert.equal(tone("mergeable"), "merge");
+  assert.equal(tone("ci_passing"), undefined);
+  assert.equal(tone("approved"), undefined);
+  // 取りやめの色 (drop) を使わない。
+  assert.equal(tone("draft"), undefined);
+  assert.equal(tone("someday_new"), STATE_TONE.waiting);
+  assert.equal(toneOf({ state: "working" }), "working");
+  assert.equal(toneOf({ state: "dropped" }), "drop");
+});
+
+test("PR の段: 箱に出す語", () => {
+  assert.equal(leadStage({ pr_stages: ["ci_failing", "draft"] }).label, "CI 失敗");
+  assert.equal(leadStage({ pr_stages: [] }), undefined);
+  assert.equal(leadStage({}), undefined);
+  assert.equal(leadStage({ pr_stages: ["someday_new"] }), undefined);
+  const labels = Object.values(PR_STAGE).map((s) => s.label);
+  assert.equal(new Set(labels).size, labels.length);
 });
 
 test("丸の色の鍵は状態ごとに 1 つ", () => {

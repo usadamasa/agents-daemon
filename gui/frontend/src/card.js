@@ -28,6 +28,39 @@ export const STATE_TONE = {
   dropped: "drop",
 };
 
+// 次の手ごとの見た目。丸と chip の色の鍵と、先頭のときのカードの class。
+const FIX = { tone: "err", card: ["attn", "err"] }; // 自分で直す
+const FINISH = { card: ["draft"] }; // 仕上げる
+const AWAIT_REVIEW = { tone: "warn", card: ["attn", "warn"] }; // 人の返事を待つ
+const AWAIT_CI = { tone: "working", card: ["working", "bounce"] }; // CI を待つ
+const MERGE = { tone: "merge", card: ["attn", "merge"] }; // マージする
+const UNDECIDED = { card: [] }; // 事実だけで、次の手を示さない
+
+// open の PR の段の語と次の手。
+export const PR_STAGE = {
+  ci_failing: { label: "CI 失敗", ...FIX },
+  conflicting: { label: "衝突", ...FIX },
+  draft: { label: "Draft", ...FINISH },
+  changes_requested: { label: "変更要求", ...FIX },
+  review_required: { label: "approve 待ち", ...AWAIT_REVIEW },
+  ci_running: { label: "CI 実行中", ...AWAIT_CI },
+  behind: { label: "base より古い", ...FIX },
+  mergeable: { label: "マージ可", ...MERGE },
+  ci_passing: { label: "CI 通過", ...UNDECIDED },
+  approved: { label: "approved", ...UNDECIDED },
+};
+
+// leadStage は箱に出す段。段の無いノードと知らない語は undefined で、状態の語と色のまま描く。
+export function leadStage(n) {
+  return PR_STAGE[n.pr_stages?.[0]];
+}
+
+// toneOf は丸と chip の色の鍵。
+export function toneOf(n) {
+  const lead = leadStage(n);
+  return lead ? lead.tone : STATE_TONE[n.state];
+}
+
 // cardText はカードの題と副題。grouped はセッションの枠の中のカードで、見出しが持つセッション名を繰り返さない。題が
 // セッション名のまま (作業の記録に題が無い) のカードは、今の作業があればそれを題にする。label は状態の語。
 export function cardText(n, label, grouped) {
@@ -63,6 +96,8 @@ const ATTENTION = new Set(["question", "permission", "limit", "error", "dropped"
 
 // emphasis はカード全体に付ける強調の class。作業中は working、手当ての要る状態は attn と色の鍵、ほかは強調しない。
 export function emphasis(n) {
+  const lead = leadStage(n);
+  if (lead) return lead.card;
   if (n.state === "working") return ["working"];
   if (ATTENTION.has(n.state)) return ["attn", STATE_TONE[n.state]];
   return [];

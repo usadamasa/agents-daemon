@@ -1197,6 +1197,25 @@ export const definitions = {
         "type": "string",
         "description": "issue: / pr: の置き場のノードの番号と repo (「PR #389 · owner/repo」)。題を引いた後も番号を読めるように残す"
       },
+      "pr_stages": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": [
+            "ci_failing",
+            "conflicting",
+            "draft",
+            "changes_requested",
+            "review_required",
+            "ci_running",
+            "behind",
+            "mergeable",
+            "ci_passing",
+            "approved"
+          ]
+        },
+        "description": "open の PR の段。次に手を動かすものから順で、先頭を箱に出す。段を引いていない PR と open でない参照には付かない"
+      },
       "summary": {
         "type": "string",
         "description": "セッションの今の作業。生きていれば Claude Code が申告したもの (OSC 7501 の msg)、終了していれば最後のターンの応答の 1 行目 (作業の記録)。kind session のノードと、進行中のタスクと TodoWrite の項目のノードに付く"

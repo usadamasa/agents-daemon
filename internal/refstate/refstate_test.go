@@ -49,6 +49,49 @@ func TestStore_PutとStates(t *testing.T) {
 	}
 }
 
+// 段を書いた写しは読み戻せ、PRs は段のある写しだけを返す。
+func TestStore_PRs(t *testing.T) {
+	s := New(t.TempDir())
+	pr := PR{Draft: true, CI: CIRunning, Review: ReviewRequired, Merge: MergeBehind}
+	for _, rec := range []Record{
+		{Ref: "pr:o/r#1", State: StateOpen, PR: pr, CheckedAt: t0},
+		{Ref: "pr:o/r#2", State: StateOpen, CheckedAt: t0},
+	} {
+		if err := s.Put(rec); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := s.PRs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := map[string]PR{"pr:o/r#1": pr}; !reflect.DeepEqual(got, want) {
+		t.Errorf("PRs = %v, want %v", got, want)
+	}
+}
+
+// 段の欄ができる前に書いた写しは、段の無い写しとして読む。
+func TestStore_段の欄が無い古い写し(t *testing.T) {
+	s := New(t.TempDir())
+	if err := os.MkdirAll(s.Dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	old := `{"ref":"pr:o/r#1","state":"open","title":"古い写し","checked_at":"2026-11-07T12:00:00Z"}`
+	if err := os.WriteFile(filepath.Join(s.Dir, "old.json"), []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	list, err := s.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec := list["pr:o/r#1"]; rec.State != StateOpen || rec.PR != (PR{}) {
+		t.Errorf("List = %+v", rec)
+	}
+	if got, err := s.PRs(); err != nil || len(got) != 0 {
+		t.Errorf("PRs = %v, %v", got, err)
+	}
+}
+
 func TestStore_Put_知らない状態は書かない(t *testing.T) {
 	s := New(t.TempDir())
 	for _, rec := range []Record{

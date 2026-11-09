@@ -2,6 +2,7 @@ package deps
 
 import (
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/ledger"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/protocol"
+	"github.com/usadamasa/agents-daemon/internal/refstate"
 	"github.com/usadamasa/agents-daemon/internal/tasklog/record"
 	"github.com/usadamasa/agents-daemon/internal/worklog"
 )
@@ -397,6 +399,54 @@ func TestGraph_exitedPlaceholderFolded(t *testing.T) {
 }
 
 // daemon が引いた外部の参照の状態 (refstate) が merged / closed なら、issue / PR の置き場は完了 (completed) になり、
+// open の PR の段は、次に手を動かすものを先頭にして並べる (#481)。ノードの状態は waiting のままで、止まっている扱いに
+// しない。段の無い写し (欄ができる前の写し) と open でない参照には何も出さない。
+func TestGraph_PRの段(t *testing.T) {
+	const cwd = "/w/a"
+	ep := func(r string) edge.Endpoint { return edge.Endpoint{Ref: r, CWD: cwd} }
+	cases := []struct {
+		ref   string
+		state string
+		pr    refstate.PR
+		want  []string
+	}{
+		{"pr:o/r#1", "open", refstate.PR{Draft: true, CI: refstate.CIFailing, Review: refstate.ReviewRequired, Merge: refstate.MergeConflicting}, []string{"ci_failing", "conflicting", "draft", "review_required"}},
+		{"pr:o/r#2", "open", refstate.PR{Draft: true, CI: refstate.CIRunning, Review: refstate.ReviewChangesRequested, Merge: refstate.MergeBehind}, []string{"draft", "changes_requested", "ci_running", "behind"}},
+		{"pr:o/r#3", "open", refstate.PR{CI: refstate.CIRunning, Review: refstate.ReviewRequired}, []string{"review_required", "ci_running"}},
+		{"pr:o/r#4", "open", refstate.PR{CI: refstate.CIRunning, Merge: refstate.MergeClean}, []string{"ci_running", "mergeable"}},
+		{"pr:o/r#5", "open", refstate.PR{CI: refstate.CIPassing, Review: refstate.ReviewApproved, Merge: refstate.MergeClean}, []string{"mergeable", "ci_passing", "approved"}},
+		// Draft の PR は mergeStateStatus が CLEAN でもマージできない (agents-daemon#541 の実物)。
+		{"pr:o/r#9", "open", refstate.PR{Draft: true, CI: refstate.CIPassing, Merge: refstate.MergeClean}, []string{"draft", "ci_passing"}},
+		{"pr:o/r#6", "open", refstate.PR{}, nil},
+		{"pr:o/r#7", "merged", refstate.PR{Merge: refstate.MergeClean}, nil},
+		{"pr:o/r#8", "dropped", refstate.PR{CI: refstate.CIFailing}, nil},
+	}
+	in := input{
+		PID:       42,
+		Snapshot:  snapshot(daemonstate.PaneStatus{PaneID: "p1", SessionID: "A", CWD: cwd, AgentStatus: "working"}),
+		Tasks:     []record.Task{task("A", "1", "マージ待ち", "pending", cwd)},
+		RefStates: map[string]string{},
+		RefPRs:    map[string]refstate.PR{},
+	}
+	for i, c := range cases {
+		in.Edges = append(in.Edges, edge.Edge{ID: "e" + strconv.Itoa(i), Before: ep(c.ref), After: ep("task:A/1")})
+		in.RefStates[c.ref] = c.state
+		if c.pr != (refstate.PR{}) {
+			in.RefPRs[c.ref] = c.pr
+		}
+	}
+	got := nodes(build(in).Graph)
+	for _, c := range cases {
+		n := got[c.ref]
+		if !reflect.DeepEqual(n.PrStages, c.want) {
+			t.Errorf("%s の段 = %v, want %v", c.ref, n.PrStages, c.want)
+		}
+		if c.state == "open" && (n.State != graph.StateWaiting || n.Halted || n.Stuck) {
+			t.Errorf("%s = %+v (段で状態を変えない)", c.ref, n)
+		}
+	}
+}
+
 // 完了を隠した図では畳まれる (#416)。open は待ち (waiting、#471)、まだ引いていない参照は外部 (external)。取りやめ (dropped) は
 // 完了にせず、待っている下流を止めている人の手当ての要るノード (halted、stuck) にし、原因の鎖に選ぶ。
 func TestGraph_refStates(t *testing.T) {

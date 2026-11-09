@@ -62,6 +62,10 @@ func Write(w io.Writer, p apppath.Paths) error {
 	if err != nil {
 		return err
 	}
+	prs, err := refStore.PRs()
+	if err != nil {
+		return err
+	}
 	b := build(input{
 		PID:          pid,
 		Snapshot:     snap,
@@ -76,6 +80,7 @@ func Write(w io.Writer, p apppath.Paths) error {
 		Sessions:     sessions,
 		RefStates:    refs,
 		RefTitles:    titles,
+		RefPRs:       prs,
 	})
 	return json.NewEncoder(w).Encode(b)
 }

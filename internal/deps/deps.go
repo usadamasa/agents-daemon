@@ -24,6 +24,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/protocol"
 	"github.com/usadamasa/agents-daemon/internal/ref"
+	"github.com/usadamasa/agents-daemon/internal/refstate"
 	"github.com/usadamasa/agents-daemon/internal/tasklog/record"
 	"github.com/usadamasa/agents-daemon/internal/worklog"
 )
@@ -58,6 +59,8 @@ type input struct {
 	RefStates map[string]string
 	// RefTitles は issue / PR の参照 → daemon が引いた題 (refstate)。
 	RefTitles map[string]string
+	// RefPRs は PR の参照 → daemon が引いた段 (refstate)。
+	RefPRs map[string]refstate.PR
 }
 
 // build は依存図を組む。
@@ -85,6 +88,7 @@ func build(in input) Deps {
 		PeerNames:    peerNames(in.Sessions),
 		RefStates:    in.RefStates,
 		RefTitles:    in.RefTitles,
+		RefPRs:       in.RefPRs,
 	})
 	for i := range d.Graph.Nodes {
 		d.Graph.Nodes[i].Repo, _ = l.row(d.Graph.Nodes[i].CWD)

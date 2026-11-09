@@ -24,6 +24,7 @@ var t0 = time.Date(2026, 11, 7, 12, 0, 0, 0, time.UTC)
 type fakeRemote struct {
 	states map[string]string
 	titles map[string]string
+	prs    map[string]refstate.PR
 	errs   map[string]error
 	calls  []string
 }
@@ -34,7 +35,7 @@ func (f *fakeRemote) fetch(_ context.Context, it ref.Item) (Remote, error) {
 	if err := f.errs[key]; err != nil {
 		return Remote{}, err
 	}
-	return Remote{State: f.states[key], Title: f.titles[key]}, nil
+	return Remote{State: f.states[key], Title: f.titles[key], PR: f.prs[key]}, nil
 }
 
 type fixture struct {
@@ -341,6 +342,133 @@ func TestDecodeView(t *testing.T) {
 	}
 	if got, err := decodeView("pr", []byte(`{`)); err == nil {
 		t.Errorf("壊れた JSON = %+v, want error", got)
+	}
+}
+
+// usadamasa/agents-daemon#540 の gh pr view --json の実物。pr-labels の sync は同じ commit で 2 回走り、先の run が
+// concurrency で CANCELLED になっている。最新の run だけを見るので CI 失敗にしない。
+const pr540 = `{"state":"OPEN","title":"Release for 2026.1109.3","isDraft":false,"mergeStateStatus":"CLEAN","mergeable":"MERGEABLE","reviewDecision":"",
+"statusCheckRollup":[
+{"__typename":"CheckRun","completedAt":"2026-11-09T08:15:10Z","conclusion":"CANCELLED","detailsUrl":"https://github.com/usadamasa/agents-daemon/actions/runs/42584585698/job/129051231200","name":"sync","startedAt":"2026-11-09T08:15:10Z","status":"COMPLETED","workflowName":"pr-labels"},
+{"__typename":"CheckRun","completedAt":"2026-11-09T08:16:10Z","conclusion":"SUCCESS","name":"go test","startedAt":"2026-11-09T08:15:25Z","status":"COMPLETED","workflowName":"ci"},
+{"__typename":"CheckRun","completedAt":"2026-11-09T08:15:20Z","conclusion":"SUCCESS","name":"sync","startedAt":"2026-11-09T08:15:14Z","status":"COMPLETED","workflowName":"pr-labels"},
+{"__typename":"CheckRun","completedAt":"2026-11-09T08:15:43Z","conclusion":"SKIPPED","name":"gui test","startedAt":"2026-11-09T08:15:43Z","status":"COMPLETED","workflowName":"ci"}
+]}`
+
+func TestDecodeView_実物のrollupの重複は最新だけを見る(t *testing.T) {
+	got, err := decodeView("pr", []byte(pr540))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := Remote{State: refstate.StateOpen, Title: "Release for 2026.1109.3", PR: refstate.PR{CI: refstate.CIPassing, Merge: refstate.MergeClean}}
+	if got != want {
+		t.Errorf("decodeView = %+v, want %+v", got, want)
+	}
+}
+
+// statusCheckRollup の 1 行。CheckRun は status と conclusion、StatusContext は state と context を持つ (gh の実物の形)。
+func checkRun(workflow, name, status, conclusion, started string) string {
+	return `{"__typename":"CheckRun","workflowName":"` + workflow + `","name":"` + name + `","status":"` + status + `","conclusion":"` + conclusion + `","startedAt":"` + started + `"}`
+}
+
+func statusContext(context, state string) string {
+	return `{"__typename":"StatusContext","context":"` + context + `","state":"` + state + `","startedAt":"2026-10-22T08:12:59Z","targetUrl":""}`
+}
+
+// notStarted は gh が開始前の check に書く startedAt。
+const notStarted = "0001-01-01T00:00:00Z"
+
+func TestDecodeView_CIを1語に畳む(t *testing.T) {
+	const at1, at2 = "2026-11-09T08:00:00Z", "2026-11-09T08:05:00Z"
+	done := func(name, conclusion string) string { return checkRun("ci", name, "COMPLETED", conclusion, at1) }
+	cases := []struct {
+		name   string
+		checks []string
+		want   string
+	}{
+		{"check が無ければ通過と言わない", nil, ""},
+		{"成功", []string{done("a", "SUCCESS")}, refstate.CIPassing},
+		{"NEUTRAL と SKIPPED は通過", []string{done("a", "NEUTRAL"), done("b", "SKIPPED")}, refstate.CIPassing},
+		{"FAILURE", []string{done("a", "SUCCESS"), done("b", "FAILURE")}, refstate.CIFailing},
+		{"TIMED_OUT", []string{done("a", "TIMED_OUT")}, refstate.CIFailing},
+		{"ACTION_REQUIRED", []string{done("a", "ACTION_REQUIRED")}, refstate.CIFailing},
+		{"STARTUP_FAILURE", []string{done("a", "STARTUP_FAILURE")}, refstate.CIFailing},
+		{"後の run が無い CANCELLED は失敗", []string{done("a", "CANCELLED")}, refstate.CIFailing},
+		{"実行中", []string{done("a", "SUCCESS"), checkRun("ci", "b", "IN_PROGRESS", "", at1)}, refstate.CIRunning},
+		{"順番待ち", []string{checkRun("ci", "b", "QUEUED", "", notStarted)}, refstate.CIRunning},
+		{"失敗は実行中より強い", []string{done("a", "FAILURE"), checkRun("ci", "b", "IN_PROGRESS", "", at1)}, refstate.CIFailing},
+		{"失敗の後の成功は通過", []string{checkRun("ci", "a", "COMPLETED", "FAILURE", at1), checkRun("ci", "a", "COMPLETED", "SUCCESS", at2)}, refstate.CIPassing},
+		{"成功の後の失敗は失敗 (並びによらない)", []string{checkRun("ci", "a", "COMPLETED", "FAILURE", at2), checkRun("ci", "a", "COMPLETED", "SUCCESS", at1)}, refstate.CIFailing},
+		{"失敗の後の開始前の再実行は実行中", []string{checkRun("ci", "a", "COMPLETED", "FAILURE", at1), checkRun("ci", "a", "QUEUED", "", notStarted)}, refstate.CIRunning},
+		{"workflow が違えば同じ名前でも別の check", []string{checkRun("ci", "a", "COMPLETED", "FAILURE", at1), checkRun("other", "a", "COMPLETED", "SUCCESS", at2)}, refstate.CIFailing},
+		{"StatusContext の成功", []string{statusContext("license/cla", "SUCCESS")}, refstate.CIPassing},
+		{"StatusContext の失敗", []string{statusContext("a", "FAILURE")}, refstate.CIFailing},
+		{"StatusContext の ERROR", []string{statusContext("a", "ERROR")}, refstate.CIFailing},
+		{"StatusContext の待ち", []string{statusContext("a", "PENDING")}, refstate.CIRunning},
+		{"StatusContext の EXPECTED", []string{statusContext("a", "EXPECTED")}, refstate.CIRunning},
+		{"知らない語を通過にしない", []string{done("a", "SOMETHING_NEW")}, refstate.CIRunning},
+	}
+	for _, c := range cases {
+		out := `{"state":"OPEN","title":"t","statusCheckRollup":[` + strings.Join(c.checks, ",") + `]}`
+		got, err := decodeView("pr", []byte(out))
+		if err != nil || got.PR.CI != c.want {
+			t.Errorf("%s: CI = %q, %v, want %q", c.name, got.PR.CI, err, c.want)
+		}
+	}
+}
+
+func TestDecodeView_Draftとレビューとマージ(t *testing.T) {
+	cases := []struct {
+		name string
+		json string
+		want refstate.PR
+	}{
+		{"Draft", `"isDraft":true,"mergeStateStatus":"DRAFT","mergeable":"MERGEABLE"`, refstate.PR{Draft: true}},
+		{"approve 待ち", `"reviewDecision":"REVIEW_REQUIRED","mergeStateStatus":"BLOCKED","mergeable":"MERGEABLE"`, refstate.PR{Review: refstate.ReviewRequired}},
+		{"変更要求", `"reviewDecision":"CHANGES_REQUESTED"`, refstate.PR{Review: refstate.ReviewChangesRequested}},
+		{"approved", `"reviewDecision":"APPROVED"`, refstate.PR{Review: refstate.ReviewApproved}},
+		{"レビューの要らない repo は語なし", `"reviewDecision":""`, refstate.PR{}},
+		{"衝突", `"mergeStateStatus":"DIRTY","mergeable":"CONFLICTING"`, refstate.PR{Merge: refstate.MergeConflicting}},
+		{"Draft の衝突は mergeStateStatus によらない", `"isDraft":true,"mergeStateStatus":"DRAFT","mergeable":"CONFLICTING"`, refstate.PR{Draft: true, Merge: refstate.MergeConflicting}},
+		{"base より古い", `"mergeStateStatus":"BEHIND","mergeable":"MERGEABLE"`, refstate.PR{Merge: refstate.MergeBehind}},
+		{"マージ可", `"mergeStateStatus":"CLEAN","mergeable":"MERGEABLE"`, refstate.PR{Merge: refstate.MergeClean}},
+		{"計算中はマージ可と言わない", `"mergeStateStatus":"UNKNOWN","mergeable":"UNKNOWN"`, refstate.PR{}},
+		{"BLOCKED はマージ可と言わない", `"mergeStateStatus":"BLOCKED","mergeable":"MERGEABLE"`, refstate.PR{}},
+		{"UNSTABLE はマージ可と言わない", `"mergeStateStatus":"UNSTABLE","mergeable":"MERGEABLE"`, refstate.PR{}},
+	}
+	for _, c := range cases {
+		got, err := decodeView("pr", []byte(`{"state":"OPEN","title":"t",`+c.json+`}`))
+		if err != nil || got.PR != c.want {
+			t.Errorf("%s: PR = %+v, %v, want %+v", c.name, got.PR, err, c.want)
+		}
+	}
+}
+
+// open でない PR と issue には段を持たせない。
+func TestDecodeView_openのPRだけ段を持つ(t *testing.T) {
+	const fields = `"title":"t","isDraft":true,"reviewDecision":"APPROVED","mergeStateStatus":"CLEAN","statusCheckRollup":[` + `{"__typename":"StatusContext","context":"a","state":"SUCCESS","startedAt":"2026-10-22T08:12:59Z"}` + `]`
+	for _, c := range [][2]string{{"pr", "MERGED"}, {"pr", "CLOSED"}, {"issue", "OPEN"}} {
+		got, err := decodeView(c[0], []byte(`{"state":"`+c[1]+`",`+fields+`}`))
+		if err != nil || got.PR != (refstate.PR{}) {
+			t.Errorf("%s %s: PR = %+v, %v", c[0], c[1], got.PR, err)
+		}
+	}
+}
+
+// 引いた段は状態と一緒に写しへ書く。引き直しで変わっていれば書き直す。
+func TestRefresh_段を写しに書く(t *testing.T) {
+	remote := &fakeRemote{states: map[string]string{"pr:o/r#1": "open"}, prs: map[string]refstate.PR{"pr:o/r#1": {CI: refstate.CIRunning}}}
+	f, add := newFixture(t, remote)
+	add("pr:o/r#1", "sid:a")
+	f.p.Refresh(context.Background(), t0)
+	remote.prs["pr:o/r#1"] = refstate.PR{CI: refstate.CIFailing}
+	f.p.Refresh(context.Background(), t0.Add(refstate.RefreshInterval))
+	got, err := f.refs.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec := got["pr:o/r#1"]; rec.PR != (refstate.PR{CI: refstate.CIFailing}) {
+		t.Errorf("写し = %+v", rec)
 	}
 }
 

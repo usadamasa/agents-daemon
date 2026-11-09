@@ -228,6 +228,110 @@ function withCycle() {
   return data;
 }
 
+// withPullRequests は fixture へ open の PR を足した deps。stages が null の PR は段の欄ができる前の写しで、
+// pr_stages を持たない。
+function withPullRequests() {
+  const data = JSON.parse(fixtureDeps);
+  const stages = {
+    1: ["ci_failing", "draft", "review_required"],
+    2: ["conflicting", "ci_passing"],
+    3: ["draft", "ci_running"],
+    4: ["ci_running"],
+    5: ["mergeable", "ci_passing", "approved"],
+    6: null,
+    7: ["review_required", "ci_passing"],
+  };
+  for (const [number, s] of Object.entries(stages)) {
+    const key = `pr:o/r#${number}`;
+    data.graph.nodes.push({
+      key, kind: "ref", state: "waiting", title: `PR の題 ${number}`, ref_kind: "pr", ref_label: `PR #${number} · o/r`,
+      ...(s ? { pr_stages: s } : {}),
+      endpoint: true, cwd: "/repo/agents-daemon", live: false,
+      depth: 0, downstream: 1, parked: 0, memos: [], blocked_by: [], deadlock: false, halted: false, stuck: false,
+    });
+    const end = (ref) => ({ ref, cwd: "/repo/agents-daemon", repo: "/repo/agents-daemon" });
+    data.graph.links.push({ before: key, after: "task:alpha/5", kind: "edge", edge: { id: `edge-pr-${number}`, before: end(key), after: end("task:alpha/5") } });
+    data.graph.folded.nodes.push({ key, depth: 0 });
+  }
+  return data;
+}
+
+test("open の PR の箱: 先頭の段を副題に出し、段ごとにタスクと同じ塗りと枠で描く", async () => {
+  await loadDeps(JSON.stringify(withPullRequests()));
+  try {
+    const card = (n) => q(`.node[data-key="pr:o/r#${n}"]`);
+    const sub = (n) => card(n).querySelector("small").textContent;
+    const dot = (n) => card(n).querySelector(".st").getAttribute("class");
+    assert.equal(sub(1), "CI 失敗 · PR #1 · o/r");
+    assert.equal(dot(1), "st err");
+    assert.ok(["attn", "err"].every((c) => card(1).classList.contains(c)), card(1).className);
+    assert.equal(sub(2), "衝突 · PR #2 · o/r");
+    assert.equal(dot(2), "st err");
+    assert.ok(["attn", "err"].every((c) => card(2).classList.contains(c)), card(2).className);
+    assert.equal(sub(3), "Draft · PR #3 · o/r");
+    assert.equal(dot(3), "st");
+    assert.ok(card(3).classList.contains("draft"), card(3).className);
+    assert.equal(card(3).classList.contains("drop"), false);
+    assert.equal(sub(4), "CI 実行中 · PR #4 · o/r");
+    assert.equal(dot(4), "st working");
+    assert.ok(["working", "bounce"].every((c) => card(4).classList.contains(c)), card(4).className);
+    assert.equal(card(4).classList.contains("attn"), false);
+    assert.equal(sub(5), "マージ可 · PR #5 · o/r");
+    assert.equal(dot(5), "st merge");
+    assert.ok(["attn", "merge"].every((c) => card(5).classList.contains(c)), card(5).className);
+    assert.equal(card(5).classList.contains("working"), false);
+    assert.equal(card(5).classList.contains("bounce"), false);
+    assert.equal(card(6).classList.contains("attn"), false);
+    assert.equal(card(6).classList.contains("ok"), false);
+    assert.equal(card(6).classList.contains("working"), false);
+    // 色は見た目だけで、止まっているノードの印は付けない。
+    for (const n of [1, 2, 3, 4, 5, 6]) assert.equal(card(n).classList.contains("halt"), false, n);
+    await snapshot("graph-pr-stages");
+  } finally {
+    await loadDeps(fixtureDeps);
+  }
+});
+
+// 動きは happy-dom では再現できないので規則の有無で確かめる。
+test("CI 実行中の丸だけが跳ね、動きを減らす設定では止まる", () => {
+  assert.match(css, /^\.node\.bounce \.st \{[^}]*animation: stage-bounce /m);
+  assert.match(css, /@keyframes stage-bounce \{[^}]*translateY/);
+  assert.match(css, /prefers-reduced-motion: reduce\) \{[^@]*\.node\.bounce \.st \{ animation: none; \}/);
+  assert.match(css, /^\.node\.attn\.merge \{ --tone: var\(--blue\); background: var\(--blue-soft\); \}/m);
+  assert.match(css, /^:is\(\.dot, \.st\)\.merge \{ background: var\(--blue\); \}/m);
+  // 取りやめは灰の破線で、マージ可の青と被らない。
+  assert.match(css, /^\.node\.attn\.drop \{ --tone: var\(--closed\); background: var\(--panel\); outline-style: dashed; \}/m);
+  assert.doesNotMatch(css, /--slate/);
+  assert.match(css, /^\.node\.draft \{[^}]*repeating-linear-gradient/m);
+});
+
+test("段の欄が無い古い写しの PR: open (待ち) のままで、マージ可のような断定を出さない", async () => {
+  await loadDeps(JSON.stringify(withPullRequests()));
+  try {
+    const card = q('.node[data-key="pr:o/r#6"]');
+    assert.equal(card.querySelector("small").textContent, "open (待ち) · PR #6 · o/r");
+    card.click();
+    assert.deepEqual([...q("#pop").querySelectorAll(".chips .chip")].map((c) => c.textContent), ["open (待ち) · PR #6 · o/r"]);
+    escape();
+  } finally {
+    await loadDeps(fixtureDeps);
+  }
+});
+
+test("open の PR の単体ビュー: 先頭の段の後ろに残りの段を優先の順で並べる", async () => {
+  await loadDeps(JSON.stringify(withPullRequests()));
+  try {
+    q('.node[data-key="pr:o/r#1"]').click();
+    const chips = [...q("#pop").querySelectorAll(".chips .chip")];
+    assert.deepEqual(chips.map((c) => c.textContent), ["CI 失敗 · PR #1 · o/r", "Draft", "approve 待ち"]);
+    assert.deepEqual(chips.map((c) => c.className), ["chip err", "chip", "chip warn"]);
+    await snapshot("graph-popup-pr-stages");
+    escape();
+  } finally {
+    await loadDeps(fixtureDeps);
+  }
+});
+
 test("待ちの輪のある図: 輪のノードと両向きの辺を描き、次の読み直しも続ける", async () => {
   await loadDeps(JSON.stringify(withCycle()));
   try {

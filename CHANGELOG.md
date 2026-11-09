@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026.1109.1](https://github.com/usadamasa/agents-daemon/compare/2026.1109.0...2026.1109.1) - 2026-11-09
+
+### Bug Fixes
+- 依存図をホイールでスクロールでき、全体表示で図全体を見える領域に収める by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/536
+
 ## [2026.1109.0](https://github.com/usadamasa/agents-daemon/compare/2026.1108.4...2026.1109.0) - 2026-11-09
 
 ### Features

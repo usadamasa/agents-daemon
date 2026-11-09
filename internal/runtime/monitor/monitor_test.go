@@ -552,15 +552,17 @@ func TestTick_Transient(t *testing.T) {
 	})
 }
 
-// 何日も前に止まったままの pane (daemon の起動直後、`claude --resume` の後) に再開の文面を送らないよう、監視から待機へ入る
-// ときは entry が 24 時間以内のものに限る。時刻の読めない entry も送らない側に倒す。
+// 長く放置された pane (daemon の起動前や `claude --resume` の前に止まったもの) に再開の文面を送らないよう、監視から待機へ
+// 入るときは「解除から 24 時間以内」の entry に限る。解除時刻の無い一時エラーは entry の時刻で見る。時刻の読めない entry は
+// 送らない側に倒す。
 func TestTick_StaleTurnDoesNotWait(t *testing.T) {
 	now := time.Date(2026, 10, 4, 10, 0, 0, 0, time.UTC)
 	tests := []struct {
 		name string
 		turn Turn
 	}{
-		{"上限の entry が 24 時間より古い", datedTurn(limitedTurn(uuidLimit, now.Add(-30*time.Hour)), now.Add(-25*time.Hour))},
+		{"上限の解除から 24 時間より経った", datedTurn(limitedTurn(uuidLimit, now.Add(-25*time.Hour)), now.Add(-26*time.Hour))},
+		{"週の上限の解除から 24 時間より経った", weeklyTurn(now.Add(-25 * time.Hour))},
 		{"一時エラーの entry が 24 時間より古い", transientTurn(now.Add(-25 * time.Hour))},
 		{"時刻の無い entry", datedTurn(limitedTurn(uuidLimit, now.Add(time.Hour)), time.Time{})},
 	}
@@ -582,8 +584,17 @@ func TestTick_StaleTurnDoesNotWait(t *testing.T) {
 		})
 	}
 
-	t.Run("24 時間ちょうどまでは待機に入る", func(t *testing.T) {
-		deps := newTestDeps(t, config.Default(), &multiplexerfake.Client{}, datedTurn(limitedTurn(uuidLimit, now.Add(time.Hour)), now.Add(-maxTurnAge)))
+	t.Run("解除から 24 時間ちょうどまでは待機に入る", func(t *testing.T) {
+		deps := newTestDeps(t, config.Default(), &multiplexerfake.Client{}, limitedTurn(uuidLimit, now.Add(-maxTurnAge)))
+		ps := &PaneState{}
+		outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, now)
+		if err != nil || outcome != OutcomeWaiting {
+			t.Errorf("Tick() = %v, %v, want waiting", outcome, err)
+		}
+	})
+
+	t.Run("entry が 24 時間より古くても解除から 24 時間以内なら待機に入る (daemon の再起動で待機を失った pane)", func(t *testing.T) {
+		deps := newTestDeps(t, config.Default(), &multiplexerfake.Client{}, datedTurn(limitedTurn(uuidLimit, now.Add(-23*time.Hour)), now.Add(-28*time.Hour)))
 		ps := &PaneState{}
 		outcome, err := Tick(context.Background(), deps, newTestPane(multiplexer.AgentStatusError, true), ps, now)
 		if err != nil || outcome != OutcomeWaiting {
@@ -603,7 +614,87 @@ func TestTick_StaleTurnDoesNotWait(t *testing.T) {
 	})
 }
 
-// 待っても解けない上限と週の上限は待機に入らない。待機中に変わったら監視へ戻る。
+// 週の上限は解除が 24 時間以内なら 5 時間ウィンドウと同じく待ち、それより先なら待たず記録だけ残す (#338)。
+// 解除が 5 日先の entry は、待っている間に 24 時間以内へ入った tick で待機に入る (entry の古さでは止めない)。
+func TestTick_WeeklyLimit(t *testing.T) {
+	now := time.Date(2026, 10, 4, 10, 0, 0, 0, time.UTC)
+	cfg := config.Default()
+	margin := time.Duration(cfg.MarginSeconds) * time.Second
+	pane := newTestPane(multiplexer.AgentStatusError, true)
+
+	t.Run("監視中", func(t *testing.T) {
+		tests := []struct {
+			name string
+			turn Turn
+			want Outcome
+		}{
+			{"解除が 1 時間先なら待機に入る", weeklyTurn(now.Add(time.Hour)), OutcomeWaiting},
+			{"解除が 24 時間ちょうど先なら待機に入る", weeklyTurn(now.Add(maxWeeklyWait)), OutcomeWaiting},
+			{"解除が 24 時間より先なら待たない", weeklyTurn(now.Add(maxWeeklyWait + time.Second)), OutcomeWeeklyCap},
+			{"解除が 3 日先なら待たない", weeklyTurn(now.Add(72 * time.Hour)), OutcomeWeeklyCap},
+			{"5 日前に踏んだ entry でも解除が 1 時間先なら待機に入る", datedTurn(weeklyTurn(now.Add(time.Hour)), now.Add(-5*24*time.Hour)), OutcomeWaiting},
+			{"解除から 1 時間過ぎていれば即起床の待機に入る", weeklyTurn(now.Add(-time.Hour)), OutcomeWaiting},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				client := &multiplexerfake.Client{}
+				ps := &PaneState{}
+				outcome, err := Tick(context.Background(), newTestDeps(t, cfg, client, tt.turn), pane, ps, now)
+				if err != nil || outcome != tt.want {
+					t.Fatalf("Tick() = %v, %v, want %v", outcome, err, tt.want)
+				}
+				assertNoRead(t, client)
+				if tt.want == OutcomeWeeklyCap {
+					if *ps != (PaneState{}) {
+						t.Errorf("ps = %+v, want 監視のまま", ps)
+					}
+					return
+				}
+				wantWake, _ := ComputeLimitWake(cfg, tt.turn.Entry, now)
+				if ps.Status != StatusWaiting || ps.TurnUUID != "weekly" || !ps.WaitUntil.Equal(wantWake) {
+					t.Errorf("ps = %+v, want waiting / uuid weekly / wake %v", ps, wantWake)
+				}
+			})
+		}
+	})
+
+	t.Run("待機明けに解除を過ぎていればそのまま送る", func(t *testing.T) {
+		client := &multiplexerfake.Client{PaneReadFunc: readReturning(cleanScreen, nil)}
+		deps := newTestDeps(t, cfg, client, datedTurn(weeklyTurn(now.Add(-time.Minute)), now.Add(-6*24*time.Hour)))
+		ps := &PaneState{Status: StatusWaiting, WaitUntil: now.Add(-time.Second), TurnUUID: "weekly"}
+		outcome, err := Tick(context.Background(), deps, pane, ps, now)
+		if err != nil || outcome != OutcomeRetried || ps.Attempts != 1 {
+			t.Errorf("Tick() = %v, %v, ps = %+v; want retried / attempts 1", outcome, err, ps)
+		}
+	})
+
+	t.Run("待機明けに別の entry で解除が 24 時間以内の未来なら待ち直す", func(t *testing.T) {
+		client := &multiplexerfake.Client{PaneReadFunc: readReturning(cleanScreen, nil)}
+		deps := newTestDeps(t, cfg, client, weeklyTurn(now.Add(2*time.Hour)))
+		ps := &PaneState{Status: StatusWaiting, WaitUntil: now.Add(-time.Second), Attempts: 1, TurnUUID: uuidLimit}
+		outcome, err := Tick(context.Background(), deps, pane, ps, now)
+		if err != nil || outcome != OutcomeWaiting {
+			t.Fatalf("Tick() = %v, %v, want waiting", outcome, err)
+		}
+		if ps.TurnUUID != "weekly" || ps.Attempts != 1 || !ps.WaitUntil.Equal(now.Add(2*time.Hour).Add(margin)) {
+			t.Errorf("ps = %+v, want uuid weekly / attempts 1 / 解除 + margin", ps)
+		}
+		assertNoRead(t, client)
+	})
+
+	t.Run("待機明けに別の entry で解除が 24 時間より先なら監視へ戻る", func(t *testing.T) {
+		client := &multiplexerfake.Client{PaneReadFunc: readReturning(cleanScreen, nil)}
+		deps := newTestDeps(t, cfg, client, weeklyTurn(now.Add(72*time.Hour)))
+		ps := &PaneState{Status: StatusWaiting, WaitUntil: now.Add(-time.Second), Attempts: 1, TurnUUID: uuidLimit}
+		outcome, err := Tick(context.Background(), deps, pane, ps, now)
+		if err != nil || outcome != OutcomeWeeklyCap || *ps != (PaneState{}) {
+			t.Errorf("Tick() = %v, %v, ps = %+v; want weekly-cap / ゼロ値", outcome, err, ps)
+		}
+		assertNoRead(t, client)
+	})
+}
+
+// 待っても解けない上限は待機に入らない。待機中に変わったら監視へ戻る。
 func TestTick_CapsDoNotWait(t *testing.T) {
 	now := time.Date(2026, 10, 4, 10, 0, 0, 0, time.UTC)
 	tests := []struct {
@@ -612,8 +703,6 @@ func TestTick_CapsDoNotWait(t *testing.T) {
 		want Outcome
 	}{
 		{"Fable のモデル単位の上限", hardCapTurn(), OutcomeHardCap},
-		{"週の上限 (解除が 3 日先)", weeklyTurn(now.Add(72 * time.Hour)), OutcomeWeeklyCap},
-		{"週の上限 (解除が 1 時間先)", weeklyTurn(now.Add(time.Hour)), OutcomeWeeklyCap},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name+"/監視中", func(t *testing.T) {

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"time"
+
+	"github.com/usadamasa/agents-daemon/internal/runtime/monitor"
 )
 
 // write は Report を人が読む形で w へ書く。節の見出しと OK / NG / ⚠ の行の形は
@@ -85,8 +87,15 @@ func writePaneTranscript(w io.Writer, rep TranscriptReport) {
 	if e.Error != "" {
 		errPart = " error=" + e.Error
 	}
+	resetsPart := ""
+	if e.ResetsAt != nil {
+		resetsPart = " (解除 " + e.ResetsAt.Format(time.RFC3339) + ")"
+	}
 	_, _ = fmt.Fprintf(w, "    transcript: %s\n", rep.Path)
-	_, _ = fmt.Fprintf(w, "    末尾の entry: type=%s%s at %s → %s\n", e.Type, errPart, e.Timestamp.Format(time.RFC3339), e.Kind)
+	_, _ = fmt.Fprintf(w, "    末尾の entry: type=%s%s at %s → %s%s\n", e.Type, errPart, e.Timestamp.Format(time.RFC3339), e.Kind, resetsPart)
+	if e.plan != monitor.PlanNone {
+		_, _ = fmt.Fprintf(w, "      daemon の扱い: %s\n", e.plan)
+	}
 }
 
 // writePaneGeometry は block の高さと screen を出す。

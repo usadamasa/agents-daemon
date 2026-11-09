@@ -22,7 +22,8 @@ const (
 	KindNone Kind = iota
 	// KindLimit は 5 時間ウィンドウの利用上限に当たり、解除を待つべき状態。
 	KindLimit
-	// KindWeeklyLimit は週のウィンドウ (seven_day 系) の上限に当たった状態。解除は数日先になりうる。
+	// KindWeeklyLimit は週のウィンドウ (seven_day 系) の上限に当たった状態。解除は数日先になりうるので、待つかどうかは
+	// 解除時刻で決める (monitor)。
 	KindWeeklyLimit
 	// KindTransient は 5xx や過負荷、アカウント全体の rate limit (429 の Request rejected) で、短い待機で再試行すべき状態。
 	KindTransient
@@ -50,6 +51,11 @@ func (k Kind) String() string {
 // Limited は daemon が待機に入る種類 (解除か回復を待って送る) かを返す。
 func (k Kind) Limited() bool {
 	return k == KindLimit || k == KindWeeklyLimit || k == KindTransient
+}
+
+// Windowed はウィンドウの解除時刻 (quotaLimits.resetsAt) を持ち、その解除を待つ種類かを返す。
+func (k Kind) Windowed() bool {
+	return k == KindLimit || k == KindWeeklyLimit
 }
 
 // transientErrors は Claude Code が API error を分類した語のうち、短い待機で回復しうるもの。

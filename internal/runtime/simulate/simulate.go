@@ -47,8 +47,8 @@ const defaultSimulateScreen = `  ⏺ Bash(task test)
 `
 
 // defaultSimulateTurn は --turn-file を省略した場合に使う transcript の末尾の entry。2026-10-04 に実機 (Claude Code 2.1.289)
-// で踏んだ 5 時間ウィンドウの上限 (transcript/testdata と同じ形で、cwd と session を伏せた)。resetsAt は過去なので
-// 1 回目の Tick は margin だけ待ち、2 回目で送る。
+// で踏んだ 5 時間ウィンドウの上限 (transcript/testdata と同じ形で、cwd と session を伏せた)。時刻は loadSimulateTurn が
+// 置き直し、resetsAt は過去になるので 1 回目の Tick は margin だけ待ち、2 回目で送る。
 // cc-premise: 2.1.319 limit-screen rate_limit の entry の形 (error、isApiErrorMessage、quotaLimits)
 const defaultSimulateTurn = `{"type":"assistant","uuid":"cae11b0e-b253-403c-8cd6-7cf350809a97","timestamp":"2026-10-04T08:32:13.884Z","message":{"role":"assistant","content":[{"type":"text","text":"You've hit your session limit · resets 9:30pm (Asia/Tokyo)"}]},"quotaLimits":{"status":"rejected","resetsAt":1791117000,"rateLimitType":"five_hour","overageStatus":"rejected"},"error":"rate_limit","isApiErrorMessage":true,"apiErrorStatus":429,"version":"2.1.289"}`
 
@@ -294,16 +294,18 @@ func cleanupSimulatePane(ctx context.Context, w io.Writer, host simulateHost, ow
 }
 
 // loadSimulateTurn は monitor へ渡す transcript の末尾を決める。--turn-file があればその末尾の会話の entry、
-// 無ければ内蔵の上限の entry。内蔵の entry は時刻だけ今に置き直す (24 時間より古い entry では待機に入らないため)。
-// --turn-file の entry はそのまま渡すので、古ければ stale-turn がそのまま見える。
+// 無ければ内蔵の上限の entry。内蔵の entry は時刻を「解除を 1 分前に過ぎた」形に置き直す (解除から 24 時間より経った
+// entry では待機に入らないため)。--turn-file の entry はそのまま渡すので、古ければ stale-turn がそのまま見える。
 func loadSimulateTurn(turnFile string) (monitor.Turn, string, error) {
 	if turnFile == "" {
 		entry, ok := transcript.Parse([]byte(defaultSimulateTurn))
 		if !ok {
 			return monitor.Turn{}, "", errors.New("内蔵の transcript の entry を読めません")
 		}
-		entry.Timestamp = time.Now()
-		return monitor.Turn{Path: "(内蔵: 2.1.289 の five_hour の上限。時刻は今)", Entry: &entry}, "builtin", nil
+		now := time.Now()
+		entry.Quota.ResetsAt = now.Add(-time.Minute)
+		entry.Timestamp = entry.Quota.ResetsAt.Add(-5 * time.Hour)
+		return monitor.Turn{Path: "(内蔵: 2.1.289 の five_hour の上限。解除時刻は 1 分前)", Entry: &entry}, "builtin", nil
 	}
 	entry, ok, err := transcript.ReadTail(turnFile)
 	if err != nil {

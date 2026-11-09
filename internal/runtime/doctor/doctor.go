@@ -23,6 +23,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/runtime/claudesessions"
 	"github.com/usadamasa/agents-daemon/internal/runtime/config"
 	"github.com/usadamasa/agents-daemon/internal/runtime/detect"
+	"github.com/usadamasa/agents-daemon/internal/runtime/monitor"
 	"github.com/usadamasa/agents-daemon/internal/transcript"
 )
 
@@ -116,13 +117,18 @@ type TranscriptReport struct {
 	LastEntry *EntryReport `json:"last_entry,omitempty"`
 }
 
-// EntryReport は transcript の末尾の会話の entry の要約と、その分類 (detect.Kind の String)。
+// EntryReport は transcript の末尾の会話の entry の要約と、その分類 (detect.Kind の String)、daemon の扱い
+// (monitor.Plan の ID。上限か一時エラーのときの、待機に入る / 解除が先で待たない / 古くて待たない)。
 type EntryReport struct {
 	UUID      string    `json:"uuid"`
 	Type      string    `json:"type"`
 	Timestamp time.Time `json:"timestamp"`
 	Error     string    `json:"error,omitempty"`
 	Kind      string    `json:"kind"`
+	// ResetsAt は quotaLimits.resetsAt (上限の entry だけ)。
+	ResetsAt *time.Time `json:"resets_at,omitempty"`
+	Plan     string     `json:"plan"`
+	plan     monitor.Plan
 }
 
 // PremisesReport は rex CLI の前提の点検。点検しなかったときは Skipped に理由が入り Findings は空。
@@ -235,7 +241,7 @@ func Collect(ctx context.Context, in Input) (Report, error) {
 		rep.Panes = &PanesReport{Error: err.Error()}
 		return rep, fmt.Errorf("%s の pane 一覧の取得に失敗しました (%s には到達できるのに異常): %w", in.Kind, in.Kind, err)
 	}
-	rep.Panes = collectPanes(ctx, in.Client, panes, in.ClaudeConfigDir)
+	rep.Panes = collectPanes(ctx, in.Client, panes, in.ClaudeConfigDir, in.Now)
 	rep.Premises = collectPremises(ctx, in.Premises, in.Getenv)
 	rep.RateLimits = collectRateLimitStates(in.Paths, rep.Panes.Claude, in.Now)
 	rep.Config = collectConfigState(in.Paths)
@@ -247,7 +253,7 @@ func Collect(ctx context.Context, in Input) (Report, error) {
 
 // collectPanes は pane 一覧のうち Claude agent と判定されたものを写し、daemon と同じ順で session を引き
 // (statusline の記録、無ければ前景の pid で登録簿)、その transcript の末尾を読む。block の高さと screen も添える。
-func collectPanes(ctx context.Context, client Client, panes []multiplexer.Pane, claudeConfigDir string) *PanesReport {
+func collectPanes(ctx context.Context, client Client, panes []multiplexer.Pane, claudeConfigDir string, now time.Time) *PanesReport {
 	rep := &PanesReport{Claude: []PaneReport{}, Total: len(panes)}
 	var registry map[int]string
 	var transcripts transcript.Store
@@ -273,7 +279,7 @@ func collectPanes(ctx context.Context, client Client, panes []multiplexer.Pane, 
 		case registry[pane.PID] != "":
 			p.SessionID, p.SessionSource = registry[pane.PID], SessionFromRegistry
 		}
-		p.Transcript = collectTranscript(transcripts, p.SessionID)
+		p.Transcript = collectTranscript(transcripts, p.SessionID, now)
 		if geom, err := client.PaneGeometry(ctx, pane.PaneID); err != nil {
 			p.GeometryError = err.Error()
 		} else {
@@ -284,12 +290,20 @@ func collectPanes(ctx context.Context, client Client, panes []multiplexer.Pane, 
 	return rep
 }
 
-// collectTranscript は daemon と同じ経路 (transcript.Store.Tail、detect.ClassifyTurn) で末尾の entry を読む。
-func collectTranscript(store transcript.Store, sessionID string) TranscriptReport {
+// collectTranscript は daemon と同じ経路 (transcript.Store.Tail、detect.ClassifyTurn、monitor.Decide) で末尾の entry を読み、
+// daemon がそれをどう扱うかを決める。
+func collectTranscript(store transcript.Store, sessionID string, now time.Time) TranscriptReport {
 	tail := store.Tail(sessionID)
 	rep := TranscriptReport{Path: tail.Path, Reason: tail.Reason}
-	if e := tail.Entry; e != nil {
-		rep.LastEntry = &EntryReport{UUID: e.UUID, Type: e.Type, Timestamp: e.Timestamp, Error: e.Error, Kind: detect.ClassifyTurn(e).String()}
+	e := tail.Entry
+	if e == nil {
+		return rep
+	}
+	kind := detect.ClassifyTurn(e)
+	plan := monitor.Decide(kind, e, now)
+	rep.LastEntry = &EntryReport{UUID: e.UUID, Type: e.Type, Timestamp: e.Timestamp, Error: e.Error, Kind: kind.String(), Plan: plan.ID(), plan: plan}
+	if kind.Windowed() {
+		rep.LastEntry.ResetsAt = new(e.Quota.ResetsAt)
 	}
 	return rep
 }

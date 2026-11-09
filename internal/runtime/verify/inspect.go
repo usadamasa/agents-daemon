@@ -62,9 +62,10 @@ type InspectReport struct {
 	// Transcript は daemon が上限の判定に読む末尾の entry。Kind はその分類 (detect.Kind の String)。
 	Transcript TranscriptReport `json:"transcript"`
 	Kind       string           `json:"kind"`
-	// StaleTurn は kind が limit / transient でも entry が古く (か時刻が無く) daemon が待機に入らないとき true。
-	StaleTurn bool `json:"stale_turn,omitempty"`
-	// Wake は kind が limit のときの起床時刻と、その算出に使った情報源。
+	// Plan は daemon が監視中にこの entry をどう扱うか (monitor.Plan の ID。wait / weekly-far / stale-turn / hard-cap / none)。
+	Plan string `json:"plan"`
+	// Wake は kind が limit / weekly-limit のときの起床時刻と、その算出に使った情報源。weekly-far でも、近づいて待機に入った
+	// ときの起床時刻として出す。
 	Wake *WakeReport `json:"wake,omitempty"`
 	// HandleTransient は kind が transient のときだけ、その扱いを決める設定。
 	HandleTransient *bool `json:"handle_transient,omitempty"`
@@ -77,6 +78,7 @@ type InspectReport struct {
 	DeferToNativeAutoContinue *bool `json:"defer_to_native_auto_continue,omitempty"`
 
 	kind detect.Kind
+	plan monitor.Plan
 	hint detect.Hint
 }
 
@@ -111,7 +113,7 @@ type QuotaReport struct {
 // textHead は EntryReport.Text に残す本文の長さ (rune)。
 const textHead = 200
 
-// WakeReport は kind が limit のときの起床時刻と、その算出に使った情報源。
+// WakeReport は kind が limit / weekly-limit のときの起床時刻と、その算出に使った情報源。
 type WakeReport struct {
 	SourceID           string     `json:"source"`
 	SourceDescription  string     `json:"source_description"`
@@ -169,15 +171,15 @@ func CollectInspect(ctx context.Context, in InspectInput) (InspectReport, error)
 	rep.Transcript = transcriptReport(tail)
 	rep.kind = detect.ClassifyTurn(tail.Entry)
 	rep.Kind = rep.kind.String()
+	rep.plan = monitor.Decide(rep.kind, tail.Entry, in.Now)
+	rep.Plan = rep.plan.ID()
 
-	switch rep.kind {
-	case detect.KindLimit:
+	switch {
+	case rep.kind.Windowed():
 		wake := collectWake(cfg, tail.Entry, in.Now)
 		rep.Wake = &wake
-		rep.StaleTurn = monitor.StaleTurn(tail.Entry, in.Now)
-	case detect.KindTransient:
+	case rep.kind == detect.KindTransient:
 		rep.HandleTransient = &cfg.HandleTransient
-		rep.StaleTurn = monitor.StaleTurn(tail.Entry, in.Now)
 	}
 	return rep, nil
 }
@@ -265,21 +267,13 @@ func writeInspect(w io.Writer, rep InspectReport) {
 	_, _ = fmt.Fprintln(w, "\n--- transcript の末尾 (上限かどうかはここで決まる) ---")
 	writeTranscript(w, rep.Transcript)
 	_, _ = fmt.Fprintf(w, "\n判定結果: %s\n", rep.Kind)
-	if rep.StaleTurn {
-		_, _ = fmt.Fprintln(w, "entry が 24 時間より古い (か時刻が無い) ので、daemon は監視中なら待機に入りません (stale-turn)。")
-	}
-	switch rep.kind {
-	case detect.KindLimit:
+	_, _ = fmt.Fprintf(w, "daemon の扱い: %s\n", rep.plan)
+	switch {
+	case rep.kind.Windowed():
 		_, _ = fmt.Fprintln(w, "\n--- 起床時刻の算出 ---")
 		writeWake(w, *rep.Wake)
-	case detect.KindWeeklyLimit:
-		_, _ = fmt.Fprintln(w, "\n週の上限です。daemon は待機に入らず記録だけ残します。")
-	case detect.KindTransient:
+	case rep.kind == detect.KindTransient:
 		_, _ = fmt.Fprintf(w, "\ntransient エラーとして扱う設定 (handleTransient): %v\n", *rep.HandleTransient)
-	case detect.KindSpendLimit:
-		_, _ = fmt.Fprintln(w, "\n待っても解除されない上限 (spend limit / usage credit / Fable のモデル単位の上限) です。待機に入りません。")
-	case detect.KindNone:
-		_, _ = fmt.Fprintln(w, "\n最後の turn は上限でも一時エラーでもありません。daemon は何もしません。")
 	}
 
 	_, _ = fmt.Fprintf(w, "\n--- 画面の通知欄 (待機明けに送るキーの選択にだけ効く。走査対象: 末尾 %d 行 / 総行数 %d) ---\n", len(rep.ScannedLines), rep.TotalLines)

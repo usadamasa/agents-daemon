@@ -45,9 +45,11 @@ const inspectSampleLimitScreen = `  ⏺ Bash(task test)
 // 解除済みで Enter 待ちの通知欄。
 const inspectSampleStaleScreen = "────────\n❯ \n────────\n  ⚠ Your usage limit has reset\n      Press enter to continue\n"
 
-// transcript の末尾の entry (transcript/testdata と同じ形)。resetsAt は 2026-10-04T12:30:00Z。
+// transcript の末尾の entry (transcript/testdata と同じ形)。inspectLimitedEntry の resetsAt は 2026-10-04T12:30:00Z、
+// inspectWeeklyEntry の resetsAt は 2026-10-07T04:00:00Z。
 const (
 	inspectLimitedEntry = `{"type":"assistant","uuid":"u-limit","timestamp":"2026-10-04T08:32:13.884Z","message":{"role":"assistant","content":[{"type":"text","text":"You've hit your session limit · resets 9:30pm (Asia/Tokyo)"}]},"quotaLimits":{"status":"rejected","resetsAt":1791117000,"rateLimitType":"five_hour","overageStatus":"rejected"},"error":"rate_limit","isApiErrorMessage":true,"apiErrorStatus":429,"version":"2.1.289"}`
+	inspectWeeklyEntry  = `{"type":"assistant","uuid":"u-weekly","timestamp":"2026-10-04T08:40:00.000Z","message":{"role":"assistant","content":[{"type":"text","text":"You've hit your weekly limit · resets Oct 7 at 1pm (Asia/Tokyo) · progress saved"}]},"quotaLimits":{"status":"rejected","resetsAt":1791345600,"rateLimitType":"seven_day","overageStatus":"rejected"},"error":"rate_limit","isApiErrorMessage":true,"apiErrorStatus":429,"version":"2.1.289"}`
 	inspectIdleEntry    = `{"type":"assistant","uuid":"u-done","timestamp":"2026-10-04T08:20:53.022Z","message":{"role":"assistant","content":[{"type":"text","text":"done"}]},"version":"2.1.289"}`
 )
 
@@ -101,7 +103,7 @@ func TestRunInspect_判定はtranscriptで決まる(t *testing.T) {
 			t.Fatalf("RunInspect() error = %v", err)
 		}
 		out := buf.String()
-		for _, want := range []string{"対象セッション: " + inspectTestSessionID + " (flag)", "entry: uuid=u-done type=assistant", "判定結果: none", "daemon は何もしません", "通知欄の判定: none"} {
+		for _, want := range []string{"対象セッション: " + inspectTestSessionID + " (flag)", "entry: uuid=u-done type=assistant", "判定結果: none", "daemon の扱い: 上限でも一時エラーでもないので何もしない", "通知欄の判定: none"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("出力に %q が無い:\n%s", want, out)
 			}
@@ -137,7 +139,7 @@ func TestRunInspect_判定はtranscriptで決まる(t *testing.T) {
 		}
 	})
 
-	t.Run("entry が 24 時間より古ければ待機に入らない旨を出す", func(t *testing.T) {
+	t.Run("解除から 24 時間より経っていれば待機に入らない旨を出す", func(t *testing.T) {
 		env := newInspectEnv(t)
 		file := writeInspectFixture(t, env.home, "normal.txt", inspectSampleNormalScreen)
 		env.transcript(t, inspectTestSessionID, inspectLimitedEntry)
@@ -146,13 +148,43 @@ func TestRunInspect_判定はtranscriptで決まる(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CollectInspect() error = %v", err)
 		}
-		if rep.Kind != "limit" || !rep.StaleTurn {
-			t.Errorf("report = kind %s stale_turn %v, want limit / true", rep.Kind, rep.StaleTurn)
+		if rep.Kind != "limit" || rep.Plan != "stale-turn" {
+			t.Errorf("report = kind %s plan %s, want limit / stale-turn", rep.Kind, rep.Plan)
 		}
 		var buf bytes.Buffer
 		writeInspect(&buf, rep)
-		if !strings.Contains(buf.String(), "stale-turn") {
-			t.Errorf("出力に stale-turn が無い:\n%s", buf.String())
+		if !strings.Contains(buf.String(), "daemon の扱い: 解除 (か entry) から 24 時間より経った") {
+			t.Errorf("出力に stale-turn の説明が無い:\n%s", buf.String())
+		}
+	})
+
+	t.Run("週の上限は解除までの長さで待つかどうかを出し、起床時刻も示す", func(t *testing.T) {
+		env := newInspectEnv(t)
+		file := writeInspectFixture(t, env.home, "normal.txt", inspectSampleNormalScreen)
+		env.transcript(t, inspectTestSessionID, inspectWeeklyEntry)
+		resetsAt := time.Unix(1791345600, 0)
+
+		far, err := CollectInspect(context.Background(), env.input(nil, "", file, inspectTestSessionID, fixedNow))
+		if err != nil {
+			t.Fatalf("CollectInspect() error = %v", err)
+		}
+		if far.Kind != "weekly-limit" || far.Plan != "weekly-far" || far.Wake == nil || !far.Wake.WakeAt.Equal(resetsAt.Add(time.Minute)) {
+			t.Errorf("report = %+v, want weekly-limit / weekly-far / 起床時刻 解除 + margin", far)
+		}
+		var buf bytes.Buffer
+		writeInspect(&buf, far)
+		for _, want := range []string{"判定結果: weekly-limit", "daemon の扱い: 解除が 24 時間より先なので待たない", "起床時刻: " + resetsAt.Add(time.Minute).Format(time.RFC3339)} {
+			if !strings.Contains(buf.String(), want) {
+				t.Errorf("出力に %q が無い:\n%s", want, buf.String())
+			}
+		}
+
+		near, err := CollectInspect(context.Background(), env.input(nil, "", file, inspectTestSessionID, resetsAt.Add(-time.Hour)))
+		if err != nil {
+			t.Fatalf("CollectInspect() error = %v", err)
+		}
+		if near.Plan != "wait" {
+			t.Errorf("解除の 1 時間前の plan = %s, want wait", near.Plan)
 		}
 	})
 

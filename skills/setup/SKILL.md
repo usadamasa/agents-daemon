@@ -96,7 +96,8 @@ jq -c . "$state/rate-limits/$sid.json"
 
 `rate-limits/` は stdin に `rate_limits.five_hour.resets_at` が来たときだけ書かれる (出し分けはバイナリの側)。
 初回の API レスポンス前には来ないし、`rate_limits` が届かない契約 (Enterprise の seat など) ではずっと来ない。
-無いときは「上限からの自動再開のゲートは画面判定だけで動く」と伝えるに留める。
+上限からの自動再開は transcript で判定するので `rate-limits/` の有無で変わらない。無いときは「statusline の使用率の
+表示に `rate_limits` が来ていない」と伝えるに留める。
 
 ### statusline を配線する
 

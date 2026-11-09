@@ -8,33 +8,34 @@ statusline・hook・daemon が別々のタイミングで動き、ファイル�
 ```
 [1] Claude Code ──再実行──stdin──> agents-daemon statusline (statusLine.command)
                                    または 利用者の statusline ──stdin──> agents-daemon ingest-statusline
-                                                   ├──> rate-limits/<session_id>.json (あれば)
-                                                   ├──> context/<session_id>.json     (毎回)
+                                                   ├──> context/<session_id>.json     (毎回。block → session の対応)
+                                                   ├──> rate-limits/<session_id>.json (あれば。doctor が出すだけ)
                                                    └──> cost/<YYYY-MM-DD>/<session_id>.json (statusline だけ、上限の env があるとき)
                                                                           │
 [2] SessionStart hook ──daemon --ensure──> daemon (常駐 1 プロセス)        │ pane の
                                               │                           │ session を
-                                              │ 毎 tick (既定 5 秒) <──────┘ 引いて読む
+                                              │ 毎 tick (既定 5 秒) <──────┘ 引く (無ければ登録簿の pid)
                                               │
-                                              ├─ PaneList ────────────> Claude の pane 一覧
-                                              ├─ PaneRead ────────────> 各 pane の画面テキスト
-                                              │  (backend は rex。multiplexer.md)
-                                              │
-                                              │  ここで判定 (下の表)
+                                              ├─ PaneList ────────────> Claude の pane 一覧 (record の agent_status を含む)
+                                              ├─ transcript の末尾 ───> ~/.claude/projects/*/<session_id>.jsonl
+                                              │  (ここで上限かどうかを判定。下の表)
                                               │
 [3]                                           └─ 上限解除の時刻まで待つ
-                                                 └─ SendText / SendKeys で再開
+                                                 ├─ PaneRead ──────────> 待機明けに画面の通知欄を読んでキーを選ぶ
+                                                 └─ SendText / SendKeys で再開 (backend は rex。multiplexer.md)
 ```
 
 context の compact と prompt cache の失効には関わらない。Claude Code 本体の autocompact・idle compaction と、
 失効後の footer の案内 (`~222k uncached · /clear to start fresh`) に任せる。
 
-### [1] statusline が上限情報を渡し、バイナリが落とす
+### [1] statusline が block と session の対応を渡す
 
-利用上限の使用率と解除時刻 (`rate_limits.five_hour.resets_at`、epoch 秒) は statusline の stdin にしか来ない。
-`statusLine.command` に向けたバイナリの `statusline` か、利用者の statusline から stdin を受けた
-`ingest-statusline` が、`rate-limits/<session_id>.json` (あるときだけ) と `context/<session_id>.json` (毎回) に落とす。
-画面の解除時刻の表記をパースせずに済むのがこのツールの中核。stdin の中身、state file の出し分け、書式は
+daemon が pane の transcript を引くには、その pane のセッションの ID が要る。`statusLine.command` に向けたバイナリの
+`statusline` か、利用者の statusline から stdin を受けた `ingest-statusline` が、`context/<session_id>.json`
+(毎回。`REX_BLOCK` から block との対応を書く) と `rate-limits/<session_id>.json`
+(stdin に `rate_limits` があるときだけ) に落とす。上限の判定と解除時刻は transcript の末尾の entry から取るので、
+`rate-limits/` を daemon は読まない (`doctor` が statusline の配線の確認に出すだけ)。statusline の記録が無い pane は
+rex の前景の pid で Claude Code の登録簿 (`~/.claude/sessions/`) から補う。stdin の中身、state file の出し分け、書式は
 [statusline-state.md](statusline-state.md)。
 
 ### [2] SessionStart hook がデーモンを起こす
@@ -73,7 +74,8 @@ lock、入れ替わりは [binary.md](binary.md)。
 
 単一プロセスが全 Claude pane を見る。pane ごとの状態は pane ID (rex の block ID) をキーに
 プロセス内で持つ。pane の列挙・読み取り・送信は多重化ツールの backend (rex) 越しに行う。
-backend の判定と rex の呼び方は [multiplexer.md](multiplexer.md)。
+backend の判定と rex の呼び方は [multiplexer.md](multiplexer.md)。上限の判定は transcript、画面は待機明けのキー選択だけ
+([rate-limit.md](rate-limit.md))。
 
 ## CLI の組み立て
 
@@ -99,26 +101,32 @@ cobra を import するのは `cmd/` の下だけで、`internal/` の本体は 
 
 ## 毎 tick の判定
 
-pane ごとに次を評価する。上限側の詳細は [rate-limit.md](rate-limit.md)、
+pane ごとに次を上から順に評価する。上限側の詳細 (分類、待つかどうか、起床時刻) は [rate-limit.md](rate-limit.md)、
 画面の読み取りと送信の作法は [pane-io.md](pane-io.md)。
 
-| 条件 | 動作 |
-| ---- | ---- |
-| 待機中で、まだ待機期限に達していない | 何もしない |
-| 上記以外 | 画面を読んで分類する (`agent_status` は見ない) |
-| ネイティブの auto-continue が再開を予約している | 手を引く (待機中なら監視へ戻す) |
-| 上限が解除済みで Enter 待ち | 通常の待機に入り、送信では Enter だけを送る |
-| 待っても解除されない上限 (spend limit / usage credit / Fable の週次上限) | 待機に入らない |
-| 画面が limit と判定され、ゲートを通過した | 待機に入る |
-| 待機中に limit が消えた | 監視に戻る (ユーザーが自分で再開した。プロンプトは送らない) |
-| 待機期限に達したが、Claude Code が `blocked` で kind が `permission` / `question` / `auth` | 送らず待機を延長する (利用者が答える prompt を esc / Enter で代行しない。[program-status.md](program-status.md)) |
-| 待機期限に達した | 再開プロンプトを送り、試行回数を増やす |
-| 試行回数が `maxRetries` に達した | 長いクールダウンに入る |
-| 一時的なサーバーエラー (5xx / 過負荷) | 指数バックオフで短周期リトライ |
-| どれにも該当しない | 何もしない |
+| 条件 | 動作 | outcome |
+| ---- | ---- | ---- |
+| 待機中で、まだ待機期限に達していない | 何もしない | `still-waiting` |
+| pane の session_id が引けない、transcript の末尾を読めない | 判定しない (待機中なら延長する) | `no-session` / `transcript-unavailable` |
+| record が `working` | 触らない (待機中なら誰かが再開したので監視へ戻る。transcript が上限なら食い違いを記録) | `monitoring` / `recovered-by-user` / `suppressed-working` |
+| 監視中: 待っても解除されない上限 (spend limit / usage credit / Fable のモデル単位の上限) | 待機に入らない | `hard-cap` |
+| 監視中: 週の上限で解除が 24 時間より先 | 待機に入らない (毎 tick 見直す) | `weekly-cap` |
+| 監視中: 解除 (解除時刻の無い一時エラーは entry) から 24 時間より経った、または時刻が読めない | 待機に入らない | `stale-turn` |
+| 監視中: 上限 (5 時間 / 24 時間以内の週) | 解除 + margin まで待つ | `waiting` |
+| 監視中: 一時的なサーバーエラー (5xx / 過負荷 / 429 の Request rejected) | 指数バックオフで待つ (`handleTransient`) | `waiting` |
+| 待機明け: transcript が上限でなくなった | 監視に戻る (利用者が自分で再開した。プロンプトは送らない) | `recovered-by-user` |
+| 待機明け: 別の entry の上限で解除時刻が未来 | 送らず待ち直す (試行回数は持ち越す) | `waiting` |
+| 待機明け: Claude Code が `blocked` で kind が `permission` / `question` / `auth` | 送らず待機を延長する (利用者が答える prompt を esc / Enter で代行しない。[program-status.md](program-status.md)) | `blocked-by-prompt` |
+| 待機明け: 画面を読めない | 送らず次の tick で読み直す | `read-error` |
+| 待機明け: 通知欄がネイティブの auto-continue の予約、request の中のリトライ、lower-priority mode | 手を引く (監視へ戻る) | `native-auto-continue` / `lower-priority` |
+| 待機明け: 試行回数が `maxRetries` に達した | 長いクールダウンに入る | `max-retries` |
+| 待機明け: 通知欄が解除済みで Enter 待ち | Enter だけを送る | `resume-enter` |
+| 待機明け | esc → `retryMessage` → enter を送り、試行回数を増やす | `retried` |
 
-この表が暗に置いている不変条件 (期限前や prompt の開いた pane に送らない、Enter 待ちにテキストを送らない、監視中は
-試行回数が 0、起床時刻は今 + margin より前にならない) は `monitor/invariants_test.go` が乱択の tick 列で確かめる。
+この表が暗に置いている不変条件 (画面を読むのは待機明けで transcript が上限のときだけ、期限前や working や
+prompt の開いた pane に送らない、Enter 待ちにテキストを送らない、監視中は試行回数が 0、起床時刻は今 + margin より前に
+ならない、解除から 24 時間より経った entry や解除が 24 時間より先の週の上限で待機に入らない) は
+`monitor/invariants_test.go` が乱択の tick 列で確かめる。
 
 ## 出力されるファイル
 
@@ -136,7 +144,7 @@ pane ごとに次を評価する。上限側の詳細は [rate-limit.md](rate-li
 | パス | 書く主体 | いつ | 中身 | 消す主体 |
 | ---- | ---- | ---- | ---- | ---- |
 | `${XDG_CONFIG_HOME:-~/.config}/agents-daemon/config.json` | 人間 | 手で編集したとき | 設定 | 消さない |
-| `$STATE/rate-limits/<session_id>.json` | `agents-daemon statusline` または `ingest-statusline` (利用者の statusline が呼ぶ) | statusline の描画ごと (`rate_limits.five_hour.resets_at` があるときだけ) | そのセッションの 5 時間 / 7 日ウィンドウの使用率と reset 時刻、観測時刻、session_id | daemon が 24 時間で消す |
+| `$STATE/rate-limits/<session_id>.json` | `agents-daemon statusline` または `ingest-statusline` (利用者の statusline が呼ぶ) | statusline の描画ごと (`rate_limits.five_hour.resets_at` があるときだけ) | そのセッションの 5 時間 / 7 日ウィンドウの使用率と reset 時刻、観測時刻、session_id。daemon は読まず、`doctor` が statusline の配線の確認に出す | daemon が 24 時間で消す |
 | `$STATE/context/<session_id>.json` | `agents-daemon statusline` または `ingest-statusline` (利用者の statusline が呼ぶ) | statusline の描画ごと | そのセッションの context 使用率、観測時刻、session_id、セッション名、多重化ツールの場所 | daemon が 7 日で消す |
 | `$STATE/cost/<YYYY-MM-DD>/<session_id>.json` | `agents-daemon statusline` (`CLAUDE_STATUSLINE_SPEND_CAP` があるとき) | statusline の描画ごと (累計が変わったときだけ書き直す) | そのセッションの累計 cost と前日までの繰り越し (`statusline/spend`)。daemon は読まない | `statusline` がその日の最初の書き込みで 45 日より古い日を消す |
 | `$STATE/tasks/<session_id>/<task_id>.json` と `…/todos.json` | `agents-daemon ingest-task` (PostToolUse hook `hooks/ingest-task.sh` が呼ぶ) | TaskCreate / TaskUpdate / TaskList / TodoWrite の呼び出しごと | タスク 1 つ (subject、status、blockedBy、session_id、cwd) と TodoWrite のリスト全体 (`tasklog`)。読み手は依存図 (`deps`、`deps` パッケージ) | daemon が完了したタスクを 1 日、それ以外を 7 日 (更新が無ければ) で消す。pane が見えている間は daemon が tick ごとに未完了のタスクと `todos.json` の mtime を進める。終了したセッションの完了タスクは作業の記録が消えるまで残す。`park adopt` (pane の「パーキングへ移す」) がメモへ移したタスクを、`task dismiss` (pane の `Dismiss`) が終了したセッションのタスクを消す |
@@ -148,9 +156,9 @@ pane ごとに次を評価する。上限側の詳細は [rate-limit.md](rate-li
 | `$STATE/daemon.lock` | daemon (`--ensure` も試しに開く) | 起動時に `flock(LOCK_EX|LOCK_NB)` で取り、寿命の間持つ | 空。起動の排他の対象で、lock を持つ process が daemon | 消さない (process の終了で OS が lock を解放する) |
 | `$STATE/daemon.pid` | daemon | lock を取った後に作成、終了時に自分の pid が書いてあれば削除 | 稼働中デーモンの PID (`status` / `doctor` / `stop` が読む) | daemon。`stop` が stale なものを消す |
 | `$STATE/status.json` | daemon | 毎 tick (既定 5 秒) | backend (rex)、監視中の pane 一覧と各 pane の自己申告 (`agent_status` と、あれば `agent_kind` / `agent_message`)・監視状態・試行回数・待機期限・直近の判定 | 上書き |
-| `$STATE/logs/daemon.log` | daemon | 報告に値する出来事があったときだけ | 上限検知と待ち時間、再開送信、ユーザーの自己再開、ゲート抑制、ネイティブへの譲り、エラー | rotate |
+| `$STATE/logs/daemon.log` | daemon | 報告に値する出来事があったときだけ (同じ状態が続く間は書かない) | 上限検知と待ち時間、再開送信、ユーザーの自己再開、working の抑制、待たない理由 (hard cap、週の上限、stale-turn)、判定できない理由、ネイティブへの譲り、エラー | rotate |
 | `$STATE/logs/daemon.log.YYYY-MM-DD` | daemon | 日付が変わって最初に書くとき | 前日までの `daemon.log` をそのまま退避したもの | daemon が 7 日で消す |
-| `$STATE/limit-events/<YYYY-MM-DD>.jsonl` | daemon | 上限の出来事 (検知して待機に入った、送った、手を引いた、Enter 待ち、hard cap、週の上限、prompt で見送り) と、判定できなかった理由 (session_id が引けない、transcript が読めない、transcript は上限なのに record が working) で daemon.log に行を書くのと同じ遷移のとき | 1 出来事 1 行の JSON (`daemon/limitlog`): 判定の根拠にした transcript の末尾の entry (`transcript`: パス、uuid、error、`quota_limits`、本文の頭) か読めなかった理由 (`reason`)、分類 (kind)、outcome、Claude Code の自己申告 (record)、待機明けに読んだ画面と通知欄の判定 (`screen` / `hint`、送った tick だけ)、block の高さと screen (`size` / `modes`)、own と account の利用上限 state、`readLines` / `detectionTailLines`、そのセッションの turn の失敗 (`turn_failure`、あるときだけ)。読み方は verification.md「次に上限を踏んだとき」 | daemon が 30 日で消す |
+| `$STATE/limit-events/<YYYY-MM-DD>.jsonl` | daemon | 上限の出来事 (検知して待機に入った、送った、手を引いた、Enter 待ち、hard cap、週の上限、prompt で見送り) と、判定できなかった理由 (session_id が引けない、transcript が読めない、transcript は上限なのに record が working) で daemon.log に行を書くのと同じ遷移のとき | 1 出来事 1 行の JSON (`daemon/limitlog`): 判定の根拠にした transcript の末尾の entry (`transcript`: パス、uuid、error、`quota_limits`、本文の頭) か読めなかった理由 (`reason`)、分類 (kind)、outcome、Claude Code の自己申告 (record)、待機明けに読んだ画面と通知欄の判定 (`screen` / `hint`、送った tick だけ)、block の高さと screen (`size` / `modes`)、`readLines` / `detectionTailLines`、そのセッションの turn の失敗 (`turn_failure`、あるときだけ)。読み方は verification.md「次に上限を踏んだとき」 | daemon が 30 日で消す |
 | `$STATE/turn-failures/<session_id>.json` | `agents-daemon ingest-turn-failure` (StopFailure / Stop / UserPromptSubmit hook `hooks/ingest-turn-failure.sh` が呼ぶ) | StopFailure で書き、Stop と UserPromptSubmit で消す | そのセッションの最後の turn を終わらせた API error (`error`、`error_details`、`last_assistant_message`、観測時刻。`turnfailure`)。あるのは「最後の turn が API error で終わり、次の turn がまだ始まっていない」間だけ。読み手は daemon の上限の出来事の記録 | 次の turn の hook が消す。閉じたセッションの残りは daemon が 24 時間で消す |
 | `$STATE/logs/events.log` | `agents-daemon ingest-task` / `ingest-work` / `work set` / `park add` / `park set` / `park discard` / `park withdraw` / `park adopt` / `park hand` / `task dismiss` / `tell` と、mod (`hooks/log.ts`) が呼ぶ `agents-daemon event-log` | タスクの記録、作業の記録 (作ったとき、終了したとき、題を書き換えたとき。ターンごとの更新は書かない)、メモの操作、アプリからの送達 (tell、park hand)、mod の出来事 (tool の登録の失敗、通知の失敗、題の推定) があったとき。mod は同じ失敗を書き直さない | 依存図とパーキングロットの経路の出来事を 1 行 1 件 (`eventlog`、出来事の一覧は package doc)。session ID、task ID、メモの id、件数、失敗の理由だけで、subject、title、detail、送った文面は書かない。`logs --events` が読む | rotate |
 | `$STATE/logs/events.log.YYYY-MM-DD` | 上と同じ | 日付が変わって最初に書くとき | 前日までの `events.log` をそのまま退避したもの | daemon が 7 日で消す |
@@ -189,6 +197,5 @@ rotate 済みログ (`daemon.log` と `events.log`、7 日)、`rate-limits/` 配
 死んで残った `.rate-limits.*` も同じ扱い)、`context/` 配下 (7 日) を削除する。何かを消したときだけログに残す。
 
 保持期間は設定キーにせず定数 (`daemon/housekeeping.go`、`ratelimit` と `sessioncontext` の `Retention`) に置く。
-state の 24 時間は判定に影響しない値として選んである: `resets_at` は観測から高々 5 時間先で、
-起床時刻の算出 (`LatestWindow`) は未来の `resets_at` しか使わない。`context/` を 7 日と長く取るのは、
-block から session への対応を 5 時間の上限待ちを跨いで残すため。
+`rate-limits/` の 24 時間は daemon の判定に関わらない (読むのは `doctor` だけ)。`context/` を 7 日と長く取るのは、
+block から session への対応を上限待ち (週の上限は最長 24 時間) を跨いで残すため。

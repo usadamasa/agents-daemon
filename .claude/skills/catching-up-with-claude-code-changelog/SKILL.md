@@ -63,8 +63,10 @@ index に載る週しか存在せず、404 が普通。
 ### 3. バイナリで文言と既定値を突き合わせる
 
 CHANGELOG に該当が無くても行う。文言の変更は CHANGELOG に載らない。
-`detect` パッケージの正規表現と test fixture (`native_continue_test.go` のバナー一覧、`real_sample_test.go` の実機の行、
-`detect_test.go` の transient) が、今のバイナリの文言を拾うかを見る。
+`detect` パッケージの正規表現と test fixture (`native_continue_test.go` のバナー一覧、`footer_test.go` の通知欄、
+`native_retry_test.go` のスピナー、`lower_priority_test.go`、`turn_test.go` の hard cap の本文) が、今のバイナリの
+文言を拾うかを見る。上限かどうかは transcript の entry (`transcript/testdata`) で決めるので、entry の形 (`error`、
+`quotaLimits`) が変わっていないかも `transcript` のテストと合わせて見る。
 
 ```sh
 B=~/.local/share/claude/versions/<version>
@@ -111,7 +113,7 @@ task typecheck
 
 `./tmp/claude-code-drift/<YYYY-MM-DD>.md`。節は次の順。空の節も見出しだけ残す (「確認したが無かった」が伝わる)。
 
-1. 競合・陳腐化のおそれ: 本体の新機能が daemon の経路と重なるもの。どの段 (1〜3 段目、ゲート、hook) に当たるか、
+1. 競合・陳腐化のおそれ: 本体の新機能が daemon の経路と重なるもの。どの段 (1〜3 段目、transcript の判定、待機明けの画面、hook) に当たるか、
    flag 待ちか、window の大きさなど条件、対処の選択肢
 2. 取り込める新機能 (アイデア): 本体の新 field・新 event・新コマンドで daemon の役目を直接果たせるもの、
    daemon に足せる機能。何を置き換えるか、何が簡単になるかを 1〜2 行

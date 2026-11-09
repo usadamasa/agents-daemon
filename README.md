@@ -12,7 +12,7 @@ Claude Code のセッションは自分が止まっている間は何もでき�
 
 | 区分 | 今ある機能 |
 | ---- | ---- |
-| 止まったセッションへの働きかけ | 5 時間ウィンドウの利用上限で止まったセッションを、解除時刻に再開させる (`monitor`) |
+| 止まったセッションへの働きかけ | 利用上限 (5 時間ウィンドウと、解除が 24 時間以内の週のウィンドウ) で止まったセッションを、transcript の末尾の entry から見つけて解除時刻に再開させる (`monitor`) |
 | セッションを跨いだ状態の集約 | statusline の stdin から利用上限・context・cost をセッション別の state file に落とし、daemon とコマンドが読む (`sessionstate`、`ratelimit`、`sessioncontext`、`statusline/spend`)。Stop のたびに transcript の要約を集め、記憶の consolidation の材料にする (`dream`) |
 | 時間で動く掃除 | ログと state file のうち、保持期間を過ぎたものを消す (`daemon/housekeeping.go`)。foreground セッションが keep したまま 1 週間触っていない worktree を、SessionStart のたびに今開いたリポジトリの分だけ回収する (`worktree`) |
 | 多重化ツールへの操作 | rex の block を列挙し、画面を読み、キーと文面を送る (`rexcli`) |

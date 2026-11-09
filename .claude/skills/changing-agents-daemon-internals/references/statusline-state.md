@@ -31,32 +31,25 @@ statusline はイベントで再実行される (新しい assistant message、`
   書いた state を壊さないため)。
 - **5 時間ウィンドウが切り替わる瞬間は `five_hour` が来ない**。docs は `resets_at` を過ぎた window を
   落とすと書き、実機では `xx:10:01` のような境界時刻に null で観測した。どちらも書かず、最後に持っていた
-  有効な state を残す。無い値で上書きすると Go 側は 0 に読むため、待機明けのゲートが「fresh な 0%」で送信を抑制し、
-  15 分後に state が古くなって改めて検知しても `resets_at` が無くフォールバック
-  (5 時間待ち) に落ちる。2026-08-28 の取りこぼしはこれが原因だった。daemon 側も
-  `resets_at` が 0 の state は「値が無い」として扱う (`ratelimit.State.HasFiveHour`)。
-  信号にするのは `resets_at` だけ。観測されたのは両方 null の形で、`used_percentage`
-  だけが null の描画は見ていない。
+  有効な state を残す。無い値で上書きすると Go 側は 0 に読むため、`doctor` の表示が「0% で解除時刻 epoch 0」になる。
+  読む側も `resets_at` が 0 の state は「値が無い」として扱う (`ratelimit.State.HasFiveHour`)。
+  観測されたのは両方 null の形で、`used_percentage` だけが null の描画は見ていない。
 - **セッションごとに別ファイルへ書く**。`resets_at` はアカウント全体で共通だが、
-  使用率は観測した時点の値で、セッションによって観測時刻が違う。1 ファイルを共有すると、
-  最後に statusline を描いたセッションの数字で別セッションの pane が判定される。実際、
-  2026-08-19 の取りこぼしでは上限に達したセッションの pane が、無関係なセッション
-  (次のウィンドウで動き出した) の使用率 6% でゲート抑制された。ゲートは自セッションの
-  ファイルだけを見る。他セッションのファイルは起床時刻の算出にだけ使う
-  ([rate-limit.md](rate-limit.md) の「待機時刻の決め方」参照)。
+  使用率は観測した時点の値で、セッションによって観測時刻が違う。`doctor` は pane ごとにそのセッションの state を出す。
 - 書き込みは同一ディレクトリの一時ファイル経由の rename で原子的に行う (`statefile`)。
 - statusline の描画を壊さないよう fail-silent。失敗しても exit 0 で終わる (理由は stderr)。
   `ingest-statusline` は stdout に何も出さず、`statusline` は描画だけを出す。daemon のログにも書かない。
 
-これがこのツールの中核。`resets_at` が epoch で直接手に入るので、画面の
-`resets 12:30pm (Asia/Tokyo)` のような表記を am/pm やタイムゾーンごとパースする処理が要らない。
-実機で `resets_at = 1786851000` と画面の `12:30pm (Asia/Tokyo)` が一致することを確認済み。
+`rate-limits/` を daemon は読まない (#528)。上限かどうかと解除時刻は transcript の末尾の entry の
+`quotaLimits.resetsAt` から取る ([rate-limit.md](rate-limit.md))。statusline の `resets_at` は使用率の警告の描画と、
+`doctor` が statusline の配線を確かめる材料として残る。実機で `resets_at = 1786851000` と画面の `12:30pm (Asia/Tokyo)`
+が一致することを確認済み。
 
 同じ呼び出しで `context/<session_id>.json` へも書く。
 こちらは `rate_limits` と違って**statusline が走るたびに必ず書く**。
-daemon が使うのは `multiplexer` (block から session_id への対応) で、同じ block の記録が複数あれば
-`observed_at` が最新のものを採る。`session_name` は依存図のノードとメモに出すセッションの名前になる。
-`used_percentage` は参考として写すだけで、daemon は読まない。
+daemon が使うのは `multiplexer` (block から session_id への対応。上限の判定に読む transcript はこの session_id で
+引く) で、同じ block の記録が複数あれば `observed_at` が最新のものを採る。`session_name` は依存図のノードとメモに出す
+セッションの名前になる。`used_percentage` は参考として写すだけで、daemon は読まない。
 
 ## 書式
 
@@ -107,8 +100,10 @@ session ID の先頭 8 文字、同じ名前のセッションが複数あれば
 
 backend は block から session_id をこの記録で逆引きする (`sessioncontext.Store.ListMultiplexerBlocks`)。同じ ID の
 記録が複数あれば `observed_at` が最新のものを採る (同じ block で Claude Code を起動し直すと古い記録が残る)。
-`context/` は 7 日で消えるだけなので、5 時間の上限待ちを跨いでも対応は残る。制約 (初回描画までの
-数秒) は [operations.md](../../../../skills/agents-daemon/references/operations.md) の「既知の制約」。
+`context/` は 7 日で消えるだけなので、上限待ち (週の上限は最長 24 時間) を跨いでも対応は残る。記録が無い pane は
+daemon が rex の前景の pid で Claude Code の登録簿 (`~/.claude/sessions/<pid>.json`、`claudesessions`) から補う。
+制約 (初回描画までの数秒、wrapper の shell から起動したときの pid の不一致) は
+[operations.md](../../../../skills/agents-daemon/references/operations.md) の「既知の制約」。
 
 skill がセッションの中から自分の session_id を引くときは `CLAUDE_CODE_SESSION_ID` を唯一の情報源にする
 (`scripts/get-session-id.sh`)。

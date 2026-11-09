@@ -241,8 +241,8 @@ test("待ちの輪のある図: 輪のノードと両向きの辺を描き、次
   }
 });
 
-test("線が 1 本も無い図: 動いているカードをセッションの枠に並べ、全体表示でも 100% のまま縮めない", async () => {
-  const narrow = { width: 600, height: 200 };
+test("線が 1 本も無い図: 動いているカードをセッションの枠に並べ、全体表示では図全体を見える領域に収める", async () => {
+  const narrow = { width: 600, height: 480 };
   setHost(narrow);
   await loadDeps(JSON.stringify(withoutLinks()));
   try {
@@ -252,11 +252,12 @@ test("線が 1 本も無い図: 動いているカードをセッションの枠
     assert.deepEqual(groups().find((g) => g.label === "参照").keys, ["pr:usadamasa/agents-daemon#254"]);
     assert.deepEqual([...cards("#column").keys()], ["sid:gamma"]);
     assert.equal(q("#legend").hidden, false);
-    const frame = q("#graph .zoom-frame");
-    assert.ok(parseFloat(frame.style.height) > narrow.height, "枠の高さが見える領域を超える");
-    assert.equal(q("#zoom-reset").textContent, "100%");
-    assert.equal(q("#zoom-fit").getAttribute("aria-pressed"), "true");
-    assert.equal(q("#graph .canvas").style.transform, "");
+    const v = view();
+    assert.ok(parseInt(v.label, 10) < 100, `拡大率が ${v.label}`);
+    assertFitted(v, narrow);
+    assert.match(q("#graph .canvas").style.transform, /^scale\(0\.\d+\)$/);
+    // 窓の幅で 1 列に折り返したまま縮めると、中央の細い列になる。縮めた分だけ横に並べ直して幅を使う。
+    assert.ok(v.width > narrow.width / 2, `枠の幅 ${v.width}`);
     await snapshot("graph-no-links");
   } finally {
     setHost(HOST);
@@ -264,12 +265,13 @@ test("線が 1 本も無い図: 動いているカードをセッションの枠
   }
 });
 
-test("線が 1 本も無い図: 窓の幅に合わせて枠を折り返し直す", async () => {
+test("線が 1 本も無い図: 窓の大きさに合わせて枠を折り返し直す", async () => {
   await loadDeps(JSON.stringify(withoutLinks()));
   const rows = () => new Set([...document.querySelectorAll("#graph .group")].map((g) => g.style.top)).size;
   try {
     assert.ok(rows() < 4, `広い窓の行数 ${rows()}`);
-    resize({ width: 400, height: 320 });
+    // 縦に長い細い窓では、1 列に積むのが 100% のまま収まる並べ方になる。
+    resize({ width: 400, height: 1600 });
     assert.equal(rows(), 4);
   } finally {
     resize(HOST);
@@ -475,10 +477,17 @@ test("状態の丸の色は .dot と .st で 1 つの規則を共有し、色の
   assert.doesNotMatch(css, /^\.(dot|st) \{[^}]*background: /m);
 });
 
-// スクロールの跳ね返りは WKWebView の描画でしか起きず、happy-dom では再現できないので規則の有無で確かめる。
+// スクロールの跳ね返りとホイールの受け渡しは WKWebView の描画でしか起きず、happy-dom では再現できないので規則の有無で確かめる。
 test("窓とスクロールする領域はどれも、端を越えたスワイプで跳ね返らない", () => {
-  assert.match(css, /^\* \{ overscroll-behavior: none; \}/m);
+  assert.match(css, /^:is\(html, body, \.graph, \.column, \.park \.ls, \.pop\) \{ overscroll-behavior: none; \}/m);
   assert.doesNotMatch(css, /overscroll-behavior: (auto|contain)/);
+});
+
+// WKWebView は overflow: hidden の箱 (拡大縮小の枠、カード) もスクロールの節に数え、そこに overscroll-behavior: none が
+// あるとホイールを #graph へ渡さない。
+test("スクロールしない箱には overscroll-behavior を置かず、ホイールを依存図の領域へ渡す", () => {
+  assert.doesNotMatch(css, /^\* \{[^}]*overscroll-behavior/m);
+  assert.equal(css.match(/overscroll-behavior/g).length, 1);
 });
 
 test("単体ビューの状態の丸は、状態の色の鍵を class に持つ", () => {

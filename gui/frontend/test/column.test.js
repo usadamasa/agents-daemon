@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { GROUP_W, groupBySession, groupHeight, partition, placeGroups } from "../src/column.js";
+import { GROUP_W, fitLimit, groupBySession, groupHeight, partition, placeGroups } from "../src/column.js";
 
 const keys = (nodes) => nodes.map((n) => n.key);
 
@@ -63,6 +63,38 @@ test("placeGroups は枠を左から並べ、limit を超える枠を次の行�
   assert.deepEqual(places.map((p) => p.y), [24, 24, 24 + groupHeight(3) + 16]);
   assert.equal(right, 64 + GROUP_W + 16 + GROUP_W);
   assert.equal(bottom, 24 + groupHeight(3) + 16 + groupHeight(1));
+});
+
+// columns は limit で並べたときの 1 行目の枠の数。
+const single = (n) => Array.from({ length: n }, (_, i) => ({ nodes: [{ key: String(i) }] }));
+function columns(groups, limit) {
+  return placeGroups(groups, 64, 24, limit).places.filter((p) => p.y === 24).length;
+}
+
+test("fitLimit は縦に長い見える領域で、全体表示の拡大率がいちばん大きくなる列の数で折り返す", () => {
+  const groups = single(4);
+  const limit = fitLimit(groups, { left: 64, top: 24, bottom: 24, graph: { width: 0, height: 0 }, view: { width: 600, height: 432 } });
+  // 1 列は縦に、3 列以上は横にはみ出して小さくなる。2 列 (676 × 312) が 600 / 676 でいちばん大きい。
+  assert.equal(columns(groups, limit), 2);
+});
+
+test("fitLimit は 100% のまま収まるなら、横に並べられるだけ並べて行を減らす", () => {
+  const groups = single(4);
+  const limit = fitLimit(groups, { left: 64, top: 24, bottom: 24, graph: { width: 0, height: 0 }, view: { width: 2000, height: 800 } });
+  assert.equal(columns(groups, limit), 4);
+});
+
+test("fitLimit は線のある図の方が広ければ、その幅に収まるだけ横に並べる", () => {
+  const groups = single(4);
+  const limit = fitLimit(groups, { left: 64, top: 300, bottom: 24, graph: { width: 1500, height: 300 }, view: { width: 600, height: 432 } });
+  assert.equal(placeGroups(groups, 64, 300, limit).places.filter((p) => p.y === 300).length, 4);
+});
+
+test("fitLimit は下限の拡大率でも収まらない図でも、縦横の釣り合う列の数を選び、横 1 行に並べない", () => {
+  const groups = single(6);
+  const limit = fitLimit(groups, { left: 64, top: 24, bottom: 24, graph: { width: 0, height: 0 }, view: { width: 150, height: 100 } });
+  // どの列の数も下限の 30% で止まる。下限で切った値を比べると全部が並び、横 1 行 (6 列) を選んでしまう。
+  assert.ok(columns(groups, limit) < 6, `列の数 ${columns(groups, limit)}`);
 });
 
 test("placeGroups は limit より広い枠でも 1 つは行に置く", () => {

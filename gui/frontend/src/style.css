@@ -29,8 +29,9 @@
   --gray-dot: #9aa49e;
   --exited: #b4bbb6;
 }
-/* overscroll-behavior は継承されないので全要素に置き、WKWebView の跳ね返りを窓とスクロールする領域のどれでも止める */
-* { overscroll-behavior: none; }
+/* WKWebView の跳ね返りを、窓と利用者がスクロールする領域 (依存図、右の列、メモの一覧、単体ビュー) で止める。
+   overflow: hidden の箱 (拡大縮小の枠、カード) に置くと、WKWebView がホイールを依存図へ渡さなくなる */
+:is(html, body, .graph, .column, .park .ls, .pop) { overscroll-behavior: none; }
 html, body { height: 100%; }
 body {
   margin: 0;

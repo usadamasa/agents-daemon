@@ -75,24 +75,30 @@ export function spawnDestinations(data, first) {
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 
-// ago は経過時間の語。1 時間に満たなければ「1 時間以内」、1 日に満たなければ時間、それより前は日で数える。
+// ago は経過時間の語。1 時間に満たなければ「<1h ago」、1 日に満たなければ時間、それより前は日で数える。
 function ago(ms) {
-  if (ms < HOUR_MS) return "1 時間以内";
-  if (ms < DAY_MS) return `${Math.floor(ms / HOUR_MS)} 時間前`;
-  return `${Math.floor(ms / DAY_MS)} 日前`;
+  if (ms < HOUR_MS) return "<1h ago";
+  if (ms < DAY_MS) return `${Math.floor(ms / HOUR_MS)}h ago`;
+  return `${Math.floor(ms / DAY_MS)}d ago`;
 }
 
-// spawnLabel は起こす repo の候補の名前。最後に見た時刻があれば now (ミリ秒) からの経過を添える。
-export function spawnLabel(to, now) {
+// lastSeenAgo は起こす repo の候補を最後に見た時刻から now (ミリ秒) までの経過の語。時刻が無ければ空。
+export function lastSeenAgo(to, now) {
   const at = to.last_seen === undefined ? NaN : Date.parse(to.last_seen);
-  return Number.isNaN(at) ? to.title : `${to.title} (${ago(now - at)})`;
+  return Number.isNaN(at) ? "" : ago(now - at);
+}
+
+// spawnLabel は起こす repo の候補の名前。最後に見た時刻があれば経過を添える。
+export function spawnLabel(to, now) {
+  const seen = lastSeenAgo(to, now);
+  return seen === "" ? to.title : `${to.title} (${seen})`;
 }
 
 // pathDestination は入力されたパスを起こす先にする。絶対パスでなければ理由を返す (バイナリも同じ検査をするが、
 // 起こす前に手元で弾いて知らせる)。
 export function pathDestination(path) {
   const repo = path.trim();
-  if (!repo.startsWith("/")) return { failure: `repo は絶対パスで指定してください: ${repo}` };
+  if (!repo.startsWith("/")) return { failure: `repo must be an absolute path: ${repo}` };
   return { route: "spawn", repo, title: basename(repo) };
 }
 

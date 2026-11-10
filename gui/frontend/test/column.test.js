@@ -48,7 +48,7 @@ test("groupBySession はセッションを持たない参照を「参照」の�
     { key: "pr:1", kind: "ref" },
     { key: "issue:2", kind: "ref" },
   ]);
-  assert.deepEqual(groups.map((g) => [g.label, keys(g.nodes)]), [["参照", ["pr:1", "issue:2"]]]);
+  assert.deepEqual(groups.map((g) => [g.label, keys(g.nodes)]), [["Refs", ["pr:1", "issue:2"]]]);
 });
 
 test("groupHeight は枠の中のカードの数で決まる", () => {

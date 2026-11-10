@@ -118,9 +118,9 @@ test("spawnDestinations はメモの repo、依存図の repo、台帳の最近�
 test("spawnLabel は最後に見た時刻からの経過を添える", () => {
   const now = Date.parse("2026-11-06T12:00:00Z");
   assert.equal(spawnLabel({ route: "spawn", repo: "/r/a", title: "a" }, now), "a");
-  assert.equal(spawnLabel({ route: "spawn", repo: "/r/a", title: "a", last_seen: "2026-11-06T11:30:00Z" }, now), "a (1 時間以内)");
-  assert.equal(spawnLabel({ route: "spawn", repo: "/r/a", title: "a", last_seen: "2026-11-06T09:00:00Z" }, now), "a (3 時間前)");
-  assert.equal(spawnLabel({ route: "spawn", repo: "/r/a", title: "a", last_seen: "2026-11-01T09:00:00Z" }, now), "a (5 日前)");
+  assert.equal(spawnLabel({ route: "spawn", repo: "/r/a", title: "a", last_seen: "2026-11-06T11:30:00Z" }, now), "a (<1h ago)");
+  assert.equal(spawnLabel({ route: "spawn", repo: "/r/a", title: "a", last_seen: "2026-11-06T09:00:00Z" }, now), "a (3h ago)");
+  assert.equal(spawnLabel({ route: "spawn", repo: "/r/a", title: "a", last_seen: "2026-11-01T09:00:00Z" }, now), "a (5d ago)");
 });
 
 test("canTell と isOwnTask は生きているセッションのノードだけ", () => {

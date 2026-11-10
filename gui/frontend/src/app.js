@@ -6,9 +6,9 @@ import { Graph } from "./graph.js";
 import { GROUP_W, fitLimit, groupBySession, partition, placeGroups } from "./column.js";
 import { fitEdges, spreadPorts } from "./ports.js";
 import { findJumps, jumpPath } from "./jumps.js";
-import { PR_STAGE, STATE_LABEL, cardHint, cardText, emphasis, leadStage, toneOf } from "./card.js";
+import { PR_STAGE, STATE_LABEL, cardHint, cardText, emphasis, leadStage, markClass, toneOf } from "./card.js";
 import { isStale, kindLabel, lastPlacedAt, stamp } from "./memo.js";
-import { bulkDismissable, canAdopt, canDismiss, canRename, canTell, candidates, destinationLabel, isOwnTask, issueDestinations, pathDestination, peerDestinations, spawnDestinations, spawnLabel, taskDestinations } from "./ops.js";
+import { bulkDismissable, canAdopt, canDismiss, canRename, canTell, candidates, isOwnTask, issueDestinations, lastSeenAgo, pathDestination, peerDestinations, spawnDestinations, taskDestinations } from "./ops.js";
 import { addBlocker, adopt, askUnlink, discard, discardStale, dismissAll, dismissOne, handOff, handOffTask, instruct, rename, setStatus, start, toParking, unlink } from "./actions.js";
 import { openTarget, pickFolder } from "./daemon.js";
 import { segments } from "./links.js";
@@ -17,19 +17,17 @@ import { restore, scrollView, watchUpgrade } from "./restore.js";
 
 const NODE_W = 240;
 const NODE_H = 72;
-const POP_W = 400;
+// 単体ビューの幅。style.css の .pop と同じ数 (Primer の overlay の small)。
+const POP_W = 320;
 // 窓が前にあるときは数秒おき、隠れているときは間隔を伸ばす。
 const POLL_MS = 3000;
 const POLL_HIDDEN_MS = 15000;
 
 const REF_KIND_LABEL = { issue: "issue", pr: "PR" };
-const KIND_LABEL = { task: "タスク", todo: "TodoWrite の項目", session: "セッションの作業", ref: "参照" };
-// 単体ビューの関係の見出しの主語。参照は issue か PR かで呼び分ける。
-const SUBJECT = { task: "このタスク", todo: "この項目", session: "このセッション", ref: "この参照" };
-const REF_SUBJECT = { issue: "この issue", pr: "この PR" };
+const KIND_LABEL = { task: "Task", todo: "TodoWrite item", session: "Session work", ref: "Ref" };
 // companion が会話から付けた題 (origin inferred) に添える chip の文 (出どころの説明)。直すのは題そのものを押す (OOUI:
 // 対象を選んでから動詞)。最初の prompt の題、人が直した題、記録の無い pane の名前には何も添えない。
-const INFERRED_CHIP = "会話から自動で付けた題";
+const INFERRED_CHIP = "Auto-titled";
 
 const state = {
   data: null,
@@ -128,7 +126,7 @@ function appendLinked(parent, text, ctx) {
 
 function stateLabel(n) {
   // 下流が全部完了した idle の peer は報告を済ませていて、こちらの返事を要さない。
-  const label = leadStage(n)?.label ?? (n.state === "done" && state.graph.settled(n.key) ? "手が空いている (idle)" : (STATE_LABEL[n.state] ?? n.state));
+  const label = leadStage(n)?.label ?? (n.state === "done" && state.graph.settled(n.key) ? "Idle" : (STATE_LABEL[n.state] ?? n.state));
   // 題を引いた issue / PR は題が番号を含まないので、番号と repo を状態に添える。
   if (n.ref_label && n.ref_label !== n.title) return `${label} · ${n.ref_label}`;
   if (n.ref_kind) return `${label} · ${REF_KIND_LABEL[n.ref_kind] ?? n.ref_kind}`;
@@ -145,7 +143,7 @@ async function fetchDeps() {
     changed = text !== state.lastText;
     if (changed) {
       const data = JSON.parse(text);
-      if (!Array.isArray(data.graph?.nodes)) throw new Error("deps の JSON に graph が無い");
+      if (!Array.isArray(data.graph?.nodes)) throw new Error("deps JSON has no graph");
       state.data = data;
       state.graph = new Graph(data.graph);
       state.lastText = text;
@@ -279,7 +277,7 @@ function nodeCard(n, highlight, grouped = false) {
   });
 
   const dot = document.createElement("span");
-  dot.className = `st ${toneOf(n) ?? ""}`.trim();
+  dot.className = markClass(n);
 
   const lb = document.createElement("span");
   lb.className = "lb";
@@ -332,7 +330,7 @@ function edgePath(d, cls, marker, hint) {
 
 // foldedHint は畳んだ辺のホバーの文。通り抜けた完了ノードの題を並べる。
 function foldedHint(l) {
-  return `${l.via.map((key) => state.graph.node(key)?.title ?? key).join(" → ")} を経由`;
+  return `via ${l.via.map((key) => state.graph.node(key)?.title ?? key).join(" → ")}`;
 }
 
 function arrowMarker(id, cls) {
@@ -369,7 +367,7 @@ function renderGraph() {
   if (connected.length === 0 && free.length === 0) {
     const empty = document.createElement("div");
     empty.className = "empty";
-    empty.textContent = nodes.length === 0 ? "タスクが無い" : "動いている作業は無い";
+    empty.textContent = nodes.length === 0 ? "No tasks" : "No active work";
     host.append(empty);
     return;
   }
@@ -436,6 +434,7 @@ function renderGroups(canvas, free, highlight, graphSize, view) {
     section.style.width = `${GROUP_W}px`;
     const head = document.createElement("h2");
     head.textContent = g.label;
+    head.title = g.label;
     section.append(head, ...g.nodes.map((n) => nodeCard(n, highlight, true)));
     canvas.append(section);
   });
@@ -449,16 +448,31 @@ function renderColumn(ended, highlight) {
   const scroll = host.scrollTop;
   host.hidden = ended.length === 0;
   const head = document.createElement("h2");
-  head.textContent = `終わった作業 · ${ended.length}`;
+  head.append(heading("Ended"), counter(ended.length));
   host.replaceChildren(head, ...ended.map((n) => nodeCard(n, highlight)));
   host.scrollTop = scroll;
+}
+
+// heading は見出しの語、counter はその横に置く件数の印。
+function heading(text) {
+  const ph = document.createElement("span");
+  ph.className = "ph";
+  ph.textContent = text;
+  return ph;
+}
+
+function counter(n) {
+  const c = document.createElement("span");
+  c.className = "counter";
+  c.textContent = String(n);
+  return c;
 }
 
 function renderToggle() {
   const done = state.graph.nodes.filter((n) => n.state === "completed").length;
   el("completed-toggle").hidden = done === 0;
   el("completed-check").checked = state.showCompleted;
-  el("completed-label").textContent = `完了したタスクも表示 (${done} 件)`;
+  el("completed-count").textContent = String(done);
 }
 
 // ---- メモの一覧 ----
@@ -494,14 +508,14 @@ function renderPark() {
   const park = el("park");
   park.hidden = false;
   const total = state.data.repos.reduce((n, r) => n + r.memos.length, 0);
-  el("park-title").textContent = `メモ · ${total}`;
 
+  // 一覧は見出しを持たない。件数は repo の絞り込みの選択肢に出る。
   const filter = el("repo-filter");
   const current = state.repoFilter;
   filter.replaceChildren();
   const all = document.createElement("option");
   all.value = "";
-  all.textContent = "すべての repo";
+  all.textContent = "All repos";
   filter.append(all);
   for (const r of state.data.repos) {
     const o = document.createElement("option");
@@ -518,7 +532,7 @@ function renderPark() {
   if (rows.length === 0) {
     const none = document.createElement("div");
     none.className = "none";
-    none.textContent = total === 0 ? "open のメモは無い" : "この repo に open のメモは無い";
+    none.textContent = total === 0 ? "No open memos" : "No open memos in this repo";
     list.append(none);
     return;
   }
@@ -527,36 +541,84 @@ function renderPark() {
 
 // ---- 単体ビュー (ポップアップ) ----
 
-function chip(text, tone, dotTone) {
+// chip は枠だけのラベル。tone は色の鍵 (ok / warn / limit / err / merge / guess) で、無ければ灰の枠。
+function chip(text, tone) {
   const c = document.createElement("span");
   c.className = tone ? `chip ${tone}` : "chip";
-  if (dotTone !== undefined) {
-    const d = document.createElement("span");
-    d.className = dotTone ? `dot ${dotTone}` : "dot";
-    c.append(d);
-  }
   const t = document.createElement("span");
   t.textContent = text;
   c.append(t);
   return c;
 }
 
-function linkChip(text, onClick) {
-  const c = chip(text, "link");
-  c.setAttribute("role", "button");
-  c.tabIndex = 0;
-  c.addEventListener("click", onClick);
-  return c;
+// group は関係の一覧。見出しの語の横に件数の印を置き、上を罫線で区切る。
+function group(label, count, rows) {
+  const g = document.createElement("div");
+  g.className = "grp sep";
+  const gh = document.createElement("div");
+  gh.className = "gh";
+  gh.append(heading(label), counter(count));
+  g.append(gh, ...rows);
+  return g;
 }
 
-function group(label, rows) {
-  const g = document.createElement("div");
-  g.className = "grp";
-  const ph = document.createElement("span");
-  ph.className = "ph";
-  ph.textContent = label;
-  g.append(ph, ...rows);
-  return g;
+// picker は動詞を開いた中身。閉じるのは押している動詞をもう一度押す (toggle) ので、やめるボタンは持たない。
+function picker(parts) {
+  const p = document.createElement("div");
+  p.className = "picker";
+  p.append(...parts);
+  return p;
+}
+
+// rowList は見出しの付いた行の一覧 (.row を並べる)。
+function rowList(label, items) {
+  const box = document.createElement("div");
+  box.className = "rows";
+  box.append(heading(label), ...items);
+  return box;
+}
+
+// rowButton は押すとそこへ渡る・足す行。lead は先頭の要素 (状態の印)、sub は名前の横の薄い補足。cls の end は補足を右端へ寄せる。
+function rowButton({ title, sub, lead, cls, hint, onClick }) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = cls ? `row ${cls}` : "row";
+  b.disabled = state.busy;
+  if (hint) b.title = hint;
+  if (lead) b.append(lead);
+  const t = document.createElement("span");
+  t.className = "t";
+  t.textContent = title;
+  b.append(t);
+  if (sub !== undefined) {
+    const s = document.createElement("span");
+    s.className = "s";
+    s.textContent = sub;
+    b.append(s);
+  }
+  b.addEventListener("click", onClick);
+  return b;
+}
+
+// iconButton は文字を出さないアイコンのボタン。名前は aria-label と title で伝える。
+function iconButton(icon, label, onClick) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "icon";
+  b.setAttribute("aria-label", label);
+  b.title = label;
+  b.disabled = state.busy;
+  // ICONS はコードの定数だけで、データの文字列は入れない。
+  b.innerHTML = svg(icon);
+  b.addEventListener("click", onClick);
+  return b;
+}
+
+// stateMark は状態の印 (丸か、PR と issue の形)。
+function stateMark(n) {
+  const dot = document.createElement("span");
+  dot.className = markClass(n);
+  return dot;
 }
 
 // nodeRow は関係するノードの 1 行: 状態の丸、題 (押すとそのノードを選ぶ)、直接か間接かの印、依存を外すボタン (あれば)。
@@ -564,18 +626,13 @@ function group(label, rows) {
 function nodeRow(n, mark, link, owner) {
   const row = document.createElement("div");
   row.className = "lk";
-  const dot = document.createElement("span");
-  dot.className = `st ${toneOf(n) ?? ""}`.trim();
   const b = document.createElement("button");
   b.type = "button";
   b.textContent = n.title;
   // 題は note と並ぶと先頭だけ残して切れるので、全文を tooltip に持たせる。
   b.title = n.title;
   b.addEventListener("click", () => select({ type: "node", key: n.key }));
-  const ph = document.createElement("span");
-  ph.className = "ph";
-  ph.textContent = mark;
-  row.append(dot, b, ph);
+  row.append(stateMark(n), b, heading(mark));
   // edge add の note (何の待ちか) は行に添える。
   if (link?.edge?.note) {
     const note = document.createElement("span");
@@ -584,25 +641,9 @@ function nodeRow(n, mark, link, owner) {
     row.append(note);
   }
   // `edge add` で書いた辺 (kind edge) は元の記録を消せる。同じセッションの blockedBy はそのセッションの TaskUpdate のもの。
-  if (link?.kind === "edge" && link.edge) {
-    const x = document.createElement("button");
-    x.type = "button";
-    x.className = "tb sm";
-    x.textContent = "外す";
-    x.disabled = state.busy;
-    x.addEventListener("click", () => act(() => unlink(link)));
-    row.append(x);
-  }
+  if (link?.kind === "edge" && link.edge) row.append(iconButton("unlink", "Unlink", () => act(() => unlink(link))));
   // 同じセッションの blockedBy は TaskUpdate のもので外せないので、そのセッションに解消を頼む。
-  if (link?.kind === "task" && owner && canTell(owner)) {
-    const ask = document.createElement("button");
-    ask.type = "button";
-    ask.className = "tb sm";
-    ask.textContent = "外すよう頼む";
-    ask.disabled = state.busy;
-    ask.addEventListener("click", () => act(() => askUnlink(n, owner)));
-    row.append(ask);
-  }
+  if (link?.kind === "task" && owner && canTell(owner)) row.append(iconButton("unlink", "Ask the session to unlink", () => act(() => askUnlink(n, owner))));
   return row;
 }
 
@@ -612,38 +653,45 @@ function related(g, direct, all, owner) {
   const seen = new Set();
   for (const [n, link] of direct) {
     seen.add(n.key);
-    rows.push(nodeRow(n, "直接", link, owner));
+    rows.push(nodeRow(n, "Direct", link, owner));
   }
   for (const k of all) {
     if (seen.has(k)) continue;
     const n = g.node(k);
-    if (n) rows.push(nodeRow(n, "間接"));
+    if (n) rows.push(nodeRow(n, "Indirect"));
   }
   return rows;
 }
 
-// 動詞のボタン。絵は線だけの小さな SVG。
+// アイコンは Octicons (GitHub、MIT。vendor/LICENSE.octicons) の 16px の path。右の語は Octicons の名前。
 const ICONS = {
-  link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
-  memo: '<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4"/><path d="M9 12h6M9 16h6"/>',
-  remove: '<path d="M5 12h14"/><circle cx="12" cy="12" r="9"/>',
-  trash: '<path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 14h10l1-14"/>',
-  task: '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V2h6v2"/><path d="M9 13l2 2 4-4"/>',
-  issue: '<circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><path d="M12 16h.01"/>',
-  folder: '<path d="M3 7h6l2 2h10v10H3z"/>',
-  send: '<path d="M4 12l16-8-6 16-2-7z"/><path d="M12 13l8-9"/>',
-  hand: '<path d="M4 12h12"/><path d="M12 7l5 5-5 5"/><path d="M20 5v14"/>',
-  play: '<path d="M7 5l12 7-12 7z"/>',
-  check: '<path d="M5 12l5 5 9-10"/>',
+  send: '<path d="M.989 8 .064 2.68a1.342 1.342 0 0 1 1.85-1.462l13.402 5.744a1.13 1.13 0 0 1 0 2.076L1.913 14.782a1.343 1.343 0 0 1-1.85-1.463L.99 8Zm.603-5.288L2.38 7.25h4.87a.75.75 0 0 1 0 1.5H2.38l-.788 4.538L13.929 8Z"/>', // paper-airplane
+  link: '<path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"/>', // link
+  unlink: '<path d="M12.914 5.914a2 2 0 0 0-2.828-2.828l-.837.837a.75.75 0 1 1-1.06-1.061l.836-.837a3.5 3.5 0 1 1 4.95 4.95l-.195.194a.75.75 0 0 1-1.06-1.06l.194-.195Zm-1.87 3.482a.759.759 0 0 1-.07.079c-.63.63-1.468 1.108-2.343 1.263-.89.159-1.86-.017-2.606-.763a.75.75 0 1 1 1.06-1.06c.329.327.767.438 1.284.347.493-.088 1.018-.36 1.445-.752l-1.247-.897a.709.709 0 0 1-.01-.008l-.295-.212c-.94-.597-1.984-.499-2.676.193l-2.5 2.5a2 2 0 1 0 2.828 2.828l.837-.836a.75.75 0 0 1 1.06 1.06l-.836.837a3.5 3.5 0 0 1-4.95-4.95l2.5-2.5a3.472 3.472 0 0 1 1.354-.848L2.312 3.109a.75.75 0 0 1 .876-1.218l5.93 4.27c.115.074.226.155.335.24l6.235 4.49a.75.75 0 0 1-.876 1.218l-3.768-2.713Z"/>', // unlink
+  hand: '<path d="M8.22 2.97a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042l2.97-2.97H3.75a.75.75 0 0 1 0-1.5h7.44L8.22 4.03a.75.75 0 0 1 0-1.06Z"/>', // arrow-right
+  play: '<path d="m6.427 4.427 3.396 3.396a.25.25 0 0 1 0 .354l-3.396 3.396A.25.25 0 0 1 6 11.396V4.604a.25.25 0 0 1 .427-.177Z"/>', // triangle-right
+  check: '<path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/>', // check
+  memo: '<path d="M0 3.75C0 2.784.784 2 1.75 2h12.5c.966 0 1.75.784 1.75 1.75v8.5A1.75 1.75 0 0 1 14.25 14H1.75A1.75 1.75 0 0 1 0 12.25Zm1.75-.25a.25.25 0 0 0-.25.25v8.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25v-8.5a.25.25 0 0 0-.25-.25ZM3.5 6.25a.75.75 0 0 1 .75-.75h7a.75.75 0 0 1 0 1.5h-7a.75.75 0 0 1-.75-.75Zm.75 2.25h4a.75.75 0 0 1 0 1.5h-4a.75.75 0 0 1 0-1.5Z"/>', // note
+  trash: '<path d="M11 1.75V3h2.25a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1 0-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75ZM4.496 6.675l.66 6.6a.25.25 0 0 0 .249.225h5.19a.25.25 0 0 0 .249-.225l.66-6.6a.75.75 0 0 1 1.492.149l-.66 6.6A1.748 1.748 0 0 1 10.595 15h-5.19a1.75 1.75 0 0 1-1.741-1.575l-.66-6.6a.75.75 0 1 1 1.492-.15ZM6.5 1.75V3h3V1.75a.25.25 0 0 0-.25-.25h-2.5a.25.25 0 0 0-.25.25Z"/>', // trash
+  remove: '<path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM3.965 13.096a6.5 6.5 0 0 0 9.131-9.131ZM1.5 8a6.474 6.474 0 0 0 1.404 4.035l9.131-9.131A6.499 6.499 0 0 0 1.5 8Z"/>', // circle-slash
+  task: '<path d="M2 2h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1Zm4.655 8.595a.75.75 0 0 1 0 1.06L4.03 14.28a.75.75 0 0 1-1.06 0l-1.5-1.5a.749.749 0 0 1 .326-1.275.749.749 0 0 1 .734.215l.97.97 2.095-2.095a.75.75 0 0 1 1.06 0ZM9.75 2.5h5.5a.75.75 0 0 1 0 1.5h-5.5a.75.75 0 0 1 0-1.5Zm0 5h5.5a.75.75 0 0 1 0 1.5h-5.5a.75.75 0 0 1 0-1.5Zm0 5h5.5a.75.75 0 0 1 0 1.5h-5.5a.75.75 0 0 1 0-1.5Zm-7.25-9v3h3v-3Z"/>', // tasklist
+  issue: '<path d="M8 9.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"/><path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Z"/>', // issue-opened
+  close: '<path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"/>', // x
 };
 
+function svg(icon) {
+  return `<svg viewBox="0 0 16 16" aria-hidden="true">${ICONS[icon]}</svg>`;
+}
+
+// actButton は動詞のボタン。アイコンの下に短い語を置く。tone の on は開いている動詞で、aria-pressed でも伝える。
 function actButton(label, icon, tone, onClick) {
   const b = document.createElement("button");
   b.type = "button";
   b.className = tone ? `act ${tone}` : "act";
   b.disabled = state.busy;
+  if (tone.split(" ").includes("on")) b.setAttribute("aria-pressed", "true");
   // ICONS はコードの定数だけで、データの文字列は入れない。
-  b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[icon]}</svg>`;
+  b.innerHTML = svg(icon);
   b.append(document.createTextNode(label));
   b.addEventListener("click", onClick);
   return b;
@@ -656,55 +704,60 @@ function actsBar(buttons) {
   return bar;
 }
 
-function cancelButton() {
-  const b = document.createElement("button");
-  b.type = "button";
-  b.className = "tb sm";
-  b.textContent = "やめる";
-  b.addEventListener("click", () => {
-    state.picker = null;
-    state.refusal = "";
-    renderPopup();
-  });
-  return b;
-}
-
-// blockerPicker は「先に済ませるタスクを選ぶ」の一覧。
+// blockerPicker は先に済ませるタスクの候補の一覧。行を押すとその辺を書く。
 function blockerPicker(n) {
-  const g = state.graph;
-  const rows = candidates(g, n).map((c) => {
-    const row = document.createElement("div");
-    row.className = "lk";
-    const dot = document.createElement("span");
-    dot.className = `st ${toneOf(c) ?? ""}`.trim();
-    const b = document.createElement("button");
-    b.type = "button";
-    b.textContent = c.title;
-    b.disabled = state.busy;
-    b.addEventListener("click", () => act(() => addBlocker(c, n)));
-    row.append(dot, b);
-    return row;
-  });
-  if (rows.length === 0) {
-    const none = document.createElement("span");
-    none.className = "ph";
-    none.textContent = "候補が無い (端点にできる、完了していないタスクが他に無い)";
-    rows.push(none);
-  }
-  return group("先に済ませるタスクを選ぶ", [...rows, cancelButton()]);
+  const items = candidates(state.graph, n).map((c) => rowButton({ title: c.title, sub: c.session ?? "", lead: stateMark(c), cls: "end", hint: c.title, onClick: () => act(() => addBlocker(c, n)) }));
+  // 端点にできる、完了していないタスクが他に無い。
+  if (items.length === 0) items.push(heading("No candidates"));
+  return picker([rowList("Add blocker", items)]);
 }
 
-// noteField は操作の文面の末尾に添える補足欄。IME の変換中の Enter は textarea なので送信にならない。
-function noteField() {
+// composer は枠の中に入力欄と、押しても送れるキーの印 (⌘↵) を並べる欄。key は下書きを持つ state の名前 (draft か note)。
+// submit が無ければ印を出さない (行を押して送る操作の補足)。needsText は空欄では送らない。textarea なので IME の変換中の
+// Enter は送信にならない。
+function composer({ placeholder, key, rows, submit, label, needsText }) {
+  const box = document.createElement("div");
+  box.className = "composer";
   const t = document.createElement("textarea");
-  t.className = "note";
-  t.rows = 2;
-  t.placeholder = "補足 (渡す文面の末尾に添える)";
-  t.value = state.note;
+  t.rows = rows;
+  t.placeholder = placeholder;
+  t.setAttribute("aria-label", placeholder);
+  t.value = state[key];
+  box.append(t);
+  const ready = () => !state.busy && (!needsText || state[key].trim() !== "");
+  let send = null;
   t.addEventListener("input", () => {
-    state.note = t.value;
+    state[key] = t.value;
+    if (send) send.disabled = !ready();
   });
-  return t;
+  if (submit === undefined) return box;
+  send = document.createElement("button");
+  send.type = "button";
+  send.className = "key send";
+  send.textContent = "⌘↵";
+  send.setAttribute("aria-label", label);
+  send.title = label;
+  send.disabled = !ready();
+  const run = () => {
+    if (ready()) submit();
+  };
+  send.addEventListener("click", run);
+  t.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && e.metaKey && !e.isComposing) {
+      e.preventDefault();
+      run();
+    }
+  });
+  const keys = document.createElement("div");
+  keys.className = "keys";
+  keys.append(send);
+  box.append(keys);
+  return box;
+}
+
+// noteField は操作の文面の末尾に添える補足欄。送るのは宛先の行を押したとき。
+function noteField() {
+  return composer({ placeholder: "Note (optional)", key: "note", rows: 2 });
 }
 
 // refusalLine は送達が拒まれた理由。無ければ出さない。
@@ -716,33 +769,11 @@ function refusalLine() {
   return p;
 }
 
-function subheading(text) {
-  const s = document.createElement("span");
-  s.className = "ph sub";
-  s.textContent = text;
-  return s;
-}
-
-// destinationRows は生きているセッションの宛先の一覧。無ければその旨を 1 行出す。
+// destinationRows は生きているセッションの宛先の一覧。名前の横に今の作業を薄く出す。無ければその旨を 1 行出す。
 function destinationRows(peers, onPick) {
-  if (peers.length === 0) {
-    const none = document.createElement("span");
-    none.className = "ph";
-    none.textContent = "生きているセッションが無い";
-    return [none];
-  }
-  return peers.map((to) => {
-    const row = document.createElement("div");
-    row.className = "lk";
-    const b = document.createElement("button");
-    b.type = "button";
-    b.textContent = destinationLabel(to);
-    b.title = to.session_id;
-    b.disabled = state.busy;
-    b.addEventListener("click", () => onPick(to));
-    row.append(b);
-    return row;
-  });
+  const items = peers.map((to) => rowButton({ title: to.session, sub: to.subject, hint: to.session_id, onClick: () => onPick(to) }));
+  if (items.length === 0) items.push(heading("No live sessions"));
+  return rowList("Sessions", items);
 }
 
 // SPAWN_SHOWN は起こす repo の候補を、「ほか n 件」を押す前に出す件数。台帳の repo は多いので畳む。
@@ -753,50 +784,42 @@ function spawnRows(first, onPick) {
   const now = Date.now();
   const all = spawnDestinations(state.data, first);
   const shown = state.moreRepos ? all : all.slice(0, SPAWN_SHOWN);
-  const rows = shown.map((to) => {
-    const row = document.createElement("div");
-    row.className = "lk";
-    const b = document.createElement("button");
-    b.type = "button";
-    b.textContent = spawnLabel(to, now);
-    b.title = to.repo;
-    b.disabled = state.busy;
-    b.addEventListener("click", () => onPick(to));
-    row.append(b);
-    return row;
+  // repo の行は名前と、最後に見た時刻からの経過を右端に分けて出す (時刻が無ければ名前だけ)。
+  const items = shown.map((to) => {
+    const seen = lastSeenAgo(to, now);
+    return rowButton({ title: to.title, ...(seen === "" ? {} : { sub: seen }), cls: "end", hint: to.repo, onClick: () => onPick(to) });
   });
   if (all.length > shown.length) {
-    const more = document.createElement("button");
-    more.type = "button";
-    more.className = "tb sm";
-    more.textContent = `ほか ${all.length - shown.length} 件…`;
-    more.addEventListener("click", () => {
-      state.moreRepos = true;
-      renderPopup();
+    const more = rowButton({
+      title: `${all.length - shown.length} more…`,
+      cls: "more",
+      onClick: () => {
+        state.moreRepos = true;
+        renderPopup();
+      },
     });
-    rows.push(more);
+    more.disabled = false;
+    items.push(more);
   }
-  const pick = document.createElement("button");
-  pick.type = "button";
-  pick.className = "tb sm";
-  pick.textContent = "フォルダを選ぶ…";
-  pick.disabled = state.busy;
-  pick.addEventListener("click", async () => {
-    const path = await pickFolder();
-    if (path === "") return;
-    const to = pathDestination(path);
-    if ("failure" in to) {
-      state.notice = to.failure;
-      state.noticeUntil = Date.now() + NOTICE_MS;
-      renderFoot();
-      return;
-    }
-    await onPick(to);
-  });
-  const foot = document.createElement("div");
-  foot.className = "lk";
-  foot.append(pick, cancelButton());
-  return [...rows, foot];
+  items.push(
+    rowButton({
+      title: "Choose folder…",
+      cls: "more",
+      onClick: async () => {
+        const path = await pickFolder();
+        if (path === "") return;
+        const to = pathDestination(path);
+        if ("failure" in to) {
+          state.notice = to.failure;
+          state.noticeUntil = Date.now() + NOTICE_MS;
+          renderFoot();
+          return;
+        }
+        await onPick(to);
+      },
+    }),
+  );
+  return rowList("New session", items);
 }
 
 // repoOf はノードのセッションがいる repo (起こす repo の候補の先頭にする)。
@@ -809,61 +832,25 @@ function repoOf(n) {
 function memoHandPicker(memo, repo, intent) {
   const peers = intent === "task" ? taskDestinations(repo) : issueDestinations(state.data, repo);
   const pick = (to) => act(() => handOff(memo, to, intent, state.note));
-  const label = intent === "task" ? "タスクにするセッションを選ぶ" : "issue にするセッションを選ぶ";
-  return group(label, [noteField(), refusalLine(), ...destinationRows(peers, pick), subheading("新しいセッションを起こす"), ...spawnRows({ repo: repo.repo, title: repo.title }, pick)]);
+  return picker([noteField(), refusalLine(), destinationRows(peers, pick), spawnRows({ repo: repo.repo, title: repo.title }, pick)]);
 }
 
 // taskHandPicker は「渡す」の宛先: 持ち主を除く生きているセッションと、新しく起こす repo。
 function taskHandPicker(n) {
   const pick = (to) => act(() => handOffTask(n, to, state.note));
-  return group("渡すセッションを選ぶ", [noteField(), refusalLine(), ...destinationRows(peerDestinations(state.data, n.session_id), pick), subheading("新しいセッションを起こす"), ...spawnRows(repoOf(n), pick)]);
+  return picker([noteField(), refusalLine(), destinationRows(peerDestinations(state.data, n.session_id), pick), spawnRows(repoOf(n), pick)]);
 }
 
-// instructPicker は指示の文面を打って送る。textarea なので IME の変換中の Enter は送信にならず、送るのはボタンか ⌘ Enter。
+// instructPicker は指示の文面を打って送る。宛先は見出しのセッションの chip が示すので、欄だけを出す。
 function instructPicker(n) {
-  const t = document.createElement("textarea");
-  t.className = "note draft";
-  t.rows = 4;
-  t.placeholder = n.kind === "task" ? "指示 (タスクの題を添えて入力欄に打つ)" : "指示 (入力欄に打つ文面)";
-  t.value = state.draft;
-  const send = document.createElement("button");
-  send.type = "button";
-  send.className = "tb sm";
-  send.textContent = "送る";
-  const submit = () => {
-    if (state.draft.trim() === "") return;
-    act(() => instruct(n, state.draft.trim()));
-  };
-  send.disabled = state.busy || state.draft.trim() === "";
-  send.addEventListener("click", submit);
-  t.addEventListener("input", () => {
-    state.draft = t.value;
-    send.disabled = state.busy || state.draft.trim() === "";
-  });
-  t.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && e.metaKey && !e.isComposing) {
-      e.preventDefault();
-      submit();
-    }
-  });
-  const foot = document.createElement("div");
-  foot.className = "lk";
-  foot.append(send, cancelButton());
-  return group(`${n.session ?? ""} へ指示を送る`, [t, refusalLine(), foot]);
+  const submit = () => act(() => instruct(n, state.draft.trim()));
+  return picker([composer({ placeholder: "Instruction", key: "draft", rows: 3, submit, label: "Send", needsText: true }), refusalLine()]);
 }
 
-// startPicker は着手の依頼に補足を添えて送る。
+// startPicker は着手の依頼に補足を添えて送る。補足は空でも頼める。
 function startPicker(n) {
-  const send = document.createElement("button");
-  send.type = "button";
-  send.className = "tb sm";
-  send.textContent = "着手を頼む";
-  send.disabled = state.busy;
-  send.addEventListener("click", () => act(() => start(n, state.note)));
-  const foot = document.createElement("div");
-  foot.className = "lk";
-  foot.append(send, cancelButton());
-  return group(`${n.session ?? ""} に着手を頼む`, [noteField(), refusalLine(), foot]);
+  const submit = () => act(() => start(n, state.note));
+  return picker([composer({ placeholder: "Note (optional)", key: "note", rows: 2, submit, label: "Ask to start" }), refusalLine()]);
 }
 
 // toggle は picker を開く・閉じる動詞。
@@ -873,13 +860,15 @@ function renameField(n) {
   wrap.className = "edit";
   const t = document.createElement("input");
   t.type = "text";
-  t.className = "note draft";
-  t.setAttribute("aria-label", "作業の題");
+  t.setAttribute("aria-label", "Work title");
   t.value = state.draft === "" ? n.title : state.draft;
+  // 直すのは Enter、戻すのは Escape。枠の中の印は押しても直せる。
   const save = document.createElement("button");
   save.type = "button";
-  save.className = "tb sm";
-  save.textContent = "直す";
+  save.className = "key";
+  save.textContent = "↵";
+  save.setAttribute("aria-label", "Rename");
+  save.title = "Rename (Enter), cancel (Esc)";
   const submit = () => {
     const subject = t.value.trim();
     if (subject === "") return;
@@ -900,7 +889,7 @@ function renameField(n) {
       toggle("rename")();
     }
   });
-  wrap.append(t, save, cancelButton());
+  wrap.append(t, save);
   return wrap;
 }
 
@@ -920,7 +909,7 @@ function titleOf(n) {
   }
   title.classList.add("editable");
   title.textContent = n.title;
-  title.title = "押して題を直す (直した題は自動で書き換わらない)";
+  title.title = "Click to rename (a renamed title is not overwritten automatically)";
   title.setAttribute("role", "button");
   title.tabIndex = 0;
   title.addEventListener("click", toggle("rename"));
@@ -945,9 +934,10 @@ function on(name) {
   return state.picker === name ? "on" : "";
 }
 
+// toneChip は状態のラベル。丸の色の鍵をラベルの鍵に写す (作業中は ok、終了と取りやめは灰の枠)。
 function toneChip(text, tone) {
-  const chipTone = tone === "working" ? "ok" : tone === "exited" ? "" : tone ?? "";
-  return chip(text, chipTone, tone ?? "");
+  const chipTone = tone === "working" ? "ok" : tone === "exited" || tone === "drop" ? "" : tone ?? "";
+  return chip(text, chipTone);
 }
 
 function stateChip(n) {
@@ -973,24 +963,24 @@ function nodePopup(n) {
   chips.append(stateChip(n), ...restStageChips(n));
   // 会話から自動で付けた題は、状態の色と被らない破線の chip (guess) で出どころを示す。直すのは題を押す。
   if (n.origin === "inferred") chips.append(chip(INFERRED_CHIP, "guess"));
-  if (n.session) chips.append(chip(`${n.session} ›`, "", undefined));
+  if (n.session) chips.append(chip(n.session));
   head.append(ph, title, chips);
   parts.push(head);
 
   // 動詞。送達を伴うもの (指示、渡す、着手、完了、削除、メモにする) は生きているセッションのタスクに、バイナリだけで済む
   // もの (メモにする = adopt、一覧から外す) は終了したセッションのタスクと作業に出る。題を直すのは題そのもの (titleOf)。
   const verbs = [];
-  if (canTell(n)) verbs.push(actButton("指示を送る", "send", on("instruct"), toggle("instruct")));
-  if (n.endpoint && n.cwd !== undefined) verbs.push(actButton("依存を足す", "link", on("blocker"), toggle("blocker")));
+  if (canTell(n)) verbs.push(actButton("Tell", "send", on("instruct"), toggle("instruct")));
+  if (n.endpoint && n.cwd !== undefined) verbs.push(actButton("Link", "link", on("blocker"), toggle("blocker")));
   if (isOwnTask(n)) {
-    verbs.push(actButton("渡す", "hand", on("hand"), toggle("hand")));
-    if (n.state !== "in_progress") verbs.push(actButton("着手", "play", on("start"), toggle("start")));
-    verbs.push(actButton("完了", "check", "", () => act(() => setStatus(n, "completed"))));
-    verbs.push(actButton("メモにする", "memo", "", () => act(() => toParking(n))));
-    verbs.push(actButton("削除", "trash", "danger", () => act(() => setStatus(n, "deleted"))));
+    verbs.push(actButton("Hand", "hand", on("hand"), toggle("hand")));
+    if (n.state !== "in_progress") verbs.push(actButton("Start", "play", on("start"), toggle("start")));
+    verbs.push(actButton("Done", "check", "", () => act(() => setStatus(n, "completed"))));
+    verbs.push(actButton("Memo", "memo", "", () => act(() => toParking(n))));
+    verbs.push(actButton("Delete", "trash", "danger", () => act(() => setStatus(n, "deleted"))));
   }
-  if (canAdopt(n, state.data)) verbs.push(actButton("メモにする", "memo", "", () => act(() => adopt(n))));
-  if (canDismiss(n, state.data)) verbs.push(actButton("一覧から外す", "remove", "danger", () => act(() => dismissOne(n))));
+  if (canAdopt(n, state.data)) verbs.push(actButton("Memo", "memo", "", () => act(() => adopt(n))));
+  if (canDismiss(n, state.data)) verbs.push(actButton("Remove", "remove", "danger", () => act(() => dismissOne(n))));
   if (verbs.length > 0) parts.push(actsBar(verbs));
   if (state.picker === "instruct") parts.push(instructPicker(n));
   if (state.picker === "blocker") parts.push(blockerPicker(n));
@@ -999,28 +989,26 @@ function nodePopup(n) {
   if (state.refusal !== "" && !["instruct", "blocker", "hand", "start"].includes(state.picker)) parts.push(refusalLine());
 
   // タスクの説明と並ぶので、今の作業 (msg) は見出しを添えて分ける。
-  for (const text of [n.description, n.summary ? `今の作業: ${n.summary}` : ""]) {
+  for (const text of [n.description, n.summary ? `Now: ${n.summary}` : ""]) {
     if (!text) continue;
     const p = document.createElement("p");
     appendLinked(p, text, linkContext(n.repo, n.cwd));
     parts.push(p);
   }
 
-  // 英字で終わる主語 (PR、issue) は助詞との間を空ける。
-  const subject = REF_SUBJECT[n.ref_kind] ?? SUBJECT[n.kind] ?? "このノード";
-  const sp = /[A-Za-z]$/.test(subject) ? " " : "";
+  // Blocks はこのノードを待っているもの、Blocked by はこのノードが待っているもの。
   const after = g.waiters(n.key).flatMap((l) => (g.node(l.after) ? [[g.node(l.after), l]] : []));
-  parts.push(group(`${subject}${sp}を待っている · ${g.reach(n.key).size}`, related(g, after, g.reach(n.key))));
+  parts.push(group("Blocks", g.reach(n.key).size, related(g, after, g.reach(n.key))));
   const before = g.blockers(n.key).flatMap((l) => (g.node(l.before) ? [[g.node(l.before), l]] : []));
-  parts.push(group(`${subject}${sp}が待っている · ${g.upstream(n.key).size}`, related(g, before, g.upstream(n.key), n)));
+  parts.push(group("Blocked by", g.upstream(n.key).size, related(g, before, g.upstream(n.key), n)));
 
   if (n.memos.length > 0) {
-    parts.push(group(`扱うメモ · ${n.memos.length}`, n.memos.map((m) => memoRowInPopup(m.id, m.title, m.status, m.status === "open"))));
+    parts.push(group("Memos handled", n.memos.length, n.memos.map((m) => memoRowInPopup(m.id, m.title, m.status, m.status === "open"))));
   }
   // 途中で置いたメモは open のものだけが repos に載る (parked の数と同じ)。
   const parked = memos().filter(({ memo }) => memo.sources.some((s) => s.task_ref === n.key));
   if (parked.length > 0) {
-    parts.push(group(`途中で置いたメモ · ${parked.length}`, parked.map(({ memo }) => memoRowInPopup(memo.id, memo.title, memo.kind, true))));
+    parts.push(group("Memos placed", parked.length, parked.map(({ memo }) => memoRowInPopup(memo.id, memo.title, memo.kind, true))));
   }
   return parts;
 }
@@ -1035,10 +1023,7 @@ function memoRowInPopup(id, title, mark, selectable) {
   b.title = title;
   b.disabled = !selectable;
   b.addEventListener("click", () => select({ type: "memo", id }));
-  const ph = document.createElement("span");
-  ph.className = "ph";
-  ph.textContent = mark;
-  row.append(b, ph);
+  row.append(b, chip(mark, "guess"));
   return row;
 }
 
@@ -1049,24 +1034,23 @@ function memoPopup({ memo, repo }) {
   head.className = "head";
   const ph = document.createElement("span");
   ph.className = "ph";
-  ph.textContent = `メモ · ${repo.title} · ${kindLabel(memo)}`;
+  // 一覧の行を押して開くので、メモであることは書かない。repo と種類だけを出す。
+  ph.textContent = `${repo.title} · ${kindLabel(memo)}`;
   const title = document.createElement("span");
   title.className = "title";
   title.textContent = memo.title;
   const chips = document.createElement("div");
   chips.className = "chips";
-  chips.append(chip("open", "ok", "working"));
-  const placedAt = memo.sources.map((s) => s.task_ref).find((k) => k && g.node(k));
-  if (placedAt) chips.append(linkChip(`置いたとき: ${g.node(placedAt).title} ›`, () => select({ type: "node", key: placedAt })));
+  chips.append(chip("open", "ok"));
   head.append(ph, title, chips);
   parts.push(head);
 
   // 動詞。渡す先は生きているセッションか、新しく起こすセッション。
   parts.push(
     actsBar([
-      actButton("タスクにする", "task", `pri ${on("task")}`.trim(), toggle("task")),
-      actButton("issue にする", "issue", on("issue"), toggle("issue")),
-      actButton("捨てる", "trash", "danger", () => act(() => discard(memo))),
+      actButton("Task", "task", `pri ${on("task")}`.trim(), toggle("task")),
+      actButton("Issue", "issue", on("issue"), toggle("issue")),
+      actButton("Discard", "trash", "danger", () => act(() => discard(memo))),
     ]),
   );
   if (state.picker === "task" || state.picker === "issue") parts.push(memoHandPicker(memo, repo, state.picker));
@@ -1077,36 +1061,38 @@ function memoPopup({ memo, repo }) {
     appendLinked(p, memo.detail, linkContext(repo.repo, repo.repo));
     parts.push(p);
   }
-  if (memo.default_taken || memo.files?.length) {
-    const dl = document.createElement("dl");
-    dl.className = "kv";
-    const add = (k, v) => {
-      const dt = document.createElement("dt");
-      dt.textContent = k;
-      const dd = document.createElement("dd");
-      dd.textContent = v;
-      dl.append(dt, dd);
-    };
-    if (memo.default_taken) add("既定", memo.default_taken);
-    if (memo.files?.length) add("ファイル", memo.files.join("、"));
-    parts.push(dl);
-  }
-  const src = document.createElement("div");
-  src.className = "src";
-  const label = document.createElement("span");
-  label.className = "ph";
-  label.textContent = "置いた経緯 · 新しい順";
-  src.append(label);
-  for (const s of memo.sources) {
-    const row = document.createElement("span");
-    const em = document.createElement("em");
-    em.textContent = stamp(s.at);
-    const text = document.createElement("span");
-    text.textContent = [s.session + (s.live ? "" : " (終了)"), s.detail].filter(Boolean).join(" · ");
-    row.append(em, text);
-    src.append(row);
-  }
-  parts.push(src);
+  // 既定・ファイル・出どころを 1 つの表にする。From は置いたセッション、そのときのタスク (押すと選ぶ)、補足、時刻で、
+  // 置いた回数だけ新しい順に並ぶ (見出しは最初の行だけ)。
+  const dl = document.createElement("dl");
+  dl.className = "kv";
+  const add = (k, ...v) => {
+    const dt = document.createElement("dt");
+    dt.textContent = k;
+    const dd = document.createElement("dd");
+    dd.append(...v);
+    dl.append(dt, dd);
+  };
+  if (memo.default_taken) add("Default", memo.default_taken);
+  if (memo.files?.length) add("Files", memo.files.join(", "));
+  memo.sources.forEach((s, i) => {
+    const task = s.task_ref ? g.node(s.task_ref) : undefined;
+    const cells = [s.session + (s.live ? "" : " (ended)")];
+    if (task) {
+      const a = document.createElement("a");
+      a.className = "ref";
+      a.href = "#";
+      a.textContent = task.title;
+      a.addEventListener("click", (e) => {
+        e.preventDefault();
+        select({ type: "node", key: task.key });
+      });
+      cells.push(a);
+    }
+    if (s.detail) cells.push(s.detail);
+    cells.push(stamp(s.at));
+    add(i === 0 ? "From" : "", ...cells.flatMap((c, j) => (j === 0 ? [c] : [" · ", c])));
+  });
+  parts.push(dl);
   return parts;
 }
 
@@ -1144,12 +1130,12 @@ function renderPopup() {
   if (n) {
     anchor = document.querySelector(`.node[data-key="${CSS.escape(n.key)}"]`);
     parts = nodePopup(n);
-    pop.setAttribute("aria-label", "タスクの詳細");
+    pop.setAttribute("aria-label", "Task details");
   } else if (m) {
     anchor = document.querySelector(`.mrow[data-memo="${CSS.escape(m.memo.id)}"]`);
     parts = memoPopup(m);
     side = "above";
-    pop.setAttribute("aria-label", "メモの詳細");
+    pop.setAttribute("aria-label", "Memo details");
   }
   if (parts === null || anchor === null) {
     // 選んだものが消えた (完了して隠れた、メモが渡された、repo の絞り込みで外れた) なら選択を解く。
@@ -1161,8 +1147,10 @@ function renderPopup() {
   const x = document.createElement("button");
   x.type = "button";
   x.className = "x";
-  x.setAttribute("aria-label", "閉じる");
-  x.textContent = "×";
+  x.setAttribute("aria-label", "Close");
+  x.title = "Close (Esc)";
+  // ICONS はコードの定数だけで、データの文字列は入れない。
+  x.innerHTML = svg("close");
   x.addEventListener("click", () => select(null));
   pop.replaceChildren(x, ...parts);
   pop.hidden = false;
@@ -1173,10 +1161,10 @@ function renderPopup() {
 
 function relative(from) {
   const sec = Math.max(0, Math.round((Date.now() - from.getTime()) / 1000));
-  if (sec < 60) return `${sec} 秒前`;
+  if (sec < 60) return `${sec}s ago`;
   const min = Math.round(sec / 60);
-  if (min < 60) return `${min} 分前`;
-  return `${Math.round(min / 60)} 時間前`;
+  if (min < 60) return `${min}m ago`;
+  return `${Math.round(min / 60)}h ago`;
 }
 
 function renderFoot() {
@@ -1194,14 +1182,14 @@ function renderFoot() {
   const memoCount = d.repos.reduce((n, r) => n + r.memos.length, 0);
   const sessions = new Set(d.repos.flatMap((r) => r.sessions.map((s) => s.session_id))).size;
   const parts = [
-    d.daemon_running ? "daemon 動作中" : "daemon 止まっている",
-    state.readAt ? `${relative(state.readAt)}に読み直し` : "",
+    d.daemon_running ? "daemon running" : "daemon stopped",
+    state.readAt ? `read ${relative(state.readAt)}` : "",
     "·",
-    `止まっている ${count((n) => n.stuck)} · 作業中 ${count((n) => n.state === "working")} · 待ち ${count((n) => n.state === "done" || n.state === "unknown")} · 完了 ${count((n) => n.state === "completed")}${state.showCompleted ? "" : " (非表示)"}`,
+    `Stuck ${count((n) => n.stuck)} · Working ${count((n) => n.state === "working")} · Waiting ${count((n) => n.state === "done" || n.state === "unknown")} · Completed ${count((n) => n.state === "completed")}${state.showCompleted ? "" : " (hidden)"}`,
     "·",
-    `タスク ${count((n) => n.kind === "task")} · メモ ${memoCount} · セッション ${sessions}`,
+    `Tasks ${count((n) => n.kind === "task")} · Memos ${memoCount} · Sessions ${sessions}`,
   ];
-  if (state.error) parts.push("·", `読み直しに失敗: ${state.error}`);
+  if (state.error) parts.push("·", `Reload failed: ${state.error}`);
   dot.className = d.daemon_running ? "dot working" : "dot";
   text.className = state.error ? "err-text" : "";
   // 操作の結果はしばらく footer を占め、その後に件数へ戻る。
@@ -1215,7 +1203,8 @@ function renderBulk() {
   const ended = visibleNodes().filter((n) => bulkDismissable(n, state.graph, state.data));
   const dismissBtn = el("dismiss-ended");
   dismissBtn.hidden = ended.length === 0;
-  dismissBtn.textContent = `終了したセッションのタスクと作業 ${ended.length} 件を外す`;
+  dismissBtn.textContent = `Dismiss ended (${ended.length})`;
+  dismissBtn.title = "Remove the tasks and work of ended sessions from the list";
   dismissBtn.disabled = state.busy;
   dismissBtn.onclick = () => act(() => dismissAll(ended));
 
@@ -1223,7 +1212,8 @@ function renderBulk() {
   const stale = state.data.repos.flatMap((r) => r.memos).filter((m) => isStale(m, Date.now(), days)).length;
   const staleBtn = el("discard-stale");
   staleBtn.hidden = stale === 0;
-  staleBtn.textContent = `${days} 日より古いメモ ${stale} 件を捨てる`;
+  staleBtn.textContent = `Discard stale (${stale})`;
+  staleBtn.title = `Discard open memos older than ${days} days`;
   staleBtn.disabled = state.busy;
   staleBtn.onclick = () => act(() => discardStale(days));
 }
@@ -1232,7 +1222,7 @@ function renderBulk() {
 
 function render() {
   if (state.data === null) {
-    el("empty").textContent = state.error ? `依存図を読めない: ${state.error}` : "依存図を読んでいる…";
+    el("empty").textContent = state.error ? `Cannot read deps: ${state.error}` : "Reading deps…";
     renderFoot();
     return;
   }

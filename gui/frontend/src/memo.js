@@ -16,7 +16,7 @@ export function isStale(memo, now, days) {
 // kindLabel はメモの種類の語 (park tool の kind の語のまま)。終了したセッションから移したメモ (origin adopted) は
 // adopted を添える。
 export function kindLabel(memo) {
-  return memo.origin === "adopted" ? `${memo.kind}・adopted` : memo.kind;
+  return memo.origin === "adopted" ? `${memo.kind} · adopted` : memo.kind;
 }
 
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000;

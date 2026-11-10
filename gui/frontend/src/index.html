@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- 画面の語は英語だが、タスクの題とメモの本文は日本語で、漢字の字形は lang で決まるので ja のままにする -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
@@ -9,44 +10,40 @@
 <script type="module" src="./app.js"></script>
 </head>
 <body>
-<header class="bar">
-  <span class="ph">タスク</span>
-  <label class="sw" id="completed-toggle" hidden><input type="checkbox" id="completed-check"> <span id="completed-label"></span></label>
-  <span class="grow"></span>
-  <button class="tb upgrade" type="button" id="upgrade" hidden>↻ Update</button>
-</header>
 <div class="stage">
   <div class="main">
     <!-- #graph はスクロールし、描き直しで中身を作り直すので、操作はその外に置く -->
-    <span class="zoom" role="group" aria-label="拡大縮小">
-      <button class="tb sm" type="button" id="zoom-out" aria-label="縮小" title="縮小 (Cmd + ホイール、ピンチでも)">−</button>
-      <button class="tb sm" type="button" id="zoom-reset" title="100% に戻す">100%</button>
-      <button class="tb sm" type="button" id="zoom-in" aria-label="拡大" title="拡大">+</button>
-      <button class="tb sm" type="button" id="zoom-fit" aria-label="全体を表示" aria-pressed="true" title="全体を表示 (オンの間は図全体がウィンドウに収まる拡大率へ合わせ続ける。拡大縮小するとオフ)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/></svg></button>
+    <span class="zoom" role="group" aria-label="Zoom">
+      <button class="tb sm" type="button" id="zoom-out" aria-label="Zoom out" title="Zoom out (Cmd + wheel or pinch)">−</button>
+      <button class="tb sm" type="button" id="zoom-reset" title="Reset to 100%">100%</button>
+      <button class="tb sm" type="button" id="zoom-in" aria-label="Zoom in" title="Zoom in">+</button>
+      <button class="tb sm" type="button" id="zoom-fit" aria-label="Fit all" aria-pressed="true" title="Fit all (keeps the whole graph fitted to the window while on; zooming turns it off)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/></svg></button>
     </span>
     <main class="graph" id="graph">
-      <div class="empty" id="empty">依存図を読んでいる…</div>
+      <div class="empty" id="empty">Reading deps…</div>
     </main>
     <div class="lg" id="legend" hidden>
-      <span><i aria-hidden="true"></i>同じセッションの blockedBy</span>
-      <span><i class="d" aria-hidden="true"></i>セッションをまたぐ依存</span>
+      <span><span class="st" aria-hidden="true"></span>Task</span>
+      <span><span class="st icon pr-open" aria-hidden="true"></span>PR</span>
+      <span><i aria-hidden="true"></i>blockedBy in the same session</span>
+      <span><i class="d" aria-hidden="true"></i>Cross-session dependency</span>
       <span><i class="c" aria-hidden="true"></i>longest chain</span>
       <span class="grow"></span>
       <button class="tb sm" type="button" id="dismiss-ended" hidden></button>
+      <label class="sw" id="completed-toggle" hidden><input type="checkbox" id="completed-check"> <span id="completed-label">Show completed</span><span class="counter" id="completed-count"></span></label>
     </div>
     <section class="park" id="park" hidden>
       <div class="hd">
-        <span class="hd-title" id="park-title">メモ</span>
-        <select class="tb sm" id="repo-filter" aria-label="repo で絞る"><option value="">すべての repo</option></select>
+        <select class="tb sm" id="repo-filter" aria-label="Filter by repo"><option value="">All repos</option></select>
         <span class="grow"></span>
         <button class="tb sm" type="button" id="discard-stale" hidden></button>
       </div>
       <div class="ls" id="park-list"></div>
     </section>
   </div>
-  <aside class="column" id="column" aria-label="終わった作業" hidden></aside>
+  <aside class="column" id="column" aria-label="Ended work" hidden></aside>
 </div>
-<footer class="foot" id="foot"><span class="dot"></span><span id="foot-text">daemon の状態を読んでいる…</span></footer>
+<footer class="foot" id="foot"><span class="dot"></span><span id="foot-text">Reading daemon status…</span><span class="grow"></span><button class="tb xs upgrade" type="button" id="upgrade" hidden>↻ Update</button></footer>
 <div class="pop" id="pop" role="dialog" hidden></div>
 </body>
 </html>

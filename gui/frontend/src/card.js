@@ -2,19 +2,19 @@
 
 // 状態の語は OSC 7501 の state と Task 系ツールの status。external、waiting、dropped は issue / PR の参照のノードだけが持つ。
 export const STATE_LABEL = {
-  working: "作業中",
-  done: "返事待ち (idle)",
-  unknown: "不明",
-  question: "質問待ち",
-  permission: "permission 待ち",
-  error: "エラー",
-  limit: "上限待ち",
-  pending: "未着手",
-  completed: "完了",
-  exited: "セッション終了",
-  external: "外部 (未取得)",
-  waiting: "open (待ち)",
-  dropped: "取りやめ",
+  working: "Working",
+  done: "Awaiting reply",
+  unknown: "Unknown",
+  question: "Question",
+  permission: "Permission",
+  error: "Error",
+  limit: "Limit",
+  pending: "Pending",
+  completed: "Completed",
+  exited: "Exited",
+  external: "External",
+  waiting: "Open",
+  dropped: "Dropped",
 };
 
 // 丸と chip の色の鍵。無い状態は既定の灰。
@@ -38,17 +38,32 @@ const UNDECIDED = { card: [] }; // 事実だけで、次の手を示さない
 
 // open の PR の段の語と次の手。
 export const PR_STAGE = {
-  ci_failing: { label: "CI 失敗", ...FIX },
-  conflicting: { label: "衝突", ...FIX },
+  ci_failing: { label: "CI failing", ...FIX },
+  conflicting: { label: "Conflicts", ...FIX },
   draft: { label: "Draft", ...FINISH },
-  changes_requested: { label: "変更要求", ...FIX },
-  review_required: { label: "approve 待ち", ...AWAIT_REVIEW },
-  ci_running: { label: "CI 実行中", ...AWAIT_CI },
-  behind: { label: "base より古い", ...FIX },
-  mergeable: { label: "マージ可", ...MERGE },
-  ci_passing: { label: "CI 通過", ...UNDECIDED },
-  approved: { label: "approved", ...UNDECIDED },
+  changes_requested: { label: "Changes requested", ...FIX },
+  review_required: { label: "Review required", ...AWAIT_REVIEW },
+  ci_running: { label: "CI running", ...AWAIT_CI },
+  behind: { label: "Behind base", ...FIX },
+  mergeable: { label: "Mergeable", ...MERGE },
+  ci_passing: { label: "CI passing", ...UNDECIDED },
+  approved: { label: "Approved", ...UNDECIDED },
 };
+
+// markIcon は丸の代わりに描く印の形 (style.css の .st.icon)。PR は open / draft / closed を形で分け、issue は 1 つ。
+// 色は次の手のまま (toneOf) で、PR の状態は形だけが持つ。ほかのノードは丸で描くので undefined。
+export function markIcon(n) {
+  if (n.ref_kind === "issue") return "issue";
+  if (n.ref_kind !== "pr") return undefined;
+  if (n.state === "dropped") return "pr-closed";
+  return n.pr_stages?.[0] === "draft" ? "pr-draft" : "pr-open";
+}
+
+// markClass は状態の印 (.st) の class。色の鍵、形の順に並べる。
+export function markClass(n) {
+  const icon = markIcon(n);
+  return ["st", toneOf(n), ...(icon ? ["icon", icon] : [])].filter(Boolean).join(" ");
+}
 
 // leadStage は箱に出す段。段の無いノードと知らない語は undefined で、状態の語と色のまま描く。
 export function leadStage(n) {

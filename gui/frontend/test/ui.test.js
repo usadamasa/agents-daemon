@@ -141,8 +141,9 @@ test("完了を隠した既定の図: マージせずに閉じた PR は完了�
   assert.ok(["attn", "drop", "halt"].every((c) => card.classList.contains(c)), card.className);
   // 題は daemon が引いた PR の題で、番号と repo は副題に残す (#472)。
   assert.equal(card.querySelector("b").textContent, "依存図の色を状態ごとに分ける");
-  assert.equal(card.querySelector("small").textContent, "取りやめ · PR #254 · usadamasa/agents-daemon");
-  assert.equal(card.querySelector(".st").getAttribute("class"), "st drop");
+  assert.equal(card.querySelector("small").textContent, "Dropped · PR #254 · usadamasa/agents-daemon");
+  // PR は丸の代わりに Octicons の形で描き、閉じた PR は closed の形にする。
+  assert.equal(card.querySelector(".st").getAttribute("class"), "st drop icon pr-closed");
 });
 
 test("完了を隠した既定の図: 見える辺と隠した完了を通り抜けた辺を描き、longest chain の辺に印を付ける", () => {
@@ -151,7 +152,7 @@ test("完了を隠した既定の図: 見える辺と隠した完了を通り抜
   assert.equal(count(`${EDGE}.folded`), 1);
   assert.equal(count(`${EDGE}.edge`), 2);
   const hints = [...document.querySelectorAll("svg.edges g.hint title")].map((t) => t.textContent);
-  assert.deepEqual(hints.sort(), ["API の形が決まるのを待つ", "PR #254 のマージを待つ", "テストを直す を経由"]);
+  assert.deepEqual(hints.sort(), ["API の形が決まるのを待つ", "PR #254 のマージを待つ", "via テストを直す"]);
 });
 
 // groups は図の領域のセッションの枠を、見出しとカードの key で返す。
@@ -181,17 +182,28 @@ test("完了を隠した既定の図: 辺でつながるノードを段の浅い
   assert.ok(top("task:beta/2") < top("task:beta/3"));
   assert.equal(q("#column").hidden, false);
   assert.deepEqual([...cards("#column").keys()], ["sid:gamma"]);
-  assert.equal(q("#column h2").textContent, "終わった作業 · 1");
+  assert.equal(q("#column h2 .ph").textContent, "Ended");
+  assert.equal(q("#column h2 .counter").textContent, "1");
   assert.deepEqual(groups(), [{ label: "zeta", keys: ["sid:zeta"] }]);
   // 枠は線のあるかたまりの下に置く。
   const lowest = Math.max(...[...graph.values()].filter((c) => !Number.isNaN(c.top)).map((c) => c.top));
   assert.ok(parseFloat(q("#graph .group").style.top) >= lowest + 72);
 });
 
+// 枠の高さは見出しを 1 行として数える (column.js の groupHeight)。折り返すと枠からカードがはみ出す。
+test("セッションの枠の見出しは 1 行に収め、切れた分は tooltip で読める", () => {
+  const head = q("#graph .group h2");
+  assert.equal(head.title, head.textContent);
+  const rule = css.match(/^\.group h2 \{([^}]*)\}/m)[1];
+  assert.match(rule, /white-space: nowrap/);
+  assert.match(rule, /text-overflow: ellipsis/);
+  assert.match(rule, /overflow: hidden/);
+});
+
 test("完了を隠した既定の図: 枠の中のカードはセッション名を繰り返さず、題がセッション名なら今の作業を題にする", () => {
   const card = q('#graph .group .node[data-key="sid:zeta"]');
   assert.equal(card.querySelector("b").textContent, "issue を読んでいる");
-  assert.equal(card.querySelector("small").textContent, "作業中");
+  assert.equal(card.querySelector("small").textContent, "Working");
 });
 
 test("完了を隠した既定の図: タスクのカードは description の 1 行を tooltip に出し、カードの高さの要る副題には足さない", () => {
@@ -262,22 +274,22 @@ test("open の PR の箱: 先頭の段を副題に出し、段ごとにタスク
     const card = (n) => q(`.node[data-key="pr:o/r#${n}"]`);
     const sub = (n) => card(n).querySelector("small").textContent;
     const dot = (n) => card(n).querySelector(".st").getAttribute("class");
-    assert.equal(sub(1), "CI 失敗 · PR #1 · o/r");
-    assert.equal(dot(1), "st err");
+    assert.equal(sub(1), "CI failing · PR #1 · o/r");
+    assert.equal(dot(1), "st err icon pr-open");
     assert.ok(["attn", "err"].every((c) => card(1).classList.contains(c)), card(1).className);
-    assert.equal(sub(2), "衝突 · PR #2 · o/r");
-    assert.equal(dot(2), "st err");
+    assert.equal(sub(2), "Conflicts · PR #2 · o/r");
+    assert.equal(dot(2), "st err icon pr-open");
     assert.ok(["attn", "err"].every((c) => card(2).classList.contains(c)), card(2).className);
     assert.equal(sub(3), "Draft · PR #3 · o/r");
-    assert.equal(dot(3), "st");
+    assert.equal(dot(3), "st icon pr-draft");
     assert.ok(card(3).classList.contains("draft"), card(3).className);
     assert.equal(card(3).classList.contains("drop"), false);
-    assert.equal(sub(4), "CI 実行中 · PR #4 · o/r");
-    assert.equal(dot(4), "st working");
+    assert.equal(sub(4), "CI running · PR #4 · o/r");
+    assert.equal(dot(4), "st working icon pr-open");
     assert.ok(["working", "bounce"].every((c) => card(4).classList.contains(c)), card(4).className);
     assert.equal(card(4).classList.contains("attn"), false);
-    assert.equal(sub(5), "マージ可 · PR #5 · o/r");
-    assert.equal(dot(5), "st merge");
+    assert.equal(sub(5), "Mergeable · PR #5 · o/r");
+    assert.equal(dot(5), "st merge icon pr-open");
     assert.ok(["attn", "merge"].every((c) => card(5).classList.contains(c)), card(5).className);
     assert.equal(card(5).classList.contains("working"), false);
     assert.equal(card(5).classList.contains("bounce"), false);
@@ -302,16 +314,23 @@ test("CI 実行中の丸だけが跳ね、動きを減らす設定では止ま�
   // 取りやめは灰の破線で、マージ可の青と被らない。
   assert.match(css, /^\.node\.attn\.drop \{ --tone: var\(--closed\); background: var\(--panel\); outline-style: dashed; \}/m);
   assert.doesNotMatch(css, /--slate/);
-  assert.match(css, /^\.node\.draft \{[^}]*repeating-linear-gradient/m);
+  // Draft は灰の塗りと draft の形の印で描く (斜線の塗りは使わない)。
+  assert.match(css, /^\.node\.draft \{[^}]*background: var\(--gray-soft\)/m);
+  assert.doesNotMatch(css, /repeating-linear-gradient/);
+  // PR と issue の印は丸の色をそのまま使い、形だけを mask で抜く。
+  assert.match(css, /^\.st\.icon \{[^}]*-webkit-mask/m);
+  for (const icon of ["pr-open", "pr-draft", "pr-closed", "issue"]) {
+    assert.match(css, new RegExp(`^\\.st\\.icon\\.${icon} \\{ -webkit-mask-image: url\\(`, "m"), icon);
+  }
 });
 
 test("段の欄が無い古い写しの PR: open (待ち) のままで、マージ可のような断定を出さない", async () => {
   await loadDeps(JSON.stringify(withPullRequests()));
   try {
     const card = q('.node[data-key="pr:o/r#6"]');
-    assert.equal(card.querySelector("small").textContent, "open (待ち) · PR #6 · o/r");
+    assert.equal(card.querySelector("small").textContent, "Open · PR #6 · o/r");
     card.click();
-    assert.deepEqual([...q("#pop").querySelectorAll(".chips .chip")].map((c) => c.textContent), ["open (待ち) · PR #6 · o/r"]);
+    assert.deepEqual([...q("#pop").querySelectorAll(".chips .chip")].map((c) => c.textContent), ["Open · PR #6 · o/r"]);
     escape();
   } finally {
     await loadDeps(fixtureDeps);
@@ -323,7 +342,7 @@ test("open の PR の単体ビュー: 先頭の段の後ろに残りの段を優
   try {
     q('.node[data-key="pr:o/r#1"]').click();
     const chips = [...q("#pop").querySelectorAll(".chips .chip")];
-    assert.deepEqual(chips.map((c) => c.textContent), ["CI 失敗 · PR #1 · o/r", "Draft", "approve 待ち"]);
+    assert.deepEqual(chips.map((c) => c.textContent), ["CI failing · PR #1 · o/r", "Draft", "Review required"]);
     assert.deepEqual(chips.map((c) => c.className), ["chip err", "chip", "chip warn"]);
     await snapshot("graph-popup-pr-stages");
     escape();
@@ -352,8 +371,8 @@ test("線が 1 本も無い図: 動いているカードをセッションの枠
   try {
     assert.equal(count(EDGE), 0);
     assert.equal(count("#graph .empty"), 0);
-    assert.deepEqual(groups().map((g) => g.label).sort(), ["alpha", "beta", "zeta", "参照"]);
-    assert.deepEqual(groups().find((g) => g.label === "参照").keys, ["pr:usadamasa/agents-daemon#254"]);
+    assert.deepEqual(groups().map((g) => g.label).sort(), ["Refs", "alpha", "beta", "zeta"]);
+    assert.deepEqual(groups().find((g) => g.label === "Refs").keys, ["pr:usadamasa/agents-daemon#254"]);
     assert.deepEqual([...cards("#column").keys()], ["sid:gamma"]);
     assert.equal(q("#legend").hidden, false);
     const v = view();
@@ -392,7 +411,7 @@ test("動いているカードが無い図: 図の領域にその旨を出し、
   data.graph.folded.links = [];
   await loadDeps(JSON.stringify(data));
   try {
-    assert.equal(q("#graph .empty").textContent, "動いている作業は無い");
+    assert.equal(q("#graph .empty").textContent, "No active work");
     assert.deepEqual([...cards("#column").keys()], ["sid:gamma"]);
   } finally {
     await loadDeps(fixtureDeps);
@@ -406,11 +425,14 @@ test("完了を隠した既定の図: 止まったノードに下流の数を、
 
 test("完了を隠した既定の図: メモの一覧と凡例と footer を出す", async () => {
   assert.equal(count("#park-list .mrow"), 2);
-  assert.equal(q("#park-title").textContent, "メモ · 2");
+  // メモの一覧は見出しを持たず、件数は repo の絞り込みの選択肢に出る。
+  assert.equal(count("#park-title"), 0);
+  assert.deepEqual([...q("#repo-filter").options].map((o) => o.textContent), ["All repos", "agents-daemon (2)", "other (0)"]);
   assert.equal(q("#legend").hidden, false);
-  assert.equal(q("#completed-label").textContent, "完了したタスクも表示 (2 件)");
+  assert.equal(q("#completed-label").textContent, "Show completed");
+  assert.equal(q("#completed-count").textContent, "2");
   assert.equal(q("#discard-stale").hidden, true);
-  assert.match(q("#foot-text").textContent, /daemon 動作中 .*止まっている 2 · 作業中 2 · 待ち 0 · 完了 2 \(非表示\)/);
+  assert.match(q("#foot-text").textContent, /daemon running .*Stuck 2 · Working 2 · Waiting 0 · Completed 2 \(hidden\)/);
   // 右の列は header と footer の間の全高を取り、凡例とメモの一覧は依存図の列の幅だけを取る。
   // 要素どうしを assert.equal で比べると、食い違ったときに happy-dom の要素の inspect が終わらないので真偽で比べる。
   const stage = q(".stage");
@@ -423,14 +445,16 @@ test("完了を隠した既定の図: メモの一覧と凡例と footer を出�
   await snapshot("graph");
 });
 
-test("header: 見せ方は依存図だけなので、見せ方の切り替えのボタンを出さない", () => {
-  const labels = [...document.querySelectorAll("header.bar button")].map((b) => b.textContent);
-  assert.ok(!labels.includes("依存図") && !labels.includes("一覧"), labels.join(" / "));
-  assert.equal(count('header.bar [aria-label="見せ方"]'), 0);
+test("header の帯は無い: 完了のトグルは依存図の領域の凡例の行に、Update は footer に置く", () => {
+  assert.equal(count("header"), 0);
+  assert.ok(q("#completed-toggle").parentElement === q("#legend"), "トグルは凡例の行");
+  assert.ok(q("#upgrade").parentElement === q("#foot"), "Update は footer");
+  // 凡例は丸がタスク、枝の形が PR と示す。
+  assert.equal(count("#legend .st.icon.pr-open"), 1);
 });
 
 test("拡大縮小の操作: header ではなく図の領域の外枠に置き、図のスクロールと描き直しの外に出す", () => {
-  const zoom = q('.zoom[aria-label="拡大縮小"]');
+  const zoom = q('.zoom[aria-label="Zoom"]');
   // 要素を assert に渡すと、失敗の文面を作るときに DOM 全体を整形して止まる。
   assert.ok(zoom.closest("header.bar") === null, "header の外");
   // #graph はスクロールする領域で、描き直しのたびに中身を作り直すので、その中には置かない。
@@ -473,8 +497,8 @@ test("拡大縮小の操作: 「全体を表示」は文字を出さないアイ
   const fit = q("#zoom-fit");
   assert.equal(fit.textContent.trim(), "");
   assert.equal(count("#zoom-fit svg"), 1);
-  assert.equal(fit.getAttribute("aria-label"), "全体を表示");
-  assert.match(fit.getAttribute("title"), /^全体を表示/);
+  assert.equal(fit.getAttribute("aria-label"), "Fit all");
+  assert.match(fit.getAttribute("title"), /^Fit all/);
   assert.match(css, /\.zoom #zoom-fit \{[^}]*width: 28px/);
 });
 
@@ -490,14 +514,20 @@ test("拡大縮小の操作: 図を描き直しても残り、押すと拡大率
   }
 });
 
+// heads は単体ビューの関係の見出しを「語 · 件数」で返す。件数は見出しの横の印 (.counter) に出る。
+const heads = (pop) => [...pop.querySelectorAll(".grp > .gh")].map((h) => `${h.querySelector(".ph").textContent} · ${h.querySelector(".counter").textContent}`);
+
 test("ノードを選ぶと単体ビューを開き、待っている先と待たれている先を並べる", async () => {
   q('.node[data-key="task:beta/1"]').click();
   const pop = q("#pop");
   assert.equal(pop.hidden, false);
   assert.equal(pop.querySelector(".title").textContent, "画面を描く");
-  const groups = [...pop.querySelectorAll(".grp > .ph")].map((p) => p.textContent);
-  assert.ok(groups.includes("このタスクを待っている · 2"), groups.join(" / "));
-  assert.ok(groups.includes("このタスクが待っている · 2"), groups.join(" / "));
+  const groups = heads(pop);
+  assert.ok(groups.includes("Blocks · 2"), groups.join(" / "));
+  assert.ok(groups.includes("Blocked by · 2"), groups.join(" / "));
+  // 閉じるのは文字の × ではなくアイコンのボタン。
+  assert.equal(pop.querySelector(".x").getAttribute("aria-label"), "Close");
+  assert.equal(pop.querySelectorAll(".x svg").length, 1);
   // 題が切れても見分けられるよう、関係の行の題は全文を tooltip に持つ。
   const rows = [...pop.querySelectorAll(".grp .lk > button:first-of-type")];
   assert.ok(rows.length > 0);
@@ -563,11 +593,10 @@ test("PR のノードの単体ビュー: 見出しは PR の題で、番号と r
   q('.node[data-key="pr:usadamasa/agents-daemon#254"]').click();
   const pop = q("#pop");
   assert.equal(pop.querySelector(".title").textContent, "依存図の色を状態ごとに分ける");
-  assert.equal(pop.querySelector(".chips .chip").textContent, "取りやめ · PR #254 · usadamasa/agents-daemon");
-  // 関係の見出しの主語は開いたノードの種類に合わせる。
-  const groups = [...pop.querySelectorAll(".grp > .ph")].map((p) => p.textContent);
-  assert.ok(groups.some((t) => t.startsWith("この PR を待っている · ")), groups.join(" / "));
-  assert.ok(groups.some((t) => t.startsWith("この PR が待っている · ")), groups.join(" / "));
+  assert.equal(pop.querySelector(".chips .chip").textContent, "Dropped · PR #254 · usadamasa/agents-daemon");
+  const groups = heads(pop);
+  assert.ok(groups.some((t) => t.startsWith("Blocks · ")), groups.join(" / "));
+  assert.ok(groups.some((t) => t.startsWith("Blocked by · ")), groups.join(" / "));
   await snapshot("graph-popup-ref");
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
 });
@@ -604,22 +633,25 @@ test("右の列の中の幅はカードの幅以上で、横にはみ出して�
   assert.ok(inner >= px("\\.node", "width"), `右の列の中の幅 ${inner}`);
 });
 
-test("単体ビューの状態の丸は、状態の色の鍵を class に持つ", () => {
-  const chipDot = (key) => {
+test("単体ビューの状態のラベルは丸を持たず、状態の色の鍵を class に持つ", () => {
+  const label = (key) => {
     q(`.node[data-key="${key}"]`).click();
-    const cls = q("#pop .chips .chip .dot").getAttribute("class");
+    const chip = q("#pop .chips .chip");
+    const got = { cls: chip.getAttribute("class"), dots: chip.querySelectorAll(".dot").length };
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
-    return cls;
+    return got;
   };
-  assert.equal(chipDot("task:alpha/2"), "dot working");
-  assert.equal(chipDot("sid:gamma"), "dot exited");
-  assert.equal(chipDot("task:beta/2"), "dot");
+  assert.deepEqual(label("task:alpha/2"), { cls: "chip ok", dots: 0 });
+  assert.deepEqual(label("sid:gamma"), { cls: "chip", dots: 0 });
+  assert.deepEqual(label("task:beta/2"), { cls: "chip", dots: 0 });
+  // ラベルは枠だけで塗らない。
+  assert.match(css, /^\.chip \{[^}]*background: transparent/m);
 });
 
-test("緑の丸は状態の丸と同じ working の鍵で描く: daemon が動いている footer と open のメモ", () => {
+test("緑は working の鍵で描く: daemon が動いている footer の丸と open のメモのラベル", () => {
   assert.equal(q("#foot .dot").getAttribute("class"), "dot working");
   q(".mrow").click();
-  assert.equal(q("#pop .chips .chip .dot").getAttribute("class"), "dot working");
+  assert.equal(q("#pop .chips .chip").getAttribute("class"), "chip ok");
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
 });
 
@@ -629,18 +661,19 @@ test("作業のノード: 題そのものを押すとその場で直せ、自動
   q('.node[data-key="sid:zeta"]').click();
   const pop = q("#pop");
   // 自動で付けた題の chip は出どころの説明で、状態の色 (ok / warn / limit / err) を使わない。
-  assert.equal(pop.querySelector(".chips .chip.guess").textContent, "会話から自動で付けた題");
+  assert.equal(pop.querySelector(".chips .chip.guess").textContent, "Auto-titled");
   assert.equal(pop.querySelectorAll(".chips .chip.warn").length, 0);
   // 動詞のバーに「題を直す」は無く、題 (対象) そのものが入口。
   let verbs = [...pop.querySelectorAll(".acts .act")].map((b) => b.textContent);
-  assert.ok(!verbs.includes("題を直す") && !verbs.includes("一覧から外す"), verbs.join(" / "));
-  const heads = [...pop.querySelectorAll(".grp > .ph")].map((p) => p.textContent);
-  assert.ok(heads.some((t) => t.startsWith("このセッションを待っている · ")), heads.join(" / "));
+  assert.ok(!verbs.includes("Rename") && !verbs.includes("Remove"), verbs.join(" / "));
+  assert.ok(heads(pop).some((t) => t.startsWith("Blocks · ")), heads(pop).join(" / "));
   const title = pop.querySelector(".title");
   assert.equal(title.getAttribute("role"), "button");
   title.click();
   const input = pop.querySelector('.title input[type="text"]');
   assert.equal(input.value, "zeta");
+  // 直すのは Enter、戻すのは Escape。横長の「直す」「やめる」は置かず、枠の中の印だけを出す。
+  assert.deepEqual([...pop.querySelectorAll(".title button")].map((b) => b.textContent), ["↵"]);
   await snapshot("graph-popup-work");
   input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   assert.equal(pop.querySelector(".title").textContent, "zeta");
@@ -648,7 +681,7 @@ test("作業のノード: 題そのものを押すとその場で直せ、自動
 
   q('.node[data-key="sid:gamma"]').click();
   verbs = [...pop.querySelectorAll(".acts .act")].map((b) => b.textContent);
-  assert.ok(verbs.includes("一覧から外す") && verbs.includes("メモにする"), verbs.join(" / "));
+  assert.ok(verbs.includes("Remove") && verbs.includes("Memo"), verbs.join(" / "));
   assert.equal(pop.querySelector(".title").getAttribute("role"), "button");
   // prompt から付けた題には chip を出さない。
   assert.equal(pop.querySelector(".chips .chip.guess"), null);
@@ -656,7 +689,7 @@ test("作業のノード: 題そのものを押すとその場で直せ、自動
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
   q('.node[data-key="task:beta/1"]').click();
   assert.equal(pop.querySelector(".title").getAttribute("role"), null);
-  assert.equal(q("#dismiss-ended").textContent, "終了したセッションのタスクと作業 1 件を外す");
+  assert.equal(q("#dismiss-ended").textContent, "Dismiss ended (1)");
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
 });
 
@@ -672,10 +705,10 @@ test("辺の端点だけの置き場のカード: 単体で外せてメモには
   data.graph.links.push({ before: "sid:ghost-waited", after: "task:beta/1", kind: "edge" }, { before: "sid:ghost-idle", after: "sid:gamma", kind: "edge" });
   await loadDeps(JSON.stringify(data));
   try {
-    assert.equal(q("#dismiss-ended").textContent, "終了したセッションのタスクと作業 2 件を外す");
+    assert.equal(q("#dismiss-ended").textContent, "Dismiss ended (2)");
     q('.node[data-key="sid:ghost-waited"]').click();
     const verbs = [...q("#pop").querySelectorAll(".acts .act")].map((b) => b.textContent);
-    assert.ok(verbs.includes("一覧から外す") && !verbs.includes("メモにする"), verbs.join(" / "));
+    assert.ok(verbs.includes("Remove") && !verbs.includes("Memo"), verbs.join(" / "));
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
   } finally {
     await loadDeps(fixtureDeps);
@@ -828,4 +861,143 @@ test("利用者が拡大縮小すると全体表示をオフにし、描き直�
     q("#zoom-fit").click();
   }
   assert.equal(view().fit, "true");
+});
+
+// ---- 単体ビューの中の操作 ----
+
+// verb は開いている単体ビューの動詞のボタンを語で引く。
+const verb = (label) => [...q("#pop").querySelectorAll(".acts .act")].find((b) => b.textContent === label);
+const buttonTexts = () => [...q("#pop").querySelectorAll("button")].map((b) => b.textContent);
+
+test("タスクの動詞: アイコンの下に短い語を置き、横長のボタンにしない", () => {
+  q('.node[data-key="task:beta/1"]').click();
+  try {
+    const acts = [...q("#pop").querySelectorAll(".acts .act")];
+    assert.deepEqual(acts.map((b) => b.textContent), ["Tell", "Link", "Hand", "Start", "Done", "Memo", "Delete"]);
+    for (const b of acts) assert.equal(b.querySelectorAll('svg[viewBox="0 0 16 16"]').length, 1, b.textContent);
+    assert.match(css, /^\.act \{[^}]*flex-direction: column/m);
+  } finally {
+    escape();
+  }
+});
+
+test("指示の欄: 見出しも横長の送るボタンも置かず、枠の中の ⌘↵ で送る", async () => {
+  q('.node[data-key="task:beta/1"]').click();
+  try {
+    verb("Tell").click();
+    const box = q("#pop .composer");
+    assert.equal(box.querySelector("textarea").placeholder, "Instruction");
+    const send = box.querySelector("button.send");
+    assert.equal(send.textContent, "⌘↵");
+    assert.equal(send.getAttribute("aria-label"), "Send");
+    assert.equal(send.disabled, true);
+    // 閉じるのは押している動詞をもう一度押す。「やめる」のボタンは置かない。
+    assert.equal(buttonTexts().includes("Cancel"), false);
+    assert.equal(verb("Tell").getAttribute("aria-pressed"), "true");
+    await snapshot("graph-popup-tell");
+    verb("Tell").click();
+    assert.equal(count("#pop .composer"), 0);
+  } finally {
+    escape();
+  }
+});
+
+test("渡す: 補足の欄の下に、生きているセッションと新しく起こす repo を行の一覧で出す", async () => {
+  q('.node[data-key="task:beta/1"]').click();
+  try {
+    verb("Hand").click();
+    const pop = q("#pop");
+    assert.equal(pop.querySelector(".composer textarea").placeholder, "Note (optional)");
+    // 行を押すと渡るので、補足の欄は送る印を持たない。
+    assert.equal(count("#pop .composer button.send"), 0);
+    assert.deepEqual([...pop.querySelectorAll(".picker .ph")].map((p) => p.textContent), ["Sessions", "New session"]);
+    const rows = [...pop.querySelectorAll(".picker .row")];
+    assert.deepEqual(rows.filter((r) => r.querySelector(".s") && !/ago$/.test(r.querySelector(".s").textContent)).map((r) => r.querySelector(".t").textContent), ["alpha", "zeta"]);
+    // repo の行は名前と、最後に見た時刻からの経過を分けて持つ。
+    const repo = rows.find((r) => r.querySelector(".t")?.textContent === "agents-daemon");
+    assert.equal(repo.querySelector(".s").textContent, "<1h ago");
+    assert.equal(rows.at(-1).textContent, "Choose folder…");
+    assert.equal(buttonTexts().includes("Cancel"), false);
+    await snapshot("graph-popup-hand");
+  } finally {
+    escape();
+  }
+});
+
+test("依存を足す: 先に済ませる候補を行の一覧で出す", async () => {
+  q('.node[data-key="task:beta/1"]').click();
+  try {
+    verb("Link").click();
+    const pop = q("#pop");
+    assert.deepEqual([...pop.querySelectorAll(".picker .ph")].map((p) => p.textContent), ["Add blocker"]);
+    const rows = [...pop.querySelectorAll(".picker .row")];
+    assert.ok(rows.length > 0);
+    for (const r of rows) assert.equal(r.querySelectorAll(".st").length, 1);
+    await snapshot("graph-popup-link");
+  } finally {
+    escape();
+  }
+});
+
+test("着手: 補足の欄の枠の中の ⌘↵ で頼み、横長の頼むボタンを置かない", async () => {
+  q('.node[data-key="task:beta/1"]').click();
+  try {
+    verb("Start").click();
+    const send = q("#pop .composer button.send");
+    assert.equal(send.textContent, "⌘↵");
+    assert.equal(send.getAttribute("aria-label"), "Ask to start");
+    // 補足は空でも頼める。
+    assert.equal(send.disabled, false);
+    await snapshot("graph-popup-start");
+  } finally {
+    escape();
+  }
+});
+
+test("関係の行: 依存を外す操作は行の右端のアイコンだけのボタンにする", () => {
+  q('.node[data-key="pr:usadamasa/agents-daemon#254"]').click();
+  try {
+    const b = q("#pop .lk button.icon");
+    assert.equal(b.textContent, "");
+    assert.equal(b.getAttribute("aria-label"), "Unlink");
+    assert.equal(b.querySelectorAll("svg").length, 1);
+    const marks = [...q("#pop").querySelectorAll(".lk > .ph")].map((p) => p.textContent);
+    assert.ok(marks.every((m) => m === "Direct" || m === "Indirect"), marks.join(" / "));
+  } finally {
+    escape();
+  }
+});
+
+test("メモの単体ビュー: 見出しは repo と種類だけで、置いた出どころは表の From の行に 1 行で出す", async () => {
+  q('.mrow[data-memo="memo-1"]').click();
+  try {
+    const pop = q("#pop");
+    assert.equal(pop.querySelector(".head .ph").textContent, "agents-daemon · aside");
+    assert.deepEqual([...pop.querySelectorAll(".acts .act")].map((b) => b.textContent), ["Task", "Issue", "Discard"]);
+    assert.deepEqual([...pop.querySelectorAll(".kv dt")].map((d) => d.textContent), ["Default", "Files", "From"]);
+    const from = [...pop.querySelectorAll(".kv dd")].at(-1);
+    assert.equal(from.textContent, "alpha · API を実装する · 11/07 10:30");
+    // 置いたときのタスクは、押すとそのタスクを選ぶリンクにする。
+    from.querySelector("a.ref").click();
+    assert.equal(q("#pop .title").textContent, "API を実装する");
+    q('.mrow[data-memo="memo-1"]').click();
+    await snapshot("graph-popup-memo");
+  } finally {
+    escape();
+  }
+});
+
+test("メモの一覧: 種類は枠だけのラベルで、選んだ行は左の線を持たない", () => {
+  assert.match(css, /^\.mrow \.k \{[^}]*border: 1px solid/m);
+  assert.doesNotMatch(css, /^\.mrow\.sel \{[^}]*box-shadow/m);
+});
+
+test("色は Primer のライトの値を使い、ダークの切り替えを持たない", () => {
+  assert.match(css, /--ink: #1f2328;/);
+  assert.match(css, /--green: #1f883d;/);
+  assert.match(css, /--blue: #0969da;/);
+  assert.doesNotMatch(css, /prefers-color-scheme/);
+  // :root の外に色を直書きしない (白と透明は除く)。
+  const body = css.slice(css.indexOf("}", css.indexOf(":root")) + 1).replace(/url\([^)]*\)/g, "");
+  assert.deepEqual(body.match(/#[0-9a-f]{6}\b/gi) ?? [], []);
 });

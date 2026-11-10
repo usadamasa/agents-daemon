@@ -133,6 +133,7 @@ rex block call -b work process
 | `connect: operation not permitted` | sandbox が socket を塞いでいる。ハーネス側の設定の問題で CLI の問題ではない。`agents-daemon:setup` skill の「多重化ツールの到達性」 |
 | `block target "<label>" not found` | 別の session の block なら `-s <session>` を付ける。それ以外はコマンドが終わってブロックが閉じたので、`--keep-open` を付けて作り直す |
 | `window target "<id>" not found` | 別の session の window なら `-s <session>` を付ける。それ以外は ID の桁の間違いで、`rex window ls` の ID 列をそのまま使う |
+| `rex -S <node>` が `x509: certificate is valid for <node>.<tailnet>.ts.net, not <node>` で落ちる | tsnet のノードの証明書は FQDN にしか発行されていない。`rex -S <node>.<tailnet>.ts.net` と FQDN で渡す。同時に出るポート 7297 への `connection refused` は fallback の probe で無害 |
 | `send` したのに動かない | `send-key -b <target> enter` を送っていない |
 | `wait` が Usage を出して終わる | 子が非 0 で終わっただけ。exit code と `--json` の 1 行目が結果 |
 | `split` `run` `new` が上限を理由に拒否される | server の資源上限 (既定: session 64、block 合計 1024、window 64 / session、pane 64 / window) に当たっている。`--keep-open` で作った block の閉じ忘れが溜まりやすいので `rex block ls` で数えて閉じる。上限は `rex server start --max-*` で変えられるが server の再起動が要る |

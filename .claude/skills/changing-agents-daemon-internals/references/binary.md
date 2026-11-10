@@ -27,7 +27,15 @@ plugin には install 時の lifecycle hook が無いので、バイナリも Se
   「plugin の更新後に daemon を入れ替える」。
 - 開発中は `task install` で同じパスへ建てられる。中身は `hooks/build-daemon.sh` そのもので、
   stamp には clone の plugin.json の version が書かれる。install 済み plugin と version が同じなら
-  次の SessionStart でも建て直されず、clone の版が動き続ける。plugin 側の版へ戻すときは stamp を消す。
+  次の SessionStart でも建て直されず、clone の版が動き続ける。
+- worktree を `claude --plugin-dir <worktree>` で読み込んだセッションも同じパスを使う。stamp が無いか、
+  worktree の plugin.json の version より古いと、SessionStart が worktree のコードで建て直す。
+  バイナリは全セッションの mod と daemon が共有するので、CLI の受け方を変えた worktree のバイナリが
+  install 済みの mod とかみ合わなくなる。state も共有なので、検証で置いたメモや辺は実際の依存図に入る。
+- 検証の後は、検証で置いたメモと辺を捨て、`agents-daemon update` で install 済みのバージョンへ建て直す。
+  update は installPath の `hooks/build-daemon.sh` を version を比べずに叩く。
+  sandbox が `~/.cache/agents-daemon` への書き込みを止めるので、利用者が
+  `! ~/.cache/agents-daemon/bin/agents-daemon update` と打つ。
 
 ## 動いている daemon の入れ替え
 

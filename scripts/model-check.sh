@@ -21,7 +21,8 @@ run() {
   local dir=$1 module=$2 cfg=$3 expect=$4 rc=0
   local log="$tmp/$cfg.log"
   printf '==> %s/%s (%s)\n' "$dir" "$cfg" "$expect"
-  tlc -metadir "$tmp/states" -config "$dir/$cfg" "$dir/$module.tla" >"$log" 2>&1 || rc=$?
+  # TLC は metadir の下に秒単位の時刻の名前でディレクトリを作るので、cfg ごとに分けて同じ秒の衝突を避ける。
+  tlc -metadir "$tmp/states/$cfg" -config "$dir/$cfg" "$dir/$module.tla" >"$log" 2>&1 || rc=$?
   case "$expect:$rc" in
     holds:0)
       printf '    反例なし (%s)\n' "$(awk '/^[0-9]+ states generated/ {print $1, "states,", $4, "distinct"}' "$log")"

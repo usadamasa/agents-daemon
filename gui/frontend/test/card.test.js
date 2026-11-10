@@ -62,7 +62,7 @@ test("手当ての要る状態は attn と状態の色で強調し、working は
 });
 
 test("取りやめの参照 (マージせずに閉じた PR、not planned の issue) は、完了ではなく手当ての要る状態として強調する", () => {
-  assert.equal(STATE_LABEL.dropped, "取りやめ");
+  assert.equal(STATE_LABEL.dropped, "Dropped");
   assert.deepEqual(emphasis({ state: "dropped" }), ["attn", "drop"]);
   // 質問待ち・permission 待ち (warn) とは別の色にする。
   assert.equal(STATE_TONE.dropped, "drop");
@@ -70,7 +70,7 @@ test("取りやめの参照 (マージせずに閉じた PR、not planned の is
 });
 
 test("open と引けた参照は、まだ引いていない参照と別の語で出す", () => {
-  assert.equal(STATE_LABEL.waiting, "open (待ち)");
+  assert.equal(STATE_LABEL.waiting, "Open");
   assert.notEqual(STATE_LABEL.waiting, STATE_LABEL.external);
 });
 
@@ -116,7 +116,7 @@ test("PR の段: 丸の色は先頭の段で決め、段の無いノードと知
 });
 
 test("PR の段: 箱に出す語", () => {
-  assert.equal(leadStage({ pr_stages: ["ci_failing", "draft"] }).label, "CI 失敗");
+  assert.equal(leadStage({ pr_stages: ["ci_failing", "draft"] }).label, "CI failing");
   assert.equal(leadStage({ pr_stages: [] }), undefined);
   assert.equal(leadStage({}), undefined);
   assert.equal(leadStage({ pr_stages: ["someday_new"] }), undefined);

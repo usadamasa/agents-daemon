@@ -33,44 +33,44 @@ test("handOff は park hand を 1 回呼び、宛先と補足と操作主体を�
   const io = fakeIO({ run: [json({ delivered: true, status: "handed", to: "s2", pane_id: "p1" })] });
   const res = await handOff(memo, peerTo, "issue", "急ぎ", io);
   assert.deepEqual(io.calls, [["park hand", { id: "m1", intent: "issue", note: "急ぎ", to_session: "s2", session_id: "app" }]]);
-  assert.deepEqual(res, { ok: true, message: "fix-lint へ送り、メモを渡しました" });
+  assert.deepEqual(res, { ok: true, message: "Sent to fix-lint and handed off the memo" });
 });
 
 test("handOff は新しいセッションへは to_repo で渡す", async () => {
   const io = fakeIO({ run: [json({ delivered: true, status: "handed", to: "s9", pane_id: "p1" })] });
   const res = await handOff(memo, spawnTo, "task", "", io);
   assert.equal(io.calls[0][1].to_repo, "/r/a");
-  assert.deepEqual(res, { ok: true, message: "a で新しいセッションを起こし、メモを渡しました" });
+  assert.deepEqual(res, { ok: true, message: "Started a new session in a and handed off the memo" });
 });
 
 test("handOff は届かず open に戻ったことを文面にする", async () => {
   const io = fakeIO({ run: [json({ delivered: false, status: "open", to: "s2", reason: "prompt が開いている" })] });
   const res = await handOff(memo, peerTo, "task", "", io);
-  assert.deepEqual(res, { ok: false, message: "fix-lint へ送れませんでした: prompt が開いている。メモは open に戻しました" });
+  assert.deepEqual(res, { ok: false, message: "Could not send to fix-lint: prompt が開いている. The memo is open again" });
 });
 
 test("handOff は claude が前景にならなかったメモが handed のまま残ることを文面にする", async () => {
   const io = fakeIO({ run: [json({ delivered: false, status: "handed", to: "s9", pane_id: "p1", reason: "待ち切れた" })] });
   const res = await handOff(memo, spawnTo, "task", "", io);
   assert.equal(res.ok, false);
-  assert.ok(res.message.startsWith("a で新しい rex session を作りましたが"));
-  assert.ok(res.message.includes("handed のまま"));
+  assert.ok(res.message.startsWith("Created a new rex session in a, but"));
+  assert.ok(res.message.includes("stays handed"));
 });
 
 test("handOff は取れなかった (exit 1) ときに理由を返す", async () => {
   const io = fakeIO({ run: [{ failure: "メモを取れない (ほかが先に渡したか、捨てたかもしれない): status は handed" }] });
   const res = await handOff(memo, peerTo, "task", "", io);
   assert.equal(res.ok, false);
-  assert.ok(res.message.startsWith("メモを渡せませんでした: メモを取れない"));
+  assert.ok(res.message.startsWith("Could not hand off the memo: メモを取れない"));
 });
 
 test("instruct はタスクの題を添えて tell に渡し、拒まれたら理由を返す", async () => {
   const io = fakeIO({ run: [toldOK, { failure: "入力欄に打ちかけの文がある" }] });
   const res = await instruct(task, "先にテストを書いて", io);
   assert.deepEqual(io.calls[0], ["tell", { to_session: "s1", text: "タスク「lint を直す」について: 先にテストを書いて", session_id: "app" }]);
-  assert.deepEqual(res, { ok: true, message: "deps-app の入力欄に打ちました" });
+  assert.deepEqual(res, { ok: true, message: "deps-app: typed into the input" });
   const refused = await instruct(task, "もう一度", io);
-  assert.deepEqual(refused, { ok: false, message: "deps-app へ送れませんでした: 入力欄に打ちかけの文がある" });
+  assert.deepEqual(refused, { ok: false, message: "Could not send to deps-app: 入力欄に打ちかけの文がある" });
 });
 
 test("askUnlink は待っている側のセッションへ解消を頼む", async () => {
@@ -86,10 +86,10 @@ test("start と setStatus は持ち主へ TaskUpdate を頼む", async () => {
   const started = await start(task, "急ぎ", io);
   assert.ok(io.calls[0][1].text.includes("in_progress にしてから"));
   assert.ok(io.calls[0][1].text.endsWith("利用者からの補足: 急ぎ"));
-  assert.equal(started.message, "deps-app に着手を頼みました");
+  assert.equal(started.message, "deps-app: asked to start");
   const done = await setStatus(task, "completed", io);
   assert.ok(io.calls[1][1].text.includes("completed にしてください"));
-  assert.equal(done.message, "deps-app に completed を頼みました");
+  assert.equal(done.message, "deps-app: asked to set completed");
 });
 
 test("handOffTask は相手へ送れたら持ち主にタスクを消すよう頼む", async () => {
@@ -100,14 +100,14 @@ test("handOffTask は相手へ送れたら持ち主にタスクを消すよう�
   assert.ok(io.calls[0][1].text.includes("詳細: 閾値を見直す"));
   assert.equal(io.calls[1][1].to_session, "s1");
   assert.ok(io.calls[1][1].text.includes("fix-lint へ渡しました"));
-  assert.deepEqual(res, { ok: true, message: "fix-lint へ渡し、deps-app にタスクを消すよう頼みました" });
+  assert.deepEqual(res, { ok: true, message: "Handed off to fix-lint; asked deps-app to delete the task" });
 });
 
 test("handOffTask は相手へ送れなければ持ち主に頼まない", async () => {
   const io = fakeIO({ run: [{ failure: "prompt が開いている" }] });
   const res = await handOffTask(task, peerTo, "", io);
   assert.equal(io.calls.length, 1);
-  assert.deepEqual(res, { ok: false, message: "fix-lint へ送れませんでした: prompt が開いている" });
+  assert.deepEqual(res, { ok: false, message: "Could not send to fix-lint: prompt が開いている" });
 });
 
 test("handOffTask は新しいセッションを起こし、前景にならなければタスクを残す", async () => {
@@ -116,19 +116,19 @@ test("handOffTask は新しいセッションを起こし、前景にならな�
   assert.equal(io.calls[0][0], "spawn");
   assert.ok(io.calls[0][1].prompt.startsWith("このタスクを渡すため、a (/r/a) で新しいセッションとして起こしました。\n"));
   assert.ok(io.calls[0][1].prompt.endsWith("利用者からの補足: 補足"));
-  assert.ok(res.ok && res.message.startsWith("a で新しいセッションを起こして渡し"));
+  assert.ok(res.ok && res.message.startsWith("Started a new session in a and handed off"));
 
   const io2 = fakeIO({ run: [json({ session_id: "s9", pane_id: "p9", foreground: false, detail: "待ち切れた" })] });
   const res2 = await handOffTask(task, spawnTo, "", io2);
   assert.equal(io2.calls.length, 1);
-  assert.ok(!res2.ok && res2.message.includes("タスクは残してあります"));
+  assert.ok(!res2.ok && res2.message.includes("The task is kept"));
 });
 
 test("toParking は扱うメモが無ければ park tool で置くよう頼む", async () => {
   const io = fakeIO({ run: [toldOK] });
   const res = await toParking(task, io);
   assert.ok(io.calls[0][1].text.includes("park tool で"));
-  assert.deepEqual(res, { ok: true, message: "deps-app にメモに置くよう頼みました" });
+  assert.deepEqual(res, { ok: true, message: "Asked deps-app to park it as a memo" });
 });
 
 test("toParking は handed のメモを open に戻してから頼み、頼めなくてもメモは open のまま残す", async () => {
@@ -137,7 +137,7 @@ test("toParking は handed のメモを open に戻してから頼み、頼め�
   const res = await toParking(node, io);
   assert.deepEqual(io.calls[0], ["park set", { id: "m1", status: "open", from: "handed" }]);
   assert.ok(io.calls[1][1].text.includes("元のメモ (m1, m3) を"));
-  assert.equal(res.message, "メモ m1, m3 を open に戻し、deps-app にタスクを消すよう頼みました");
+  assert.equal(res.message, "Reopened memo m1, m3; asked deps-app to delete the task");
 
   // 頼めなくてもメモは一覧に戻っているので取り直さない (#380)。押し直すとタスクを消す依頼だけが送り直される。
   const io2 = fakeIO({ run: [{ failure: "上限の画面" }] });
@@ -145,7 +145,7 @@ test("toParking は handed のメモを open に戻してから頼み、頼め�
   assert.equal(io2.calls.length, 2);
   assert.deepEqual(res2, {
     ok: false,
-    message: "メモ m1, m3 は open に戻しましたが、deps-app へタスクを消す依頼を送れませんでした: 上限の画面。もう一度「メモにする」を押すと依頼だけ送り直します",
+    message: "Reopened memo m1, m3, but could not ask deps-app to delete the task: 上限の画面. Press Memo again to resend only the request",
   });
 
   const reopened = { ...node, memos: [{ id: "m1", title: "a", status: "open" }, { id: "m3", title: "c", status: "open" }] };
@@ -159,45 +159,45 @@ test("toParking は handed のメモを open に戻してから頼み、頼め�
 test("toParking は扱うメモが無くて頼めなければ、そのまま理由を返す", async () => {
   const io = fakeIO({ run: [{ failure: "上限の画面" }] });
   const res = await toParking(task, io);
-  assert.deepEqual(res, { ok: false, message: "deps-app へ送れませんでした: 上限の画面" });
+  assert.deepEqual(res, { ok: false, message: "Could not send to deps-app: 上限の画面" });
 });
 
 test("dismissAll は 1 つが外せなくても残りを続け、数と最初の理由を返す", async () => {
   const io = fakeIO({ park: ["", "まだ生きている", ""] });
   const message = await dismissAll([{ key: "a" }, { key: "b" }, { key: "c" }], io);
   assert.equal(io.calls.length, 3);
-  assert.equal(message, "終了したセッションのタスクと作業 2 つを一覧から外しました (1 つは外せませんでした: まだ生きている)");
+  assert.equal(message, "Dismissed 2 tasks and work of ended sessions (1 failed: まだ生きている)");
 });
 
 test("dismissOne と adopt は作業のノード (sid:) も key をそのまま渡し、呼び名を作業にする", async () => {
   const work = { key: "sid:s9", kind: "session", title: "README を直す", session_id: "s9", live: false, state: "exited" };
   let io = fakeIO({});
-  assert.equal(await dismissOne(work, io), "作業「README を直す」を一覧から外しました");
+  assert.equal(await dismissOne(work, io), 'Dismissed work "README を直す"');
   assert.deepEqual(io.calls, [["task dismiss", { ref: "sid:s9" }]]);
   io = fakeIO({});
-  assert.equal(await adopt(work, io), "作業「README を直す」をパーキングへ移しました");
+  assert.equal(await adopt(work, io), 'Moved work "README を直す" to parking');
   assert.deepEqual(io.calls, [["park adopt", { ref: "sid:s9" }]]);
 });
 
 test("dismissOne は辺の端点だけの置き場のカードをセッションと呼ぶ", async () => {
   const placeholder = { key: "sid:s9", kind: "ref", title: "deps-app", session_id: "s9", live: false, state: "exited" };
   const io = fakeIO({});
-  assert.equal(await dismissOne(placeholder, io), "セッション「deps-app」を一覧から外しました");
+  assert.equal(await dismissOne(placeholder, io), 'Dismissed session "deps-app"');
   assert.deepEqual(io.calls, [["task dismiss", { ref: "sid:s9" }]]);
 });
 
 test("rename は work set に session_id と題を渡す", async () => {
   const work = { key: "sid:s9", kind: "session", title: "推定の題", session_id: "s9", origin: "inferred" };
   let io = fakeIO({});
-  assert.equal(await rename(work, "人の題", io), "題を「人の題」に直しました");
+  assert.equal(await rename(work, "人の題", io), 'Renamed to "人の題"');
   assert.deepEqual(io.calls, [["work set", { session_id: "s9", subject: "人の題" }]]);
   io = fakeIO({ run: [{ failure: "記録が無い" }] });
-  assert.equal(await rename(work, "人の題", io), "題を直せませんでした: 記録が無い");
+  assert.equal(await rename(work, "人の題", io), "Could not rename: 記録が無い");
 });
 
 test("discardStale は捨てた数を返す", async () => {
   const io = fakeIO({ run: [{ stdout: "[{}, {}, {}]" }] });
   const message = await discardStale(14, io);
   assert.equal(io.calls[0][1].days, 14);
-  assert.ok(message.startsWith("14 日より前のメモ 3 つを捨てました"));
+  assert.ok(message.startsWith("Discarded 3 memos older than 14 days"));
 });

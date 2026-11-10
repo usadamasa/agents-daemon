@@ -60,7 +60,7 @@ export function watchUpgrade(views, button) {
       await window.wails.Call.ByName("main.Daemon.Upgrade", JSON.stringify(capture(views)));
     } catch (err) {
       button.disabled = false;
-      button.title = `切り替えられなかった: ${String(err?.message ?? err)}`;
+      button.title = `Could not switch: ${String(err?.message ?? err)}`;
     }
   };
 }

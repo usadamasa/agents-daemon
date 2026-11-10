@@ -29,7 +29,7 @@ export function groupBySession(nodes) {
   const groups = new Map();
   for (const n of nodes) {
     const key = n.kind === "ref" ? "ref" : n.session_id;
-    if (!groups.has(key)) groups.set(key, { key, label: n.kind === "ref" ? "参照" : n.session, nodes: [] });
+    if (!groups.has(key)) groups.set(key, { key, label: n.kind === "ref" ? "Refs" : n.session, nodes: [] });
     groups.get(key).nodes.push(n);
   }
   return [...groups.values()];

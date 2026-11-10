@@ -24,5 +24,5 @@ test("isStale は最後に置かれてから days 日より経ったか", () => 
 
 test("kindLabel は adopted のときだけ添える", () => {
   assert.equal(kindLabel(memo([], { kind: "scope" })), "scope");
-  assert.equal(kindLabel(memo([], { kind: "scope", origin: "adopted" })), "scope・adopted");
+  assert.equal(kindLabel(memo([], { kind: "scope", origin: "adopted" })), "scope · adopted");
 });

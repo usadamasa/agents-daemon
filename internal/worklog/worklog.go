@@ -75,7 +75,7 @@ func Ended(r Record) bool {
 	return r.EndedAt != nil
 }
 
-// Dismiss は終了したセッションの作業の記録を消す (依存図の「一覧から外す」)。exited はセッションが記録の時刻より後に
+// Dismiss は終了したセッションの作業の記録を消す (依存図の Remove)。exited はセッションが記録の時刻より後に
 // 終了したと確かめる (daemonstate.SessionExited)。確かめられなければ消さない (生きているセッションの記録を消すと、
 // 次の hook まで依存図から落ちる)。
 func (s Store) Dismiss(sessionID string, exited func(sessionID string, after time.Time) error) error {

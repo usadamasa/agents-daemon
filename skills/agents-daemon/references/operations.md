@@ -138,10 +138,10 @@ printf '%s' '{"id":"<id>","status":"open"}' | agents-daemon park set            
 ```
 
 - メモは種類 `kind` (aside / scope / preference) と出自 `origin` を持つ。`placed` は model が park tool で置いたメモ、
-  `adopted` は終了したセッションの未完了のタスクをアプリの「メモにする」(`park adopt`) で
+  `adopted` は終了したセッションの未完了のタスクをアプリの `Memo` (`park adopt`) で
   移したメモ (種類は scope)
 - handed のメモは宛先 `handed_to` (`sid:<session_id>` か、新しく起こしたセッションの `repo:<path>`) を持つ
-- メモを渡すのはアプリの「タスクにする」「issue にする」(`park hand`)。取る (handed)、送る (生きているセッションの
+- メモを渡すのはアプリの `Task` と `Issue` (`park hand`)。取る (handed)、送る (生きているセッションの
   入力欄に `tell` で打つか、`spawn` で新しいセッションを起こす)、届かなければ戻す (open) を 1 回で行う
 
 ### 終了したセッションのタスクと作業を一覧から外す
@@ -151,10 +151,10 @@ printf '%s' '{"ref":"task:<session_id>/<task_id>"}' | agents-daemon task dismiss
 printf '%s' '{"ref":"sid:<session_id>"}' | agents-daemon task dismiss              # セッションの作業と、それを端点に持つ辺
 ```
 
-- アプリの「一覧から外す」と「終了したセッションのタスクと作業 n 件を外す」(1 つずつ呼ぶ) が使う。終了したセッションの
+- アプリの `Remove` と `Dismiss ended (n)` (1 つずつ呼ぶ) が使う。終了したセッションの
   タスクの記録 (完了しているかを問わない) か作業の記録 (`sid:`、#368) を消す
 - セッションの終了は動いている daemon の status.json で確かめ、確かめられなければ消さずに exit 1 で理由を出す
-- 消した記録は戻せない。メモとして残すなら「メモにする」(`park adopt`。`sid:` も受ける) を使う
+- 消した記録は戻せない。メモとして残すなら `Memo` (`park adopt`。`sid:` も受ける) を使う
 
 ### セッションの作業の記録を読む・題を直す
 

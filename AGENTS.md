@@ -120,6 +120,10 @@ mod が呼ぶコマンドは入力を stdin の JSON で受け、出力を JSON 
   読むだけの Claude Code の設定ディレクトリは `apppath.ClaudeConfigDir` で決める。
 - 書くファイルを足すときは、同じ PR で消す仕組みと `changing-agents-daemon-internals` skill の architecture.md「出力されるファイル」の行 (書く主体・消す主体) を足す。
 - 削除は daemon 自身が mtime で行う (`internal/runtime/daemon/housekeeping.go`)。保持期間は定数にし、根拠をコメントに書く。
+- 旧バージョンが書いた state と消した設定キーへの後方互換は取らない。利用者は作者だけで、残り物は手で消せる。
+  機能を消すときは、読み書き・掃除 (prune)・設定キーから名前ごと消し、残り物の消し方を PR 本文に 1 行書く。
+  旧バージョンが書いたものを消すだけの枝は残さない。update の直後に旧バージョンの plugin のまま動くセッションが
+  新しいバイナリと共存する状態 (`hooks/lib/daemon-bin.sh`) は、この対象外。
 
 ## PR を作るときの決めごと
 

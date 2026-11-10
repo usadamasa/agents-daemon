@@ -5,6 +5,12 @@ name: dependabot-auto-merge
 on:
   pull_request:
     types: [opened, reopened, synchronize]
+    paths:
+      - go.mod
+      - go.sum
+      - flake.lock
+      - flake.nix
+      - .github/workflows/**
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}

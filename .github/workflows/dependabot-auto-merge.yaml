@@ -1,0 +1,44 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+# 低リスクの Dependabot PR に auto-merge を予約する。マージの関門は ruleset の必須チェック ci-status-check
+name: dependabot-auto-merge
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  auto-merge:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    steps:
+      - uses: dependabot/fetch-metadata@v3.1.0
+        id: metadata
+
+      # 予約するのは semver の patch と minor、それに nix の flake input の更新。
+      # nix の更新は rev の差し替えで、fetch-metadata の update-type が空になる。
+      # nix でも update-type が付けば上の semver の判定に従い、major は手動のまま
+      - name: Decide
+        id: decide
+        if: >-
+          steps.metadata.outputs.update-type == 'version-update:semver-patch'
+          || steps.metadata.outputs.update-type == 'version-update:semver-minor'
+          || (steps.metadata.outputs.package-ecosystem == 'nix' && steps.metadata.outputs.update-type == '')
+        run: echo "eligible=true" >> "$GITHUB_OUTPUT"
+
+      # GITHUB_TOKEN でマージすると main への push で tagpr と CI が起動しないので、
+      # fine-grained PAT を使う。secret は Dependabot secrets に置く
+      - name: Enable auto-merge
+        if: steps.decide.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.DEPENDABOT_AUTOMERGE_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: gh pr merge --auto --merge "$PR_URL"

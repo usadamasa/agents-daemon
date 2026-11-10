@@ -12,6 +12,22 @@
         "x86_64-linux"
       ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
+      # nixos-unstable の go_1_27 は 1.27.3 で、1.27.4 で修正された脆弱性 (net/http の MaxBytesReader の
+      # データ競合、cgo 経由のビルド時の任意コード実行) が残る。channel の go_1_27 が 1.27.4 より古いときだけ
+      # ソースを差し替える。Dependabot の nix PR が 1.27.4 以上の nixpkgs を取り込んだ時点で channel の go_1_27 に
+      # 戻り、以後のパッチ更新は flake.lock と一緒に上がる。戻った後の差し替えの分岐は使われないので、そのとき消す
+      devGo =
+        pkgs:
+        if pkgs.lib.versionOlder pkgs.go_1_27.version "1.27.4" then
+          pkgs.go_1_27.overrideAttrs (old: rec {
+            version = "1.27.4";
+            src = pkgs.fetchurl {
+              url = "https://go.dev/dl/go${version}.src.tar.gz";
+              hash = "sha256-c8+4VxrsDAEXdofbhxY9Rqog6XeWcncokaoXZU2aYJk=";
+            };
+          })
+        else
+          pkgs.go_1_27;
     in
     {
       devShells = forAllSystems (pkgs: {
@@ -20,7 +36,7 @@
           # go-arch-lint は analyze-arch-lint が PATH から呼ぶので tool ではなくここに置く
           packages = with pkgs; [
             # go.mod の go 行と同じ系列。ずれたら GOTOOLCHAIN=local で即座に失敗させる
-            go_1_26
+            (devGo pkgs)
             go-task
             golangci-lint
             go-arch-lint

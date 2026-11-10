@@ -1,5 +1,17 @@
 # Changelog
 
+## [2026.1110.0](https://github.com/usadamasa/agents-daemon/compare/2026.1109.3...2026.1110.0) - 2026-11-10
+
+### Features
+- ci: 低リスクの Dependabot PR に auto-merge を予約する by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/545
+- feat(gui): agent-tasks を GitHub Primer の作法へ移し、画面の語を英語にする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/548
+### Bug Fixes
+- task model-check の TLC の metadir を cfg ごとに分ける by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/542
+### Documentation
+- docs: auto memory の知見を AGENTS.md と skill へ移す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/546
+### Dependencies
+- build(deps): Bump nixpkgs from `0bb2eed` to `f9a75f4` by @dependabot[bot] in https://github.com/usadamasa/agents-daemon/pull/547
+
 ## [2026.1109.3](https://github.com/usadamasa/agents-daemon/compare/2026.1109.2...2026.1109.3) - 2026-11-09
 
 ### Features

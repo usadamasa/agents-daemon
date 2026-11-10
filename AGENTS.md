@@ -137,6 +137,12 @@ mod が呼ぶコマンドは入力を stdin の JSON で受け、出力を JSON 
 tagpr (`.tagpr`、`.github/workflows/tagpr.yaml`) がリリース PR を作る。`version` は手で上げない。
 tag に **`v` を付けない。** `v2026.0926.0` は Go module が major 2026 の semver と解釈して拒否する。
 
-リリース PR の merge 後の plugin 更新と動いている daemon の入れ替えは、`agents-daemon update` が 1 回で行う。
+リリース PR の merge 後の plugin 更新と動いている daemon の入れ替えは、`update` サブコマンドが 1 回で行う。
 sandbox が `~/.claude/plugins` と `~/.cache/agents-daemon` への書き込みを止めるので、利用者が `!` で打つ。
-コマンドは `skills/agents-daemon/references/operations.md` の「plugin の更新後に daemon を入れ替える」。
+バイナリは PATH に無いので、利用者へ渡すコマンドは置き場のパスから書く。
+
+```sh
+! ~/.cache/agents-daemon/bin/agents-daemon update
+```
+
+何をするかは `skills/agents-daemon/references/operations.md` の「plugin の更新後に daemon を入れ替える」。

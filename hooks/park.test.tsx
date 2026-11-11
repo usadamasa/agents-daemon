@@ -62,6 +62,8 @@ test('session.start で park の tool を登録する', async ($, on) => {
   expect(tool.inputSchema.properties.cwd).toBeUndefined()
   expect(tool.description).toMatch(/進めるのに要る判断/)
   expect(tool.description).toMatch(/危ない操作の確認/)
+  // 置くときの「既定はやらない」は今の作業の中だけに効き、後で拾ってタスクにするときは着手が既定になる。
+  expect(tool.description).toMatch(/後で拾ってタスクにするときの既定は着手/)
   // 置いたメモの前提が作業の中で消えたら、unpark で取り下げる。
   expect(tool.description).toMatch(/前提が.*消えたら.*unpark/)
 

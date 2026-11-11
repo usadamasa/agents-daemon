@@ -131,7 +131,7 @@ func text(item parking.Item, intent, repoTitle, note string, names map[string]st
 			premiseCheck +
 			fmt.Sprintf("成り立つときは TaskCreate で作り、タスクの description にメモの id (%s) を入れてください。", item.ID) +
 			"既にこのメモを扱うタスクがあれば、新しく作らずにその description に id を書き足すだけで構いません。" +
-			"着手の時期は今の計画 (タスクの依存) に従ってください。" + premiseGone
+			"作ったら基本すぐ着手してください。承認待ちや未完了の依存タスクのような、着手できない理由があるときだけ見送ってください。" + premiseGone
 	}
 	body := strings.Join(append([]string{head}, contextLines(item, names)...), "\n")
 	if said := strings.TrimSpace(note); said != "" {

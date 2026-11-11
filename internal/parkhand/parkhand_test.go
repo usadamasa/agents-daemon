@@ -106,6 +106,7 @@ func TestRunner_Run_toSession(t *testing.T) {
 		"補足 (lint-review): 後から足した補足",
 		"関係するファイル: .golangci.yml",
 		"置いたときの既定: やらない",
+		"作ったら基本すぐ着手してください。",
 		"(メモ " + memoID + ")",
 		"\n利用者からの補足: 急ぎ",
 	} {
@@ -253,6 +254,9 @@ func TestText(t *testing.T) {
 	task := text(memo, "task", "agents-daemon", "", nil)
 	if !strings.Contains(task, "TaskCreate で作り") || strings.Contains(task, "利用者からの補足") {
 		t.Errorf("task:\n%s", task)
+	}
+	if !strings.Contains(task, "作ったら基本すぐ着手してください。") || !strings.Contains(task, "着手できない理由があるときだけ見送ってください。") {
+		t.Errorf("task に着手の既定が無い:\n%s", task)
 	}
 	issue := text(memo, "issue", "agents-daemon", "URL を貼って", nil)
 	if !strings.Contains(issue, "repo: agents-daemon。") || !strings.HasSuffix(issue, "\n利用者からの補足: URL を貼って") {

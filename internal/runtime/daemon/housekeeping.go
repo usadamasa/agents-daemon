@@ -13,6 +13,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/refstate"
 	"github.com/usadamasa/agents-daemon/internal/runtime/daemon/limitlog"
+	"github.com/usadamasa/agents-daemon/internal/spawnedsession"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 	"github.com/usadamasa/agents-daemon/internal/turnfailure"
 	"github.com/usadamasa/agents-daemon/internal/worklog"
@@ -42,6 +43,7 @@ func (r *daemonRuntime) attachStateDir(stateDir string) {
 	r.limits = limitlog.New(stateDir)
 	r.turnFailures = turnfailure.New(stateDir)
 	r.refs = refstate.New(stateDir)
+	r.spawned = spawnedsession.New(stateDir)
 }
 
 // housekeepDue は前回の housekeeping から housekeepInterval 以上経ったかを返す。

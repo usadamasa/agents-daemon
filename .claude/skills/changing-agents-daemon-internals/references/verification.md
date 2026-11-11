@@ -14,7 +14,7 @@ agents-daemon inspect --file <path> --session <id>  # 加えて、そのセッ�
 agents-daemon simulate                  # 使い捨て pane で検知から送信まで通す (transcript は内蔵の上限の entry)
 agents-daemon simulate --turn-file <jsonl>  # transcript の末尾として読ませる entry を差し替える
 agents-daemon simulate --send --keep    # 実際に送信し、pane を残して目で見る
-agents-daemon daemon --foreground --dry-run  # このプロセスで回し、送信だけをしない
+agents-daemon daemon --foreground --dry-run  # このプロセスで回し、送信と起こした session の後片付けだけをしない
 ```
 
 `statusLine.command` から呼ばれる `statusline` は stdin の JSON を受けて state file を書き、描画を stdout に出す。

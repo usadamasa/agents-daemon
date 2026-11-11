@@ -92,7 +92,8 @@ exec して stdout を返すだけで、JSON はフロントエンド (`gui/fron
 `spawn` は起こすたびに `rex session new` で専用の rex session を作る。起きた claude は rex の案内に従って
 自分の REX_SESSION を rename するので、起こす側の session に相乗りさせない (#376)。
 claude が終わり、session に残る block が自分だけなら、包んだ sh がその session を閉じる。異常終了では Enter まで
-画面を残してから閉じる (#391)。
+画面を残してから閉じる (#391)。ほかの pane が残っていて閉じなかった session は、包んだ sh が起こす前に書いた印
+(`spawnedsession`) を daemon が回り、pane が無くなったら閉じる (#557)。
 
 ## 依存の DAG (`graph`)
 

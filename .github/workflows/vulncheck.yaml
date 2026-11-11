@@ -19,6 +19,8 @@ jobs:
       - uses: actions/checkout@v7.0.1
 
       - uses: usadamasa/gh-manage/actions/setup-nix@main
+        with:
+          cache: false
 
       - name: Run govulncheck (symbol)
         run: task vulncheck

@@ -42,6 +42,7 @@ components:
       - "internal/parking"
       - "internal/edge"
       - "internal/ledger"
+      - "internal/spawnedsession"
       - "internal/eventlog"
       - "internal/daemonstate"
       - "internal/protocol"

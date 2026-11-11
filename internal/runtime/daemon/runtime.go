@@ -26,10 +26,12 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/runtime/claudesessions"
 	"github.com/usadamasa/agents-daemon/internal/runtime/config"
 	"github.com/usadamasa/agents-daemon/internal/runtime/daemon/limitlog"
+	"github.com/usadamasa/agents-daemon/internal/runtime/daemon/reaper"
 	"github.com/usadamasa/agents-daemon/internal/runtime/daemon/refpoll"
 	"github.com/usadamasa/agents-daemon/internal/runtime/detect"
 	"github.com/usadamasa/agents-daemon/internal/runtime/monitor"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
+	"github.com/usadamasa/agents-daemon/internal/spawnedsession"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 	"github.com/usadamasa/agents-daemon/internal/transcript"
 	"github.com/usadamasa/agents-daemon/internal/turnfailure"
@@ -107,8 +109,12 @@ type daemonRuntime struct {
 	turnFailures turnfailure.Store
 	// refs は辺の端点の issue / PR の状態の写し (refstate)。refPoll が tick ごとに引いて書き、housekeeping で消す。
 	// ゼロ値 (refPoll が nil) は引かない。
-	refs                refstate.Store
-	refPoll             *refpoll.Poller
+	refs    refstate.Store
+	refPoll *refpoll.Poller
+	// spawned は spawn と peer-sessions skill が起こした session の印 (spawnedsession)。reaper が tick ごとに回り、
+	// housekeeping で消す。reaper が nil (多重化ツールが後片付けの操作を持たない) なら回らない。
+	spawned             spawnedsession.Store
+	reaper              *reaper.Reaper
 	sleep               func(time.Duration)
 	startedAt           time.Time
 	panes               map[string]*paneEntry
@@ -175,6 +181,7 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 	}
 	r.observeSessions(statusPanes, now)
 	r.refPoll.Refresh(ctx, now)
+	r.reaper.Reap(ctx, now)
 
 	if claudeCount == 0 {
 		if r.idleSince.IsZero() {
@@ -536,6 +543,30 @@ func connect(ctx context.Context, store sessionstate.Store) (kind string, client
 	return kind, execClient, nil
 }
 
+// assembleRuntime は daemon のループが回す runtime を組み立て、state の置き場と Claude Code の設定ディレクトリを
+// 配線する。dry-run なら送信を握りつぶす包みを被せる。起こした session の後片付けは包む前の client で行い、dry-run なら
+// reaper が閉じない。
+func assembleRuntime(raw multiplexerClient, kind string, p apppath.Paths, store sessionstate.Store, log *applog.Logger, dryRun bool, now time.Time) *daemonRuntime {
+	client := raw
+	if dryRun {
+		client = newDryRunClient(raw, log)
+		log.Logf("dry-run モード: 検知と判定は通常どおり行うが、pane への送信とラベル更新と、起こした session の後片付けはしない")
+	}
+	runtime := newDaemonRuntime(client, log, p.StatusFile(), store, time.Sleep, now)
+	runtime.backend = kind
+	runtime.attachStateDir(p.StateDir())
+	runtime.refPoll = refpoll.New(runtime.edges, runtime.refs, refpoll.GH, log)
+	if c, ok := raw.(reaper.Client); ok {
+		runtime.reaper = reaper.New(runtime.spawned, c, log, dryRun)
+	}
+	if claudeConfig, err := apppath.ClaudeConfigDir(); err != nil {
+		log.Logf("Claude Code の設定ディレクトリを決められないため、transcript を読めず上限を判定できません。台帳にセッション名も書きません: %v", err)
+	} else {
+		runtime.attachClaudeConfigDir(claudeConfig)
+	}
+	return runtime
+}
+
 // RunForeground は --foreground の本体。SessionStart から detach 起動された
 // 子プロセスも最終的にここへ辿り着く。
 func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
@@ -569,10 +600,8 @@ func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 	defer func() { _ = log.Close() }()
 	log.Logf("daemon 起動 (pid %d, backend=%s, pollIntervalSeconds=%d)", os.Getpid(), kind, cfg.PollIntervalSeconds)
 
-	if dryRun {
-		client = newDryRunClient(client, log)
-		log.Logf("dry-run モード: 検知と判定は通常どおり行うが、pane への送信とラベル更新はしない")
-	}
+	now := time.Now()
+	runtime := assembleRuntime(client, kind, p, store, log, dryRun, now)
 
 	// 実行ファイルの差し替えに気づくための基準。取得できなければ更新検知だけを
 	// 諦める (path が空の stamp は changed() が常に false を返す)。
@@ -581,16 +610,6 @@ func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 		log.Logf("実行ファイルの情報を取得できないため、更新の自動反映を無効にします: %v", stampErr)
 	}
 
-	now := time.Now()
-	runtime := newDaemonRuntime(client, log, p.StatusFile(), store, time.Sleep, now)
-	runtime.backend = kind
-	runtime.attachStateDir(p.StateDir())
-	runtime.refPoll = refpoll.New(runtime.edges, runtime.refs, refpoll.GH, log)
-	if claudeConfig, err := apppath.ClaudeConfigDir(); err != nil {
-		log.Logf("Claude Code の設定ディレクトリを決められないため、transcript を読めず上限を判定できません。台帳にセッション名も書きません: %v", err)
-	} else {
-		runtime.attachClaudeConfigDir(claudeConfig)
-	}
 	runtime.housekeep(p.LogFile(), now)
 
 	sigCh := make(chan os.Signal, 1)
@@ -600,7 +619,7 @@ func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 	loopCtx, stop := context.WithCancel(ctx)
 	defer stop()
 
-	defer startWatch(loopCtx, client, log)()
+	defer startWatch(loopCtx, runtime.client, log)()
 
 	cleanup := func(reason string) {
 		if err := daemonstate.RemoveOwnPIDFile(p.PIDFile(), os.Getpid()); err != nil {

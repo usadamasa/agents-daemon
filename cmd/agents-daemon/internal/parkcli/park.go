@@ -26,7 +26,7 @@ import (
 
 // Commands は root に登録するコマンド。
 func Commands() []*cobra.Command {
-	return []*cobra.Command{newParkCmd(), newSpawnCmd(), newTellCmd()}
+	return []*cobra.Command{newParkCmd(), newSpawnCmd(), newSpawnedSessionCmd(), newTellCmd()}
 }
 
 // newParkCmd は `agents-daemon park add|set|list|discard|withdraw|adopt|hand` を組み立てる (parking、parkhand)。

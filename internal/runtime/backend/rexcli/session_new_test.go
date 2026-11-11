@@ -17,9 +17,24 @@ import (
 // sessionNewJSON は `session new --json` の応答。形は 2026-11-07 の実測。
 const sessionNewJSON = `{"session_id":"session:01a1b37a-0560-743d-adfd-959e5e1c53a9","initial_windows":[{"window_id":"window:01a1b37a-056e-70fa-90fd-15d50af005a9","block_ids":["block:01a1b37a-0560-74ce-af88-d37d23de33b9"],"revision":1}]}`
 
-// wrapPrefix は NewSession が argv の前に置く、終了を見張る sh の語。
-func wrapPrefix(f *fakeRex) string {
-	return "/bin/sh -c " + shellQuote(closeOnExitScript) + " agents-daemon-spawn " + shellQuote(f.bin)
+// useFakeSelf は包みが印を書くのに呼ぶ agents-daemon を、引数を self.log へ 1 行ずつ書くだけの script に差し替える。
+func useFakeSelf(t *testing.T, f *fakeRex) string {
+	t.Helper()
+	path := filepath.Join(f.dir, "agents-daemon")
+	script := "#!/bin/sh\nfor a in \"$@\"; do printf '%s ' \"$a\"; done >> " + shellQuote(filepath.Join(f.dir, "self.log")) +
+		"\necho >> " + shellQuote(filepath.Join(f.dir, "self.log")) + "\n"
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil { // #nosec G306 -- テストの実行ファイル
+		t.Fatal(err)
+	}
+	saved := selfBinary
+	selfBinary = func() (string, error) { return path, nil }
+	t.Cleanup(func() { selfBinary = saved })
+	return path
+}
+
+// wrapPrefix は NewSession が argv の前に置く、印を書いて終了を見張る sh の語。
+func wrapPrefix(f *fakeRex, self string) string {
+	return "/bin/sh -c " + shellQuote(closeOnExitScript) + " agents-daemon-spawn " + shellQuote(f.bin) + " " + shellQuote(self)
 }
 
 // TestExecClient_NewSession は新しい rex session でコマンドを起こす配線を見る。起こす側の session を指さず (-s を付けない)、
@@ -29,6 +44,7 @@ func wrapPrefix(f *fakeRex) string {
 func TestExecClient_NewSession(t *testing.T) {
 	f := newFakeRex(t)
 	f.put(t, "session-new.json", sessionNewJSON)
+	self := useFakeSelf(t, f)
 	c := f.client(staticResolver(nil))
 
 	prompt := "パーキングロットのメモ「x」をタスクにしてください。 詳細: a b"
@@ -40,7 +56,7 @@ func TestExecClient_NewSession(t *testing.T) {
 		t.Errorf("NewSession() = %q, want %q", got, want)
 	}
 	f.assertCalls(t,
-		"--autostart=false session new claude-config --cwd /w/claude-config --window claude-config --json -- "+wrapPrefix(f)+" claude --session-id "+sidDone+" -- "+shellQuote(prompt),
+		"--autostart=false session new claude-config --cwd /w/claude-config --window claude-config --json -- "+wrapPrefix(f, self)+" claude --session-id "+sidDone+" -- "+shellQuote(prompt),
 	)
 }
 
@@ -57,11 +73,12 @@ func TestExecClient_NewSession_DashLabel(t *testing.T) {
 		t.Run(tt.label, func(t *testing.T) {
 			f := newFakeRex(t)
 			f.put(t, "session-new.json", sessionNewJSON)
+			self := useFakeSelf(t, f)
 			c := f.client(staticResolver(nil))
 			if _, err := c.NewSession(context.Background(), tt.label, "/w/-x", []string{"claude"}); err != nil {
 				t.Fatalf("NewSession() error = %v", err)
 			}
-			f.assertCalls(t, tt.want+wrapPrefix(f)+" claude")
+			f.assertCalls(t, tt.want+wrapPrefix(f, self)+" claude")
 		})
 	}
 }
@@ -69,6 +86,8 @@ func TestExecClient_NewSession_DashLabel(t *testing.T) {
 // TestExecClient_NewSession_ClosesOnExit は rex が起こす argv を実際に走らせ、session (REX_SESSION) に残る block が
 // 自分 (REX_BLOCK) だけのときだけ session を閉じ、exit code をそのまま返すことを見る。0 以外で終わったときは終わり方を
 // 出して Enter を待ち、押されるまで失敗の画面を残す。後から開いた pane があれば巻き込まないよう閉じない (#391)。
+// どの場合も、コマンドを起こす前に agents-daemon で session の印を書く (後から pane が空になった session を
+// daemon が閉じる。#557)。
 func TestExecClient_NewSession_ClosesOnExit(t *testing.T) {
 	const (
 		own   = `{"block_id":"block:own","window_id":"window:1"}`
@@ -98,6 +117,7 @@ func TestExecClient_NewSession_ClosesOnExit(t *testing.T) {
 			if tt.blocks != "" {
 				f.put(t, "block-ls-session:spawned.json", tt.blocks)
 			}
+			useFakeSelf(t, f)
 			c := f.client(staticResolver(nil))
 			inner := []string{"/bin/sh", "-c", "exit " + strconv.Itoa(tt.exit)}
 			if _, err := c.NewSession(context.Background(), "x", "/w/x", inner); err != nil {
@@ -164,6 +184,10 @@ func TestExecClient_NewSession_ClosesOnExit(t *testing.T) {
 			want := append([][]string{calls[0]}, tt.wantAfter...)
 			if got := splitArgs(t, readLines(t, filepath.Join(f.dir, "calls.log"))); !slices.EqualFunc(got, want, slices.Equal[[]string]) {
 				t.Errorf("calls =\n%q\nwant\n%q", got, want)
+			}
+			wantMark := [][]string{{"spawned-session", "mark", "session:spawned"}}
+			if got := splitArgs(t, readLines(t, filepath.Join(f.dir, "self.log"))); !slices.EqualFunc(got, wantMark, slices.Equal[[]string]) {
+				t.Errorf("agents-daemon の呼び出し = %q, want %q", got, wantMark)
 			}
 		})
 	}

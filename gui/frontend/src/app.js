@@ -11,7 +11,7 @@ import { isStale, kindLabel, lastPlacedAt, stamp } from "./memo.js";
 import { bulkDismissable, canAdopt, canDismiss, canRename, canTell, candidates, isOwnTask, issueDestinations, lastSeenAgo, pathDestination, peerDestinations, spawnDestinations, taskDestinations } from "./ops.js";
 import { addBlocker, adopt, askUnlink, discard, discardStale, dismissAll, dismissOne, handOff, handOffTask, instruct, rename, setStatus, start, toParking, unlink } from "./actions.js";
 import { openTarget, pickFolder } from "./daemon.js";
-import { segments } from "./links.js";
+import { edgeNoteRepo, segments } from "./links.js";
 import { CONTROLS_BAND, MAX_ZOOM, MIN_ZOOM, centerOffset, clampZoom, fitZoom, overflowCenter, percent, scaledFrame, scrollAfterZoom, stepZoom, topOffset, wheelZoomer } from "./zoom.js";
 import { restore, scrollView, watchUpgrade } from "./restore.js";
 
@@ -101,7 +101,8 @@ async function openLink(target) {
 
 // linkContext は repo の鍵 (owner/repo を引く) と base (相対パスの基準) を segments の ctx にする。
 function linkContext(repo, base) {
-  return { githubRepo: state.data.repos.find((r) => r.repo === repo)?.github_repo, base };
+  const githubRepo = state.data.repos.find((r) => r.repo === repo)?.github_repo;
+  return { githubRepo: () => githubRepo, base };
 }
 
 // appendLinked は text の URL、issue / PR の参照、ファイルパスをリンクにして parent に足す。
@@ -637,7 +638,7 @@ function nodeRow(n, mark, link, owner) {
   if (link?.edge?.note) {
     const note = document.createElement("span");
     note.className = "note";
-    appendLinked(note, link.edge.note, linkContext(link.edge.after.repo, link.edge.after.cwd));
+    appendLinked(note, link.edge.note, { githubRepo: (k) => edgeNoteRepo(link.edge, state.data.repos, k), base: link.edge.after.cwd });
     row.append(note);
   }
   // `edge add` で書いた辺 (kind edge) は元の記録を消せる。同じセッションの blockedBy はそのセッションの TaskUpdate のもの。

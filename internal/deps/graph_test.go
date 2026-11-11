@@ -491,14 +491,15 @@ func TestGraph_refStates(t *testing.T) {
 	if n := got["issue:o/r#4"]; n.Title != "issue #4 · o/r" || n.RefLabel != "issue #4 · o/r" {
 		t.Errorf("題を引いていない issue:o/r#4 = %+v", n)
 	}
-	// note の無い辺は before の参照の題を note に出す。書いた note と、題を引いていない参照の辺はそのまま。
+	// note は edge add で書いた補足だけ。引いた題は参照のノードの題に出ていて、note に重ねない (題の #N は題の repo を
+	// 指し、note の #N の補い方 (models/noterepo) と食い違う)。
 	notes := map[string]string{}
 	for _, l := range b.Graph.Links {
 		if l.Edge != nil {
 			notes[l.Edge.ID] = l.Edge.Note
 		}
 	}
-	if want := map[string]string{"e1": "依存図に題を出す", "e2": "書いた note", "e3": "マージを待つ PR", "e4": "", "e5": ""}; !reflect.DeepEqual(notes, want) {
+	if want := map[string]string{"e1": "", "e2": "書いた note", "e3": "", "e4": "", "e5": ""}; !reflect.DeepEqual(notes, want) {
 		t.Errorf("notes = %v, want %v", notes, want)
 	}
 	shown := map[string]bool{}

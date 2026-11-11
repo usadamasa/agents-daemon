@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { segments } from "../src/links.js";
+import { edgeNoteRepo, segments } from "../src/links.js";
 
-const ctx = { githubRepo: "o/r", base: "/repo/x" };
+const ctx = { githubRepo: () => "o/r", base: "/repo/x" };
 const links = (text, c = ctx) => segments(text, c).filter((s) => s.target !== undefined);
 
 test("segments: 切り分けた text をつなぐと元の文字列に戻る", () => {
@@ -37,8 +37,14 @@ test("segments: #123 は repo の owner/repo を補う。日本語に挟まれ�
   assert.equal(links("(#12)")[0].text, "#12");
 });
 
+test("segments: #123 の owner/repo は番号ごとに引く", () => {
+  const byNumber = { githubRepo: (k) => (k === 12 ? "a/b" : "c/d"), base: "/repo/x" };
+  assert.deepEqual(links("#12 と #13", byNumber).map((s) => s.target), ["https://github.com/a/b/issues/12", "https://github.com/c/d/issues/13"]);
+});
+
 test("segments: GitHub の repo が分からなければ #123 は素の文字", () => {
   assert.deepEqual(links("#12", { base: "/repo/x" }), []);
+  assert.deepEqual(links("#12", { githubRepo: () => undefined, base: "/repo/x" }), []);
 });
 
 test("segments: # を拾いすぎない", () => {
@@ -75,4 +81,53 @@ test("segments: URL の中のパスや # を別のリンクにしない", () => 
   const got = links("https://a.example/x/y.go#12");
   assert.equal(got.length, 1);
   assert.equal(got[0].target, "https://a.example/x/y.go#12");
+});
+
+const repos = [
+  { repo: "/repo/agents-daemon", github_repo: "usadamasa/agents-daemon" },
+  { repo: "/repo/workspace", github_repo: "usadamasa/workspace" },
+];
+const end = (ref, repo) => ({ ref, cwd: repo, repo });
+
+// 性質は models/noterepo の不変条件と対応する。
+
+test("edgeNoteRepo: 番号の合う before の参照の repo で補う。after が別 repo でも (RefNoteResolves、#551)", () => {
+  const edge = { before: end("pr:usadamasa/agents-daemon#549", "/repo/workspace"), after: end("task:alpha/1", "/repo/workspace") };
+  assert.equal(edgeNoteRepo(edge, repos, 549), "usadamasa/agents-daemon");
+  const issue = { before: end("issue:usadamasa/agents-daemon#551", "/repo/workspace"), after: end("sid:abc", "/repo/workspace") };
+  assert.equal(edgeNoteRepo(issue, repos, 551), "usadamasa/agents-daemon");
+});
+
+test("edgeNoteRepo: 番号の合う after の参照の repo で補う。before が別 repo でも (RefNoteResolves)", () => {
+  const edge = { before: end("sid:abc", "/repo/workspace"), after: end("pr:usadamasa/agents-daemon#10", "/repo/workspace") };
+  assert.equal(edgeNoteRepo(edge, repos, 10), "usadamasa/agents-daemon");
+});
+
+test("edgeNoteRepo: 参照の repo が repos に無くても参照の owner/repo を使う", () => {
+  const edge = { before: end("pr:someone/elsewhere#3", "/repo/workspace"), after: end("task:alpha/1", "/repo/workspace") };
+  assert.equal(edgeNoteRepo(edge, repos, 3), "someone/elsewhere");
+});
+
+test("edgeNoteRepo: 両端の参照が同じ番号で別 repo なら決めない (NoWrongLink)", () => {
+  const edge = { before: end("pr:usadamasa/agents-daemon#5", "/repo/workspace"), after: end("issue:usadamasa/workspace#5", "/repo/workspace") };
+  assert.equal(edgeNoteRepo(edge, repos, 5), undefined);
+  const same = { before: end("pr:usadamasa/agents-daemon#5", "/repo/workspace"), after: end("issue:usadamasa/agents-daemon#5", "/repo/workspace") };
+  assert.equal(edgeNoteRepo(same, repos, 5), "usadamasa/agents-daemon");
+});
+
+test("edgeNoteRepo: 番号の合う参照が無ければ、辺が触れる repo が 1 つのときだけ補う (NoWrongUnmatchedLink)", () => {
+  const ref = { before: end("pr:usadamasa/agents-daemon#549", "/repo/workspace"), after: end("task:alpha/1", "/repo/workspace") };
+  assert.equal(edgeNoteRepo(ref, repos, 550), undefined);
+  const task = { before: end("task:alpha/1", "/repo/agents-daemon"), after: end("task:beta/1", "/repo/workspace") };
+  assert.equal(edgeNoteRepo(task, repos, 7), undefined);
+  const one = { before: end("task:alpha/1", "/repo/workspace"), after: end("sid:abc", "/repo/workspace") };
+  assert.equal(edgeNoteRepo(one, repos, 7), "usadamasa/workspace");
+  // 端点の repo を repos で引けなければ、触れる repo が 1 つか分からないので補わない。
+  const unknown = { before: end("task:alpha/1", "/repo/workspace"), after: end("sid:abc", "/repo/elsewhere") };
+  assert.equal(edgeNoteRepo(unknown, repos, 7), undefined);
+});
+
+test("edgeNoteRepo: 両端と参照が同じ repo の session → pr は、番号に依らずその repo (SameRepoStable)", () => {
+  const edge = { before: end("sid:abc", "/repo/agents-daemon"), after: end("pr:usadamasa/agents-daemon#10", "/repo/agents-daemon") };
+  for (const k of [10, 11]) assert.equal(edgeNoteRepo(edge, repos, k), "usadamasa/agents-daemon", String(k));
 });

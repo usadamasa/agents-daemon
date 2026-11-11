@@ -211,16 +211,12 @@ func (g *builder) linkBlockedBy() {
 }
 
 // linkEdges は辺の記録の端点をノードに解決して辺にする。before 側は末端 (複数ならセッションのノード)、after 側は
-// 根のタスクにつなぐ。note の無い辺は、daemon が before の issue / PR の題を引いていればそれを note に出す。
+// 根のタスクにつなぐ。note は edge add で書いた補足だけで、daemon が引いた issue / PR の題は参照のノードの題に出す。
 func (g *builder) linkEdges() {
 	for _, e := range g.in.Edges {
 		befores := g.resolve(e.Before, g.sinkHub)
 		afters := g.resolve(e.After, g.roots)
-		note := e.Note
-		if note == "" {
-			note = g.in.RefTitles[e.Before.Ref]
-		}
-		via := &protocol.EdgeRecord{ID: e.ID, Before: e.Before, After: e.After, Note: note}
+		via := &protocol.EdgeRecord{ID: e.ID, Before: e.Before, After: e.After, Note: e.Note}
 		for _, b := range befores {
 			for _, a := range afters {
 				g.link(b, a, LinkEdge, via)

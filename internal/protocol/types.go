@@ -481,7 +481,7 @@ type EdgeRecord struct {
 	ID     string       `json:"id"`
 	Before EdgeEndpoint `json:"before"`
 	After  EdgeEndpoint `json:"after"`
-	// 辺の補足。空なら daemon が引いた before の issue / PR の題で埋める (記録は書き換えない)。
+	// edge add で書いた辺の補足。daemon が引いた issue / PR の題は混ぜない (参照のノードの題に出る)。
 	Note string `json:"note,omitempty"`
 }
 

@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 # analyze-modularity.sh
-# `go tool analyze-modularity --strict` を、base の commit で測ったレポートと比べて回す。`task lint` が呼ぶ。
+# `go tool analyze-modularity --strict --quiet` を、base の commit で測ったレポートと比べて回す。`task lint` が呼ぶ。
 # 揮発の窓は判定する変更自身の commit も含むので、base から D を悪くしたパッケージだけを落とす。
 #
 # BASE_SHA は比べる先。CI は pull_request の base.sha か push の before を渡す。
@@ -18,7 +18,7 @@ readonly BASE_SHA
 case "$BASE_SHA" in
   "" | 0000000*)
     printf '%s\n' "analyze-modularity: 比べる base が無いので --baseline なしで判定する" >&2
-    exec go tool analyze-modularity --strict .
+    exec go tool analyze-modularity --strict --quiet .
     ;;
 esac
 
@@ -34,4 +34,4 @@ trap cleanup EXIT
 
 git worktree add --quiet --detach "$work/base" "$BASE_SHA"
 go tool analyze-modularity "$work/base" > "$work/base.json"
-go tool analyze-modularity --strict --baseline "$work/base.json" .
+go tool analyze-modularity --strict --quiet --baseline "$work/base.json" .

@@ -1,8 +1,8 @@
 module github.com/usadamasa/agents-daemon
 
-go 1.26.3
-
-toolchain go1.26.10
+// net/http と cgo のビルド時の脆弱性は go1.27.4 で修正された。toolchain 行は GOTOOLCHAIN=local で効かないので、
+// go 行を下限にして利用者の手元のビルドも修正版に限る
+go 1.27.4
 
 require (
 	github.com/google/jsonschema-go v0.4.3

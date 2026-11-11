@@ -21,8 +21,8 @@ updates:
 
   # devShell の Go と lint ツールの版は flake.lock の nixpkgs の rev で決まる。
   # nix の対象は flake.lock の input の更新だけで、security updates は出ない。
-  # flake.nix の devGo の差し替えは channel の go_1_26 が追いつくと外れ、以後の
-  # Go のパッチ更新もこの PR に乗る。1.26 から 1.27 への系列上げは対象外。
+  # flake.nix の devGo の差し替えは channel の go_1_27 が追いつくと外れ、以後の
+  # Go のパッチ更新もこの PR に乗る。1.27 から 1.28 への系列上げは対象外。
   - package-ecosystem: nix
     directory: /
     schedule:

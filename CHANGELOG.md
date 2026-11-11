@@ -1,5 +1,18 @@
 # Changelog
 
+## [2026.1111.0](https://github.com/usadamasa/agents-daemon/compare/2026.1110.0...2026.1111.0) - 2026-11-11
+
+### Features
+- dependabot-auto-merge を依存ファイルの変更でだけ起動する by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/549
+- claude の終了で spawn と peer の rex session を閉じる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/556
+### Bug Fixes
+- park から拾ってタスクにするときは着手を既定にする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/554
+- 依存図: 辺の note の #N を番号の合う端点の参照の repo で補う by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/555
+### Documentation
+- docs: update のコマンドを置き場のパスから書く by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/552
+### Dependencies
+- build: Go を 1.27.4 に上げる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/553
+
 ## [2026.1110.0](https://github.com/usadamasa/agents-daemon/compare/2026.1109.3...2026.1110.0) - 2026-11-10
 
 ### Features

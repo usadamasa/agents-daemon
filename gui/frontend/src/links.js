@@ -42,13 +42,40 @@ function linkOf(m, { githubRepo, base }) {
     return { text: url, target: url };
   }
   if (g.repo !== undefined) return { text: m[0], target: issueUrl(g.repo, g.number, g.kind) };
-  if (g.bare !== undefined) return githubRepo ? { text: m[0], target: issueUrl(githubRepo, g.bare) } : undefined;
+  if (g.bare !== undefined) {
+    const repo = githubRepo?.(Number(g.bare));
+    return repo ? { text: m[0], target: issueUrl(repo, g.bare) } : undefined;
+  }
   if (g.abs !== undefined) return { text: m[0], target: g.abs };
   return base ? { text: m[0], target: `${base}/${g.rel}` } : undefined;
 }
 
+const REF = /^(?:pr|issue):(?<repo>[\w-]+\/[\w.-]+)#(?<number>[1-9]\d*)$/;
+
+// refRepo は pr: / issue: の参照の owner/repo。daemon が状態を引けたかに依らず参照の文字列から取る。
+const refRepo = (ref) => REF.exec(ref)?.groups.repo;
+
+// edgeNoteRepo は辺の note の #number を補う owner/repo。repos は deps の repos。決め方の性質は models/noterepo が持つ。
+// 辺の向きでは選ばない (note の番号は before の参照のことも after の参照のこともある)。番号の合う端点の参照があれば
+// その repo。両端が同じ番号で別 repo なら決めない。合わなければ辺が触れる repo が 1 つのときだけそれを使う。
+export function edgeNoteRepo(edge, repos, number) {
+  const ends = [edge.before, edge.after];
+  const matched = new Set(
+    ends.flatMap((e) => {
+      const m = REF.exec(e.ref);
+      return m !== null && Number(m.groups.number) === number ? [m.groups.repo] : [];
+    }),
+  );
+  if (matched.size > 0) return matched.size === 1 ? [...matched][0] : undefined;
+  const touched = new Set(ends.flatMap((e) => [refRepo(e.ref), repos.find((r) => r.repo === e.repo)?.github_repo]).filter((r) => r !== undefined));
+  // 端点の repo を repos で引けなければ、触れる repo が 1 つかは分からない。
+  const known = ends.every((e) => repos.some((r) => r.repo === e.repo && r.github_repo));
+  return known && touched.size === 1 ? [...touched][0] : undefined;
+}
+
 // segments は text を { text } (素の文字) と { text, target } (リンク。target は URL か絶対パス) の並びにする。
-// ctx.githubRepo は #123 を補う owner/repo、ctx.base は相対パスの基準。無ければその形は素の文字のまま。
+// ctx.githubRepo は #123 の番号を受けて補う owner/repo を返す関数、ctx.base は相対パスの基準。無いか owner/repo が
+// 分からなければ、その形は素の文字のまま。
 export function segments(text, ctx) {
   const out = [];
   const re = new RegExp(PATTERN);

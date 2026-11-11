@@ -90,5 +90,18 @@ run models/card Card CardNoTouchTask.cfg violated
 run models/card Card CardNoTouchEdge.cfg violated
 # 同じく、open の PR の辺が 7 日で消える (OpenRefEdgeKept の反例)。
 run models/card Card CardNoTouchRef.cfg violated
+# 辺の note の #N を、番号の合う端点の参照の repo で補う形 (#551)。合わなければ辺が触れる repo が 1 つのときだけ補う。
+# 参照の repo は ref の文字列から取り、状態を引けたかに依らない。
+run models/noterepo NoteRepo NoteRepo.cfg holds
+# after の端点の repo で補うと、別 repo の PR を待つ辺で #N が after の repo を指す (RefNoteResolves の反例)。
+run models/noterepo NoteRepo NoteRepoAfter.cfg violated
+# before の端点で補うと、after の参照の番号を書いた note (skill の session → pr の例) が before の repo を指す (RefNoteResolves の反例)。
+run models/noterepo NoteRepo NoteRepoBefore.cfg violated
+# 両端の参照が同じ番号で別 repo のとき before を選ぶと、after を指した note を before の repo へ送る (NoWrongLink の反例)。
+run models/noterepo NoteRepo NoteRepoPreferBefore.cfg violated
+# 番号の合わない #N を before の端点の repo で補うと、書き手の repo の issue を指した note を別 repo へ送る (NoWrongUnmatchedLink の反例)。
+run models/noterepo NoteRepo NoteRepoFallbackBefore.cfg violated
+# 参照の repo を daemon が引いた状態から取ると、状態を引けない PR の番号を書いた note がリンクにならない (RefNoteResolves の反例)。
+run models/noterepo NoteRepo NoteRepoViaState.cfg violated
 
 exit "$failed"

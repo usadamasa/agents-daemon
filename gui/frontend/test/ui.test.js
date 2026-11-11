@@ -578,7 +578,7 @@ test("メモの detail: repo を基準にリンクにする", async () => {
   escape();
 });
 
-test("辺の note: 辺の待つ側の repo を基準にリンクにする", async () => {
+test("辺の note: #123 は番号の合う端点の参照の repo で補う", async () => {
   q('.node[data-key="pr:usadamasa/agents-daemon#254"]').click();
   const a = q("#pop .lk .note a.ref");
   assert.equal(a.textContent, "#254");

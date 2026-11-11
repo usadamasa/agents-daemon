@@ -88,7 +88,8 @@ printf '%s' '{"before":{"ref":"pr:<owner>/<repo>#<番号>","cwd":"<この sessio
   | "${XDG_CACHE_HOME:-$HOME/.cache}/agents-daemon/bin/agents-daemon" edge add
 ```
 
-- note に書く番号は before の参照の番号 (PR 番号) に揃える。PR が閉じる issue の番号を書くと、線の note と参照が食い違う
+- note に書く番号は端点の参照の番号 (PR 番号) に揃える。依存図は note の `#N` を、番号の合う端点の参照の repo へリンクする。
+  PR が閉じる issue の番号を書くと、repo をまたぐ辺ではリンクにならない
 - PR がマージされると、`pr:` を before に持つ辺は daemon が消す。`session → pr` の辺は残るが、peer が終われば
   図から畳まれ、保持期間 (7 日) で消える。マージせずに閉じた PR の辺は消えないので、付け替えるか `edge rm` する
 

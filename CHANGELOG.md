@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026.1111.1](https://github.com/usadamasa/agents-daemon/compare/2026.1111.0...2026.1111.1) - 2026-11-11
+
+### Features
+- pane が無くなった起こした rex session を daemon が閉じる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/560
+
 ## [2026.1111.0](https://github.com/usadamasa/agents-daemon/compare/2026.1110.0...2026.1111.0) - 2026-11-11
 
 ### Features

@@ -35,7 +35,8 @@ const (
 // Host は起こす先の多重化ツール。rexcli の Client が満たす。
 type Host interface {
 	// NewSession は新しい多重化ツールの session を作り、その最初の pane で argv を起こして pane の ID を返す。コマンドが
-	// 終わっても pane を残す (起動の失敗を画面で読めるようにする)。session ができた時点で返り、コマンドの起動は待たない。
+	// 終わり、session にほかの pane が無ければ session を閉じる。異常終了では Enter まで pane を残す (起動の失敗を画面で
+	// 読めるようにする)。session ができた時点で返り、コマンドの起動は待たない。
 	// label は session と window の名前。
 	NewSession(ctx context.Context, label, cwd string, argv []string) (paneID string, err error)
 	// PaneGet は pane の今の前景 (multiplexer.Client と同じ)。起こした pane で claude が前景になるのを待つのに使う。

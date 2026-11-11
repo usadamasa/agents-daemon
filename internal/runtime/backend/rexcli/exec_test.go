@@ -108,6 +108,7 @@ case "$1" in
   session)
     case "$2" in
       new) emit session-new.json session ;;
+      kill) exit 0 ;;
       *) echo "Error: unknown session subcommand $2" >&2; exit 2 ;;
     esac ;;
   api) emit server-status.json server ;;

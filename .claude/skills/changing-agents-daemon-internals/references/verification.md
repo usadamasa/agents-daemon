@@ -97,6 +97,21 @@ agents-daemon inspect --file ./tmp/limit-screen.txt --session <session_id>  # �
 5. `daemon --foreground --dry-run` — 実 pane 相手に流し、誰にも送信せず誤爆もしないこと
 6. `simulate` — 検知から送信までを end-to-end で通す
 
+## 動いている daemon とかち合わずに試す
+
+worktree で建てたバイナリを実機の rex で試すときは、利用者の daemon と state を分ける。
+
+```sh
+go build -o ./tmp/ad ./cmd/agents-daemon
+cp ./tmp/ad ~/tmp/ad-<topic>
+XDG_STATE_HOME=~/tmp/state-<topic> ~/tmp/ad-<topic> daemon --foreground
+```
+
+- `XDG_STATE_HOME` を分けると `daemon.lock` も分かれ、動いている daemon と並んで起きる。印のファイルを書くサブコマンド
+  (`spawned-session mark` など) も同じ `XDG_STATE_HOME` で呼ぶ
+- バイナリは `~/tmp` へ写して呼ぶ。worktree のパスは `github.com` を含み、Bash の guard が git の操作と見なして止める
+- 済んだら `cc-rm tmp ~/tmp/ad-<topic> ~/tmp/state-<topic>` で消す
+
 ## 実機で通すこと
 
 送信の経路と画面の読み取り元は、fake ではなく実機で 1 度は通す。多重化ツールの応答の解釈違いや

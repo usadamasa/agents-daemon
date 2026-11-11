@@ -125,8 +125,9 @@ tasks:
       # `go tool analyze-arch-lint --metrics`。
       - go tool analyze-arch-lint --strict .
       - task: vulncheck
-      # gui/ は別 module (Wails のアプリ) で、gui:test が自分で gosec を回す。./... は入れ子の module の .go も拾うので外す
-      - gosec -exclude-dir=gui ./...
+      # gui/ は別 module (Wails のアプリ) で、gui:test が自分で gosec を回す。./... は入れ子の module の .go も拾うので外す。
+      # -quiet が無いとファイルごとの進捗が出力を埋め、後ろの段の失敗が読めなくなる
+      - gosec -exclude-dir=gui -quiet ./...
       # 揮発性を git の履歴から測り、base の commit と比べる。CI の checkout は fetch-depth: 0 にする
       - scripts/analyze-modularity.sh
 

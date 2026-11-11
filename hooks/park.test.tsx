@@ -62,6 +62,8 @@ test('session.start で park の tool を登録する', async ($, on) => {
   expect(tool.inputSchema.properties.cwd).toBeUndefined()
   expect(tool.description).toMatch(/進めるのに要る判断/)
   expect(tool.description).toMatch(/危ない操作の確認/)
+  // 依頼の対象を狭める判断を scope に置くと、既定の「やらない」で依頼が欠けたまま進む。置かずに聞く側へ並べる。
+  expect(tool.description).toMatch(/依頼の対象を狭める判断/)
   // 置くときの「既定はやらない」は今の作業の中だけに効き、後で拾ってタスクにするときは着手が既定になる。
   expect(tool.description).toMatch(/後で拾ってタスクにするときの既定は着手/)
   // 置いたメモの前提が作業の中で消えたら、unpark で取り下げる。

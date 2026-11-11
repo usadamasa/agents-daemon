@@ -66,12 +66,17 @@ help と同じ役。docs と feedback の代わりにはならない。
 
 ```sh
 rex session new peer-b --cwd "$PWD" --json -- \
+  /bin/sh -c 'rex="$1"; shift; "$@"; s=$?; c() { if "$rex" --autostart=false block ls -s "$REX_SESSION" --json | jq -e --arg b "$REX_BLOCK" ".blocks | length == 1 and .[0].block_id == \$b" >/dev/null; then "$rex" --autostart=false session kill "$REX_SESSION"; fi; exit "$s"; }; if [ "$s" -ne 0 ]; then trap c INT; printf "\n%s が exit %s で終わった。Enter で閉じる。\n" "$1" "$s"; read -r _; fi; c' \
+  agents-daemon-spawn rex \
   claude --name peer-b --model "${CLAUDE_CODE_SUBAGENT_MODEL:?}"
 ```
 
 <!-- rex-premise: preview.26 cli session new は --focus を持たず、起きたコマンドの REX_SESSION は新しい session になる -->
 
 `session new` は選択中の pane を動かさない。
+`/bin/sh -c` の包みは、claude が終わったとき session に残る block が自分だけなら session を閉じる。rex は中の
+コマンドが終わっても session を閉じない。異常終了では終わり方を出して Enter を待ち、それまで失敗の画面が残る。
+本文は spawn の `closeOnExitScript` (`rexcli`) と同じにする。
 
 数秒後に `ListAgents` へ `peer-b` として現れる。本文は `SendMessage` で送る。rex には Claude の
 入力欄へ本文を渡す専用のコマンドが無く、画面へ直接投入するなら `send -s peer-b '<本文>'` と
@@ -79,7 +84,9 @@ rex session new peer-b --cwd "$PWD" --json -- \
 
 ### 畳む
 
-`rex session kill peer-b` で session ごと畳む。`rex window close` で最後の window を閉じると、
+peer が `/exit` で終われば session は閉じる。異常終了で画面が残っているときは、その pane で Enter を押すと閉じる。
+peer の session に pane を足していると、claude の pane だけが閉じて session は残るので、`rex session kill peer-b` で
+session ごと畳む。`rex window close` で最後の window を閉じると、
 window が 0 の session が一覧に残る。
 
 <!-- rex-premise: preview.26 cli session kill は label を受ける。最後の window を閉じても session は残る -->

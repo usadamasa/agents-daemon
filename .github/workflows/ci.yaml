@@ -18,6 +18,7 @@ permissions:
   contents: read
 
 # Go と lint・テストのツールは flake.nix の devShell から取る (usadamasa/gh-manage の setup-nix)。版の正本は flake.lock
+# nix store の cache は Linux でも macOS でも restore の方が binary cache からの取得より遅いので、全 job で cache: false にする
 jobs:
   go-test:
     name: go test

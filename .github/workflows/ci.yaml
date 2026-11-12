@@ -18,6 +18,7 @@ permissions:
   contents: read
 
 # Go と lint・テストのツールは flake.nix の devShell から取る (usadamasa/gh-manage の setup-nix)。版の正本は flake.lock
+# nix store の cache は Linux でも macOS でも restore の方が binary cache からの取得より遅いので、全 job で cache: false にする
 jobs:
   go-test:
     name: go test
@@ -26,6 +27,8 @@ jobs:
       - uses: actions/checkout@v7.0.1
 
       - uses: usadamasa/gh-manage/actions/setup-nix@main
+        with:
+          cache: false
 
       - name: go vet
         run: go vet ./...
@@ -49,6 +52,8 @@ jobs:
           fetch-depth: 0
 
       - uses: usadamasa/gh-manage/actions/setup-nix@main
+        with:
+          cache: false
 
       - name: Run all linters
         env:
@@ -62,6 +67,8 @@ jobs:
       - uses: actions/checkout@v7.0.1
 
       - uses: usadamasa/gh-manage/actions/setup-nix@main
+        with:
+          cache: false
 
       # hook のテストは fake の go とバイナリで回るが、ソースが build できることもここで確かめる。
       - name: Build Go binaries
@@ -78,6 +85,8 @@ jobs:
 
       # apt の shellcheck ではなく devShell で固定した版を使い、ローカルと結果を揃える
       - uses: usadamasa/gh-manage/actions/setup-nix@main
+        with:
+          cache: false
 
       - name: Run shellcheck
         run: shellcheck hooks/*.sh hooks/lib/*.sh scripts/*.sh tests/lib/*.bash tests/fixtures/fake-go tests/fixtures/fake-gh .envrc
@@ -110,6 +119,8 @@ jobs:
 
       # .claude-plugin/types/ は対話セッションでしか書かれないので、ci/mod-types/ に写した型で検査する
       - uses: usadamasa/gh-manage/actions/setup-nix@main
+        with:
+          cache: false
 
       - name: Typecheck the mod
         run: task typecheck
@@ -143,6 +154,8 @@ jobs:
       - uses: actions/checkout@v7.0.1
 
       - uses: usadamasa/gh-manage/actions/setup-nix@main
+        with:
+          cache: false
 
       - name: Test the gui module
         run: task gui:test

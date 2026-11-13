@@ -39,6 +39,7 @@ if [ -z "$out" ]; then
   exit 2
 fi
 
+# shellcheck disable=SC2016 # 展開するのは書き出した script の側
 printf '#!/bin/bash\nprintf "%%s\\n" "$*" >>"%s"\nprintf "GOTOOLCHAIN=%%s\\n" "${GOTOOLCHAIN-unset}" >>"%s"\n' \
   "$TEST_TMPDIR/daemon.calls" "$TEST_TMPDIR/daemon.env" >"$out"
 chmod +x "$out"

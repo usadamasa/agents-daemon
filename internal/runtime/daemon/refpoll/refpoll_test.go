@@ -25,6 +25,7 @@ type fakeRemote struct {
 	states map[string]string
 	titles map[string]string
 	prs    map[string]refstate.PR
+	heads  map[string]string
 	errs   map[string]error
 	calls  []string
 }
@@ -35,19 +36,36 @@ func (f *fakeRemote) fetch(_ context.Context, it ref.Item) (Remote, error) {
 	if err := f.errs[key]; err != nil {
 		return Remote{}, err
 	}
-	return Remote{State: f.states[key], Title: f.titles[key], PR: f.prs[key]}, nil
+	return Remote{State: f.states[key], Title: f.titles[key], PR: f.prs[key], HeadBranch: f.heads[key]}, nil
+}
+
+// fakeSessions は生きているセッションと、その cwd の GitHub の repo と branch。locate の呼び出しを数える。
+type fakeSessions struct {
+	live    []Session
+	places  map[string][2]string
+	locates int
+}
+
+func (s *fakeSessions) list() []Session { return s.live }
+
+func (s *fakeSessions) locate(cwd string) (string, string) {
+	s.locates++
+	p := s.places[cwd]
+	return p[0], p[1]
 }
 
 type fixture struct {
-	p       *Poller
-	refs    refstate.Store
-	edges   edge.Store
-	dir     string
-	logPath string
-	log     *applog.Logger
+	p        *Poller
+	refs     refstate.Store
+	edges    edge.Store
+	dir      string
+	logPath  string
+	log      *applog.Logger
+	sessions *fakeSessions
 }
 
-// newFixture は一時ディレクトリの辺と写しの置き場で Poller を作る。add で辺を書く。
+// newFixture は一時ディレクトリの辺と写しの置き場で Poller を作る。add で辺を書く。生きているセッションは
+// f.sessions に置く (既定は無し)。
 func newFixture(t *testing.T, remote *fakeRemote) (fixture, func(before, after string)) {
 	t.Helper()
 	dir := t.TempDir()
@@ -61,7 +79,10 @@ func newFixture(t *testing.T, remote *fakeRemote) (fixture, func(before, after s
 			t.Fatal(err)
 		}
 	}
-	return fixture{p: New(edges, refs, remote.fetch, log), refs: refs, edges: edges, dir: dir, logPath: logPath, log: log}, add
+	sessions := &fakeSessions{places: map[string][2]string{}}
+	p := New(edges, refs, remote.fetch, sessions.list, log)
+	p.locate = sessions.locate
+	return fixture{p: p, refs: refs, edges: edges, dir: dir, logPath: logPath, log: log, sessions: sessions}, add
 }
 
 func (f fixture) states(t *testing.T) map[string]string {
@@ -342,6 +363,124 @@ func TestDecodeView(t *testing.T) {
 	}
 	if got, err := decodeView("pr", []byte(`{`)); err == nil {
 		t.Errorf("壊れた JSON = %+v, want error", got)
+	}
+}
+
+// PR の head branch を読む。マージ後も読む (初めて引いた時点でマージ済みの PR にも導く)。
+func TestDecodeView_PRのheadBranch(t *testing.T) {
+	for _, state := range []string{"OPEN", "MERGED", "CLOSED"} {
+		got, err := decodeView("pr", []byte(`{"state":"`+state+`","title":"t","headRefName":"worktree-x"}`))
+		if err != nil || got.HeadBranch != "worktree-x" {
+			t.Errorf("decodeView(pr %s) = %+v, %v", state, got, err)
+		}
+	}
+}
+
+// 写しに head branch を書く。
+func TestRefresh_headBranchを写しに書く(t *testing.T) {
+	remote := &fakeRemote{states: map[string]string{"pr:o/r#1": "open"}, heads: map[string]string{"pr:o/r#1": "feat"}}
+	f, add := newFixture(t, remote)
+	add("pr:o/r#1", "sid:h")
+
+	f.p.Refresh(context.Background(), t0)
+	got, err := f.refs.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got["pr:o/r#1"].HeadBranch != "feat" {
+		t.Errorf("写し = %+v", got["pr:o/r#1"])
+	}
+}
+
+// 渡す側が pr → task だけを書いた PR に、PR の repo と head branch で動いている生きているセッションから PR への辺を
+// 導く (#487、models/prlink の EventuallyAnchored)。repo が違うセッション、合うセッションが 2 つ以上の PR には導かない。
+func TestRefresh_PRのbranchのセッションからPRへ辺を導く(t *testing.T) {
+	remote := &fakeRemote{
+		states: map[string]string{"pr:o/r#1": "open", "pr:o/r#2": "open", "pr:o/r#3": "open"},
+		heads:  map[string]string{"pr:o/r#1": "feat", "pr:o/r#2": "dup", "pr:o/r#3": "other"},
+	}
+	f, add := newFixture(t, remote)
+	add("pr:o/r#1", "task:H/1")
+	add("pr:o/r#2", "task:H/1")
+	add("pr:o/r#3", "task:H/1")
+	f.sessions.live = []Session{{ID: "A", CWD: "/a"}, {ID: "B", CWD: "/b"}, {ID: "C", CWD: "/c"}, {ID: "D", CWD: "/d"}, {ID: "E", CWD: "/e"}}
+	f.sessions.places = map[string][2]string{
+		"/a": {"O/R", "feat"},  // repo の大文字小文字は区別しない
+		"/b": {"o/r", "main"},  // branch が違う
+		"/c": {"x/y", "other"}, // repo が違う
+		"/d": {"o/r", "dup"},
+		"/e": {"o/r", "dup"},
+	}
+
+	for i := range 3 {
+		f.p.Refresh(context.Background(), t0.Add(time.Duration(i)*time.Second))
+	}
+	got := edgeKeys(t, f.dir)
+	want := []string{"pr:o/r#1>task:H/1", "pr:o/r#2>task:H/1", "pr:o/r#3>task:H/1", "sid:A>pr:o/r#1"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("辺 = %v, want %v", got, want)
+	}
+	if log := f.readLog(t); !strings.Contains(log, "sid:A → pr:o/r#1") {
+		t.Errorf("導いたことのログが無い: %q", log)
+	}
+}
+
+// 初めて引いた時点でマージ済みの PR も、同じ引き直しで pr → task を消す前に導く。導いた辺は PR が済んでも残り、
+// PR のノードは図に残る (models/prlink の PRKept)。
+func TestRefresh_マージ済みのPRも掃除の前に導く(t *testing.T) {
+	remote := &fakeRemote{states: map[string]string{"pr:o/r#1": "merged"}, heads: map[string]string{"pr:o/r#1": "feat"}}
+	f, add := newFixture(t, remote)
+	add("pr:o/r#1", "task:H/1")
+	f.sessions.live = []Session{{ID: "A", CWD: "/a"}}
+	f.sessions.places["/a"] = [2]string{"o/r", "feat"}
+
+	f.p.Refresh(context.Background(), t0)
+	if got, want := edgeKeys(t, f.dir), []string{"sid:A>pr:o/r#1"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("辺 = %v, want %v", got, want)
+	}
+}
+
+// 自分の PR のマージを待つセッションには導かず、導いた後に待つ辺を書いたら導いた辺を消す (models/prlink の NoDaemonLoop)。
+func TestRefresh_自分のPRを待つ形になったら導いた辺を消す(t *testing.T) {
+	remote := &fakeRemote{states: map[string]string{"pr:o/r#1": "open"}, heads: map[string]string{"pr:o/r#1": "feat"}}
+	f, add := newFixture(t, remote)
+	add("pr:o/r#1", "task:H/1")
+	f.sessions.live = []Session{{ID: "A", CWD: "/a"}}
+	f.sessions.places["/a"] = [2]string{"o/r", "feat"}
+
+	f.p.Refresh(context.Background(), t0)
+	add("pr:o/r#1", "task:A/2")
+	f.p.Refresh(context.Background(), t0.Add(time.Second))
+	if got, want := edgeKeys(t, f.dir), []string{"pr:o/r#1>task:A/2", "pr:o/r#1>task:H/1"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("辺 = %v, want %v", got, want)
+	}
+}
+
+// 導く候補 (head branch が分かっていて上流の無い PR) が無ければ、セッションの branch を git で引かない。
+// 引いた branch は locateTTL のあいだ使い回す。
+func TestRefresh_branchを引くのは候補があるときだけ(t *testing.T) {
+	remote := &fakeRemote{states: map[string]string{"pr:o/r#1": "open"}, heads: map[string]string{"pr:o/r#1": "feat"}}
+	f, add := newFixture(t, remote)
+	add("sid:x", "pr:o/r#1")
+	add("pr:o/r#1", "task:H/1")
+	f.sessions.live = []Session{{ID: "A", CWD: "/a"}}
+
+	f.p.Refresh(context.Background(), t0)
+	if f.sessions.locates != 0 {
+		t.Errorf("上流のある PR だけなのに branch を %d 回引いた", f.sessions.locates)
+	}
+
+	if _, err := f.edges.Remove(edge.Endpoint{Ref: "sid:x", CWD: "/w"}, edge.Endpoint{Ref: "pr:o/r#1", CWD: "/w"}); err != nil {
+		t.Fatal(err)
+	}
+	f.p.Refresh(context.Background(), t0.Add(time.Second))
+	f.p.Refresh(context.Background(), t0.Add(2*time.Second))
+	if f.sessions.locates != 1 {
+		t.Errorf("locateTTL の内で branch を %d 回引いた, want 1", f.sessions.locates)
+	}
+	f.p.Refresh(context.Background(), t0.Add(locateTTL+3*time.Second))
+	if f.sessions.locates != 2 {
+		t.Errorf("locateTTL の後に引き直していない (%d 回)", f.sessions.locates)
 	}
 }
 

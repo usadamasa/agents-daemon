@@ -19,7 +19,7 @@ owner/repo と番号)、before の参照の状態を daemon が引けたか、no
 | | `MatchedNoteLinks`: 番号の合う参照のある note がリンクにならないのは、両端が同じ番号で別 repo のときだけ | 番号の合う参照の repo を先に見る |
 | | `SameRepoStable`: 両端と参照がどれも同じ repo の辺は、その repo で補う | どの枝もその repo を返す |
 | `NoteRepoAfter.cfg` | `RefNoteResolves` が破れる (`violated` を期待) | after の端点の repo で補うと、別 repo の PR を待つ辺で `#N` が after の repo を指す (#551 の症状) |
-| `NoteRepoBefore.cfg` | `RefNoteResolves` が破れる (`violated` を期待) | before の端点で補うと、after の参照の番号を書いた note (skill の session → pr の例) が before の repo を指す |
+| `NoteRepoBefore.cfg` | `RefNoteResolves` が破れる (`violated` を期待) | before の端点で補うと、after の参照の番号を書いた note (daemon が導く sid → pr の辺の「PR #N」) が before の repo を指す |
 | `NoteRepoPreferBefore.cfg` | `NoWrongLink` が破れる (`violated` を期待) | 両端の参照が同じ番号で別 repo のとき before を選ぶと、after を指した note を before の repo で補う |
 | `NoteRepoFallbackBefore.cfg` | `NoWrongUnmatchedLink` が破れる (`violated` を期待) | 番号の合わない `#N` を before の端点の repo で補うと、書き手の repo の issue を指した note を別 repo へ送る |
 | `NoteRepoViaState.cfg` | `RefNoteResolves` が破れる (`violated` を期待) | 参照の repo を daemon が引いた状態から取ると、状態を引けない PR の番号を書いた note がリンクにならない |

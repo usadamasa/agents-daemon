@@ -158,6 +158,7 @@ Spec == Init /\ [][Next]_vars
 BindOnce == file # None /\ bound # None => file = bound
 
 \* `edge rm` で消した辺を結びつけの書き込みが作り直さない。ファイルを無い状態から作るのは `edge add` だけ。
+\* daemon が導く sid → pr の辺 (edge の Anchor) は session: の端点を持たないので、このモデルの辺には当たらない (models/prlink)。
 NoResurrect == file # None => origin = "add"
 
 =============================================================================

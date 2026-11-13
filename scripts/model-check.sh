@@ -95,7 +95,7 @@ run models/card Card CardNoTouchRef.cfg violated
 run models/noterepo NoteRepo NoteRepo.cfg holds
 # after の端点の repo で補うと、別 repo の PR を待つ辺で #N が after の repo を指す (RefNoteResolves の反例)。
 run models/noterepo NoteRepo NoteRepoAfter.cfg violated
-# before の端点で補うと、after の参照の番号を書いた note (skill の session → pr の例) が before の repo を指す (RefNoteResolves の反例)。
+# before の端点で補うと、after の参照の番号を書いた note (daemon が導く sid → pr の辺の「PR #N」) が before の repo を指す (RefNoteResolves の反例)。
 run models/noterepo NoteRepo NoteRepoBefore.cfg violated
 # 両端の参照が同じ番号で別 repo のとき before を選ぶと、after を指した note を before の repo へ送る (NoWrongLink の反例)。
 run models/noterepo NoteRepo NoteRepoPreferBefore.cfg violated

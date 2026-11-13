@@ -27,4 +27,9 @@ daemon が `sid:A → pr:P` の辺を導く手順 (#487) を TLA+ に写した�
 - 生きているセッションのうち repo と branch の合うものが 2 つ以上なら導かない。モデルは合うセッションを A の 1 つに絞る。
 - 導き、導いた辺の除去、`edge add` / `edge rm` は `edges/.lock` の中で読んで書くので、交錯は 1 ステップで足りる
   (`models/handoff` の `EdgeBind` と同じ)。
-- 導いた辺を人が `edge rm` すると、条件が揃っていれば次の tick で導き直す。A が P を出した事実は変わらないため。
+- 導いた辺を人が `edge rm` すると (アプリの Unlink も)、条件が揃っていれば次の tick で導き直す。A が P を出した事実は
+  変わらないため。
+- モデルは A の branch を tick ごとに読むが、実装は cwd の repo と branch を `locateTTL` (1 分) のあいだ使い回す。
+  open の PR では導くのが遅れるだけで性質は変わらない。branch を切り替えた直後に初めて引いた PR が既にマージ済みだと、
+  古い branch のまま `pr:P → task` が消え、導く元が無くなる。
+- A の cwd は作業の記録の cwd (hook が渡す今の cwd)。記録が無ければ pane の cwd (起動したディレクトリ) を使う。

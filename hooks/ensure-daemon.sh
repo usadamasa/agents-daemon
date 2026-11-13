@@ -43,25 +43,30 @@ prepare_build_log() {
 }
 
 # report_build_failures MARKER...: 失敗印のあるものを 1 つの systemMessage にまとめて stdout へ出す。
-# 失敗印は 1 行目が原因、2 行目が建て直すコマンド。行のまま載せる。
+# build を detach する前に呼ぶ (後だと、走り出した build が印を消す・書き直すのと競合する)。
+# 載せるのは印の 1 行目 (原因) だけ。建て直すコマンドはこの hook の置き場から組む。印の 2 行目は失敗した時点の
+# plugin の置き場を指し、plugin を更新した後は消えているかもしれない。
 report_build_failures() {
   local -a lines=()
-  local marker body what
+  local marker cause what script
   for marker in "$@"; do
     if [ ! -f "$marker" ]; then
       continue
     fi
     # 判定と読み取りの間に、走っている build が成功して消すことがある
-    if ! body=$(<"$marker"); then
+    if ! IFS= read -r cause <"$marker"; then
       log_error "read failed: $marker"
       continue
     fi
     if [ "$marker" = "$GUI_BUILD_FAILED" ]; then
       what="依存図のアプリ (agent-tasks)"
+      script="$SCRIPT_DIR/build-gui.sh"
     else
       what="daemon"
+      script="$SCRIPT_DIR/build-daemon.sh"
     fi
-    lines+=("agents-daemon: $what のビルドに失敗しています。詳細は $DAEMON_BUILD_LOG を見てください。" "$body")
+    lines+=("agents-daemon: $what のビルドに失敗しています。詳細は $DAEMON_BUILD_LOG を見てください。" "$cause"
+      "セッションを開き直さずに建て直すには、Claude Code で ! $script を打つ")
   done
   if [ "${#lines[@]}" -eq 0 ]; then
     return 0

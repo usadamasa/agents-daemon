@@ -35,6 +35,7 @@ command -v rex go jq
 - `rex`: 無ければ NG。daemon は rex の CLI で block の画面を読み、プロンプトを送る。
 - `go`: 無ければ NG。SessionStart hook が plugin のソースから `go build` する。
   hook は Claude Code を起動したシェルの PATH で探すので、入れた後は Claude Code を起動し直す。
+  `go.mod` より古い go でもよい (build は `GOTOOLCHAIN=auto` で要るバージョンを取りに行く)。
 - `jq`: 無ければ NG。hook が plugin.json の version と hook 入力の JSON を読むのに使う。
 
 ## 2. rex の到達性と、このセッションの block
@@ -122,6 +123,7 @@ cat "$bin/agents-daemon.version"
 - 両方あれば OK。`agents-daemon.version` (建てた元の plugin version を書いた stamp) の値を報告に書く。
 - 無ければ NG。`${XDG_STATE_HOME:-$HOME/.local/state}/agents-daemon/logs/build.log` の末尾を読む。
   install 直後のセッションなら build がまだ走っている途中かもしれない。`go not found in PATH` なら 1 段目へ戻る。
+  `go build failed` なら、続く行の建て直すコマンドを利用者に `!` で打ってもらう。
   それ以外の失敗は `agents-daemon:agents-daemon` skill の「daemon が起きない・バイナリがビルドされない」から追う。
 
 ## 5. doctor

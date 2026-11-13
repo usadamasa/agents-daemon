@@ -71,8 +71,8 @@ plugin が持つもの:
 - **Go toolchain**: SessionStart hook が plugin のソースから `go build` でバイナリを建てる。
   hook は Claude Code を起動したシェルの PATH で `go` を探す。無ければ `brew install go` などで入れる。
   初回の build では Go module のダウンロードにネットワークを使う。PATH の `go` が `go.mod` の `go` 行
-  (1.27.4) より古いと、`GOTOOLCHAIN` が既定の `auto` なら go がそのバージョンを取得してビルドし、
-  `GOTOOLCHAIN=local` ならビルドが失敗する。
+  (1.27.4) より古ければ、Claude Code を開いたリポジトリの `GOTOOLCHAIN` (devShell の `local` など) にかかわらず、
+  go がそのバージョンの toolchain を取得してビルドする。
 - **jq**: hook が plugin.json の version と hook 入力の JSON を読むのに使う。
 
 ## インストール
@@ -91,6 +91,9 @@ plugin を更新すると次の SessionStart で建て直される。
 「plugin の更新後に daemon を入れ替える」にある。
 
 build の経過は `${XDG_STATE_HOME:-~/.local/state}/agents-daemon/logs/build.log` に残る。
+build が失敗したら (toolchain を取得できない、など)、次のセッションの開始時に原因と建て直すコマンドがメッセージに出る。
+セッションを開き直さずに建て直す手順は `skills/agents-daemon/references/operations.md` の
+「build の失敗から建て直す」にある。
 
 ## セットアップ
 

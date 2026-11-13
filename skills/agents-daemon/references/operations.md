@@ -60,7 +60,7 @@ mod の失敗が出たセッションは開き直す。
 ### build の失敗から建て直す
 
 SessionStart hook の build は裏で走るので、失敗は次のセッションの開始時にメッセージで出る。
-daemon なら `daemon のビルドに失敗しています`、依存図のアプリなら `agent-tasks のビルドに失敗しています` に続けて、
+`daemon のビルドに失敗しています` か `依存図のアプリ (agent-tasks) のビルドに失敗しています` に続けて、
 go の最後の行 (原因) と建て直すコマンドが並ぶ。同じ 2 行は `$STATE/logs/build.log` にも残る。
 
 go build は `GOTOOLCHAIN=auto` で走るので、PATH の go が古くても要るバージョンの toolchain を取りに行く。

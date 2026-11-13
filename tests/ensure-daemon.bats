@@ -136,7 +136,9 @@ teardown() {
   [ "$status" -eq 0 ]
   msg=$(printf '%s' "$output" | jq -er '.systemMessage')
   [[ "$msg" == *"toolchain not available"* ]]
-  [[ "$msg" == *"! /x/hooks/build-daemon.sh"* ]]
+  # 建て直すコマンドは印の 2 行目 (失敗した時点の、更新で消えうる置き場) ではなく、今の plugin の置き場から組む
+  [[ "$msg" == *"! $REPO_ROOT/hooks/build-daemon.sh"* ]]
+  [[ "$msg" != *"/x/hooks"* ]]
   [[ "$msg" == *"$BUILD_LOG"* ]]
   wait_until stamp_is_current
 }
@@ -158,7 +160,8 @@ teardown() {
   msg=$(printf '%s' "$output" | jq -er '.systemMessage')
   [[ "$msg" == *"agent-tasks"* ]]
   [[ "$msg" == *"cgo error"* ]]
-  [[ "$msg" == *"! /x/hooks/build-gui.sh"* ]]
+  [[ "$msg" == *"! $REPO_ROOT/hooks/build-gui.sh"* ]]
+  [[ "$msg" != *"/x/hooks"* ]]
   [ "$(<"$TEST_TMPDIR/daemon.calls")" = "daemon --ensure" ]
 }
 

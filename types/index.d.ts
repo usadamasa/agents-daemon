@@ -257,12 +257,13 @@ export type ParkAdded = {
   item: ParkingItem
 }
 
-// セッションをまたぐ辺の記録 1 つ
+// セッションをまたぐ辺の記録 1 つ。derived は daemon が PR の head branch とセッションの branch の一致から導いた sid → pr の辺
 export type Edge = {
   id: string
   before: EdgeEndpoint
   after: EdgeEndpoint
   note?: string
+  derived?: boolean
   created_at: string
 }
 

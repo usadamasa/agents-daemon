@@ -7,6 +7,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/daemonstate"
 	"github.com/usadamasa/agents-daemon/internal/ledger"
 	"github.com/usadamasa/agents-daemon/internal/runtime/claudesessions"
+	"github.com/usadamasa/agents-daemon/internal/runtime/daemon/refpoll"
 	"github.com/usadamasa/agents-daemon/internal/transcript"
 )
 
@@ -22,16 +23,18 @@ func (r *daemonRuntime) observeSessions(panes []daemonstate.PaneStatus, now time
 	r.touchLive(panes, now)
 }
 
-// touchLive は tick で見えたセッションの作業の記録と未完了のタスク、辺の mtime を進め、見えたセッションを liveSessions に控える。
-// 開いたまま何も打たないセッションの記録を保持期間で消さないため。進められなくても tick は止めない。
+// touchLive は tick で見えたセッションの作業の記録と未完了のタスク、辺の mtime を進め、見えたセッションを liveSessions と
+// livePlaces に控える。開いたまま何も打たないセッションの記録を保持期間で消さないため。進められなくても tick は止めない。
 func (r *daemonRuntime) touchLive(panes []daemonstate.PaneStatus, now time.Time) {
 	ids := make([]string, 0, len(panes))
+	places := make([]refpoll.Session, 0, len(panes))
 	for _, p := range panes {
 		if p.SessionID != "" {
 			ids = append(ids, p.SessionID)
+			places = append(places, refpoll.Session{ID: p.SessionID, CWD: p.CWD})
 		}
 	}
-	r.liveSessions = ids
+	r.liveSessions, r.livePlaces = ids, places
 	if err := errors.Join(r.works.Touch(ids, now), r.tasks.Touch(ids, now), r.edges.TouchSessions(ids, now)); err != nil {
 		r.log.Logf("生きているセッションの記録の mtime を進められません: %v", err)
 	}

@@ -123,6 +123,13 @@ type daemonRuntime struct {
 	lastHousekeepAt     time.Time // ゼロ値は「まだ 1 度も掃除していない」
 	// liveSessions は最後の tick で pane が見えたセッション。housekeeping が終了したセッションを見分けるのに使う。
 	liveSessions []string
+	// livePlaces は最後の tick で pane が見えたセッションとその cwd。refPoll が PR を出したセッションを引くのに使う。
+	livePlaces []refpoll.Session
+}
+
+// liveRefSessions は最後の tick で pane が見えたセッションとその cwd。
+func (r *daemonRuntime) liveRefSessions() []refpoll.Session {
+	return r.livePlaces
 }
 
 func newDaemonRuntime(client multiplexerClient, log *applog.Logger, statusPath string, store sessionstate.Store, sleep func(time.Duration), startedAt time.Time) *daemonRuntime {
@@ -555,7 +562,7 @@ func assembleRuntime(raw multiplexerClient, kind string, p apppath.Paths, store 
 	runtime := newDaemonRuntime(client, log, p.StatusFile(), store, time.Sleep, now)
 	runtime.backend = kind
 	runtime.attachStateDir(p.StateDir())
-	runtime.refPoll = refpoll.New(runtime.edges, runtime.refs, refpoll.GH, log)
+	runtime.refPoll = refpoll.New(runtime.edges, runtime.refs, refpoll.GH, runtime.liveRefSessions, log)
 	if c, ok := raw.(reaper.Client); ok {
 		runtime.reaper = reaper.New(runtime.spawned, c, log, dryRun)
 	}

@@ -2,7 +2,7 @@
 // だけで、gh で引いた状態を書く。読むのは依存図 (deps) で、merged / closed の参照を完了にし、dropped の参照を
 // 取りやめにし、引いた題を参照のノードの題にする。
 //
-//	refs/<id>.json   参照 1 つ (参照、状態、題、open の PR の段、引いた時刻)
+//	refs/<id>.json   参照 1 つ (参照、状態、題、open の PR の段、PR の head branch、引いた時刻)
 //
 // id は参照から決める (参照は / と # を含み、そのままではファイル名にできない)。引き直すかどうかは Due が決め、
 // 手順の性質は models/refstate が持つ。
@@ -72,9 +72,11 @@ type Record struct {
 	Ref   string `json:"ref"`
 	State string `json:"state"`
 	// Title は issue / PR の題。閉じた参照は引き直さないので、閉じた後に変わった題は写らない。
-	Title     string    `json:"title,omitempty"`
-	PR        PR        `json:"pr,omitzero"`
-	CheckedAt time.Time `json:"checked_at"`
+	Title string `json:"title,omitempty"`
+	PR    PR     `json:"pr,omitzero"`
+	// HeadBranch は PR の head branch。PR を出したセッションを branch の一致で引くのに使う (#487)。
+	HeadBranch string    `json:"head_branch,omitempty"`
+	CheckedAt  time.Time `json:"checked_at"`
 }
 
 // Done は済んだ状態 (merged / closed) か。取りやめは閉じているが済んでいない。

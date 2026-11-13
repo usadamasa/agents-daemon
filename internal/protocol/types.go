@@ -257,12 +257,13 @@ type ParkAdded struct {
 	Item    ParkingItem `json:"item"`
 }
 
-// Edge はセッションをまたぐ辺の記録 1 つ。
+// Edge はセッションをまたぐ辺の記録 1 つ。derived は daemon が PR の head branch とセッションの branch の一致から導いた sid → pr の辺。
 type Edge struct {
 	ID        string       `json:"id"`
 	Before    EdgeEndpoint `json:"before"`
 	After     EdgeEndpoint `json:"after"`
 	Note      string       `json:"note,omitempty"`
+	Derived   bool         `json:"derived,omitempty"`
 	CreatedAt time.Time    `json:"created_at"`
 }
 

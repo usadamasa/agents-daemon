@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026.1113.1](https://github.com/usadamasa/agents-daemon/compare/2026.1113.0...2026.1113.1) - 2026-11-13
+
+### Features
+- 依存図: PR を出したセッションから PR への辺を daemon が導く by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/574
+
 ## [2026.1113.0](https://github.com/usadamasa/agents-daemon/compare/2026.1111.1...2026.1113.0) - 2026-11-13
 
 ### Features

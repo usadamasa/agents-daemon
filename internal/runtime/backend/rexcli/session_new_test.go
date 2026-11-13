@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -190,6 +191,39 @@ func TestExecClient_NewSession_ClosesOnExit(t *testing.T) {
 				t.Errorf("agents-daemon の呼び出し = %q, want %q", got, wantMark)
 			}
 		})
+	}
+}
+
+// TestExecClient_NewSession_OwnProcessGroup は、包んだコマンドが sh と別のプロセスグループで動くことを見る。
+// sh と同じグループのままだと rex は sh を前景と見て、claude が立てた端末の題を sh のものとして扱い、
+// サイドバーに出さない (#570)。
+// macOS の /bin/sh (bash 3.2) は端末が無くても set -m でグループを分けるが、Linux の dash は端末が無いと
+// job control を切るので、rex が動く darwin だけで見る。
+func TestExecClient_NewSession_OwnProcessGroup(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("包みが相手にするのは macOS の /bin/sh。dash は端末が無いと set -m を効かせない")
+	}
+	f := newFakeRex(t)
+	f.put(t, "session-new.json", sessionNewJSON)
+	f.put(t, "block-ls-session:spawned.json", `{"blocks":[]}`)
+	useFakeSelf(t, f)
+	c := f.client(staticResolver(nil))
+	inner := []string{"perl", "-e", `print getpgrp() == $$ ? "own" : "shared"`}
+	if _, err := c.NewSession(context.Background(), "x", "/w/x", inner); err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	calls := splitArgs(t, readLines(t, filepath.Join(f.dir, "calls.log")))
+	sep := slices.Index(calls[0], "--")
+	argv := calls[0][sep+1:]
+
+	cmd := exec.Command(argv[0], argv[1:]...) // #nosec G204 -- テストが組んだ argv
+	cmd.Env = append(os.Environ(), "REX_SESSION=session:spawned", "REX_BLOCK=block:own")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("包んだ argv の実行 error = %v", err)
+	}
+	if got := string(out); got != "own" {
+		t.Errorf("包んだコマンドのプロセスグループ = %q, want %q (sh と別のグループ)", got, "own")
 	}
 }
 

@@ -66,7 +66,7 @@ help と同じ役。docs と feedback の代わりにはならない。
 
 ```sh
 rex session new peer-b --cwd "$PWD" --json -- \
-  /bin/sh -c 'rex="$1"; ad="$2"; shift 2; "$ad" spawned-session mark "$REX_SESSION" >/dev/null; "$@"; s=$?; c() { if "$rex" --autostart=false block ls -s "$REX_SESSION" --json | jq -e --arg b "$REX_BLOCK" ".blocks | length == 1 and .[0].block_id == \$b" >/dev/null; then "$rex" --autostart=false session kill "$REX_SESSION"; fi; exit "$s"; }; if [ "$s" -ne 0 ]; then trap c INT; printf "\n%s が exit %s で終わった。Enter で閉じる。\n" "$1" "$s"; read -r _; fi; c' \
+  /bin/sh -c 'set -m; rex="$1"; ad="$2"; shift 2; "$ad" spawned-session mark "$REX_SESSION" >/dev/null; "$@"; s=$?; c() { if "$rex" --autostart=false block ls -s "$REX_SESSION" --json | jq -e --arg b "$REX_BLOCK" ".blocks | length == 1 and .[0].block_id == \$b" >/dev/null; then "$rex" --autostart=false session kill "$REX_SESSION"; fi; exit "$s"; }; if [ "$s" -ne 0 ]; then trap c INT; printf "\n%s が exit %s で終わった。Enter で閉じる。\n" "$1" "$s"; read -r _; fi; c' \
   agents-daemon-spawn rex "${XDG_CACHE_HOME:-$HOME/.cache}/agents-daemon/bin/agents-daemon" \
   claude --name peer-b --model "${CLAUDE_CODE_SUBAGENT_MODEL:?}"
 ```

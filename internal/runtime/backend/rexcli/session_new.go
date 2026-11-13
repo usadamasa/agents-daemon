@@ -24,6 +24,8 @@ type sessionNewResult struct {
 // closeOnExitScript は起こしたコマンドを走らせ、終わったら session に残る block が自分 (REX_BLOCK) だけのときに
 // 自分の rex session を閉じる sh の本文。$1 が rex のバイナリ、$2 が agents-daemon のバイナリ、残りが起こす argv。
 // rex は中のコマンドが終わっても session を閉じず、pane が閉じても window が 0 の session が残る (#391)。
+//   - set -m で、起こすコマンドを自分のプロセスグループで端末の前景にする。sh と同じグループのままだと rex は sh を
+//     前景と見て、claude が立てた端末の題の持ち主を sh とし、サイドバーに題を出さない (#570)。
 //   - 起こす前に session の印を書く。後から開いた pane が残って自分では閉じられなかった session を、pane が空に
 //     なった後で daemon が閉じる (#557)。印を書けなくてもコマンドは起こす (失敗は画面に出る)。
 //   - 0 以外で終わったときは終わり方を出して Enter を待ち、それまで失敗の画面を残す。待つ間の Ctrl-C は Enter と同じ。
@@ -33,8 +35,9 @@ type sessionNewResult struct {
 // REX_SESSION は ID なので、起きた claude が session を rename しても当たる。peer-sessions skill の references/rex.md が
 // 同じ本文を single quote で囲んで載せるので、本文に single quote を入れない。
 // rex-premise: preview.28 cli block ls -s は session の全 window の block を返す。中のコマンドの終了で session は閉じない
+// rex-premise: preview.28 program_status サイドバーは端末の題の持ち主 (block call title の owner) が前景のプロセスのときだけ題を出す
 // macOS の /bin/sh (bash 3.2) は INT の trap の後も read を続けるので、閉じる処理 (c) を trap から直に呼んで抜ける。
-const closeOnExitScript = `rex="$1"; ad="$2"; shift 2; "$ad" spawned-session mark "$REX_SESSION" >/dev/null; "$@"; s=$?; ` +
+const closeOnExitScript = `set -m; rex="$1"; ad="$2"; shift 2; "$ad" spawned-session mark "$REX_SESSION" >/dev/null; "$@"; s=$?; ` +
 	`c() { if "$rex" --autostart=false block ls -s "$REX_SESSION" --json | ` +
 	`jq -e --arg b "$REX_BLOCK" ".blocks | length == 1 and .[0].block_id == \$b" >/dev/null; ` +
 	`then "$rex" --autostart=false session kill "$REX_SESSION"; fi; exit "$s"; }; ` +

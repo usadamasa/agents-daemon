@@ -1,5 +1,18 @@
 # Changelog
 
+## [2026.1113.0](https://github.com/usadamasa/agents-daemon/compare/2026.1111.1...2026.1113.0) - 2026-11-13
+
+### Features
+- 振り返りから、park の説明・lint の出力・検証手順を直す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/563
+### Bug Fixes
+- spawn の包みで起こす claude を端末の前景にし、rex のサイドバーに題を出す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/572
+### Documentation
+- peer-sessions の notify_when_idle を報告と重ならない形に絞る by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/571
+### Dependencies
+- go-arch-metrics を 2026.1111.0 に上げ、analyze-modularity を --quiet で回す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/565
+- devShell の go 1.27.4 を go.dev の配布バイナリに差し替える by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/566
+- CI の nix store の cache を止め、setup-nix を進める by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/569
+
 ## [2026.1111.1](https://github.com/usadamasa/agents-daemon/compare/2026.1111.0...2026.1111.1) - 2026-11-11
 
 ### Features

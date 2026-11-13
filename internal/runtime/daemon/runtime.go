@@ -128,9 +128,18 @@ type daemonRuntime struct {
 	livePlaces []refpoll.Session
 }
 
-// liveRefSessions は最後の tick で pane が見えたセッションとその cwd。
+// liveRefSessions は最後の tick で pane が見えたセッションとその今の cwd。pane の cwd は起動したディレクトリのままで、
+// セッションの途中で入った worktree を映さないので、作業の記録の cwd (hook が渡す今の cwd) があればそちらを使う。
+// cc-premise: 2.1.323 hooks EnterWorktree の後の hook の入力の cwd は worktree (rex の pane の cwd は起動したディレクトリのまま)
 func (r *daemonRuntime) liveRefSessions() []refpoll.Session {
-	return r.livePlaces
+	sessions := make([]refpoll.Session, 0, len(r.livePlaces))
+	for _, s := range r.livePlaces {
+		if rec, ok := r.works.Get(s.ID); ok && rec.CWD != "" {
+			s.CWD = rec.CWD
+		}
+		sessions = append(sessions, s)
+	}
+	return sessions
 }
 
 func newDaemonRuntime(client multiplexerClient, log *applog.Logger, statusPath string, store sessionstate.Store, sleep func(time.Duration), startedAt time.Time) *daemonRuntime {

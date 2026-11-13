@@ -123,10 +123,15 @@ func (p *Poller) Refresh(ctx context.Context, now time.Time) {
 // PR への辺を導き (#487)、自分の PR を待つ形になった導いた辺を消す。合うセッションが 2 つ以上なら導かない。
 // 辺の条件は edge の Anchor が edges/.lock の中で確かめ直す。
 func (p *Poller) anchor(edges []edge.Edge, cached map[string]refstate.Record, now time.Time) {
-	for _, pr := range p.candidates(edges, cached) {
+	candidates := p.candidates(edges, cached)
+	var live []Session
+	if len(candidates) > 0 {
+		live = p.sessions()
+	}
+	for _, pr := range candidates {
 		it, _ := ref.ParseItem(pr)
 		var matched []Session
-		for _, s := range p.sessions() {
+		for _, s := range live {
 			repo, branch := p.place(s.CWD, now)
 			if strings.EqualFold(repo, it.Repo) && branch == cached[pr].HeadBranch {
 				matched = append(matched, s)

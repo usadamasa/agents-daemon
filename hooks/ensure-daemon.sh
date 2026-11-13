@@ -6,8 +6,11 @@
 # - stamp が無い・古い・読めなければ build-daemon.sh を detach して即座に戻る。build 完了後の起動は
 #   build-daemon.sh が行う。SessionStart を go build で待たせない
 # - daemon は最新で依存図のアプリ (agent-tasks) だけ古ければ、build-gui.sh を detach する
+# - 前の build の失敗印 (build.failed、build-gui.failed) があれば、原因と建て直すコマンドを systemMessage に載せる。
+#   build は detach するので、失敗はそのセッションではなく次の SessionStart で伝わる
 #
-# stdout は会話の context へ注入されるため、何も出さない。ログは stderr と build.log へ送る。
+# stdout は会話の context へ注入されるため、systemMessage の JSON のほかは何も出さない。ログは stderr と build.log へ送る。
+# cc-premise: 2.1.323 hooks SessionStart の stdout の {"systemMessage": ...} を利用者に見せる
 
 set -euo pipefail
 
@@ -36,6 +39,25 @@ prepare_build_log() {
     exit 1
   fi
 }
+
+# 失敗印は 1 行目が原因、2 行目が建て直すコマンド。行のまま載せる。
+report_build_failures() {
+  local -a lines=()
+  if [ -f "$DAEMON_BUILD_FAILED" ]; then
+    lines+=("agents-daemon: daemon のビルドに失敗しています。詳細は $DAEMON_BUILD_LOG を見てください。" "$(<"$DAEMON_BUILD_FAILED")")
+  fi
+  if [ -f "$GUI_BUILD_FAILED" ]; then
+    lines+=("agents-daemon: 依存図のアプリ (agent-tasks) のビルドに失敗しています。詳細は $DAEMON_BUILD_LOG を見てください。" "$(<"$GUI_BUILD_FAILED")")
+  fi
+  if [ "${#lines[@]}" -eq 0 ]; then
+    return 0
+  fi
+  if ! jq -n --arg msg "$(printf '%s\n' "${lines[@]}")" '{systemMessage: $msg}'; then
+    log_error "cannot report build failures as systemMessage"
+  fi
+}
+
+report_build_failures
 
 if [ -x "$DAEMON_BIN" ] && stamp_current "$DAEMON_STAMP" "$version"; then
   # daemon は plugin 以上。依存図のアプリだけ古い (前回の build で toolchain が無かった、など) なら、それだけ建て直す。

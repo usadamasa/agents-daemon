@@ -36,6 +36,7 @@ README の「役割」が持つ。機能を足す・外す判断はそこに照�
 | `models/refstate/` | 外部の参照 (issue / PR) の状態を引いて依存図へ写し、済んだ参照の辺を消す TLA+ のモデル |
 | `models/rexlist/` | rex の全列挙と、その途中の session の close の交錯の TLA+ のモデル |
 | `models/noterepo/` | 依存図の辺の note の `#N` を補う repo を、端点の参照の番号で決める TLA+ のモデル |
+| `models/prlink/` | PR を出したセッションから PR への辺を daemon が導く TLA+ のモデル |
 | `models/card/` | 記録の更新と保持期間の掃除から依存図のカードの状態を導く TLA+ のモデル |
 | `flake.nix` | 開発ツールの devShell |
 | `.claude/skills/` | この repo の保守用 skill。plugin には同梱しない |

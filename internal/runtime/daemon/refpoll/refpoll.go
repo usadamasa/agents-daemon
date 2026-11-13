@@ -18,6 +18,7 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/applog"
 	"github.com/usadamasa/agents-daemon/internal/edge"
+	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/ref"
 	"github.com/usadamasa/agents-daemon/internal/refstate"
 )
@@ -26,16 +27,28 @@ import (
 // 長く止めない。
 const fetchTimeout = 10 * time.Second
 
+// locateTTL は生きているセッションの cwd の repo と branch を使い回す期間。導く候補の PR がある間は tick ごとに
+// 見るので、セッションごとに git を tick ごとに起こさない。branch を切り替えてから導くまでの遅れはこの長さで足りる。
+const locateTTL = time.Minute
+
 // Remote は引いた issue / PR 1 つ。State は refstate の語。
 type Remote struct {
 	State string
 	Title string
 	// PR は open の PR の段。open でない PR と issue はゼロ値。
 	PR refstate.PR
+	// HeadBranch は PR の head branch。issue は空。
+	HeadBranch string
 }
 
 // Fetcher は issue / PR の今の状態と題と段を引く。
 type Fetcher func(ctx context.Context, it ref.Item) (Remote, error)
+
+// Session は tick で見えた生きているセッション 1 つ。
+type Session struct {
+	ID  string
+	CWD string
+}
 
 // failure は gh が失敗した参照 1 つの、次に引ける時刻とログに書いた理由。
 type failure struct {
@@ -43,26 +56,45 @@ type failure struct {
 	reason  string
 }
 
-// Poller は引き直しの状態 (失敗した参照) を daemon の寿命の間持つ。
+// located は cwd の GitHub の repo (owner/repo) と branch を引いた結果と時刻。
+type located struct {
+	repo, branch string
+	at           time.Time
+}
+
+// Poller は引き直しの状態 (失敗した参照、引いた cwd の branch) を daemon の寿命の間持つ。
 type Poller struct {
 	edges    edge.Store
 	refs     refstate.Store
 	fetch    Fetcher
+	sessions func() []Session
+	// locate は cwd の GitHub の repo (owner/repo) と branch を引く (テストが git を起こさずに差し替える継ぎ目)。
+	locate   func(cwd string) (repo, branch string)
 	log      *applog.Logger
 	failures map[string]failure
+	places   map[string]located
 }
 
-// New は edges の端点の参照を fetch で引き、refs へ書く Poller を作る。
-func New(edges edge.Store, refs refstate.Store, fetch Fetcher, log *applog.Logger) *Poller {
-	return &Poller{edges: edges, refs: refs, fetch: fetch, log: log, failures: map[string]failure{}}
+// New は edges の端点の参照を fetch で引き、refs へ書く Poller を作る。sessions は生きているセッションを返す。
+func New(edges edge.Store, refs refstate.Store, fetch Fetcher, sessions func() []Session, log *applog.Logger) *Poller {
+	return &Poller{
+		edges: edges, refs: refs, fetch: fetch, sessions: sessions, locate: gitLocate, log: log,
+		failures: map[string]failure{}, places: map[string]located{},
+	}
+}
+
+// gitLocate は cwd の origin の GitHub の repo と branch を git で引く。git の外や detached HEAD は空。
+func gitLocate(cwd string) (string, string) {
+	place := gitrepo.Locate(cwd)
+	return gitrepo.GitHubRepo(place.Repo), place.Branch
 }
 
 // Refresh は辺の端点の issue / PR のうち引き直す時期のもの (refstate.Due) を 1 つ選んで引き、写しへ書く。
 // 1 回に 1 つにして、tick (既定 5 秒) の間隔で gh の呼び出しをばらす。選ぶ順は、まだ引いていないもの、前に引いた
 // 時刻の古いもの、参照の順。gh が失敗したら写しを書かず (済んでいない参照を完了と見せない)、その参照は
 // RefreshInterval のあいだ引かない。失敗の理由は参照ごとに、変わったときだけログに書く (gh が無いような全部に
-// 効く理由は参照の数だけ 1 回ずつ)。引いた後に、済んだ参照を before に持つ辺を消す (sweep)。nil の Poller は
-// 何もしない。
+// 効く理由は参照の数だけ 1 回ずつ)。引いた後に、PR を出したセッションから PR への辺を導き (anchor)、済んだ参照を
+// before に持つ辺を消す (sweep)。導くのは掃除より前 (models/prlink の PRKept)。nil の Poller は何もしない。
 func (p *Poller) Refresh(ctx context.Context, now time.Time) {
 	if p == nil || p.refs.Dir == "" {
 		return
@@ -82,8 +114,80 @@ func (p *Poller) Refresh(ctx context.Context, now time.Time) {
 			cached[rec.Ref] = rec
 		}
 	}
+	p.anchor(edges, cached, now)
 	p.sweep(edges, cached)
 	p.keepOpen(cached, now)
+}
+
+// anchor は渡す側が上流を書いていない PR に、その PR の repo と head branch で動いている生きているセッションから
+// PR への辺を導き (#487)、自分の PR を待つ形になった導いた辺を消す。合うセッションが 2 つ以上なら導かない。
+// 辺の条件は edge の Anchor が edges/.lock の中で確かめ直す。
+func (p *Poller) anchor(edges []edge.Edge, cached map[string]refstate.Record, now time.Time) {
+	candidates := p.candidates(edges, cached)
+	var live []Session
+	if len(candidates) > 0 {
+		live = p.sessions()
+	}
+	for _, pr := range candidates {
+		it, _ := ref.ParseItem(pr)
+		var matched []Session
+		for _, s := range live {
+			repo, branch := p.place(s.CWD, now)
+			if strings.EqualFold(repo, it.Repo) && branch == cached[pr].HeadBranch {
+				matched = append(matched, s)
+			}
+		}
+		if len(matched) != 1 {
+			continue
+		}
+		e, ok, err := p.edges.Anchor(matched[0].ID, matched[0].CWD, pr, now)
+		if err != nil {
+			p.log.Logf("PR を出したセッションの辺を導けません: %s: %v", pr, err)
+			continue
+		}
+		if ok {
+			p.log.Logf("辺 %s を導きました: %s → %s (branch %s)", e.ID, e.Before.Ref, e.After.Ref, cached[pr].HeadBranch)
+		}
+	}
+	removed, err := p.edges.Unanchor()
+	if err != nil {
+		p.log.Logf("自分の PR を待つ形になった導いた辺を消せません: %v", err)
+	}
+	for _, e := range removed {
+		p.log.Logf("辺 %s を消しました: %s → %s (%s が %s を待つ辺と輪になるため)", e.ID, e.Before.Ref, e.After.Ref, e.Before.Ref, e.After.Ref)
+	}
+}
+
+// candidates は導く候補の PR: 写しが head branch を持ち、辺の before にあり、どの辺の after にも無いもの。
+func (p *Poller) candidates(edges []edge.Edge, cached map[string]refstate.Record) []string {
+	upstream := map[string]bool{}
+	for _, e := range edges {
+		upstream[e.After.Ref] = true
+	}
+	seen := map[string]bool{}
+	var prs []string
+	for _, e := range edges {
+		pr := e.Before.Ref
+		if seen[pr] || upstream[pr] || cached[pr].HeadBranch == "" {
+			continue
+		}
+		if it, ok := ref.ParseItem(pr); ok && it.Kind == "pr" {
+			seen[pr] = true
+			prs = append(prs, pr)
+		}
+	}
+	sort.Strings(prs)
+	return prs
+}
+
+// place は cwd の GitHub の repo と branch。locateTTL のあいだは前に引いた値を使う。
+func (p *Poller) place(cwd string, now time.Time) (string, string) {
+	if l, ok := p.places[cwd]; ok && now.Sub(l.at) < locateTTL {
+		return l.repo, l.branch
+	}
+	repo, branch := p.locate(cwd)
+	p.places[cwd] = located{repo: repo, branch: branch, at: now}
+	return repo, branch
 }
 
 // keepOpen は写しが open の参照を before に持つ辺の保持期間を数え直す。マージを待っている PR の辺を、更新が無いだけで消さない。
@@ -168,7 +272,7 @@ func (p *Poller) refresh(ctx context.Context, key string, prev refstate.Record, 
 		p.log.Logf("外部の参照の状態を引けるようになりました: %s", key)
 	}
 	state := remote.State
-	rec := refstate.Record{Ref: key, State: state, Title: remote.Title, PR: remote.PR, CheckedAt: now}
+	rec := refstate.Record{Ref: key, State: state, Title: remote.Title, PR: remote.PR, HeadBranch: remote.HeadBranch, CheckedAt: now}
 	if err := p.refs.Put(rec); err != nil {
 		p.log.Logf("外部の参照の写しの書き込みに失敗: %v", err)
 		return refstate.Record{}, false
@@ -192,7 +296,7 @@ func GH(ctx context.Context, it ref.Item) (Remote, error) {
 	}
 	sub, fields := "issue", "state,stateReason,title"
 	if it.Kind == "pr" {
-		sub, fields = "pr", "state,title,isDraft,statusCheckRollup,reviewDecision,mergeStateStatus,mergeable"
+		sub, fields = "pr", "state,title,headRefName,isDraft,statusCheckRollup,reviewDecision,mergeStateStatus,mergeable"
 	}
 	cmd := exec.CommandContext(ctx, bin, sub, "view", strconv.Itoa(it.Number), "--repo", it.Repo, "--json", fields) // #nosec G204 -- 固定の gh のサブコマンドと、ref.ParseItem で検証した repo と番号
 	var stderr bytes.Buffer
@@ -214,6 +318,7 @@ type view struct {
 	State             string  `json:"state"`
 	StateReason       string  `json:"stateReason"`
 	Title             string  `json:"title"`
+	HeadRefName       string  `json:"headRefName"`
 	IsDraft           bool    `json:"isDraft"`
 	StatusCheckRollup []check `json:"statusCheckRollup"`
 	ReviewDecision    string  `json:"reviewDecision"`
@@ -243,7 +348,7 @@ func decodeView(sub string, out []byte) (Remote, error) {
 	if err != nil {
 		return Remote{}, err
 	}
-	r := Remote{State: state, Title: v.Title}
+	r := Remote{State: state, Title: v.Title, HeadBranch: v.HeadRefName}
 	if sub == "pr" && state == refstate.StateOpen {
 		r.PR = refstate.PR{Draft: v.IsDraft, CI: ciOf(v.StatusCheckRollup), Review: reviewOf(v.ReviewDecision), Merge: mergeOf(v.Mergeable, v.MergeStateStatus)}
 	}

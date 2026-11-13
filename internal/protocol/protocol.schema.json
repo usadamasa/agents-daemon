@@ -293,7 +293,7 @@
       }
     },
     "Edge": {
-      "description": "セッションをまたぐ辺の記録 1 つ",
+      "description": "セッションをまたぐ辺の記録 1 つ。derived は daemon が PR の head branch とセッションの branch の一致から導いた sid → pr の辺",
       "type": "object",
       "additionalProperties": false,
       "required": ["id", "before", "after", "created_at"],
@@ -302,6 +302,7 @@
         "before": { "$ref": "#/$defs/EdgeEndpoint" },
         "after": { "$ref": "#/$defs/EdgeEndpoint" },
         "note": { "type": "string" },
+        "derived": { "type": "boolean" },
         "created_at": { "type": "string", "format": "date-time" }
       }
     },

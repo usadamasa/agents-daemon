@@ -1,4 +1,4 @@
-package daemon
+package dryrun
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
 )
 
-// dryRunClient は稼働中の Claude セッションへの誤送信を防ぐ安全弁そのものなので、
+// dry-run の Client は稼働中の Claude セッションへの誤送信を防ぐ安全弁そのものなので、
 // 「読み取り系はそのまま inner へ通す」「書き込み系は inner に絶対到達しない」を
 // 直接検証する。inner 側の FakeClient に到達したかどうかを Calls で確認する。
 
@@ -32,7 +32,7 @@ func TestDryRunClient_ReadOperationsPassThrough(t *testing.T) {
 	}
 	log := applog.NewLogger(filepath.Join(t.TempDir(), "daemon.log"), time.Now)
 	defer func() { _ = log.Close() }()
-	c := newDryRunClient(inner, log)
+	c := New(inner, log)
 	ctx := context.Background()
 
 	t.Run("PaneListはinnerへ到達する", func(t *testing.T) {
@@ -78,7 +78,7 @@ func TestDryRunClient_WriteOperationsNeverReachInner(t *testing.T) {
 	}
 	logPath := filepath.Join(t.TempDir(), "daemon.log")
 	log := applog.NewLogger(logPath, time.Now)
-	c := newDryRunClient(inner, log)
+	c := New(inner, log)
 	ctx := context.Background()
 
 	t.Run("SendTextはinnerに到達せず常に成功を返す", func(t *testing.T) {

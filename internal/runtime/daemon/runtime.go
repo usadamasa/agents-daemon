@@ -25,6 +25,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend"
 	"github.com/usadamasa/agents-daemon/internal/runtime/claudesessions"
 	"github.com/usadamasa/agents-daemon/internal/runtime/config"
+	"github.com/usadamasa/agents-daemon/internal/runtime/daemon/dryrun"
 	"github.com/usadamasa/agents-daemon/internal/runtime/daemon/limitlog"
 	"github.com/usadamasa/agents-daemon/internal/runtime/daemon/reaper"
 	"github.com/usadamasa/agents-daemon/internal/runtime/daemon/refpoll"
@@ -56,8 +57,8 @@ type paneEntry struct {
 
 // multiplexerClient は daemon が多重化ツールに対して使う操作。monitor へ渡す 3 つ (読む・送る) に、tick の pane の列挙、
 // 上限の出来事の記録に添える端末の大きさ、起動時の到達性を足したもの (#301)。PaneGet は daemon の process からは
-// 呼ばないので持たない。backend.Connect が返す multiplexer.Client (全部入り) をそのまま渡し、dry-run の包みは
-// この 6 つだけを実装する。購読 (multiplexer.Watcher) は持つ実装だけが満たす別の口で、startWatch が型で確かめる。
+// 呼ばないので持たない。backend.Connect が返す multiplexer.Client (全部入り) をそのまま渡し、dry-run の包み
+// (dryrun.Client) はこの 6 つだけを実装する。購読 (multiplexer.Watcher) は持つ実装だけが満たす別の口で、startWatch が型で確かめる。
 type multiplexerClient interface {
 	monitor.Client
 	// PaneList は現在の全 pane を返す。
@@ -123,6 +124,22 @@ type daemonRuntime struct {
 	lastHousekeepAt     time.Time // ゼロ値は「まだ 1 度も掃除していない」
 	// liveSessions は最後の tick で pane が見えたセッション。housekeeping が終了したセッションを見分けるのに使う。
 	liveSessions []string
+	// livePlaces は最後の tick で pane が見えたセッションとその cwd。refPoll が PR を出したセッションを引くのに使う。
+	livePlaces []refpoll.Session
+}
+
+// liveRefSessions は最後の tick で pane が見えたセッションとその今の cwd。pane の cwd は起動したディレクトリのままで、
+// セッションの途中で入った worktree を映さないので、作業の記録の cwd (hook が渡す今の cwd) があればそちらを使う。
+// cc-premise: 2.1.323 hooks EnterWorktree の後の hook の入力の cwd は worktree (rex の pane の cwd は起動したディレクトリのまま)
+func (r *daemonRuntime) liveRefSessions() []refpoll.Session {
+	sessions := make([]refpoll.Session, 0, len(r.livePlaces))
+	for _, s := range r.livePlaces {
+		if rec, ok := r.works.Get(s.ID); ok && rec.CWD != "" {
+			s.CWD = rec.CWD
+		}
+		sessions = append(sessions, s)
+	}
+	return sessions
 }
 
 func newDaemonRuntime(client multiplexerClient, log *applog.Logger, statusPath string, store sessionstate.Store, sleep func(time.Duration), startedAt time.Time) *daemonRuntime {
@@ -549,13 +566,13 @@ func connect(ctx context.Context, store sessionstate.Store) (kind string, client
 func assembleRuntime(raw multiplexerClient, kind string, p apppath.Paths, store sessionstate.Store, log *applog.Logger, dryRun bool, now time.Time) *daemonRuntime {
 	client := raw
 	if dryRun {
-		client = newDryRunClient(raw, log)
+		client = dryrun.New(raw, log)
 		log.Logf("dry-run モード: 検知と判定は通常どおり行うが、pane への送信とラベル更新と、起こした session の後片付けはしない")
 	}
 	runtime := newDaemonRuntime(client, log, p.StatusFile(), store, time.Sleep, now)
 	runtime.backend = kind
 	runtime.attachStateDir(p.StateDir())
-	runtime.refPoll = refpoll.New(runtime.edges, runtime.refs, refpoll.GH, log)
+	runtime.refPoll = refpoll.New(runtime.edges, runtime.refs, refpoll.GH, runtime.liveRefSessions, log)
 	if c, ok := raw.(reaper.Client); ok {
 		runtime.reaper = reaper.New(runtime.spawned, c, log, dryRun)
 	}

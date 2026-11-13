@@ -80,18 +80,18 @@ after に置くのは、peer の成果が無いと始められない自分の作
 「報告を受け取る」だけのタスクは辺の after にせず、報告が来たら成果を使う作業のタスクへ辺を向ける。
 
 peer の成果が PR になったら、報告を受けて PR 番号が分かった時点で、上の `session → task` の辺を
-`edge rm` し、PR を挟んだ鎖に書き直す:
+`edge rm` し、PR を待つ辺に書き直す:
 
 ```sh
-printf '%s' '{"before":{"ref":"session:<name>","cwd":"<この session に渡した cwd>"},"after":{"ref":"pr:<owner>/<repo>#<番号>","cwd":"<この session に渡した cwd>"},"note":"PR #<番号>"}' \
-  | "${XDG_CACHE_HOME:-$HOME/.cache}/agents-daemon/bin/agents-daemon" edge add
 printf '%s' '{"before":{"ref":"pr:<owner>/<repo>#<番号>","cwd":"<この session に渡した cwd>"},"after":{"task":"<自分のタスクの id>"},"note":"PR #<番号> のマージの後"}' \
   | "${XDG_CACHE_HOME:-$HOME/.cache}/agents-daemon/bin/agents-daemon" edge add
 ```
 
+- peer と PR をつなぐ `sid:<peer> → pr:` の辺は daemon が導く。PR の repo と head branch で動いている生きている
+  セッションが 1 つだけなら、数秒のうちに書く。PR の branch を持つ worktree で peer を動かしていれば手で書くものは無い
 - note に書く番号は端点の参照の番号 (PR 番号) に揃える。依存図は note の `#N` を、番号の合う端点の参照の repo へリンクする。
   PR が閉じる issue の番号を書くと、repo をまたぐ辺ではリンクにならない
-- PR がマージされると、`pr:` を before に持つ辺は daemon が消す。`session → pr` の辺は残るが、peer が終われば
+- PR がマージされると、`pr:` を before に持つ辺は daemon が消す。導いた `sid → pr` の辺は残るが、peer が終われば
   図から畳まれ、保持期間 (7 日) で消える。マージせずに閉じた PR の辺は消えないので、付け替えるか `edge rm` する
 
 before の ref は `pr:<owner>/<repo>#<番号>` や `issue:` でもよい。`session:<name>` は、daemon が数秒のうちに

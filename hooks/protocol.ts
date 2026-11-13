@@ -717,7 +717,7 @@ export const definitions = {
     }
   },
   "Edge": {
-    "description": "セッションをまたぐ辺の記録 1 つ",
+    "description": "セッションをまたぐ辺の記録 1 つ。derived は daemon が PR の head branch とセッションの branch の一致から導いた sid → pr の辺",
     "type": "object",
     "additionalProperties": false,
     "required": [
@@ -738,6 +738,9 @@ export const definitions = {
       },
       "note": {
         "type": "string"
+      },
+      "derived": {
+        "type": "boolean"
       },
       "created_at": {
         "type": "string",

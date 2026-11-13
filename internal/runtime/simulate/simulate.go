@@ -438,8 +438,8 @@ func (c *scopedClient) SendKeys(ctx context.Context, paneID string, keys ...stri
 	return c.inner.SendKeys(ctx, paneID, keys...)
 }
 
-// simulateDryRunClient は daemon パッケージの dryRunClient と同じ考え方の decorator で、monitor.Tick に渡す
-// monitor.Client (読む・送る) だけを包む。dryRunClient をそのまま使わない理由は、それが daemon のログファイル
+// simulateDryRunClient は dryrun パッケージの Client と同じ考え方の decorator で、monitor.Tick に渡す
+// monitor.Client (読む・送る) だけを包む。dryrun.Client をそのまま使わない理由は、それが daemon のログファイル
 // (*applog.Logger) 前提であるのに対し、simulate は「何を送るはずだったか」を
 // そのままコマンドの標準出力 w に表示したいから。
 type simulateDryRunClient struct {

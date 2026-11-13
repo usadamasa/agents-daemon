@@ -8,6 +8,7 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/applog"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
+	"github.com/usadamasa/agents-daemon/internal/runtime/daemon/dryrun"
 )
 
 // watchingClient は購読の口 (multiplexer.Watcher) を持つ fake。ctx が止まったら done を閉じる。
@@ -49,7 +50,7 @@ func TestStartWatch(t *testing.T) {
 	})
 	t.Run("dry-run で包んだ client", func(t *testing.T) {
 		c := &watchingClient{Client: &multiplexerfake.Client{}}
-		stop := startWatch(context.Background(), newDryRunClient(c, log), log)
+		stop := startWatch(context.Background(), dryrun.New(c, log), log)
 		if c.watched != 1 {
 			t.Errorf("Watch の呼び出し = %d 回, want 1 (dry-run の包みが購読を隠した)", c.watched)
 		}

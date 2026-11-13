@@ -1,8 +1,9 @@
 // Package edge はセッションをまたぐ作業の依存 (DAG の辺、#134) を XDG state 配下に置く。辺の正は作業を渡す側
-// (workspace) が `agents-daemon edge add` で書いたもの。読むのは `edge list` と、依存図の DAG を組む deps パッケージ。
+// (workspace) が `agents-daemon edge add` で書いたものと、daemon が PR を出したセッションから PR へ導いたもの
+// (Anchor、印 derived、#487)。読むのは `edge list` と、依存図の DAG を組む deps パッケージ。
 //
 //	edges/<id>.json   1 本 1 ファイル
-//	edges/.lock       Add、Remove、Bind、Prune を直列にするロック
+//	edges/.lock       Add、Remove、Bind、Anchor、Unanchor、Prune を直列にするロック
 //
 // 辺は「before が済まないと after を始められない」を表す。端点は参照 (ref の Ref のうち todo: 以外) と、
 // その作業の cwd から求めた repo (依存図の repo と同じ鍵) を持つ。
@@ -48,7 +49,7 @@ import (
 // 渡す側が登録し直すと数え直す。
 const Retention = 7 * 24 * time.Hour
 
-// lockFile は edges/ で Add、Remove、Bind、Prune を直列にするロック。
+// lockFile は edges/ で Add、Remove、Bind、Anchor、Unanchor、Prune を直列にするロック。
 const lockFile = ".lock"
 
 // sessionPrefix は結びつける前のセッションの参照の種類。

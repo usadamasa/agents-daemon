@@ -95,7 +95,7 @@ run models/card Card CardNoTouchRef.cfg violated
 run models/noterepo NoteRepo NoteRepo.cfg holds
 # after の端点の repo で補うと、別 repo の PR を待つ辺で #N が after の repo を指す (RefNoteResolves の反例)。
 run models/noterepo NoteRepo NoteRepoAfter.cfg violated
-# before の端点で補うと、after の参照の番号を書いた note (skill の session → pr の例) が before の repo を指す (RefNoteResolves の反例)。
+# before の端点で補うと、after の参照の番号を書いた note (daemon が導く sid → pr の辺の「PR #N」) が before の repo を指す (RefNoteResolves の反例)。
 run models/noterepo NoteRepo NoteRepoBefore.cfg violated
 # 両端の参照が同じ番号で別 repo のとき before を選ぶと、after を指した note を before の repo へ送る (NoWrongLink の反例)。
 run models/noterepo NoteRepo NoteRepoPreferBefore.cfg violated
@@ -103,5 +103,11 @@ run models/noterepo NoteRepo NoteRepoPreferBefore.cfg violated
 run models/noterepo NoteRepo NoteRepoFallbackBefore.cfg violated
 # 参照の repo を daemon が引いた状態から取ると、状態を引けない PR の番号を書いた note がリンクにならない (RefNoteResolves の反例)。
 run models/noterepo NoteRepo NoteRepoViaState.cfg violated
+# PR の head branch で動くセッションから PR への辺を、daemon が掃除の前に導く形 (#487)。自分の PR を待つ形では導かない。
+run models/prlink PRLink PRLink.cfg holds
+# 掃除の後に導くと、初めて引いた時点でマージ済みの PR が辺ごと消え、導く元が無くなる (PRKept の反例)。
+run models/prlink PRLink PRLinkSweepFirst.cfg violated
+# 自分の PR を待つ辺を見ずに導くと、セッションのタスクと PR の間に待ちの輪を作る (NoDaemonLoop の反例)。
+run models/prlink PRLink PRLinkNoSelfWait.cfg violated
 
 exit "$failed"

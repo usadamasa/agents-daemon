@@ -6,11 +6,13 @@
 # - stamp が無い・古い・読めなければ build-daemon.sh を detach して即座に戻る。build 完了後の起動は
 #   build-daemon.sh が行う。SessionStart を go build で待たせない
 # - daemon は最新で依存図のアプリ (agent-tasks) だけ古ければ、build-gui.sh を detach する
-# - 前の build の失敗印 (build.failed、build-gui.failed) があれば、原因と建て直すコマンドを systemMessage に載せる。
-#   build は detach するので、失敗はそのセッションではなく次の SessionStart で伝わる
+# - これから建て直す成果物に前の build の失敗印 (build.failed、build-gui.failed) があれば、原因と建て直すコマンドを
+#   systemMessage に載せる。build は detach するので、失敗はそのセッションではなく次の SessionStart で伝わる。
+#   stamp が current なら建て直さないので載せない (task install や worktree の build が残した失敗印で、動いているものに
+#   「失敗しています」と出さない)
 #
 # stdout は会話の context へ注入されるため、systemMessage の JSON のほかは何も出さない。ログは stderr と build.log へ送る。
-# cc-premise: 2.1.323 hooks SessionStart の stdout の {"systemMessage": ...} を利用者に見せる
+# cc-premise: 2.1.323 hooks SessionStart の stdout の {"systemMessage": ...} を利用者に見せる (stdout の JSON までを確かめ、表示は未観測)
 
 set -euo pipefail
 
@@ -40,15 +42,27 @@ prepare_build_log() {
   fi
 }
 
+# report_build_failures MARKER...: 失敗印のあるものを 1 つの systemMessage にまとめて stdout へ出す。
 # 失敗印は 1 行目が原因、2 行目が建て直すコマンド。行のまま載せる。
 report_build_failures() {
   local -a lines=()
-  if [ -f "$DAEMON_BUILD_FAILED" ]; then
-    lines+=("agents-daemon: daemon のビルドに失敗しています。詳細は $DAEMON_BUILD_LOG を見てください。" "$(<"$DAEMON_BUILD_FAILED")")
-  fi
-  if [ -f "$GUI_BUILD_FAILED" ]; then
-    lines+=("agents-daemon: 依存図のアプリ (agent-tasks) のビルドに失敗しています。詳細は $DAEMON_BUILD_LOG を見てください。" "$(<"$GUI_BUILD_FAILED")")
-  fi
+  local marker body what
+  for marker in "$@"; do
+    if [ ! -f "$marker" ]; then
+      continue
+    fi
+    # 判定と読み取りの間に、走っている build が成功して消すことがある
+    if ! body=$(<"$marker"); then
+      log_error "read failed: $marker"
+      continue
+    fi
+    if [ "$marker" = "$GUI_BUILD_FAILED" ]; then
+      what="依存図のアプリ (agent-tasks)"
+    else
+      what="daemon"
+    fi
+    lines+=("agents-daemon: $what のビルドに失敗しています。詳細は $DAEMON_BUILD_LOG を見てください。" "$body")
+  done
   if [ "${#lines[@]}" -eq 0 ]; then
     return 0
   fi
@@ -57,12 +71,11 @@ report_build_failures() {
   fi
 }
 
-report_build_failures
-
 if [ -x "$DAEMON_BIN" ] && stamp_current "$DAEMON_STAMP" "$version"; then
   # daemon は plugin 以上。依存図のアプリだけ古い (前回の build で toolchain が無かった、など) なら、それだけ建て直す。
   # macOS 以外では build-gui.sh が飛ばすだけなので起こさない。
   if [ "$(uname -s)" = Darwin ] && ! stamp_current "$GUI_STAMP" "$version"; then
+    report_build_failures "$GUI_BUILD_FAILED"
     prepare_build_log
     log_info "agent-tasks missing or built from another version; building $version in background (log: $DAEMON_BUILD_LOG)"
     nohup "$SCRIPT_DIR/build-gui.sh" </dev/null >>"$DAEMON_BUILD_LOG" 2>&1 &
@@ -71,6 +84,8 @@ if [ -x "$DAEMON_BIN" ] && stamp_current "$DAEMON_STAMP" "$version"; then
   exec "$DAEMON_BIN" daemon --ensure >&2
 fi
 
+# build-daemon.sh は続けて agent-tasks も建て直すので、両方の失敗印を載せる。
+report_build_failures "$DAEMON_BUILD_FAILED" "$GUI_BUILD_FAILED"
 prepare_build_log
 
 log_info "binary missing or built from another version; building $version in background (log: $DAEMON_BUILD_LOG)"

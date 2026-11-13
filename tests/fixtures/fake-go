@@ -1,13 +1,19 @@
 #!/bin/bash
 # テスト用の go の代役。`go build ... -o <path> ...` だけを模す。
 #
-# - 呼び出しの引数を $TEST_TMPDIR/go.calls へ記録する
-# - <path> に、呼び出しを $TEST_TMPDIR/daemon.calls へ記録する fake daemon を作る
+# - 呼び出しの引数を $TEST_TMPDIR/go.calls へ、受け取った GOTOOLCHAIN を $TEST_TMPDIR/go.env へ記録する
+# - <path> に、呼び出しを $TEST_TMPDIR/daemon.calls へ、GOTOOLCHAIN を $TEST_TMPDIR/daemon.env へ記録する fake daemon を作る
+# - GO_STUB_OUTPUT があれば、その中身を stderr へ出す
 # - GO_STUB_EXIT が 0 以外なら何も作らずその値で終わる
 # - GO_STUB_WAIT_FOR が指すファイルが現れるまで終わらない (detach の検証用、最大 10 秒)
 set -euo pipefail
 
 printf '%s\n' "$*" >>"$TEST_TMPDIR/go.calls"
+printf 'GOTOOLCHAIN=%s\n' "${GOTOOLCHAIN-unset}" >>"$TEST_TMPDIR/go.env"
+
+if [ -n "${GO_STUB_OUTPUT:-}" ]; then
+  printf '%s\n' "$GO_STUB_OUTPUT" >&2
+fi
 
 if [ -n "${GO_STUB_WAIT_FOR:-}" ]; then
   for ((i = 0; i < 200; i++)); do
@@ -33,5 +39,6 @@ if [ -z "$out" ]; then
   exit 2
 fi
 
-printf '#!/bin/bash\nprintf "%%s\\n" "$*" >>"%s"\n' "$TEST_TMPDIR/daemon.calls" >"$out"
+printf '#!/bin/bash\nprintf "%%s\\n" "$*" >>"%s"\nprintf "GOTOOLCHAIN=%%s\\n" "${GOTOOLCHAIN-unset}" >>"%s"\n' \
+  "$TEST_TMPDIR/daemon.calls" "$TEST_TMPDIR/daemon.env" >"$out"
 chmod +x "$out"

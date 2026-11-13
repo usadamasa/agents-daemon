@@ -103,6 +103,58 @@ teardown() {
   [ -z "$(find "$BIN_DIR" -name '.agent-tasks.*')" ]
 }
 
+@test "受け継いだ GOTOOLCHAIN=local を go build にだけ auto で上書きする" {
+  require_darwin
+  install_fake_go
+  install_fake_gui_toolchain
+  export GOTOOLCHAIN=local
+
+  PATH="$FIXTURE_PATH" run_hook "$BUILD"
+  [ "$status" -eq 0 ]
+  [ "$(<"$TEST_TMPDIR/go.env")" = "GOTOOLCHAIN=auto" ]
+}
+
+@test "go build が失敗したら go の最後の行と建て直すコマンドを失敗印と log に残す" {
+  require_darwin
+  install_fake_go
+  install_fake_gui_toolchain
+  export GO_STUB_OUTPUT='go: download go1.99.0 for darwin/arm64: toolchain not available'
+  export GO_STUB_EXIT=1
+
+  PATH="$FIXTURE_PATH" run_hook "$BUILD"
+  [ "$status" -ne 0 ]
+  [ "$(sed -n 1p "$GUI_BUILD_FAILED")" = "go build failed: go: download go1.99.0 for darwin/arm64: toolchain not available" ]
+  [[ "$(sed -n 2p "$GUI_BUILD_FAILED")" == *"! $REPO_ROOT/hooks/build-gui.sh"* ]]
+  [[ "$output" == *"toolchain not available"* ]]
+  [[ "$output" == *"! $REPO_ROOT/hooks/build-gui.sh"* ]]
+  [ -z "$(find "$BIN_DIR" -name '.agent-tasks.*')" ]
+}
+
+@test "go build の出力を go の終了を待たずに流す" {
+  require_darwin
+  install_fake_gui_toolchain
+  install_slow_failing_go
+
+  PATH="$FIXTURE_PATH" "$BUILD" >"$TEST_TMPDIR/out" 2>&1 &
+  local pid=$!
+  wait_until file_contains "$TEST_TMPDIR/out" "downloading go1.99.0" || true
+  touch "$TEST_TMPDIR/release"
+  wait "$pid" || true
+  [[ "$(sed -n 1p "$GUI_BUILD_FAILED")" == *"go: released" ]]
+}
+
+@test "建てられたら前の失敗印を消す" {
+  require_darwin
+  install_fake_go
+  install_fake_gui_toolchain
+  mkdir -p "$(dirname "$GUI_BUILD_FAILED")"
+  printf 'go build failed: old\n! /x/hooks/build-gui.sh\n' >"$GUI_BUILD_FAILED"
+
+  PATH="$FIXTURE_PATH" run_hook "$BUILD"
+  [ "$status" -eq 0 ]
+  [ ! -e "$GUI_BUILD_FAILED" ]
+}
+
 @test "codesign が失敗したら前の bundle と stamp を残す" {
   require_darwin
   install_fake_go

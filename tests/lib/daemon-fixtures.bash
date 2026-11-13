@@ -4,8 +4,9 @@
 # PATH は差し引きではなく組み立てる。hook が呼ぶコマンドだけを symlink した
 # ディレクトリを PATH にすれば、開発機でも CI でも `go` が無い状態を同じ形で作れる。
 
-# hook・build・fake go が呼ぶ外部コマンド (bash の builtin は含めない)。cp と uname は build-gui.sh が使う。
-DAEMON_FIXTURE_COMMANDS=(jq mkdir mv mktemp nohup dirname rm rmdir chmod sleep date cp uname)
+# hook・build・fake go が呼ぶ外部コマンド (bash の builtin は含めない)。cp と uname は build-gui.sh、tee と tail は
+# go build の出力を写して最後の行を拾う箇所が使う。
+DAEMON_FIXTURE_COMMANDS=(jq mkdir mv mktemp nohup dirname rm rmdir chmod sleep date cp uname tee tail)
 
 # HOME と XDG の各ディレクトリを一時ディレクトリへ向け、PATH 用のディレクトリを作る。
 # setup から呼ぶ。呼んだ後は FIXTURE_PATH・BIN_DIR・BIN・STAMP・BUILD_LOG・LOCK が使える。
@@ -25,6 +26,8 @@ setup_daemon_fixture() {
   STAMP="$BIN_DIR/agents-daemon.version"
   LOCK="$BIN_DIR/.build.lock"
   BUILD_LOG="$XDG_STATE_HOME/agents-daemon/logs/build.log"
+  BUILD_FAILED="$XDG_STATE_HOME/agents-daemon/build.failed"
+  GUI_BUILD_FAILED="$XDG_STATE_HOME/agents-daemon/build-gui.failed"
   GUI_BIN="$BIN_DIR/agent-tasks"
   GUI_STAMP="$BIN_DIR/agent-tasks.version"
   GUI_LOCK="$BIN_DIR/.build-gui.lock"
@@ -93,6 +96,25 @@ wait_until() {
     sleep 0.05
   done
   return 1
+}
+
+file_contains() {
+  [ -f "$1" ] && grep -qF -- "$2" "$1"
+}
+
+# toolchain の取得中のように、1 行出してから $TEST_TMPDIR/release が置かれるまで (最大 2 秒) 終わらず、
+# 最後の行を出して失敗する go を FIXTURE_PATH に置く。出力を捕まえて go の終了まで流さない実装では、
+# 呼び出し元が 1 行目を見て release を置く前に時間切れになり、最後の行が `go: timed out` になる。
+install_slow_failing_go() {
+  printf '%s\n' '#!/bin/bash' \
+    'printf "go: downloading go1.99.0 (darwin/arm64)\n" >&2' \
+    'for ((i = 0; i < 40; i++)); do' \
+    "  if [ -e '$TEST_TMPDIR/release' ]; then printf 'go: released\n' >&2; exit 1; fi" \
+    '  sleep 0.05' \
+    'done' \
+    'printf "go: timed out\n" >&2' \
+    'exit 1' >"$FIXTURE_PATH/go"
+  chmod +x "$FIXTURE_PATH/go"
 }
 
 stamp_is_current() {

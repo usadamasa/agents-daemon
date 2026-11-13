@@ -109,3 +109,57 @@ teardown() {
   [ ! -d "$LOCK" ]
   [ -z "$(find "$BIN_DIR" -name '.agents-daemon.*')" ]
 }
+
+# セッションを開いたリポジトリの devShell が付けた GOTOOLCHAIN=local を受け継ぐと、PATH の go が go.mod より古いとき
+# toolchain を取りに行けずに落ちる。auto は go build にだけ渡し、起動する daemon には渡さない。
+@test "受け継いだ GOTOOLCHAIN=local を go build にだけ auto で上書きする" {
+  export GOTOOLCHAIN=local
+
+  PATH="$FIXTURE_PATH" run_hook "$BUILD"
+  [ "$status" -eq 0 ]
+  [ "$(<"$TEST_TMPDIR/go.env")" = "GOTOOLCHAIN=auto" ]
+  [ "$(<"$TEST_TMPDIR/daemon.env")" = "GOTOOLCHAIN=local" ]
+}
+
+@test "go build が失敗したら go の最後の行と建て直すコマンドを失敗印と log に残す" {
+  export GO_STUB_OUTPUT=$'go: downloading go1.99.0 (darwin/arm64)\ngo: download go1.99.0 for darwin/arm64: toolchain not available'
+  export GO_STUB_EXIT=1
+
+  PATH="$FIXTURE_PATH" run_hook "$BUILD"
+  [ "$status" -ne 0 ]
+  [ "$(sed -n 1p "$BUILD_FAILED")" = "go build failed: go: download go1.99.0 for darwin/arm64: toolchain not available" ]
+  [[ "$(sed -n 2p "$BUILD_FAILED")" == *"! $REPO_ROOT/hooks/build-daemon.sh"* ]]
+  # 失敗したセッションでは systemMessage がまだ出ないので、log (この出力) にも同じ 2 行を残す
+  [[ "$output" == *"toolchain not available"* ]]
+  [[ "$output" == *"! $REPO_ROOT/hooks/build-daemon.sh"* ]]
+  [ -z "$(find "$BIN_DIR" -name '.agents-daemon.*')" ]
+}
+
+@test "go build が何も出さずに失敗しても、失敗印の 1 行目は空にしない" {
+  export GO_STUB_EXIT=1
+
+  PATH="$FIXTURE_PATH" run_hook "$BUILD"
+  [ "$status" -ne 0 ]
+  [ "$(sed -n 1p "$BUILD_FAILED")" = "go build failed" ]
+}
+
+# `!` で建て直すとき、toolchain の取得中の表示が go の終了を待たずに見えること。
+@test "go build の出力を go の終了を待たずに流す" {
+  install_slow_failing_go
+
+  PATH="$FIXTURE_PATH" "$BUILD" >"$TEST_TMPDIR/out" 2>&1 &
+  local pid=$!
+  wait_until file_contains "$TEST_TMPDIR/out" "downloading go1.99.0" || true
+  touch "$TEST_TMPDIR/release"
+  wait "$pid" || true
+  [[ "$(sed -n 1p "$BUILD_FAILED")" == *"go: released" ]]
+}
+
+@test "建てられたら前の失敗印を消す" {
+  mkdir -p "$(dirname "$BUILD_FAILED")"
+  printf 'go build failed: old\n! /x/hooks/build-daemon.sh\n' >"$BUILD_FAILED"
+
+  PATH="$FIXTURE_PATH" run_hook "$BUILD"
+  [ "$status" -eq 0 ]
+  [ ! -e "$BUILD_FAILED" ]
+}

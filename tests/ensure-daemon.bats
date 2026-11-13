@@ -5,8 +5,9 @@
 #   古い plugin のソースで上書きしない)
 # - stamp が無い・古い・読めなければ build-daemon.sh を detach して即座に戻る (go build を前景で回さない)
 # - go が無ければ build.log に ERROR を残し、バイナリを作らない
+# - 前の build の失敗印があれば、原因と建て直すコマンドを systemMessage に載せる
 #
-# SessionStart hook の stdout は会話の context へ注入されるため、どの分岐でも stdout を空に保つ。
+# SessionStart hook の stdout は会話の context へ注入されるため、失敗印が無ければ stdout を空に保つ。
 
 bats_require_minimum_version 1.5.0
 
@@ -123,6 +124,37 @@ teardown() {
   wait_until stamp_is_current
   wait_until daemon_ensured
   [ -x "$BIN" ]
+}
+
+# build は detach するので、失敗はそのセッションではなく次の SessionStart の systemMessage で伝える。
+@test "daemon の失敗印があれば、建て直しを detach しつつ原因と建て直すコマンドを systemMessage に載せる" {
+  install_fake_go
+  mkdir -p "$(dirname "$BUILD_FAILED")"
+  printf '%s\n' 'go build failed: toolchain not available' '! /x/hooks/build-daemon.sh' >"$BUILD_FAILED"
+
+  PATH="$FIXTURE_PATH" run_hook --separate-stderr "$HOOK"
+  [ "$status" -eq 0 ]
+  msg=$(printf '%s' "$output" | jq -er '.systemMessage')
+  [[ "$msg" == *"toolchain not available"* ]]
+  [[ "$msg" == *"! /x/hooks/build-daemon.sh"* ]]
+  [[ "$msg" == *"$BUILD_LOG"* ]]
+  wait_until stamp_is_current
+}
+
+@test "agent-tasks の失敗印があれば、daemon を起こしつつ原因と建て直すコマンドを systemMessage に載せる" {
+  make_fake_daemon "$TEST_TMPDIR/daemon.calls" "$BIN"
+  printf '%s\n' "$PLUGIN_VERSION" >"$STAMP"
+  printf '%s\n' "$PLUGIN_VERSION" >"$GUI_STAMP"
+  mkdir -p "$(dirname "$GUI_BUILD_FAILED")"
+  printf '%s\n' 'go build failed: cgo error' '! /x/hooks/build-gui.sh' >"$GUI_BUILD_FAILED"
+
+  PATH="$FIXTURE_PATH" run_hook --separate-stderr "$HOOK"
+  [ "$status" -eq 0 ]
+  msg=$(printf '%s' "$output" | jq -er '.systemMessage')
+  [[ "$msg" == *"agent-tasks"* ]]
+  [[ "$msg" == *"cgo error"* ]]
+  [[ "$msg" == *"! /x/hooks/build-gui.sh"* ]]
+  [ "$(<"$TEST_TMPDIR/daemon.calls")" = "daemon --ensure" ]
 }
 
 @test "go が PATH に無ければ build.log に ERROR を残し、バイナリを作らない" {

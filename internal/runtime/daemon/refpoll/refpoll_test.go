@@ -44,9 +44,13 @@ type fakeSessions struct {
 	live    []Session
 	places  map[string][2]string
 	locates int
+	// issued は PR の参照ごとの、その PR を出した記録のあるセッション (終了したものも含む)。
+	issued map[string][]Session
 }
 
 func (s *fakeSessions) list() []Session { return s.live }
+
+func (s *fakeSessions) issuers() map[string][]Session { return s.issued }
 
 func (s *fakeSessions) locate(cwd string) (string, string) {
 	s.locates++
@@ -80,7 +84,7 @@ func newFixture(t *testing.T, remote *fakeRemote) (fixture, func(before, after s
 		}
 	}
 	sessions := &fakeSessions{places: map[string][2]string{}}
-	p := New(edges, refs, remote.fetch, sessions.list, log)
+	p := New(edges, refs, remote.fetch, sessions.list, sessions.issuers, log)
 	p.locate = sessions.locate
 	return fixture{p: p, refs: refs, edges: edges, dir: dir, logPath: logPath, log: log, sessions: sessions}, add
 }
@@ -422,6 +426,66 @@ func TestRefresh_PRのbranchのセッションからPRへ辺を導く(t *testing
 	}
 	if log := f.readLog(t); !strings.Contains(log, "sid:A → pr:o/r#1") {
 		t.Errorf("導いたことのログが無い: %q", log)
+	}
+}
+
+// PR を出した記録があれば、branch の照合より記録の持ち主を選ぶ (#575、models/prlink の PRAuthor)。出したセッションが
+// 終了していても (#1)、別の branch へ移っていても (#2)、同じ branch に別のセッションがいても (#3)、そのセッションへ
+// 導き、同じ branch にいるだけのセッションへは導かない (NoWrongAnchor)。初めて引いた時点でマージ済みでも掃除の前に
+// 導く (#4、IssuerKept)。記録が 2 つのセッションにある PR は記録で決めず、branch で照合する (#5)。
+func TestRefresh_PRを出した記録のセッションへ導く(t *testing.T) {
+	remote := &fakeRemote{
+		states: map[string]string{"pr:o/r#1": "open", "pr:o/r#2": "open", "pr:o/r#3": "open", "pr:o/r#4": "merged", "pr:o/r#5": "open"},
+		heads:  map[string]string{"pr:o/r#1": "f1", "pr:o/r#2": "f2", "pr:o/r#3": "f3", "pr:o/r#4": "f4", "pr:o/r#5": "f5"},
+	}
+	f, add := newFixture(t, remote)
+	for _, pr := range []string{"pr:o/r#1", "pr:o/r#2", "pr:o/r#3", "pr:o/r#4", "pr:o/r#5"} {
+		add(pr, "task:H/1")
+	}
+	f.sessions.live = []Session{{ID: "A", CWD: "/a"}, {ID: "B", CWD: "/b"}, {ID: "C", CWD: "/c"}}
+	f.sessions.places = map[string][2]string{
+		"/a": {"o/r", "main"}, // 出した A は別の branch へ移った
+		"/b": {"o/r", "f1"},   // B は A の出した PR の branch にいるだけ
+		"/c": {"o/r", "f5"},
+	}
+	ended := Session{ID: "E", CWD: "/e"} // 終了したセッション (生きているセッションに無い)
+	f.sessions.issued = map[string][]Session{
+		"pr:o/r#1": {ended},
+		"pr:o/r#2": {{ID: "A", CWD: "/a"}},
+		"pr:o/r#3": {{ID: "A", CWD: "/a"}},
+		"pr:o/r#4": {ended},
+		"pr:o/r#5": {{ID: "A", CWD: "/a"}, {ID: "B", CWD: "/b"}},
+	}
+	f.sessions.places["/x"] = [2]string{"o/r", "f3"}
+	f.sessions.live = append(f.sessions.live, Session{ID: "D", CWD: "/x"}) // #3 の branch にいる別のセッション
+
+	for i := range 5 {
+		f.p.Refresh(context.Background(), t0.Add(time.Duration(i)*time.Second))
+	}
+	got := edgeKeys(t, f.dir)
+	want := []string{
+		"pr:o/r#1>task:H/1", "pr:o/r#2>task:H/1", "pr:o/r#3>task:H/1", "pr:o/r#5>task:H/1",
+		"sid:A>pr:o/r#2", "sid:A>pr:o/r#3", "sid:C>pr:o/r#5", "sid:E>pr:o/r#1", "sid:E>pr:o/r#4",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("辺 = %v, want %v", got, want)
+	}
+	if log := f.readLog(t); !strings.Contains(log, "sid:E → pr:o/r#1") || !strings.Contains(log, "PR を出した記録") {
+		t.Errorf("記録で導いたことのログが無い: %q", log)
+	}
+}
+
+// 記録の参照は gh の出した URL の綴りで、辺の参照は人や skill が書いた綴り。owner/repo の大文字小文字が違っても
+// 同じ PR として記録の持ち主へ導く (branch の照合が repo の大文字小文字を区別しないのと揃える)。
+func TestRefresh_PRを出した記録はrepoの大文字小文字を区別しない(t *testing.T) {
+	remote := &fakeRemote{states: map[string]string{"pr:O/R#1": "open"}, heads: map[string]string{"pr:O/R#1": "f1"}}
+	f, add := newFixture(t, remote)
+	add("pr:O/R#1", "task:H/1")
+	f.sessions.issued = map[string][]Session{"pr:o/r#1": {{ID: "E", CWD: "/e"}}}
+
+	f.p.Refresh(context.Background(), t0)
+	if got, want := edgeKeys(t, f.dir), []string{"pr:O/R#1>task:H/1", "sid:E>pr:O/R#1"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("辺 = %v, want %v", got, want)
 	}
 }
 

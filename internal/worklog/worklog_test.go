@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -132,6 +133,69 @@ func TestIngest_最後のpromptとStopの時刻を残す(t *testing.T) {
 	}
 }
 
+// bash は PostToolUse の Bash の入力。stdout は gh が出した文字列。
+// cc-premise: 2.1.325 hooks PostToolUse の Bash の tool_input.command と tool_response.stdout (hooks のドキュメント)
+func bash(command, stdout string) []byte {
+	return hook("PostToolUse", `"tool_name": "Bash"`,
+		`"tool_input": {"command": `+strconv.Quote(command)+`}`,
+		`"tool_response": {"stdout": `+strconv.Quote(stdout)+`, "stderr": "", "interrupted": false, "isImage": false}`)
+}
+
+// gh pr create が出した PR の URL を、出したセッションの記録に参照として残す (#575)。daemon はこの記録で、セッションが
+// 終了していても別の branch へ移っていても、PR からそのセッションへの辺を導く (models/prlink の PRAuthor)。
+func TestIngest_ghprcreateが出したPRを記録に残す(t *testing.T) {
+	s := New(t.TempDir())
+	mustIngest(t, s, hook("UserPromptSubmit", `"prompt": "p"`), now)
+	created := "https://github.com/usadamasa/agents-daemon/pull/601\n"
+	res := mustIngest(t, s, bash("gh pr create --draft --title t --body-file ./tmp/body.md", created), now.Add(time.Minute))
+	if !res.Written || res.Created {
+		t.Errorf("Result = %+v, want Written", res)
+	}
+	got := mustGet(t, s, "s1")
+	if want := []string{"pr:usadamasa/agents-daemon#601"}; !reflect.DeepEqual(got.Prs, want) {
+		t.Errorf("Prs = %v, want %v", got.Prs, want)
+	}
+	if got.Turns != 1 || got.Summary != "" {
+		t.Errorf("ほかの欄が変わった: %+v", got)
+	}
+
+	// 同じ PR は重ねない。別の PR は足す。前置きのある打ち方 (git push の後) も拾う。
+	mustIngest(t, s, bash("gh pr create --fill", created), now.Add(2*time.Minute))
+	mustIngest(t, s, bash("git push -u origin x && gh pr create --fill", "https://github.com/o/r/pull/7\n"), now.Add(3*time.Minute))
+	if got, want := mustGet(t, s, "s1").Prs, []string{"pr:usadamasa/agents-daemon#601", "pr:o/r#7"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Prs = %v, want %v", got, want)
+	}
+}
+
+// PR を作らないコマンドの出力に出た URL (gh pr view、gh pr list、echo) は、出した事実ではないので残さない。
+// 記録の無いセッション、Bash でないツールの入力も書かない。
+func TestIngest_ghprcreateでなければPRを残さない(t *testing.T) {
+	s := New(t.TempDir())
+	url := "https://github.com/o/r/pull/7\n"
+	if res := mustIngest(t, s, bash("gh pr create --fill", url), now); res.Written || res.Created {
+		t.Errorf("記録の無いセッションで Result = %+v, want 書かない", res)
+	}
+	if _, ok := s.Get("s1"); ok {
+		t.Fatal("記録が作られた")
+	}
+	mustIngest(t, s, hook("UserPromptSubmit", `"prompt": "p"`), now)
+	inputs := [][]byte{
+		bash("gh pr view 7 --json url", url),
+		bash("gh pr list", url),
+		bash("echo gh pr create", url),
+		bash("gh pr create --fill", "a pull request already exists\n"),
+		hook("PostToolUse", `"tool_name": "Read"`, `"tool_input": {"file_path": "/x"}`, `"tool_response": {}`),
+	}
+	for _, in := range inputs {
+		if res := mustIngest(t, s, in, now.Add(time.Minute)); res.Written {
+			t.Errorf("Ingest(%s) = %+v, want 書かない", in, res)
+		}
+	}
+	if got := mustGet(t, s, "s1"); len(got.Prs) != 0 || !got.UpdatedAt.Equal(now) {
+		t.Errorf("Get() = %+v, want PR 無し", got)
+	}
+}
+
 // SessionStart と SessionEnd は記録があるときだけ書く (prompt を打たずに終わったセッションの記録を残さない)。
 func TestIngest_SessionStartとSessionEndは記録が無ければ何もしない(t *testing.T) {
 	dir := t.TempDir()
@@ -248,7 +312,7 @@ func TestDismiss(t *testing.T) {
 func TestIngest_rejects(t *testing.T) {
 	tests := map[string][]byte{
 		"壊れた JSON":           []byte(`{"session_id": `),
-		"扱わない hook の入力":      hook("PostToolUse"),
+		"扱わない hook の入力":      hook("PreToolUse"),
 		"session_id が無い":     []byte(`{"hook_event_name": "Stop"}`),
 		"ファイル名に使えない session": []byte(`{"session_id": "../x", "hook_event_name": "Stop"}`),
 	}

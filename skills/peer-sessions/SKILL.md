@@ -96,8 +96,8 @@ printf '%s' '{"before":{"ref":"pr:<owner>/<repo>#<番号>","cwd":"<この sessio
   | "${XDG_CACHE_HOME:-$HOME/.cache}/agents-daemon/bin/agents-daemon" edge add
 ```
 
-- peer と PR をつなぐ `sid:<peer> → pr:` の辺は daemon が導く。PR の repo と head branch で動いている生きている
-  セッションが 1 つだけなら、数秒のうちに書く。PR の branch を持つ worktree で peer を動かしていれば手で書くものは無い
+- peer と PR をつなぐ `sid:<peer> → pr:` の辺は daemon が導く。peer が `gh pr create` で出した PR なら、peer が
+  終了していても数秒のうちに書くので、手で書くものは無い。導き方は `agents-daemon:agents-daemon` skill の operations.md
 - note に書く番号は端点の参照の番号 (PR 番号) に揃える。依存図は note の `#N` を、番号の合う端点の参照の repo へリンクする。
   PR が閉じる issue の番号を書くと、repo をまたぐ辺ではリンクにならない
 - PR がマージされると、`pr:` を before に持つ辺は daemon が消す。導いた `sid → pr` の辺は残るが、peer が終われば

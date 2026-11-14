@@ -42,17 +42,26 @@ printenv REX_SESSION
 | 値が出る | `references/rex.md` の手順で `rex session new` から claude を起動する |
 | 空 | rex の session を作れないので、ユーザーへ起動を頼む (下の「モデルの指定」の形でコマンドを渡す) |
 
-起動してから渡すまでを 1 ターンでやりきる。
+依頼文を書いてから起こすまでを 1 ターンでやりきる。受領は peer から後で届く。
 
-1. peer 専用の rex session を作る。渡す先が別リポジトリなら
-   cwd をそのパスにする。自分の worktree は渡さない
-2. その session で `claude --name <name> --model "${CLAUDE_CODE_SUBAGENT_MODEL:?}"` を起動する
-   (`rex session new` の `--` の後に渡す)
-3. `ListAgents` に `<name>` が並ぶのを確かめる
-4. 渡す作業に「これが済まないと始められない」相手 (別の peer の作業、マージ待ちの PR) があれば、
-   送る前に辺を書く (下の「依存の辺を書く」)
-5. `SendMessage` で引き継ぎ内容を本文に入れて送る。完了は本文で求めた `SendMessage` の報告で受けるので、
-   `notify_when_idle` は付けない (下の「相手の完了を知る」)
+1. 依頼文を `./tmp/brief-<作業名>.md` に Write で書く。`<作業名>` は作業を表す 2〜4 語の小文字を
+   ハイフンでつないだもの (`fix-note-repo-link`)。依頼文の先頭で、着手前に `SendMessage` で自分へ受領を
+   1 行返すよう求める。自分の名前は `ListAgents` の先頭行 (`This session is <名前>`) にある
+2. claude の session_id を `uuidgen` で決め、`references/rex.md` の手順で peer 専用の rex session を
+   `<作業名>` の label で作り、`claude --session-id <uuid> --model ... -- <依頼文>` で起こす。
+   渡す先が別リポジトリなら cwd をそのパスにする。自分の worktree は渡さない。
+   結果の rex の `session_id` (畳むときに使う) と claude の `<uuid>` (辺に使う) を控える
+3. 渡す作業に「これが済まないと始められない」相手 (別の peer の作業、マージ待ちの PR) があれば、
+   辺を書く (下の「依存の辺を書く」)
+4. peer の受領の `SendMessage` を待つ。その `from` が peer の宛先になる。完了は依頼文で求めた
+   `SendMessage` の報告で受けるので、`notify_when_idle` は付けない (下の「相手の完了を知る」)
+
+`--name` は付けない。付けると Claude Code が AI の題を作らず、rex のサイドバーの題が名前のまま固定される。
+付けなければ `ListAgents` の名前は `<cwd の basename>-<連番>` になり、起こす側からは決められないので、
+宛先は受領の `from` で知る。
+
+<!-- cc-premise: 2.1.325 osc7501 --name を付けると ai-title を作らず、端末の題が名前のまま -->
+<!-- cc-premise: 2.1.325 peer-messaging --name の無いセッションの ListAgents の名前は cwd の basename と連番 -->
 
 ### 依存の辺を書く
 
@@ -62,14 +71,14 @@ printenv REX_SESSION
 渡した peer が、ほかの作業の後でないと始められない向き:
 
 ```sh
-printf '%s' '{"before":{"ref":"session:<待つ相手の name>","cwd":"<その session に渡した cwd>"},"after":{"ref":"session:<name>","cwd":"<この session に渡した cwd>"},"note":"<何の後か>"}' \
+printf '%s' '{"before":{"ref":"sid:<待つ相手の uuid>","cwd":"<その session に渡した cwd>"},"after":{"ref":"sid:<uuid>","cwd":"<この session に渡した cwd>"},"note":"<何の後か>"}' \
   | "${XDG_CACHE_HOME:-$HOME/.cache}/agents-daemon/bin/agents-daemon" edge add
 ```
 
 自分のタスクが、渡した peer の完了を待つ向き (peer の成果を受けてから進める):
 
 ```sh
-printf '%s' '{"before":{"ref":"session:<name>","cwd":"<この session に渡した cwd>"},"after":{"task":"<自分のタスクの id>"},"note":"<何の後か>"}' \
+printf '%s' '{"before":{"ref":"sid:<uuid>","cwd":"<この session に渡した cwd>"},"after":{"task":"<自分のタスクの id>"},"note":"<何の後か>"}' \
   | "${XDG_CACHE_HOME:-$HOME/.cache}/agents-daemon/bin/agents-daemon" edge add
 ```
 
@@ -94,12 +103,9 @@ printf '%s' '{"before":{"ref":"pr:<owner>/<repo>#<番号>","cwd":"<この sessio
 - PR がマージされると、`pr:` を before に持つ辺は daemon が消す。導いた `sid → pr` の辺は残るが、peer が終われば
   図から畳まれ、保持期間 (7 日) で消える。マージせずに閉じた PR の辺は消えないので、付け替えるか `edge rm` する
 
-before の ref は `pr:<owner>/<repo>#<番号>` や `issue:` でもよい。`session:<name>` は、daemon が数秒のうちに
-その名前のセッションへ 1 回だけ結びつける。辺を書いた時点で同名のセッションが動いていれば最も新しく起きたもの
-(手順 1 で起こした相手)、まだ起きていなければ後から最初に現れたもの。結びついた後に同じ名前のセッションを
-起こし直しても辺の相手は変わらないので、別のセッションを待たせたいなら `edge rm` してから `sid:<session_id>` で
-書き直す。
-参照の形と結びつけ、`rm` / `list` は `agents-daemon:agents-daemon` skill の `references/operations.md`
+before の ref は `pr:<owner>/<repo>#<番号>` や `issue:` でもよい。peer は `sid:<uuid>` で指す。`<uuid>` は
+手順 2 で `--session-id` に渡した値で、起こす前から決まっているので、起こす前にも辺を書ける。
+参照の形 (名前で結びつける `session:<名前>` を含む) と、`rm` / `list` は `agents-daemon:agents-daemon` skill の `references/operations.md`
 「セッションをまたぐ辺を書く」。
 
 辺を書かずに送ると、`SendMessage` の結果に辺が無いことと書き方が添えられる。依存があれば上の形で書き、
@@ -135,14 +141,14 @@ workflow の 1 行を消すような定型の横展開だけ、`--model sonnet` 
 `env` が定義しており、Claude Code セッションの中からは環境変数として見える。
 
 ```sh
-claude --name peer-b --model "${CLAUDE_CODE_SUBAGENT_MODEL:?}"
+claude --model "${CLAUDE_CODE_SUBAGENT_MODEL:?}"
 ```
 
 ユーザーへ起動を頼むときは、この変数を自分で展開した値に置き換えてから渡し、
 シングルクォートで囲む。
 
 ```sh
-claude --name peer-b --model 'opus'
+claude --model 'opus'
 ```
 
 settings の `env` は Claude Code のプロセスにだけ注入されるので、ユーザーのログインシェルに
@@ -157,10 +163,11 @@ settings の `env` は Claude Code のプロセスにだけ注入されるので
 
 ## 宛先の指定
 
-`ListAgents` が出した行の名前を `to` に渡す。bare name (`peer-b`) で届く (v2.1.232 以降)。
+`ListAgents` が出した行の名前を `to` に渡す。bare name (`agents-config-01`) で届く (v2.1.232 以降)。
+自分で起こした peer の名前は、受領の `from` で知る。
 
 ```
-{"to": "peer-b", "message": "..."}
+{"to": "agents-config-01", "message": "..."}
 ```
 
 `[ref]` を付けるのは、listing に同じ名前が 2 行あるか、エラーが付けろと言ったときだけ。
@@ -203,8 +210,8 @@ settings の `env` は Claude Code のプロセスにだけ注入されるので
 ### 報告が来ないとき
 
 子が報告しないまま止まった、ユーザーへの質問で止まった、といった異常は、報告が来ないことで気づく。
-作業の見込みを過ぎても報告が無ければ、子の block を `rex capture` で読んで止まった理由を確かめる
-(`references/rex.md`「画面の読み方」)。
+作業の見込みを過ぎても報告が無ければ、子の block を `rex capture -s <session_id>` で読んで止まった理由を確かめる
+(`references/rex.md`「画面の読み方」)。`<session_id>` は起こしたときに控えたもので、label は rename されている。
 
 ### idle 通知が報告と重なったとき
 
@@ -234,9 +241,11 @@ settings の `env` は Claude Code のプロセスにだけ注入されるので
 
 ## 引き継ぎ内容の渡し方
 
-`SendMessage` の本文に入れるのが既定。受け手はそれをそのまま指示として読む。
+新しく起こす peer には、依頼文を `claude` の最後の引数で最初のターンとして渡す (手順 2)。
+既に動いているセッションへの依頼と、起こした peer への追加の指示は `SendMessage` の本文に入れる。
+受け手はどちらもそのまま指示として読む。
 
-ファイル出力は明示的に求められたときと、本文に載らないほど長いときだけ。その場合もパスを
+それ以外のファイル出力は、明示的に求められたときと、本文に載らないほど長いときだけ。その場合もパスを
 `SendMessage` の本文に載せる。
 
 渡す先のセッションで PR を作らせるなら、PR のタイトルと本文を日本語で書くことを最初の指示で明示する。

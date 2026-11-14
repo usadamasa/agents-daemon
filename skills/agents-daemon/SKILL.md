@@ -21,7 +21,7 @@ plugin root の `README.md` の「役割」が持つ。コマンド、設定キ�
 | 上限が解除されても再開しない | `logs` の「待機に入りました」と起床時刻の行。operations.md の「既知の制約」(statusline の未配線、ネイティブ auto-continue への譲り、spend limit) |
 | 関係ない pane にプロンプトが打ち込まれた | すぐ `stop` し、`logs` の該当行と画面を添えて issue にする |
 | `doctor` の pane 一覧が全部 `agent_status=unknown` (rex を上げた直後) | `doctor` の「rex CLI の前提」の `⚠`。rex の版への追従が要るので issue にする |
-| daemon が起きない・バイナリがビルドされない | `$STATE/logs/build.log`。operations.md の「既知の制約」(go が PATH に無い、rex の外) |
+| daemon が起きない・バイナリがビルドされない | `$STATE/logs/build.log`。operations.md の「build の失敗から建て直す」と「既知の制約」(go が PATH に無い、rex の外) |
 | plugin を更新したのに古い daemon が動いている | operations.md の「plugin の更新後に daemon を入れ替える」 |
 | 送信が block に届かない | operations.md の「既知の制約」(block 内 tmux、rex の送信は未測定) |
 | `doctor` の pane 一覧が `session_id=(なし)` になる | statusline の配線 (`agents-daemon:setup` skill の `references/statusline.md`) |

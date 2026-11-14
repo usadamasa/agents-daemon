@@ -6,6 +6,8 @@
 # - macOS 以外、go / cc / codesign / plutil が無い環境では INFO 1 行で飛ばす (exit 0)。stamp は書かないので次の
 #   SessionStart がまた試す。gui は daemon と違って無くても plugin の他の機能に影響しない
 # - 同時に起きた build は lock で 1 本に絞る (build-lock.sh)
+# - go build は GOTOOLCHAIN=auto で走らせる。失敗したら原因と建て直すコマンドを build-gui.failed に書き、
+#   次の SessionStart が systemMessage で利用者へ伝える (go-build.sh)
 # - バイナリは一時ファイルから mv で差し替え、.app は一時の bundle を組んで rename で入れ替える。起動中のアプリは
 #   元の inode を持ち続けるので、次に開いたときに新しくなる
 # - 署名は ad hoc (手元で建てたものを手元で動かすだけ。quarantine が付かないので Gatekeeper は見ない)
@@ -27,6 +29,8 @@ source "$SCRIPT_DIR/lib/daemon-bin.sh"
 BUILD_LOCK="$GUI_BUILD_LOCK"
 # shellcheck disable=SC1091 # Dynamically resolved path
 source "$SCRIPT_DIR/lib/build-lock.sh"
+# shellcheck disable=SC1091 # Dynamically resolved path
+source "$SCRIPT_DIR/lib/go-build.sh"
 
 if [ "$(uname -s)" != Darwin ]; then
   log_info "not macOS; skipping agent-tasks"
@@ -47,11 +51,15 @@ fi
 claim_lock || exit 0
 
 tmp_bin=""
+tmp_out=""
 tmp_app=""
 tmp_stamp=""
 cleanup() {
   if [ -n "$tmp_bin" ] && [ -e "$tmp_bin" ]; then
     rm -f "$tmp_bin" || log_error "rm failed: $tmp_bin"
+  fi
+  if [ -n "$tmp_out" ] && [ -e "$tmp_out" ]; then
+    rm -f "$tmp_out" || log_error "rm failed: $tmp_out"
   fi
   if [ -n "$tmp_app" ] && [ -e "$tmp_app" ]; then
     rm -rf "$tmp_app" || log_error "rm failed: $tmp_app"
@@ -78,9 +86,13 @@ if ! tmp_bin=$(mktemp "$DAEMON_BIN_DIR/.agent-tasks.XXXXXX"); then
 fi
 # deployment target は Go 1.27 が要求する macOS の下限 13.0 (Taskfile の gui:build と揃える)。下げると ld が警告する。
 # version は窓の title に出す (gui/main.go の version)。
+if ! tmp_out=$(mktemp "$DAEMON_BIN_DIR/.agent-tasks.go-build.XXXXXX"); then
+  log_error "mktemp failed in $DAEMON_BIN_DIR"
+  exit 1
+fi
 if ! CGO_CFLAGS=-mmacosx-version-min=13.0 CGO_LDFLAGS=-mmacosx-version-min=13.0 MACOSX_DEPLOYMENT_TARGET=13.0 \
-  go build -C "$PLUGIN_ROOT/gui" -ldflags "-X main.version=$version" -o "$tmp_bin" .; then
-  log_error "go build failed"
+  go_build "$tmp_out" -C "$PLUGIN_ROOT/gui" -ldflags "-X main.version=$version" -o "$tmp_bin" .; then
+  record_build_failure "$GUI_BUILD_FAILED" "$tmp_out" "$SCRIPT_DIR/build-gui.sh"
   exit 1
 fi
 if ! mv "$tmp_bin" "$GUI_BIN"; then
@@ -168,5 +180,6 @@ if ! mv "$tmp_stamp" "$GUI_STAMP"; then
   exit 1
 fi
 tmp_stamp=""
+clear_build_failure "$GUI_BUILD_FAILED"
 
 log_info "built $GUI_APP ($version)"

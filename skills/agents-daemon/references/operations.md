@@ -57,6 +57,24 @@ repo の絞り込み、スクロール位置を引き継いで新しいバージ
 そのまま渡すので止まらない。mod は古い版の形の JSON を送り、新しいバイナリの schema に合わなければ弾かれる。
 mod の失敗が出たセッションは開き直す。
 
+### build の失敗から建て直す
+
+SessionStart hook の build は裏で走るので、失敗は次のセッションの開始時にメッセージで出る。
+`daemon のビルドに失敗しています` か `依存図のアプリ (agent-tasks) のビルドに失敗しています` に続けて、
+go の最後の行 (原因) と建て直すコマンドが並ぶ。同じ 2 行は `$STATE/logs/build.log` にも残る。
+
+go build は `GOTOOLCHAIN=auto` で走るので、PATH の go が古くても要るバージョンの toolchain を取りに行く。
+取得にも失敗する (オフラインなど) ときは、原因を取り除いてからメッセージのコマンドを打つ。
+Claude Code の sandbox は `~/.cache/agents-daemon` に書けないので、`!` を付けて打つ。
+
+```sh
+! <plugin の置き場>/hooks/build-daemon.sh   # daemon (続けて依存図のアプリも建てる)
+! <plugin の置き場>/hooks/build-gui.sh      # 依存図のアプリだけ
+```
+
+`<plugin の置き場>` はメッセージに出るパスを使う。建てられたら失敗の印は消え、`build-daemon.sh` は daemon も起こす。
+動いている daemon は差し替えを次の tick で検知して入れ替わる。
+
 ### 放置された worktree を回収する
 
 普段は SessionStart hook が `prune-worktrees --hook` で、今開いたリポジトリの `.claude/worktrees/` 配下を回収する
@@ -263,6 +281,7 @@ issue にする。
   config.json だけ置いても何も起きない。
 - **Go が無いとバイナリが建たない。** SessionStart hook は `go build` でバイナリを用意する。
   `go` が PATH に無ければ `$STATE/logs/build.log` に ERROR を残し、デーモンは起きない。
+  go が古いだけなら toolchain を取りに行く。取得にも失敗したときは「build の失敗から建て直す」。
 - **rex が要る。** rex の server に到達できないときデーモンは起動せず、`REX_SESSION` の無いセッションの
   SessionStart では起こさない。Ghostty 単体では pane へキーを送る手段が無いため、この機能は成立しない。
 - **session_id が引けない pane は上限を判定しない。** block とセッションの対応は `context/<sid>.json` の

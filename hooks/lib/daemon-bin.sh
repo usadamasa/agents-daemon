@@ -19,6 +19,10 @@ DAEMON_STAMP="$DAEMON_BIN_DIR/agents-daemon.version"
 # 同時に起きた SessionStart が二重に build しないための lock (mkdir の原子性を使う)。
 DAEMON_BUILD_LOCK="$DAEMON_BIN_DIR/.build.lock"
 DAEMON_BUILD_LOG="${XDG_STATE_HOME:-$HOME/.local/state}/agents-daemon/logs/build.log"
+# go build の失敗印。1 行目が原因、2 行目が建て直すコマンド。次の SessionStart が systemMessage に載せ、
+# 建てられたら build の script が消す (go-build.sh)。
+DAEMON_BUILD_FAILED="${XDG_STATE_HOME:-$HOME/.local/state}/agents-daemon/build.failed"
+GUI_BUILD_FAILED="${XDG_STATE_HOME:-$HOME/.local/state}/agents-daemon/build-gui.failed"
 
 # 依存図のアプリ (gui/、agent-tasks)。バイナリは daemon と同じ cache に置き、起動用の .app は ~/Applications に組む。
 # stamp と lock は daemon と別 (macOS 以外や toolchain の無い環境では gui だけ建たない)。

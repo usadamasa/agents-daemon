@@ -5,8 +5,9 @@
 #   古い plugin のソースで上書きしない)
 # - stamp が無い・古い・読めなければ build-daemon.sh を detach して即座に戻る (go build を前景で回さない)
 # - go が無ければ build.log に ERROR を残し、バイナリを作らない
+# - 建て直す成果物に前の build の失敗印があれば、原因と建て直すコマンドを systemMessage に載せる
 #
-# SessionStart hook の stdout は会話の context へ注入されるため、どの分岐でも stdout を空に保つ。
+# SessionStart hook の stdout は会話の context へ注入されるため、失敗印が無ければ stdout を空に保つ。
 
 bats_require_minimum_version 1.5.0
 
@@ -123,6 +124,60 @@ teardown() {
   wait_until stamp_is_current
   wait_until daemon_ensured
   [ -x "$BIN" ]
+}
+
+# build は detach するので、失敗はそのセッションではなく次の SessionStart の systemMessage で伝える。
+@test "daemon の失敗印があれば、建て直しを detach しつつ原因と建て直すコマンドを systemMessage に載せる" {
+  install_fake_go
+  mkdir -p "$(dirname "$BUILD_FAILED")"
+  printf '%s\n' 'go build failed: toolchain not available' '! /x/hooks/build-daemon.sh' >"$BUILD_FAILED"
+
+  PATH="$FIXTURE_PATH" run_hook --separate-stderr "$HOOK"
+  [ "$status" -eq 0 ]
+  msg=$(printf '%s' "$output" | jq -er '.systemMessage')
+  [[ "$msg" == *"toolchain not available"* ]]
+  # 建て直すコマンドは印の 2 行目 (失敗した時点の、更新で消えうる置き場) ではなく、今の plugin の置き場から組む
+  [[ "$msg" == *"! $REPO_ROOT/hooks/build-daemon.sh"* ]]
+  [[ "$msg" != *"/x/hooks"* ]]
+  [[ "$msg" == *"$BUILD_LOG"* ]]
+  wait_until stamp_is_current
+}
+
+@test "agent-tasks を建て直すとき失敗印があれば、daemon を起こしつつ原因と建て直すコマンドを systemMessage に載せる" {
+  require_darwin
+  make_fake_daemon "$TEST_TMPDIR/daemon.calls" "$BIN"
+  printf '%s\n' "$PLUGIN_VERSION" >"$STAMP"
+  printf '%s\n' "0000.0000.0" >"$GUI_STAMP"
+  install_fake_go
+  install_fake_gui_toolchain
+  # 載せた後に detach した build が成功して失敗印を消さないよう、go を落とす
+  export GO_STUB_EXIT=1
+  mkdir -p "$(dirname "$GUI_BUILD_FAILED")"
+  printf '%s\n' 'go build failed: cgo error' '! /x/hooks/build-gui.sh' >"$GUI_BUILD_FAILED"
+
+  PATH="$FIXTURE_PATH" run_hook --separate-stderr "$HOOK"
+  [ "$status" -eq 0 ]
+  msg=$(printf '%s' "$output" | jq -er '.systemMessage')
+  [[ "$msg" == *"agent-tasks"* ]]
+  [[ "$msg" == *"cgo error"* ]]
+  [[ "$msg" == *"! $REPO_ROOT/hooks/build-gui.sh"* ]]
+  [[ "$msg" != *"/x/hooks"* ]]
+  [ "$(<"$TEST_TMPDIR/daemon.calls")" = "daemon --ensure" ]
+}
+
+# 建て直さないなら失敗印は古い (task install や worktree の build が残したもの)。動いているものに「失敗しています」と出さない。
+@test "stamp が両方 current なら、失敗印が残っていても stdout は空" {
+  make_fake_daemon "$TEST_TMPDIR/daemon.calls" "$BIN"
+  printf '%s\n' "$PLUGIN_VERSION" >"$STAMP"
+  printf '%s\n' "$PLUGIN_VERSION" >"$GUI_STAMP"
+  mkdir -p "$(dirname "$BUILD_FAILED")"
+  printf '%s\n' 'go build failed: old' '! /x/hooks/build-daemon.sh' >"$BUILD_FAILED"
+  printf '%s\n' 'go build failed: old' '! /x/hooks/build-gui.sh' >"$GUI_BUILD_FAILED"
+
+  PATH="$FIXTURE_PATH" run_hook --separate-stderr "$HOOK"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  [ "$(<"$TEST_TMPDIR/daemon.calls")" = "daemon --ensure" ]
 }
 
 @test "go が PATH に無ければ build.log に ERROR を残し、バイナリを作らない" {

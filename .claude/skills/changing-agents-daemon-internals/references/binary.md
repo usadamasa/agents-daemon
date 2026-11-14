@@ -18,6 +18,13 @@ plugin には install 時の lifecycle hook が無いので、バイナリも Se
 
 - `go` が PATH に無ければ `build.log` に `ERROR ... go not found in PATH` を残して終わる。
   hook は PATH を仮定しないので、Claude Code を起動するシェルの PATH に Go を入れる。
+- go build は呼び出しにだけ `GOTOOLCHAIN=auto` を渡す (`hooks/lib/go-build.sh`)。起動したリポジトリの devShell の
+  `GOTOOLCHAIN=local` を受け継ぐと、PATH の go が `go.mod` より古いとき落ちるため。export しないので daemon には渡らない。
+- go build が落ちたら、go の最後の行と `!` で打つ建て直しのコマンドを `$STATE/build.failed` (アプリは
+  `build-gui.failed`) と `build.log` に書く。次の SessionStart で `ensure-daemon.sh` が、その成果物を建て直すときだけ
+  原因の行を systemMessage に載せる (stamp が current なら載せない。`task install` や worktree の build が残した失敗印で、
+  動いているものに失敗と出さないため)。建て直すコマンドは印の 2 行目ではなく hook 自身の置き場から組む
+  (印は失敗した時点の置き場を指し、plugin の更新で消えうる)。建てられたら build の script が消す。
 - 同時に起きた build は `bin/.build.lock` (ディレクトリ。中の `pid` が持ち主) で 1 本に絞る。
   持ち主が生きていれば後から来た側は何もせずに終わる。build が SIGKILL などで落ちて lock が残っても、
   次の build が持ち主の死を `kill -0` で確かめて残骸を消し、取り直す (`build.log` に `stale lock` が残る)。

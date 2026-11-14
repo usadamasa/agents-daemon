@@ -7,6 +7,8 @@
 # - 建てたバイナリは同一ディレクトリの一時ファイルから mv で差し替える。動作中の daemon は
 #   実行ファイルの差し替えを検知して自分で入れ替わるので、ここでは止めない
 # - go が無ければエラー終了する。PATH に何が居るかは仮定しない (入れ方は README)
+# - go build は GOTOOLCHAIN=auto で走らせる。失敗したら原因と建て直すコマンドを build.failed に書き、
+#   次の SessionStart が systemMessage で利用者へ伝える (go-build.sh)
 # - 最後に build-gui.sh を呼び、依存図のアプリも同じ version で建て直す
 
 set -euo pipefail
@@ -26,6 +28,8 @@ source "$SCRIPT_DIR/lib/daemon-bin.sh"
 BUILD_LOCK="$DAEMON_BUILD_LOCK"
 # shellcheck disable=SC1091 # Dynamically resolved path
 source "$SCRIPT_DIR/lib/build-lock.sh"
+# shellcheck disable=SC1091 # Dynamically resolved path
+source "$SCRIPT_DIR/lib/go-build.sh"
 
 if ! mkdir -p "$DAEMON_BIN_DIR"; then
   log_error "mkdir failed: $DAEMON_BIN_DIR"
@@ -35,10 +39,14 @@ fi
 claim_lock || exit 0
 
 tmp_bin=""
+tmp_out=""
 tmp_stamp=""
 cleanup() {
   if [ -n "$tmp_bin" ] && [ -e "$tmp_bin" ]; then
     rm -f "$tmp_bin" || log_error "rm failed: $tmp_bin"
+  fi
+  if [ -n "$tmp_out" ] && [ -e "$tmp_out" ]; then
+    rm -f "$tmp_out" || log_error "rm failed: $tmp_out"
   fi
   if [ -n "$tmp_stamp" ] && [ -e "$tmp_stamp" ]; then
     rm -f "$tmp_stamp" || log_error "rm failed: $tmp_stamp"
@@ -65,8 +73,12 @@ if ! tmp_bin=$(mktemp "$DAEMON_BIN_DIR/.agents-daemon.XXXXXX"); then
   log_error "mktemp failed in $DAEMON_BIN_DIR"
   exit 1
 fi
-if ! go build -C "$PLUGIN_ROOT" -ldflags "-X main.version=$version" -o "$tmp_bin" ./cmd/agents-daemon; then
-  log_error "go build failed"
+if ! tmp_out=$(mktemp "$DAEMON_BIN_DIR/.agents-daemon.go-build.XXXXXX"); then
+  log_error "mktemp failed in $DAEMON_BIN_DIR"
+  exit 1
+fi
+if ! go_build "$tmp_out" -C "$PLUGIN_ROOT" -ldflags "-X main.version=$version" -o "$tmp_bin" ./cmd/agents-daemon; then
+  record_build_failure "$DAEMON_BUILD_FAILED" "$tmp_out" "$SCRIPT_DIR/build-daemon.sh"
   exit 1
 fi
 if ! mv "$tmp_bin" "$DAEMON_BIN"; then
@@ -89,6 +101,7 @@ if ! mv "$tmp_stamp" "$DAEMON_STAMP"; then
   exit 1
 fi
 tmp_stamp=""
+clear_build_failure "$DAEMON_BUILD_FAILED"
 
 log_info "built $DAEMON_BIN ($version)"
 

@@ -109,7 +109,9 @@ peer の session に pane を足していると、claude の pane だけが閉�
 "${XDG_CACHE_HOME:-$HOME/.cache}/agents-daemon/bin/agents-daemon" spawned-session close <session_id>
 ```
 
-閉じるのは包みが印 (`spawned-session mark`) を書いた session だけで、印の無い session は理由を出して拒否する。
+閉じるのは包みが印 (`spawned-session mark`) を書いた session だけで、rex に居る印の無い session は理由を出して拒否する。
+peer が先に終わって session が既に無ければ、印が残っていても daemon が消した後でも、exit 0 で
+`{"session_id":"…","killed":false}` を返す。`killed:true` は close が閉じたときだけ。
 `rex session kill` は起こしていない session も閉じられるので、peer を畳むのには使わない。
 
 <!-- rex-premise: preview.28 cli session kill は session ID を受ける。最後の window を閉じても session は残る -->

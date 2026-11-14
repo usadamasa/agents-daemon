@@ -109,5 +109,16 @@ run models/prlink PRLink PRLink.cfg holds
 run models/prlink PRLink PRLinkSweepFirst.cfg violated
 # 自分の PR を待つ辺を見ずに導くと、セッションのタスクと PR の間に待ちの輪を作る (NoDaemonLoop の反例)。
 run models/prlink PRLink PRLinkNoSelfWait.cfg violated
+# 起こした session を spawned-session close で畳む形 (#596)。rex に無ければ印の有無に依らず成功にし、kill に失敗したら
+# 数え直す。包みの c()、reaper、利用者が同じ session を閉じる交錯を含める。liveness も見る。
+run models/spawnedclose SpawnedClose SpawnedClose.cfg holds
+# 印が無ければ rex を数える前に拒否すると、reaper が印を消した後の close が exit 1 になる (FoldedSpawnedIsOk の反例、#596 の修正前)。
+run models/spawnedclose SpawnedClose SpawnedCloseNeedsMark.cfg violated
+# kill の失敗を数え直さないと、数えた後に別の主体が閉じた session への close が exit 1 になる (ErrOnlyWhenDownOrRefused の反例)。
+run models/spawnedclose SpawnedClose SpawnedCloseNoRecount.cfg violated
+# 接続の失敗を target not found と読むと、生きた session を「もう無い」と返す (OkMeansGone の反例)。
+run models/spawnedclose SpawnedClose SpawnedCloseDownAsGone.cfg violated
+# 印を見ずに閉じると、起こしていない session を閉じる (NoKillUnmarked の反例)。
+run models/spawnedclose SpawnedClose SpawnedCloseIgnoreMark.cfg violated
 
 exit "$failed"

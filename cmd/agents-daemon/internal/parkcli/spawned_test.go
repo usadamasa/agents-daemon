@@ -56,18 +56,23 @@ func TestSpawnedSessionMark_Args(t *testing.T) {
 	}
 }
 
-// fakeCloser は close が呼ぶ多重化ツールの操作を記録する。
+// fakeCloser は close が呼ぶ多重化ツールの操作を記録する。goneAfterKill を立てると、kill の後の数え直しでは
+// session が無いと返す (kill の直前に別の経路が session を閉じた競合を再現する)。
 type fakeCloser struct {
-	blocks   int
-	found    bool
-	countErr error
-	killErr  error
-	counted  []string
-	killed   []string
+	blocks        int
+	found         bool
+	countErr      error
+	killErr       error
+	goneAfterKill bool
+	counted       []string
+	killed        []string
 }
 
 func (f *fakeCloser) SessionBlocks(_ context.Context, id string) (int, bool, error) {
 	f.counted = append(f.counted, id)
+	if f.goneAfterKill && len(f.killed) > 0 {
+		return 0, false, f.countErr
+	}
 	return f.blocks, f.found, f.countErr
 }
 
@@ -76,8 +81,8 @@ func (f *fakeCloser) SessionKill(_ context.Context, id string) error {
 	return f.killErr
 }
 
-// 印の無い session は閉じない。起こしていない session (自分や人の session) を閉じないための線で、多重化ツールに
-// 触れる前に理由を出して止まる (#585)。
+// 印の無い session が多重化ツールに居れば閉じない。起こしていない session (自分や人の session) を閉じないための線で、
+// 理由を出して止まる (#585)。
 func TestCloseSpawnedSession_RefusesUnmarked(t *testing.T) {
 	store := spawnedsession.New(t.TempDir())
 	f := &fakeCloser{blocks: 1, found: true}
@@ -85,8 +90,59 @@ func TestCloseSpawnedSession_RefusesUnmarked(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "印") {
 		t.Errorf("error = %v, want 印が無いことを述べる error", err)
 	}
-	if len(f.counted) != 0 || len(f.killed) != 0 {
-		t.Errorf("多重化ツールを呼んだ: counted=%v killed=%v", f.counted, f.killed)
+	if len(f.killed) != 0 {
+		t.Errorf("印の無い session を閉じた: killed=%v", f.killed)
+	}
+}
+
+// 印が無くても多重化ツールに session が無ければ成功 (killed=false) にする。reaper が先に印を消した後でも、
+// 印が残っているうちに打ったときと同じ返り方になる (#596)。
+func TestCloseSpawnedSession_UnmarkedAlreadyGone(t *testing.T) {
+	store := spawnedsession.New(t.TempDir())
+	const id = "session:reaped"
+	f := &fakeCloser{found: false}
+	got, err := closeSpawnedSession(context.Background(), store, f, id)
+	if err != nil {
+		t.Fatalf("error = %v, want nil", err)
+	}
+	if got.SessionID != id || got.Killed {
+		t.Errorf("result = %+v, want session_id %s と killed=false", got, id)
+	}
+	if len(f.killed) != 0 {
+		t.Errorf("無い session を閉じようとした: %v", f.killed)
+	}
+}
+
+// 印が無く、多重化ツールに session が有るかを確かめられないときは成功にしない。
+func TestCloseSpawnedSession_UnmarkedCountErr(t *testing.T) {
+	store := spawnedsession.New(t.TempDir())
+	f := &fakeCloser{countErr: errors.New("socket")}
+	if _, err := closeSpawnedSession(context.Background(), store, f, "session:unknown"); err == nil {
+		t.Error("error = nil, want error")
+	}
+	if len(f.killed) != 0 {
+		t.Errorf("killed = %v, want 空", f.killed)
+	}
+}
+
+// 数えた後、kill の前に別の経路 (包みの c()) が session を閉じて kill が失敗しても、数え直して無ければ成功
+// (killed=false) にして印を消す (#596)。
+func TestCloseSpawnedSession_KillRaceGone(t *testing.T) {
+	store := spawnedsession.New(t.TempDir())
+	const id = "session:race"
+	if err := store.Put(id); err != nil {
+		t.Fatal(err)
+	}
+	f := &fakeCloser{blocks: 1, found: true, killErr: errors.New("not found"), goneAfterKill: true}
+	got, err := closeSpawnedSession(context.Background(), store, f, id)
+	if err != nil {
+		t.Fatalf("error = %v, want nil", err)
+	}
+	if got.SessionID != id || got.Killed {
+		t.Errorf("result = %+v, want session_id %s と killed=false", got, id)
+	}
+	if _, ok := store.Get(id); ok {
+		t.Error("無くなった session の印が残った")
 	}
 }
 
@@ -158,10 +214,10 @@ func TestCloseSpawnedSession_FailureKeepsMark(t *testing.T) {
 	}
 }
 
-// `spawned-session close` は印の無い session を、rex に繋ぐ前に拒否する。
-func TestSpawnedSessionClose_RefusesUnmarked(t *testing.T) {
+// `spawned-session close` は印の無い session を、rex で無いと確かめられなければ成功にしない。
+func TestSpawnedSessionClose_UnmarkedUnreachable(t *testing.T) {
 	parkTestEnv(t)
-	t.Setenv("REX_BIN_PATH", filepath.Join(t.TempDir(), "rex-must-not-run"))
+	t.Setenv("REX_BIN_PATH", filepath.Join(t.TempDir(), "rex-missing"))
 	if _, err := runSpawnedSession(t, "close", "session:not-spawned"); err == nil || !strings.Contains(err.Error(), "印") {
 		t.Errorf("error = %v, want 印が無いことを述べる error", err)
 	}

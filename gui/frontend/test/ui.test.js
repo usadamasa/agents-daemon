@@ -574,7 +574,27 @@ test("メモの detail: repo を基準にリンクにする", async () => {
   opened.length = 0;
   for (const a of as) a.click();
   await flush();
-  assert.deepEqual(opened, ["/repo/agents-daemon/gui/main.go", "https://github.com/usadamasa/agents-daemon/issues/7"]);
+  assert.deepEqual(opened, [
+    "/repo/agents-daemon/gui/main.go",
+    "https://github.com/usadamasa/agents-daemon/issues/7",
+    "https://github.com/usadamasa/workspace/issues/8",
+    "https://github.com/usadamasa/workspace/issues/8",
+  ]);
+  escape();
+});
+
+test("タスクの説明: #123 は同じ文の参照と番号が合えばその repo、合わなければタスクの repo で補う (#562)", async () => {
+  q('.node[data-key="task:alpha/4"]').click();
+  const as = [...q("#pop").querySelectorAll("p a.ref")];
+  assert.deepEqual(as.map((a) => a.textContent), ["pr:usadamasa/workspace#3", "#3", "#9"]);
+  opened.length = 0;
+  for (const a of as) a.click();
+  await flush();
+  assert.deepEqual(opened, [
+    "https://github.com/usadamasa/workspace/pull/3",
+    "https://github.com/usadamasa/workspace/issues/3",
+    "https://github.com/usadamasa/agents-daemon/issues/9",
+  ]);
   escape();
 });
 

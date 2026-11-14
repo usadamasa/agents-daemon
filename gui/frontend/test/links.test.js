@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { edgeNoteRepo, segments } from "../src/links.js";
+import { edgeNoteRepo, segments, textNoteRepo } from "../src/links.js";
 
 const ctx = { githubRepo: () => "o/r", base: "/repo/x" };
 const links = (text, c = ctx) => segments(text, c).filter((s) => s.target !== undefined);
@@ -130,4 +130,35 @@ test("edgeNoteRepo: 番号の合う参照が無ければ、辺が触れる repo 
 test("edgeNoteRepo: 両端と参照が同じ repo の session → pr は、番号に依らずその repo (SameRepoStable)", () => {
   const edge = { before: end("sid:abc", "/repo/agents-daemon"), after: end("pr:usadamasa/agents-daemon#10", "/repo/agents-daemon") };
   for (const k of [10, 11]) assert.equal(edgeNoteRepo(edge, repos, k), "usadamasa/agents-daemon", String(k));
+});
+
+test("textNoteRepo: 同じ文の pr: / issue: の参照と番号が合えば、その参照の repo で補う (#562)", () => {
+  const text = "pr:usadamasa/agents-daemon#555 を待つ。#555 が通ったら進める";
+  assert.equal(textNoteRepo(text, 555, "usadamasa/workspace"), "usadamasa/agents-daemon");
+  assert.equal(textNoteRepo("issue:someone/elsewhere#3 と #3", 3, undefined), "someone/elsewhere");
+});
+
+test("textNoteRepo: 番号の合う参照が無ければ fallback で補う", () => {
+  assert.equal(textNoteRepo("pr:usadamasa/agents-daemon#555 と #7", 7, "usadamasa/workspace"), "usadamasa/workspace");
+  assert.equal(textNoteRepo("#7 を見る", 7, "usadamasa/workspace"), "usadamasa/workspace");
+  assert.equal(textNoteRepo("#7 を見る", 7, undefined), undefined);
+});
+
+test("textNoteRepo: 同じ番号で別 repo の参照が 2 つあれば決めない。同じ repo なら補う", () => {
+  assert.equal(textNoteRepo("pr:a/b#5 と issue:c/d#5 と #5", 5, "o/r"), undefined);
+  assert.equal(textNoteRepo("pr:a/b#5 と issue:a/b#5 と #5", 5, "o/r"), "a/b");
+});
+
+test("textNoteRepo: 接頭辞の無い owner/repo#N と、URL の中の参照は数えない", () => {
+  assert.equal(textNoteRepo("a/b#5 と #5", 5, "o/r"), "o/r");
+  assert.equal(textNoteRepo("https://x.example/pr:a/b#5 と #5", 5, "o/r"), "o/r");
+});
+
+test("textNoteRepo を segments の ctx にすると、#N は同じ文の参照の repo へリンクされる", () => {
+  const text = "pr:usadamasa/agents-daemon#555 と #555";
+  const c = { githubRepo: (k) => textNoteRepo(text, k, "usadamasa/workspace") };
+  assert.deepEqual(
+    links(text, c).map((s) => s.target),
+    ["https://github.com/usadamasa/agents-daemon/pull/555", "https://github.com/usadamasa/agents-daemon/issues/555"],
+  );
 });

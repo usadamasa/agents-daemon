@@ -142,6 +142,10 @@ func (r *daemonRuntime) liveRefSessions() []refpoll.Session {
 	return sessions
 }
 
+func (r *daemonRuntime) prIssuers() map[string][]refpoll.Session {
+	return nil
+}
+
 func newDaemonRuntime(client multiplexerClient, log *applog.Logger, statusPath string, store sessionstate.Store, sleep func(time.Duration), startedAt time.Time) *daemonRuntime {
 	return &daemonRuntime{
 		client:     client,
@@ -572,7 +576,7 @@ func assembleRuntime(raw multiplexerClient, kind string, p apppath.Paths, store 
 	runtime := newDaemonRuntime(client, log, p.StatusFile(), store, time.Sleep, now)
 	runtime.backend = kind
 	runtime.attachStateDir(p.StateDir())
-	runtime.refPoll = refpoll.New(runtime.edges, runtime.refs, refpoll.GH, runtime.liveRefSessions, log)
+	runtime.refPoll = refpoll.New(runtime.edges, runtime.refs, refpoll.GH, runtime.liveRefSessions, nil, log)
 	if c, ok := raw.(reaper.Client); ok {
 		runtime.reaper = reaper.New(runtime.spawned, c, log, dryRun)
 	}

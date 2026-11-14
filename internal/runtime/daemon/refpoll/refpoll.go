@@ -69,6 +69,7 @@ type Poller struct {
 	refs     refstate.Store
 	fetch    Fetcher
 	sessions func() []Session
+	issuers  func() map[string][]Session
 	// locate は cwd の GitHub の repo (owner/repo) と branch を引く (テストが git を起こさずに差し替える継ぎ目)。
 	locate   func(cwd string) (repo, branch string)
 	log      *applog.Logger
@@ -77,9 +78,10 @@ type Poller struct {
 }
 
 // New は edges の端点の参照を fetch で引き、refs へ書く Poller を作る。sessions は生きているセッションを返す。
-func New(edges edge.Store, refs refstate.Store, fetch Fetcher, sessions func() []Session, log *applog.Logger) *Poller {
+// issuers は PR の参照ごとに、その PR を出した記録のあるセッション (終了したものも含む) を返す。
+func New(edges edge.Store, refs refstate.Store, fetch Fetcher, sessions func() []Session, issuers func() map[string][]Session, log *applog.Logger) *Poller {
 	return &Poller{
-		edges: edges, refs: refs, fetch: fetch, sessions: sessions, locate: gitLocate, log: log,
+		edges: edges, refs: refs, fetch: fetch, sessions: sessions, issuers: issuers, locate: gitLocate, log: log,
 		failures: map[string]failure{}, places: map[string]located{},
 	}
 }

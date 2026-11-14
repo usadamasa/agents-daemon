@@ -440,6 +440,49 @@ func TestRefresh_マージ済みのPRも掃除の前に導く(t *testing.T) {
 	}
 }
 
+// 別の PR の照合で branch を引いた直後に PR の branch へ切り替え、locateTTL の内に初めて引いた PR が既にマージ済みでも、
+// 済んだ候補は使い回さずに branch を引き直して掃除の前に導く (#577、models/prlink の PRKept)。
+func TestRefresh_branchを切り替えた直後に初めて引いたマージ済みのPRも導く(t *testing.T) {
+	remote := &fakeRemote{
+		states: map[string]string{"pr:o/r#1": "open", "pr:o/r#2": "merged"},
+		heads:  map[string]string{"pr:o/r#1": "other", "pr:o/r#2": "feat"},
+	}
+	f, add := newFixture(t, remote)
+	add("pr:o/r#1", "task:H/1")
+	f.sessions.live = []Session{{ID: "A", CWD: "/a"}}
+	f.sessions.places["/a"] = [2]string{"o/r", "main"}
+
+	f.p.Refresh(context.Background(), t0)
+	if f.sessions.locates != 1 {
+		t.Fatalf("前提: 別の PR の照合で branch を引く (%d 回)", f.sessions.locates)
+	}
+
+	f.sessions.places["/a"] = [2]string{"o/r", "feat"}
+	add("pr:o/r#2", "task:H/2")
+	f.p.Refresh(context.Background(), t0.Add(5*time.Second))
+	got := edgeKeys(t, f.dir)
+	want := []string{"pr:o/r#1>task:H/1", "sid:A>pr:o/r#2"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("辺 = %v, want %v", got, want)
+	}
+}
+
+// 取りやめた PR の辺は掃除しないので、照合は locateTTL のあいだ branch を使い回す (tick ごとに git を起こさない)。
+func TestRefresh_取りやめたPRの照合ではbranchを使い回す(t *testing.T) {
+	remote := &fakeRemote{states: map[string]string{"pr:o/r#1": "dropped"}, heads: map[string]string{"pr:o/r#1": "feat"}}
+	f, add := newFixture(t, remote)
+	add("pr:o/r#1", "task:H/1")
+	f.sessions.live = []Session{{ID: "A", CWD: "/a"}}
+	f.sessions.places["/a"] = [2]string{"o/r", "main"}
+
+	for i := range 3 {
+		f.p.Refresh(context.Background(), t0.Add(time.Duration(i)*5*time.Second))
+	}
+	if f.sessions.locates != 1 {
+		t.Errorf("locateTTL の内で branch を %d 回引いた, want 1", f.sessions.locates)
+	}
+}
+
 // 自分の PR のマージを待つセッションには導かず、導いた後に待つ辺を書いたら導いた辺を消す (models/prlink の NoDaemonLoop)。
 func TestRefresh_自分のPRを待つ形になったら導いた辺を消す(t *testing.T) {
 	remote := &fakeRemote{states: map[string]string{"pr:o/r#1": "open"}, heads: map[string]string{"pr:o/r#1": "feat"}}

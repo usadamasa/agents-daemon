@@ -29,6 +29,7 @@ const fetchTimeout = 10 * time.Second
 
 // locateTTL は生きているセッションの cwd の repo と branch を使い回す期間。導く候補の PR がある間は tick ごとに
 // 見るので、セッションごとに git を tick ごとに起こさない。branch を切り替えてから導くまでの遅れはこの長さで足りる。
+// 写しが済んだ状態の候補は使い回さない (anchor)。
 const locateTTL = time.Minute
 
 // Remote は引いた issue / PR 1 つ。State は refstate の語。
@@ -130,9 +131,12 @@ func (p *Poller) anchor(edges []edge.Edge, cached map[string]refstate.Record, no
 	}
 	for _, pr := range candidates {
 		it, _ := ref.ParseItem(pr)
+		// 済んだ PR の辺はこの tick の sweep で消え、導く機会はここが最後になる。使い回した branch で照合すると
+		// 切り替えた直後のセッションを見落とすので引き直す (#577、models/prlink の PRKept)。
+		reread := refstate.Done(cached[pr].State)
 		var matched []Session
 		for _, s := range live {
-			repo, branch := p.place(s.CWD, now)
+			repo, branch := p.place(s.CWD, now, reread)
 			if strings.EqualFold(repo, it.Repo) && branch == cached[pr].HeadBranch {
 				matched = append(matched, s)
 			}
@@ -180,9 +184,9 @@ func (p *Poller) candidates(edges []edge.Edge, cached map[string]refstate.Record
 	return prs
 }
 
-// place は cwd の GitHub の repo と branch。locateTTL のあいだは前に引いた値を使う。
-func (p *Poller) place(cwd string, now time.Time) (string, string) {
-	if l, ok := p.places[cwd]; ok && now.Sub(l.at) < locateTTL {
+// place は cwd の GitHub の repo と branch。reread でなければ、locateTTL のあいだは前に引いた値を使う。
+func (p *Poller) place(cwd string, now time.Time, reread bool) (string, string) {
+	if l, ok := p.places[cwd]; ok && !reread && now.Sub(l.at) < locateTTL {
 		return l.repo, l.branch
 	}
 	repo, branch := p.locate(cwd)

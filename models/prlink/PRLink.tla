@@ -11,6 +11,14 @@
    - 導きは、写しが head branch を持ち (写しがある)、P がどこかの辺の端点にあり、P を after に持つ辺が無く、
      生きているセッションのうち repo と branch の合うものが A だけで、pr:P → task:A/x の辺が無いとき
      sid:A → pr:P を書く (印 derived 付き)。edges/.lock の中で読んで書くので、`edge add` との交錯は 1 ステップで足りる。
+   - daemon が見る A の branch は、git で引いた結果 (seen) を使い回した値になりうる (#577)。引くのは導く候補の PR が
+     あり A が生きている tick だけ。使い回しの期限 (locateTTL) が切れるのは Expire、ほかの PR の照合で A の cwd を
+     引くのは OtherLocate。Locate が引き直す時期を決める。
+       "tick":  tick ごとに引く (使い回さない)。
+       "ttl":   期限が切れたときだけ引く (#577 の修正前の実装)。
+       "first": 加えて、P を初めて引いた tick と open から済んだ状態へ変わった tick に引く (issue の候補 1)。
+       "done":  加えて、写しが済んだ状態の P を照合する tick に引く (掃除される直前の照合)。
+   - HoldSweep が TRUE の変種は、写しが済んだ状態の P が導く候補の間、掃除を 1 tick 遅らせる (issue の候補 2)。
    - DeriveFirst が FALSE の変種は、掃除の後に導く (性質を破る壊れたモデル)。
    - CheckSelfWait が FALSE の変種は、自分の PR を待つ辺を見ずに導き、導いた辺も消さない (性質を破る壊れたモデル)。
    - 人 (渡す側、A 自身) は辺をいつでも書き消しうる。導いた辺を `edge rm` しても、条件が揃えば次の tick で導き直す。 *)
@@ -19,7 +27,11 @@ EXTENDS Naturals
 CONSTANTS
   DeriveFirst,    \* 掃除の前に導くか
   CheckSelfWait,  \* 自分の PR を待つ辺を見るか
+  Locate,         \* A の branch を引き直す時期 ("tick" / "ttl" / "first" / "done")
+  HoldSweep,      \* 済んだ候補の掃除を 1 tick 遅らせるか
   MaxOps          \* 人の操作の回数
+
+ASSUME Locate \in {"tick", "ttl", "first", "done"}
 
 None == "none"
 Done == {"merged"}
@@ -29,22 +41,28 @@ VARIABLES
   cache,     \* refs/ の写し (状態と head branch)。無ければ None
   live,      \* A が生きているか
   onBranch,  \* A の cwd が P の head branch か
+  seen,      \* daemon が前に引いた A の branch が P の head branch か
+  fresh,     \* seen が使い回しの期限内か
+  held,      \* 前の tick で済んだ候補の掃除を遅らせたか
   prTask,    \* 辺 pr:P → task:H/1
   prOwn,     \* 辺 pr:P → task:A/1
   sidPr,     \* 辺 sid:A → pr:P。none / derived (daemon が導いた) / manual (人が書いた)
   ops,       \* 人の操作の数
-  chance,    \* tick の始めに導く条件が揃ったことがあるか (履歴)
+  chance,    \* 掃除する tick の始めに導く条件が揃ったことがあるか (履歴)
   humanRm,   \* 人が sid:A → pr:P を消したことがあるか (履歴)
   selfSeen,  \* pr:P → task:A/1 が書かれたことがあるか (履歴)
   daemonLoop \* tick の終わりに、導いた辺が自分の PR を待つ辺と輪を作っていたことがあるか (履歴)
 
-vars == <<remote, cache, live, onBranch, prTask, prOwn, sidPr, ops, chance, humanRm, selfSeen, daemonLoop>>
+vars == <<remote, cache, live, onBranch, seen, fresh, held, prTask, prOwn, sidPr, ops, chance, humanRm, selfSeen, daemonLoop>>
 
 TypeOK ==
   /\ remote \in {"open", "merged"}
   /\ cache \in {None, "open", "merged"}
   /\ live \in BOOLEAN
   /\ onBranch \in BOOLEAN
+  /\ seen \in BOOLEAN
+  /\ fresh \in BOOLEAN
+  /\ held \in BOOLEAN
   /\ prTask \in BOOLEAN
   /\ prOwn \in BOOLEAN
   /\ sidPr \in {None, "derived", "manual"}
@@ -55,11 +73,15 @@ TypeOK ==
   /\ daemonLoop \in BOOLEAN
 
 \* 渡す側が pr:P → task:H/1 を書いた時点。A は P の branch で動いている。daemon はまだ引いていない。
+\* daemon は A の cwd をまだ引いていない (fresh が FALSE)。前に引いた値の使い回しは OtherLocate と Switch で作る。
 Init ==
   /\ remote = "open"
   /\ cache = None
   /\ live = TRUE
   /\ onBranch = TRUE
+  /\ seen = FALSE
+  /\ fresh = FALSE
+  /\ held = FALSE
   /\ prTask = TRUE
   /\ prOwn = FALSE
   /\ sidPr = None
@@ -69,88 +91,126 @@ Init ==
   /\ selfSeen = FALSE
   /\ daemonLoop = FALSE
 
-\* 導く条件。c は引き直した後の写し、t と o はその時点の辺。
-CanAnchor(c, t, o) ==
+\* 導く条件。c は引き直した後の写し、t と o はその時点の辺、b は daemon が見る A の branch。
+CanAnchor(c, t, o, b) ==
   /\ c # None
   /\ t \/ o
   /\ sidPr = None
-  /\ live /\ onBranch
+  /\ live /\ b
   /\ (CheckSelfWait => ~o)
 
 \* daemon の tick。引き直し、導き、導いた辺の除去、掃除。
 Tick ==
   LET c == IF cache \in {None, "open"} THEN remote ELSE cache
-      swept(x) == x /\ c \notin Done
+      \* 導く候補か (写しが head branch を持ち、P が辺の before にあり、after に無い)。導く前の辺で決める。
+      cand == c # None /\ (prTask \/ prOwn) /\ sidPr = None
+      \* A の cwd を照合するか (候補があり A が生きているときだけ place を呼ぶ)。
+      look == cand /\ live
+      reread == CASE Locate = "tick" -> TRUE
+                  [] Locate = "ttl" -> ~fresh
+                  [] Locate = "first" -> ~fresh \/ cache = None \/ (cache = "open" /\ c \in Done)
+                  [] Locate = "done" -> ~fresh \/ c \in Done
+      b == IF reread THEN onBranch ELSE seen
+      hold == HoldSweep /\ c \in Done /\ cand /\ ~held
+      swept(x) == x /\ (c \notin Done \/ hold)
       t1 == IF DeriveFirst THEN prTask ELSE swept(prTask)
       o1 == IF DeriveFirst THEN prOwn ELSE swept(prOwn)
-      s1 == IF CanAnchor(c, t1, o1) THEN "derived" ELSE sidPr
+      s1 == IF look /\ CanAnchor(c, t1, o1, b) THEN "derived" ELSE sidPr
       s2 == IF CheckSelfWait /\ s1 = "derived" /\ o1 THEN None ELSE s1
       o2 == swept(prOwn)
   IN
   /\ cache' = c
+  /\ seen' = IF look /\ reread THEN onBranch ELSE seen
+  /\ fresh' = IF look /\ reread THEN TRUE ELSE fresh
+  /\ held' = hold
   /\ sidPr' = s2
   /\ prTask' = swept(prTask)
   /\ prOwn' = o2
-  /\ chance' = (chance \/ CanAnchor(c, prTask, prOwn))
+  /\ chance' = (chance \/ (c \in Done /\ CanAnchor(c, prTask, prOwn, onBranch)))
   /\ daemonLoop' = (daemonLoop \/ (s2 = "derived" /\ o2))
   /\ UNCHANGED <<remote, live, onBranch, ops, humanRm, selfSeen>>
+
+\* 使い回しの期限 (locateTTL) が切れる。
+Expire ==
+  /\ Locate # "tick"
+  /\ fresh
+  /\ fresh' = FALSE
+  /\ UNCHANGED <<remote, cache, live, onBranch, seen, held, prTask, prOwn, sidPr, ops, chance, humanRm, selfSeen, daemonLoop>>
+
+\* ほかの PR を照合する tick で、daemon が A の cwd の branch を引く。
+OtherLocate ==
+  /\ Locate # "tick"
+  /\ live /\ ~fresh
+  /\ seen' = onBranch
+  /\ fresh' = TRUE
+  /\ UNCHANGED <<remote, cache, live, onBranch, held, prTask, prOwn, sidPr, ops, chance, humanRm, selfSeen, daemonLoop>>
 
 Human(change) ==
   /\ ops < MaxOps
   /\ ops' = ops + 1
   /\ change
 
+Daemon == <<seen, fresh, held>>
+
 \* PR がマージされる。
 Merge ==
   /\ remote = "open"
   /\ remote' = "merged"
   /\ UNCHANGED <<cache, live, onBranch, prTask, prOwn, sidPr, ops, chance, humanRm, selfSeen, daemonLoop>>
+  /\ UNCHANGED Daemon
 
 \* A が終わる (起き直さない)。
 End ==
   /\ live
   /\ live' = FALSE
   /\ UNCHANGED <<remote, cache, onBranch, prTask, prOwn, sidPr, ops, chance, humanRm, selfSeen, daemonLoop>>
+  /\ UNCHANGED Daemon
 
 \* A が branch を切り替える・戻す。
 Switch ==
   Human(/\ onBranch' = ~onBranch
-        /\ UNCHANGED <<remote, cache, live, prTask, prOwn, sidPr, chance, humanRm, selfSeen, daemonLoop>>)
+        /\ UNCHANGED <<remote, cache, live, prTask, prOwn, sidPr, chance, humanRm, selfSeen, daemonLoop>>
+        /\ UNCHANGED Daemon)
 
 \* 渡す側が pr:P → task:H/1 を書く・消す。
 ToggleTask ==
   Human(/\ prTask' = ~prTask
-        /\ UNCHANGED <<remote, cache, live, onBranch, prOwn, sidPr, chance, humanRm, selfSeen, daemonLoop>>)
+        /\ UNCHANGED <<remote, cache, live, onBranch, prOwn, sidPr, chance, humanRm, selfSeen, daemonLoop>>
+        /\ UNCHANGED Daemon)
 
 \* A 自身が pr:P → task:A/1 を書く。
 AddOwn ==
   Human(/\ ~prOwn
         /\ prOwn' = TRUE
         /\ selfSeen' = TRUE
-        /\ UNCHANGED <<remote, cache, live, onBranch, prTask, sidPr, chance, humanRm, daemonLoop>>)
+        /\ UNCHANGED <<remote, cache, live, onBranch, prTask, sidPr, chance, humanRm, daemonLoop>>
+        /\ UNCHANGED Daemon)
 
 \* 人が sid:A → pr:P を書く (導いた辺に書き直すと人の辺になる)。
 AddManual ==
   Human(/\ sidPr # "manual"
         /\ sidPr' = "manual"
-        /\ UNCHANGED <<remote, cache, live, onBranch, prTask, prOwn, chance, humanRm, selfSeen, daemonLoop>>)
+        /\ UNCHANGED <<remote, cache, live, onBranch, prTask, prOwn, chance, humanRm, selfSeen, daemonLoop>>
+        /\ UNCHANGED Daemon)
 
 \* 人が sid:A → pr:P を `edge rm` する。
 RemoveSidPr ==
   Human(/\ sidPr # None
         /\ sidPr' = None
         /\ humanRm' = TRUE
-        /\ UNCHANGED <<remote, cache, live, onBranch, prTask, prOwn, chance, selfSeen, daemonLoop>>)
+        /\ UNCHANGED <<remote, cache, live, onBranch, prTask, prOwn, chance, selfSeen, daemonLoop>>
+        /\ UNCHANGED Daemon)
 
 Next ==
-  \/ Tick \/ Merge \/ End
+  \/ Tick \/ Expire \/ OtherLocate \/ Merge \/ End
   \/ Switch \/ ToggleTask \/ AddOwn \/ AddManual \/ RemoveSidPr
 
-\* tick は 5 秒ごとに来る。
-Spec == Init /\ [][Next]_vars /\ WF_vars(Tick)
+\* tick は 5 秒ごとに来て、使い回しの期限は 1 分で切れる。
+Spec == Init /\ [][Next]_vars /\ WF_vars(Tick) /\ WF_vars(Expire)
 
-\* tick の始めに導く条件が揃ったら、人が消すか自分の PR を待つ形にならない限り、P は sid:A → pr:P で A につながった
-\* まま残る (PR のマージで pr:P → task:H/1 が消えても、P のノードは図から消えない)。
+\* 写しが済んだ状態の P を掃除する tick の始めに導く条件が揃ったら、人が消すか自分の PR を待つ形にならない限り、
+\* P は sid:A → pr:P で A につながったまま残る (PR のマージで pr:P → task:H/1 が消えても、P のノードは図から消えない)。
+\* 写しが open の間は掃除しないので、導くのが遅れても辺は残り、EventuallyAnchored が導くことを持つ。
 PRKept == (chance /\ ~humanRm /\ ~selfSeen) => sidPr # None
 
 \* daemon は自分の PR を待つ辺と輪になる辺を、tick の終わりに残さない。

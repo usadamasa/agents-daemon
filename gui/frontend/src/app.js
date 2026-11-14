@@ -623,9 +623,9 @@ function stateMark(n) {
   return dot;
 }
 
-// nodeRow は関係するノードの 1 行: 状態の丸、題 (押すとそのノードを選ぶ)、直接か間接かの印、依存を外すボタン (あれば)。
+// nodeRow は関係するノードの 1 行: 状態の丸、題 (押すとそのノードを選ぶ)、依存を外すボタン (あれば)。
 // owner は選んでいるノード (同じセッションの blockedBy の解消を頼む宛先)。
-function nodeRow(n, mark, link, owner) {
+function nodeRow(n, link, owner) {
   const row = document.createElement("div");
   row.className = "lk";
   const b = document.createElement("button");
@@ -634,7 +634,7 @@ function nodeRow(n, mark, link, owner) {
   // 題は note と並ぶと先頭だけ残して切れるので、全文を tooltip に持たせる。
   b.title = n.title;
   b.addEventListener("click", () => select({ type: "node", key: n.key }));
-  row.append(stateMark(n), b, heading(mark));
+  row.append(stateMark(n), b);
   // edge add の note (何の待ちか) は行に添える。
   if (link?.edge?.note) {
     const note = document.createElement("span");
@@ -649,20 +649,15 @@ function nodeRow(n, mark, link, owner) {
   return row;
 }
 
-// related は key の直近 (直接) と、その先 (間接) のノードを並べる。direct は [ノード, 辺] の組。
-function related(g, direct, all, owner) {
-  const rows = [];
-  const seen = new Set();
-  for (const [n, link] of direct) {
-    seen.add(n.key);
-    rows.push(nodeRow(n, "Direct", link, owner));
-  }
-  for (const k of all) {
-    if (seen.has(k)) continue;
-    const n = g.node(k);
-    if (n) rows.push(nodeRow(n, "Indirect"));
-  }
-  return rows;
+// relatedGroups は直近 (direct の [ノード, 辺] の組) と、その先 (all から直近を除いたもの) を別のグループにする。
+// 見出しの数はグループの行の数。直近のグループは 0 件でも出し、その先のグループは行があるときだけ出す。
+function relatedGroups(g, label, direct, all, owner) {
+  const seen = new Set(direct.map(([n]) => n.key));
+  const near = direct.map(([n, link]) => nodeRow(n, link, owner));
+  const far = [...all].flatMap((k) => (seen.has(k) || !g.node(k) ? [] : [nodeRow(g.node(k))]));
+  const groups = [group(label, near.length, near)];
+  if (far.length > 0) groups.push(group(`${label} (indirect)`, far.length, far));
+  return groups;
 }
 
 // アイコンは Octicons (GitHub、MIT。vendor/LICENSE.octicons) の 16px の path。右の語は Octicons の名前。
@@ -1000,9 +995,9 @@ function nodePopup(n) {
 
   // Blocks はこのノードを待っているもの、Blocked by はこのノードが待っているもの。
   const after = g.waiters(n.key).flatMap((l) => (g.node(l.after) ? [[g.node(l.after), l]] : []));
-  parts.push(group("Blocks", g.reach(n.key).size, related(g, after, g.reach(n.key))));
+  parts.push(...relatedGroups(g, "Blocks", after, g.reach(n.key)));
   const before = g.blockers(n.key).flatMap((l) => (g.node(l.before) ? [[g.node(l.before), l]] : []));
-  parts.push(group("Blocked by", g.upstream(n.key).size, related(g, before, g.upstream(n.key), n)));
+  parts.push(...relatedGroups(g, "Blocked by", before, g.upstream(n.key), n));
 
   if (n.memos.length > 0) {
     parts.push(group("Memos handled", n.memos.length, n.memos.map((m) => memoRowInPopup(m.id, m.title, m.status, m.status === "open"))));

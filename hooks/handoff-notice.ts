@@ -44,19 +44,23 @@ async function nudge<R extends ToolCallResult>($: EngineInterface, name: string,
     const g = new Graph(loaded.data.graph)
     if (unlinked(g, [name]).length === 0) return sent
 
+    // unlinked と同じ条件で探すので、unlinked が name を返したなら peer は見つかる。
     const peer = g.nodes.find(n => n.session_name === name && n.live && n.state !== 'completed')
-    await logEvent($, 'mod.handoff.unlinked', { session: peer?.session_id ?? '' })
-    return { ...sent, context: [...(sent.context ?? []), describe(name, peer?.cwd, await daemonBin($))] }
+    if (peer?.session_id === undefined) return sent
+    await logEvent($, 'mod.handoff.unlinked', { session: peer.session_id })
+    return { ...sent, context: [...(sent.context ?? []), describe(name, peer.session_id, peer.cwd, await daemonBin($))] }
   } catch (err) {
     await logChange($, 'handoff', 'mod.handoff.failed', { reason: reason(err, 'handoff') })
     return sent
   }
 }
 
-// describe は辺の書き方を両方の向きで示す。peer の端点は session:<名前> で、cwd は依存図のノードから埋める。自分の
-// タスクの端点は task 欄の id だけで、参照と cwd はバイナリが埋める (mod は自分のどのタスクかを知らない)。
-function describe(name: string, cwd: string | undefined, bin: string): string {
-  const peer = { ref: `session:${name}`, cwd: cwd ?? '<その cwd>' }
+// describe は辺の書き方を両方の向きで示す。peer の端点は依存図のノードの session_id で sid:<id> と指し、cwd もノードから
+// 埋める。名前 (session:<名前>) で指さないのは、--name の無いセッションの名前は起こす側が決められず、同名で起こし直すと
+// 別のセッションへ結びつくため。自分のタスクの端点は task 欄の id だけで、参照と cwd はバイナリが埋める (mod は自分の
+// どのタスクかを知らない)。
+function describe(name: string, sessionID: string, cwd: string | undefined, bin: string): string {
+  const peer = { ref: `sid:${sessionID}`, cwd: cwd ?? '<その cwd>' }
   const peerWaits: EdgeAddRequest = { before: { ref: '<待つ相手の参照>', cwd: '<その cwd>' }, after: peer, note: '<何の後か>' }
   const selfWaits: EdgeAddRequest = { before: peer, after: { task: '<自分のタスクの id>' }, note: '<何の後か>' }
   const line = (req: EdgeAddRequest) => `  printf '%s' '${JSON.stringify(req)}' | ${bin} edge add`

@@ -133,6 +133,7 @@ jobs:
       pull-requests: read
     outputs:
       gui: ${{ steps.filter.outputs.gui != 'false' }}
+      models: ${{ steps.filter.outputs.models != 'false' }}
     steps:
       - uses: actions/checkout@v7.0.1
 
@@ -169,6 +170,32 @@ jobs:
           path: tmp/gui-snapshots
           if-no-files-found: ignore
 
+  # models/ の TLA+ を TLC で回し、cfg ごとの期待 (反例なし / 反例あり) と突き合わせる。
+  # PR では filters.yaml の models に当たるときだけ回し、main への push では毎回回す
+  model-check:
+    name: model check
+    needs: [changes]
+    if: needs.changes.outputs.models == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: usadamasa/gh-manage/actions/setup-nix@main
+        with:
+          cache: false
+
+      - name: Run TLC
+        run: task model-check
+
+      # 反例の trace と期待に外れた cfg の log。期待どおりの反例も含む
+      - name: Upload TLC logs
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: tlc-logs
+          path: tmp/tlc/*.log
+          if-no-files-found: ignore
+
   actions-lock:
     name: actions-lock verify
     runs-on: ubuntu-latest
@@ -178,7 +205,7 @@ jobs:
       - uses: usadamasa/gh-manage/actions/verify-actions-lock@main
 
   ci-status-check:
-    needs: [go-test, go-lint, bats, shellcheck, plugin-validate, mod-typecheck, changes, gui-test, actions-lock]
+    needs: [go-test, go-lint, bats, shellcheck, plugin-validate, mod-typecheck, changes, gui-test, model-check, actions-lock]
     if: always()
     runs-on: ubuntu-slim
     timeout-minutes: 10

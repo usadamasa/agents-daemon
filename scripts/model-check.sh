@@ -104,7 +104,16 @@ run models/noterepo NoteRepo NoteRepoFallbackBefore.cfg violated
 # 参照の repo を daemon が引いた状態から取ると、状態を引けない PR の番号を書いた note がリンクにならない (RefNoteResolves の反例)。
 run models/noterepo NoteRepo NoteRepoViaState.cfg violated
 # PR の head branch で動くセッションから PR への辺を、daemon が掃除の前に導く形 (#487)。自分の PR を待つ形では導かない。
+# A の branch は 1 分使い回し、写しが済んだ状態の PR を照合するときだけ引き直す (#577)。
 run models/prlink PRLink PRLink.cfg holds
+# branch を tick ごとに引く形 (使い回しの無い基準)。
+run models/prlink PRLink PRLinkEveryTick.cfg holds
+# 使い回しの期限の間は branch を引き直さないと、切り替えた直後に初めて引いた済んだ PR が辺ごと消える (PRKept の反例、#577 の修正前)。
+run models/prlink PRLink PRLinkStaleBranch.cfg violated
+# 初めて引いた tick と open から済んだ状態へ変わった tick だけ引き直すと、マージ後に書いた辺の PR で同じことが起きる (PRKept の反例)。
+run models/prlink PRLink PRLinkRefetchFirst.cfg violated
+# 済んだ候補の掃除を 1 tick 遅らせても、使い回しが次の tick まで続くと辺ごと消える (PRKept の反例)。
+run models/prlink PRLink PRLinkHoldSweep.cfg violated
 # 掃除の後に導くと、初めて引いた時点でマージ済みの PR が辺ごと消え、導く元が無くなる (PRKept の反例)。
 run models/prlink PRLink PRLinkSweepFirst.cfg violated
 # 自分の PR を待つ辺を見ずに導くと、セッションのタスクと PR の間に待ちの輪を作る (NoDaemonLoop の反例)。

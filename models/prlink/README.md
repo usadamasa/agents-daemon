@@ -1,23 +1,44 @@
 # PR とそれを出したセッションの辺のモデル (TLA+)
 
 渡す側が `pr:P → task` だけを書いても、P の head branch で動くセッション A と P のノードがつながるよう、
-daemon が `sid:A → pr:P` の辺を導く手順 (#487) を TLA+ に写したもの。回し方と期待の突き合わせは
-`models/handoff/README.md` と同じ `task model-check`。ステップと実装の対応は `.tla` のコメントが持つ。
+daemon が `sid:A → pr:P` の辺を導く手順 (#487) と、A の branch を使い回す窓 (#577) を TLA+ に写したもの。
+回し方と期待の突き合わせは `models/handoff/README.md` と同じ `task model-check`。
 
 | cfg | 性質 | 成り立つ理由 |
 | ---- | ---- | ---- |
-| `PRLink.cfg` | `PRKept`: 導く条件が揃った tick の後は、P が A につながったまま残る | 導きを掃除より前に行う。マージで `pr:P → task` が消えても `sid:A → pr:P` は残る |
+| `PRLink.cfg` | `PRKept`: 写しが済んだ状態の P を掃除する tick の始めに導く条件が揃っていたら、P が A につながったまま残る | 導きを掃除より前に行い、写しが済んだ状態の P を照合するときは branch を引き直す。マージで `pr:P → task` が消えても `sid:A → pr:P` は残る |
 | | `NoDaemonLoop`: daemon は自分の PR を待つ辺と輪になる辺を tick の終わりに残さない | `pr:P → task:A/x` があれば導かず、導いた後に書かれたら導いた辺を消す |
 | | `LoopResolved` (liveness): 導いた辺の輪はいずれ解ける | 同上を tick ごとに行う |
-| | `EventuallyAnchored` (liveness): A が P の branch で生きていて P が open の間に、いずれ A とつながる | 写しが無いか open なら引き直して head branch を写し、tick ごとに導く |
-| `PRLinkSweepFirst.cfg` | `PRKept` が破れる (`violated` を期待) | 掃除の後に導くと、初めて引いた時点でマージ済みの PR は `pr:P → task` が消えて導く元が無くなる |
-| `PRLinkNoSelfWait.cfg` | `NoDaemonLoop` が破れる (`violated` を期待) | 自分の PR を待つ辺を見ずに導くと、A のタスクと P の間に待ちの輪を作る |
+| | `EventuallyAnchored` (liveness): A が P の branch で生きていて P が open の間に、いずれ A とつながる | 写しが無いか open なら引き直して head branch を写し、使い回しの期限が切れたら branch を引き直して導く |
+| `PRLinkEveryTick.cfg` | 同上が成り立つ | branch を tick ごとに引く基準の形 |
+| `PRLinkStaleBranch.cfg` | `PRKept` が破れる (`violated` を期待) | #577 の修正前の形。branch を切り替えた直後の窓で初めて引いた P がマージ済みだと、古い branch で照合して導けず、同じ tick に `pr:P → task` が消える |
+| `PRLinkRefetchFirst.cfg` | `PRKept` が破れる | P を初めて引いた tick と open から済んだ状態へ変わった tick だけ引き直す形。マージ済みの P へ後から `pr:P → task` を書くと、引き直さずに掃除する |
+| `PRLinkHoldSweep.cfg` | `PRKept` が破れる | 済んだ候補の掃除を 1 tick 遅らせる形。使い回しの窓 (1 分) は tick (5 秒) より長く、遅らせた次の tick も古い branch で照合する |
+| `PRLinkSweepFirst.cfg` | `PRKept` が破れる | 掃除の後に導くと、初めて引いた時点でマージ済みの PR は `pr:P → task` が消えて導く元が無くなる |
+| `PRLinkNoSelfWait.cfg` | `NoDaemonLoop` が破れる | 自分の PR を待つ辺を見ずに導くと、A のタスクと P の間に待ちの輪を作る |
+
+`PRKept` は、写しが open の間に導く条件が揃ったことを数えない。使い回しの窓がある限り open の P は導くのが遅れ、
+遅れは性質の破れではない (導くことは `EventuallyAnchored` が持つ)。掃除で `pr:P → task` が消える tick が、
+P を A につなげる最後の機会になる。
+
+## 実装との対応
+
+| モデルの動作 | 実装 |
+| ---- | ---- |
+| `Tick` | `refpoll` の `Poller.Refresh` (引き直し、`anchor`、`sweep` の順) |
+| `Tick` の `cand` | `Poller.candidates` |
+| `Tick` の `look` と `reread` (`Locate = "done"`) | `Poller.anchor` が候補ごとに呼ぶ `Poller.place`。写しが済んだ状態 (`refstate.Done`) の候補では `locateTTL` を見ずに引き直す |
+| `Tick` の `CanAnchor` | `edge` の `Store.Anchor` (edges/.lock の中で辺の条件を確かめ直す) |
+| `Tick` の `s2` | `edge` の `Store.Unanchor` |
+| `Tick` の `swept` | `Poller.sweep` |
+| `Expire` | `locateTTL` (1 分) が過ぎる |
+| `OtherLocate` | ほかの候補の PR を照合するために `Poller.place` が同じ cwd を引く |
 
 同じ性質を実装に対してテストが持つ。
 
 | 性質 | テスト |
 | ---- | ---- |
-| `PRKept` | `refpoll/refpoll_test.go` の `TestRefresh_マージ済みのPRも掃除の前に導く` |
+| `PRKept` | `refpoll/refpoll_test.go` の `TestRefresh_マージ済みのPRも掃除の前に導く` と `TestRefresh_branchを切り替えた直後に初めて引いたマージ済みのPRも導く` |
 | `NoDaemonLoop` / `LoopResolved` | `edge/anchor_test.go` の `TestAnchor_自分のPRを待つセッションには導かない` と `TestAnchor_自分のPRを待つ形になったら導いた辺を消す` |
 | `EventuallyAnchored` | `refpoll/refpoll_test.go` の `TestRefresh_PRのbranchのセッションからPRへ辺を導く` |
 
@@ -29,7 +50,7 @@ daemon が `sid:A → pr:P` の辺を導く手順 (#487) を TLA+ に写した�
   (`models/handoff` の `EdgeBind` と同じ)。
 - 導いた辺を人が `edge rm` すると (アプリの Unlink も)、条件が揃っていれば次の tick で導き直す。A が P を出した事実は
   変わらないため。
-- モデルは A の branch を tick ごとに読むが、実装は cwd の repo と branch を `locateTTL` (1 分) のあいだ使い回す。
-  open の PR では導くのが遅れるだけで性質は変わらない。branch を切り替えた直後に初めて引いた PR が既にマージ済みだと、
-  古い branch のまま `pr:P → task` が消え、導く元が無くなる。
+- 使い回しの期限は時刻ではなく、いつ起きてもよい `Expire` で表す。期限の内の tick の数は限らない。
+- P が open の間に A が P の branch へ切り替え、期限が切れる前に別の branch へ戻ってからマージされると、導かない。
+  daemon が A を P の branch で見たことが無いため。
 - A の cwd は作業の記録の cwd (hook が渡す今の cwd)。記録が無ければ pane の cwd (起動したディレクトリ) を使う。

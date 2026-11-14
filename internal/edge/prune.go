@@ -56,7 +56,8 @@ func (s Store) touch(keep func(Edge) bool, now time.Time) error {
 	})
 }
 
-// Prune は Retention のあいだ更新の無いファイル (辺と消し損ねた一時ファイル) を mtime で消し、消した数を返す。
+// Prune は Retention のあいだ更新の無いファイル (辺、「導かない」の記録、消し損ねた一時ファイル) を mtime で消し、
+// 消した数を返す。
 // ロックのファイルは残す (消すと、開いたままの別のプロセスと別のロックを取り合うことになる)。Add と同じロックを
 // 取り、Add が読んでから書くまでの間には消さない。
 func (s Store) Prune(now time.Time) (int, error) {

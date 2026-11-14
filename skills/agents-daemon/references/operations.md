@@ -149,8 +149,9 @@ agents-daemon edge list --cwd <dir> [--here | --repo <main worktree>] [--ref <�
 - before にある `pr:` を after に持つ辺が無ければ、daemon がその PR を出したセッションから PR への辺
   (`sid:<session_id>` → `pr:`、`derived` が true) を導く。PR の repo (origin) と head branch で動いている生きている
   セッションが 1 つだけのときに書き、そのセッションが同じ PR を待つ辺 (`pr:` → 自分のタスクか `sid:`) があれば
-  書かない。後から待つ辺が書かれたら導いた辺を消す。導いた辺を `edge rm` しても、条件が揃っていれば次の tick で
-  導き直す。同じ参照の組で `edge add` すると人の辺になる
+  書かない。後から待つ辺が書かれたら導いた辺を消す。`sid:` → `pr:` の辺を `edge rm` (アプリの Unlink も) で消すと、
+  その組は導き直さない (記録 `edges/<id>.declined` は導く条件が途切れて 7 日で消える)。同じ参照の組で `edge add`
+  すると人の辺になり、記録も消える
 - `list` はすべての辺を出す。`--ref` は今の参照 (結びついた後なら `sid:`) で絞る。`--cwd` は `--here` の基準で、`--repo` / `--here` / `--ref` はどちらかの端点で絞る
 
 ### パーキングのメモを一覧する・書き換える

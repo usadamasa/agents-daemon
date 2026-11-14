@@ -379,10 +379,6 @@ export type DepsGraph = {
   // 下流の最も多い止まっているノードから、下流をたどった最長の鎖の key
   longest_chain: string[]
   folded: FoldedGraph
-  // folded の nodes と、links のうち両端が folded の nodes にあるものと folded の links で組んだレーンの行
-  rows: GraphRow[]
-  // 完了したノードも含めて組んだレーンの行
-  rows_with_completed: GraphRow[]
   // 依存の無いノードを図の領域のセッションの枠と右の列に並べる順 (全ノードの key)。手当てが要るもの、作業中、返事待ち、未着手、外部の参照、完了、終了の段で、同じ段は最後に動いた時刻の新しい順
   column_order: string[]
 }
@@ -486,14 +482,6 @@ export type EdgeRecord = {
   after: EdgeEndpoint
   // edge add で書いた辺の補足。daemon が引いた issue / PR の題は混ぜない (参照のノードの題に出る)
   note?: string
-}
-
-// レーンの行 1 つ。lanes は行頭の罫線で、ノードの行は * がそのノードのレーンの位置。node が無ければ辺をつなぐだけの行
-export type GraphRow = {
-  lanes: string
-  node?: string
-  // longest chain の辺を描いた lanes の桁 (昇順)
-  marks?: number[]
 }
 
 // protocol:end

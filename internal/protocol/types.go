@@ -379,10 +379,6 @@ type DepsGraph struct {
 	// 下流の最も多い止まっているノードから、下流をたどった最長の鎖の key。
 	LongestChain []string    `json:"longest_chain"`
 	Folded       FoldedGraph `json:"folded"`
-	// folded の nodes と、links のうち両端が folded の nodes にあるものと folded の links で組んだレーンの行。
-	Rows []GraphRow `json:"rows"`
-	// 完了したノードも含めて組んだレーンの行。
-	RowsWithCompleted []GraphRow `json:"rows_with_completed"`
 	// 依存の無いノードを図の領域のセッションの枠と右の列に並べる順 (全ノードの key)。手当てが要るもの、作業中、返事待ち、未着手、外部の参照、完了、終了の段で、同じ段は最後に動いた時刻の新しい順。
 	ColumnOrder []string `json:"column_order"`
 }
@@ -486,12 +482,4 @@ type EdgeRecord struct {
 	After  EdgeEndpoint `json:"after"`
 	// edge add で書いた辺の補足。daemon が引いた issue / PR の題は混ぜない (参照のノードの題に出る)。
 	Note string `json:"note,omitempty"`
-}
-
-// GraphRow はレーンの行 1 つ。lanes は行頭の罫線で、ノードの行は * がそのノードのレーンの位置。node が無ければ辺をつなぐだけの行。
-type GraphRow struct {
-	Lanes string `json:"lanes"`
-	Node  string `json:"node,omitempty"`
-	// longest chain の辺を描いた lanes の桁 (昇順)。
-	Marks []int `json:"marks,omitempty"`
 }

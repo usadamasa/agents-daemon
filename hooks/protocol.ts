@@ -1077,8 +1077,6 @@ export const definitions = {
       "links",
       "longest_chain",
       "folded",
-      "rows",
-      "rows_with_completed",
       "column_order"
     ],
     "properties": {
@@ -1104,20 +1102,6 @@ export const definitions = {
       },
       "folded": {
         "$ref": "#/$defs/FoldedGraph"
-      },
-      "rows": {
-        "type": "array",
-        "items": {
-          "$ref": "#/$defs/GraphRow"
-        },
-        "description": "folded の nodes と、links のうち両端が folded の nodes にあるものと folded の links で組んだレーンの行"
-      },
-      "rows_with_completed": {
-        "type": "array",
-        "items": {
-          "$ref": "#/$defs/GraphRow"
-        },
-        "description": "完了したノードも含めて組んだレーンの行"
       },
       "column_order": {
         "type": "array",
@@ -1451,29 +1435,6 @@ export const definitions = {
       "note": {
         "type": "string",
         "description": "edge add で書いた辺の補足。daemon が引いた issue / PR の題は混ぜない (参照のノードの題に出る)"
-      }
-    }
-  },
-  "GraphRow": {
-    "description": "レーンの行 1 つ。lanes は行頭の罫線で、ノードの行は * がそのノードのレーンの位置。node が無ければ辺をつなぐだけの行",
-    "type": "object",
-    "additionalProperties": false,
-    "required": [
-      "lanes"
-    ],
-    "properties": {
-      "lanes": {
-        "type": "string"
-      },
-      "node": {
-        "type": "string"
-      },
-      "marks": {
-        "type": "array",
-        "items": {
-          "type": "integer"
-        },
-        "description": "longest chain の辺を描いた lanes の桁 (昇順)"
       }
     }
   }

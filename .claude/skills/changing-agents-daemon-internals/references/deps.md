@@ -150,8 +150,7 @@ pane を解釈するのは `deps` パッケージの `activity` だけで、生�
 (`question` / `permission` / `limit` / `error`) ノードで、原因の鎖で先に選ぶ上流に使う。`stuck` は
 `halted` か、完了していない待ちの輪のノードで、footer の数、箱の下流の数、longest chain の起点に使う。
 
-段 (`depth`)・下流の数・待ちの輪・原因の鎖・最長の鎖の数え方と、`rows` / `rows_with_completed` (位相順の行とレーンの
-割り当て) は `graph/dag` が持つ。アプリは `depth` を dagre の段にし、`rows` は読まない。
+段 (`depth`)・下流の数・待ちの輪・原因の鎖・最長の鎖の数え方は `graph/dag` が持つ。アプリは `depth` を dagre の段にする。
 
 ## 渡した宛先の辺の確かめ
 

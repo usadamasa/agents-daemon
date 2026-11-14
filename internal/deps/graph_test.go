@@ -9,7 +9,6 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/daemonstate"
 	"github.com/usadamasa/agents-daemon/internal/deps/graph"
-	"github.com/usadamasa/agents-daemon/internal/deps/graph/dag"
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/ledger"
 	"github.com/usadamasa/agents-daemon/internal/parking"
@@ -583,80 +582,13 @@ func TestGraph_chains(t *testing.T) {
 			t.Errorf("%s halted/stuck = %v/%v, want %v", key, n.Halted, n.Stuck, want)
 		}
 	}
-	// ノードは下流の多い順 (同じなら Key の順) に並ぶ (出力の並びを固定する)。
+	// ノードは下流の多い順 (同じなら Key の順) に並ぶ。アプリはこの順で dagre へノードを渡し、同じ段の並びの初期値になる。
 	var order []string
 	for _, n := range b.Graph.Nodes {
 		order = append(order, n.Key)
 	}
 	if want := []string{"task:A/0", "task:A/1", "task:B/1", "task:A/2", "task:A/3", "task:A/4", "task:C/1"}; !reflect.DeepEqual(order, want) {
 		t.Errorf("order = %v, want %v", order, want)
-	}
-}
-
-// drawRows は rows を目で読める形にする (graph/dag のテストと同じ形)。
-func drawRows(rows []dag.Row) string {
-	lines := make([]string, 0, len(rows))
-	for _, r := range rows {
-		if r.Node == "" {
-			lines = append(lines, r.Lanes)
-			continue
-		}
-		lines = append(lines, r.Lanes+" "+r.Node)
-	}
-	return strings.Join(lines, "\n")
-}
-
-// rows は Nodes の順を order にしたレーンの行。完了したノードとその辺を落としたものと、全部を含むものの 2 組。
-// edge の辺 (セッションをまたぐ) は破線。
-func TestGraph_rows(t *testing.T) {
-	const cwd = "/w/a"
-	b := build(input{
-		PID: 42,
-		Snapshot: snapshot(
-			daemonstate.PaneStatus{PaneID: "p1", SessionID: "A", CWD: cwd, AgentStatus: "blocked", AgentKind: "question"},
-			daemonstate.PaneStatus{PaneID: "p2", SessionID: "B", CWD: cwd, AgentStatus: "working"},
-			daemonstate.PaneStatus{PaneID: "p3", SessionID: "C", CWD: cwd, AgentStatus: "blocked", AgentKind: "permission"},
-		),
-		Tasks: []record.Task{
-			task("A", "1", "論点を決める", "in_progress", cwd),
-			task("A", "2", "段5", "pending", cwd, "1", "0"),
-			task("A", "0", "済んだ前提", "completed", cwd),
-			task("A", "3", "リリース", "pending", cwd, "2"),
-			task("A", "4", "確認", "pending", cwd, "3"),
-			task("B", "1", "別の作業", "in_progress", cwd),
-			task("C", "1", "止まった小さな作業", "in_progress", cwd),
-		},
-		Edges: []edge.Edge{
-			{ID: "e1", Before: edge.Endpoint{Ref: "task:B/1", CWD: cwd}, After: edge.Endpoint{Ref: "task:A/2", CWD: cwd}},
-		},
-	})
-	if got, want := drawRows(b.Graph.Rows), "* task:A/1\n│ * task:B/1\n├┄┘\n* task:A/2\n* task:A/3\n* task:A/4\n* task:C/1"; got != want {
-		t.Errorf("rows =\n%s\nwant\n%s", got, want)
-	}
-	if got, want := drawRows(b.Graph.RowsWithCompleted), "* task:A/0\n│ * task:A/1\n│ │ * task:B/1\n├─┴┄┘\n* task:A/2\n* task:A/3\n* task:A/4\n* task:C/1"; got != want {
-		t.Errorf("rows_with_completed =\n%s\nwant\n%s", got, want)
-	}
-	// longest chain (A/1 → A/2 → A/3 → A/4) の辺の罫線に印が付く。A/1 → A/2 は B/1 の行を縦線で通り抜け、
-	// 合流の行で ├ に入る。B/1 → A/2 の横線には付かない。
-	marks := func(rows []dag.Row) map[int][]int {
-		out := map[int][]int{}
-		for i, r := range rows {
-			if len(r.Marks) > 0 {
-				out[i] = r.Marks
-			}
-		}
-		return out
-	}
-	if got, want := marks(b.Graph.Rows), map[int][]int{1: {0}, 2: {0}}; !reflect.DeepEqual(got, want) {
-		t.Errorf("rows の印 = %v, want %v", got, want)
-	}
-	if got, want := marks(b.Graph.RowsWithCompleted), map[int][]int{2: {2}, 3: {0, 1, 2}}; !reflect.DeepEqual(got, want) {
-		t.Errorf("rows_with_completed の印 = %v, want %v", got, want)
-	}
-	// ノードが無ければ空の配列 (JSON で null にしない)。
-	empty := build(input{})
-	if empty.Graph.Rows == nil || empty.Graph.RowsWithCompleted == nil {
-		t.Errorf("rows = %v / %v, want 空の配列", empty.Graph.Rows, empty.Graph.RowsWithCompleted)
 	}
 }
 
@@ -727,7 +659,7 @@ func TestGraph_sessionSinksHub(t *testing.T) {
 }
 
 // 完了したノードを隠した図 (folded) は、隠したノードを通り抜けた辺を畳んで残す (#392)。末端の完了ノードは、
-// 完了も終了もしていない上流を直接持つ間だけ見せる。rows も同じ図で組む。
+// 完了も終了もしていない上流を直接持つ間だけ見せる。
 func TestGraph_folded(t *testing.T) {
 	const cwd = "/w/a"
 	b := build(input{
@@ -767,10 +699,6 @@ func TestGraph_folded(t *testing.T) {
 	}
 	if want := []protocol.FoldedLink{{Before: "task:A/1", After: "task:A/4", Via: []string{"task:A/2", "task:A/3"}}}; !reflect.DeepEqual(f.Links, want) {
 		t.Errorf("folded links = %+v, want %+v", f.Links, want)
-	}
-	// 畳んだ辺 (A/1 → A/4) と残した末端 (P → A/5) は、それぞれ同じレーンの続く行になる。
-	if got, want := drawRows(b.Graph.Rows), "* task:A/1\n* task:A/4\n* sid:P\n* task:A/5"; got != want {
-		t.Errorf("rows =\n%s\nwant\n%s", got, want)
 	}
 	// ノードが無ければ空の配列 (JSON で null にしない)。
 	empty := build(input{})

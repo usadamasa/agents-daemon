@@ -475,6 +475,20 @@ func TestRefresh_PRを出した記録のセッションへ導く(t *testing.T) {
 	}
 }
 
+// 記録の参照は gh の出した URL の綴りで、辺の参照は人や skill が書いた綴り。owner/repo の大文字小文字が違っても
+// 同じ PR として記録の持ち主へ導く (branch の照合が repo の大文字小文字を区別しないのと揃える)。
+func TestRefresh_PRを出した記録はrepoの大文字小文字を区別しない(t *testing.T) {
+	remote := &fakeRemote{states: map[string]string{"pr:O/R#1": "open"}, heads: map[string]string{"pr:O/R#1": "f1"}}
+	f, add := newFixture(t, remote)
+	add("pr:O/R#1", "task:H/1")
+	f.sessions.issued = map[string][]Session{"pr:o/r#1": {{ID: "E", CWD: "/e"}}}
+
+	f.p.Refresh(context.Background(), t0)
+	if got, want := edgeKeys(t, f.dir), []string{"pr:O/R#1>task:H/1", "sid:E>pr:O/R#1"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("辺 = %v, want %v", got, want)
+	}
+}
+
 // 初めて引いた時点でマージ済みの PR も、同じ引き直しで pr → task を消す前に導く。導いた辺は PR が済んでも残り、
 // PR のノードは図に残る (models/prlink の PRKept)。
 func TestRefresh_マージ済みのPRも掃除の前に導く(t *testing.T) {

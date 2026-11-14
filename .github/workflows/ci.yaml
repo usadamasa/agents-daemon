@@ -89,7 +89,7 @@ jobs:
           cache: false
 
       - name: Run shellcheck
-        run: shellcheck hooks/*.sh hooks/lib/*.sh scripts/*.sh tests/lib/*.bash tests/fixtures/fake-go tests/fixtures/fake-gh .envrc
+        run: shellcheck hooks/*.sh hooks/lib/*.sh scripts/*.sh tests/lib/*.bash tests/fixtures/fake-go .envrc
 
   plugin-validate:
     name: plugin validate

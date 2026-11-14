@@ -51,7 +51,7 @@ task lint                                   # Go の全静的解析。devShell �
 task vulncheck                              # govulncheck の symbol モード (task lint が呼ぶ)
 task typecheck                              # mod の型検査 (tsc)
 task protocol:generate                      # schema を変えたら Go の型と mod の型を作り直す
-shellcheck hooks/*.sh hooks/lib/*.sh scripts/*.sh tests/lib/*.bash tests/fixtures/fake-go tests/fixtures/fake-gh .envrc
+shellcheck hooks/*.sh hooks/lib/*.sh scripts/*.sh tests/lib/*.bash tests/fixtures/fake-go .envrc
 claude plugin validate --strict .           # plugin manifest と hooks.json
 claude plugin validate --strict skills      # skill の frontmatter
 claude plugin test .                        # mod (hooks/*.test.tsx) のテスト

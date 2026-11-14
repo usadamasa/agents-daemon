@@ -1,38 +1,17 @@
 # yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
-# PR が閉じる issue の種類と area のラベルを PR へ写す。release note の category は PR のラベルで決まる
+# PR が閉じる issue の種類と area のラベルを PR へ写す。本体は gh-manage の reusable workflow
 name: pr-labels
 
-on:
+"on":
   pull_request:
     types: [opened, edited, reopened, synchronize]
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
-
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   sync:
-    # fork と dependabot の PR は token に書き込み権限が無い。dependabot は自分で dependencies を付ける
-    if: >-
-      github.event.pull_request.head.repo.full_name == github.repository
-      && github.actor != 'dependabot[bot]'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
     permissions:
       contents: read
       issues: read
       pull-requests: write
-    steps:
-      - uses: actions/checkout@v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Copy labels from closing issues
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: ./scripts/sync-pr-labels.sh "$PR_NUMBER"
+    uses: usadamasa/gh-manage/.github/workflows/sync-pr-labels.yaml@main

@@ -1,5 +1,13 @@
 # Changelog
 
+## [2026.1114.1](https://github.com/usadamasa/agents-daemon/compare/2026.1114.0...2026.1114.1) - 2026-11-14
+
+### Features
+- 依存図: 単体ビューの Blocks / Blocked by を直近とその先のグループに分ける by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/588
+- 起こした peer の rex session を session_id で畳む spawned-session close を足す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/587
+### Bug Fixes
+- 依存図: 説明文とメモの #N を同じ文の参照の repo で補う by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/583
+
 ## [2026.1114.0](https://github.com/usadamasa/agents-daemon/compare/2026.1113.1...2026.1114.0) - 2026-11-14
 
 ### Bug Fixes

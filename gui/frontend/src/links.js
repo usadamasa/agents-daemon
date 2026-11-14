@@ -73,6 +73,18 @@ export function edgeNoteRepo(edge, repos, number) {
   return known && touched.size === 1 ? [...touched][0] : undefined;
 }
 
+// textNoteRepo は text の #number を補う owner/repo。text の中の番号の合う pr: / issue: の参照があればその repo
+// (別 repo が 2 つ以上なら決めない)。無ければ fallback。参照は segments がリンクにする位置のものだけを数える。
+export function textNoteRepo(text, number, fallback) {
+  const matched = new Set();
+  for (const m of text.matchAll(PATTERN)) {
+    const g = m.groups;
+    if (g.kind !== undefined && Number(g.number) === number) matched.add(g.repo);
+  }
+  if (matched.size === 0) return fallback;
+  return matched.size === 1 ? [...matched][0] : undefined;
+}
+
 // segments は text を { text } (素の文字) と { text, target } (リンク。target は URL か絶対パス) の並びにする。
 // ctx.githubRepo は #123 の番号を受けて補う owner/repo を返す関数、ctx.base は相対パスの基準。無いか owner/repo が
 // 分からなければ、その形は素の文字のまま。

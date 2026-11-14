@@ -11,7 +11,7 @@ import { isStale, kindLabel, lastPlacedAt, stamp } from "./memo.js";
 import { bulkDismissable, canAdopt, canDismiss, canRename, canTell, candidates, isOwnTask, issueDestinations, lastSeenAgo, pathDestination, peerDestinations, spawnDestinations, taskDestinations } from "./ops.js";
 import { addBlocker, adopt, askUnlink, discard, discardStale, dismissAll, dismissOne, handOff, handOffTask, instruct, rename, setStatus, start, toParking, unlink } from "./actions.js";
 import { openTarget, pickFolder } from "./daemon.js";
-import { edgeNoteRepo, segments } from "./links.js";
+import { edgeNoteRepo, segments, textNoteRepo } from "./links.js";
 import { CONTROLS_BAND, MAX_ZOOM, MIN_ZOOM, centerOffset, clampZoom, fitZoom, overflowCenter, percent, scaledFrame, scrollAfterZoom, stepZoom, topOffset, wheelZoomer } from "./zoom.js";
 import { restore, scrollView, watchUpgrade } from "./restore.js";
 
@@ -99,10 +99,11 @@ async function openLink(target) {
   setTimeout(renderFoot, NOTICE_MS + 100);
 }
 
-// linkContext は repo の鍵 (owner/repo を引く) と base (相対パスの基準) を segments の ctx にする。
-function linkContext(repo, base) {
+// linkContext は text をリンクにする segments の ctx。#123 は text の中の番号の合う参照の repo、無ければ repo の鍵
+// で引く owner/repo で補う。base は相対パスの基準。
+function linkContext(text, repo, base) {
   const githubRepo = state.data.repos.find((r) => r.repo === repo)?.github_repo;
-  return { githubRepo: () => githubRepo, base };
+  return { githubRepo: (k) => textNoteRepo(text, k, githubRepo), base };
 }
 
 // appendLinked は text の URL、issue / PR の参照、ファイルパスをリンクにして parent に足す。
@@ -993,7 +994,7 @@ function nodePopup(n) {
   for (const text of [n.description, n.summary ? `Now: ${n.summary}` : ""]) {
     if (!text) continue;
     const p = document.createElement("p");
-    appendLinked(p, text, linkContext(n.repo, n.cwd));
+    appendLinked(p, text, linkContext(text, n.repo, n.cwd));
     parts.push(p);
   }
 
@@ -1059,7 +1060,7 @@ function memoPopup({ memo, repo }) {
 
   if (memo.detail) {
     const p = document.createElement("p");
-    appendLinked(p, memo.detail, linkContext(repo.repo, repo.repo));
+    appendLinked(p, memo.detail, linkContext(memo.detail, repo.repo, repo.repo));
     parts.push(p);
   }
   // 既定・ファイル・出どころを 1 つの表にする。From は置いたセッション、そのときのタスク (押すと選ぶ)、補足、時刻で、

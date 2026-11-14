@@ -29,7 +29,7 @@
           "kind": "scope",
           "origin": "placed",
           "title": "ラベルの文言も揃えるか",
-          "detail": "gui/main.go:5 の文言と #7 を見る",
+          "detail": "gui/main.go:5 の文言と #7 を見る。issue:usadamasa/workspace#8 の #8 も見る",
           "default_taken": "やらない",
           "sources": [
             { "session_id": "sid-beta", "task_ref": "task:beta/1", "session": "beta", "live": true, "at": "2026-11-07T02:10:00Z" }
@@ -102,7 +102,8 @@
       },
       {
         "key": "task:alpha/4", "kind": "task", "state": "pending", "title": "docs を書く",
-        "endpoint": true, "cwd": "/repo/agents-daemon", "task_id": "4",
+        "endpoint": true, "cwd": "/repo/agents-daemon", "repo": "/repo/agents-daemon", "task_id": "4",
+        "description": "pr:usadamasa/workspace#3 を待ってから #3 と #9 を見る",
         "session_id": "sid-alpha", "session": "alpha", "session_name": "alpha", "live": true,
         "depth": 3, "downstream": 0, "parked": 0, "memos": [], "blocked_by": [], "deadlock": false, "halted": false, "stuck": false
       },

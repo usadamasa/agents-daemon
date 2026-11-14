@@ -63,7 +63,9 @@ function describe(name: string, sessionID: string, cwd: string | undefined, bin:
   const peer = { ref: `sid:${sessionID}`, cwd: cwd ?? '<その cwd>' }
   const peerWaits: EdgeAddRequest = { before: { ref: '<待つ相手の参照>', cwd: '<その cwd>' }, after: peer, note: '<何の後か>' }
   const selfWaits: EdgeAddRequest = { before: peer, after: { task: '<自分のタスクの id>' }, note: '<何の後か>' }
-  const line = (req: EdgeAddRequest) => `  printf '%s' '${JSON.stringify(req)}' | ${bin} edge add`
+  // model が写して打つので、cwd に ' があっても崩れないよう sh の単引用符で引用する。
+  const quote = (s: string) => `'${s.replaceAll("'", "'\\''")}'`
+  const line = (req: EdgeAddRequest) => `  printf '%s' ${quote(JSON.stringify(req))} | ${bin} edge add`
   return [
     `${name} へ送りましたが、${name} を端点に持つ依存の辺がありません。`,
     'agents-daemon:peer-sessions skill の「依存の辺を書く」に従って、当たる向きの辺を書いてください。',

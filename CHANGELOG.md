@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026.1114.2](https://github.com/usadamasa/agents-daemon/compare/2026.1114.1...2026.1114.2) - 2026-11-14
+
+### Documentation
+- peer-sessions skill で peer を名前でなく session_id で指し、--name を外す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/589
+
 ## [2026.1114.1](https://github.com/usadamasa/agents-daemon/compare/2026.1114.0...2026.1114.1) - 2026-11-14
 
 ### Features

@@ -20,7 +20,8 @@
 task model-check          # 全 cfg を TLC で回し、期待 (反例なし / 反例あり) と突き合わせる
 ```
 
-TLC は devShell の `tlaplus` (`tlc`)。CI では回さない。`scripts/model-check.sh` が `./tmp/tlc/` に
+TLC は devShell の `tlaplus` (`tlc`)。CI の `model check` job は `.github/filters.yaml` の `models` に当たる PR と
+main への push で回し、cfg ごとの log を artifact `tlc-logs` に残す。`scripts/model-check.sh` が `./tmp/tlc/` に
 標準モジュールの展開先と探索の状態を置き、cfg ごとの log もそこに残す。
 
 | cfg | 不変条件 | 成り立つ理由 |

@@ -1,8 +1,8 @@
 #!/bin/bash
-# SessionStart・UserPromptSubmit・Stop・SessionEnd hook: `agents-daemon ingest-work` に stdin をそのまま渡す。
+# SessionStart・UserPromptSubmit・Stop・SessionEnd と Bash の PostToolUse hook: `agents-daemon ingest-work` に stdin をそのまま渡す。
 #
-# セッション 1 つの作業の記録 (最初の prompt の題、最後のターンの要約、turns、始まりと終わり) を XDG state の work/ に
-# 書く (#368、worklog)。どの event で何を書くかはバイナリ側が持つ。この hook が担うのはバイナリの場所の解決だけで、
+# セッション 1 つの作業の記録 (最初の prompt の題、最後のターンの要約、turns、始まりと終わり、gh pr create で出した PR) を
+# XDG state の work/ に書く (#368、#575、worklog)。どの event で何を書くかはバイナリ側が持つ。この hook が担うのはバイナリの場所の解決だけで、
 # 無ければ何もしない (ensure-daemon.sh が build する)。stamp が plugin の version より古いときも、理由を stderr に出して
 # 何もしない (daemon_bin_serves)。新しいときは通す。
 #

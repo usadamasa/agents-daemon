@@ -111,6 +111,8 @@ export type Work = {
   ended_at?: string
   // SessionEnd の reason
   end_reason?: string
+  // このセッションが gh pr create で出した PR の参照 (pr:<owner>/<repo>#<番号>)。daemon が PR からこのセッションへの辺を導くのに使う
+  prs?: string[]
 }
 
 // park hand の stdin。open のメモを取り (status handed、宛先付き)、文面を組んで宛先へ渡し、届かなければ open に戻す。宛先は生きているセッション (to_session。tell で入力欄に打つ) か、新しく起こすセッションの repo (to_repo。spawn) のどちらか 1 つ。取れなければ (ほかが先に渡した、捨てた) 何もせず exit 1 で理由を返し、取れた後は届かなくても ParkHandResult を出す

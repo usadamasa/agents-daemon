@@ -118,7 +118,8 @@
         "prompted_at": { "type": "string", "format": "date-time", "description": "最後の UserPromptSubmit の時刻" },
         "stopped_at": { "type": "string", "format": "date-time", "description": "最後の Stop の時刻" },
         "ended_at": { "type": "string", "format": "date-time", "description": "SessionEnd の時刻。生きている (resume した) 間は無い" },
-        "end_reason": { "type": "string", "description": "SessionEnd の reason" }
+        "end_reason": { "type": "string", "description": "SessionEnd の reason" },
+        "prs": { "type": "array", "items": { "type": "string" }, "description": "このセッションが gh pr create で出した PR の参照 (pr:<owner>/<repo>#<番号>)。daemon が PR からこのセッションへの辺を導くのに使う" }
       }
     },
     "ParkHandRequest": {

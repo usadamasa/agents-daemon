@@ -128,6 +128,26 @@ run models/prlink PRLink PRLinkHideDerived.cfg violated
 run models/prlink PRLink PRLinkSplitDecline.cfg violated
 # 記録で導きを飛ばす間も保持期間を数え直さないと、記録が期限切れになって導き直す (NoRederive の反例)。
 run models/prlink PRLink PRLinkNoTouchDecline.cfg violated
+# PR を出した記録で、終了したセッションへも導く形 (#575)。掃除の順序、自分の PR を待つ形、人が外した組の性質と両立する。
+run models/prlink PRLink PRLinkRecord.cfg holds
+# PR を出した記録を優先し、記録の無い PR だけ生きているセッションの branch で照合する形 (#575)。liveness も見る。
+run models/prlink PRAuthor PRAuthor.cfg holds
+# 同じ形で、終了したセッションの記録が保持期間で消えても、記録のある間に掃除される PR は出したセッションにつながる。
+run models/prlink PRAuthor PRAuthorExpire.cfg holds
+# 記録が保持期間で消えた後に初めて候補になった PR は、branch の照合で別のセッションへ導きうる (NoWrongAnchor の反例、受け入れた限界)。
+run models/prlink PRAuthor PRAuthorExpireWrong.cfg violated
+# 記録の無い PR (web で作った PR) は、branch の照合で別のセッションへ導きうる (NoWrongAnchor の反例、#575 の修正前と同じ)。
+run models/prlink PRAuthor PRAuthorUnrecorded.cfg violated
+# 生きているセッションの branch だけで照合すると、出したセッションが終了するか別の branch へ移った PR が辺ごと消える (IssuerKept の反例、#575 の修正前)。
+run models/prlink PRAuthor PRAuthorLiveAlone.cfg violated
+# 同じく、出したセッションが移った後に同じ branch へ入った別のセッションへ導く (NoWrongAnchor の反例、#575 の修正前)。
+run models/prlink PRAuthor PRAuthorLiveShared.cfg violated
+# 終了したセッションも最後の hook の branch で照合しても、別の branch へ移った後の hook で照合の相手から外れる (IssuerKept の反例、#575 の候補 1)。
+run models/prlink PRAuthor PRAuthorHistory.cfg violated
+# 合うセッションが複数のとき 1 つを選ぶと、出していないセッションを選びうる (NoWrongAnchor の反例、#575 の候補 3)。
+run models/prlink PRAuthor PRAuthorNearest.cfg violated
+# 記録だけで導く形。記録の無い PR は導かない代わりに、どの性質も破らない。
+run models/prlink PRAuthor PRAuthorRecordOnly.cfg holds
 # 起こした session を spawned-session close で畳む形 (#596)。rex に無ければ印の有無に依らず成功にし、kill に失敗したら
 # 数え直す。包みの c()、reaper、利用者が同じ session を閉じる交錯を含める。liveness も見る。
 run models/spawnedclose SpawnedClose SpawnedClose.cfg holds

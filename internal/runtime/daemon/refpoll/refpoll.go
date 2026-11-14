@@ -69,6 +69,7 @@ type Poller struct {
 	refs     refstate.Store
 	fetch    Fetcher
 	sessions func() []Session
+	issuers  func() map[string][]Session
 	// locate は cwd の GitHub の repo (owner/repo) と branch を引く (テストが git を起こさずに差し替える継ぎ目)。
 	locate   func(cwd string) (repo, branch string)
 	log      *applog.Logger
@@ -77,9 +78,10 @@ type Poller struct {
 }
 
 // New は edges の端点の参照を fetch で引き、refs へ書く Poller を作る。sessions は生きているセッションを返す。
-func New(edges edge.Store, refs refstate.Store, fetch Fetcher, sessions func() []Session, log *applog.Logger) *Poller {
+// issuers は PR の参照ごとに、その PR を出した記録のあるセッション (終了したものも含む) を返す。
+func New(edges edge.Store, refs refstate.Store, fetch Fetcher, sessions func() []Session, issuers func() map[string][]Session, log *applog.Logger) *Poller {
 	return &Poller{
-		edges: edges, refs: refs, fetch: fetch, sessions: sessions, locate: gitLocate, log: log,
+		edges: edges, refs: refs, fetch: fetch, sessions: sessions, issuers: issuers, locate: gitLocate, log: log,
 		failures: map[string]failure{}, places: map[string]located{},
 	}
 }
@@ -120,37 +122,31 @@ func (p *Poller) Refresh(ctx context.Context, now time.Time) {
 	p.keepOpen(cached, now)
 }
 
-// anchor は渡す側が上流を書いていない PR に、その PR の repo と head branch で動いている生きているセッションから
-// PR への辺を導き (#487)、自分の PR を待つ形になった導いた辺を消す。合うセッションが 2 つ以上なら導かない。
+// anchor は渡す側が上流を書いていない PR に、その PR を出したセッションから PR への辺を導き (#487)、自分の PR を
+// 待つ形になった導いた辺を消す。出したセッションは、PR を出した記録 (gh pr create の出力) があればその持ち主で、
+// 終了していても別の branch へ移っていても導く (#575)。記録が無ければ、PR の repo と head branch で動いている
+// 生きているセッションで、合うものが 2 つ以上なら導かない。照合の相手の性質は models/prlink の PRAuthor が持つ。
 // 辺の条件は edge の Anchor が edges/.lock の中で確かめ直す。
 func (p *Poller) anchor(edges []edge.Edge, cached map[string]refstate.Record, now time.Time) {
 	candidates := p.candidates(edges, cached)
 	var live []Session
+	var issued map[string][]Session
 	if len(candidates) > 0 {
 		live = p.sessions()
+		issued = foldRefs(p.issuers())
 	}
 	for _, pr := range candidates {
-		it, _ := ref.ParseItem(pr)
-		// 済んだ PR の辺はこの tick の sweep で消え、導く機会はここが最後になる。使い回した branch で照合すると
-		// 切り替えた直後のセッションを見落とすので引き直す (#577、models/prlink の PRKept)。
-		reread := refstate.Done(cached[pr].State)
-		var matched []Session
-		for _, s := range live {
-			repo, branch := p.place(s.CWD, now, reread)
-			if strings.EqualFold(repo, it.Repo) && branch == cached[pr].HeadBranch {
-				matched = append(matched, s)
-			}
-		}
-		if len(matched) != 1 {
+		s, why, ok := p.issuer(pr, cached[pr], issued[strings.ToLower(pr)], live, now)
+		if !ok {
 			continue
 		}
-		e, ok, err := p.edges.Anchor(matched[0].ID, matched[0].CWD, pr, now)
+		e, ok, err := p.edges.Anchor(s.ID, s.CWD, pr, now)
 		if err != nil {
 			p.log.Logf("PR を出したセッションの辺を導けません: %s: %v", pr, err)
 			continue
 		}
 		if ok {
-			p.log.Logf("辺 %s を導きました: %s → %s (branch %s)", e.ID, e.Before.Ref, e.After.Ref, cached[pr].HeadBranch)
+			p.log.Logf("辺 %s を導きました: %s → %s (%s)", e.ID, e.Before.Ref, e.After.Ref, why)
 		}
 	}
 	removed, err := p.edges.Unanchor()
@@ -160,6 +156,40 @@ func (p *Poller) anchor(edges []edge.Edge, cached map[string]refstate.Record, no
 	for _, e := range removed {
 		p.log.Logf("辺 %s を消しました: %s → %s (%s が %s を待つ辺と輪になるため)", e.ID, e.Before.Ref, e.After.Ref, e.Before.Ref, e.After.Ref)
 	}
+}
+
+// foldRefs は PR の参照の鍵を小文字にそろえる。記録の参照は gh の URL の綴り、辺の参照は人の書いた綴りで、
+// GitHub の owner/repo は大文字小文字を区別しない。
+func foldRefs(issued map[string][]Session) map[string][]Session {
+	folded := make(map[string][]Session, len(issued))
+	for pr, sessions := range issued {
+		key := strings.ToLower(pr)
+		folded[key] = append(folded[key], sessions...)
+	}
+	return folded
+}
+
+// issuer は PR を出したセッションと、そう決めた理由 (ログの文言) を返す。記録のあるセッションがちょうど 1 つなら
+// それ。記録が無いか 2 つ以上のセッションにあれば、branch の合う生きているセッションがちょうど 1 つのときだけそれ。
+func (p *Poller) issuer(pr string, rec refstate.Record, issued, live []Session, now time.Time) (Session, string, bool) {
+	if len(issued) == 1 {
+		return issued[0], "PR を出した記録", true
+	}
+	it, _ := ref.ParseItem(pr)
+	// 済んだ PR の辺はこの tick の sweep で消え、導く機会はここが最後になる。使い回した branch で照合すると
+	// 切り替えた直後のセッションを見落とすので引き直す (#577、models/prlink の PRKept)。
+	reread := refstate.Done(rec.State)
+	var matched []Session
+	for _, s := range live {
+		repo, branch := p.place(s.CWD, now, reread)
+		if strings.EqualFold(repo, it.Repo) && branch == rec.HeadBranch {
+			matched = append(matched, s)
+		}
+	}
+	if len(matched) != 1 {
+		return Session{}, "", false
+	}
+	return matched[0], "branch " + rec.HeadBranch, true
 }
 
 // candidates は導く候補の PR: 写しが head branch を持ち、辺の before にあり、どの辺の after にも無いもの。

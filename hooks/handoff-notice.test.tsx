@@ -82,13 +82,20 @@ const context = (res: { context?: readonly string[] }) => (res.context ?? []).jo
 
 const depsCalls = (state: { ran: unknown[][] }) => state.ran.filter(argv => argv[1] === 'deps')
 
-// edgeAdds は context の中の `printf '%s' '<JSON>' | <bin> edge add` の行 (向きごとに 1 行) から、stdin に渡す JSON を
-// 並びの順 (peer が待つ向き、自分のタスクが待つ向き) に読む。2 行でなければ落とす。
+// shWord は sh の単語のうち、単引用符の区間と `\'` だけで組んだものを sh と同じ規則で読む。それ以外の形なら落とす。
+function shWord(word: string): string {
+  const parts = word.match(/'[^']*'|\\'/g) ?? []
+  if (parts.join('') !== word) throw new Error(`sh の単語として読めない: ${word}`)
+  return parts.map(p => (p === "\\'" ? "'" : p.slice(1, -1))).join('')
+}
+
+// edgeAdds は context の中の `printf '%s' <引用した JSON> | <bin> edge add` の行 (向きごとに 1 行) から、stdin に渡す
+// JSON を sh が読むとおりに、並びの順 (peer が待つ向き、自分のタスクが待つ向き) に読む。2 行でなければ落とす。
 function edgeAdds(text: string): [EdgeAddRequest, EdgeAddRequest] {
   const reqs = text
     .split('\n')
     .filter(l => l.endsWith(`| ${BIN} edge add`))
-    .map(l => JSON.parse(l.replace(/^\s*printf '%s' '/, '').replace(/' \| .*$/, '')) as EdgeAddRequest)
+    .map(l => JSON.parse(shWord(l.replace(/^\s*printf '%s' /, '').replace(` | ${BIN} edge add`, ''))) as EdgeAddRequest)
   const [peerWaits, selfWaits] = reqs
   if (reqs.length !== 2 || peerWaits === undefined || selfWaits === undefined) throw new Error(`edge add の行が ${reqs.length} 行`)
   return [peerWaits, selfWaits]
@@ -116,6 +123,16 @@ test('辺の無い生きているセッションへ渡したら、辺の書き�
   expect(res.context).toHaveLength(1)
   // tool の結果そのものは変えない。
   expect(res.result).toEqual({ success: true })
+})
+
+test("cwd に ' があっても、案内の行を sh が読むと cwd がそのまま渡る", async ($, on) => {
+  const cwd = "/src/home/it's"
+  world(on, deps([node('PEER', '1', 'edge-cli', { cwd })]))
+  await $.session.start(START)
+
+  const [peerWaits, selfWaits] = edgeAdds(context(await send($, 'edge-cli')))
+  expect(peerWaits.after).toEqual({ ref: 'sid:PEER', cwd })
+  expect(selfWaits.before).toEqual({ ref: 'sid:PEER', cwd })
 })
 
 test('同名のセッションに付く末尾の [ref] を落として宛先を当てる', async ($, on) => {

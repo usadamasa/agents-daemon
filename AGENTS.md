@@ -47,7 +47,7 @@ README の「役割」が持つ。機能を足す・外す判断はそこに照�
 ```sh
 task test                                   # go test ./... と bats tests/
 task fuzz                                   # go の fuzz target を 1 つずつ回す (FUZZTIME で時間)
-task model-check                            # models/ の TLA+ を TLC で回す (CI では回さない)
+task model-check                            # models/ の TLA+ を TLC で回す (CI は models/ に触れる PR で回す)
 task lint                                   # Go の全静的解析。devShell のツールが要る
 task vulncheck                              # govulncheck の symbol モード (task lint が呼ぶ)
 task typecheck                              # mod の型検査 (tsc)

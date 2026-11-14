@@ -8,3 +8,13 @@ gui:
   - '.github/workflows/ci.yaml'
   - '.github/workflows/actions.lock'
   - '.github/filters.yaml'
+# models: task model-check が読むもの。tlc の版は flake.lock が決める。
+models:
+  - 'models/**'
+  - 'scripts/model-check.sh'
+  - 'Taskfile.yml'
+  - 'flake.nix'
+  - 'flake.lock'
+  - '.github/workflows/ci.yaml'
+  - '.github/workflows/actions.lock'
+  - '.github/filters.yaml'

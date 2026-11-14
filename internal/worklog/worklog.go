@@ -6,7 +6,8 @@
 //	                         最後の prompt と Stop の時刻、始まりと終わり)
 //	work/.lock               hook、`work set`、prune を直列にするロック
 //
-// 書くのは hook (SessionStart / UserPromptSubmit / Stop / SessionEnd が `agents-daemon ingest-work` に渡す)、人とアプリと
+// 書くのは hook (SessionStart / UserPromptSubmit / Stop / SessionEnd と、Bash の PostToolUse が `agents-daemon ingest-work` に
+// 渡す。PostToolUse は gh pr create が出した PR を prs に残し、daemon がその PR からセッションへの辺を導く)、人とアプリと
 // companion の `work set`、daemon の housekeeping (Prune)。どれも lock の中で読んでから自分の欄だけを書き換える。
 // lock が無いと、ターンの途中に入った peer の delivery の UserPromptSubmit と Stop が同じ写しを書いて turns を失い、遅れた
 // hook が人の直した subject や SessionEnd の ended_at を戻す (models/work の WorkRace*.cfg の反例)。
@@ -25,6 +26,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"syscall"
@@ -107,6 +109,7 @@ type Result struct {
 
 // hookInput は hook の stdin のうち、記録に使う欄。
 // cc-premise: 2.1.319 hooks SessionStart の source、UserPromptSubmit の prompt、Stop の last_assistant_message、SessionEnd の reason
+// cc-premise: 2.1.325 hooks PostToolUse の tool_name、Bash の tool_input.command と tool_response.stdout
 type hookInput struct {
 	SessionID     string `json:"session_id"`
 	CWD           string `json:"cwd"`
@@ -115,6 +118,44 @@ type hookInput struct {
 	Prompt        string `json:"prompt"`
 	Message       string `json:"last_assistant_message"`
 	Reason        string `json:"reason"`
+	ToolName      string `json:"tool_name"`
+	ToolInput     struct {
+		Command string `json:"command"`
+	} `json:"tool_input"`
+	ToolResponse struct {
+		Stdout string `json:"stdout"`
+	} `json:"tool_response"`
+}
+
+// prCreatePattern は PR を作るコマンド。gh はコマンドの頭 (行頭か ; & | ( の後) に置かれたものだけを見る
+// (echo の引数は拾わない)。gh pr view や gh pr list の出力の URL は出した事実ではないので拾わない。
+var prCreatePattern = regexp.MustCompile(`(?m)(?:^|[;&|(])\s*gh\s+pr\s+create(?:\s|$)`)
+
+// prURLPattern は gh pr create が stdout に出す PR の URL。
+var prURLPattern = regexp.MustCompile(`https://github\.com/([\w.-]+/[\w.-]+)/pull/([0-9]+)`)
+
+// createdPRs は PostToolUse の Bash の入力から、gh pr create が出した PR の参照を返す。無ければ空。
+func createdPRs(in hookInput) []string {
+	if in.ToolName != "Bash" || !prCreatePattern.MatchString(in.ToolInput.Command) {
+		return nil
+	}
+	var prs []string
+	for _, m := range prURLPattern.FindAllStringSubmatch(in.ToolResponse.Stdout, -1) {
+		prs = append(prs, "pr:"+m[1]+"#"+m[2])
+	}
+	return prs
+}
+
+// addPRs は rec に無い PR を足し、足したかを返す。
+func addPRs(rec *Record, prs []string) bool {
+	added := false
+	for _, pr := range prs {
+		if !slices.Contains(rec.Prs, pr) {
+			rec.Prs = append(rec.Prs, pr)
+			added = true
+		}
+	}
+	return added
 }
 
 // Store は work/ の置き場所を持つ。ゼロ値は Dir が空で、書き込みはエラー、読み込みは空になる。
@@ -136,6 +177,8 @@ func (s Store) Ingest(input []byte, now time.Time) (Result, error) {
 	res := Result{Event: in.HookEventName, SessionID: in.SessionID}
 	switch in.HookEventName {
 	case "SessionStart", "UserPromptSubmit", "Stop", "SessionEnd":
+	case "PostToolUse":
+		return s.recordPRs(in, res, now)
 	default:
 		return res, fmt.Errorf("扱わない hook の入力 (%q)", in.HookEventName)
 	}
@@ -176,6 +219,29 @@ func (s Store) Ingest(input []byte, now time.Time) (Result, error) {
 		return true
 	}, now)
 	res.Written = err == nil && (res.Created || res.Ended || in.HookEventName == "UserPromptSubmit" || in.HookEventName == "Stop" || resumed(in))
+	return res, err
+}
+
+// recordPRs は PostToolUse の入力から gh pr create が出した PR を記録に足す。Bash の呼び出しごとに来るので、PR を
+// 作っていなければ lock も取らずに返す。記録は prompt を打ったセッションにだけ作る (SessionStart と SessionEnd と同じ)。
+func (s Store) recordPRs(in hookInput, res Result, now time.Time) (Result, error) {
+	prs := createdPRs(in)
+	if len(prs) == 0 {
+		return res, nil
+	}
+	err := s.modify(in.SessionID, func(rec *Record, found bool) bool {
+		if !found || !addPRs(rec, prs) {
+			return false
+		}
+		res.Written = true
+		if in.CWD != "" {
+			rec.CWD = in.CWD
+		}
+		return true
+	}, now)
+	if err != nil {
+		res.Written = false
+	}
 	return res, err
 }
 

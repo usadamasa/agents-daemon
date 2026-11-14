@@ -142,8 +142,21 @@ func (r *daemonRuntime) liveRefSessions() []refpoll.Session {
 	return sessions
 }
 
+// prIssuers は PR の参照ごとに、作業の記録 (prs) にその PR を出したと残したセッションと記録の cwd を返す。終了した
+// セッションの記録も含む (記録は終了から worklog.Retention のあいだ残る)。
 func (r *daemonRuntime) prIssuers() map[string][]refpoll.Session {
-	return nil
+	recs, err := r.works.List()
+	if err != nil {
+		r.log.Logf("作業の記録を読めないので、PR を出した記録で辺を導きません: %v", err)
+		return nil
+	}
+	issued := map[string][]refpoll.Session{}
+	for _, rec := range recs {
+		for _, pr := range rec.Prs {
+			issued[pr] = append(issued[pr], refpoll.Session{ID: rec.SessionID, CWD: rec.CWD})
+		}
+	}
+	return issued
 }
 
 func newDaemonRuntime(client multiplexerClient, log *applog.Logger, statusPath string, store sessionstate.Store, sleep func(time.Duration), startedAt time.Time) *daemonRuntime {
@@ -576,7 +589,7 @@ func assembleRuntime(raw multiplexerClient, kind string, p apppath.Paths, store 
 	runtime := newDaemonRuntime(client, log, p.StatusFile(), store, time.Sleep, now)
 	runtime.backend = kind
 	runtime.attachStateDir(p.StateDir())
-	runtime.refPoll = refpoll.New(runtime.edges, runtime.refs, refpoll.GH, runtime.liveRefSessions, nil, log)
+	runtime.refPoll = refpoll.New(runtime.edges, runtime.refs, refpoll.GH, runtime.liveRefSessions, runtime.prIssuers, log)
 	if c, ok := raw.(reaper.Client); ok {
 		runtime.reaper = reaper.New(runtime.spawned, c, log, dryRun)
 	}

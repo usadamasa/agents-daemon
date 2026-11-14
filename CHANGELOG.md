@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026.1114.3](https://github.com/usadamasa/agents-daemon/compare/2026.1114.2...2026.1114.3) - 2026-11-14
+
+### Features
+- 辺の案内で peer を名前でなく sid:<session_id> で示す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/591
+
 ## [2026.1114.2](https://github.com/usadamasa/agents-daemon/compare/2026.1114.1...2026.1114.2) - 2026-11-14
 
 ### Documentation

@@ -1,5 +1,18 @@
 # Changelog
 
+## [2026.1114.4](https://github.com/usadamasa/agents-daemon/compare/2026.1114.3...2026.1114.4) - 2026-11-14
+
+### Features
+- 人が外した sid → pr の辺を daemon が導き直さないようにする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/599
+- PR を出した記録で、終了・移動したセッションにも sid → pr の辺を導く by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/603
+### Bug Fixes
+- 辺の案内の printf 例で cwd の ' を引用する by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/593
+- spawned-session close で既に畳まれた session を一貫して成功にする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/597
+- 済んだ PR を照合するときはセッションの branch を引き直す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/598
+### Refactoring
+- PR のラベル同期を gh-manage の reusable workflow へ寄せる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/595
+- CI で task model-check を回す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/602
+
 ## [2026.1114.3](https://github.com/usadamasa/agents-daemon/compare/2026.1114.2...2026.1114.3) - 2026-11-14
 
 ### Features

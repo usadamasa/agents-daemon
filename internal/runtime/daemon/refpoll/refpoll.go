@@ -133,10 +133,10 @@ func (p *Poller) anchor(edges []edge.Edge, cached map[string]refstate.Record, no
 	var issued map[string][]Session
 	if len(candidates) > 0 {
 		live = p.sessions()
-		issued = p.issuers()
+		issued = foldRefs(p.issuers())
 	}
 	for _, pr := range candidates {
-		s, why, ok := p.issuer(pr, cached[pr], issued[pr], live, now)
+		s, why, ok := p.issuer(pr, cached[pr], issued[strings.ToLower(pr)], live, now)
 		if !ok {
 			continue
 		}
@@ -156,6 +156,17 @@ func (p *Poller) anchor(edges []edge.Edge, cached map[string]refstate.Record, no
 	for _, e := range removed {
 		p.log.Logf("辺 %s を消しました: %s → %s (%s が %s を待つ辺と輪になるため)", e.ID, e.Before.Ref, e.After.Ref, e.Before.Ref, e.After.Ref)
 	}
+}
+
+// foldRefs は PR の参照の鍵を小文字にそろえる。記録の参照は gh の URL の綴り、辺の参照は人の書いた綴りで、
+// GitHub の owner/repo は大文字小文字を区別しない。
+func foldRefs(issued map[string][]Session) map[string][]Session {
+	folded := make(map[string][]Session, len(issued))
+	for pr, sessions := range issued {
+		key := strings.ToLower(pr)
+		folded[key] = append(folded[key], sessions...)
+	}
+	return folded
 }
 
 // issuer は PR を出したセッションと、そう決めた理由 (ログの文言) を返す。記録のあるセッションがちょうど 1 つなら

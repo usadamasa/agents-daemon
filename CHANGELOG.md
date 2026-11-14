@@ -1,5 +1,12 @@
 # Changelog
 
+## [2026.1114.0](https://github.com/usadamasa/agents-daemon/compare/2026.1113.1...2026.1114.0) - 2026-11-14
+
+### Bug Fixes
+- SessionStart のビルドで GOTOOLCHAIN=auto を go build にだけ渡し、失敗と建て直す手順を伝える by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/580
+### Dependencies
+- build(deps): Bump nixpkgs from `f9a75f4` to `f4a03c0` by @dependabot[bot] in https://github.com/usadamasa/agents-daemon/pull/581
+
 ## [2026.1113.1](https://github.com/usadamasa/agents-daemon/compare/2026.1113.0...2026.1113.1) - 2026-11-13
 
 ### Features

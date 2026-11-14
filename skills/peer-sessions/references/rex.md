@@ -74,6 +74,8 @@ rex session new peer-b --cwd "$PWD" --json -- \
 <!-- rex-premise: preview.26 cli session new は --focus を持たず、起きたコマンドの REX_SESSION は新しい session になる -->
 
 `session new` は選択中の pane を動かさない。
+結果の `session_id` を控えておく。起きた claude は rex の案内どおりに session を作業の名前へ rename するので、
+`peer-b` の label は後で session を指す手段にならない。`session_id` は rename で変わらない。
 `/bin/sh -c` の包みは、claude が終わったとき session に残る block が自分だけなら session を閉じる。rex は中の
 コマンドが終わっても session を閉じない。異常終了では終わり方を出して Enter を待ち、それまで失敗の画面が残る。
 起こす前に session の印を書くので、ほかの pane が残っていて閉じられなかった session も、pane が空になると
@@ -87,9 +89,16 @@ daemon が閉じる。本文は spawn の `closeOnExitScript` (`rexcli`) と同�
 
 peer が `/exit` で終われば session は閉じる。異常終了で画面が残っているときは、その pane で Enter を押すと閉じる。
 peer の session に pane を足していると、claude の pane だけが閉じて session は残る。残りの pane を閉じて空に
-なれば daemon が閉じる。すぐ畳むなら `rex session kill peer-b` で session ごと畳む。
+なれば daemon が閉じる。すぐ畳むなら、起こしたときに控えた `session_id` で session ごと畳む。
 
-<!-- rex-premise: preview.26 cli session kill は label を受ける。最後の window を閉じても session は残る -->
+```sh
+"${XDG_CACHE_HOME:-$HOME/.cache}/agents-daemon/bin/agents-daemon" spawned-session close <session_id>
+```
+
+閉じるのは包みが印 (`spawned-session mark`) を書いた session だけで、印の無い session は理由を出して拒否する。
+`rex session kill` は起こしていない session も閉じられるので、peer を畳むのには使わない。
+
+<!-- rex-premise: preview.28 cli session kill は session ID を受ける。最後の window を閉じても session は残る -->
 
 ## 別ブロックでコマンドを走らせて結果を読む
 

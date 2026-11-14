@@ -1,13 +1,14 @@
 // Package spawnedsession は spawn と peer-sessions skill が起こした多重化ツールの session の印を XDG state 配下に
 // 置く (#557)。書くのは起こした session の中の包みの sh (`agents-daemon spawned-session mark`) で、daemon の reaper が
-// 印を回り、block が無くなった session を閉じて印を消す。多重化ツール (rex) の session には印を付ける欄が無く、手で
-// 作った空の session と見分けるのに使う。
+// 印を回り、block が無くなった session を閉じて印を消す。起こした側も `agents-daemon spawned-session close` で印の
+// ある session を閉じて印を消せる (#585)。多重化ツール (rex) の session には印を付ける欄が無く、手で作った空の
+// session や起こしていない session と見分けるのに使う。
 //
 //	spawned-sessions/<id>.json   印 1 つ (多重化ツールの session ID、書いた時刻)
 //
 // id は session ID から決める (rex の session ID は : を含む)。印は古さで消さない。daemon が回らないまま日が経っても
-// 生きている session の印を残すためで、消すのは reaper が session を閉じたときか、session がもう無いと分かったとき
-// だけ。印は生きている起こした session の数しか溜まらない。
+// 生きている session の印を残すためで、消すのは reaper か close が session を閉じたときか、session がもう無いと
+// 分かったときだけ。印は生きている起こした session の数しか溜まらない。
 package spawnedsession
 
 import (

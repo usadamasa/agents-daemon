@@ -522,9 +522,10 @@ test("ノードを選ぶと単体ビューを開き、待っている先と待�
   const pop = q("#pop");
   assert.equal(pop.hidden, false);
   assert.equal(pop.querySelector(".title").textContent, "画面を描く");
-  const groups = heads(pop);
-  assert.ok(groups.includes("Blocks · 2"), groups.join(" / "));
-  assert.ok(groups.includes("Blocked by · 2"), groups.join(" / "));
+  // 直近と、その先へたどれるノードは別のグループに分け、見出しの数はそのグループの行の数にする。
+  assert.deepEqual(heads(pop).slice(0, 4), ["Blocks · 1", "Blocks (indirect) · 1", "Blocked by · 1", "Blocked by (indirect) · 1"]);
+  const titles = (grp) => [...grp.querySelectorAll(".lk > button:first-of-type")].map((b) => b.textContent);
+  assert.deepEqual([...pop.querySelectorAll(".grp")].slice(0, 4).map(titles), [["スクリーンショットを撮る"], ["PR を作る"], ["API を実装する"], ["スキーマを決める"]]);
   // 閉じるのは文字の × ではなくアイコンのボタン。
   assert.equal(pop.querySelector(".x").getAttribute("aria-label"), "Close");
   assert.equal(pop.querySelectorAll(".x svg").length, 1);
@@ -614,9 +615,8 @@ test("PR のノードの単体ビュー: 見出しは PR の題で、番号と r
   const pop = q("#pop");
   assert.equal(pop.querySelector(".title").textContent, "依存図の色を状態ごとに分ける");
   assert.equal(pop.querySelector(".chips .chip").textContent, "Dropped · PR #254 · usadamasa/agents-daemon");
-  const groups = heads(pop);
-  assert.ok(groups.some((t) => t.startsWith("Blocks · ")), groups.join(" / "));
-  assert.ok(groups.some((t) => t.startsWith("Blocked by · ")), groups.join(" / "));
+  // 間接のグループは行が無ければ出さない。直近のグループは 0 件でも出す。
+  assert.deepEqual(heads(pop), ["Blocks · 1", "Blocked by · 0"]);
   await snapshot("graph-popup-ref");
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
 });
@@ -981,8 +981,8 @@ test("関係の行: 依存を外す操作は行の右端のアイコンだけの
     assert.equal(b.textContent, "");
     assert.equal(b.getAttribute("aria-label"), "Unlink");
     assert.equal(b.querySelectorAll("svg").length, 1);
-    const marks = [...q("#pop").querySelectorAll(".lk > .ph")].map((p) => p.textContent);
-    assert.ok(marks.every((m) => m === "Direct" || m === "Indirect"), marks.join(" / "));
+    // 直接か間接かはグループの見出しが示すので、行には印を置かない。
+    assert.equal(q("#pop").querySelectorAll(".lk > .ph").length, 0);
   } finally {
     escape();
   }

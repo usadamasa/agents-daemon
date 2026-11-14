@@ -30,7 +30,9 @@
    - HideDerived が TRUE の変種は、アプリが導いた辺に Unlink を出さない (issue の候補 3)。
    - SplitDecline が TRUE の変種は、辺を消してから別のステップで記録する (lock の外で記録する壊れたモデル)。
    - 記録は保持期間で消える (ForgetDecline)。TouchDecline が TRUE なら、導きが記録で飛ばした tick に保持期間を
-     数え直すので、導く条件が揃っている間は消えない。FALSE の変種はいつでも消える (性質を破る壊れたモデル)。 *)
+     数え直すので、導く条件が揃っている間は消えない。FALSE の変種はいつでも消える (性質を破る壊れたモデル)。
+   - ByRecord が TRUE の変種は、A が P を出した記録で導く (#575)。A の branch も生きているかも問わない。記録の
+     保持期間と、記録の無い PR の照合の相手は PRAuthor が持つ。 *)
 EXTENDS Naturals
 
 CONSTANTS
@@ -42,6 +44,7 @@ CONSTANTS
   HideDerived,    \* アプリが導いた辺に Unlink を出さないか
   SplitDecline,   \* 辺を消すのと記録を別のステップで行うか
   TouchDecline,   \* 記録で導きを飛ばした tick に記録の保持期間を数え直すか
+  ByRecord,       \* A が P を出した記録で導くか (#575、照合の相手の選び方は PRAuthor が持つ)
   MaxOps          \* 人の操作の回数
 
 ASSUME Locate \in {"tick", "ttl", "first", "done"}
@@ -122,7 +125,7 @@ Derivable(c, t, o, b) ==
   /\ c # None
   /\ t \/ o
   /\ sidPr = None
-  /\ live /\ b
+  /\ (ByRecord \/ (live /\ b))
   /\ (CheckSelfWait => ~o)
 
 \* 導く条件。「導かない」の記録のある組は飛ばす。
@@ -133,8 +136,8 @@ Tick ==
   LET c == IF cache \in {None, "open"} THEN remote ELSE cache
       \* 導く候補か (写しが head branch を持ち、P が辺の before にあり、after に無い)。導く前の辺で決める。
       cand == c # None /\ (prTask \/ prOwn) /\ sidPr = None
-      \* A の cwd を照合するか (候補があり A が生きているときだけ place を呼ぶ)。
-      look == cand /\ live
+      \* A の cwd を照合するか (候補があり A が生きているときだけ place を呼ぶ)。記録で導くなら A が終了していても導く。
+      look == cand /\ (live \/ ByRecord)
       reread == CASE Locate = "tick" -> TRUE
                   [] Locate = "ttl" -> ~fresh
                   [] Locate = "first" -> ~fresh \/ cache = None \/ (cache = "open" /\ c \in Done)

@@ -301,6 +301,13 @@ export const definitions = {
       "end_reason": {
         "type": "string",
         "description": "SessionEnd の reason"
+      },
+      "prs": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "このセッションが gh pr create で出した PR の参照 (pr:<owner>/<repo>#<番号>)。daemon が PR からこのセッションへの辺を導くのに使う"
       }
     }
   },

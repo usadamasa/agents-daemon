@@ -23,7 +23,7 @@ func TestDaemonRuntimeTick_refreshesRefs(t *testing.T) {
 	r, statusPath := newTestRuntime(t, client, now)
 	dir := filepath.Dir(statusPath)
 	r.attachStateDir(dir)
-	r.refPoll = refpoll.New(r.edges, r.refs, func(context.Context, ref.Item) (refpoll.Remote, error) { return refpoll.Remote{State: "merged"}, nil }, r.liveRefSessions, r.log)
+	r.refPoll = refpoll.New(r.edges, r.refs, func(context.Context, ref.Item) (refpoll.Remote, error) { return refpoll.Remote{State: "merged"}, nil }, r.liveRefSessions, r.prIssuers, r.log)
 	if _, err := edge.New(dir).Add(edge.Endpoint{Ref: "pr:o/r#1", CWD: "/w"}, edge.Endpoint{Ref: "sid:a", CWD: "/w"}, "", now); err != nil {
 		t.Fatal(err)
 	}
@@ -54,5 +54,34 @@ func TestLiveRefSessions_作業の記録のcwdを先に使う(t *testing.T) {
 	want := []refpoll.Session{{ID: "A", CWD: "/repo/.claude/worktrees/x"}, {ID: "B", CWD: "/other"}}
 	if got := r.liveRefSessions(); !reflect.DeepEqual(got, want) {
 		t.Errorf("liveRefSessions() = %v, want %v", got, want)
+	}
+}
+
+// PR を出したセッションは、作業の記録の prs から引く。終了したセッションの記録も含め、cwd は記録の cwd (#575)。
+// 同じ PR を 2 つのセッションが記録していれば両方を返す (どちらへ導くかは refpoll が決める)。
+func TestPRIssuers_作業の記録のPRから出したセッションを引く(t *testing.T) {
+	now := time.Date(2026, 11, 14, 12, 0, 0, 0, time.UTC)
+	r, statusPath := newTestRuntime(t, &multiplexerfake.Client{}, now)
+	r.attachStateDir(filepath.Dir(statusPath))
+	inputs := []string{
+		`{"session_id":"A","cwd":"/a","hook_event_name":"UserPromptSubmit","prompt":"p"}`,
+		`{"session_id":"A","cwd":"/a","hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"gh pr create --fill"},"tool_response":{"stdout":"https://github.com/o/r/pull/1\n"}}`,
+		`{"session_id":"A","cwd":"/a","hook_event_name":"SessionEnd","reason":"other"}`,
+		`{"session_id":"B","cwd":"/b","hook_event_name":"UserPromptSubmit","prompt":"p"}`,
+		`{"session_id":"B","cwd":"/b","hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"gh pr create --fill"},"tool_response":{"stdout":"https://github.com/o/r/pull/2\n"}}`,
+		`{"session_id":"C","cwd":"/c","hook_event_name":"UserPromptSubmit","prompt":"p"}`,
+		`{"session_id":"C","cwd":"/c","hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"gh pr create --fill"},"tool_response":{"stdout":"https://github.com/o/r/pull/2\n"}}`,
+	}
+	for _, in := range inputs {
+		if _, err := r.works.Ingest([]byte(in), now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := map[string][]refpoll.Session{
+		"pr:o/r#1": {{ID: "A", CWD: "/a"}},
+		"pr:o/r#2": {{ID: "B", CWD: "/b"}, {ID: "C", CWD: "/c"}},
+	}
+	if got := r.prIssuers(); !reflect.DeepEqual(got, want) {
+		t.Errorf("prIssuers() = %v, want %v", got, want)
 	}
 }

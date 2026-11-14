@@ -15,14 +15,15 @@ import (
 
 // newIngestWorkCmd は `agents-daemon ingest-work` を組み立てる。
 //
-// SessionStart / UserPromptSubmit / Stop / SessionEnd hook (hooks/ingest-work.sh) が stdin をそのまま渡してくる。どの event で
+// SessionStart / UserPromptSubmit / Stop / SessionEnd と Bash の PostToolUse hook (hooks/ingest-work.sh) が stdin をそのまま
+// 渡してくる。どの event で
 // 何を書くかはバイナリ側 (worklog) が持つ。失敗しても nil を返して exit 0 にするのは、記録の失敗でセッションの作業に
 // 割り込まないため。理由は stderr に 1 行だけ出す。stdout には何も出さない (UserPromptSubmit と SessionStart の stdout は
 // 会話の context に入る) ので --json には対応しない。
 func newIngestWorkCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:         "ingest-work",
-		Short:       "SessionStart / UserPromptSubmit / Stop / SessionEnd hook の stdin から work/ にセッションの作業を記録する",
+		Short:       "SessionStart / UserPromptSubmit / Stop / SessionEnd / PostToolUse hook の stdin から work/ にセッションの作業を記録する",
 		Annotations: jsonflag.Unsupported(),
 		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {

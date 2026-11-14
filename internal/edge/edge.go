@@ -2,8 +2,9 @@
 // (workspace) が `agents-daemon edge add` で書いたものと、daemon が PR を出したセッションから PR へ導いたもの
 // (Anchor、印 derived、#487)。読むのは `edge list` と、依存図の DAG を組む deps パッケージ。
 //
-//	edges/<id>.json   1 本 1 ファイル
-//	edges/.lock       Add、Remove、Bind、Anchor、Unanchor、Prune を直列にするロック
+//	edges/<id>.json       1 本 1 ファイル
+//	edges/<id>.declined   人が消した sid → pr の組。Anchor が導き直さない (#576)
+//	edges/.lock           Add、Remove、Bind、Anchor、Unanchor、Prune を直列にするロック
 //
 // 辺は「before が済まないと after を始められない」を表す。端点は参照 (ref の Ref のうち todo: 以外) と、
 // その作業の cwd から求めた repo (依存図の repo と同じ鍵) を持つ。
@@ -88,7 +89,7 @@ func New(stateDir string) Store {
 }
 
 // Add は辺を書く。同じ辺があれば created_at と結びついた端点を残して書き直す (note と cwd、repo は後から書いた側)。
-// 同じ辺は、書いたときの参照の組が同じ辺か、今の参照の組が同じ辺。
+// 同じ辺は、書いたときの参照の組が同じ辺か、今の参照の組が同じ辺。書いた組の「導かない」の記録は消す。
 func (s Store) Add(before, after Endpoint, note string, now time.Time) (Added, error) {
 	if err := s.normalize(&before, &after); err != nil {
 		return Added{}, err
@@ -108,13 +109,19 @@ func (s Store) Add(before, after Endpoint, note string, now time.Time) (Added, e
 			e.After.Ref, e.After.BoundFrom = existing.After.Ref, existing.After.BoundFrom
 		}
 		added = Added{Created: !found, Edge: e}
-		return write(dir, e)
+		if err := write(dir, e); err != nil {
+			return err
+		}
+		// 人が結び直した組は「導かない」を外す。
+		return undecline(dir, e.Before.Ref, e.After.Ref)
 	})
 	return added, err
 }
 
 // Remove は before と after の辺を消す。書いたときの参照の組でも、結びついた後の参照の組でも当たる。
-// 無い辺は消さずに Removed を false で返す。
+// 無い辺は消さずに Removed を false で返す。消した辺が sid:S → pr:P なら、導いた辺でも人の辺でも、その組を
+// Anchor が導かないよう記録する (#576)。daemon の sweep も Remove を呼ぶが、消すのは済んだ参照を before に持つ辺だけで、
+// この形には当たらない。
 func (s Store) Remove(before, after Endpoint) (Removed, error) {
 	if err := s.normalize(&before, &after); err != nil {
 		return Removed{}, err
@@ -133,6 +140,10 @@ func (s Store) Remove(before, after Endpoint) (Removed, error) {
 			return err
 		}
 		removed.Removed = true
+		// 消した直後の tick が導き直さないよう、同じロックの中で記録する (models/prlink の SplitDecline)。
+		if declinable(existing.Before.Ref, existing.After.Ref) {
+			return decline(dir, existing.Before.Ref, existing.After.Ref)
+		}
 		return nil
 	})
 	return removed, err

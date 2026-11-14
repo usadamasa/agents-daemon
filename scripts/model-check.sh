@@ -118,6 +118,16 @@ run models/prlink PRLink PRLinkHoldSweep.cfg violated
 run models/prlink PRLink PRLinkSweepFirst.cfg violated
 # 自分の PR を待つ辺を見ずに導くと、セッションのタスクと PR の間に待ちの輪を作る (NoDaemonLoop の反例)。
 run models/prlink PRLink PRLinkNoSelfWait.cfg violated
+# 人が消した sid → pr を記録しないと、次の tick で導き直す (NoRederive の反例、#576 の修正前)。
+run models/prlink PRLink PRLinkRederive.cfg violated
+# アプリの Unlink だけ記録すると、CLI の edge rm で消した組を導き直す (NoRederive の反例、#576 の候補 2)。
+run models/prlink PRLink PRLinkDeclineApp.cfg violated
+# アプリが導いた辺に Unlink を出さなくても、CLI の edge rm で消した組を導き直す (NoRederive の反例、#576 の候補 3)。
+run models/prlink PRLink PRLinkHideDerived.cfg violated
+# 辺を消してから lock の外で記録すると、間の tick が導き直す (NoRederive の反例)。
+run models/prlink PRLink PRLinkSplitDecline.cfg violated
+# 記録で導きを飛ばす間も保持期間を数え直さないと、記録が期限切れになって導き直す (NoRederive の反例)。
+run models/prlink PRLink PRLinkNoTouchDecline.cfg violated
 # 起こした session を spawned-session close で畳む形 (#596)。rex に無ければ印の有無に依らず成功にし、kill に失敗したら
 # 数え直す。包みの c()、reaper、利用者が同じ session を閉じる交錯を含める。liveness も見る。
 run models/spawnedclose SpawnedClose SpawnedClose.cfg holds

@@ -14,7 +14,8 @@ import (
 
 // Anchor は PR を出したセッション (sessionID、その cwd) から pr への辺を、印 derived を付けて書く (#487)。
 // 書くのは、pr がどれかの辺の端点にあり、pr を after に持つ辺が無く、pr がそのセッション (sid: かそのタスク) を
-// after に持つ辺 (自分の PR を自分で待つ形。書くと待ちの輪になる) が無いときだけ。書いたら ok が true。
+// after に持つ辺 (自分の PR を自分で待つ形。書くと待ちの輪になる) が無く、人がその組を消して「導かない」と
+// 記録していない (#576) ときだけ。書いたら ok が true。
 // pr の端点の cwd は、pr が出ている辺の端点から写す。手順の性質は models/prlink が持つ。
 func (s Store) Anchor(sessionID, cwd, pr string, now time.Time) (Edge, bool, error) {
 	before := Endpoint{Ref: ref.SessionID(sessionID), CWD: cwd}
@@ -43,6 +44,9 @@ func (s Store) Anchor(sessionID, cwd, pr string, now time.Time) (Edge, bool, err
 		}
 		if !found {
 			return nil
+		}
+		if skip, err := declined(dir, before.Ref, pr, now); skip || err != nil {
+			return err
 		}
 		before.Repo = gitrepo.RepoKey(cwd)
 		anchored = Edge{

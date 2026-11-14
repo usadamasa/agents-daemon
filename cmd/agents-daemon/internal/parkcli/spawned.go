@@ -46,14 +46,15 @@ func newSpawnedSessionCmd() *cobra.Command {
 		Use:   "close <session_id>",
 		Short: "印の付いた rex session を閉じて印を消し、結果を JSON で出す。印の無い session は閉じない",
 		Long: "peer を起こした側が、`rex session new --json` の session_id で peer の session を畳むときに呼ぶ。\n" +
-			"label は起きた claude が rename するので宛先に使わない。印 (spawned-session mark) の無い session は\n" +
-			"rex に触れずに error にする。session がもう無ければ印だけ消す。閉じられなければ印を残して error にする。",
+			"label は起きた claude が rename するので宛先に使わない。session がもう rex に無ければ、印の有無にかかわらず\n" +
+			"killed:false の成功にして印を消す。印 (spawned-session mark) の無い session が rex に居れば閉じずに error にする。\n" +
+			"閉じられなければ印を残して error にする。",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return statecmd.Run(cmd, func(p apppath.Paths, _ io.Reader) (any, error) {
 				store := spawnedsession.New(p.StateDir())
-				if err := requireMark(store, args[0]); err != nil {
-					return nil, err
+				if args[0] == "" {
+					return nil, errors.New("session ID が空")
 				}
 				closer, ok := backend.ConnectRex(sessioncontext.New(p.StateDir())).(sessionCloser)
 				if !ok {
@@ -78,34 +79,46 @@ type closeResult struct {
 	Killed    bool   `json:"killed"`
 }
 
-// requireMark は印の有無で閉じてよい session かを決める。起こしていない session を閉じないための線。
-func requireMark(store spawnedsession.Store, id string) error {
-	if id == "" {
-		return errors.New("session ID が空")
-	}
-	if _, ok := store.Get(id); !ok {
-		return fmt.Errorf("session %s には起こした印が無いので閉じない (spawned-session mark が書いた session だけを閉じる)", id)
-	}
-	return nil
-}
-
-// closeSpawnedSession は印の付いた session を閉じて印を消す。session がもう無ければ印だけ消す。数えられない、
-// 閉じられないときは印を残し、daemon の reaper が後で拾う。
+// closeSpawnedSession は印の付いた session を閉じて印を消す。session がもう無ければ、印の有無にかかわらず
+// killed=false の成功にする。reaper は session が無くなると印を消し、閉じた理由は残さないので、印が無いだけでは
+// 起こしていない session と畳まれた session を見分けられない。印の無い session が rex に居れば閉じずに拒否する。
+// 数えられない、閉じられないときは印を残し、daemon の reaper が後で拾う。
 func closeSpawnedSession(ctx context.Context, store spawnedsession.Store, closer sessionCloser, id string) (closeResult, error) {
-	if err := requireMark(store, id); err != nil {
-		return closeResult{}, err
+	if id == "" {
+		return closeResult{}, errors.New("session ID が空")
 	}
+	_, marked := store.Get(id)
 	_, found, err := closer.SessionBlocks(ctx, id)
-	if err != nil {
+	switch {
+	case err != nil && !marked:
+		return closeResult{}, fmt.Errorf("session %s には起こした印が無く、rex に残っていないかを確かめられない: %w", id, err)
+	case err != nil:
 		return closeResult{}, fmt.Errorf("session %s を確かめられない: %w", id, err)
+	case found && !marked:
+		return closeResult{}, fmt.Errorf("session %s には起こした印が無いので閉じない (spawned-session mark が書いた session だけを閉じる)", id)
 	}
+	killed := false
 	if found {
-		if err := closer.SessionKill(ctx, id); err != nil {
-			return closeResult{}, fmt.Errorf("session %s を閉じられない: %w", id, err)
+		killed, err = killOrGone(ctx, closer, id)
+		if err != nil {
+			return closeResult{}, err
 		}
 	}
 	if err := store.Remove(id); err != nil {
 		return closeResult{}, fmt.Errorf("session %s の印を消せない: %w", id, err)
 	}
-	return closeResult{SessionID: id, Killed: found}, nil
+	return closeResult{SessionID: id, Killed: killed}, nil
+}
+
+// killOrGone は session を閉じる。閉じられなくても、数え直して session が無ければ (数えた後に包みの c() か reaper が
+// 先に閉じた) killed=false の成功にする。
+func killOrGone(ctx context.Context, closer sessionCloser, id string) (killed bool, err error) {
+	killErr := closer.SessionKill(ctx, id)
+	if killErr == nil {
+		return true, nil
+	}
+	if _, found, err := closer.SessionBlocks(ctx, id); err == nil && !found {
+		return false, nil
+	}
+	return false, fmt.Errorf("session %s を閉じられない: %w", id, killErr)
 }

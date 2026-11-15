@@ -19,6 +19,7 @@
 //	ingest-quota-resume  Notification hook の stdin から本体の上限待ちの結末 (quota_auto_resume_*) を quota-resume/ に記録する
 //	park      パーキングロットのメモを parking/ に置く・書き換える・一覧する (add / set / list)
 //	dream     記憶階層の consolidation の実行系 (harvest / mine / stage / adopt / forget)。手順は agents-daemon:dream skill
+//	desktop   Claude Code Desktop で始めたセッションを rex で続ける (list / resume)
 //	prune-worktrees  誰も使っていない Claude Code の worktree の回収 (SessionStart hook が --hook 付きで呼ぶ)
 //	version   建てた元の plugin の version の表示 (--version も同じ)
 //

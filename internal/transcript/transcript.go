@@ -9,6 +9,7 @@
 package transcript
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -266,4 +267,61 @@ func contentText(raw json.RawMessage) string {
 		}
 	}
 	return strings.Join(texts, "\n")
+}
+
+// Cwd は sessionID の transcript に載った cwd のうち、transcript を今置いている project ディレクトリの名前に合うものを
+// 返す。合うものが無ければ最後に載った cwd。transcript が無い・cwd が無ければ ("", nil)。Desktop で閉じたセッションは
+// 登録簿 (claudesessions) から消えるので、rex で resume する cwd をここから引く (#130)。
+//
+// project ディレクトリに合うものを採るのは、`claude --resume` が cwd の project ディレクトリから transcript を引くため。
+// EnterWorktree で cwd が変わると transcript は別の project ディレクトリへ移る (locate) ので、最初の cwd では合わない。
+//
+// cc-premise: 2.1.325 desktop transcript の entry は cwd を持ち、Desktop 由来のセッションも CLI と同じ projects/<project>/<sid>.jsonl に書く
+func (s Store) Cwd(sessionID string) (string, error) {
+	path, err := s.locate(sessionID)
+	if err != nil || path == "" {
+		return "", err
+	}
+	f, err := os.Open(path) // #nosec G304 -- locate が projects 配下の検証済みの名前で引いたパス
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = f.Close() }()
+	project := filepath.Base(filepath.Dir(path))
+	var last string
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 0, tailChunk), maxTailBytes)
+	for sc.Scan() {
+		line := sc.Bytes()
+		if !bytes.Contains(line, []byte(`"cwd"`)) {
+			continue
+		}
+		var x struct {
+			Cwd string `json:"cwd"`
+		}
+		if json.Unmarshal(line, &x) != nil || x.Cwd == "" {
+			continue
+		}
+		if ProjectDirName(x.Cwd) == project {
+			return x.Cwd, nil
+		}
+		last = x.Cwd
+	}
+	if err := sc.Err(); err != nil {
+		return "", fmt.Errorf("%s の読み取りに失敗: %w", path, err)
+	}
+	return last, nil
+}
+
+// ProjectDirName は cwd から Claude Code の project ディレクトリの名前を作る。英数字以外を `-` に置き換える。
+//
+// cc-premise: 2.1.325 desktop projects/ のディレクトリ名は cwd の英数字以外を - にしたもの (/Users/x/src/github.com/a → -Users-x-src-github-com-a)
+func ProjectDirName(cwd string) string {
+	b := []byte(cwd)
+	for i, c := range b {
+		if !('a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9') {
+			b[i] = '-'
+		}
+	}
+	return string(b)
 }

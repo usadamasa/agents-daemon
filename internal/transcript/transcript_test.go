@@ -304,3 +304,52 @@ func TestStore_Tail(t *testing.T) {
 		})
 	}
 }
+
+// Cwd は transcript を今置いている project ディレクトリに合う cwd を採り、合うものが無ければ最後の cwd を返す。
+func TestStore_Cwd(t *testing.T) {
+	dir := t.TempDir()
+	s := Store{Dir: dir}
+	put := func(project, sid, body string) {
+		t.Helper()
+		p := filepath.Join(dir, project, sid+".jsonl")
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// EnterWorktree で worktree の project ディレクトリへ移った transcript。最初の cwd は repo、後の cwd が worktree。
+	put("-Users-x-repo--claude-worktrees-fix", "moved",
+		`{"type":"summary"}`+"\n"+
+			`{"type":"user","cwd":"/Users/x/repo"}`+"\n"+
+			`{"type":"user","cwd":"/Users/x/repo/.claude/worktrees/fix"}`+"\n"+
+			`{"type":"user","cwd":"/Users/x/repo/.claude/worktrees/fix/sub"}`+"\n")
+	put("-Users-x-desk", "desk", `{"type":"user","cwd":"/Users/x/desk"}`+"\n"+`{"type":"assistant","cwd":"/Users/x/desk/sub"}`+"\n")
+	put("-Users-x-other", "nomatch", `{"type":"user","cwd":"/a"}`+"\n"+`broken`+"\n"+`{"type":"user","cwd":"/b"}`+"\n")
+	put("-Users-x-none", "none", `{"type":"summary"}`+"\n")
+
+	cases := map[string]string{
+		"moved":   "/Users/x/repo/.claude/worktrees/fix",
+		"desk":    "/Users/x/desk",
+		"nomatch": "/b",
+		"none":    "",
+		"missing": "",
+	}
+	for sid, want := range cases {
+		got, err := s.Cwd(sid)
+		if err != nil || got != want {
+			t.Errorf("Cwd(%s) = %q, %v, want %q", sid, got, err, want)
+		}
+	}
+	if _, err := s.Cwd("../etc"); err == nil {
+		t.Error("Cwd(../etc) error = nil")
+	}
+}
+
+func TestProjectDirName(t *testing.T) {
+	got := ProjectDirName("/Users/usadamasa/src/github.com/usadamasa/agents-daemon")
+	if want := "-Users-usadamasa-src-github-com-usadamasa-agents-daemon"; got != want {
+		t.Errorf("ProjectDirName = %q, want %q", got, want)
+	}
+}

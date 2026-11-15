@@ -49,7 +49,7 @@ func TestExecClient_NewSession(t *testing.T) {
 	c := f.client(staticResolver(nil))
 
 	prompt := "パーキングロットのメモ「x」をタスクにしてください。 詳細: a b"
-	got, err := c.NewSession(context.Background(), "claude-config", "/w/claude-config", []string{"claude", "--session-id", sidDone, "--", prompt})
+	got, err := c.NewSession(context.Background(), "example-repo", "/w/example-repo", []string{"claude", "--session-id", sidDone, "--", prompt})
 	if err != nil {
 		t.Fatalf("NewSession() error = %v", err)
 	}
@@ -57,7 +57,7 @@ func TestExecClient_NewSession(t *testing.T) {
 		t.Errorf("NewSession() = %q, want %q", got, want)
 	}
 	f.assertCalls(t,
-		"--autostart=false session new claude-config --cwd /w/claude-config --window claude-config --json -- "+wrapPrefix(f, self)+" claude --session-id "+sidDone+" -- "+shellQuote(prompt),
+		"--autostart=false session new example-repo --cwd /w/example-repo --window example-repo --json -- "+wrapPrefix(f, self)+" claude --session-id "+sidDone+" -- "+shellQuote(prompt),
 	)
 }
 

@@ -20,8 +20,8 @@ CLAUDE.md と重複していたら CLAUDE.md 側を skill 名参照へ置き換�
 
 `description` を **増減の両方向** で見直す。description は全 skill ぶんが毎ターン注入されるため、
 索引と同じく lean に保つ。
-書き方の規範は `writing-skills` skill に従う。利用者の規約の `skillGuides` が対象の skill の範囲 (`scope`) に
-当てはまる規範を指していれば、その skill に従う。
+書き方は、skill を書く規範の skill (利用者の規約の `skillGuides`) のうち、範囲 (`scope`) が対象の skill と
+合うものに従う。
 
 dream で特に見るのは **本文の変更が description に染み出していないか** の一点。
 

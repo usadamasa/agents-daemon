@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	repoHome = "/src/home/claude-config"
+	repoHome = "/src/home/example-repo"
 	newSID   = "6b1f3c2a-1111-4222-8333-944455556666"
 	paneID   = "block:01a15e6a-7fe3-7298-af51-8982a808f03b"
 )
@@ -89,7 +89,7 @@ func TestRunner_Run(t *testing.T) {
 		t.Fatalf("NewSession の呼び出し = %d 回, want 1", len(host.runs))
 	}
 	call := host.runs[0]
-	if call.cwd != repoHome || call.label != "claude-config" {
+	if call.cwd != repoHome || call.label != "example-repo" {
 		t.Errorf("NewSession(%q, %q) (label、cwd が違う)", call.label, call.cwd)
 	}
 	wantArgv := []string{"claude", "--session-id", newSID, "--model", "claude-sonnet-5[1m]", "--", request().Prompt}
@@ -127,7 +127,7 @@ func TestRunner_Run_Errors(t *testing.T) {
 		host    *fakeHost
 		wantErr string
 	}{
-		{name: "repo は絶対パス", req: func(r Request) Request { r.Repo = "claude-config"; return r }, wantErr: "絶対パス"},
+		{name: "repo は絶対パス", req: func(r Request) Request { r.Repo = "example-repo"; return r }, wantErr: "絶対パス"},
 		{name: "repo が無い", req: func(r Request) Request { r.Repo = "/src/home/missing"; return r }, wantErr: "見つからない"},
 		{name: "本文が空なら起こさない", req: func(r Request) Request { r.Prompt = " \n"; return r }, wantErr: "本文"},
 		{name: "モデルが無ければ起こさない", req: func(r Request) Request { r.Model = ""; return r }, wantErr: "CLAUDE_CODE_SUBAGENT_MODEL"},

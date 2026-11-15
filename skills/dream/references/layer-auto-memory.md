@@ -23,7 +23,8 @@
 | 設定値の意図 | 設定の原本のコメント |
 | 上のどれでもない (手順 5 の条件を満たす) | memory に残し、本文へ失効条件を書く |
 
-新規 skill を作ると判定したら、SKILL.md の作成そのものは `writing-skills` skill へ渡す。dream は
+新規 skill を作ると判定したら、SKILL.md の作成そのものは skill を書く規範の skill
+(利用者の規約の `skillGuides`) へ渡す。dream は
 「skill 化すべき」と判定するところまでを担当する。
 
 ## スコープの選び方

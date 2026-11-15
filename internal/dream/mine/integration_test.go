@@ -59,9 +59,9 @@ metadata:
   type: feedback
 ---
 
-デフォルトの投稿先は #z-times-usadamasa｡
+デフォルトの投稿先は #team-standup｡
 
-**How to apply:** チャンネル指定がなければ #z-times-usadamasa に投稿する｡
+**How to apply:** チャンネル指定がなければ #team-standup に投稿する｡
 `,
 		"feedback_standup_name_kanji.md": `---
 name: feedback-standup-name-kanji

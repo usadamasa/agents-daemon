@@ -30,6 +30,22 @@ func fakeRexInVersions(t *testing.T, root, build string) *fakeRex {
 	return newFakeRexAt(t, filepath.Join(root, "fixtures"), filepath.Join(versionsDir(root, build), "rex"))
 }
 
+// launchdPath は Finder や Dock から起きた .app が受け取る PATH。rex の項を持たない。
+const launchdPath = "/usr/bin:/bin:/usr/sbin:/sbin"
+
+// installedVersions は HOME の下の rex の既定の置き場の Versions/ を返す。
+func installedVersions(home string) string {
+	return filepath.Join(home, "Library", "Application Support", "com.superlogical.rex", "RexServer", "Versions")
+}
+
+// isolateHome は HOME を空の一時ディレクトリにし、開発機に入っている本物の rex を既定の置き場から引かないようにする。
+func isolateHome(t *testing.T) string {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	return home
+}
+
 func TestLocateBinary(t *testing.T) {
 	t.Run("REX_BIN_PATH があればそのまま返す", func(t *testing.T) {
 		t.Setenv("REX_BIN_PATH", "/custom/rex")
@@ -52,6 +68,7 @@ func TestLocateBinary(t *testing.T) {
 
 	t.Run("PATH の Versions の項が消えていれば一番新しい build を引く", func(t *testing.T) {
 		t.Setenv("REX_BIN_PATH", "")
+		isolateHome(t)
 		root := t.TempDir()
 		// 999 と 1203 は rex を持ち、1300 はダウンロード途中でまだ無い。辞書順なら 999 が勝つが数値順で 1203。
 		// Current (build の複製) と .staging-… (ダウンロードの途中経過) は数字名でないので候補にしない。
@@ -70,8 +87,34 @@ func TestLocateBinary(t *testing.T) {
 		}
 	})
 
+	// Finder や Dock から起きた依存図のアプリ (launchd の最小の PATH) の子でも、rex の既定の置き場から引ける。
+	t.Run("PATH に rex が無ければ既定の置き場の Current を引く", func(t *testing.T) {
+		t.Setenv("REX_BIN_PATH", "")
+		root := installedVersions(isolateHome(t))
+		fakeRexInVersions(t, filepath.Dir(root), "1973")
+		want := fakeRexInVersions(t, filepath.Dir(root), "Current").bin
+		t.Setenv("PATH", launchdPath)
+		got, err := locateBinary()
+		if err != nil || got != want {
+			t.Fatalf("locateBinary() = %q, %v; want %q", got, err, want)
+		}
+	})
+
+	t.Run("既定の置き場に Current が無ければ一番新しい build を引く", func(t *testing.T) {
+		t.Setenv("REX_BIN_PATH", "")
+		root := installedVersions(isolateHome(t))
+		fakeRexInVersions(t, filepath.Dir(root), "1900")
+		want := fakeRexInVersions(t, filepath.Dir(root), "1973").bin
+		t.Setenv("PATH", launchdPath)
+		got, err := locateBinary()
+		if err != nil || got != want {
+			t.Fatalf("locateBinary() = %q, %v; want %q", got, err, want)
+		}
+	})
+
 	t.Run("どこにも無ければ ErrNotFound", func(t *testing.T) {
 		t.Setenv("REX_BIN_PATH", "")
+		isolateHome(t)
 		t.Setenv("PATH", t.TempDir())
 		_, err := locateBinary()
 		if !errors.Is(err, exec.ErrNotFound) {
@@ -83,6 +126,7 @@ func TestLocateBinary(t *testing.T) {
 // rex の自動更新で旧 build のディレクトリが消えても、同じ呼び出しが引き直した rex で通る。
 func TestExecClient_RelocatesWhenBinaryVanishes(t *testing.T) {
 	t.Setenv("REX_BIN_PATH", "")
+	isolateHome(t)
 	root := t.TempDir()
 	f := fakeRexInVersions(t, root, "100")
 	f.put(t, "server-status.json", measured(t, measuredOct10, "server_status.json"))

@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026.1115.3](https://github.com/usadamasa/agents-daemon/compare/2026.1115.2...2026.1115.3) - 2026-11-15
+
+### Features
+- dream の利用者固有の値を規約のファイルから受ける by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/624
+
 ## [2026.1115.2](https://github.com/usadamasa/agents-daemon/compare/2026.1115.1...2026.1115.2) - 2026-11-15
 
 ### Refactoring

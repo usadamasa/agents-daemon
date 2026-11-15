@@ -1,6 +1,6 @@
 // Package graph はタスクの記録と生きているセッションから、セッションをまたぐタスクの依存の DAG を組む (#134)。
-// ノードの材料 (Card) と repo ごとのセッションを組むのは deps パッケージ、段・下流・待ちの輪・鎖の数え方とレーンの
-// 割り当ては graph/dag が持つ。
+// ノードの材料 (Card) と repo ごとのセッションを組むのは deps パッケージ、段・下流・待ちの輪・鎖の数え方は
+// graph/dag が持つ。
 package graph
 
 import (
@@ -71,7 +71,6 @@ var halted = map[string]bool{StateQuestion: true, StatePermission: true, StateLi
 //   - ノードはタスク 1 つで、同じセッションの blockedBy と edge list の辺を 1 つにする
 //   - Nodes は下流の多い順 (同じなら Key の順)、Links は before、after の Key の順
 //   - LongestChain は止まっているノード (待ちの輪を含む) から数え、止まっているノードが無ければ空
-//   - Rows は Nodes の順を優先の順にした位相順で、edge の辺 (セッションをまたぐ) は破線 (graph/dag の Rows)
 //   - BlockedBy は完了していない上流を、止まっているもの、進行中のものの順に選ぶ。Memos は消えたメモの id を落とす
 //   - before 側の sid: の端点が末端のタスクを複数持つと、末端をセッションのノード (sid:) に集め、辺の記録は
 //     そのノードからの 1 本にする (#405)。after 側の sid: は根のタスクの数だけの Link になる
@@ -452,16 +451,13 @@ func (g *builder) finish() Graph {
 	for _, n := range out.Nodes {
 		order = append(order, n.Key)
 	}
-	var folded *dag.Graph
-	var keys []string
-	out.Folded, folded, keys = g.fold(a, order, pairs)
-	out.Rows, out.RowsWithCompleted = g.rows(a, order, folded, keys, out.Folded.Links, out.LongestChain)
+	out.Folded = g.fold(a, order, pairs)
 	return out
 }
 
 // fold は完了したノードを隠した図を組む (#392)。隠したノードを通り抜けていた辺は畳んで残し、段はこの図の辺で
-// 数え直す (#395。全部の図の段のままだと、隠したノードの段が空いて線が伸びる)。図の表と見せるノードの key も返す。
-func (g *builder) fold(a *dag.Graph, order []string, pairs [][2]string) (protocol.FoldedGraph, *dag.Graph, []string) {
+// 数え直す (#395。全部の図の段のままだと、隠したノードの段が空いて線が伸びる)。
+func (g *builder) fold(a *dag.Graph, order []string, pairs [][2]string) protocol.FoldedGraph {
 	shown := map[string]bool{}
 	keys := make([]string, 0, len(order))
 	for _, key := range order {
@@ -488,7 +484,7 @@ func (g *builder) fold(a *dag.Graph, order []string, pairs [][2]string) (protoco
 	for _, key := range keys {
 		nodes = append(nodes, protocol.FoldedNode{Key: key, Depth: folded.Depth(key)})
 	}
-	return protocol.FoldedGraph{Nodes: nodes, Links: links}, folded, keys
+	return protocol.FoldedGraph{Nodes: nodes, Links: links}
 }
 
 // shownWhenFolded は完了したノードを隠した図にノードを見せるか。完了したノードは隠すが、下流に完了していないノードが
@@ -536,26 +532,6 @@ func (g *builder) exitedInUse(a *dag.Graph, key string) bool {
 		}
 	}
 	return false
-}
-
-// rows はレーンの行を 2 組組む: 完了したノードを隠した図 (folded、keys はその見せるノード) と、全部を含むもの。
-// 隠した方は辺を絞って組み直した表を使う (Depth で輪を切る位置が辺の集合で変わるので、全部の表を使い回さない)。
-// 畳んだ辺は破線にする。longest chain の辺には印を付ける。
-func (g *builder) rows(all *dag.Graph, order []string, folded *dag.Graph, keys []string, foldedLinks []protocol.FoldedLink, chain []string) (opened, every []dag.Row) {
-	kinds := map[[2]string]string{}
-	for _, l := range g.links {
-		kinds[[2]string{l.Before, l.After}] = l.Kind
-	}
-	for _, l := range foldedLinks {
-		kinds[[2]string{l.Before, l.After}] = LinkEdge
-	}
-	dashed := func(before, after string) bool { return kinds[[2]string{before, after}] == LinkEdge }
-	onChain := map[[2]string]bool{}
-	for i := 1; i < len(chain); i++ {
-		onChain[[2]string{chain[i-1], chain[i]}] = true
-	}
-	highlight := func(before, after string) bool { return onChain[[2]string{before, after}] }
-	return folded.Rows(keys, dashed, highlight), all.Rows(order, dashed, highlight)
 }
 
 // rank は原因の鎖で先に選ぶ上流の順。止まっているもの、進行中のもの、それ以外。

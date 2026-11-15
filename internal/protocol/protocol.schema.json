@@ -444,14 +444,12 @@
       "description": "タスクの依存の DAG",
       "type": "object",
       "additionalProperties": false,
-      "required": ["nodes", "links", "longest_chain", "folded", "rows", "rows_with_completed", "column_order"],
+      "required": ["nodes", "links", "longest_chain", "folded", "column_order"],
       "properties": {
         "nodes": { "type": "array", "items": { "$ref": "#/$defs/GraphNode" }, "description": "下流の多い順 (同じなら key の順)" },
         "links": { "type": "array", "items": { "$ref": "#/$defs/GraphLink" } },
         "longest_chain": { "type": "array", "items": { "type": "string" }, "description": "下流の最も多い止まっているノードから、下流をたどった最長の鎖の key" },
         "folded": { "$ref": "#/$defs/FoldedGraph" },
-        "rows": { "type": "array", "items": { "$ref": "#/$defs/GraphRow" }, "description": "folded の nodes と、links のうち両端が folded の nodes にあるものと folded の links で組んだレーンの行" },
-        "rows_with_completed": { "type": "array", "items": { "$ref": "#/$defs/GraphRow" }, "description": "完了したノードも含めて組んだレーンの行" },
         "column_order": { "type": "array", "items": { "type": "string" }, "description": "依存の無いノードを図の領域のセッションの枠と右の列に並べる順 (全ノードの key)。手当てが要るもの、作業中、返事待ち、未着手、外部の参照、完了、終了の段で、同じ段は最後に動いた時刻の新しい順" }
       }
     },
@@ -554,17 +552,6 @@
         "before": { "$ref": "#/$defs/EdgeEndpoint" },
         "after": { "$ref": "#/$defs/EdgeEndpoint" },
         "note": { "type": "string", "description": "edge add で書いた辺の補足。daemon が引いた issue / PR の題は混ぜない (参照のノードの題に出る)" }
-      }
-    },
-    "GraphRow": {
-      "description": "レーンの行 1 つ。lanes は行頭の罫線で、ノードの行は * がそのノードのレーンの位置。node が無ければ辺をつなぐだけの行",
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["lanes"],
-      "properties": {
-        "lanes": { "type": "string" },
-        "node": { "type": "string" },
-        "marks": { "type": "array", "items": { "type": "integer" }, "description": "longest chain の辺を描いた lanes の桁 (昇順)" }
       }
     }
   }

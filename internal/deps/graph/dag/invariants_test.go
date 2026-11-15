@@ -8,7 +8,6 @@ import (
 	"math/rand/v2"
 	"reflect"
 	"slices"
-	"strings"
 	"testing"
 )
 
@@ -117,7 +116,6 @@ func TestGraph_乱択のグラフで参照実装と一致する(t *testing.T) {
 			}
 			checkCause(fail, r, links, shared, key)
 		}
-		checkRows(fail, r, shared, nodes)
 	}
 }
 
@@ -174,53 +172,5 @@ func checkCause(fail func(key, msg string), r *rand.Rand, links [][2]string, g *
 	}
 	if uniq := slices.Compact(slices.Sorted(slices.Values(chain))); len(uniq) != len(chain) {
 		fail(key, fmt.Sprintf("Cause %v に同じノードが 2 回出る", chain))
-	}
-}
-
-// checkRows は order のノードを 1 回ずつ出し、ノードの行には `*` が 1 つだけ、つなぐ行には無いことを見る。
-// ノードの行のレーンには空きの列が無く (閉じたレーンには右のレーンを詰める)、印は罫線の桁にだけ付く。
-// order には辺の無いノードも混ぜ、辺のあるノードを落とすこともある。
-func checkRows(fail func(key, msg string), r *rand.Rand, g *Graph, nodes []string) {
-	order := slices.Clone(nodes)
-	if r.IntN(3) == 0 {
-		order = append(order, "z")
-	}
-	if len(order) > 1 && r.IntN(3) == 0 {
-		order = order[1:]
-	}
-	r.Shuffle(len(order), func(i, j int) { order[i], order[j] = order[j], order[i] })
-	dashed := func(string, string) bool { return r.IntN(2) == 0 }
-	highlight := func(string, string) bool { return r.IntN(2) == 0 }
-
-	rows := g.Rows(order, dashed, highlight)
-
-	emitted := []string{}
-	for _, row := range rows {
-		stars := strings.Count(row.Lanes, "*")
-		switch {
-		case row.Node == "" && stars != 0:
-			fail("", fmt.Sprintf("Rows(%v): つなぐ行 %q に * がある", order, row.Lanes))
-		case row.Node != "" && stars != 1:
-			fail("", fmt.Sprintf("Rows(%v): ノードの行 %q の * が 1 つでない", order, row.Lanes))
-		}
-		cells := []rune(row.Lanes)
-		if row.Node != "" {
-			for i := 0; i < len(cells); i += 2 {
-				if cells[i] == ' ' {
-					fail("", fmt.Sprintf("Rows(%v): ノードの行 %q の %d 桁目が空きのレーン", order, row.Lanes, i))
-				}
-			}
-		}
-		for _, i := range row.Marks {
-			if i < 0 || i >= len(cells) || cells[i] == ' ' || cells[i] == '*' {
-				fail("", fmt.Sprintf("Rows(%v): 行 %q の印 %d が罫線の桁でない", order, row.Lanes, i))
-			}
-		}
-		if row.Node != "" {
-			emitted = append(emitted, row.Node)
-		}
-	}
-	if !reflect.DeepEqual(slices.Sorted(slices.Values(emitted)), slices.Sorted(slices.Values(order))) {
-		fail("", fmt.Sprintf("Rows(%v) が出したノード %v が order と違う", order, emitted))
 	}
 }

@@ -162,8 +162,6 @@
         { "before": "task:alpha/2", "after": "task:alpha/4", "via": ["task:alpha/3"] }
       ]
     },
-    "rows": [],
-    "rows_with_completed": [],
     "column_order": [
       "task:beta/1",
       "pr:usadamasa/agents-daemon#254",

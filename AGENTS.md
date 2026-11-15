@@ -55,6 +55,7 @@ task protocol:generate                      # schema を変えたら Go の型�
 shellcheck hooks/*.sh hooks/lib/*.sh scripts/*.sh tests/lib/*.bash tests/fixtures/fake-go .envrc
 claude plugin validate --strict .           # plugin manifest と hooks.json
 claude plugin validate --strict skills      # skill の frontmatter
+claude plugin validate --strict .claude/skills  # 保守用 skill の frontmatter
 claude plugin test .                        # mod (hooks/*.test.tsx) のテスト
 ```
 
@@ -135,7 +136,7 @@ mod が呼ぶコマンドは入力を stdin の JSON で受け、出力を JSON 
 
 - 本文に、閉じる issue を `Closes #N` で 1 行ずつ書く。pr-labels workflow が issue の種類と area のラベルを PR へ写し、
   release note の category になる。
-- issue を閉じない PR は、`gh pr create --label` で種類と area のラベルを付けて作る。選び方は `labeling-github-issues` skill、
+- issue を閉じない PR は、`gh pr create --label` で種類と area のラベルを付けて作る。選び方は `github-ops:labeling-github-issues` skill、
   area の表は `triaging-issues` skill。
 - マージは merge commit で行う (`gh pr merge --merge`)。Draft のままでは通らないので、先に `gh pr ready` を打つ。
 

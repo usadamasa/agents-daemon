@@ -130,7 +130,7 @@ func TestGenerateCandidates_IncludesEvidenceSessions(t *testing.T) {
 		{
 			Name: "feedback-standup-default-channel",
 			Type: "feedback",
-			Body: "デフォルトは #z-times-usadamasa に投稿",
+			Body: "デフォルトは #team-standup に投稿",
 			Path: "/mem/a.md",
 		},
 	}

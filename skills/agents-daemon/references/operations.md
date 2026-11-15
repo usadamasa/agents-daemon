@@ -3,7 +3,7 @@
 ## コマンド
 
 バイナリは `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon` にある。PATH には入れていないので、
-手で叩くときは絶対パスで呼ぶか、そのディレクトリを PATH に足す。
+手で叩くときは絶対パスで呼ぶか、そのディレクトリを PATH に足す。全コマンドの一覧は `agents-daemon --help` が出す。
 
 ```sh
 agents-daemon daemon --ensure [--dry-run]      # 居なければ detach 起動 (hook 用)
@@ -12,13 +12,28 @@ agents-daemon status                           # 稼働状況、監視中の pan
 agents-daemon --json status                    # 同じものを JSON で出す (--json は他のコマンドにも効く。下の「--json」)
 agents-daemon logs -n 80                       # 現行ログ (daemon.log) の末尾
 agents-daemon logs --events                    # 依存図とパーキングロットの経路 (タスクの記録、パーキング、mod) の出来事のログの末尾
+agents-daemon doctor                           # 前提条件の診断 (下の「診断」)
+agents-daemon inspect --pane <block id>        # 生きた block の画面と transcript の末尾を分類する (送信はしない)
+agents-daemon simulate [--send]                # 使い捨て pane を作り、上限の判定から送信までを end-to-end で確かめる
 agents-daemon stop                             # SIGTERM を送って停止
+agents-daemon update                           # plugin を更新し、daemon を建て直す (下の「plugin の更新後に daemon を入れ替える」)
+agents-daemon version                          # 建てた元の plugin の version
+COLUMNS=200 agents-daemon statusline < in.json # statusline を描画し、state file も書く (statusLine.command が呼ぶ)
+agents-daemon ingest-statusline < in.json      # statusline の stdin から state file だけを書く (自前の statusline が呼ぶ)
 agents-daemon dream harvest --incremental      # 直近の transcript を集める (Stop hook が --detach 付きで呼ぶ)
 agents-daemon dream mine|stage|adopt|forget    # 記憶階層の consolidation の実行系 (agents-daemon:dream skill)
+agents-daemon dream policy                     # config.json の dream.policy が指す規約のファイルを読み、合わせた結果を JSON で出す
 agents-daemon prune-worktrees [--dry-run]      # 放置された Claude Code の worktree を回収する (SessionStart hook が --hook 付きで呼ぶ)
 agents-daemon edge add|rm|list                 # セッションをまたぐ作業の依存を書く・消す・一覧する (下の「セッションをまたぐ辺を書く」)
 agents-daemon park list|set                    # パーキングのメモを一覧する・書き換える (stdin の JSON で受ける)
+agents-daemon park hand < request.json         # メモを取って渡し、届かなければ戻す (アプリが呼ぶ)
+agents-daemon spawn < request.json             # prompt を最初のターンにした Claude Code を repo の新しい rex session に起こす (アプリが呼ぶ)
+agents-daemon tell < request.json              # 生きているセッションの入力欄に文面を打つ (アプリが呼ぶ)
 ```
+
+アプリと mod が呼ぶコマンドは、入力を stdin の JSON で受ける。対象は `deps`、`park`、`edge add` / `rm`、
+`task dismiss`、`work set` / `get`、`spawn`、`tell`、`event-log` になる。
+形は `internal/protocol/protocol.schema.json` が持つ。
 
 ### `--dry-run`
 

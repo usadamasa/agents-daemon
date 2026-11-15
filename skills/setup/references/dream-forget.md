@@ -9,8 +9,8 @@ sandbox の中では `operation not permitted` になる。`dream forget` だけ
 
 ## 足す行
 
-利用者の `~/.claude/settings.json`。settings を生成している環境では、その原本 (agents-config なら
-`dotclaude/settings/base.yaml`) に足す。生成物に手で足しても次の生成で消える。
+利用者の `~/.claude/settings.json`。settings を別のファイルから生成している環境では、その原本に足す。
+生成物に手で足しても次の生成で消える。
 
 ```json
 {

@@ -163,11 +163,11 @@ settings の `env` は Claude Code のプロセスにだけ注入されるので
 
 ## 宛先の指定
 
-`ListAgents` が出した行の名前を `to` に渡す。bare name (`agents-config-01`) で届く (v2.1.232 以降)。
+`ListAgents` が出した行の名前を `to` に渡す。bare name (`my-repo-01`) で届く (v2.1.232 以降)。
 自分で起こした peer の名前は、受領の `from` で知る。
 
 ```
-{"to": "agents-config-01", "message": "..."}
+{"to": "my-repo-01", "message": "..."}
 ```
 
 `[ref]` を付けるのは、listing に同じ名前が 2 行あるか、エラーが付けろと言ったときだけ。

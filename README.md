@@ -63,7 +63,8 @@ plugin が持つもの:
   rex の外で動く Claude Code には何も届かず、`REX_SESSION` の無いセッションの SessionStart では daemon を起こさない
   (statusline は rex の外でも動く)。server の socket は `~/Library/Application Support/rex/server.sock`。
   sandbox の中から rex を叩くときの設定は「利用者の設定」にある。
-  rex `0.0.1791570264-g7b5bf3` と Claude Code `2.1.296` で測った (2026-10-10)。
+  確かめた rex と Claude Code のバージョンは、前提を置いた箇所ごとの `rex-premise:` / `cc-premise:` の marker が持つ。
+  marker の書き方は AGENTS.md の「Claude Code の挙動を書くときの決めごと」にある。
 - **statusline の配線**: 使用率と解除時刻は statusline の stdin にしか来ない。
   `statusLine.command` をこの plugin のバイナリの `statusline` に向けるか、自前の statusline から
   `ingest-statusline` へ stdin を渡す 1 行を足す (下の「セットアップ」で行う)。
@@ -182,31 +183,7 @@ sandbox の中で使うときに settings へ足すもの。行の書き方は s
 
 ## コマンド
 
-バイナリは PATH に入らないので、絶対パスで呼ぶかそのディレクトリを PATH に足す。
-
-```sh
-agents-daemon status                     # 稼働状況、監視中の pane、ログの末尾
-agents-daemon logs -n 80                 # daemon.log の末尾
-agents-daemon logs --events              # 依存図とパーキングロットの経路の出来事のログの末尾
-agents-daemon doctor                     # 前提条件の診断
-agents-daemon --json doctor              # 同じ診断を JSON で出す (--json は hook 用のコマンドと update 以外に効く)
-agents-daemon inspect --pane <block id>  # 生きた block の画面を分類する
-agents-daemon daemon --foreground --dry-run  # 送信せずに判定だけ回す
-agents-daemon stop                       # 停止
-COLUMNS=200 agents-daemon statusline < in.json  # statusline を描画し、state file も書く (statusLine.command が呼ぶ)
-agents-daemon ingest-statusline < in.json  # statusline の stdin から state file だけを書く (自前の statusline が呼ぶ)
-agents-daemon dream harvest --incremental  # 直近の transcript を集める (Stop hook が --detach 付きで呼ぶ)
-agents-daemon dream mine --project <canonical>   # memory と skill を突き合わせて候補を出す
-agents-daemon dream stage --project <canonical>  # 候補の承認レポートを ./tmp/dream/ に書く
-agents-daemon dream forget <memory-name>...      # auto memory を消す (sandbox の外で動かす)
-agents-daemon prune-worktrees --dry-run          # 回収対象の worktree を表示する (SessionStart hook が --hook 付きで呼ぶ)
-agents-daemon spawn < request.json               # prompt を最初のターンにした Claude Code を repo の新しい rex session に起こす (アプリが呼ぶ)
-agents-daemon tell < request.json                # 生きているセッションの入力欄に文面を打つ (アプリが呼ぶ)
-agents-daemon park hand < request.json           # メモを取って渡し、届かなければ戻す (アプリが呼ぶ)
-```
-
-アプリと mod が呼ぶコマンド (`deps`、`park`、`edge add` / `rm`、`task dismiss`、`work set` / `get`、`spawn`、`tell`、`event-log`) は入力を
-stdin の JSON で受ける。形は `protocol/protocol.schema.json` が持つ。
+コマンドの一覧と呼び方は `skills/agents-daemon/references/operations.md` の「コマンド」にある。
 
 ## 依存図のアプリ (agent-tasks)
 

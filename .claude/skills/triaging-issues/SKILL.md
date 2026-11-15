@@ -2,12 +2,12 @@
 name: triaging-issues
 description: >-
   agents-daemon の issue と PR に付ける area ラベルを選ぶとき、機能を足したり廃止したりして area の表を見直すときに使う。
-  ラベルの軸と付け方の手順は labeling-github-issues skill の担当。
+  ラベルの軸と付け方の手順は github-ops:labeling-github-issues skill の担当。
 ---
 
 # agents-daemon の area
 
-ラベルの軸、種類の決め方、付け方、PR への写し方は labeling-github-issues skill に従う。
+ラベルの軸、種類の決め方、付け方、PR への写し方は github-ops:labeling-github-issues skill に従う。
 この skill は agents-daemon 固有の area の表と、area を作らない廃止した機能を持つ。
 
 ## area の表

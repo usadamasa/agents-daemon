@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026.1115.2](https://github.com/usadamasa/agents-daemon/compare/2026.1115.1...2026.1115.2) - 2026-11-15
+
+### Refactoring
+- rex の PATH の前提を Versions/Current の 1 項に直し、PATH の build から引き直す経路を消す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/622
+
 ## [2026.1115.1](https://github.com/usadamasa/agents-daemon/compare/2026.1115.0...2026.1115.1) - 2026-11-15
 
 ### Bug Fixes

@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026.1115.4](https://github.com/usadamasa/agents-daemon/compare/2026.1115.3...2026.1115.4) - 2026-11-15
+
+### Documentation
+- README の古い記述と利用者固有の名前を直す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/625
+
 ## [2026.1115.3](https://github.com/usadamasa/agents-daemon/compare/2026.1115.2...2026.1115.3) - 2026-11-15
 
 ### Features

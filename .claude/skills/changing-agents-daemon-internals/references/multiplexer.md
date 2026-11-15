@@ -78,4 +78,11 @@ rex は block の PATH に `…/RexServer/Versions/Current/…` を先に、`…
 同じ呼び出しを 1 回やり直す。数字名の項だけを持つ PATH でその build が消えたときに起きる。このやり直しは tick の
 失敗に数えない。
 `REX_BIN_PATH` で固定しているときは引き直さない (`rexcli/locate.go`)。
+
+<!-- rex-premise: preview.30 cli 既定の置き場は ~/Library/Application Support/com.superlogical.rex/RexServer/Versions/{Current,<build>}/Rex Server.app/Contents/MacOS/rex。ログインシェルの PATH には載らない -->
+
+PATH に rex の項が無いとき (Finder や Dock から起きた依存図のアプリと、その子の `park hand` や `spawn`) は、
+既定の置き場 `~/Library/Application Support/com.superlogical.rex/RexServer/Versions/` の `Current`、
+無ければ一番新しい数字名の build の rex を引く。rex は block の中のシェルにしか PATH を足さず、ログインシェルの
+PATH にも載らないので、アプリの側で PATH を取り込んでも引けない。
 doctor の「rex CLI の前提」の節は、解決した rex のパスを版と並べて出す。

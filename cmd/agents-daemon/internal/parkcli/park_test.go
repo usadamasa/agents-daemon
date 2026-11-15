@@ -377,7 +377,7 @@ func TestParkAdopt(t *testing.T) {
 	}
 
 	// タスクの無いセッションの作業 (sid:) も同じ門で移す。題は見せる題、detail は最後の要約。
-	writeTestConfig(t, filepath.Join(root, "state", "agents-daemon", "work", "gone.json"), `{"session_id": "gone", "cwd": "`+cwd+`", "subject": "最初の prompt", "origin": "prompt", "inferred": "推定の題", "summary": "最後の応答", "turns": 3, "started_at": "2026-10-18T09:00:00Z", "updated_at": "2026-10-18T09:00:00Z"}`)
+	writeTestConfig(t, filepath.Join(root, "state", "agents-daemon", "work", "gone.json"), `{"session_id": "gone", "cwd": "`+cwd+`", "repo": "`+cwd+`", "subject": "最初の prompt", "origin": "prompt", "inferred": "推定の題", "summary": "最後の応答", "turns": 3, "started_at": "2026-10-18T09:00:00Z", "updated_at": "2026-10-18T09:00:00Z"}`)
 	writeDaemonStatus(t, root, `{"pane_id": "b2", "session_id": "gone", "cwd": "`+cwd+`"}`)
 	if _, stderr, err := adopt("sid:gone"); err == nil || !strings.Contains(stderr, "生きている") {
 		t.Fatalf("pane のあるセッションの作業を移した: %v %s", err, stderr)

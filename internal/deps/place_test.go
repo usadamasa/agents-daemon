@@ -4,9 +4,53 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/usadamasa/agents-daemon/internal/daemonstate"
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
+	"github.com/usadamasa/agents-daemon/internal/parking"
+	"github.com/usadamasa/agents-daemon/internal/tasklog/record"
+	"github.com/usadamasa/agents-daemon/internal/worklog"
 )
+
+// worktree の消えた終了セッションは、git で cwd を引けなくても作業の記録の repo の鍵 (worklog の repo) の列に置く
+// (models/prlink の PlacedRepo)。同じ cwd のタスクのノードも同じ列に入り、移したメモと同じ repo にまとまる。
+// 同じ cwd に鍵が複数あれば、cwd と違う鍵 (git で引けたときの鍵) を選ぶ。
+func TestBuild_worktreeが消えた終了セッションを記録のrepoの鍵の列へ置く(t *testing.T) {
+	const main = "/src/home/agents-daemon"
+	const gone, goneTask = main + "/.claude/worktrees/x", main + "/.claude/worktrees/y"
+	ended := t0.Add(time.Hour)
+	exited := func(sid, cwd, repo string) worklog.Record {
+		w := work(sid, cwd, "終わった作業 "+sid, t0)
+		w.Repo, w.EndedAt = repo, &ended
+		return w
+	}
+	d := build(input{
+		PID:      42,
+		Snapshot: snapshot(daemonstate.PaneStatus{PaneID: "p1", SessionID: "L", CWD: main, AgentStatus: "working"}),
+		Tasks:    []record.Task{task("Y", "1", "worktree のタスク", "pending", goneTask)},
+		Works: []worklog.Record{
+			work("L", main, "生きている作業", t0),
+			exited("Z", gone, gone),
+			exited("X", gone, main),
+			exited("Y", goneTask, main),
+		},
+		Parking: []parking.Item{{ID: "m1", Repo: main, Status: parking.StatusOpen, Origin: parking.OriginAdopted, Kind: parking.KindScope, Title: "移した作業"}},
+		Locate:  places(map[string]gitrepo.Place{main: {Repo: main, Branch: "main"}}),
+	})
+
+	if len(d.Repos) != 1 || d.Repos[0].Repo != main || len(d.Repos[0].Memos) != 1 {
+		t.Errorf("repos = %+v", d.Repos)
+	}
+	for _, n := range d.Graph.Nodes {
+		if n.Repo != main {
+			t.Errorf("%s の repo = %q, want %q", n.Key, n.Repo, main)
+		}
+	}
+	if got := nodes(d.Graph); got["sid:X"].Key == "" || got["task:Y/1"].Key == "" {
+		t.Errorf("nodes = %v", keys(d.Graph.Nodes))
+	}
+}
 
 // 依存図の repo の鍵はパーキングのメモの repo (gitrepo.RepoKey) と同じになる。git の中、linked worktree、
 // git の外のどれでも一致しないと、パーキングのメモがどの repo にも載らなくなる。

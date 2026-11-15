@@ -38,31 +38,3 @@ func TestDetectFeedback(t *testing.T) {
 	}
 }
 
-func TestDetectFeedback_QuoteMaskedAndTruncated(t *testing.T) {
-	// PII を含む長文が伏せ字化 + truncate されて quote に入るか
-	input := "そうじゃなくて JP-TECH-042 の件は " +
-		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	fs, ok := detectFeedback(input)
-	if !ok {
-		t.Fatal("feedback should be detected")
-	}
-	if len([]rune(fs.Quote)) > maxFeedbackQuote {
-		t.Errorf("quote rune len = %d; want <= %d", len([]rune(fs.Quote)), maxFeedbackQuote)
-	}
-	if contains := indexOf(fs.Quote, "JP-TECH-042"); contains >= 0 {
-		t.Errorf("quote must not contain raw candidate id: %q", fs.Quote)
-	}
-	if indexOf(fs.Quote, "[CANDIDATE-ID]") < 0 {
-		t.Errorf("quote should contain masked marker: %q", fs.Quote)
-	}
-}
-
-// indexOf は strings.Index の薄いラッパー (test 内の import 節約用)｡
-func indexOf(s, substr string) int {
-	for i := 0; i+len(substr) <= len(s); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
-}

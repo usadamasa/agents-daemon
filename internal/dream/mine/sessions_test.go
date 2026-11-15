@@ -8,12 +8,12 @@ import (
 
 func TestExtractInvokedSkills(t *testing.T) {
 	recs := []record.Record{
-		{SessionID: "s1", CWDProject: "-Users-x-workspace", SkillsInvoked: []string{"daily-standup", "caddi-obsidian"}},
+		{SessionID: "s1", CWDProject: "-Users-x-workspace", SkillsInvoked: []string{"daily-standup", "team-obsidian"}},
 		{SessionID: "s2", CWDProject: "-Users-x-workspace", SkillsInvoked: []string{"daily-standup", "weekly-report"}},
 	}
 	skills := extractInvokedSkills(recs)
 	// deduped + sorted
-	want := []string{"caddi-obsidian", "daily-standup", "weekly-report"}
+	want := []string{"team-obsidian", "daily-standup", "weekly-report"}
 	if len(skills) != len(want) {
 		t.Fatalf("skills = %v; want %v", skills, want)
 	}

@@ -15,6 +15,7 @@ import (
 	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/jsonflag"
 	"github.com/usadamasa/agents-daemon/internal/dream/forget"
 	"github.com/usadamasa/agents-daemon/internal/dream/harvest"
+	"github.com/usadamasa/agents-daemon/internal/dream/policy"
 )
 
 // testRoot は main の root と同じく SilenceUsage を立てた親にコマンドを載せる。
@@ -31,7 +32,7 @@ func TestDreamCmd_HasFivePhases(t *testing.T) {
 		names = append(names, sub.Name())
 	}
 	slices.Sort(names)
-	want := []string{"adopt", "forget", "harvest", "mine", "stage"}
+	want := []string{"adopt", "forget", "harvest", "mine", "policy", "stage"}
 	if !slices.Equal(names, want) {
 		t.Errorf("subcommands = %v; want %v", names, want)
 	}
@@ -106,6 +107,84 @@ func TestDreamCmd_JSON(t *testing.T) {
 
 	if _, err := execJSON("harvest", "--detach"); err == nil || !strings.Contains(err.Error(), "--json") {
 		t.Errorf("harvest --detach: error = %v, want --json に対応していない error", err)
+	}
+}
+
+// setPolicyConfig は XDG_CONFIG_HOME の config.json に dream.policy を書く。
+func setPolicyConfig(t *testing.T, policyPaths ...string) {
+	t.Helper()
+	cfgHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", cfgHome)
+	body, err := json.Marshal(map[string]any{"dream": map[string]any{"policy": policyPaths}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(cfgHome, "agents-daemon")
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// dream policy は config.json の dream.policy が指す規約を合わせた結果を JSON で出す。
+func TestDreamPolicyCmd_PrintsMergedPolicy(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	p := filepath.Join(t.TempDir(), "policy.json")
+	if err := os.WriteFile(p, []byte(`{"version": 1, "skillNamePrefixes": ["team"]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	setPolicyConfig(t, p)
+
+	var out bytes.Buffer
+	root := testRoot()
+	root.SetOut(&out)
+	root.SetArgs([]string{"dream", "policy"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	var got policy.Policy
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("not JSON: %q (%v)", out.String(), err)
+	}
+	if !slices.Equal(got.Sources, []string{p}) || !slices.Equal(got.SkillNamePrefixes, []string{"team"}) {
+		t.Errorf("policy = %+v", got)
+	}
+}
+
+// キーが無ければ空の規約を出す (エラーにしない)。
+func TestDreamPolicyCmd_NoKey(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	var out bytes.Buffer
+	root := testRoot()
+	root.SetOut(&out)
+	root.SetArgs([]string{"dream", "policy"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	var got policy.Policy
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil || len(got.Sources) != 0 {
+		t.Errorf("policy = %q (%v)", out.String(), err)
+	}
+}
+
+// 規約が読めなければ harvest は PII の規則を欠いたまま書き出さず、エラーで止まる。
+func TestDreamHarvestCmd_FailsOnUnreadablePolicy(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	stateHome := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", stateHome)
+	setPolicyConfig(t, filepath.Join(t.TempDir(), "missing.json"))
+
+	root := testRoot()
+	root.SetErr(&bytes.Buffer{})
+	root.SetArgs([]string{"dream", "harvest", "--projects-dir", t.TempDir()})
+	if err := root.Execute(); err == nil {
+		t.Fatal("規約が読めないのに harvest が成功した")
+	}
+	if _, err := os.Stat(filepath.Join(stateHome, "agents-daemon", "dream", "harvest")); !os.IsNotExist(err) {
+		t.Errorf("harvest の出力が書かれている: %v", err)
 	}
 }
 

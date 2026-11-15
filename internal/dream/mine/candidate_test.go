@@ -12,6 +12,9 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/dream/mine/corpus"
 )
 
+// dailyPrefix は規約から渡る接頭辞の例。memory 名の "standup" を skill "daily-standup" へ結ぶ。
+var dailyPrefix = []string{"daily"}
+
 func TestGenerateCandidates_PIIMigration(t *testing.T) {
 	// coverage 0% ケース: PII rule が skill body に一切ない → skill_body high
 	mems := []corpus.Memory{
@@ -26,7 +29,7 @@ func TestGenerateCandidates_PIIMigration(t *testing.T) {
 	skills := map[string]corpus.Skill{
 		"daily-standup": {Name: "daily-standup", Body: "SKILL body without PII rule"},
 	}
-	cands := generateCandidates(mems, skills, "-Users-x-workspace", []record.Record{})
+	cands := generateCandidates(mems, skills, "-Users-x-workspace", []record.Record{}, dailyPrefix)
 	if len(cands) != 1 {
 		t.Fatalf("expected 1 candidate, got %d", len(cands))
 	}
@@ -61,7 +64,7 @@ func TestGenerateCandidates_FullyCoveredMemoryDedup(t *testing.T) {
 	skills := map[string]corpus.Skill{
 		"daily-standup": {Name: "daily-standup", Body: "日付モデル: Done は前営業日 / Doing は当日"},
 	}
-	cands := generateCandidates(mems, skills, "-Users-x-workspace", nil)
+	cands := generateCandidates(mems, skills, "-Users-x-workspace", nil, dailyPrefix)
 	if len(cands) != 1 {
 		t.Fatalf("expected 1 candidate, got %d", len(cands))
 	}
@@ -86,7 +89,7 @@ func TestGenerateCandidates_UnhomedWhenNoAssociatedSkill(t *testing.T) {
 	skills := map[string]corpus.Skill{
 		"daily-standup": {Name: "daily-standup", Body: "some body"},
 	}
-	cands := generateCandidates(mems, skills, "-p", nil)
+	cands := generateCandidates(mems, skills, "-p", nil, dailyPrefix)
 	if len(cands) != 1 {
 		t.Fatalf("expected 1 unhomed candidate, got %d: %+v", len(cands), cands)
 	}
@@ -113,7 +116,7 @@ func TestGenerateCandidates_UnhomedIDsAreUniquePerMemory(t *testing.T) {
 		{Name: "feedback-alpha", Type: "feedback", Body: "a", Path: "/mem/a.md"},
 		{Name: "feedback-beta", Type: "feedback", Body: "b", Path: "/mem/b.md"},
 	}
-	cands := generateCandidates(mems, map[string]corpus.Skill{}, "-p", nil)
+	cands := generateCandidates(mems, map[string]corpus.Skill{}, "-p", nil, nil)
 	if len(cands) != 2 {
 		t.Fatalf("expected 2 candidates, got %d", len(cands))
 	}
@@ -136,10 +139,10 @@ func TestGenerateCandidates_IncludesEvidenceSessions(t *testing.T) {
 	}
 	sessions := []record.Record{
 		{SessionID: "sess-a", SkillsInvoked: []string{"daily-standup"}, CWDProject: "-p"},
-		{SessionID: "sess-b", SkillsInvoked: []string{"caddi-obsidian"}, CWDProject: "-p"},
+		{SessionID: "sess-b", SkillsInvoked: []string{"team-obsidian"}, CWDProject: "-p"},
 		{SessionID: "sess-c", SkillsInvoked: []string{"daily-standup", "weekly-report"}, CWDProject: "-p"},
 	}
-	cands := generateCandidates(mems, skills, "-p", sessions)
+	cands := generateCandidates(mems, skills, "-p", sessions, dailyPrefix)
 	if len(cands) != 1 {
 		t.Fatalf("candidates: %d", len(cands))
 	}
@@ -197,8 +200,8 @@ func TestBuildCandidateID_Deterministic(t *testing.T) {
 	if id1 != "dream-candidate-daily-standup-001" {
 		t.Errorf("id1 = %q", id1)
 	}
-	id2 := buildCandidateID("caddi-obsidian", 42)
-	if id2 != "dream-candidate-caddi-obsidian-042" {
+	id2 := buildCandidateID("team-obsidian", 42)
+	if id2 != "dream-candidate-team-obsidian-042" {
 		t.Errorf("id2 = %q", id2)
 	}
 }

@@ -49,19 +49,20 @@ func TestComputeCoverage_EmptyPhrases(t *testing.T) {
 }
 
 func TestFindAssociatedSkill_ByName(t *testing.T) {
-	skills := []string{"daily-standup", "caddi-obsidian", "weekly-report"}
+	skills := []string{"daily-standup", "team-obsidian", "weekly-report"}
+	prefixes := []string{"daily", "team", "weekly"}
 	tests := []struct {
 		memName string
 		want    string
 	}{
 		{"feedback-standup-no-pii", "daily-standup"},
 		{"feedback-standup-default-channel", "daily-standup"},
-		{"feedback-obsidian-vault", "caddi-obsidian"},
+		{"feedback-obsidian-vault", "team-obsidian"},
 		{"unrelated-memory", ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.memName, func(t *testing.T) {
-			got := findAssociatedSkill(tc.memName, "", skills)
+			got := findAssociatedSkill(tc.memName, "", skills, prefixes)
 			if got != tc.want {
 				t.Errorf("findAssociatedSkill(%q) = %q; want %q", tc.memName, got, tc.want)
 			}
@@ -87,7 +88,7 @@ func TestFindAssociatedSkill_ShortNameDoesNotMatchInsideWord(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := findAssociatedSkill(tc.memName, tc.memDesc, skills)
+			got := findAssociatedSkill(tc.memName, tc.memDesc, skills, nil)
 			if got != tc.want {
 				t.Errorf("findAssociatedSkill(%q, %q) = %q; want %q", tc.memName, tc.memDesc, got, tc.want)
 			}
@@ -96,10 +97,40 @@ func TestFindAssociatedSkill_ShortNameDoesNotMatchInsideWord(t *testing.T) {
 }
 
 func TestFindAssociatedSkill_ByDescription(t *testing.T) {
-	skills := []string{"daily-standup", "caddi-obsidian"}
-	got := findAssociatedSkill("feedback-x", "daily-standup skill のデフォルト投稿先", skills)
+	skills := []string{"daily-standup", "team-obsidian"}
+	got := findAssociatedSkill("feedback-x", "daily-standup skill のデフォルト投稿先", skills, nil)
 	if got != "daily-standup" {
 		t.Errorf("got %q", got)
+	}
+}
+
+// 接頭辞は規約から受ける。規約が無ければ接頭辞を外さず、skill 名の全体でだけ照合する。
+func TestFindAssociatedSkill_PrefixesFromPolicyOnly(t *testing.T) {
+	skills := []string{"team-obsidian"}
+	if got := findAssociatedSkill("feedback-obsidian-vault", "", skills, nil); got != "" {
+		t.Errorf("without prefixes got %q; want no match", got)
+	}
+	if got := findAssociatedSkill("feedback-obsidian-vault", "", skills, []string{"team"}); got != "team-obsidian" {
+		t.Errorf("with prefixes got %q; want team-obsidian", got)
+	}
+}
+
+func TestExtractSkillKey(t *testing.T) {
+	tests := []struct {
+		name     string
+		prefixes []string
+		want     string
+	}{
+		{"team-obsidian", []string{"team"}, "obsidian"},
+		{"team-obsidian", nil, "team-obsidian"},
+		{"other-obsidian", []string{"team"}, "other-obsidian"},
+		{"team-a-b", []string{"team"}, "a-b"},
+		{"dream", []string{"dream"}, "dream"},
+	}
+	for _, tc := range tests {
+		if got := extractSkillKey(tc.name, tc.prefixes); got != tc.want {
+			t.Errorf("extractSkillKey(%q, %v) = %q; want %q", tc.name, tc.prefixes, got, tc.want)
+		}
 	}
 }
 

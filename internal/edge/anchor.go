@@ -17,7 +17,9 @@ import (
 // after に持つ辺 (自分の PR を自分で待つ形。書くと待ちの輪になる) が無く、人がその組を消して「導かない」と
 // 記録していない (#576) ときだけ。書いたら ok が true。
 // pr の端点の cwd は、pr が出ている辺の端点から写す。手順の性質は models/prlink が持つ。
-func (s Store) Anchor(sessionID, cwd, pr string, now time.Time) (Edge, bool, error) {
+// repo はセッションの repo の鍵 (作業の記録が持つもの)。空なら cwd から求める。終了後に worktree が消えたセッションは
+// cwd から鍵を引けないので、呼び手が記録の鍵を渡す (#606)。
+func (s Store) Anchor(sessionID, cwd, repo, pr string, now time.Time) (Edge, bool, error) {
 	before := Endpoint{Ref: ref.SessionID(sessionID), CWD: cwd}
 	it, isItem := ref.ParseItem(pr)
 	switch {
@@ -48,7 +50,10 @@ func (s Store) Anchor(sessionID, cwd, pr string, now time.Time) (Edge, bool, err
 		if skip, err := declined(dir, before.Ref, pr, now); skip || err != nil {
 			return err
 		}
-		before.Repo = gitrepo.RepoKey(cwd)
+		before.Repo = repo
+		if repo == "" {
+			before.Repo = gitrepo.RepoKey(cwd)
+		}
 		anchored = Edge{
 			ID:        edgeID(before.Ref, pr),
 			Before:    before,

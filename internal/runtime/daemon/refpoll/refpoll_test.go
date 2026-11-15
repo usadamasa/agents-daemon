@@ -489,6 +489,31 @@ func TestRefresh_PRを出した記録はrepoの大文字小文字を区別しな
 	}
 }
 
+// 記録の repo の鍵 (hook が cwd を書いたときに求めたもの) を導いた辺の before に使う。終了後に worktree が消えた
+// cwd から求め直さない (#606)。
+func TestRefresh_PRを出した記録のrepoの鍵を辺に使う(t *testing.T) {
+	remote := &fakeRemote{states: map[string]string{"pr:o/r#1": "open"}, heads: map[string]string{"pr:o/r#1": "f1"}}
+	f, add := newFixture(t, remote)
+	add("pr:o/r#1", "task:H/1")
+	gone := "/nonexistent/repo/.claude/worktrees/x"
+	f.sessions.issued = map[string][]Session{"pr:o/r#1": {{ID: "E", CWD: gone, Repo: "/nonexistent/repo"}}}
+
+	f.p.Refresh(context.Background(), t0)
+	edges, err := edge.New(f.dir).Find("", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range edges {
+		if e.Before.Ref == "sid:E" {
+			if e.Before.CWD != gone || e.Before.Repo != "/nonexistent/repo" {
+				t.Errorf("before = %+v", e.Before)
+			}
+			return
+		}
+	}
+	t.Errorf("sid:E の辺が無い: %+v", edges)
+}
+
 // 初めて引いた時点でマージ済みの PR も、同じ引き直しで pr → task を消す前に導く。導いた辺は PR が済んでも残り、
 // PR のノードは図に残る (models/prlink の PRKept)。
 func TestRefresh_マージ済みのPRも掃除の前に導く(t *testing.T) {

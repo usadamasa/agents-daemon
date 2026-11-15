@@ -6,7 +6,7 @@ import (
 
 func mustAnchor(t *testing.T, s Store, sessionID, cwd, pr string) (Edge, bool) {
 	t.Helper()
-	e, ok, err := s.Anchor(sessionID, cwd, pr, testNow)
+	e, ok, err := s.Anchor(sessionID, cwd, "", pr, testNow)
 	if err != nil {
 		t.Fatalf("Anchor() error = %v", err)
 	}
@@ -134,8 +134,24 @@ func TestAnchor_不正な参照(t *testing.T) {
 		{"A", "/a", "issue:o/r#1"},
 		{"A", "/a", "pr:o/r"},
 	} {
-		if _, _, err := s.Anchor(c.sessionID, c.cwd, c.pr, testNow); err == nil {
+		if _, _, err := s.Anchor(c.sessionID, c.cwd, "", c.pr, testNow); err == nil {
 			t.Errorf("Anchor(%q, %q, %q) にエラーが無い", c.sessionID, c.cwd, c.pr)
 		}
+	}
+}
+
+// 記録の repo の鍵を渡されたら before の repo はそれにする。worktree が消えた cwd から求め直すと、鍵が worktree の
+// パスになる (#606)。
+func TestAnchor_渡したrepoの鍵をbeforeに使う(t *testing.T) {
+	s := New(t.TempDir())
+	mustAdd(t, s, Endpoint{Ref: "pr:o/r#5", CWD: "/h"}, Endpoint{Ref: "task:H/1", CWD: "/h"}, "", testNow)
+
+	gone := "/nonexistent/repo/.claude/worktrees/x"
+	e, ok, err := s.Anchor("A", gone, "/nonexistent/repo", "pr:o/r#5", testNow)
+	if err != nil || !ok {
+		t.Fatalf("Anchor() = %v, %v", ok, err)
+	}
+	if e.Before.CWD != gone || e.Before.Repo != "/nonexistent/repo" {
+		t.Errorf("before = %+v", e.Before)
 	}
 }

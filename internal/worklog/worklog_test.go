@@ -167,6 +167,80 @@ func TestIngest_ghprcreateが出したPRを記録に残す(t *testing.T) {
 	}
 }
 
+// cwd の repo の鍵を記録に残す (#606)。求めるのは記録を作ったときと cwd が変わったときだけで、同じ cwd の hook では
+// 求め直さない。worktree が消えた後の SessionEnd が、worktree のパスになった鍵で上書きしないため。
+func TestIngest_cwdのrepoの鍵を残しworktreeが消えても上書きしない(t *testing.T) {
+	s, repo, worktree, asked := worktreeStore(t)
+
+	mustIngest(t, s, cwdHook("UserPromptSubmit", repo, `"prompt": "p"`), now)
+	if got := mustGet(t, s, "s1"); got.Repo != repo {
+		t.Errorf("Repo = %q, want %q", got.Repo, repo)
+	}
+	mustIngest(t, s, cwdHook("UserPromptSubmit", worktree, `"prompt": "q"`), now.Add(time.Minute))
+	mustIngest(t, s, cwdHook("Stop", worktree, `"last_assistant_message": "done"`), now.Add(2*time.Minute))
+	if got := mustGet(t, s, "s1"); got.CWD != worktree || got.Repo != repo {
+		t.Errorf("worktree に入った後の記録 = cwd %q repo %q", got.CWD, got.Repo)
+	}
+
+	removeDir(t, worktree)
+	mustIngest(t, s, cwdHook("SessionEnd", worktree, `"reason": "other"`), now.Add(3*time.Minute))
+	if got := mustGet(t, s, "s1"); got.Repo != repo {
+		t.Errorf("worktree が消えた後の Repo = %q, want %q", got.Repo, repo)
+	}
+	if want := []string{repo, worktree}; !reflect.DeepEqual(*asked, want) {
+		t.Errorf("repo の鍵を求めた cwd = %v, want %v", *asked, want)
+	}
+}
+
+// worktree へ入った後の hook が来ないまま (割り込みで Stop が来ない) worktree が消えると、SessionEnd が初めて
+// 消えた cwd を渡す。無くなった cwd からは鍵を求め直さず、記録の鍵を残す (models/prlink の PRRepoKeyOnCwd の反例)。
+func TestIngest_無くなったcwdからはrepoの鍵を求め直さない(t *testing.T) {
+	s, repo, worktree, asked := worktreeStore(t)
+
+	mustIngest(t, s, cwdHook("UserPromptSubmit", repo, `"prompt": "p"`), now)
+	removeDir(t, worktree)
+	mustIngest(t, s, cwdHook("SessionEnd", worktree, `"reason": "other"`), now.Add(time.Minute))
+	if got := mustGet(t, s, "s1"); got.CWD != worktree || got.Repo != repo {
+		t.Errorf("記録 = cwd %q repo %q, want cwd %q repo %q", got.CWD, got.Repo, worktree, repo)
+	}
+	if want := []string{repo}; !reflect.DeepEqual(*asked, want) {
+		t.Errorf("repo の鍵を求めた cwd = %v, want %v", *asked, want)
+	}
+}
+
+// worktreeStore は repo とその下の worktree のディレクトリを作り、鍵を求めた cwd を数える Store を返す。鍵は
+// ディレクトリがあれば repo、無ければ cwd そのもの (gitrepo.RepoKey が git で引けないときと同じ)。
+func worktreeStore(t *testing.T) (Store, string, string, *[]string) {
+	t.Helper()
+	repo := filepath.Join(t.TempDir(), "repo")
+	worktree := filepath.Join(repo, ".claude", "worktrees", "x")
+	if err := os.MkdirAll(worktree, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	s := New(t.TempDir())
+	asked := &[]string{}
+	s.repoKey = func(cwd string) string {
+		*asked = append(*asked, cwd)
+		if _, err := os.Stat(cwd); err == nil {
+			return repo
+		}
+		return cwd
+	}
+	return s, repo, worktree, asked
+}
+
+func cwdHook(event, cwd string, fields ...string) []byte {
+	parts := append([]string{`"session_id": "s1"`, `"cwd": ` + strconv.Quote(cwd), `"hook_event_name": "` + event + `"`}, fields...)
+	return []byte("{" + strings.Join(parts, ", ") + "}")
+}
+
+func removeDir(t *testing.T, dir string) {
+	t.Helper()
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // PR を作らないコマンドの出力に出た URL (gh pr view、gh pr list、echo) は、出した事実ではないので残さない。
 // 記録の無いセッション、Bash でないツールの入力も書かない。
 func TestIngest_ghprcreateでなければPRを残さない(t *testing.T) {

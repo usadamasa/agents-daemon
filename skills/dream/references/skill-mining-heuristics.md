@@ -13,11 +13,13 @@ feedback memory の内容を反映するとき、対象 skill を絞り込む。
 | 状況 | 判定 |
 |------|-----|
 | memory 名や description に既存 skill 名 (フル or key) が含まれる | 既存 skill body 変更 (`kind: skill_body`) |
-| memory が hook / settings 系 | dream の対象外 (`agents-config-management` 等の下位 skill が担当) |
+| memory が hook / settings 系 | dream の対象外 (利用者の規約の `delegates` が指す skill が担当) |
 | 上記いずれにも該当しない | 行き先未定 (`kind: unhomed`) |
 
 `findAssociatedSkill` (`coverage.go`) は語境界つきの一致 (`containsAsToken`) で最長の skill 名を返す。
-二段目の match では、hyphen prefix (`daily-`, `caddi-`, `weekly-`) を除いた key でも一致を試みる。
+二段目の match では、skill 名から利用者の規約の `skillNamePrefixes` にある先頭の語を除いた key でも一致を試みる。
+`skillNamePrefixes` に `team` があれば、memory 名の `notes` が skill の `team-notes` に一致する。
+`skillNamePrefixes` が空 (規約が無いときも) なら、二段目も skill 名の全体で照合する。
 
 **既知の限界 (name-based の false negative)**: 名前の一致は memory 名と skill 名の綴りが違うと
 domain overlap を拾えない。たとえば memory 名 `background-job-tmp-denied` と skill 名 `sandbox-troubleshooting` は、

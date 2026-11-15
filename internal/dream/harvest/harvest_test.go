@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/usadamasa/agents-daemon/internal/dream/policy"
 )
 
 // writeJSONLTest はテスト用に JSONL fixture を書き出す｡
@@ -49,7 +51,7 @@ func TestScanSessionFile_NormalSession(t *testing.T) {
 		normalUserLine("sess1", "2026-07-19T10:01:00+09:00", "ありがとう"),
 	})
 
-	rec, err := scanSessionFile(path)
+	rec, err := scanSessionFile(path, mustMasker(t, nil))
 	if err != nil {
 		t.Fatalf("ScanSessionFile: %v", err)
 	}
@@ -96,7 +98,7 @@ func TestScanSessionFile_CorrectionSession(t *testing.T) {
 		normalUserLine("sess2", "2026-07-19T10:00:10+09:00", "そうじゃなくて Go のテストで書いて"),
 	})
 
-	rec, err := scanSessionFile(path)
+	rec, err := scanSessionFile(path, mustMasker(t, nil))
 	if err != nil {
 		t.Fatalf("ScanSessionFile: %v", err)
 	}
@@ -114,24 +116,56 @@ func TestScanSessionFile_CorrectionSession(t *testing.T) {
 	}
 }
 
+// memberIDRule は規約のファイルから渡る利用者固有の PII 規則の例。
+var memberIDRule = policy.PIIRule{Name: "member-id", Pattern: `\bMEM-\d{3}\b`, Replacement: "[MEMBER-ID]"}
+
 func TestScanSessionFile_PIIMaskedInUserPrompts(t *testing.T) {
 	dir := t.TempDir()
 	path := writeJSONLTest(t, dir, "sess3.jsonl", []string{
-		normalUserLine("sess3", "2026-07-19T10:00:00+09:00", "JP-TECH-042 の一次面接の準備"),
+		normalUserLine("sess3", "2026-07-19T10:00:00+09:00", "MEM-042 の問い合わせの準備"),
 	})
 
-	rec, err := scanSessionFile(path)
+	rec, err := scanSessionFile(path, mustMasker(t, []policy.PIIRule{memberIDRule}))
 	if err != nil {
 		t.Fatalf("ScanSessionFile: %v", err)
 	}
 	if len(rec.UserPrompts) != 1 {
 		t.Fatalf("UserPrompts len = %d", len(rec.UserPrompts))
 	}
-	if strings.Contains(rec.UserPrompts[0], "JP-TECH-042") {
-		t.Errorf("raw candidate id should be masked: %q", rec.UserPrompts[0])
+	if rec.UserPrompts[0] != "[MEMBER-ID] の問い合わせの準備" {
+		t.Errorf("UserPrompts[0] = %q", rec.UserPrompts[0])
 	}
-	if !strings.Contains(rec.UserPrompts[0], "[CANDIDATE-ID]") {
-		t.Errorf("should contain mask marker: %q", rec.UserPrompts[0])
+}
+
+// feedback の引用と、直前の skill への反応のどちらにも PII を残さない。
+func TestScanSessionFile_PIIMaskedInFeedbackAndReaction(t *testing.T) {
+	dir := t.TempDir()
+	long := "そうじゃなくて MEM-042 の件は foo@example.com へ " + strings.Repeat("a", 400)
+	path := writeJSONLTest(t, dir, "sess10.jsonl", []string{
+		normalUserLine("sess10", "2026-07-19T10:00:00+09:00", "問い合わせを書いて"),
+		assistantSkillLine("sess10", "2026-07-19T10:00:05+09:00", "some-skill"),
+		normalUserLine("sess10", "2026-07-19T10:00:10+09:00", long),
+	})
+
+	rec, err := scanSessionFile(path, mustMasker(t, []policy.PIIRule{memberIDRule}))
+	if err != nil {
+		t.Fatalf("ScanSessionFile: %v", err)
+	}
+	if len(rec.FeedbackSignals) != 1 || len(rec.FailedInvocations) != 1 {
+		t.Fatalf("feedback=%d failed=%d; want 1 and 1", len(rec.FeedbackSignals), len(rec.FailedInvocations))
+	}
+	quote := rec.FeedbackSignals[0].Quote
+	if len([]rune(quote)) > maxFeedbackQuote {
+		t.Errorf("quote rune len = %d; want <= %d", len([]rune(quote)), maxFeedbackQuote)
+	}
+	reaction := rec.FailedInvocations[0].UserReaction
+	for _, s := range []string{quote, reaction} {
+		if strings.Contains(s, "MEM-042") || strings.Contains(s, "foo@example.com") {
+			t.Errorf("raw PII left: %q", s)
+		}
+		if !strings.Contains(s, "[MEMBER-ID]") {
+			t.Errorf("mask marker missing: %q", s)
+		}
 	}
 }
 
@@ -143,7 +177,7 @@ func TestScanSessionFile_MetaPromptsIgnored(t *testing.T) {
 		normalUserLine("sess4", "2026-07-19T10:00:10+09:00", "ほんとうの質問"),
 	})
 
-	rec, err := scanSessionFile(path)
+	rec, err := scanSessionFile(path, mustMasker(t, nil))
 	if err != nil {
 		t.Fatalf("ScanSessionFile: %v", err)
 	}
@@ -162,7 +196,7 @@ func TestScanSessionFile_EmptySessionReturnsNil(t *testing.T) {
 		normalUserLine("sess5", "2026-07-19T10:00:00+09:00", "<command-name>test</command-name>"),
 	})
 
-	rec, err := scanSessionFile(path)
+	rec, err := scanSessionFile(path, mustMasker(t, nil))
 	if err != nil {
 		t.Fatalf("ScanSessionFile: %v", err)
 	}
@@ -176,7 +210,7 @@ func TestScanSessionFile_ArrayContent(t *testing.T) {
 	line := `{"type":"user","sessionId":"sess6","timestamp":"2026-07-19T10:00:00+09:00","message":{"content":[{"type":"text","text":"配列コンテンツ"},{"type":"tool_result","tool_use_id":"x"}]}}`
 	path := writeJSONLTest(t, dir, "sess6.jsonl", []string{line})
 
-	rec, err := scanSessionFile(path)
+	rec, err := scanSessionFile(path, mustMasker(t, nil))
 	if err != nil {
 		t.Fatalf("ScanSessionFile: %v", err)
 	}
@@ -194,7 +228,7 @@ func TestScanSessionFile_MultipleSkillInvocations(t *testing.T) {
 		assistantSkillLine("sess7", "2026-07-19T10:00:15+09:00", "skill-a"), // duplicate
 	})
 
-	rec, err := scanSessionFile(path)
+	rec, err := scanSessionFile(path, mustMasker(t, nil))
 	if err != nil {
 		t.Fatalf("ScanSessionFile: %v", err)
 	}
@@ -215,7 +249,7 @@ func TestScanSessionFile_UserPromptsCap(t *testing.T) {
 	}
 	path := writeJSONLTest(t, dir, "sess8.jsonl", lines)
 
-	rec, err := scanSessionFile(path)
+	rec, err := scanSessionFile(path, mustMasker(t, nil))
 	if err != nil {
 		t.Fatalf("ScanSessionFile: %v", err)
 	}
@@ -235,7 +269,7 @@ func TestScanSessionFile_UserPromptTruncated(t *testing.T) {
 		normalUserLine("sess9", "2026-07-19T10:00:00+09:00", long),
 	})
 
-	rec, err := scanSessionFile(path)
+	rec, err := scanSessionFile(path, mustMasker(t, nil))
 	if err != nil {
 		t.Fatalf("ScanSessionFile: %v", err)
 	}
@@ -310,7 +344,7 @@ func TestScanSessionFile_SkillBodyDoesNotTriggerFeedback(t *testing.T) {
 				normalUserLine("sess", "2026-07-20T10:00:00+09:00", tc.userPrompt),
 				assistantSkillLine("sess", "2026-07-20T10:00:05+09:00", "some-skill"),
 			})
-			rec, err := scanSessionFile(path)
+			rec, err := scanSessionFile(path, mustMasker(t, nil))
 			if err != nil {
 				t.Fatalf("ScanSessionFile: %v", err)
 			}

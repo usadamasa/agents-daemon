@@ -62,8 +62,7 @@ plugin が持つもの:
 - **rex**: daemon は rex の CLI (`rex ls` / `block call` / `capture` / `send`) で block を見て送信する。
   rex の外で動く Claude Code には何も届かず、`REX_SESSION` の無いセッションの SessionStart では daemon を起こさない
   (statusline は rex の外でも動く)。server の socket は `~/Library/Application Support/rex/server.sock`。
-  sandbox の中の Bash から `doctor` や setup skill で rex を叩くなら、
-  `sandbox.network.allowUnixSockets` に `~/Library/Application Support/rex` を足す。
+  sandbox の中から rex を叩くときの設定は「利用者の設定」にある。
   rex `0.0.1791570264-g7b5bf3` と Claude Code `2.1.296` で測った (2026-10-10)。
 - **statusline の配線**: 使用率と解除時刻は statusline の stdin にしか来ない。
   `statusLine.command` をこの plugin のバイナリの `statusline` に向けるか、自前の statusline から
@@ -101,11 +100,85 @@ build が失敗したら (toolchain を取得できない、など)、次のセ�
 install 後に rex の block の中で Claude Code を起動し、`/agents-daemon:setup` を実行する。
 前提がそろっているかを確かめ、statusline への配線が無ければ足す案を出す。
 
-## 設定
+## 利用者の設定
+
+この plugin が利用者から受け取る値と、利用者が Claude Code の settings へ足す設定の一覧。
+利用者固有の値 (PII の規則、skill の置き場や名前) は、ここに並べた口から渡す。
+
+### config.json
 
 `${XDG_CONFIG_HOME:-~/.config}/agents-daemon/config.json`。ファイルが無ければ全て既定値で動く。
+daemon の設定キーは `skills/agents-daemon/references/operations.md` の「設定」にある。
 daemon は毎 tick 読み直すので、編集は数秒で反映される。
-設定キーの一覧は `skills/agents-daemon/references/operations.md` にある。
+
+dream が読むキーは `dream.policy` だけ。dream の規約のファイルのパスを配列で並べる。
+
+```json
+{"dream": {"policy": ["~/notes/dream-policy.json", "~/work/dream-policy.json"]}}
+```
+
+- `~/` は home、相対パスは config.json のディレクトリを起点にする。
+- 個人の規約と仕事用の規約のように、別の場所のファイルを並べてよい。各ファイルの配列のフィールド (`pii`、`skillDirs` など) を
+  並べた順につなぐ。PII の規則もこの順に当てる。`version` は各ファイルで `1` にする。
+- キーが無ければ、dream は規約なしで動く。PII は組み込みの規則 (email、日本の携帯電話番号) だけを伏せ、
+  skill の走査は `~/.claude/skills` と project の `.claude/skills` だけ、skill 名の接頭辞は外さない。
+- キーがあるのに config.json か規約のファイルが読めない・壊れている・未知のフィールドがあると、
+  `dream harvest` と `dream mine` はエラーで止まる。PII の規則が外れたまま記録を書かないため。
+  harvest は Stop hook から裏で動くので、止まったことは `${XDG_STATE_HOME:-~/.local/state}/agents-daemon/logs/dream-harvest.log` と
+  `doctor` の「dream の規約」の節にだけ出る。
+  規約を書いた・直したら `agents-daemon dream policy` で読めるかを確かめる (合わせた結果を JSON で出す)。
+
+### dream の規約のファイル
+
+JSON。`version` だけが必須で、ほかのフィールドは省いてよい。未知のフィールドはエラーにする。
+
+```json
+{
+  "version": 1,
+  "pii": [{"name": "member-id", "pattern": "\\bMEM-\\d{5}\\b", "replacement": "[MEMBER-ID]"}],
+  "skillNamePrefixes": ["team"],
+  "skillDirs": ["~/src/example/skills"],
+  "delegates": [{"topic": "settings と hook", "skill": "example:config-management"}],
+  "skillGuides": [{"scope": "仕事用の skill", "skill": "example:skill-guide"}],
+  "memoryHomes": [{"when": "社外に出せない情報を含む", "home": "非公開リポジトリの skill"}]
+}
+```
+
+| フィールド | 読み手 | 意味 |
+| ---------- | ------ | ---- |
+| `version` | dream | `1` |
+| `pii` | `dream harvest` | 記録へ残す前に伏せる規則。`pattern` は Go の正規表現、`replacement` は展開せずそのまま置く。組み込みの規則より先に当てる |
+| `skillNamePrefixes` | `dream mine` | memory 名との照合で skill 名から外す先頭の語。`team` なら、memory 名の `notes` が skill の `team-notes` に一致する |
+| `skillDirs` | `dream mine` | `~/.claude/skills` の後、project の `.claude/skills` の前に走査する skill の置き場。相対パスは規約のファイルのディレクトリが起点 |
+| `delegates` | dream skill | dream の対象外の話題と、それを担う skill |
+| `skillGuides` | dream skill | skill を書くときに従う規範の skill (範囲ごと) |
+| `memoryHomes` | dream skill | memory の行き先の規則。references の既定の表より先に当てる |
+
+### settings の env
+
+Claude Code の settings の `env` に置く。この plugin は既定値を持たず、無いときの挙動は表のとおり。
+
+| 変数 | 読み手 | 無いとき |
+| ---- | ------ | -------- |
+| `CLAUDE_CODE_SUBAGENT_MODEL` | `spawn` と peer-sessions skill (起こすセッションの model) | `spawn` がセッションを起こさない |
+| `CLAUDE_STATUSLINE_SPEND_CAP` | `statusline` (月額上限に対する消費。USD の整数) | 消費の表示を出さない |
+| `CLAUDE_CODE_ENABLE_TODO_TOOLS` | Claude Code (Task 系ツール。依存図のタスクの元) | 依存図にタスクが載らない |
+
+ほかに読む環境変数を並べる。どれも無ければ既定の置き場を使う。
+
+- `CLAUDE_CONFIG_DIR`: Claude Code の設定ディレクトリ
+- `REX_BIN_PATH`: rex のバイナリ。無ければ PATH から探す
+- `XDG_CONFIG_HOME` / `XDG_STATE_HOME` / `XDG_CACHE_HOME`: 設定・state・バイナリの置き場
+
+### sandbox
+
+sandbox の中で使うときに settings へ足すもの。行の書き方は setup skill の references にある。
+
+| 設定 | 値 | 要る場面 | 書き方 |
+| ---- | -- | -------- | ------ |
+| `sandbox.network.allowUnixSockets` | `~/Library/Application Support/rex` | `doctor` や setup skill を sandbox の中から打つ | `skills/setup/references/rex.md` |
+| `sandbox.network.allowUnixSockets` | `/tmp/cc-socks`、`/private/tmp/cc-socks` | peer messaging (`ListAgents` / `SendMessage`) | `skills/setup/references/peer-messaging.md` |
+| `sandbox.excludedCommands` | `~/.cache/agents-daemon/bin/agents-daemon dream forget *` | `dream forget` で auto memory を消す | `skills/setup/references/dream-forget.md` |
 
 ## コマンド
 

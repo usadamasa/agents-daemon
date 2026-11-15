@@ -44,7 +44,7 @@ type skillInput struct {
 
 // scanSessionFile は 1 つのセッション JSONL を 1 レコードに集約する。
 // content ゼロ・parse エラーのみの空セッションは nil を返す。
-func scanSessionFile(path string) (*record.Record, error) {
+func scanSessionFile(path string, m masker) (*record.Record, error) {
 	f, err := os.Open(path) // #nosec G304 -- CLI: パスは WalkDir 由来
 	if err != nil {
 		return nil, err
@@ -52,6 +52,7 @@ func scanSessionFile(path string) (*record.Record, error) {
 	defer func() { _ = f.Close() }()
 
 	state := &scanState{
+		masker:     m,
 		rec:        &record.Record{},
 		skillsSeen: make(map[string]struct{}),
 	}
@@ -100,6 +101,7 @@ func scanSessionFile(path string) (*record.Record, error) {
 // scanState は scanSessionFile が 1 セッションを走査する間に持ち回る mutable 状態。
 // entry ごとの分岐を state のメソッドに切り出すことで scanSessionFile 本体の複雑度を下げる。
 type scanState struct {
+	masker           masker
 	rec              *record.Record
 	skillsSeen       map[string]struct{}
 	lastInvokedSkill string
@@ -137,11 +139,13 @@ func (s *scanState) absorbMetadata(e *jsonlEntry) {
 }
 
 // handleUser は user entry を消化する (prompt 追加・feedback 抽出・failed invocation 判定)。
+// 記録へ残す文字列はどれも PII を伏せた後のものから作る。
 func (s *scanState) handleUser(raw json.RawMessage) {
-	text := extractUserText(raw)
-	if text == "" || isMetaUserContent(text) {
+	unmasked := extractUserText(raw)
+	if unmasked == "" || isMetaUserContent(unmasked) {
 		return
 	}
+	text := s.masker.mask(unmasked)
 	s.rec.NMessages++
 	addUserPrompt(s.rec, text)
 
@@ -172,13 +176,12 @@ func (s *scanState) handleAssistant(raw json.RawMessage) {
 	}
 }
 
-// addUserPrompt は最大 maxUserPrompts 件、それぞれ maxUserPromptLen で truncate + PII 伏せ字化して追加。
+// addUserPrompt は最大 maxUserPrompts 件、それぞれ maxUserPromptLen で truncate して追加。text は伏せ字化済み。
 func addUserPrompt(rec *record.Record, text string) {
 	if len(rec.UserPrompts) >= maxUserPrompts {
 		return
 	}
-	masked := maskPII(text)
-	rec.UserPrompts = append(rec.UserPrompts, truncate(masked, maxUserPromptLen))
+	rec.UserPrompts = append(rec.UserPrompts, truncate(text, maxUserPromptLen))
 }
 
 // extractUserText は user entry.Message から本文テキストを取り出す。

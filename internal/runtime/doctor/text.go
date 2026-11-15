@@ -3,6 +3,7 @@ package doctor
 import (
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/runtime/monitor"
@@ -33,6 +34,11 @@ func write(w io.Writer, rep Report) {
 
 	_, _ = fmt.Fprintln(w, "\n-- 設定ファイル --")
 	writeConfigState(w, *rep.Config)
+
+	if rep.DreamPolicy != nil {
+		_, _ = fmt.Fprintln(w, "\n-- dream の規約 --")
+		writeDreamPolicy(w, *rep.DreamPolicy)
+	}
 
 	_, _ = fmt.Fprintln(w, "\n-- daemon --")
 	writeDaemonState(w, *rep.Daemon)
@@ -186,6 +192,18 @@ func writeConfigState(w io.Writer, rep ConfigReport) {
 			mark = " (*)"
 		}
 		_, _ = fmt.Fprintf(w, "    %-28s = %v%s\n", f.Name, f.Value, mark)
+	}
+}
+
+func writeDreamPolicy(w io.Writer, rep DreamPolicyReport) {
+	switch {
+	case rep.Error != "":
+		_, _ = fmt.Fprintf(w, "  NG: %s\n", rep.Error)
+		_, _ = fmt.Fprintln(w, "      dream harvest (Stop hook) と dream mine はこの規約を直すまでエラーで止まります")
+	case len(rep.Sources) == 0:
+		_, _ = fmt.Fprintln(w, "  config.json に dream.policy はありません。dream は規約なしで動作します")
+	default:
+		_, _ = fmt.Fprintf(w, "  OK: 規約 %d 件: %s\n", len(rep.Sources), strings.Join(rep.Sources, ", "))
 	}
 }
 

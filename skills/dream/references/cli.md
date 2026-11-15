@@ -1,7 +1,9 @@
 # agents-daemon dream (CLI の実装リファレンス)
 
 `dream` skill が使う Go の実行系。agents-daemon のバイナリの `dream` サブコマンドとして、
-`harvest` / `mine` / `stage` / `adopt` / `forget` の 5 つを提供する。
+`harvest` / `mine` / `stage` / `adopt` / `forget` / `policy` の 6 つを提供する。
+利用者の規約 (config.json の `dream.policy`) の形は
+[README の「利用者の設定」](../../../README.md#利用者の設定) にある。
 
 本ファイルはどう動くかの実装リファレンス。いつ・何のために実行するかは skill 本体が持ち、
 呼び方 (絶対パス、sandbox の除外) は [pipeline.md](pipeline.md) にある。
@@ -15,6 +17,7 @@
 | `dream stage` | 6 Stage | candidates → Markdown 承認レポート |
 | `dream adopt` | 7 Adopt | candidate → git branch 作成 + LLM 向け手順書 |
 | `dream forget` | 4 Consolidate | auto memory 削除 + MEMORY.md 索引の同期 |
+| `dream policy` | (全 phase) | 利用者の規約のファイルを連結して JSON で出す |
 
 ## state の置き場
 
@@ -60,11 +63,10 @@ Claude Code の session JSONL を走査し、PII を除去して `$DREAM/harvest
 
 ### PII 伏せ字化ルール
 
-次のパターンを機械検出して `[REDACTED]` に置換する。
-
-- `[A-Z]{2}-[A-Z]{2,6}-\d{2,6}`: 候補者 ID
-- email アドレス
-- 日本の携帯電話番号
+利用者の規約の `pii` の規則を先に、組み込みの規則 (email アドレス → `[EMAIL]`、日本の携帯電話番号 → `[PHONE]`) を
+後に当てる。user_prompts、feedback_signals の quote、failed_invocations の user_reaction は、
+どれも伏せた後の文字列から作る。
+規約が読めなければ、何も書かずにエラーで止まる。
 
 氏名は regex で捕捉できないため上位運用と組み合わせる。
 
@@ -89,7 +91,10 @@ hook は transcript を読まない。読むのは起こしたバイナリで、
 - harvest jsonl (対象 project セッション)
 - `~/.claude/projects/<canonical>/memory/*.md` (feedback memory)
 - `~/.claude/skills/<name>/SKILL.md` (global skill 本体)
+- `<dir>/<name>/SKILL.md` (利用者の規約の `skillDirs`。global skill の後に探す)
 - `<project_root>/.claude/skills/<name>/SKILL.md` (fallback、project-local skill)
+
+skill 名と memory 名の照合で外す接頭辞は、利用者の規約の `skillNamePrefixes` から受ける。
 
 ### Coverage 判定 (3 段階)
 
@@ -229,3 +234,10 @@ CLI 内部に持たせている。登録する行は `agents-daemon:setup` skill
 | `--project` | cwd | canonical name または絶対パス |
 | `--memory-dir` | `~/.claude/projects/<project>/memory` | memory ディレクトリ |
 | `--dry-run` | `false` | 削除せず対象だけ表示 |
+
+## `dream policy`
+
+config.json の `dream.policy` が指す規約のファイルを配列の順に読み、各フィールドの配列をその順で連結して
+JSON で stdout に出す。flag は無く、`--json` の有無で出力は変わらない。
+キーが無ければ `{}`。読めない・壊れている・未知のフィールドを含む規約があればエラーで止まる。
+`dream harvest` と `dream mine` も同じ読み方をするので、規約を直したらこのコマンドで確かめる。

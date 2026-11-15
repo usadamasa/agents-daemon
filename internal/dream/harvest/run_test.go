@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/usadamasa/agents-daemon/internal/dream/policy"
 )
 
 func TestRun_PrunesExpiredStateBeforeWriting(t *testing.T) {
@@ -36,6 +38,21 @@ func TestRun_PrunesExpiredStateBeforeWriting(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(stateDir, stateFileName)); err != nil {
 		t.Errorf("harvest-state.json が書かれていない: %v", err)
+	}
+}
+
+// 規約の PII 規則が組めないときは、伏せずに書き出さず止まる。
+func TestRun_RejectsBadPIIRule(t *testing.T) {
+	stateDir := t.TempDir()
+	_, err := Run(Opts{
+		ProjectsDir: t.TempDir(), StateDir: stateDir, Days: 14, Home: t.TempDir(),
+		PII: []policy.PIIRule{{Name: "x", Pattern: "(", Replacement: "[X]"}},
+	})
+	if err == nil {
+		t.Fatal("want error")
+	}
+	if _, err := os.Stat(filepath.Join(stateDir, stateFileName)); !os.IsNotExist(err) {
+		t.Errorf("state must not be written on a bad rule: %v", err)
 	}
 }
 

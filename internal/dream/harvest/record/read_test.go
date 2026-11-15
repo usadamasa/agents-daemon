@@ -35,7 +35,7 @@ func TestLoadForProject(t *testing.T) {
 	})
 	writeFixture(t, dir, "2026-07-20.jsonl", []map[string]any{
 		{"session_id": "s3", "cwd_project": "-Users-x-workspace", "cwd": "/Users/x/workspace",
-			"skills_invoked": []string{"daily-standup", "caddi-obsidian"}, "n_messages": 8},
+			"skills_invoked": []string{"daily-standup", "team-obsidian"}, "n_messages": 8},
 	})
 
 	got, err := LoadForProject(dir, "-Users-x-workspace")

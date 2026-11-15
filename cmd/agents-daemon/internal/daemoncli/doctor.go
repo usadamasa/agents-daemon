@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/dreamcli"
 	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/jsonflag"
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
@@ -21,7 +22,8 @@ func newDoctorCmd() *cobra.Command {
 		Short: "daemon が動作するための前提条件を診断する",
 		Long: "多重化ツール (rex) の到達性、Claude pane の見え方 (session_id の出どころと、上限の判定に読む transcript の末尾)、\n" +
 			"rex CLI の応答の形 (自分の block に固定のコマンドを打ち、コードが読む欄と exit code が変わっていないか)、statusline state、\n" +
-			"設定ファイルの状態、daemon の稼働状況、peer messaging の socket (CLAUDE_CODE_MESSAGING_SOCKET)、\n" +
+			"設定ファイルの状態、dream の規約 (config.json の dream.policy) が読めるか、daemon の稼働状況、\n" +
+			"peer messaging の socket (CLAUDE_CODE_MESSAGING_SOCKET)、\n" +
 			"解決済みパスを順に確認して報告する。rex の外 (REX_SESSION なし) と、rex の server へ\n" +
 			"到達できない場合のみ実際に壊れているとみなし exit 1 にする。他の項目は情報提供のみで\n" +
 			"exit 0 (state ファイルがまだ無い、daemon が起動していない等)。",
@@ -38,7 +40,10 @@ func newDoctorCmd() *cobra.Command {
 			premises, _ := client.(multiplexer.PremiseChecker)
 			// Claude Code の設定ディレクトリが決まらなければ、登録簿と transcript の点検だけが欠ける。
 			claudeDir, _ := apppath.ClaudeConfigDir()
-			in := doctor.Input{Client: client, Kind: kind, Paths: p, ClaudeConfigDir: claudeDir, Now: time.Now(), Getenv: os.Getenv, Premises: premises}
+			in := doctor.Input{
+				Client: client, Kind: kind, Paths: p, ClaudeConfigDir: claudeDir, Now: time.Now(), Getenv: os.Getenv, Premises: premises,
+				DreamPolicy: dreamcli.PolicySources,
+			}
 			if !jsonflag.Enabled(cmd) {
 				return doctor.Run(cmd.Context(), cmd.OutOrStdout(), in)
 			}

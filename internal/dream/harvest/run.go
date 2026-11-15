@@ -15,6 +15,7 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/dream"
 	"github.com/usadamasa/agents-daemon/internal/dream/harvest/record"
+	"github.com/usadamasa/agents-daemon/internal/dream/policy"
 )
 
 // Opts は harvest サブコマンドの実行パラメータ。値は呼び出し側 (cobra) で解決済み。
@@ -26,7 +27,9 @@ type Opts struct {
 	Incremental bool   // 前回 harvest 以降のみ
 	Verbose     bool   // 処理サマリを Stderr へ
 	Home        string // os.UserHomeDir 相当 (呼び出し側で解決)
-	Stderr      io.Writer
+	// PII は規約のファイルから受けた伏せ字化の規則。組み込みの規則 (email、電話番号) に足して当てる。
+	PII    []policy.PIIRule
+	Stderr io.Writer
 }
 
 // Summary は harvest 1 回分の処理の数。--verbose はこれを 1 行で stderr に出し、`--json` はそのまま stdout に出す。
@@ -48,6 +51,12 @@ func Run(opts Opts) (Summary, error) {
 	}
 	if opts.StateDir == "" {
 		return Summary{}, errors.New("StateDir が未解決 (呼び出し側が apppath で決める)")
+	}
+
+	// 規則が組めないまま走査すると伏せずに書き出すので、state に触る前に止める。
+	m, err := newMasker(opts.PII)
+	if err != nil {
+		return Summary{}, err
 	}
 
 	resolvedProjects := opts.ProjectsDir
@@ -77,7 +86,7 @@ func Run(opts Opts) (Summary, error) {
 		if !filter.accept(path, resolvedProjects) {
 			return nil
 		}
-		rec, err := scanSessionFile(path)
+		rec, err := scanSessionFile(path, m)
 		if err != nil {
 			return nil
 		}

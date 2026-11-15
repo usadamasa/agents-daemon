@@ -29,6 +29,11 @@ type Opts struct {
 	Date       string // 空なら今日
 	Verbose    bool
 
+	// ExtraSkillDirs は規約の skillDirs。SkillsDir の後、project の .claude/skills の前に走査する。
+	ExtraSkillDirs []string
+	// SkillNamePrefixes は規約の skillNamePrefixes。skill 名から外して memory 名と照合する。
+	SkillNamePrefixes []string
+
 	Home   string
 	Cwd    string
 	Stderr io.Writer
@@ -85,8 +90,8 @@ func Run(opts Opts) (Summary, error) {
 	invokedSkills := extractInvokedSkills(sessions)
 
 	// 3. 各 skill の実体を読み込む。
-	// 探索順: global → project-local (daily-standup など project 固有 skill を拾う)
-	skillDirs := []string{resolvedSkills}
+	// 探索順: global → 規約の置き場 → project-local (project 固有 skill を拾う)
+	skillDirs := append([]string{resolvedSkills}, opts.ExtraSkillDirs...)
 	if projRoot := projectRootFromSessions(sessions); projRoot != "" {
 		skillDirs = append(skillDirs, filepath.Join(projRoot, ".claude", "skills"))
 	}
@@ -107,7 +112,7 @@ func Run(opts Opts) (Summary, error) {
 	}
 
 	// 5. candidate 生成
-	cands := generateCandidates(mems, skills, project, sessions)
+	cands := generateCandidates(mems, skills, project, sessions, opts.SkillNamePrefixes)
 
 	// 6. jsonl 出力
 	outFile := candidates.Path(opts.StateDir, project, resolvedDate)

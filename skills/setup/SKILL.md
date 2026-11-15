@@ -2,7 +2,7 @@
 name: setup
 description: >-
   agents-daemon plugin を install した直後、または動いていない疑いがあるときに、前提 (rex、go と jq、
-  statusline の配線、バイナリ、peer messaging、`dream forget` の sandbox 除外、タスクのツール) がそろっているかを確かめて
+  statusline の配線、バイナリ、peer messaging、`dream forget` の sandbox 除外、dream の規約、タスクのツール) がそろっているかを確かめて
   足りない配線を足す。
   `doctor` で `session_id=(なし)`、state file が無い、sandbox 内から rex の socket に繋がらない、
   `ListAgents` が無い、`dream forget` が `operation not permitted` で消せない、といった症状でも引く。
@@ -135,6 +135,7 @@ cat "$bin/agents-daemon.version"
 ```
 
 pane 一覧、セッションごとの rate-limits の鮮度、config.json の実効値、daemon の稼働、peer messaging の socket を出す。
+dream の規約の行は「8. dream の規約」で読む。
 `daemon は起動していません` なら、次のセッションの SessionStart で起きる。
 すぐ起こしたいときも、Claude の Bash からは起こさない。Bash が sandbox の中で動く環境では、
 そこから起こした daemon が sandbox の制限を引き継ぐ。代わりに、利用者に次の 1 行をプロンプトへ打ってもらう。
@@ -175,7 +176,27 @@ rg -n 'agents-daemon dream forget' ~/.claude/settings.json
 行が無ければ NG。足す行、照合の規則、効いているかの確かめ方は [dream-forget.md](references/dream-forget.md) を
 `Read` で開いて従う。
 
-## 8. タスクのツール
+## 8. dream の規約
+
+`agents-daemon:dream` が利用者から受け取る規約 (config.json の `dream.policy`) が読めるかを見る。
+`doctor` の出力の「dream の規約」の行で判定する。
+
+| 結果 | 判定 |
+| ---- | ---- |
+| `OK: 規約 n 件: …` | OK |
+| `config.json に dream.policy はありません` | 情報。dream は利用者固有の PII の規則なしで動く |
+| `NG: …` | NG。dream harvest (Stop hook) と dream mine が止まっている。メッセージが示す規約のファイルを直す |
+
+rex の外 (`doctor` がこの行まで進まない) では、次のコマンドで判定する。
+
+```sh
+"${XDG_CACHE_HOME:-$HOME/.cache}/agents-daemon/bin/agents-daemon" dream policy
+```
+
+`sources` に規約のパスが並べば OK、`{}` なら情報、エラーで止まれば NG (判定は上の表と同じ)。
+規約の形は [README.md](../../README.md) の「利用者の設定」にある。
+
+## 9. タスクのツール
 
 依存図 (アプリ `agent-tasks`) は TaskCreate / TaskUpdate / TaskList / TodoWrite の呼び出しを PostToolUse hook で記録して描く。
 このセッションのツールにそれらがあるかを見る。
@@ -202,6 +223,7 @@ agents-daemon setup
 - doctor: <要点>
 - peer messaging: <OK | 無効 (切り分けの結果) | 判定できず (理由)>
 - dream forget の sandbox 除外: <OK | NG (足す行) | 情報 (dream を使わない)>
+- dream の規約: <OK (n 件) | 情報 (dream.policy なし) | NG (読めない理由)>
 - タスクのツール: <OK | 情報 (CLAUDE_CODE_ENABLE_TODO_TOOLS が無い)>
 - 直したこと: <書き換えたファイルと中身の要約 | なし>
 - 残っていること: <利用者の作業 | なし>

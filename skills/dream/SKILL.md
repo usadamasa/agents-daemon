@@ -53,8 +53,24 @@ consolidation は fine-tune ではなく記憶の再編。モデルや skill の
 呼び方、実体パスの解決) は [pipeline](references/pipeline.md)。背景は
 [why-consolidate](references/why-consolidate.md)。
 
-設定 (`settings.json`)・hook・エージェントは dream の対象外。`agents-config-management` と
-`permission-optimizer` が担う。
+設定 (`settings.json`)・hook・エージェントは dream の対象外。これらを担う skill は利用者の規約の `delegates` にある。
+
+## 利用者の規約
+
+dream を始める前に、利用者の規約を読む。行き先を判断するときは、この規約を references の既定より先に当てる。
+
+```sh
+~/.cache/agents-daemon/bin/agents-daemon dream policy
+```
+
+| フィールド | 使う場面 | 中身 |
+|---|---|---|
+| `delegates` | dream の対象外の話題を見つけたとき | 話題を渡す skill |
+| `skillGuides` | skill を作る・直すとき | 従う規範の skill |
+| `memoryHomes` | memory の行き先を決めるとき | [layer-auto-memory](references/layer-auto-memory.md) の表より先に当てる規則 |
+
+規約が空 (`{}`) なら references の既定だけで進める。`dream policy` がエラーで止まったら dream を進めず、
+メッセージをユーザーへ伝える。規約の形は plugin root の `README.md` の「利用者の設定」にある。
 
 ## 進め方
 

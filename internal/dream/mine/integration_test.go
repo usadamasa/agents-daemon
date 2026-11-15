@@ -147,7 +147,7 @@ Slack 投稿は明確なアクション/タスクのみ｡つぶやきは除外�
 		t.Fatalf("expected 5 memories, got %d", len(mems))
 	}
 
-	cands := generateCandidates(mems, skills, "-fixture-workspace", sessions)
+	cands := generateCandidates(mems, skills, "-fixture-workspace", sessions, []string{"daily"})
 
 	// 5. 検証: prototype と同じ 5 候補、全て daily-standup 関連付け
 	if len(cands) != 5 {

@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026.1115.1](https://github.com/usadamasa/agents-daemon/compare/2026.1115.0...2026.1115.1) - 2026-11-15
+
+### Bug Fixes
+- PATH に rex が無いときは既定の置き場から rex を引く by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/620
+
 ## [2026.1115.0](https://github.com/usadamasa/agents-daemon/compare/2026.1114.4...2026.1115.0) - 2026-11-15
 
 ### Features

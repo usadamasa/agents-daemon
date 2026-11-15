@@ -1,5 +1,18 @@
 # Changelog
 
+## [2026.1115.0](https://github.com/usadamasa/agents-daemon/compare/2026.1114.4...2026.1115.0) - 2026-11-15
+
+### Features
+- gui test の job を gui 用の devShell と Go の cache で縮める by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/614
+### Bug Fixes
+- 作業の記録に repo の鍵を残し、worktree の消えたセッションからも本来の repo で辺を導く by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/616
+- 終了セッションの作業のメモと依存図のノードを作業の記録の repo の鍵で置く by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/617
+### Refactoring
+- deps の出力から読み手の無い graph.rows と rows_with_completed を外す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/608
+### Documentation
+- rex preview.30 で確かめ直した rex-premise marker を上げる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/611
+- rex の changelog の版の決め方を Server & CLI の投稿に合わせる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/613
+
 ## [2026.1114.4](https://github.com/usadamasa/agents-daemon/compare/2026.1114.3...2026.1114.4) - 2026-11-14
 
 ### Features

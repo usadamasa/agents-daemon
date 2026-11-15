@@ -12,7 +12,7 @@ import (
 var selfBinary = os.Executable
 
 // sessionNewResult は `session new --json` の応答。initial_windows[0].block_ids[0] が新しい session の pane。
-// rex-premise: preview.25 cli session new --json は session_id と initial_windows (window_id、block_ids) を返す
+// rex-premise: preview.30 cli session new --json は session_id と initial_windows (window_id、block_ids) を返す
 type sessionNewResult struct {
 	SessionID      string `json:"session_id"`
 	InitialWindows []struct {
@@ -34,7 +34,7 @@ type sessionNewResult struct {
 //
 // REX_SESSION は ID なので、起きた claude が session を rename しても当たる。peer-sessions skill の references/rex.md が
 // 同じ本文を single quote で囲んで載せるので、本文に single quote を入れない。
-// rex-premise: preview.28 cli block ls -s は session の全 window の block を返す。中のコマンドの終了で session は閉じない
+// rex-premise: preview.30 cli block ls -s は session の全 window の block を返す。中のコマンドの終了で session は閉じない
 // rex-premise: preview.28 program_status サイドバーは端末の題の持ち主 (block call title の owner) が前景のプロセスのときだけ題を出す
 // macOS の /bin/sh (bash 3.2) は INT の trap の後も read を続けるので、閉じる処理 (c) を trap から直に呼んで抜ける。
 const closeOnExitScript = `set -m; rex="$1"; ad="$2"; shift 2; "$ad" spawned-session mark "$REX_SESSION" >/dev/null; "$@"; s=$?; ` +
@@ -49,7 +49,7 @@ const closeOnExitScript = `set -m; rex="$1"; ad="$2"; shift 2; "$ad" spawned-ses
 // 起きたコマンドの REX_SESSION と REX_BLOCK は新しい session と block になる (実測)。argv は `--` の後にそのまま渡し、rex は login shell の環境で 1 引数ずつ子へ渡す
 // (空白、`$` を変えない。実測)。LABEL は位置引数で、rex は `-` で始まる値を flag と読んで拒むので、先頭の `-` を外す。
 // 外して空なら label を付けない (rex の既定の名前になる)。
-// rex-premise: preview.26 cli session new は LABEL --cwd --window --json を取り、-- の後の argv をそのまま渡す
+// rex-premise: preview.30 cli session new は LABEL --cwd --window --json を取り、-- の後の argv をそのまま渡す
 func (c *execClient) NewSession(ctx context.Context, label, cwd string, argv []string) (string, error) {
 	label = strings.TrimLeft(label, "-")
 	args := []string{"session", "new"}

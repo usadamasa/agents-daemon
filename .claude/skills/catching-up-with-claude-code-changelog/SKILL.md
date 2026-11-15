@@ -174,6 +174,7 @@ rg -n -o 'cc-premise: [0-9.]+ [a-z0-9-]+.*' --glob '!tmp/**' . | sort -t' ' -k3,
 | `tools` | タスクの記録 (`ingest-task`) が拾う Task 系ツールと TodoWrite の有無と入出力 | TaskCreate, TaskUpdate, TaskList, TodoWrite, CLAUDE_CODE_ENABLE_TODO_TOOLS, tasks |
 | `worktrees` | 放置 worktree の回収 (`prune-worktrees`): 本体の sweep の範囲と lock reason の書式 | worktree, worktrees, cleanupPeriodDays, EnterWorktree, --worktree, worktree lock, sweep |
 | `bash-env` | Bash ツールの環境から自分の session_id を引く (`edge add` の task 欄、`scripts/get-session-id.sh`) | CLAUDE_CODE_SESSION_ID, Bash tool, environment variable, env |
+| `desktop` | Desktop で始めたセッションを rex で続ける (`desktop list` / `resume`): 登録簿の `entrypoint`、transcript の置き場と `cwd`、`--resume` と `/desktop` での行き来 | Desktop, claude-desktop, entrypoint, --resume, /desktop, --desktop, teleport, sessions |
 | `input-line` | `tell` が送る前に読む入力欄 (`❯` の行、空なら NBSP、複数行は bracketed paste、次の prompt の提案は薄字で打つと消える) | prompt input, input box, placeholder, paste, bracketed paste, multiline, suggestion, suggested prompt, ghost text, dim |
 
 ## やらないこと

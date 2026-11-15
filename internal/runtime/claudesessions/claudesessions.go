@@ -5,14 +5,22 @@
 //
 // cc-premise: 2.1.316 peer-messaging sessions/<pid>.json の sessionId と name が ListAgents の名前の対 (nameSource は derived か user)
 // cc-premise: 2.1.319 peer-messaging sessions/<pid>.json の pid は claude の process の pid (rex の foreground の pid と一致するのを実測)
+// cc-premise: 2.1.325 desktop sessions/<pid>.json の entrypoint は端末起動が cli、Desktop 由来が claude-desktop (Desktop が抱える 2.1.317 で実測)
+//
+// Desktop 由来のセッションを rex で引き継ぐ (#130) のにも使う。`claude agents --json` は動いている interactive の
+// セッションを出さない (2.1.325 で実測) ので、Desktop 由来の列挙はこの登録簿に頼る。
 package claudesessions
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"syscall"
+	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 )
@@ -20,6 +28,8 @@ import (
 // Store は登録簿の置き場所を持つ。ゼロ値は Dir が空で、読み込みは空になる。
 type Store struct {
 	Dir string
+	// Alive は process の生存の確かめ。nil なら processAlive。テストが差し替える。
+	Alive func(pid int) bool
 }
 
 // New は Claude Code の設定ディレクトリ (apppath.ClaudeConfigDir) から置き場所を導出する。
@@ -27,11 +37,103 @@ func New(configDir string) Store {
 	return Store{Dir: filepath.Join(configDir, "sessions")}
 }
 
+// EntrypointDesktop は Claude Code Desktop が起こしたセッションの entrypoint。端末から起動したものは cli。
+const EntrypointDesktop = "claude-desktop"
+
 // entry は登録簿の 1 ファイルのうち読む欄。
 type entry struct {
-	PID       int    `json:"pid"`
-	SessionID string `json:"sessionId"`
-	Name      string `json:"name"`
+	PID        int    `json:"pid"`
+	SessionID  string `json:"sessionId"`
+	Name       string `json:"name"`
+	Cwd        string `json:"cwd"`
+	Entrypoint string `json:"entrypoint"`
+	Status     string `json:"status"`
+}
+
+// Session は登録簿に載ったセッション。欄は entry と同じ並び (session が変換で写す)。Desktop 由来の一覧 (Desktop) と引き継ぎの確かめ (Find) が返す。
+type Session struct {
+	PID        int    `json:"pid"`
+	SessionID  string `json:"session_id"`
+	Name       string `json:"name,omitempty"`
+	Cwd        string `json:"cwd,omitempty"`
+	Entrypoint string `json:"entrypoint,omitempty"`
+	// Status は Claude Code が書く idle / busy。
+	Status string `json:"status,omitempty"`
+}
+
+func (x entry) session() Session {
+	return Session(x)
+}
+
+// Desktop は Desktop 由来 (entrypoint=claude-desktop) で、process が生きているセッションを session ID の順に返す。
+// 終わったセッションのファイルが残っていても、process が居なければ載せない。
+func (s Store) Desktop() ([]Session, error) {
+	entries, err := s.readAll()
+	if err != nil {
+		return nil, err
+	}
+	var out []Session
+	for _, x := range entries {
+		if x.Entrypoint != EntrypointDesktop || x.SessionID == "" || !s.alive(x.PID) {
+			continue
+		}
+		out = append(out, x.session())
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].SessionID < out[j].SessionID })
+	return out, nil
+}
+
+// Find は sessionID のセッションのうち process が生きているものを返す。無ければ ok=false。
+// 同じ session ID のファイルが複数残っていても (pid を変えて resume した)、生きているものだけを見る。
+func (s Store) Find(sessionID string) (Session, bool, error) {
+	entries, err := s.readAll()
+	if err != nil {
+		return Session{}, false, err
+	}
+	for _, x := range entries {
+		if x.SessionID == sessionID && s.alive(x.PID) {
+			return x.session(), true, nil
+		}
+	}
+	return Session{}, false, nil
+}
+
+// WaitClosed は sessionID のセッションの process が居なくなるまで interval ごとに登録簿を引いて待つ。
+// 利用者が Desktop でセッションを閉じるのを待ってから rex で resume するのに使う。ctx が切れたら ctx の error。
+func (s Store) WaitClosed(ctx context.Context, sessionID string, interval time.Duration) error {
+	for {
+		_, open, err := s.Find(sessionID)
+		if err != nil {
+			return err
+		}
+		if !open {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(interval):
+		}
+	}
+}
+
+// alive は pid の process が居るか。Alive が nil なら processAlive。
+func (s Store) alive(pid int) bool {
+	if s.Alive != nil {
+		return s.Alive(pid)
+	}
+	return processAlive(pid)
+}
+
+// processAlive は pid の process が居るかを signal 0 で確かめる。権限が無い (EPERM) のは居るとみなす。
+// pid が使い回されていれば別の process を居ると読むが、登録簿の session ID と組で引くので害は小さい。
+// sandbox の中では EPERM になり全部を居ると読むので、daemon のバイナリは sandbox の外で打つ。
+func processAlive(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	err := syscall.Kill(pid, 0)
+	return err == nil || errors.Is(err, syscall.EPERM)
 }
 
 // Names は session ID → ListAgents の名前を返す。名前か session ID の無いものは載せない。

@@ -90,6 +90,7 @@ func TestRootCmd_jsonFlag(t *testing.T) {
 		"agents-daemon dream forget":          true,
 		"agents-daemon dream harvest":         true,
 		"agents-daemon dream mine":            true,
+		"agents-daemon dream policy":          true,
 		"agents-daemon dream stage":           true,
 		"agents-daemon edge add":              true,
 		"agents-daemon edge list":             true,

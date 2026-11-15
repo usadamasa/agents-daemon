@@ -13,7 +13,7 @@ func TestExtractInvokedSkills(t *testing.T) {
 	}
 	skills := extractInvokedSkills(recs)
 	// deduped + sorted
-	want := []string{"team-obsidian", "daily-standup", "weekly-report"}
+	want := []string{"daily-standup", "team-obsidian", "weekly-report"}
 	if len(skills) != len(want) {
 		t.Fatalf("skills = %v; want %v", skills, want)
 	}

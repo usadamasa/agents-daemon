@@ -68,21 +68,20 @@ server が落ちていれば今までどおり tick の失敗に数える。切�
 
 ## rex のバイナリの引き直し
 
-<!-- rex-premise: preview.30 cli block の PATH は Versions/Current/… と Versions/<build>/… の順。Current は更新で中身が入れ替わり、前の build は次の更新で消える -->
+<!-- rex-premise: preview.30 cli block の PATH は Versions/Current/… の 1 項だけ。Current は更新で中身が入れ替わり、前の build は次の更新で消える -->
 
 rex のバイナリは最初の呼び出しで PATH から絶対パスに引いて覚える (`REX_BIN_PATH` があればそれで固定)。
-rex は block の PATH に `…/RexServer/Versions/Current/…` を先に、`…/RexServer/Versions/<build>/…` をその後ろに
-載せる。自動更新は `Current/` の中身を入れ替え、前の数字名の build を次の更新で消す。最初の解決は先頭の `Current`
-の項に当たり、その項は更新をまたいで同じパスのまま残るので、覚えたパスは普段そのまま使える。
-呼び出しで rex のバイナリが見つからなければ、PATH の `Versions/` から一番新しい数字名の build の rex を引き直し、
-同じ呼び出しを 1 回やり直す。数字名の項だけを持つ PATH でその build が消えたときに起きる。このやり直しは tick の
-失敗に数えない。
-`REX_BIN_PATH` で固定しているときは引き直さない (`rexcli/locate.go`)。
+rex は block の PATH に `…/RexServer/Versions/Current/…` の 1 項だけを載せる。自動更新は `Current/` の中身を
+入れ替え、前の数字名の build を次の更新で消す。`Current` の項は更新をまたいで同じパスのまま残るので、
+覚えたパスは普段そのまま使える。
 
 <!-- rex-premise: preview.30 cli 既定の置き場は ~/Library/Application Support/com.superlogical.rex/RexServer/Versions/{Current,<build>}/Rex Server.app/Contents/MacOS/rex。ログインシェルの PATH には載らない -->
 
-PATH に rex の項が無いとき (Finder や Dock から起きた依存図のアプリと、その子の `park hand` や `spawn`) は、
-既定の置き場 `~/Library/Application Support/com.superlogical.rex/RexServer/Versions/` の `Current`、
-無ければ一番新しい数字名の build の rex を引く。rex は block の中のシェルにしか PATH を足さず、ログインシェルの
-PATH にも載らないので、アプリの側で PATH を取り込んでも引けない。
+PATH で引けないときは、既定の置き場 `~/Library/Application Support/com.superlogical.rex/RexServer/Versions/` の
+`Current`、無ければ一番新しい数字名の build の rex を引く。PATH に rex の項が無いプロセス (Finder や Dock から
+起きた依存図のアプリと、その子の `park hand` や `spawn`) と、覚えていた build が更新で消えたときがこれに当たる。
+rex は block の中のシェルにしか PATH を足さず、ログインシェルの PATH にも載らないので、アプリの側で PATH を
+取り込んでも引けない。標準外の置き場は探さないので、そこに置くなら `REX_BIN_PATH` で固定する。
+呼び出しで rex のバイナリが見つからなければ、この順で引き直して同じ呼び出しを 1 回やり直す。このやり直しは
+tick の失敗に数えない。`REX_BIN_PATH` で固定しているときは引き直さない (`rexcli/locate.go`)。
 doctor の「rex CLI の前提」の節は、解決した rex のパスを版と並べて出す。

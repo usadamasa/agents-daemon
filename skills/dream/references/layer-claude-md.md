@@ -11,7 +11,7 @@
   昇格させるときだけ。
 - プロジェクト CLAUDE.md は、グローバルと重複していたら自分側を削る。
 - skill 本体と重複していたら、CLAUDE.md 側を「skill 名で参照」に置き換える
-  (例: 「PR 作成は `commit-push-pr` スキルに従う」)。
+  (例: 「PR 作成は `commit-commands:commit-push-pr` スキルに従う」)。
 
 ## 昇格の条件
 
@@ -32,8 +32,8 @@ auto memory から昇格させるのは **1〜2 行に圧縮できるものだ�
 
 ## 編集先
 
-`~/.claude/CLAUDE.md` は symlink で、実体は agents-config の `dotclaude/CLAUDE-global.md`。
-生成物ではなく、このファイル自体が原本なので直接編集する。
+`~/.claude/CLAUDE.md` が symlink なら、実体 (`readlink -f ~/.claude/CLAUDE.md`) を編集する。
+実体が何かから生成されたファイルなら、生成元を直す。
 
 ## memory への参照を作らない
 

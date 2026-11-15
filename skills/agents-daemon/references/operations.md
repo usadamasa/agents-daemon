@@ -218,6 +218,7 @@ error で止まる。flag の組み合わせで JSON にできないもの (`dae
 | `dream harvest` / `mine` / `stage` | `--verbose` と同じ処理のサマリ |
 | `dream adopt` | 候補と作業ブランチ、branch を作ったか |
 | `dream forget` | 消した (dry-run なら消すはずだった) パス |
+| `dream policy` | 合わせた dream の規約 (`--json` が無くても JSON) |
 | `version` | 建てた元の plugin の version |
 
 ```sh
@@ -263,6 +264,9 @@ issue にする。
 | `submitDelayMs` | `400` | テキストと Enter の間の待ち |
 | `idleShutdownMinutes` | `30` | Claude pane が 0 のまま続いたら自己終了する |
 | `deferToNativeAutoContinue` | `true` | ネイティブの auto-continue が再開を予約している間は手を出さない |
+
+dream が読む `dream.policy` は daemon の設定と扱いが違い、読めなければ dream のコマンドがエラーで止まる。
+形と挙動は plugin root の `README.md` の「利用者の設定」にある。
 
 ### 送る文面
 

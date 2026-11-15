@@ -18,6 +18,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/dream/forget"
 	"github.com/usadamasa/agents-daemon/internal/dream/harvest"
 	"github.com/usadamasa/agents-daemon/internal/dream/mine"
+	"github.com/usadamasa/agents-daemon/internal/dream/policy"
 	"github.com/usadamasa/agents-daemon/internal/dream/stage"
 )
 
@@ -47,15 +48,46 @@ func newDreamCmd() *cobra.Command {
 	cmd.AddCommand(newDreamStageCmd())
 	cmd.AddCommand(newDreamAdoptCmd())
 	cmd.AddCommand(newDreamForgetCmd())
+	cmd.AddCommand(newDreamPolicyCmd())
 	return cmd
+}
+
+// newDreamPolicyCmd は config.json の dream.policy が指す規約を合わせた結果を出す。dream skill が
+// 行き先の規則を読む口と、利用者が規約のファイルを確かめる口を兼ねる。
+func newDreamPolicyCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "policy",
+		Short: "config.json の dream.policy が指す規約を合わせて JSON で出す",
+		Long: "config.json の dream.policy が指す規約のファイルを順に読んで合わせ、JSON で stdout に出す。\n" +
+			"キーが無ければ空の規約 ({}) を出す。読めない・壊れている規約があればエラーで止まる。\n" +
+			"規約のファイルの形は README の「利用者の設定」にある。",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			env, err := resolveDreamEnv()
+			if err != nil {
+				return err
+			}
+			pol, err := env.policy()
+			if err != nil {
+				return err
+			}
+			return jsonflag.Write(cmd.OutOrStdout(), pol)
+		},
+	}
 }
 
 // dreamEnv は dream の各 phase が共通に要る環境由来の値。
 type dreamEnv struct {
-	home     string
-	cwd      string
-	stateDir string
-	logDir   string
+	home       string
+	cwd        string
+	stateDir   string
+	logDir     string
+	configFile string
+}
+
+// policy は config.json の dream.policy が指す規約を読む。キーが無ければ空の規約。
+func (e dreamEnv) policy() (policy.Policy, error) {
+	return policy.FromConfig(e.configFile, e.home)
 }
 
 // resolveDreamEnv は home・cwd・state とログのディレクトリを環境から 1 回で解決する。
@@ -70,7 +102,10 @@ func resolveDreamEnv() (dreamEnv, error) {
 		return dreamEnv{}, err
 	}
 	cwd, _ := os.Getwd()
-	return dreamEnv{home: home, cwd: cwd, stateDir: dream.Dir(p.StateDir()), logDir: filepath.Dir(p.LogFile())}, nil
+	return dreamEnv{
+		home: home, cwd: cwd, stateDir: dream.Dir(p.StateDir()), logDir: filepath.Dir(p.LogFile()),
+		configFile: p.ConfigFile(),
+	}, nil
 }
 
 func newDreamHarvestCmd() *cobra.Command {
@@ -118,6 +153,11 @@ func runDreamHarvest(opts harvest.Opts, detach bool) (harvest.Summary, error) {
 	if detach {
 		return harvest.Summary{}, harvest.Detach(os.Args[1:], env.logDir)
 	}
+	pol, err := env.policy()
+	if err != nil {
+		return harvest.Summary{}, err
+	}
+	opts.PII = pol.PII
 	opts.Home = env.home
 	opts.StateDir = env.stateDir
 	opts.Stderr = os.Stderr
@@ -154,6 +194,12 @@ func newDreamMineCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			pol, err := env.policy()
+			if err != nil {
+				return err
+			}
+			opts.ExtraSkillDirs = pol.SkillDirs
+			opts.SkillNamePrefixes = pol.SkillNamePrefixes
 			opts.Home = env.home
 			opts.Cwd = env.cwd
 			opts.StateDir = env.stateDir

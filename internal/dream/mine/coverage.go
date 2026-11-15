@@ -1,6 +1,7 @@
 package mine
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/usadamasa/agents-daemon/internal/dream/mine/candidates"
@@ -140,7 +141,7 @@ func shingleMatch(phrase string, skillShingles map[string]struct{}, threshold fl
 
 // findAssociatedSkill は memory 名 / description から関連 skill 名を推定する。
 // skill 名が独立した語として現れていればマッチとする。見つからなければ ""。
-func findAssociatedSkill(memName, memDescription string, candidateSkills []string) string {
+func findAssociatedSkill(memName, memDescription string, candidateSkills, prefixes []string) string {
 	// より長い skill 名から順に match させる (specific 優先)
 	// e.g., "daily-standup" は "standup" より先に評価する
 	longest := ""
@@ -157,10 +158,10 @@ func findAssociatedSkill(memName, memDescription string, candidateSkills []strin
 	if longest != "" {
 		return longest
 	}
-	// より短い substring key (skill 名の一部) でもう一度試す (e.g., "standup" → "daily-standup")
+	// 接頭辞を外した key でもう一度試す (e.g., "standup" → "daily-standup")
 	// これは memory 命名規則が feedback-<topic>-<detail> であることを前提とする。
 	for _, s := range candidateSkills {
-		key := extractSkillKey(s)
+		key := extractSkillKey(s, prefixes)
 		if key == "" {
 			continue
 		}
@@ -206,19 +207,16 @@ func isASCIIWordByte(s string, i int) bool {
 	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
 }
 
-// extractSkillKey は "daily-standup" → "standup" のような検索キーを返す。
-// prefix 部分 (daily- / caddi- 等) が memory 名から省略される慣習に対応する。
-func extractSkillKey(name string) string {
-	// ハイフンで分割し、最後の 2 tokens を key とする (例: "daily-standup" → "standup")
-	// 単一 token skill (例: "dream") はそのまま
-	parts := strings.Split(name, "-")
-	if len(parts) <= 1 {
+// extractSkillKey は skill 名の先頭の語が prefixes のどれかなら、それを外した検索キーを返す
+// (prefixes に "daily" があれば "daily-standup" → "standup")。memory 名で接頭辞を省く慣習に対応する。
+// 接頭辞は利用者の skill の命名に依るので規約 (policy) から受ける。単一 token の skill 名はそのまま。
+func extractSkillKey(name string, prefixes []string) string {
+	head, rest, ok := strings.Cut(name, "-")
+	if !ok {
 		return name
 	}
-	// prefix が "caddi" "daily" "weekly" などなら末尾 tokens を返す
-	knownPrefixes := map[string]bool{"caddi": true, "daily": true, "weekly": true}
-	if knownPrefixes[parts[0]] {
-		return strings.Join(parts[1:], "-")
+	if slices.Contains(prefixes, head) {
+		return rest
 	}
 	return name
 }

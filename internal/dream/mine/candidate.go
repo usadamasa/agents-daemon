@@ -12,7 +12,8 @@ import (
 
 // generateCandidates は memory / skill / harvest を突き合わせて candidates を生成する。
 // 出力は candidates.Candidate (mine/stage/adopt で共有される canonical schema)。
-func generateCandidates(mems []corpus.Memory, skills map[string]corpus.Skill, project string, sessions []record.Record) []candidates.Candidate {
+// prefixes は skill 名から外して memory 名と照合する接頭辞 (規約の skillNamePrefixes)。
+func generateCandidates(mems []corpus.Memory, skills map[string]corpus.Skill, project string, sessions []record.Record, prefixes []string) []candidates.Candidate {
 	// skill 名リスト (findAssociatedSkill 用)
 	skillNames := make([]string, 0, len(skills))
 	for n := range skills {
@@ -31,7 +32,7 @@ func generateCandidates(mems []corpus.Memory, skills map[string]corpus.Skill, pr
 	var out []candidates.Candidate
 	perSkillIdx := make(map[string]int)
 	for _, m := range mems {
-		skillName := findAssociatedSkill(m.Name, m.Description, skillNames)
+		skillName := findAssociatedSkill(m.Name, m.Description, skillNames, prefixes)
 		if skillName == "" {
 			// association 先が無い memory も 1 行出す。skip すると行き先を決める機会が
 			// stage レポートに現れないまま memory が残り続ける。

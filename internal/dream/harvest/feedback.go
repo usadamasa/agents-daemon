@@ -34,6 +34,7 @@ var feedbackPatterns = []feedbackPattern{
 
 // detectFeedback は text が feedback signal かを判定し、該当すれば feedbackSignal を返す。
 // 複数パターン該当時は最初にマッチした kind を採用する (correction を優先させる並び順)。
+// text は呼び手が PII を伏せたものを渡す。
 func detectFeedback(text string) (record.FeedbackSignal, bool) {
 	trimmed := strings.TrimSpace(text)
 	if trimmed == "" {
@@ -42,7 +43,7 @@ func detectFeedback(text string) (record.FeedbackSignal, bool) {
 	for _, fp := range feedbackPatterns {
 		if fp.pattern.MatchString(trimmed) {
 			return record.FeedbackSignal{
-				Quote: truncate(maskPII(trimmed), maxFeedbackQuote),
+				Quote: truncate(trimmed, maxFeedbackQuote),
 				Kind:  fp.kind,
 			}, true
 		}

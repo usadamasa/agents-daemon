@@ -28,7 +28,7 @@ import (
 // Store は登録簿の置き場所を持つ。ゼロ値は Dir が空で、読み込みは空になる。
 type Store struct {
 	Dir string
-	// Alive は process の生存の確かめ。nil なら ProcessAlive。テストが差し替える。
+	// Alive は process の生存の確かめ。nil なら processAlive。テストが差し替える。
 	Alive func(pid int) bool
 }
 
@@ -117,18 +117,18 @@ func (s Store) WaitClosed(ctx context.Context, sessionID string, interval time.D
 	}
 }
 
-// alive は pid の process が居るか。Alive が nil なら ProcessAlive。
+// alive は pid の process が居るか。Alive が nil なら processAlive。
 func (s Store) alive(pid int) bool {
 	if s.Alive != nil {
 		return s.Alive(pid)
 	}
-	return ProcessAlive(pid)
+	return processAlive(pid)
 }
 
-// ProcessAlive は pid の process が居るかを signal 0 で確かめる。権限が無い (EPERM) のは居るとみなす。
+// processAlive は pid の process が居るかを signal 0 で確かめる。権限が無い (EPERM) のは居るとみなす。
 // pid が使い回されていれば別の process を居ると読むが、登録簿の session ID と組で引くので害は小さい。
 // sandbox の中では EPERM になり全部を居ると読むので、daemon のバイナリは sandbox の外で打つ。
-func ProcessAlive(pid int) bool {
+func processAlive(pid int) bool {
 	if pid <= 0 {
 		return false
 	}

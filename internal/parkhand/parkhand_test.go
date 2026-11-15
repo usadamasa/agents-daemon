@@ -77,7 +77,7 @@ func toSession() protocol.ParkHandRequest {
 }
 
 func toRepo() protocol.ParkHandRequest {
-	return protocol.ParkHandRequest{ID: memoID, Intent: "issue", ToRepo: "/src/github.com/usadamasa/claude-config"}
+	return protocol.ParkHandRequest{ID: memoID, Intent: "issue", ToRepo: "/src/github.com/usadamasa/example-repo"}
 }
 
 // 生きているセッションへ: 取ってから tell で打ち、届けば handed のまま。
@@ -173,13 +173,13 @@ func TestRunner_Run_toRepo(t *testing.T) {
 	if res != want {
 		t.Fatalf("res = %+v, want %+v", res, want)
 	}
-	if len(f.sets) != 1 || f.sets[0].to != parking.ToRepo("/src/github.com/usadamasa/claude-config") {
+	if len(f.sets) != 1 || f.sets[0].to != parking.ToRepo("/src/github.com/usadamasa/example-repo") {
 		t.Fatalf("sets = %+v", f.sets)
 	}
-	prompt := strings.TrimPrefix(f.spawned[0], "/src/github.com/usadamasa/claude-config\n")
+	prompt := strings.TrimPrefix(f.spawned[0], "/src/github.com/usadamasa/example-repo\n")
 	for _, s := range []string{
-		"このメモを渡すため、claude-config (/src/github.com/usadamasa/claude-config) で新しいセッションとして起こしました。\n",
-		"メモ「lint の閾値を見直す」を GitHub の issue にしてください。repo: claude-config。",
+		"このメモを渡すため、example-repo (/src/github.com/usadamasa/example-repo) で新しいセッションとして起こしました。\n",
+		"メモ「lint の閾値を見直す」を GitHub の issue にしてください。repo: example-repo。",
 		"成り立つときは起票し、URL を返してください。",
 	} {
 		if !strings.Contains(prompt, s) {

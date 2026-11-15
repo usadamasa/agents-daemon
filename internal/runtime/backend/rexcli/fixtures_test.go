@@ -28,7 +28,7 @@ const (
 	pidOwn      = 79724
 	pidOwnShell = 79054
 	sidOwn      = "8c798e60-d1c2-4967-b62a-a1b2a4be9fc3"
-	cwdOwn      = "/Users/usadamasa/src/github.com/usadamasa/agents-daemon"
+	cwdOwn      = "/Users/user/src/github.com/usadamasa/agents-daemon"
 )
 
 // 実測に無い形の program_status。
@@ -52,9 +52,9 @@ func measured(t *testing.T, dir, name string) string {
 func processJSON(pid int, argv0, cwd string) string {
 	return `{"last_exit":null,` +
 		`"child":{"pid":33929,"user_id":0,"user":"root","name":"login","path":"/usr/bin/login"},` +
-		`"foreground":{"pid":` + strconv.Itoa(pid) + `,"user_id":501,"user":"usadamasa","name":"2.1.296","path":"/Users/usadamasa/.local/share/claude/versions/2.1.296","invoked_path":"/Users/usadamasa/.local/bin/claude","argv0":"` + argv0 + `","cwd":"` + cwd + `"},` +
-		`"ancestors":[{"pid":33930,"user_id":501,"user":"usadamasa","name":"zsh","path":"/bin/zsh","invoked_path":"/bin/zsh","argv0":"-zsh","cwd":"` + cwd + `"}],` +
-		`"home":"/Users/usadamasa"}`
+		`"foreground":{"pid":` + strconv.Itoa(pid) + `,"user_id":501,"user":"user","name":"2.1.296","path":"/Users/user/.local/share/claude/versions/2.1.296","invoked_path":"/Users/user/.local/bin/claude","argv0":"` + argv0 + `","cwd":"` + cwd + `"},` +
+		`"ancestors":[{"pid":33930,"user_id":501,"user":"user","name":"zsh","path":"/bin/zsh","invoked_path":"/bin/zsh","argv0":"-zsh","cwd":"` + cwd + `"}],` +
+		`"home":"/Users/user"}`
 }
 
 // psChangedLine は events --all --json の program_status_changed の行を 2026-10-27 の実測の形で組む (root record)。

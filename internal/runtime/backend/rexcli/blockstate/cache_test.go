@@ -26,7 +26,7 @@ const (
 	pidOwn      = 79724
 	pidOwnShell = 79054
 	sidOwn      = "8c798e60-d1c2-4967-b62a-a1b2a4be9fc3"
-	cwdOwn      = "/Users/usadamasa/src/github.com/usadamasa/agents-daemon"
+	cwdOwn      = "/Users/user/src/github.com/usadamasa/agents-daemon"
 )
 
 // 以下は events --all --json の行を 2026-10-27 の実測の形で組む。
@@ -55,7 +55,7 @@ func psRemovedLine(session, block, reason string, ids ...string) string {
 
 func procChangedLine(session, block string, generation, pid int, argv0, cwd string) string {
 	return blockEventLine(session, block, "process_changed", `{"generation":`+strconv.Itoa(generation)+
-		`,"foreground":{"pid":`+strconv.Itoa(pid)+`,"user_id":501,"user":"usadamasa","name":"x","path":"/x","invoked_path":"/x","argv0":"`+argv0+`","cwd":"`+cwd+`"}}`)
+		`,"foreground":{"pid":`+strconv.Itoa(pid)+`,"user_id":501,"user":"user","name":"x","path":"/x","invoked_path":"/x","argv0":"`+argv0+`","cwd":"`+cwd+`"}}`)
 }
 
 func sessionDestroyedLine(session string) string {
@@ -284,7 +284,7 @@ func TestCache_SessionCreated(t *testing.T) {
 	if got := applyAll(t, c, lines[:1]); !slices.Equal(got, []Ref{{Session: sessionNew}}) {
 		t.Fatalf("session_created の Ref = %+v, want block の無い session だけの Ref", got)
 	}
-	c.Put(Ref{Session: sessionNew, Block: blockNew}, state(t, sessionNew, psEmpty, processJSON(pidShell, "/bin/zsh", "/Users/usadamasa")))
+	c.Put(Ref{Session: sessionNew, Block: blockNew}, state(t, sessionNew, psEmpty, processJSON(pidShell, "/bin/zsh", "/Users/user")))
 	applyAll(t, c, lines[1:3])
 	if got := c.Panes(nil); len(got) != 1 || got[0].PaneID != blockNew {
 		t.Fatalf("panes() = %+v, want 新しい session の block", got)

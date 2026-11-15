@@ -39,8 +39,8 @@ func (f *walkFilter) accept(path, projectsDir string) bool {
 	return true
 }
 
-// extractProjectFromPath は ~/.claude/projects/-Users-masaru-uchida-workspace/<sid>.jsonl から
-// -Users-masaru-uchida-workspace を返す。
+// extractProjectFromPath は ~/.claude/projects/-Users-jane-doe-workspace/<sid>.jsonl から
+// -Users-jane-doe-workspace を返す。
 func extractProjectFromPath(path, projectsDir string) string {
 	rel, err := filepath.Rel(projectsDir, path)
 	if err != nil {

@@ -56,9 +56,9 @@ func measured(t *testing.T, dir, name string) string {
 func processJSON(pid int, argv0, cwd string) string {
 	return `{"last_exit":null,` +
 		`"child":{"pid":33929,"user_id":0,"user":"root","name":"login","path":"/usr/bin/login"},` +
-		`"foreground":{"pid":` + strconv.Itoa(pid) + `,"user_id":501,"user":"usadamasa","name":"2.1.296","path":"/Users/usadamasa/.local/share/claude/versions/2.1.296","invoked_path":"/Users/usadamasa/.local/bin/claude","argv0":"` + argv0 + `","cwd":"` + cwd + `"},` +
-		`"ancestors":[{"pid":33930,"user_id":501,"user":"usadamasa","name":"zsh","path":"/bin/zsh","invoked_path":"/bin/zsh","argv0":"-zsh","cwd":"` + cwd + `"}],` +
-		`"home":"/Users/usadamasa"}`
+		`"foreground":{"pid":` + strconv.Itoa(pid) + `,"user_id":501,"user":"user","name":"2.1.296","path":"/Users/user/.local/share/claude/versions/2.1.296","invoked_path":"/Users/user/.local/bin/claude","argv0":"` + argv0 + `","cwd":"` + cwd + `"},` +
+		`"ancestors":[{"pid":33930,"user_id":501,"user":"user","name":"zsh","path":"/bin/zsh","invoked_path":"/bin/zsh","argv0":"-zsh","cwd":"` + cwd + `"}],` +
+		`"home":"/Users/user"}`
 }
 
 func TestToPane(t *testing.T) {
@@ -87,7 +87,7 @@ func TestToPane(t *testing.T) {
 		{"event 形の id 空の root record", psEmptyID, pidClaudeWorking, "claude", "claude", multiplexer.AgentStatusWorking, ""},
 		{"subagent の record だけなら状態を取らない", psSubagentOnly, pidClaudeWorking, "claude", "claude", multiplexer.AgentStatusUnknown, ""},
 		// record を使えないときの argv0 による判定。--shell=none で起動した block では argv0 が絶対パス。
-		{"record が無くても argv0 の basename が claude なら Claude", psEmpty, pidClaudeStartup, "/Users/usadamasa/.local/bin/claude", "claude", multiplexer.AgentStatusUnknown, ""},
+		{"record が無くても argv0 の basename が claude なら Claude", psEmpty, pidClaudeStartup, "/Users/user/.local/bin/claude", "claude", multiplexer.AgentStatusUnknown, ""},
 		{"shell だけの block", psEmpty, pidShell, "-zsh", "", multiplexer.AgentStatusUnknown, ""},
 		{"Claude が死んで done の record だけ残った shell", staleDone, pidShell, "-zsh", "", multiplexer.AgentStatusUnknown, ""},
 		{"前の Claude の record が残る中で claude を起動し直した直後", staleDone, pidClaudeStartup, "claude", "claude", multiplexer.AgentStatusUnknown, reasonStaleOwner},

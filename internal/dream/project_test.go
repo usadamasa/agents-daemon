@@ -7,7 +7,7 @@ func TestCanonicalizeProjectPath(t *testing.T) {
 		in   string
 		want string
 	}{
-		{"/Users/masaru_uchida/workspace", "-Users-masaru-uchida-workspace"},
+		{"/Users/jane_doe/workspace", "-Users-jane-doe-workspace"},
 		{"/home/x/repo", "-home-x-repo"},
 		{"/Users/x/src/github.com/y/z", "-Users-x-src-github-com-y-z"},
 		{"", ""},
@@ -30,27 +30,27 @@ func TestResolveProject(t *testing.T) {
 	}{
 		{
 			name: "flag with canonical name passes through",
-			flag: "-Users-masaru-uchida-workspace",
+			flag: "-Users-jane-doe-workspace",
 			cwd:  "/tmp/somewhere",
-			want: "-Users-masaru-uchida-workspace",
+			want: "-Users-jane-doe-workspace",
 		},
 		{
 			name: "flag with absolute path is canonicalized",
-			flag: "/Users/masaru_uchida/workspace",
+			flag: "/Users/jane_doe/workspace",
 			cwd:  "/tmp/somewhere",
-			want: "-Users-masaru-uchida-workspace",
+			want: "-Users-jane-doe-workspace",
 		},
 		{
 			name: "no flag falls back to cwd canonical",
 			flag: "",
-			cwd:  "/Users/masaru_uchida/workspace",
-			want: "-Users-masaru-uchida-workspace",
+			cwd:  "/Users/jane_doe/workspace",
+			want: "-Users-jane-doe-workspace",
 		},
 		{
 			name: "dots in path are canonicalized to hyphens",
-			flag: "/Users/masaru_uchida/src/github.com/usadamasa/claude-config",
+			flag: "/Users/jane_doe/src/github.com/example/my.repo",
 			cwd:  "",
-			want: "-Users-masaru-uchida-src-github-com-usadamasa-claude-config",
+			want: "-Users-jane-doe-src-github-com-example-my-repo",
 		},
 		{
 			name: "cwd fallback also canonicalizes dots",

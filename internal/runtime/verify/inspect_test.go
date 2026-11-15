@@ -38,7 +38,7 @@ const inspectSampleLimitScreen = `  ⏺ Bash(task test)
 ❯
 ────────────────────────────────────────────────────────────────────────────
   🌸 Opus 5 💎 ･ﾟ 💰 $22.10 ･ﾟ 🧠 229k (23%) ･ﾟ ⚡ high ･ﾟ 🎀 Mikawa ･ﾟ 🐣 v2.1.224
-  📁 ~/src/github.com/usadamasa/claude-config ･ﾟ 🌿 feat/claude-auto-retry ✨
+  📁 ~/src/github.com/example/example-repo ･ﾟ 🌿 feat/claude-auto-retry ✨
   ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents
 `
 

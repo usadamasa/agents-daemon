@@ -15,7 +15,7 @@ preview が出るので、上げたら changelog と実機の応答をこの rep
 
 | 資料 | 何が分かるか | 読み方 |
 | ---- | ---- | ---- |
-| changelog (superlogical MCP) | 版ごとの変更。投稿は platform ごと (Mac、CLI、Linux Server、iOS) に分かれる | `list_changelog` の一覧から範囲の投稿を `read_changelog` に ID で渡して 1 投稿ずつ本文を読む。`search_changelog` は検索語の裏取りに使う |
+| changelog (superlogical MCP) | 版ごとの変更。投稿は platform ごと (Mac、Server & CLI、iOS) に分かれる | `list_changelog` の一覧から範囲の投稿を `read_changelog` に ID で渡して 1 投稿ずつ本文を読む。`search_changelog` は検索語の裏取りに使う |
 | 実機の CLI (自分の block) | 応答の JSON の欄、exit code、flag の有無 | `doctor` の「rex CLI の前提」の節が固定コマンドを打って欄を名指しで出す。streaming と一覧の増減だけ人が打つ ([references/cli-checks.md](references/cli-checks.md)) |
 | rex docs | OSC 7501 の仕様 (何が仕様で何が rex 独自か) | [program-status](https://www.superlogical.com/rex/docs/build/program-status) |
 
@@ -38,34 +38,33 @@ go run ./cmd/agents-daemon doctor
 `api_revision` は CLI が対応する API の版。同じ節が server の版と比べ、食い違えば `⚠` になる
 (CLI と server が別々に更新された状態)。
 
-changelog の投稿は platform ごとに分かれ、版の付け方も違う。手元の build に当たる投稿を 2 つ決める。
+changelog の投稿は platform ごとに分かれ、`preview.N` の数列も platform ごとに別。手元の build に当たる投稿を
+2 つ決める。
 
-- **Mac** (`Rex v0.1.0-preview.N (Mac)`): app と embedded server の版。`preview.N` が marker と testdata の
-  `<version>` になる。CLI は `preview.N` を出さないので、`list_changelog` の一覧から `built_at` の日付と同じ日か
-  その直後の Mac の投稿を取る (投稿は build より後に出る)。embedded server が CLI と同じ build かは
-  `rex whoami --json` の `rex_version` (server の版) が `rex version --json` の `rex_version` と同じことで確かめる。
+- **Server & CLI** (`Rex v0.1.0-preview.N (Server & CLI)`): CLI と server の版。`rex version --json` の
+  `rex_version` (`0.1.0-preview.N`) と同じ `preview.N` の投稿を取る。embedded server が CLI と同じ build かは
+  `rex whoami --json` の `rex_version` (server の版) が CLI の `rex_version` と同じことで確かめる。
   食い違えば server が旧 build のまま動いている (app の更新後に restart していない) ので、server を再起動して
   手順 1 をやり直す
-- **CLI** (`Rex v0.1.0-<hash> (CLI)`): 版は commit hash。`rex version --json` の `commit` の先頭 7 桁と同じ hash の
-  投稿を取る (`rex version --json | jq -r '.commit[:7]'`)。hash は順序を持たないので marker には書かず、
-  last-checked.md の CLI の列に書く
+- **Mac** (`Rex v0.1.0-preview.N-<build>-<hash> (Mac)`): app の版。本文の末尾の「Includes embedded server
+  v0.1.0-preview.N」が Server & CLI の版と同じ投稿を取る。この Mac の `preview.N` が marker と testdata の
+  `<version>` になる
 
-Linux Server (`🐧 … (Linux Server)`) の `preview.N` は Mac と別の数列で、版は記録しない。iOS の投稿は読まない。
+marker を Mac の版のまま書くのは、2026-10 までの marker と last-checked.md が Mac の数列で並んでいて、
+Server & CLI の `preview.N` と同じ数字が別の時期を指すため。iOS の投稿は読まない。
 
 前回見た版は [references/last-checked.md](references/last-checked.md) の最後の行。範囲は Mac の列の次の版から
-手元の Mac の版まで。同じ期間の CLI と Linux Server の投稿も範囲に入る。
+手元の Mac の版まで。同じ期間の Server & CLI の投稿も範囲に入る (前回の Server & CLI の列の次の版から)。
 `rex_version` が前回と同じなら changelog は読まず、手順 4 の実機の点検だけ行う。
 
 ### 2. changelog を読む
 
 範囲の投稿を `read_changelog` で 1 投稿ずつ読む。`release` には `list_changelog` の一覧の ID を渡す。版の文字列で
-引くと Linux Server と Mac の `preview.N` が衝突して別の投稿が返る。要約で済ませない (1 行の変更が前提を壊す)。
+引くと Server & CLI と Mac の `preview.N` が衝突して別の投稿が返る。要約で済ませない (1 行の変更が前提を壊す)。
 投稿ごとに読む範囲が違う。
 
-- **CLI**: 全文。`cli` の前提は全部ここに載る
+- **Server & CLI**: 全文。`cli` と `program_status` の前提はほぼここに載る
 - **Mac**: server の項目 (OSC 7501、program status、Kitty、「server restart」が要る項目)。app の UI の項目は飛ばす
-- **Linux Server**: server 共通の変更が Mac より先に載ることがあるので、参考として server の項目を読む。
-  Mac の embedded server に入っているかは実機 (手順 4) で確かめる
 
 読みながら 2 つの観点で拾う。
 
@@ -131,8 +130,8 @@ worktree の `./tmp` は `ExitWorktree` の remove で一緒に消え、worktree
 
 - 確かめ直して変更不要だった marker の `<version>` を手元の Mac の版へ上げる。この差分が点検の証跡。ずれた marker は
   上げずに残す (issue の番号は last-checked.md の結果の列に書く)
-- [references/last-checked.md](references/last-checked.md) に 1 行足す (日付、`rex_version`、Mac の版、CLI の hash、
-  結果と issue の番号)
+- [references/last-checked.md](references/last-checked.md) に 1 行足す (日付、`rex_version`、Mac の版、
+  Server & CLI の版、結果と issue の番号)
 
 ## 前提の洗い出し
 
@@ -143,7 +142,7 @@ worktree の `./tmp` は `ExitWorktree` の remove で一緒に消え、worktree
 rex-premise: <version> <topic> [メモ]
 ```
 
-- `<version>`: その前提を最後に確かめたときの Mac の changelog の版 (`preview.N` の形)。CLI の hash は書かない
+- `<version>`: その前提を最後に確かめたときの Mac の changelog の版 (`preview.N` の形)。Server & CLI の版は書かない
 - `<topic>`: 下の表の 1 語
 - Go と sh はコメント行、md は `<!-- rex-premise: … -->` の 1 行
 

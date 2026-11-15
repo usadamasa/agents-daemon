@@ -25,7 +25,7 @@ func testRoot() *cobra.Command {
 	return root
 }
 
-func TestDreamCmd_HasFivePhases(t *testing.T) {
+func TestDreamCmd_Subcommands(t *testing.T) {
 	cmd := newDreamCmd()
 	var names []string
 	for _, sub := range cmd.Commands() {

@@ -33,7 +33,7 @@ auto memory から昇格させるのは **1〜2 行に圧縮できるものだ�
 ## 編集先
 
 `~/.claude/CLAUDE.md` が symlink なら、実体 (`readlink -f ~/.claude/CLAUDE.md`) を編集する。
-実体が何かから生成されたファイルなら、生成元を直す。
+実体が生成されたファイルなら、生成元を直す。プロジェクト CLAUDE.md が symlink や生成物のときも同じ扱いにする。
 
 ## memory への参照を作らない
 

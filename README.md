@@ -164,7 +164,7 @@ Claude Code の settings の `env` に置く。この plugin は既定値を持�
 | `CLAUDE_STATUSLINE_SPEND_CAP` | `statusline` (月額上限に対する消費。USD の整数) | 消費の表示を出さない |
 | `CLAUDE_CODE_ENABLE_TODO_TOOLS` | Claude Code (Task 系ツール。依存図のタスクの元) | 依存図にタスクが載らない |
 
-ほかに読む環境変数は次の 3 種類。どれも無ければ既定の置き場を使う。
+ほかに読む環境変数を並べる。どれも無ければ既定の置き場を使う。
 
 - `CLAUDE_CONFIG_DIR`: Claude Code の設定ディレクトリ
 - `REX_BIN_PATH`: rex のバイナリ。無ければ PATH から探す

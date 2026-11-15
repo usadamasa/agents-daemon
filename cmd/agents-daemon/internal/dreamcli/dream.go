@@ -30,7 +30,7 @@ func Commands() []*cobra.Command {
 // newDreamCmd は `agents-daemon dream` を組み立てる。
 //
 // dream は Claude Code の記憶階層 (CLAUDE.md / auto memory / skill) の consolidation で、
-// 手順は `agents-daemon:dream` skill が持つ。ここにあるのはその実行系 5 phase。
+// 手順は `agents-daemon:dream` skill が持つ。ここにあるのはその実行系 5 phase と、利用者の規約を出す policy。
 // state は dream.Dir(apppath の StateDir) に置き、各 phase は解決済みの絶対パスを受け取る。
 func newDreamCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -40,7 +40,7 @@ func newDreamCmd() *cobra.Command {
 			"サブコマンド群。forget は Consolidate で役目を終えた auto memory を消す。\n" +
 			"いつ・何のために回すかは agents-daemon:dream skill が持つ。\n" +
 			"--json は各 phase の結果 (harvest・mine・stage は --verbose と同じサマリ、adopt は手順の中身、\n" +
-			"forget は消したパス) を stdout に出す。\n" +
+			"forget は消したパス) を stdout に出す。policy は利用者の規約 (config.json の dream.policy) を JSON で出す。\n" +
 			"state は ${XDG_STATE_HOME:-~/.local/state}/agents-daemon/dream/ に置く。",
 	}
 	cmd.AddCommand(newDreamHarvestCmd())

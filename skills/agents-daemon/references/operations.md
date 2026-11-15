@@ -218,7 +218,7 @@ error で止まる。flag の組み合わせで JSON にできないもの (`dae
 | `dream harvest` / `mine` / `stage` | `--verbose` と同じ処理のサマリ |
 | `dream adopt` | 候補と作業ブランチ、branch を作ったか |
 | `dream forget` | 消した (dry-run なら消すはずだった) パス |
-| `dream policy` | 合わせた dream の規約 (`--json` が無くても JSON) |
+| `dream policy` | config.json の `dream.policy` が指す規約のファイルを連結したもの (`--json` が無くても JSON) |
 | `version` | 建てた元の plugin の version |
 
 ```sh
@@ -236,8 +236,9 @@ agents-daemon logs -n 80                     # 上限の検知、再開の送信
 agents-daemon daemon --foreground --dry-run  # 送信せずに検知だけを流して様子を見る
 ```
 
-`doctor` は rex の server への到達性、Claude pane の一覧 (`session_id` が引けなければ `(なし)`、block の高さ)、
-peer messaging を出す。rex の外 (`REX_SESSION` なし) では exit 1 で止まる。
+`doctor` は rex の server への到達性と、Claude pane の一覧 (`session_id` が引けなければ `(なし)`、block の高さ) を出す。
+peer messaging と dream の規約 (config.json の `dream.policy` が読めるか) も出す。
+rex の外 (`REX_SESSION` なし) では exit 1 で止まる。
 「rex CLI の前提」の節に `⚠` が出たら、rex の版で daemon が読む欄が変わった疑いがある。daemon 側の追従が要るので
 issue にする。
 
@@ -265,8 +266,9 @@ issue にする。
 | `idleShutdownMinutes` | `30` | Claude pane が 0 のまま続いたら自己終了する |
 | `deferToNativeAutoContinue` | `true` | ネイティブの auto-continue が再開を予約している間は手を出さない |
 
-dream が読む `dream.policy` は daemon の設定と扱いが違い、読めなければ dream のコマンドがエラーで止まる。
-形と挙動は plugin root の `README.md` の「利用者の設定」にある。
+dream が読む `dream.policy` は、daemon の設定と違って既定値に落ちない。キーが無ければ dream は規約なしで動き、
+キーがあるのに規約が読めなければ dream のコマンドがエラーで止まる。
+形と挙動は [README の「利用者の設定」](../../../README.md#利用者の設定) にある。
 
 ### 送る文面
 

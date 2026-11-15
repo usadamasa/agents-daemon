@@ -8,7 +8,7 @@
 | 2. プロジェクト CLAUDE.md | `<repo-root>/CLAUDE.md` ・サブディレクトリ CLAUDE.md | プロジェクト・サブツリー固有のルール | ○ |
 | 3. auto memory 索引 | `~/.claude/projects/<project-canonical>/memory/MEMORY.md` | 各メモリのフック行を並べた索引 (~200 行上限) | ○ |
 | 4. auto memory 本体 | 同ディレクトリ配下の `*.md` | 関連時に想起される個別メモリ | ○ |
-| 5. グローバルスキル | `~/.claude/skills/*/SKILL.md` と利用者の規約の `skillDirs` | グローバル配布スキルの本体・description | △ |
+| 5. グローバルスキル | `~/.claude/skills/*/SKILL.md` と `<skillDirs>/*/SKILL.md` ([利用者の規約](../SKILL.md#利用者の規約)) | グローバル配布スキルの本体・description | △ |
 | 6. プロジェクトスキル | `<repo>/.claude/skills/*/SKILL.md` | リポジトリ専用スキル | △ |
 
 **△ の意味**: dream はスキル本体の「手順」を書き換えない (skill の改修として別作業で扱う)。

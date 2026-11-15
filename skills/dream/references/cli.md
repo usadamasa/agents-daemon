@@ -2,7 +2,8 @@
 
 `dream` skill が使う Go の実行系。agents-daemon のバイナリの `dream` サブコマンドとして、
 `harvest` / `mine` / `stage` / `adopt` / `forget` / `policy` の 6 つを提供する。
-利用者の規約 (config.json の `dream.policy`) の形は [README の「利用者の設定」](../../../README.md#利用者の設定) にある。
+利用者の規約 (config.json の `dream.policy`) の形は
+[README の「利用者の設定」](../../../README.md#利用者の設定) にある。
 
 本ファイルはどう動くかの実装リファレンス。いつ・何のために実行するかは skill 本体が持ち、
 呼び方 (絶対パス、sandbox の除外) は [pipeline.md](pipeline.md) にある。
@@ -63,7 +64,8 @@ Claude Code の session JSONL を走査し、PII を除去して `$DREAM/harvest
 ### PII 伏せ字化ルール
 
 利用者の規約の `pii` の規則を先に、組み込みの規則 (email アドレス → `[EMAIL]`、日本の携帯電話番号 → `[PHONE]`) を
-後に当てる。user_prompts、feedback_signals の quote、failed_invocations の user_reaction のどれも伏せた後の文字列から作る。
+後に当てる。user_prompts、feedback_signals の quote、failed_invocations の user_reaction は、
+どれも伏せた後の文字列から作る。
 規約が読めなければ、何も書かずにエラーで止まる。
 
 氏名は regex で捕捉できないため上位運用と組み合わせる。

@@ -1,7 +1,7 @@
 # skill レイヤーの手順
 
-対象はグローバル skill (`~/.claude/skills/*/SKILL.md` と、利用者の規約の `skillDirs`) とプロジェクト skill
-(`<repo>/.claude/skills/*/SKILL.md`)。
+対象はグローバル skill (`~/.claude/skills/*/SKILL.md` と、[利用者の規約](../SKILL.md#利用者の規約) の `skillDirs` が
+指す `<dir>/*/SKILL.md`) とプロジェクト skill (`<repo>/.claude/skills/*/SKILL.md`)。
 
 skill 本体の「手順」を dream で書き換えるのは、下位レイヤーの知見を受け入れるときだけ。
 機能の改修そのものは dream の仕事ではない。
@@ -20,7 +20,8 @@ CLAUDE.md と重複していたら CLAUDE.md 側を skill 名参照へ置き換�
 
 `description` を **増減の両方向** で見直す。description は全 skill ぶんが毎ターン注入されるため、
 索引と同じく lean に保つ。
-書き方の規範は `writing-skills` skill に従う。範囲ごとに別の規範があれば、利用者の規約の `skillGuides` が指す skill に従う。
+書き方の規範は `writing-skills` skill に従う。利用者の規約の `skillGuides` が対象の skill の範囲 (`scope`) に
+当てはまる規範を指していれば、その skill に従う。
 
 dream で特に見るのは **本文の変更が description に染み出していないか** の一点。
 

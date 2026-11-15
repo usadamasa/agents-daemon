@@ -55,15 +55,20 @@ P を A につなげる最後の機会になる。
 元の `EventuallyAnchored` (前件に記録の有無を持たない形) は `NoRederive` と両立しない。人が消した後も導く条件が
 揃ったままなら、導かないことが liveness の反例になる。人の判断を導きより優先し、記録のある組を前件から外した。
 
-## 辺の before の repo の鍵 (PRRepoKey)
+## 作業の記録の repo の鍵 (PRRepoKey)
 
-PR を出したセッション A から導く辺の before の repo の鍵を、いつ求めるか (#606)。A は main worktree で起動し、
+セッション A の作業の記録に残す repo の鍵を、いつ求めて誰が読むか (#606)。A は main worktree で起動し、
 linked worktree へ入って戻りうる。worktree は消えうり、消えた worktree の cwd からは git で鍵を引けない
-(`gitrepo.RepoKey` が cwd を返す)。hook はどれも来なくてよく (割り込みで Stop が来ない)、daemon は A の終了後にも導く。
+(`gitrepo.RepoKey` が cwd を返す)。hook はどれも来なくてよく (割り込みで Stop が来ない)。鍵を読むのは、
+A の終了後にも辺を導く daemon、終了した A の作業をメモへ移す人、記録のある間いつでもノードを置く依存図の 3 つ。
 
 | cfg | 性質 | 成り立つ理由 |
 | ---- | ---- | ---- |
 | `PRRepoKey.cfg` | `AnchoredRepo`: 導いた辺の before の repo の鍵は、いつ導いても本来のリポジトリで、worktree のパスにならない | hook が cwd を記録に書くとき、記録が新しいか cwd が変わったときだけ鍵を求め、cwd が無くなっていて記録に鍵があれば求め直さない |
+| | `MemoRepo`: 終了した A の作業を移したメモの repo の鍵は本来のリポジトリ | 移すときに記録の鍵を使い、鍵の無い記録は移さない |
+| | `PlacedRepo`: 記録のある間、依存図は A のノードを本来のリポジトリの列へ置く | cwd を git で引けなければ記録の鍵を使う |
+| `PRRepoKeyAdoptCwd.cfg` | `MemoRepo` が破れる | 移すときに記録の cwd から求める形 (メモ 20261115T003548-a4ffe588 の修正前)。worktree の消えたセッションのメモが worktree のパスの repo に入る |
+| `PRRepoKeyPlaceCwd.cfg` | `PlacedRepo` が破れる | ノードを置くときに記録の cwd からだけ求める形 (同じく修正前)。worktree の消えたセッションのノードが worktree のパスの列に入る |
 | `PRRepoKeyAtAnchor.cfg` | `AnchoredRepo` が破れる | #606 の修正前の形。導くときに記録の cwd から求めると、終了後に worktree が消えたセッションで鍵が worktree のパスになる |
 | `PRRepoKeyEveryHook.cfg` | `AnchoredRepo` が破れる | hook のたびに求め直す形。worktree が消えた後の SessionEnd が鍵を上書きする |
 | `PRRepoKeyOnCwd.cfg` | `AnchoredRepo` が破れる | cwd が変わったときだけ求める形 (`ledger.Observe` と同じ)。worktree へ入った後の hook が来ないまま消えると、SessionEnd が初めて消えた cwd を渡して求め直す |
@@ -90,6 +95,8 @@ linked worktree へ入って戻りうる。worktree は消えうり、消えた 
 | PRAuthor の `Forget` | housekeeping の `worklog` の `Store.Prune` が終了から `worklog.Retention` (7 日) を過ぎた作業の記録を消す |
 | PRRepoKey の `WriteCWD` (`Mode = "oncwdexists"`) | `worklog` の `Store.setCWD`。hook の cwd を記録に書き、鍵を `repo` に残す |
 | PRRepoKey の `Anchor` | daemon の `prIssuers` が記録の `repo` を `refpoll.Session` に載せ、`edge` の `Store.Anchor` が before の repo に使う |
+| PRRepoKey の `Adopt` (`AdoptKey = "record"`) | `parking` の `Store.AdoptWork`。記録の `repo` をメモの repo にし、メモを書いてから記録を消す |
+| PRRepoKey の `Placed` (`PlaceKey = "record"`) | `deps` の `locator.row`。cwd を git で引けなければ、作業の記録の cwd → `repo` の表から引く |
 
 同じ性質を実装に対してテストが持つ。
 
@@ -100,6 +107,8 @@ linked worktree へ入って戻りうる。worktree は消えうり、消えた 
 | `EventuallyAnchored` | `refpoll/refpoll_test.go` の `TestRefresh_PRのbranchのセッションからPRへ辺を導く` |
 | `IssuerKept` / `NoWrongAnchor` | `refpoll/refpoll_test.go` の `TestRefresh_PRを出した記録のセッションへ導く`、`worklog/worklog_test.go` の `TestIngest_ghprcreateが出したPRを記録に残す` と `TestIngest_ghprcreateでなければPRを残さない` |
 | `AnchoredRepo` | `worklog/worklog_test.go` の `TestIngest_cwdのrepoの鍵を残しworktreeが消えても上書きしない` と `TestIngest_無くなったcwdからはrepoの鍵を求め直さない`、`daemon/refs_test.go` の `TestPRIssuers_worktreeが消えても本来のrepoの鍵で導く` |
+| `MemoRepo` | `parking/work_test.go` の `TestAdoptWork_worktreeが消えても記録のrepoの鍵でメモを置く` と `TestAdoptWork_repoの鍵の無い記録は移さない` |
+| `PlacedRepo` | `deps/place_test.go` の `TestBuild_worktreeが消えた終了セッションを記録のrepoの鍵の列へ置く` |
 | `NoRederive` | `edge/decline_test.go` の `TestAnchor_人が消した組には導き直さない`、`TestAdd_人が書き直したら導かないの記録を外す`、`TestPrune_導かないの記録は飛ばした回から保持期間で消える` |
 
 ## 前提
@@ -122,3 +131,7 @@ linked worktree へ入って戻りうる。worktree は消えうり、消えた 
 - P が open の間に A が P の branch へ切り替え、期限が切れる前に別の branch へ戻ってからマージされると、記録の無い P
   は導かない。daemon が A を P の branch で見たことが無いため。A が `gh pr create` で出した P は記録で導く。
 - A の cwd は作業の記録の cwd (hook が渡す今の cwd)。記録が無ければ pane の cwd (起動したディレクトリ) を使う。
+- PRRepoKey のセッションは 1 つで、同じ cwd に別のセッションの記録が別の鍵を持つときの決め方 (cwd と違う鍵を優先) は
+  `deps/place_test.go` だけが持つ。`RemoveInside` の限界は、メモとノードの鍵にも同じく及ぶ。
+- 依存図は作業の記録の cwd で鍵を引くので、タスクの cwd が記録の最後の cwd と違う終了セッションのタスクのノードは
+  覆わない。

@@ -158,6 +158,10 @@ run models/prlink PRRepoKey PRRepoKeyEveryHook.cfg violated
 run models/prlink PRRepoKey PRRepoKeyOnCwd.cfg violated
 # 生きているセッションの居る worktree を外から消すと、消えた cwd で初めて記録を作るセッションの鍵はパスになる (AnchoredRepo の反例、受け入れた限界)。
 run models/prlink PRRepoKey PRRepoKeyRemoveInside.cfg violated
+# 終了したセッションの作業をメモへ移すときに記録の cwd から鍵を求めると、worktree が消えたセッションのメモが worktree のパスの repo に入る (MemoRepo の反例)。
+run models/prlink PRRepoKey PRRepoKeyAdoptCwd.cfg violated
+# 依存図がノードを置くときに記録の cwd からだけ鍵を求めると、worktree が消えたセッションのノードが worktree のパスの列に入る (PlacedRepo の反例)。
+run models/prlink PRRepoKey PRRepoKeyPlaceCwd.cfg violated
 # 起こした session を spawned-session close で畳む形 (#596)。rex に無ければ印の有無に依らず成功にし、kill に失敗したら
 # 数え直す。包みの c()、reaper、利用者が同じ session を閉じる交錯を含める。liveness も見る。
 run models/spawnedclose SpawnedClose SpawnedClose.cfg holds

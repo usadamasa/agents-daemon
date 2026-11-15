@@ -19,9 +19,24 @@ import (
 // rex-premise: preview.30 cli block の PATH は Versions/Current/… と Versions/<build>/… の順。Current は更新で中身が入れ替わり、前の build は次の更新で消える
 const versionsComponent = "Versions"
 
+// installedBinDir は既定の置き場の Versions/<build>/ から rex のあるディレクトリまでの相対パス。
+const installedBinDir = "Rex Server.app/Contents/MacOS"
+
+// defaultVersionsDir は rex の既定の置き場の Versions/ を返す。rex は block の中のシェルにしか PATH を足さず、
+// ログインシェルの PATH にも載らないので、Finder や Dock から起きたアプリ (launchd の最小の PATH) の子はここから引く。
+// rex-premise: preview.30 cli 既定の置き場は ~/Library/Application Support/com.superlogical.rex/RexServer/Versions/{Current,<build>}/Rex Server.app/Contents/MacOS/rex。ログインシェルの PATH には載らない
+func defaultVersionsDir() (string, bool) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", false
+	}
+	return filepath.Join(home, "Library", "Application Support", "com.superlogical.rex", "RexServer", versionsComponent), true
+}
+
 // locateBinary は rex のバイナリの絶対パスを返す。REX_BIN_PATH があればそのまま、無ければ PATH を探す。
-// PATH の項が全部外れたとき (`Versions/<build>/…` だけを持つ PATH で、その build が更新で消えた) に限り、
-// 同じ置き場の一番新しい数字名の build を引く。どこにも無ければ exec.ErrNotFound を wrap した error を返す。
+// PATH の項が全部外れたとき (`Versions/<build>/…` だけを持つ PATH で、その build が更新で消えた) は、
+// 同じ置き場の一番新しい数字名の build を引く。PATH に rex の項が無いとき (rex の block の外で起きたプロセス) は、
+// 既定の置き場の Current、無ければ一番新しい数字名の build を引く。どこにも無ければ exec.ErrNotFound を wrap した error を返す。
 func locateBinary() (string, error) {
 	if bin := os.Getenv("REX_BIN_PATH"); bin != "" {
 		return bin, nil
@@ -34,7 +49,15 @@ func locateBinary() (string, error) {
 			return bin, nil
 		}
 	}
-	return "", fmt.Errorf("rex が PATH にも Versions/<build>/ にも無い: %w", exec.ErrNotFound)
+	if versions, ok := defaultVersionsDir(); ok {
+		if bin, err := exec.LookPath(filepath.Join(versions, "Current", installedBinDir, "rex")); err == nil {
+			return bin, nil
+		}
+		if bin, ok := newestBuildIn(versions, installedBinDir); ok {
+			return bin, nil
+		}
+	}
+	return "", fmt.Errorf("rex が PATH にも Versions/<build>/ にも既定の置き場にも無い: %w", exec.ErrNotFound)
 }
 
 // newestBuild は PATH の項 dir を `<prefix>/Versions/<build>/<suffix>` と読み、`<prefix>/Versions/` の中で

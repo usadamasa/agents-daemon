@@ -144,7 +144,7 @@ jobs:
           filters: .github/filters.yaml
 
   # gui/ は Wails v3 の macOS のアプリ (cgo と WebKit の link) なので macOS の runner で回す。
-  # node --test も同じジョブで回す (public repo は macOS の分も課金されないので ubuntu へ分けない)。
+  # node --test も同じジョブで回す (数秒で終わり、ubuntu へ分けても所要は縮まない)。
   # PR では filters.yaml の gui に当たるときだけ回し、main への push では毎回回す
   gui-test:
     name: gui test
@@ -154,9 +154,21 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
 
+      # devShell は gui 用の細いもの (flake.nix の devShells.gui) にして、nix の取得を減らす
       - uses: usadamasa/gh-manage/actions/setup-nix@main
         with:
           cache: false
+          devshell: gui
+
+      # go vet が Wails と cgo を毎回 cold でビルドするのが最大の step なので、Go の build と module の cache を持つ。
+      # 置き場は macOS の Go の既定 (GOCACHE は ~/Library/Caches/go-build、GOPATH は ~/go)
+      - uses: actions/cache@v6.1.0
+        with:
+          path: |
+            ~/Library/Caches/go-build
+            ~/go/pkg/mod
+          key: go-gui-${{ runner.os }}-${{ hashFiles('flake.lock', 'gui/go.sum') }}
+          restore-keys: go-gui-${{ runner.os }}-
 
       - name: Test the gui module
         run: task gui:test

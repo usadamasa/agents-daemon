@@ -75,6 +75,16 @@
           ];
           env.GOTOOLCHAIN = "local";
         };
+        # task gui:test が使うものだけ。CI の macOS の job は nix の取得が遅いので、default の closure を引かない
+        gui = pkgs.mkShellNoCC {
+          packages = with pkgs; [
+            (devGo pkgs)
+            go-task
+            gosec
+            nodejs
+          ];
+          env.GOTOOLCHAIN = "local";
+        };
       });
     };
 }

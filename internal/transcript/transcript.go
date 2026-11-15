@@ -319,7 +319,8 @@ func (s Store) Cwd(sessionID string) (string, error) {
 func ProjectDirName(cwd string) string {
 	b := []byte(cwd)
 	for i, c := range b {
-		if !('a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9') {
+		alnum := 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9'
+		if !alnum {
 			b[i] = '-'
 		}
 	}

@@ -50,7 +50,7 @@ type entry struct {
 	Status     string `json:"status"`
 }
 
-// Session は登録簿に載ったセッション。Desktop 由来の一覧 (Desktop) と引き継ぎの確かめ (Find) が返す。
+// Session は登録簿に載ったセッション。欄は entry と同じ並び (session が変換で写す)。Desktop 由来の一覧 (Desktop) と引き継ぎの確かめ (Find) が返す。
 type Session struct {
 	PID        int    `json:"pid"`
 	SessionID  string `json:"session_id"`
@@ -62,7 +62,7 @@ type Session struct {
 }
 
 func (x entry) session() Session {
-	return Session{PID: x.PID, SessionID: x.SessionID, Name: x.Name, Cwd: x.Cwd, Entrypoint: x.Entrypoint, Status: x.Status}
+	return Session(x)
 }
 
 // Desktop は Desktop 由来 (entrypoint=claude-desktop) で、process が生きているセッションを session ID の順に返す。

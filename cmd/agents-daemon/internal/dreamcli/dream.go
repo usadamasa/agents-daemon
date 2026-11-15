@@ -85,6 +85,19 @@ type dreamEnv struct {
 	configFile string
 }
 
+// PolicySources は doctor が dream の規約を点検する口。読めた規約のパスを返し、読めなければ理由を返す。
+func PolicySources() ([]string, error) {
+	env, err := resolveDreamEnv()
+	if err != nil {
+		return nil, err
+	}
+	pol, err := env.policy()
+	if err != nil {
+		return nil, err
+	}
+	return pol.Sources, nil
+}
+
 // policy は config.json の dream.policy が指す規約を読む。キーが無ければ空の規約。
 func (e dreamEnv) policy() (policy.Policy, error) {
 	return policy.FromConfig(e.configFile, e.home)

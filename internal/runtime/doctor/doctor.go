@@ -50,6 +50,9 @@ type Input struct {
 	Getenv          func(string) string // peer messaging と rex CLI の前提 (REX_BLOCK / REX_SESSION) に使う環境 (通常は os.Getenv)
 	// Premises は rex CLI の前提の点検。Client がその口を持たなければ nil。
 	Premises multiplexer.PremiseChecker
+	// DreamPolicy は dream の規約 (config.json の dream.policy) を読み、読めた規約のパスを返す。
+	// dream は runtime の外の家族なので、cmd が組んで渡す。nil なら節を省く。
+	DreamPolicy func() ([]string, error)
 }
 
 // Report は doctor の診断の結果。backend に到達できなければ Backend だけが埋まる。
@@ -59,6 +62,7 @@ type Report struct {
 	Premises      *PremisesReport      `json:"premises,omitempty"`
 	RateLimits    *RateLimitsReport    `json:"rate_limits,omitempty"`
 	Config        *ConfigReport        `json:"config,omitempty"`
+	DreamPolicy   *DreamPolicyReport   `json:"dream_policy,omitempty"`
 	Daemon        *DaemonReport        `json:"daemon,omitempty"`
 	PeerMessaging *PeerMessagingReport `json:"peer_messaging,omitempty"`
 	Paths         *PathsReport         `json:"paths,omitempty"`
@@ -179,6 +183,12 @@ type ConfigFieldReport struct {
 	Differs bool `json:"differs_from_default"`
 }
 
+// DreamPolicyReport は dream の規約を読めたか。Sources も Error も空なら、config.json に dream.policy が無い。
+type DreamPolicyReport struct {
+	Sources []string `json:"sources,omitempty"`
+	Error   string   `json:"error,omitempty"`
+}
+
 // DaemonReport は PID ファイルと status.json から見た daemon の稼働状況。
 type DaemonReport struct {
 	Running       bool                  `json:"running"`
@@ -245,10 +255,23 @@ func Collect(ctx context.Context, in Input) (Report, error) {
 	rep.Premises = collectPremises(ctx, in.Premises, in.Getenv)
 	rep.RateLimits = collectRateLimitStates(in.Paths, rep.Panes.Claude, in.Now)
 	rep.Config = collectConfigState(in.Paths)
+	rep.DreamPolicy = collectDreamPolicy(in.DreamPolicy)
 	rep.Daemon = collectDaemonState(in.Paths, in.Now)
 	rep.PeerMessaging = collectPeerMessaging(in.Getenv)
 	rep.Paths = collectPaths(in.Paths, in.ClaudeConfigDir)
 	return rep, nil
+}
+
+// collectDreamPolicy は dream の規約を読めるかを集める。点検の口が無ければ nil。
+func collectDreamPolicy(check func() ([]string, error)) *DreamPolicyReport {
+	if check == nil {
+		return nil
+	}
+	sources, err := check()
+	if err != nil {
+		return &DreamPolicyReport{Error: err.Error()}
+	}
+	return &DreamPolicyReport{Sources: sources}
 }
 
 // collectPanes は pane 一覧のうち Claude agent と判定されたものを写し、daemon と同じ順で session を引き

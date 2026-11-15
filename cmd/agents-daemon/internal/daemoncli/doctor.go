@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/dreamcli"
 	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/jsonflag"
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
@@ -38,7 +39,10 @@ func newDoctorCmd() *cobra.Command {
 			premises, _ := client.(multiplexer.PremiseChecker)
 			// Claude Code の設定ディレクトリが決まらなければ、登録簿と transcript の点検だけが欠ける。
 			claudeDir, _ := apppath.ClaudeConfigDir()
-			in := doctor.Input{Client: client, Kind: kind, Paths: p, ClaudeConfigDir: claudeDir, Now: time.Now(), Getenv: os.Getenv, Premises: premises}
+			in := doctor.Input{
+				Client: client, Kind: kind, Paths: p, ClaudeConfigDir: claudeDir, Now: time.Now(), Getenv: os.Getenv, Premises: premises,
+				DreamPolicy: dreamcli.PolicySources,
+			}
 			if !jsonflag.Enabled(cmd) {
 				return doctor.Run(cmd.Context(), cmd.OutOrStdout(), in)
 			}

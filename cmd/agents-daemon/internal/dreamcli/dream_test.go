@@ -188,6 +188,25 @@ func TestDreamHarvestCmd_FailsOnUnreadablePolicy(t *testing.T) {
 	}
 }
 
+// PolicySources は doctor が規約を点検する口。読めた規約のパスか、読めない理由を返す。
+func TestPolicySources(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	p := filepath.Join(t.TempDir(), "policy.json")
+	if err := os.WriteFile(p, []byte(`{"version": 1}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	setPolicyConfig(t, p)
+	got, err := PolicySources()
+	if err != nil || !slices.Equal(got, []string{p}) {
+		t.Errorf("PolicySources() = (%v, %v); want ([%s], nil)", got, err, p)
+	}
+
+	setPolicyConfig(t, filepath.Join(t.TempDir(), "missing.json"))
+	if _, err := PolicySources(); err == nil {
+		t.Error("読めない規約なのに error が無い")
+	}
+}
+
 func TestDreamStageCmd_HasOutFlagInsteadOfExplorationsDir(t *testing.T) {
 	cmd := newDreamCmd()
 	stage, _, err := cmd.Find([]string{"stage"})

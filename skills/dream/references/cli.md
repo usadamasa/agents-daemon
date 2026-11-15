@@ -2,7 +2,7 @@
 
 `dream` skill が使う Go の実行系。agents-daemon のバイナリの `dream` サブコマンドとして、
 `harvest` / `mine` / `stage` / `adopt` / `forget` / `policy` の 6 つを提供する。
-利用者の規約 (config.json の `dream.policy`) の形は plugin root の `README.md` の「利用者の設定」にある。
+利用者の規約 (config.json の `dream.policy`) の形は [README の「利用者の設定」](../../../README.md#利用者の設定) にある。
 
 本ファイルはどう動くかの実装リファレンス。いつ・何のために実行するかは skill 本体が持ち、
 呼び方 (絶対パス、sandbox の除外) は [pipeline.md](pipeline.md) にある。
@@ -16,7 +16,7 @@
 | `dream stage` | 6 Stage | candidates → Markdown 承認レポート |
 | `dream adopt` | 7 Adopt | candidate → git branch 作成 + LLM 向け手順書 |
 | `dream forget` | 4 Consolidate | auto memory 削除 + MEMORY.md 索引の同期 |
-| `dream policy` | (全 phase) | 利用者の規約を合わせて JSON で出す |
+| `dream policy` | (全 phase) | 利用者の規約のファイルを連結して JSON で出す |
 
 ## state の置き場
 
@@ -89,7 +89,7 @@ hook は transcript を読まない。読むのは起こしたバイナリで、
 - harvest jsonl (対象 project セッション)
 - `~/.claude/projects/<canonical>/memory/*.md` (feedback memory)
 - `~/.claude/skills/<name>/SKILL.md` (global skill 本体)
-- 利用者の規約の `skillDirs` の `<dir>/<name>/SKILL.md`
+- `<dir>/<name>/SKILL.md` (利用者の規約の `skillDirs`。global skill の後に探す)
 - `<project_root>/.claude/skills/<name>/SKILL.md` (fallback、project-local skill)
 
 skill 名と memory 名の照合で外す接頭辞は、利用者の規約の `skillNamePrefixes` から受ける。
@@ -235,6 +235,7 @@ CLI 内部に持たせている。登録する行は `agents-daemon:setup` skill
 
 ## `dream policy`
 
-config.json の `dream.policy` が指す規約のファイルを順に読んで合わせ、JSON で stdout に出す。
-キーが無ければ `{}`。読めない・壊れている・未知のフィールドがある規約があればエラーで止まる。
+config.json の `dream.policy` が指す規約のファイルを配列の順に読み、各フィールドの配列をその順で連結して
+JSON で stdout に出す。flag は無く、`--json` の有無で出力は変わらない。
+キーが無ければ `{}`。読めない・壊れている・未知のフィールドを含む規約があればエラーで止まる。
 `dream harvest` と `dream mine` も同じ読み方をするので、規約を直したらこのコマンドで確かめる。

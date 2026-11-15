@@ -102,8 +102,8 @@ install 後に rex の block の中で Claude Code を起動し、`/agents-daemo
 
 ## 利用者の設定
 
-この plugin が利用者から受け取る値の一覧。plugin は利用者固有の値と、利用者のほかのリポジトリの置き場を持たない。
-値はここに並べた口から渡す。
+この plugin が利用者から受け取る値と、利用者が Claude Code の settings へ足す設定の一覧。
+利用者固有の値 (PII の規則、skill の置き場や名前) は、ここに並べた口から渡す。
 
 ### config.json
 
@@ -118,12 +118,14 @@ dream が読むキーは `dream.policy` だけ。dream の規約のファイル�
 ```
 
 - `~/` は home、相対パスは config.json のディレクトリを起点にする。
-- 個人の規約と仕事用の規約のように、別の場所のファイルを並べてよい。配列の項目は並べた順に連結する。
+- 個人の規約と仕事用の規約のように、別の場所のファイルを並べてよい。各ファイルの配列のフィールド (`pii`、`skillDirs` など) を
+  並べた順につなぐ。PII の規則もこの順に当てる。`version` は各ファイルで `1` にする。
 - キーが無ければ、dream は規約なしで動く。PII は組み込みの規則 (email、日本の携帯電話番号) だけを伏せ、
   skill の走査は `~/.claude/skills` と project の `.claude/skills` だけ、skill 名の接頭辞は外さない。
 - キーがあるのに config.json か規約のファイルが読めない・壊れている・未知のフィールドがあると、
   `dream harvest` と `dream mine` はエラーで止まる。PII の規則が外れたまま記録を書かないため。
-  harvest は Stop hook から裏で動くので、止まったことは `logs/dream-harvest.log` と `doctor` の「dream の規約」の節にだけ出る。
+  harvest は Stop hook から裏で動くので、止まったことは `${XDG_STATE_HOME:-~/.local/state}/agents-daemon/logs/dream-harvest.log` と
+  `doctor` の「dream の規約」の節にだけ出る。
   規約を書いた・直したら `agents-daemon dream policy` で読めるかを確かめる (合わせた結果を JSON で出す)。
 
 ### dream の規約のファイル
@@ -146,7 +148,7 @@ JSON。`version` だけが必須で、ほかのフィールドは省いてよい
 | ---------- | ------ | ---- |
 | `version` | dream | `1` |
 | `pii` | `dream harvest` | 記録へ残す前に伏せる規則。`pattern` は Go の正規表現、`replacement` は展開せずそのまま置く。組み込みの規則より先に当てる |
-| `skillNamePrefixes` | `dream mine` | memory 名との照合で skill 名から外す先頭の語 (`team` なら `team-notes` を `notes` でも引く) |
+| `skillNamePrefixes` | `dream mine` | memory 名との照合で skill 名から外す先頭の語。`team` なら、memory 名の `notes` が skill の `team-notes` に一致する |
 | `skillDirs` | `dream mine` | `~/.claude/skills` の後、project の `.claude/skills` の前に走査する skill の置き場。相対パスは規約のファイルのディレクトリが起点 |
 | `delegates` | dream skill | dream の対象外の話題と、それを担う skill |
 | `skillGuides` | dream skill | skill を書くときに従う規範の skill (範囲ごと) |
@@ -154,7 +156,7 @@ JSON。`version` だけが必須で、ほかのフィールドは省いてよい
 
 ### settings の env
 
-Claude Code の settings の `env` に置く。この plugin は値を持たない。
+Claude Code の settings の `env` に置く。この plugin は既定値を持たず、無いときの挙動は表のとおり。
 
 | 変数 | 読み手 | 無いとき |
 | ---- | ------ | -------- |
@@ -162,8 +164,11 @@ Claude Code の settings の `env` に置く。この plugin は値を持たな�
 | `CLAUDE_STATUSLINE_SPEND_CAP` | `statusline` (月額上限に対する消費。USD の整数) | 消費の表示を出さない |
 | `CLAUDE_CODE_ENABLE_TODO_TOOLS` | Claude Code (Task 系ツール。依存図のタスクの元) | 依存図にタスクが載らない |
 
-ほかに読む環境変数は `CLAUDE_CONFIG_DIR` (Claude Code の設定ディレクトリ)、`REX_BIN_PATH` (rex のバイナリ。無ければ PATH)、
-`XDG_CONFIG_HOME` / `XDG_STATE_HOME` / `XDG_CACHE_HOME` (置き場)。
+ほかに読む環境変数は次の 3 種類。どれも無ければ既定の置き場を使う。
+
+- `CLAUDE_CONFIG_DIR`: Claude Code の設定ディレクトリ
+- `REX_BIN_PATH`: rex のバイナリ。無ければ PATH から探す
+- `XDG_CONFIG_HOME` / `XDG_STATE_HOME` / `XDG_CACHE_HOME`: 設定・state・バイナリの置き場
 
 ### sandbox
 

@@ -37,4 +37,3 @@ func TestDetectFeedback(t *testing.T) {
 		})
 	}
 }
-

@@ -70,16 +70,16 @@ type file struct {
 
 // FromConfig は config.json の dream.policy が指す規約を読んで合わせる。キーが無ければ空の Policy。
 func FromConfig(configFile, home string) (Policy, error) {
-	paths, err := PathsFromConfig(configFile, home)
+	paths, err := pathsFromConfig(configFile, home)
 	if err != nil {
 		return Policy{}, err
 	}
-	return Load(paths, home)
+	return load(paths, home)
 }
 
-// PathsFromConfig は config.json の dream.policy を絶対パスの列にして返す。ファイルかキーが無ければ nil。
+// pathsFromConfig は config.json の dream.policy を絶対パスの列にして返す。ファイルかキーが無ければ nil。
 // `~/` は home、相対パスは config.json のディレクトリを起点にする。
-func PathsFromConfig(configFile, home string) ([]string, error) {
+func pathsFromConfig(configFile, home string) ([]string, error) {
 	data, err := os.ReadFile(configFile) // #nosec G304 -- 呼び出し元が apppath の固定パスを渡す
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -115,8 +115,8 @@ func PathsFromConfig(configFile, home string) ([]string, error) {
 	return paths, nil
 }
 
-// Load は paths の規約のファイルを順に読んで合わせる。1 つでも読めなければエラー。
-func Load(paths []string, home string) (Policy, error) {
+// load は paths の規約のファイルを順に読んで合わせる。1 つでも読めなければエラー。
+func load(paths []string, home string) (Policy, error) {
 	var p Policy
 	for _, path := range paths {
 		f, err := readFile(path)

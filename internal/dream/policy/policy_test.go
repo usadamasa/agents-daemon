@@ -19,7 +19,7 @@ func writeFile(t *testing.T, path, body string) {
 }
 
 func TestPathsFromConfig_NoFileMeansNoPolicy(t *testing.T) {
-	paths, err := PathsFromConfig(filepath.Join(t.TempDir(), "config.json"), t.TempDir())
+	paths, err := pathsFromConfig(filepath.Join(t.TempDir(), "config.json"), t.TempDir())
 	if err != nil || paths != nil {
 		t.Fatalf("got (%v, %v); want (nil, nil)", paths, err)
 	}
@@ -28,7 +28,7 @@ func TestPathsFromConfig_NoFileMeansNoPolicy(t *testing.T) {
 func TestPathsFromConfig_NoKeyMeansNoPolicy(t *testing.T) {
 	cfg := filepath.Join(t.TempDir(), "config.json")
 	writeFile(t, cfg, `{"pollIntervalSeconds": 5}`)
-	paths, err := PathsFromConfig(cfg, t.TempDir())
+	paths, err := pathsFromConfig(cfg, t.TempDir())
 	if err != nil || paths != nil {
 		t.Fatalf("got (%v, %v); want (nil, nil)", paths, err)
 	}
@@ -39,7 +39,7 @@ func TestPathsFromConfig_ResolvesHomeAndRelative(t *testing.T) {
 	home := t.TempDir()
 	cfg := filepath.Join(dir, "config.json")
 	writeFile(t, cfg, `{"dream": {"policy": ["~/a.json", "b.json", "/abs/c.json"]}}`)
-	paths, err := PathsFromConfig(cfg, home)
+	paths, err := pathsFromConfig(cfg, home)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func TestPathsFromConfig_RejectsMalformed(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			cfg := filepath.Join(t.TempDir(), "config.json")
 			writeFile(t, cfg, body)
-			if _, err := PathsFromConfig(cfg, t.TempDir()); err == nil {
+			if _, err := pathsFromConfig(cfg, t.TempDir()); err == nil {
 				t.Errorf("want error for %s", body)
 			}
 		})
@@ -69,7 +69,7 @@ func TestPathsFromConfig_RejectsMalformed(t *testing.T) {
 }
 
 func TestLoad_NoPathsIsEmptyPolicy(t *testing.T) {
-	p, err := Load(nil, t.TempDir())
+	p, err := load(nil, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +97,7 @@ func TestLoad_MergesFilesInOrder(t *testing.T) {
 		"skillGuides": [{"scope": "仕事用の skill", "skill": "example:skill-guide"}],
 		"memoryHomes": [{"when": "社外に出せない情報を含む", "home": "private リポジトリの skill"}]
 	}`)
-	p, err := Load([]string{a, b}, home)
+	p, err := load([]string{a, b}, home)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +142,7 @@ func TestLoad_RejectsInvalidFile(t *testing.T) {
 			bad := filepath.Join(dir, "bad.json")
 			writeFile(t, good, `{"version": 1}`)
 			writeFile(t, bad, body)
-			_, err := Load([]string{good, bad}, t.TempDir())
+			_, err := load([]string{good, bad}, t.TempDir())
 			if err == nil {
 				t.Fatalf("want error for %s", body)
 			}
@@ -155,7 +155,7 @@ func TestLoad_RejectsInvalidFile(t *testing.T) {
 
 func TestLoad_MissingFileIsError(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "nope.json")
-	if _, err := Load([]string{missing}, t.TempDir()); err == nil {
+	if _, err := load([]string{missing}, t.TempDir()); err == nil {
 		t.Fatal("want error for missing file")
 	}
 }

@@ -45,10 +45,12 @@ type Remote struct {
 // Fetcher は issue / PR の今の状態と題と段を引く。
 type Fetcher func(ctx context.Context, it ref.Item) (Remote, error)
 
-// Session は tick で見えた生きているセッション 1 つ。
+// Session は tick で見えた生きているセッションか、PR を出した記録のあるセッション 1 つ。
 type Session struct {
 	ID  string
 	CWD string
+	// Repo は作業の記録の repo の鍵。記録が無ければ空で、導くときに cwd から求める。
+	Repo string
 }
 
 // failure は gh が失敗した参照 1 つの、次に引ける時刻とログに書いた理由。
@@ -140,7 +142,7 @@ func (p *Poller) anchor(edges []edge.Edge, cached map[string]refstate.Record, no
 		if !ok {
 			continue
 		}
-		e, ok, err := p.edges.Anchor(s.ID, s.CWD, pr, now)
+		e, ok, err := p.edges.Anchor(s.ID, s.CWD, s.Repo, pr, now)
 		if err != nil {
 			p.log.Logf("PR を出したセッションの辺を導けません: %s: %v", pr, err)
 			continue

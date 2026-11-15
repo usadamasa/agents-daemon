@@ -251,6 +251,10 @@ export const definitions = {
       "cwd": {
         "type": "string"
       },
+      "repo": {
+        "type": "string",
+        "description": "cwd の repo の鍵 (gitrepo.RepoKey)。cwd を書いたときに求め、worktree が消えた後も本来のリポジトリを引けるように残す"
+      },
       "subject": {
         "type": "string",
         "description": "題 (出どころは origin)"

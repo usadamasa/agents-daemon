@@ -91,6 +91,8 @@ export type WorkGetRequest = {
 export type Work = {
   session_id: string
   cwd: string
+  // cwd の repo の鍵 (gitrepo.RepoKey)。cwd を書いたときに求め、worktree が消えた後も本来のリポジトリを引けるように残す
+  repo?: string
   // 題 (出どころは origin)
   subject?: string
   // 題の出どころ。prompt は最初の prompt の 1 行目、human は人が work set で直した

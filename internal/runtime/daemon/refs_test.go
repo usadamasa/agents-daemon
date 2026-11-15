@@ -2,12 +2,15 @@ package daemon
 
 import (
 	"context"
+	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/edge"
+	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
 	"github.com/usadamasa/agents-daemon/internal/ref"
@@ -51,7 +54,7 @@ func TestLiveRefSessions_作業の記録のcwdを先に使う(t *testing.T) {
 	}
 	r.livePlaces = []refpoll.Session{{ID: "A", CWD: "/repo"}, {ID: "B", CWD: "/other"}}
 
-	want := []refpoll.Session{{ID: "A", CWD: "/repo/.claude/worktrees/x"}, {ID: "B", CWD: "/other"}}
+	want := []refpoll.Session{{ID: "A", CWD: "/repo/.claude/worktrees/x", Repo: "/repo/.claude/worktrees/x"}, {ID: "B", CWD: "/other"}}
 	if got := r.liveRefSessions(); !reflect.DeepEqual(got, want) {
 		t.Errorf("liveRefSessions() = %v, want %v", got, want)
 	}
@@ -78,10 +81,64 @@ func TestPRIssuers_作業の記録のPRから出したセッションを引く(t
 		}
 	}
 	want := map[string][]refpoll.Session{
-		"pr:o/r#1": {{ID: "A", CWD: "/a"}},
-		"pr:o/r#2": {{ID: "B", CWD: "/b"}, {ID: "C", CWD: "/c"}},
+		"pr:o/r#1": {{ID: "A", CWD: "/a", Repo: "/a"}},
+		"pr:o/r#2": {{ID: "B", CWD: "/b", Repo: "/b"}, {ID: "C", CWD: "/c", Repo: "/c"}},
 	}
 	if got := r.prIssuers(); !reflect.DeepEqual(got, want) {
 		t.Errorf("prIssuers() = %v, want %v", got, want)
+	}
+}
+
+// worktree で PR を出して終了し、worktree が消えたセッションからも、本来のリポジトリの鍵で辺を導く (#606)。
+func TestPRIssuers_worktreeが消えても本来のrepoの鍵で導く(t *testing.T) {
+	now := time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)
+	r, statusPath := newTestRuntime(t, &multiplexerfake.Client{}, now)
+	dir := filepath.Dir(statusPath)
+	r.attachStateDir(dir)
+
+	main := filepath.Join(t.TempDir(), "repo")
+	worktree := filepath.Join(main, ".claude", "worktrees", "x")
+	for _, args := range [][]string{
+		{"init", "-q", "-b", "main", main},
+		{"-C", main, "-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", "init"},
+		{"-C", main, "worktree", "add", "-q", "-b", "x", worktree},
+	} {
+		if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	wantRepo := gitrepo.RepoKey(main)
+
+	inputs := []string{
+		`{"session_id":"A","cwd":` + strconv.Quote(worktree) + `,"hook_event_name":"UserPromptSubmit","prompt":"p"}`,
+		`{"session_id":"A","cwd":` + strconv.Quote(worktree) + `,"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"gh pr create --fill"},"tool_response":{"stdout":"https://github.com/o/r/pull/1\n"}}`,
+	}
+	for _, in := range inputs {
+		if _, err := r.works.Ingest([]byte(in), now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if out, err := exec.Command("git", "-C", main, "worktree", "remove", "--force", worktree).CombinedOutput(); err != nil {
+		t.Fatalf("git worktree remove: %v\n%s", err, out)
+	}
+	end := `{"session_id":"A","cwd":` + strconv.Quote(worktree) + `,"hook_event_name":"SessionEnd","reason":"other"}`
+	if _, err := r.works.Ingest([]byte(end), now); err != nil {
+		t.Fatal(err)
+	}
+
+	issued := r.prIssuers()["pr:o/r#1"]
+	if len(issued) != 1 || issued[0].Repo != wantRepo {
+		t.Fatalf("prIssuers() = %+v, want repo %q", issued, wantRepo)
+	}
+	edges := edge.New(dir)
+	if _, err := edges.Add(edge.Endpoint{Ref: "pr:o/r#1", CWD: main}, edge.Endpoint{Ref: "task:H/1", CWD: main}, "", now); err != nil {
+		t.Fatal(err)
+	}
+	e, ok, err := edges.Anchor(issued[0].ID, issued[0].CWD, issued[0].Repo, "pr:o/r#1", now)
+	if err != nil || !ok {
+		t.Fatalf("Anchor() = %v, %v", ok, err)
+	}
+	if e.Before.Repo != wantRepo {
+		t.Errorf("before の repo = %q, want %q", e.Before.Repo, wantRepo)
 	}
 }

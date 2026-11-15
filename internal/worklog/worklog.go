@@ -3,7 +3,7 @@
 // 作業の単位として載り、辺の端点 (sid:<session_id>) にもなれるようにする。読み手は依存図 (deps)。
 //
 //	work/<session_id>.json   セッション 1 つの作業 (subject と出どころ、companion の推定の題、最後のターンの要約、turns、
-//	                         最後の prompt と Stop の時刻、始まりと終わり)
+//	                         最後の prompt と Stop の時刻、始まりと終わり、cwd とその repo の鍵、出した PR)
 //	work/.lock               hook、`work set`、prune を直列にするロック
 //
 // 書くのは hook (SessionStart / UserPromptSubmit / Stop / SessionEnd と、Bash の PostToolUse が `agents-daemon ingest-work` に
@@ -32,6 +32,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/protocol"
 	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
@@ -161,11 +162,32 @@ func addPRs(rec *Record, prs []string) bool {
 // Store は work/ の置き場所を持つ。ゼロ値は Dir が空で、書き込みはエラー、読み込みは空になる。
 type Store struct {
 	Dir string
+	// repoKey は cwd の repo の鍵を求める (テストが git を起こさずに差し替える継ぎ目)。
+	repoKey func(cwd string) string
 }
 
 // New は XDG state ディレクトリ (apppath.Paths.StateDir) から置き場所を導出する。
 func New(stateDir string) Store {
-	return Store{Dir: filepath.Join(stateDir, "work")}
+	return Store{Dir: filepath.Join(stateDir, "work"), repoKey: gitrepo.RepoKey}
+}
+
+// setCWD は hook の cwd を記録に書く。repo の鍵は cwd が変わったか鍵が無いときだけ求め、cwd が無くなっていれば
+// 記録の鍵を残す。worktree が消えると cwd から鍵を引けず、鍵が worktree のパスになるため (#606、models/prlink の
+// PRRepoKey)。
+func (s Store) setCWD(rec *Record, cwd string) {
+	if cwd == "" {
+		return
+	}
+	if rec.Repo != "" && (cwd == rec.CWD || !dirExists(cwd)) {
+		rec.CWD = cwd
+		return
+	}
+	rec.CWD, rec.Repo = cwd, s.repoKey(cwd)
+}
+
+func dirExists(dir string) bool {
+	info, err := os.Stat(dir)
+	return err == nil && info.IsDir()
 }
 
 // Ingest は hook の stdin を読み、event に応じて記録を書く。
@@ -213,9 +235,7 @@ func (s Store) Ingest(input []byte, now time.Time) (Result, error) {
 			rec.EndedAt, rec.EndReason = &at, in.Reason
 			res.Ended = true
 		}
-		if in.CWD != "" {
-			rec.CWD = in.CWD
-		}
+		s.setCWD(rec, in.CWD)
 		return true
 	}, now)
 	res.Written = err == nil && (res.Created || res.Ended || in.HookEventName == "UserPromptSubmit" || in.HookEventName == "Stop" || resumed(in))
@@ -234,9 +254,7 @@ func (s Store) recordPRs(in hookInput, res Result, now time.Time) (Result, error
 			return false
 		}
 		res.Written = true
-		if in.CWD != "" {
-			rec.CWD = in.CWD
-		}
+		s.setCWD(rec, in.CWD)
 		return true
 	}, now)
 	if err != nil {

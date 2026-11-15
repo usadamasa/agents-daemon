@@ -148,6 +148,16 @@ run models/prlink PRAuthor PRAuthorHistory.cfg violated
 run models/prlink PRAuthor PRAuthorNearest.cfg violated
 # 記録だけで導く形。記録の無い PR は導かない代わりに、どの性質も破らない。
 run models/prlink PRAuthor PRAuthorRecordOnly.cfg holds
+# 導いた辺の before の repo の鍵を、cwd を書いたときに記録へ残す形 (#606)。cwd が変わったときだけ求め、無くなった cwd では求め直さない。
+run models/prlink PRRepoKey PRRepoKey.cfg holds
+# 導くときに記録の cwd から求めると、終了後に worktree が消えたセッションで鍵が worktree のパスになる (AnchoredRepo の反例、#606 の修正前)。
+run models/prlink PRRepoKey PRRepoKeyAtAnchor.cfg violated
+# hook のたびに求め直すと、worktree が消えた後の SessionEnd が鍵を worktree のパスで上書きする (AnchoredRepo の反例)。
+run models/prlink PRRepoKey PRRepoKeyEveryHook.cfg violated
+# cwd が変わったときだけ求めても、worktree へ入った後の hook が来ないまま消えると、SessionEnd が消えた cwd で求める (AnchoredRepo の反例)。
+run models/prlink PRRepoKey PRRepoKeyOnCwd.cfg violated
+# 生きているセッションの居る worktree を外から消すと、消えた cwd で初めて記録を作るセッションの鍵はパスになる (AnchoredRepo の反例、受け入れた限界)。
+run models/prlink PRRepoKey PRRepoKeyRemoveInside.cfg violated
 # 起こした session を spawned-session close で畳む形 (#596)。rex に無ければ印の有無に依らず成功にし、kill に失敗したら
 # 数え直す。包みの c()、reaper、利用者が同じ session を閉じる交錯を含める。liveness も見る。
 run models/spawnedclose SpawnedClose SpawnedClose.cfg holds

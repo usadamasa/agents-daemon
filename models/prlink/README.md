@@ -55,6 +55,20 @@ P を A につなげる最後の機会になる。
 元の `EventuallyAnchored` (前件に記録の有無を持たない形) は `NoRederive` と両立しない。人が消した後も導く条件が
 揃ったままなら、導かないことが liveness の反例になる。人の判断を導きより優先し、記録のある組を前件から外した。
 
+## 辺の before の repo の鍵 (PRRepoKey)
+
+PR を出したセッション A から導く辺の before の repo の鍵を、いつ求めるか (#606)。A は main worktree で起動し、
+linked worktree へ入って戻りうる。worktree は消えうり、消えた worktree の cwd からは git で鍵を引けない
+(`gitrepo.RepoKey` が cwd を返す)。hook はどれも来なくてよく (割り込みで Stop が来ない)、daemon は A の終了後にも導く。
+
+| cfg | 性質 | 成り立つ理由 |
+| ---- | ---- | ---- |
+| `PRRepoKey.cfg` | `AnchoredRepo`: 導いた辺の before の repo の鍵は、いつ導いても本来のリポジトリで、worktree のパスにならない | hook が cwd を記録に書くとき、記録が新しいか cwd が変わったときだけ鍵を求め、cwd が無くなっていて記録に鍵があれば求め直さない |
+| `PRRepoKeyAtAnchor.cfg` | `AnchoredRepo` が破れる | #606 の修正前の形。導くときに記録の cwd から求めると、終了後に worktree が消えたセッションで鍵が worktree のパスになる |
+| `PRRepoKeyEveryHook.cfg` | `AnchoredRepo` が破れる | hook のたびに求め直す形。worktree が消えた後の SessionEnd が鍵を上書きする |
+| `PRRepoKeyOnCwd.cfg` | `AnchoredRepo` が破れる | cwd が変わったときだけ求める形 (`ledger.Observe` と同じ)。worktree へ入った後の hook が来ないまま消えると、SessionEnd が初めて消えた cwd を渡して求め直す |
+| `PRRepoKeyRemoveInside.cfg` | `AnchoredRepo` が破れる (受け入れた限界) | 生きている A の居る worktree を外から消すと、消えた cwd で初めて記録を作る A の鍵は cwd になる |
+
 ## 実装との対応
 
 | モデルの動作 | 実装 |
@@ -74,6 +88,8 @@ P を A につなげる最後の機会になる。
 | `ByRecord` / PRAuthor の `rec` | `worklog` の `Store.Ingest` が Bash の PostToolUse で `gh pr create` の stdout の PR の URL を `prs` に足す。daemon の `prIssuers` が作業の記録から PR ごとに引く |
 | PRAuthor の `Targets` (`Match = "record"`) | `Poller.issuer`。記録のあるセッションがちょうど 1 つならそれ、無ければ branch の合う生きているセッションがちょうど 1 つのときだけ |
 | PRAuthor の `Forget` | housekeeping の `worklog` の `Store.Prune` が終了から `worklog.Retention` (7 日) を過ぎた作業の記録を消す |
+| PRRepoKey の `WriteCWD` (`Mode = "oncwdexists"`) | `worklog` の `Store.setCWD`。hook の cwd を記録に書き、鍵を `repo` に残す |
+| PRRepoKey の `Anchor` | daemon の `prIssuers` が記録の `repo` を `refpoll.Session` に載せ、`edge` の `Store.Anchor` が before の repo に使う |
 
 同じ性質を実装に対してテストが持つ。
 
@@ -83,6 +99,7 @@ P を A につなげる最後の機会になる。
 | `NoDaemonLoop` / `LoopResolved` | `edge/anchor_test.go` の `TestAnchor_自分のPRを待つセッションには導かない` と `TestAnchor_自分のPRを待つ形になったら導いた辺を消す` |
 | `EventuallyAnchored` | `refpoll/refpoll_test.go` の `TestRefresh_PRのbranchのセッションからPRへ辺を導く` |
 | `IssuerKept` / `NoWrongAnchor` | `refpoll/refpoll_test.go` の `TestRefresh_PRを出した記録のセッションへ導く`、`worklog/worklog_test.go` の `TestIngest_ghprcreateが出したPRを記録に残す` と `TestIngest_ghprcreateでなければPRを残さない` |
+| `AnchoredRepo` | `worklog/worklog_test.go` の `TestIngest_cwdのrepoの鍵を残しworktreeが消えても上書きしない` と `TestIngest_無くなったcwdからはrepoの鍵を求め直さない`、`daemon/refs_test.go` の `TestPRIssuers_worktreeが消えても本来のrepoの鍵で導く` |
 | `NoRederive` | `edge/decline_test.go` の `TestAnchor_人が消した組には導き直さない`、`TestAdd_人が書き直したら導かないの記録を外す`、`TestPrune_導かないの記録は飛ばした回から保持期間で消える` |
 
 ## 前提

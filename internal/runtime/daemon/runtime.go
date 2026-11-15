@@ -135,15 +135,15 @@ func (r *daemonRuntime) liveRefSessions() []refpoll.Session {
 	sessions := make([]refpoll.Session, 0, len(r.livePlaces))
 	for _, s := range r.livePlaces {
 		if rec, ok := r.works.Get(s.ID); ok && rec.CWD != "" {
-			s.CWD = rec.CWD
+			s.CWD, s.Repo = rec.CWD, rec.Repo
 		}
 		sessions = append(sessions, s)
 	}
 	return sessions
 }
 
-// prIssuers は PR の参照ごとに、作業の記録 (prs) にその PR を出したと残したセッションと記録の cwd を返す。終了した
-// セッションの記録も含む (記録は終了から worklog.Retention のあいだ残る)。
+// prIssuers は PR の参照ごとに、作業の記録 (prs) にその PR を出したと残したセッションと記録の cwd と repo の鍵を返す。
+// 終了したセッションの記録も含む (記録は終了から worklog.Retention のあいだ残る)。
 func (r *daemonRuntime) prIssuers() map[string][]refpoll.Session {
 	recs, err := r.works.List()
 	if err != nil {
@@ -153,7 +153,7 @@ func (r *daemonRuntime) prIssuers() map[string][]refpoll.Session {
 	issued := map[string][]refpoll.Session{}
 	for _, rec := range recs {
 		for _, pr := range rec.Prs {
-			issued[pr] = append(issued[pr], refpoll.Session{ID: rec.SessionID, CWD: rec.CWD})
+			issued[pr] = append(issued[pr], refpoll.Session{ID: rec.SessionID, CWD: rec.CWD, Repo: rec.Repo})
 		}
 	}
 	return issued

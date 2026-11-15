@@ -91,6 +91,8 @@ type WorkGetRequest struct {
 type Work struct {
 	SessionID string `json:"session_id"`
 	CWD       string `json:"cwd"`
+	// cwd の repo の鍵 (gitrepo.RepoKey)。cwd を書いたときに求め、worktree が消えた後も本来のリポジトリを引けるように残す。
+	Repo string `json:"repo,omitempty"`
 	// 題 (出どころは origin)。
 	Subject string `json:"subject,omitempty"`
 	// 題の出どころ。prompt は最初の prompt の 1 行目、human は人が work set で直した。

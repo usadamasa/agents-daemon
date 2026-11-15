@@ -149,24 +149,11 @@ func (r resumer) run(ctx context.Context, stderr io.Writer, sessionID, cwd strin
 		return spawn.Result{}, err
 	}
 	if isOpen {
-		if open.Entrypoint != claudesessions.EntrypointDesktop {
-			return spawn.Result{}, fmt.Errorf("セッション %s は Desktop ではなく %s で開いている (pid %d)", sessionID, open.Entrypoint, open.PID)
-		}
-		if wait <= 0 {
-			return spawn.Result{}, fmt.Errorf("セッション %s は Desktop で開いている (pid %d)。Desktop で閉じてから打つか、--wait で閉じるのを待つ", sessionID, open.PID)
+		if err := r.waitDesktopClosed(ctx, stderr, open, wait); err != nil {
+			return spawn.Result{}, err
 		}
 		if cwd == "" {
 			cwd = open.Cwd
-		}
-		_, _ = fmt.Fprintf(stderr, "Desktop でセッション %s を閉じてください (%s まで待つ)\n", sessionID, wait)
-		wctx, cancel := context.WithTimeout(ctx, wait)
-		err := r.sessions.WaitClosed(wctx, sessionID, r.interval)
-		cancel()
-		if errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil {
-			return spawn.Result{}, fmt.Errorf("%s の間にセッション %s が Desktop で閉じなかった", wait, sessionID)
-		}
-		if err != nil {
-			return spawn.Result{}, err
 		}
 	}
 	if cwd == "" {
@@ -187,4 +174,23 @@ func sessionStore() (claudesessions.Store, error) {
 		return claudesessions.Store{}, err
 	}
 	return claudesessions.New(configDir), nil
+}
+
+// waitDesktopClosed は開いているセッション open が Desktop のものなら、wait の間 Desktop で閉じるのを待つ。
+// 端末 (cli) で開いているもの、wait が 0 のもの、待っても閉じなかったものは error。
+func (r resumer) waitDesktopClosed(ctx context.Context, stderr io.Writer, open claudesessions.Session, wait time.Duration) error {
+	if open.Entrypoint != claudesessions.EntrypointDesktop {
+		return fmt.Errorf("セッション %s は Desktop ではなく %s で開いている (pid %d)", open.SessionID, open.Entrypoint, open.PID)
+	}
+	if wait <= 0 {
+		return fmt.Errorf("セッション %s は Desktop で開いている (pid %d)。Desktop で閉じてから打つか、--wait で閉じるのを待つ", open.SessionID, open.PID)
+	}
+	_, _ = fmt.Fprintf(stderr, "Desktop でセッション %s を閉じてください (%s まで待つ)\n", open.SessionID, wait)
+	wctx, cancel := context.WithTimeout(ctx, wait)
+	defer cancel()
+	err := r.sessions.WaitClosed(wctx, open.SessionID, r.interval)
+	if errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil {
+		return fmt.Errorf("%s の間にセッション %s が Desktop で閉じなかった", wait, open.SessionID)
+	}
+	return err
 }

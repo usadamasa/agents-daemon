@@ -1,10 +1,13 @@
 package claudesessions
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 )
@@ -104,6 +107,91 @@ func TestNames_missing(t *testing.T) {
 		ids, err := s.SessionIDs()
 		if err != nil || len(ids) != 0 {
 			t.Errorf("SessionIDs() = %v, %v, want 空", ids, err)
+		}
+	}
+}
+
+// registry は Desktop 由来と端末由来の混ざった登録簿を置き、alive の pid だけを生きているとする Store を返す。
+func registry(t *testing.T, alive ...int) Store {
+	t.Helper()
+	config := t.TempDir()
+	dir := filepath.Join(config, "sessions")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write(t, dir, "100.json", `{"pid":100,"sessionId":"D2","name":"desk-b","cwd":"/src/b","entrypoint":"claude-desktop","status":"busy","hostSessionId":"local_b"}`)
+	write(t, dir, "200.json", `{"pid":200,"sessionId":"D1","cwd":"/src/a","entrypoint":"claude-desktop","status":"idle","hostSessionId":"local_a"}`)
+	write(t, dir, "300.json", `{"pid":300,"sessionId":"C1","cwd":"/src/c","entrypoint":"cli","status":"idle"}`)
+	write(t, dir, "400.json", `{"pid":400,"sessionId":"D3","cwd":"/src/d","entrypoint":"claude-desktop"}`)
+	write(t, dir, "500.json", `{"pid":500,"cwd":"/src/e","entrypoint":"claude-desktop"}`)
+	s := New(config)
+	s.Alive = func(pid int) bool {
+		for _, a := range alive {
+			if a == pid {
+				return true
+			}
+		}
+		return false
+	}
+	return s
+}
+
+// Desktop は entrypoint=claude-desktop で process が生きているものだけを session ID の順に返す。端末由来、process の
+// 居ない残り物、session ID の無いものは載せない。
+func TestDesktop(t *testing.T) {
+	got, err := registry(t, 100, 200, 300, 500).Desktop()
+	if err != nil {
+		t.Fatalf("Desktop() error = %v", err)
+	}
+	want := []Session{
+		{PID: 200, SessionID: "D1", Cwd: "/src/a", Entrypoint: EntrypointDesktop, Status: "idle"},
+		{PID: 100, SessionID: "D2", Name: "desk-b", Cwd: "/src/b", Entrypoint: EntrypointDesktop, Status: "busy"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Desktop() = %+v, want %+v", got, want)
+	}
+}
+
+// Find は session ID で生きているセッションを引く。process が居なければ (閉じた) ok=false。
+func TestFind(t *testing.T) {
+	s := registry(t, 100)
+	if got, ok, err := s.Find("D2"); err != nil || !ok || got.PID != 100 || got.Cwd != "/src/b" {
+		t.Errorf("Find(D2) = %+v, %v, %v, want pid 100 の /src/b", got, ok, err)
+	}
+	for _, id := range []string{"D3", "missing"} {
+		if _, ok, err := s.Find(id); err != nil || ok {
+			t.Errorf("Find(%s) = %v, %v, want 見つからない", id, ok, err)
+		}
+	}
+}
+
+// WaitClosed は process が居なくなるまで待ち、ctx が切れたら ctx の error を返す。
+func TestWaitClosed(t *testing.T) {
+	s := registry(t)
+	calls := 0
+	s.Alive = func(pid int) bool { calls++; return calls < 3 }
+	if err := s.WaitClosed(context.Background(), "D2", time.Millisecond); err != nil {
+		t.Fatalf("WaitClosed() error = %v", err)
+	}
+	if calls < 3 {
+		t.Errorf("閉じる前に戻った (calls=%d)", calls)
+	}
+	s.Alive = func(int) bool { return true }
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	if err := s.WaitClosed(ctx, "D2", time.Millisecond); !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("WaitClosed() error = %v, want DeadlineExceeded", err)
+	}
+}
+
+// ProcessAlive は自分の process を居ると読み、0 以下の pid は居ないと読む。
+func TestProcessAlive(t *testing.T) {
+	if !ProcessAlive(os.Getpid()) {
+		t.Error("自分の pid を居ないと読んだ")
+	}
+	for _, pid := range []int{0, -1} {
+		if ProcessAlive(pid) {
+			t.Errorf("ProcessAlive(%d) = true", pid)
 		}
 	}
 }

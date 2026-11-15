@@ -18,6 +18,7 @@ agents-daemon dream mine|stage|adopt|forget    # 記憶階層の consolidation �
 agents-daemon prune-worktrees [--dry-run]      # 放置された Claude Code の worktree を回収する (SessionStart hook が --hook 付きで呼ぶ)
 agents-daemon edge add|rm|list                 # セッションをまたぐ作業の依存を書く・消す・一覧する (下の「セッションをまたぐ辺を書く」)
 agents-daemon park list|set                    # パーキングのメモを一覧する・書き換える (stdin の JSON で受ける)
+agents-daemon desktop list|resume              # Desktop で始めたセッションを rex で続ける (下の「Desktop のセッションを rex で続ける」)
 ```
 
 ### `--dry-run`
@@ -96,6 +97,26 @@ Claude Code の sandbox の中で叩くと、`git worktree remove` は main work
 ディレクトリに書く。worktree の中から叩くと cwd の外への書き込みになるので、sandbox の書き込み許可
 (`sandbox.filesystem.allowWrite`) にリポジトリの親ディレクトリが入っていないリポジトリでは `operation not permitted`
 になる。その場合は利用者が `!` で打つか、main worktree を cwd にして叩く。
+
+### Desktop のセッションを rex で続ける
+
+Claude Code Desktop で始めたセッションは rex の外で動くので、daemon の pane 一覧にも peer の手順にも載らない。
+rex の画面で続けたいときは、Desktop で閉じてから rex の新しい session で resume し直す (#130)。同じセッションを
+Desktop と rex の 2 つで開くと transcript に両方の発言が混ざるので、Desktop で開いたままのものは開かない。
+
+```sh
+! ~/.cache/agents-daemon/bin/agents-daemon desktop list                        # Desktop で開いているセッション
+! ~/.cache/agents-daemon/bin/agents-daemon desktop resume --wait 10m <session_id>  # Desktop で閉じるのを待って開く
+! ~/.cache/agents-daemon/bin/agents-daemon desktop resume <session_id>         # もう閉じたものを開く
+```
+
+- cwd は `--cwd`、Desktop で開いていれば登録簿、閉じていれば transcript (`projects/<project>/<session_id>.jsonl`) から決める。
+  閉じたセッションは `desktop list` に出ないので、session ID は Desktop を閉じる前に `list` で控えるか、`--wait` を使う。
+- Desktop へ戻すときは、rex で開いたセッションで `/desktop` を打つ。rex で開いている間に `claude --desktop --resume <id>` を
+  打つと、CLI 本体が「open in another terminal」で止める。
+- process の生存を signal 0 で確かめる。sandbox の中では全部の pid が `operation not permitted` で「開いている」と読めて
+  しまうので、`!` で sandbox の外から打つ。
+<!-- cc-premise: 2.1.325 desktop Desktop で閉じたセッションは CLI の claude --resume で続きが開き、/desktop で戻せる (#130 で実測) -->
 
 ### セッションをまたぐ辺を書く
 

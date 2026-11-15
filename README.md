@@ -15,7 +15,7 @@ Claude Code のセッションは自分が止まっている間は何もでき�
 | 止まったセッションへの働きかけ | 利用上限 (5 時間ウィンドウと、解除が 24 時間以内の週のウィンドウ) で止まったセッションを、transcript の末尾の entry から見つけて解除時刻に再開させる (`monitor`) |
 | セッションを跨いだ状態の集約 | statusline の stdin から利用上限・context・cost をセッション別の state file に落とし、daemon とコマンドが読む (`sessionstate`、`ratelimit`、`sessioncontext`、`statusline/spend`)。Stop のたびに transcript の要約を集め、記憶の consolidation の材料にする (`dream`) |
 | 時間で動く掃除 | ログと state file のうち、保持期間を過ぎたものを消す (`daemon/housekeeping.go`)。foreground セッションが keep したまま 1 週間触っていない worktree を、SessionStart のたびに今開いたリポジトリの分だけ回収する (`worktree`) |
-| 多重化ツールへの操作 | rex の block を列挙し、画面を読み、キーと文面を送る (`rexcli`) |
+| 多重化ツールへの操作 | rex の block を列挙し、画面を読み、キーと文面を送る (`rexcli`)。Claude Code Desktop で閉じたセッションを rex の新しい session で開き直す (`desktop resume`、#130) |
 
 境界は 1 つ。**Claude Code 本体が自分でできることは本体に任せる**。auto-continue が再開を予約している間は
 手を出さず、本体の auto-continue が降りた場面だけを拾う。context の compact と prompt cache の失効も本体
@@ -46,6 +46,7 @@ plugin が持つもの:
 | `agents-daemon park hand` | パーキングのメモを取って生きているセッション (`tell`) か新しく起こすセッション (`spawn`) へ渡し、届かなければ戻す |
 | `agents-daemon spawned-session mark` | `spawn` と peer-sessions skill が起こした rex session の中で、claude を起こす前に印を `spawned-sessions/` に書く。daemon が印を回り、pane が無くなった session を閉じる (#557) |
 | `agents-daemon spawned-session close <session_id>` | peer を起こした側が、控えた session_id で peer の rex session を閉じて印を消す。rex にもう無い session は印の有無にかかわらず成功、印の無い生きた session は拒否する (#585、#596) |
+| `agents-daemon desktop list\|resume` | Claude Code Desktop で開いているセッションを登録簿 (`sessions/<pid>.json` の `entrypoint=claude-desktop`) から一覧し、Desktop で閉じたもの (`--wait` なら閉じるのを待って) を rex の新しい session で `claude --resume <id>` として開く。Desktop へ戻すのは rex 側で `/desktop` (#130) |
 | `agents-daemon ingest-task` | PostToolUse hook の stdin からタスクを `tasks/<session_id>/` に記録する |
 | `agents-daemon ingest-work` | SessionStart / UserPromptSubmit / Stop / SessionEnd hook の stdin からセッションの作業 (最初の prompt の題、最後の応答の要約、turns、始まりと終わり) を `work/<session_id>.json` に記録する (#368) |
 | `agents-daemon work set\|get` | 作業の題を書き換える (人が直した題、companion の推定の題)・記録を読む |
@@ -128,6 +129,8 @@ agents-daemon dream stage --project <canonical>  # 候補の承認レポート�
 agents-daemon dream forget <memory-name>...      # auto memory を消す (sandbox の外で動かす)
 agents-daemon prune-worktrees --dry-run          # 回収対象の worktree を表示する (SessionStart hook が --hook 付きで呼ぶ)
 agents-daemon spawn < request.json               # prompt を最初のターンにした Claude Code を repo の新しい rex session に起こす (アプリが呼ぶ)
+agents-daemon desktop list                       # Claude Code Desktop で開いているセッションを一覧する
+agents-daemon desktop resume --wait 10m <id>     # Desktop で閉じるのを待って、rex の新しい session で resume する
 agents-daemon tell < request.json                # 生きているセッションの入力欄に文面を打つ (アプリが呼ぶ)
 agents-daemon park hand < request.json           # メモを取って渡し、届かなければ戻す (アプリが呼ぶ)
 ```

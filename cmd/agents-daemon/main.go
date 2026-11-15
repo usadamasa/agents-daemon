@@ -18,6 +18,7 @@
 //	ingest-turn-failure  StopFailure hook の stdin から turn を終わらせた API error を turn-failures/ に記録する (Stop と UserPromptSubmit で消す)
 //	park      パーキングロットのメモを parking/ に置く・書き換える・一覧する (add / set / list)
 //	dream     記憶階層の consolidation の実行系 (harvest / mine / stage / adopt / forget)。手順は agents-daemon:dream skill
+//	desktop   Claude Code Desktop で始めたセッションを rex で続ける (list / resume)
 //	prune-worktrees  誰も使っていない Claude Code の worktree の回収 (SessionStart hook が --hook 付きで呼ぶ)
 //	version   建てた元の plugin の version の表示 (--version も同じ)
 //

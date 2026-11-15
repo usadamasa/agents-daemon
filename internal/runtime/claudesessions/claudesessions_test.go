@@ -184,14 +184,14 @@ func TestWaitClosed(t *testing.T) {
 	}
 }
 
-// ProcessAlive は自分の process を居ると読み、0 以下の pid は居ないと読む。
+// processAlive は自分の process を居ると読み、0 以下の pid は居ないと読む。
 func TestProcessAlive(t *testing.T) {
-	if !ProcessAlive(os.Getpid()) {
+	if !processAlive(os.Getpid()) {
 		t.Error("自分の pid を居ないと読んだ")
 	}
 	for _, pid := range []int{0, -1} {
-		if ProcessAlive(pid) {
-			t.Errorf("ProcessAlive(%d) = true", pid)
+		if processAlive(pid) {
+			t.Errorf("processAlive(%d) = true", pid)
 		}
 	}
 }

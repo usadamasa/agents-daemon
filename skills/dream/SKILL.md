@@ -69,8 +69,10 @@ dream を始める前に、利用者の規約を読む。行き先を判断す�
 | `skillGuides` | skill を作る・直すとき | 従う規範の skill |
 | `memoryHomes` | memory の行き先を決めるとき | [layer-auto-memory](references/layer-auto-memory.md) の表より先に当てる規則 |
 
-規約が空 (`{}`) なら references の既定だけで進める。`dream policy` がエラーで止まったら dream を進めず、
-メッセージをユーザーへ伝える。規約の形は plugin root の `README.md` の「利用者の設定」にある。
+`skillGuides` が空なら dream を進めず、skill を書く規範の skill を規約の `skillGuides` に足すようユーザーへ伝える。
+規約が無い (`{}`) ときも同じ。ほかのフィールドが空なら references の既定で進める。
+`dream policy` がエラーで止まったら dream を進めず、メッセージをユーザーへ伝える。
+規約の形は plugin root の `README.md` の「利用者の設定」にある。
 
 ## 進め方
 

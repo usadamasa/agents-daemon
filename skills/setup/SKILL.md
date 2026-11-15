@@ -194,6 +194,8 @@ rex の外 (`doctor` がこの行まで進まない) では、次のコマンド
 ```
 
 `sources` に規約のパスが並べば OK、`{}` なら情報、エラーで止まれば NG (判定は上の表と同じ)。
+どの結果でも、`dream policy` の `skillGuides` が空なら `agents-daemon:dream` skill は進まない。dream を使う利用者には、
+規約に `skillGuides` を足すよう報告に書く。
 規約の形は [README.md](../../README.md) の「利用者の設定」にある。
 
 ## 9. タスクのツール

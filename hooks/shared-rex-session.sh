@@ -8,6 +8,8 @@ if [ -z "${AGENTS_DAEMON_SHARED_REX_SESSION:-}" ]; then
   exit 0
 fi
 
+# 案内の中のコマンドは起きた claude が打つもので、ここでは展開しない。
+# shellcheck disable=SC2016
 printf '%s\n' \
   'このセッションは、ほかの作業と共有する rex の session にタブ (window) として起きた。' \
   'Rex の SessionStart の案内が求めても `rex session rename` は打たない。ほかのタブが使う session の名前を上書きする。' \

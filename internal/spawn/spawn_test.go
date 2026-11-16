@@ -83,8 +83,7 @@ func request() Request {
 }
 
 // 成功: repo を cwd にした新しい多重化ツールの session で claude を固定の session ID、subagent 用のモデル、本文で起こし、
-// claude が前景になってから結果を返す。起こす側の session には置かない (起きた claude が案内に従って自分の session を
-// rename するので、相乗りすると起こした側の名前が書き換わる。#376)。
+// claude が前景になってから結果を返す。足し先の session を指定しなければ、新しい session を作る。
 func TestRunner_Run(t *testing.T) {
 	host := &fakeHost{run: opened, paneGet: claudePane}
 	got, err := runner(host).Run(context.Background(), request())

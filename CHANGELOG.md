@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026.1116.0](https://github.com/usadamasa/agents-daemon/compare/2026.1115.4...2026.1116.0) - 2026-11-16
+
+### Features
+- peer を作業のまとまりごとの rex session にタブとして立てる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/631
+
 ## [2026.1115.4](https://github.com/usadamasa/agents-daemon/compare/2026.1115.3...2026.1115.4) - 2026-11-15
 
 ### Documentation

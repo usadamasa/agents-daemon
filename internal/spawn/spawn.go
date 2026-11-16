@@ -1,12 +1,13 @@
-// Package spawn は、パーキングのメモを渡す先として新しい Claude Code のセッションを多重化ツールの新しい session に
-// 起こす (#162)。
+// Package spawn は、パーキングのメモを渡す先として新しい Claude Code のセッションを多重化ツールに起こす (#162)。
 //
 // 起こすのは daemon のバイナリ (`agents-daemon spawn`)。mod や hook から多重化ツールを叩かない決めごとに合わせる。
 // 新しいセッションは repo を cwd にし、session ID をこちらで決めて `claude --session-id <id> --model <model> -- <本文>`
 // で起こす。本文は最初のターンとして入るので、peer メッセージの inbox が開くのを待たずに渡せる。
 //
-// 多重化ツールの session は起こすたびに新しく作り、起こす側の session には相乗りしない。起きた claude は rex の
-// SessionStart の案内に従って自分の REX_SESSION を rename するので、相乗りすると起こした側の名前が書き換わる (#376)。
+// 起こす先は既定で新しい多重化ツールの session、足し先 (Request.Session) があればその session のタブ。作業のまとまり
+// ごとに session を分け、同じまとまりの peer をタブに並べる。起きた claude は rex の SessionStart の案内に従って
+// REX_SESSION を rename するので、タブで起きたときは包みが渡す環境変数を plugin の hook が見て、rename を止める案内を
+// 足す (#376)。
 //
 // session を起こす口 (Host) は multiplexer.Client に足さず、ここに閉じる。Client は daemon / monitor / doctor / verify が
 // pane を見て送るための全部入りで、session の作成はこのコマンドだけが使う (simulate の simulateHost と同じ考え)。
@@ -39,6 +40,9 @@ type Host interface {
 	// 読めるようにする)。session ができた時点で返り、コマンドの起動は待たない。
 	// label は session と window の名前。
 	NewSession(ctx context.Context, label, cwd string, argv []string) (paneID string, err error)
+	// NewWindow は既存の session にタブを足し、その pane で argv を起こして pane の ID を返す。コマンドが終われば自分の
+	// タブだけが閉じ、session とほかのタブは残る。異常終了の扱いと返るときは NewSession と同じ。label はタブの名前。
+	NewWindow(ctx context.Context, session, label, cwd string, argv []string) (paneID string, err error)
 	// PaneGet は pane の今の前景 (multiplexer.Client と同じ)。起こした pane で claude が前景になるのを待つのに使う。
 	PaneGet(ctx context.Context, paneID string) (multiplexer.Pane, error)
 }
@@ -52,6 +56,9 @@ type Request struct {
 	// Model は新しいセッションのモデル。別セッションへ渡す作業は subagent 用のモデルに揃える (peer-sessions skill) ので、
 	// CLI は settings.json の env.CLAUDE_CODE_SUBAGENT_MODEL (SubagentModel) を入れる。空なら起こさない。
 	Model string
+	// Session は足し先の多重化ツールの session (ID か label)。空なら新しい session を作り、あればその session に
+	// タブとして起こす。どちらにするかは起こす側が作業のまとまりで決める。
+	Session string
 }
 
 // Result は起こしたセッション。JSON で stdout に出す。形は protocol の schema が持つ。
@@ -86,9 +93,18 @@ func (r Runner) Run(ctx context.Context, req Request) (Result, error) {
 	}
 	// `--` は本文が `-` で始まっても flag と読まれないため。
 	argv := []string{"claude", "--session-id", id, "--model", req.Model, "--", req.Prompt}
-	paneID, err := r.Host.NewSession(ctx, filepath.Base(req.Repo), req.Repo, argv)
-	if err != nil {
-		return Result{}, fmt.Errorf("多重化ツールの session を作れない: %w", err)
+	label := filepath.Base(req.Repo)
+	var paneID string
+	if req.Session == "" {
+		paneID, err = r.Host.NewSession(ctx, label, req.Repo, argv)
+		if err != nil {
+			return Result{}, fmt.Errorf("多重化ツールの session を作れない: %w", err)
+		}
+	} else {
+		paneID, err = r.Host.NewWindow(ctx, req.Session, label, req.Repo, argv)
+		if err != nil {
+			return Result{}, fmt.Errorf("多重化ツールの session %s にタブを足せない: %w", req.Session, err)
+		}
 	}
 	res := Result{SessionID: id, PaneID: paneID, Foreground: true}
 	if err := r.waitForClaude(ctx, paneID); err != nil {

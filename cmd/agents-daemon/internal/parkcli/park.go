@@ -19,6 +19,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/protocol"
 	"github.com/usadamasa/agents-daemon/internal/ref"
 	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
+	"github.com/usadamasa/agents-daemon/internal/spawn"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 	"github.com/usadamasa/agents-daemon/internal/tell"
 	"github.com/usadamasa/agents-daemon/internal/worklog"
@@ -143,7 +144,7 @@ func newHandRunner(p apppath.Paths, viewer string) (parkhand.Runner, error) {
 			return res, err
 		},
 		Spawn: func(ctx context.Context, repo, prompt string) (protocol.SpawnResult, error) {
-			return spawnSession(ctx, p, repo, prompt)
+			return spawnSession(ctx, p, spawn.Request{Repo: repo, Prompt: prompt})
 		},
 		SessionNames: func() map[string]string {
 			names, _ := sessioncontext.New(p.StateDir()).ListSessionNames()

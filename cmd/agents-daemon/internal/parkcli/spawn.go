@@ -19,7 +19,7 @@ import (
 func newSpawnCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "spawn",
-		Short: "stdin の SpawnRequest の prompt を最初のターンにした Claude Code のセッションを、repo を cwd にした新しい rex の session に起こす",
+		Short: "stdin の SpawnRequest の prompt を最初のターンにした Claude Code のセッションを、repo を cwd にして rex の新しい session か、session で指したタブに起こす",
 		Long: "パーキングロットのメモを、生きているセッションの無い repo へ渡すときに呼ぶ。\n" +
 			"新しいセッションは `claude --session-id <uuid> --model <model> -- <本文>` で起きる。<model> は\n" +
 			"Claude Code の settings.json の env." + spawn.SubagentModelKey + " から読む。\n" +
@@ -28,15 +28,15 @@ func newSpawnCmd() *cobra.Command {
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return statecmd.Run(cmd, statecmd.Decoded("SpawnRequest", func(paths apppath.Paths, req protocol.SpawnRequest) (any, error) {
-				return spawnSession(cmd.Context(), paths, req.Repo, req.Prompt)
+				return spawnSession(cmd.Context(), paths, spawn.Request{Repo: req.Repo, Prompt: req.Prompt, Session: req.Session})
 			}))
 		},
 	}
 }
 
-// spawnSession は repo で新しいセッションを起こし、prompt を最初のターンにする。依存図のアプリは rex の外で起きるので
-// REX_SESSION を要求しない (ConnectRex)。rex の session は spawn が起こすたびに新しく作る。
-func spawnSession(ctx context.Context, paths apppath.Paths, repo, prompt string) (spawn.Result, error) {
+// spawnSession は req.Repo で新しいセッションを起こし、req.Prompt を最初のターンにする。依存図のアプリは rex の外で
+// 起きるので REX_SESSION を要求しない (ConnectRex)。rex の session は req.Session が空なら新しく作る。モデルはここで埋める。
+func spawnSession(ctx context.Context, paths apppath.Paths, req spawn.Request) (spawn.Result, error) {
 	host, ok := backend.ConnectRex(sessioncontext.New(paths.StateDir())).(spawn.Host)
 	if !ok {
 		return spawn.Result{}, errors.New("この backend は session を作れない")
@@ -49,5 +49,6 @@ func spawnSession(ctx context.Context, paths apppath.Paths, repo, prompt string)
 	if err != nil {
 		return spawn.Result{}, err
 	}
-	return spawn.Runner{Host: host}.Run(ctx, spawn.Request{Repo: repo, Prompt: prompt, Model: model})
+	req.Model = model
+	return spawn.Runner{Host: host}.Run(ctx, req)
 }

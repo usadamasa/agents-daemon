@@ -178,12 +178,14 @@ export type EdgeTarget = {
   cwd?: string
 }
 
-// spawn の stdin。prompt を最初のターンにした Claude Code のセッションを、repo を cwd にした新しい rex の session に起こし、SpawnResult を出す
+// spawn の stdin。prompt を最初のターンにした Claude Code のセッションを、repo を cwd にして rex に起こし、SpawnResult を出す。起こす先は session があればその rex の session のタブ、無ければ新しい rex の session
 export type SpawnRequest = {
   // 新しいセッションの cwd (絶対パス)
   repo: string
   // 最初のターンとして入る本文
   prompt: string
+  // タブを足す先の rex の session (ID か label)。同じ作業のまとまりの peer を並べるときに指定する。省くと新しい rex の session を作る
+  session?: string
 }
 
 // tell の stdin。to_session のセッションが動いている rex の pane の入力欄に text を打って Enter を送り、TellResult を出す。pane で claude が前景でない、利用者の答えを待つ prompt (permission / question / auth) が開いている、上限の画面、入力欄に打ちかけの文がある、のどれかなら送らずに exit 1 で理由を返す。文面を打った後、Enter の前に claude が前景でなくなるか prompt が開いたら、Enter を送らずに exit 1 で理由を返し、文面は入力欄に残る。ターンの途中の pane には送り、文面は入力欄に溜まって次のターンになる

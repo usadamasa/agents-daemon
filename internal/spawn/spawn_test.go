@@ -21,17 +21,26 @@ const (
 type fakeHost struct {
 	run     func(label, cwd string, argv []string) (string, error)
 	paneGet func(paneID string) (multiplexer.Pane, error)
-	// runs は NewSession に渡った引数。
+	// runs は NewSession と NewWindow に渡った引数。NewSession の呼び出しは session が空。
 	runs []runCall
 }
 
 type runCall struct {
+	session    string
 	label, cwd string
 	argv       []string
 }
 
 func (h *fakeHost) NewSession(_ context.Context, label, cwd string, argv []string) (string, error) {
-	h.runs = append(h.runs, runCall{label, cwd, argv})
+	h.runs = append(h.runs, runCall{"", label, cwd, argv})
+	if h.run == nil {
+		return "", errors.New("fakeHost: run が未設定")
+	}
+	return h.run(label, cwd, argv)
+}
+
+func (h *fakeHost) NewWindow(_ context.Context, session, label, cwd string, argv []string) (string, error) {
+	h.runs = append(h.runs, runCall{session, label, cwd, argv})
 	if h.run == nil {
 		return "", errors.New("fakeHost: run が未設定")
 	}
@@ -74,8 +83,7 @@ func request() Request {
 }
 
 // 成功: repo を cwd にした新しい多重化ツールの session で claude を固定の session ID、subagent 用のモデル、本文で起こし、
-// claude が前景になってから結果を返す。起こす側の session には置かない (起きた claude が案内に従って自分の session を
-// rename するので、相乗りすると起こした側の名前が書き換わる。#376)。
+// claude が前景になってから結果を返す。足し先の session を指定しなければ、新しい session を作る。
 func TestRunner_Run(t *testing.T) {
 	host := &fakeHost{run: opened, paneGet: claudePane}
 	got, err := runner(host).Run(context.Background(), request())
@@ -89,10 +97,36 @@ func TestRunner_Run(t *testing.T) {
 		t.Fatalf("NewSession の呼び出し = %d 回, want 1", len(host.runs))
 	}
 	call := host.runs[0]
-	if call.cwd != repoHome || call.label != "example-repo" {
-		t.Errorf("NewSession(%q, %q) (label、cwd が違う)", call.label, call.cwd)
+	if call.session != "" || call.cwd != repoHome || call.label != "example-repo" {
+		t.Errorf("NewSession(%q, %q) (足し先 %q) (label、cwd が違うか、新しい session でない)", call.label, call.cwd, call.session)
 	}
 	wantArgv := []string{"claude", "--session-id", newSID, "--model", "claude-sonnet-5[1m]", "--", request().Prompt}
+	if strings.Join(call.argv, "\x00") != strings.Join(wantArgv, "\x00") {
+		t.Errorf("argv = %q, want %q", call.argv, wantArgv)
+	}
+}
+
+// 足し先の session を指定したときは、新しい session を作らずその session にタブとして起こす。label と argv は
+// 新しい session のときと同じ。
+func TestRunner_Run_IntoSession(t *testing.T) {
+	host := &fakeHost{run: opened, paneGet: claudePane}
+	req := request()
+	req.Session = "session:01a1e34b-42fc-72ea-b04c-1009e911123c"
+	got, err := runner(host).Run(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if want := (Result{SessionID: newSID, PaneID: paneID, Foreground: true}); got != want {
+		t.Errorf("Run() = %+v, want %+v", got, want)
+	}
+	if len(host.runs) != 1 {
+		t.Fatalf("NewWindow の呼び出し = %d 回, want 1", len(host.runs))
+	}
+	call := host.runs[0]
+	if call.session != req.Session || call.cwd != repoHome || call.label != "example-repo" {
+		t.Errorf("NewWindow(%q, %q, %q), want (%q, example-repo, %q)", call.session, call.label, call.cwd, req.Session, repoHome)
+	}
+	wantArgv := []string{"claude", "--session-id", newSID, "--model", "claude-sonnet-5[1m]", "--", req.Prompt}
 	if strings.Join(call.argv, "\x00") != strings.Join(wantArgv, "\x00") {
 		t.Errorf("argv = %q, want %q", call.argv, wantArgv)
 	}

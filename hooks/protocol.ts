@@ -482,7 +482,7 @@ export const definitions = {
     }
   },
   "SpawnRequest": {
-    "description": "spawn の stdin。prompt を最初のターンにした Claude Code のセッションを、repo を cwd にした新しい rex の session に起こし、SpawnResult を出す",
+    "description": "spawn の stdin。prompt を最初のターンにした Claude Code のセッションを、repo を cwd にして rex に起こし、SpawnResult を出す。起こす先は session があればその rex の session のタブ、無ければ新しい rex の session",
     "type": "object",
     "additionalProperties": false,
     "required": [
@@ -497,6 +497,10 @@ export const definitions = {
       "prompt": {
         "type": "string",
         "description": "最初のターンとして入る本文"
+      },
+      "session": {
+        "type": "string",
+        "description": "タブを足す先の rex の session (ID か label)。同じ作業のまとまりの peer を並べるときに指定する。省くと新しい rex の session を作る"
       }
     }
   },

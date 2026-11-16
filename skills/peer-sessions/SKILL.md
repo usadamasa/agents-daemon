@@ -39,7 +39,7 @@ printenv REX_SESSION
 
 | 結果 | 次にすること |
 | ---- | ---- |
-| 値が出る | `references/rex.md` の手順で `rex session new` から claude を起動する |
+| 値が出る | 下の「足し先の session を決める」で決めた先に、`references/rex.md` の手順で claude を起動する |
 | 空 | rex の session を作れないので、ユーザーへ起動を頼む (下の「モデルの指定」の形でコマンドを渡す) |
 
 依頼文を書いてから起こすまでを 1 ターンでやりきる。受領は peer から後で届く。
@@ -47,10 +47,11 @@ printenv REX_SESSION
 1. 依頼文を `./tmp/brief-<作業名>.md` に Write で書く。`<作業名>` は作業を表す 2〜4 語の小文字を
    ハイフンでつないだもの (`fix-note-repo-link`)。依頼文の先頭で、着手前に `SendMessage` で自分へ受領を
    1 行返すよう求める。自分の名前は `ListAgents` の先頭行 (`This session is <名前>`) にある
-2. claude の session_id を `uuidgen` で決め、`references/rex.md` の手順で peer 専用の rex session を
-   `<作業名>` の label で作り、`claude --session-id <uuid> --model ... -- <依頼文>` で起こす。
+2. claude の session_id を `uuidgen` で決め、`references/rex.md` の手順で、新しい rex session か既存の
+   session のタブを `<作業名>` の label で作り、`claude --session-id <uuid> --model ... -- <依頼文>` で起こす。
    渡す先が別リポジトリなら cwd をそのパスにする。自分の worktree は渡さない。
-   結果の rex の `session_id` (畳むときに使う) と claude の `<uuid>` (辺に使う) を控える
+   結果の rex の `session_id` (タブなら足し先の `session_id` と `window_id`。畳むときに使う) と claude の
+   `<uuid>` (辺に使う) を控える
 3. 渡す作業に「これが済まないと始められない」相手 (別の peer の作業、マージ待ちの PR) があれば、
    辺を書く (下の「依存の辺を書く」)
 4. peer の受領の `SendMessage` を待つ。その `from` が peer の宛先になる。完了は依頼文で求めた
@@ -62,6 +63,19 @@ printenv REX_SESSION
 
 <!-- cc-premise: 2.1.325 osc7501 --name を付けると ai-title を作らず、端末の題が名前のまま -->
 <!-- cc-premise: 2.1.325 peer-messaging --name の無いセッションの ListAgents の名前は cwd の basename と連番 -->
+
+### 足し先の session を決める
+
+rex の session は作業のまとまりごとに 1 つにし、同じまとまりの peer はその session にタブとして並べる。
+サイドバーに出る単位は session なので、まとまりごとに分けておけば、どの peer が同じ作業かがサイドバーで分かる。
+
+| 起こす peer | 足し先 |
+| ---- | ---- |
+| 自分の作業の一部 (開発中に dotfile やハーネス設定を直す peer) | 自分の session (`"$REX_SESSION"`) のタブ |
+| 既にある作業の続き | その作業の peer を起こしたときに控えた `session_id` のタブ |
+| 新しい作業のまとまり (dispatcher から新しい依頼を渡す) | 新しい session |
+
+どれにも当たらないと迷ったら新しい session にする。
 
 ### 依存の辺を書く
 
@@ -252,14 +266,15 @@ settings の `env` は Claude Code のプロセスにだけ注入されるので
 
 ## 委譲先セッションの寿命
 
-寿命は担当 PR に揃える。担当 PR がクローズ (マージ含む) されたら、rex の session ごと畳む。
-畳むときは起こしたときに控えた `session_id` で指す。label は起きた claude が rename するので使わない。
+寿命は担当 PR に揃える。担当 PR がクローズ (マージ含む) されたら、peer を畳む。新しい session に立てた peer は
+rex の session ごと、タブに立てた peer はそのタブだけを畳む。
+畳むときは起こしたときに控えた `session_id` (タブなら `window_id` も) で指す。label は起きた claude が rename するので使わない。
 閉じるコマンドは `references/rex.md` の「畳む」にある。空いたセッションを次のタスクへ使い回さず、依頼が出たその時点で
-立て直す。開いている rex の session の数がそのまま進行中の作業の数になる。
+立て直す。開いている rex の session の数がそのまま進行中の作業のまとまりの数になる。
 複数 PR を 1 セッションへ束ねるなら、束ねた全部が閉じるまでが寿命。渡すときからこれを前提に
 スコープを切る。
 
-**1 エージェント = 1 rex session**。指示者セッションも独立した rex session に置く。理由は `references/rex.md`。
+**1 作業のまとまり = 1 rex session**。peer はまとまりの session にタブとして並べる (「足し先の session を決める」)。
 
 ## 届く範囲
 

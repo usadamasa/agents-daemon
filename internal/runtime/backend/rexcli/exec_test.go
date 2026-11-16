@@ -111,6 +111,11 @@ case "$1" in
       kill) exit 0 ;;
       *) echo "Error: unknown session subcommand $2" >&2; exit 2 ;;
     esac ;;
+  window)
+    case "$2" in
+      new) emit window-new.json session ;;
+      *) echo "Error: unknown window subcommand $2" >&2; exit 2 ;;
+    esac ;;
   api) emit server-status.json server ;;
   events)
     emit events.jsonl events

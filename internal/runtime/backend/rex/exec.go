@@ -1,7 +1,7 @@
 // Package rex は rex を操作する multiplexer.Client の実装 (adapter) を提供する。rex の語彙を daemon の語彙 (Pane、
-// Geometry) へ写す。pane の読み書きと session の作成は control API を api から呼び、events の購読と doctor の前提点検は
-// rex の CLI (cli) を起こす。spawn した pane の中で走る包みは wrap、応答と event の形は wire、block の状態から Pane への
-// 写像は blockstate にある。
+// Geometry) へ写す。rex は control API (api) だけで操作し、rex の CLI は起こさない。購読の cache は watch、doctor の
+// 前提点検は premise、spawn した pane の中で走る包み (包みだけが CLI を叩く) は wrap、応答と event の形は wire、
+// block の状態から Pane への写像は blockstate にある。
 package rex
 
 import (
@@ -14,12 +14,12 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/api"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/blockstate"
-	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/cli"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/premise"
+	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/watch"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/wire"
 )
 
-// defaultTimeout は rex の呼び出し 1 回あたりのタイムアウト (CLI の起動と API の request のどちらも)。
+// defaultTimeout は control API の request 1 回あたりのタイムアウト。
 const defaultTimeout = 10 * time.Second
 
 // SessionResolver は block の ID から Claude Code の session_id への対応を返す。
@@ -31,24 +31,22 @@ type SessionResolver func() (map[string]string, error)
 type execClient struct {
 	// rex は control API を呼ぶ。
 	rex *api.Client
-	// cli は events の購読と前提点検で rex の CLI を起こす。
-	cli *cli.Runner
 	// resolve は block_id から session_id を引く (statusline が書いた sidecar)。
 	resolve SessionResolver
 	// watch は Watch が始めた購読の cache。nil なら購読しておらず、PaneList は毎回全列挙する。
-	watch *watchState
+	watch *watch.Watcher
 	// watchBackoff は購読が切れてから張り直すまでの最初の間隔。0 なら defaultWatchBackoff。
 	watchBackoff time.Duration
 }
 
-// NewExecClient は rex server を操作する Client を返す。control API の socket は REX_SERVER か既定の場所、
-// CLI のバイナリは最初の呼び出しで PATH から引く (REX_BIN_PATH があればそれで固定する)。
+// NewExecClient は rex server を操作する Client を返す。control API の socket は REX_SERVER か既定の場所。
+// 接続は最初の呼び出しで張る。
 func NewExecClient(resolve SessionResolver) multiplexer.Client {
 	return newExecClientWithTimeout(resolve, defaultTimeout)
 }
 
 func newExecClientWithTimeout(resolve SessionResolver, timeout time.Duration) *execClient {
-	return &execClient{rex: api.New(api.DefaultSocket, timeout), cli: cli.FromEnv(timeout), resolve: resolve}
+	return &execClient{rex: api.New(api.DefaultSocket, timeout), resolve: resolve}
 }
 
 // PaneList は shell の block を block ID の順に返す。Watch の購読が同期していれば cache から返し、rex を叩かない。
@@ -58,7 +56,7 @@ func (c *execClient) PaneList(ctx context.Context) ([]multiplexer.Pane, error) {
 	if err != nil {
 		return nil, fmt.Errorf("block と session の対応の読み込みに失敗: %w", err)
 	}
-	if panes, ok := c.watch.panes(sessions); ok {
+	if panes, ok := c.watch.Panes(sessions); ok {
 		return panes, nil
 	}
 	blocks, err := c.snapshot(ctx)
@@ -203,13 +201,8 @@ func tailLines(s string, n int) string {
 
 // CheckPremises は doctor の前提点検 (multiplexer.PremiseChecker)。点検の中身は premise が持つ。
 func (c *execClient) CheckPremises(ctx context.Context, blockID, sessionID string) []multiplexer.PremiseFinding {
-	return premise.Check(ctx, premiseRunner{c.cli}, blockID, sessionID)
+	return premise.Check(ctx, c.rex, rexBinary, blockID, sessionID)
 }
-
-// premiseRunner は CLI の Runner に exit 3 の判定を足して premise.Runner にする。
-type premiseRunner struct{ *cli.Runner }
-
-func (premiseRunner) TargetNotFound(err error) bool { return cli.TargetNotFound(err) }
 
 // Reachable は server.status で rex server の生死を確かめる。
 func (c *execClient) Reachable(ctx context.Context) error {

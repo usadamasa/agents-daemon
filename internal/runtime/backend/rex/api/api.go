@@ -415,6 +415,24 @@ func (c *Client) DestroySession(ctx context.Context, session string) error {
 	return c.call(ctx, "session.destroy", map[string]any{"session_id": session}, nil)
 }
 
+// Revision は daemon が hello で名乗る API revision。server の対応する幅に入っていないと接続できない。
+const Revision = control.APIRevision
+
+// Raw は method を呼び、応答を key の有無を見られる形で返す。doctor の前提点検だけが使う (欄の有無は型付きの
+// struct ではゼロ値と見分けられない)。
+func (c *Client) Raw(ctx context.Context, method string, payload any) (map[string]any, error) {
+	var m map[string]any
+	err := c.call(ctx, method, payload, &m)
+	return m, err
+}
+
+// RawBlock は terminal の block の method を Raw と同じ形で呼ぶ。
+func (c *Client) RawBlock(ctx context.Context, session, blockID, method string) (map[string]any, error) {
+	var m map[string]any
+	err := c.blockCall(ctx, session, blockID, method, nil, &m)
+	return m, err
+}
+
 // version は hello で名乗る版。go build のバイナリが持つ module の版で、取れなければ dev。
 func version() string {
 	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" {

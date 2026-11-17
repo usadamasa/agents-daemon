@@ -11,5 +11,8 @@ func ErrorCode(err error) (code string, status int) {
 	return "", 0
 }
 
+// ErrEventOverflow は event の queue が溢れて接続を閉じたときの Err。
+var ErrEventOverflow = errEventOverflow
+
 // WelcomeRevision は welcome が言った api_revision を返す。
 func (c *Conn) WelcomeRevision() int { return c.welcome.apiRevision }

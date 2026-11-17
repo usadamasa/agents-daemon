@@ -59,7 +59,7 @@ plugin が持つもの:
 
 ## 前提
 
-- **rex**: daemon は rex の CLI (`rex ls` / `block call` / `capture` / `send`) で block を見て送信する。
+- **rex**: daemon は rex の control API (server の socket の上の WebSocket) で block を見て送信する。
   rex の外で動く Claude Code には何も届かず、`REX_SESSION` の無いセッションの SessionStart では daemon を起こさない
   (statusline は rex の外でも動く)。server の socket は `~/Library/Application Support/rex/server.sock`。
   sandbox の中から rex を叩くときの設定は「利用者の設定」にある。
@@ -170,7 +170,8 @@ Claude Code の settings の `env` に置く。この plugin は既定値を持�
 ほかに読む環境変数を並べる。どれも無ければ既定の置き場を使う。
 
 - `CLAUDE_CONFIG_DIR`: Claude Code の設定ディレクトリ
-- `REX_BIN_PATH`: rex のバイナリ。無ければ PATH から探す
+- `REX_SERVER`: rex の control API の socket (`unix://` の URL)。rex の pane の中なら rex が渡す
+- `REX_BIN_PATH`: spawn した session の包みが叩く rex のバイナリ。無ければ PATH と rex の既定の置き場から探す
 - `XDG_CONFIG_HOME` / `XDG_STATE_HOME` / `XDG_CACHE_HOME`: 設定・state・バイナリの置き場
 
 ### sandbox

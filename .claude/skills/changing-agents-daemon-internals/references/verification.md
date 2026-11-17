@@ -46,13 +46,13 @@ shell を受け手にすると ESC の直後の文字を Meta として食う (z
 | `REX_BLOCK` の block | `rex split --shell=none -- /bin/sh …` で shell を挟まず直接 | script の先頭で Claude Code と同じ OSC 7501 (`state=idle:app=claude-code`) を `printf` し、`program_status` の record に載せる | `rex block close` |
 
 登録が rex に載ったことを daemon と同じ経路 (`PaneGet` → `IsClaudeAgent`) で待ってから画面を読む。
-rex の `capture` は可視領域しか返さないので、使い捨て block は自分の block の 40% の高さで割る。
+rex の `format` は可視領域しか返さないので、使い捨て block は自分の block の 40% の高さで割る。
 OSC 7501 の書式と判定の条件は [program-status.md](program-status.md)。
 
 `doctor` は rex の server への到達性、Claude pane の一覧 (`session_id` とその出どころ (statusline / registry)、
 transcript の末尾の entry と分類と daemon の扱い、読めなければ ⚠ と理由、block の高さと screen) を出す。
-rex の外 (`REX_SESSION` なし) では exit 1 で止まる。「rex CLI の前提」は自分の block (`REX_BLOCK`) に固定の
-コマンドを打ち、コードが読む欄と exit code が rex の版で変わっていないかを `⚠` で名指しする (rex を上げた直後に
+rex の外 (`REX_SESSION` なし) では exit 1 で止まる。「rex の前提」は自分の block (`REX_BLOCK`) に固定の
+呼び出しを打ち、コードが読む欄と error の code が rex の版で変わっていないかを `⚠` で名指しする (rex を上げた直後に
 全 pane が unknown になったときの最初の手がかり)。末尾の「peer messaging」は
 `CLAUDE_CODE_MESSAGING_SOCKET` と socket の有無で、Claude Code のセッション内 (Bash ツール) から呼んだときだけ
 意味を持つ (切り分けは `agents-daemon:setup` skill の `references/peer-messaging.md`)。

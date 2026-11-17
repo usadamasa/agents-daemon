@@ -30,6 +30,10 @@ const minMessageBytes = 64 * 1024
 // errClosed は Close の後の呼び出しの失敗。
 var errClosed = errors.New("rex の control 接続は閉じている")
 
+// errEventOverflow は event の queue が溢れて接続を閉じたこと。読み手が追いつかないまま event を捨てると、
+// 欠けた event で状態を進めることになる。
+var errEventOverflow = errors.New("rex の event の queue が溢れた")
+
 // apiError は server が response の error で返した失敗。分岐は code で行い、message は人向けの文面。
 type apiError struct {
 	method  string
@@ -63,6 +67,8 @@ type Options struct {
 	// ClientName と ClientVersion は hello の client に載せる (rex の client 一覧に出る)。
 	ClientName    string
 	ClientVersion string
+	// EventBuffer が正なら、event をこの長さの queue (Events) へ渡す。0 なら event を捨てる。
+	EventBuffer int
 }
 
 // welcome は server が hello に返した welcome のうち、client が使うもの。
@@ -81,12 +87,24 @@ type Conn struct {
 	pending map[string]chan response
 	err     error
 
+	// events は event の queue。EventBuffer が 0 なら nil。読む goroutine だけが送り、終わるときに閉じる。
+	events chan Event
 	done   chan struct{}
 	cancel context.CancelFunc
 }
 
+// Event は server が送った event 1 件。
+type Event struct {
+	// Seq はこの接続で送られた event の通し番号 (1 から欠けずに増える)。応答の seq と比べて、結果がどの event まで
+	// 含んでいるかを決める。
+	Seq int64
+	// Payload は event message の payload (`{"type": <event の名前>, "payload": <欄>}`)。
+	Payload json.RawMessage
+}
+
 type response struct {
 	payload json.RawMessage
+	seq     int64
 	err     *apiError
 }
 
@@ -141,6 +159,9 @@ func Dial(ctx context.Context, socketPath string, opts Options) (*Conn, error) {
 		done:    make(chan struct{}),
 		cancel:  cancel,
 	}
+	if opts.EventBuffer > 0 {
+		c.events = make(chan Event, opts.EventBuffer)
+	}
 	go c.readLoop(readCtx)
 	return c, nil
 }
@@ -184,13 +205,21 @@ func handshake(ctx context.Context, ws *websocket.Conn, opts Options) (welcome, 
 // error で返し、対象が無い失敗は IsNotFound で見分ける。
 // ctx が終われば待つのをやめる (server は request を走らせ終えることがある)。
 func (c *Conn) Call(ctx context.Context, method string, payload, out any) error {
+	_, err := c.CallSeq(ctx, method, payload, out)
+	return err
+}
+
+// CallSeq は Call と同じく呼び、応答の seq も返す。seq は server が request を始めた時点でこの接続に積んでいた
+// 最後の event の seq で、結果はそこまでの event を含む。応答はまだ届いていない event を追い越しうる。
+// rex-premise: preview.30 api 応答の seq は request を始めた時点で積んでいた最後の event の seq (無ければ 0)
+func (c *Conn) CallSeq(ctx context.Context, method string, payload, out any) (int64, error) {
 	id := strconv.FormatUint(c.nextID.Add(1), 10)
 	ch := make(chan response, 1)
 	c.mu.Lock()
 	if c.err != nil {
 		err := c.err
 		c.mu.Unlock()
-		return fmt.Errorf("rex %s: %w", method, err)
+		return 0, fmt.Errorf("rex %s: %w", method, err)
 	}
 	c.pending[id] = ch
 	c.mu.Unlock()
@@ -206,36 +235,40 @@ func (c *Conn) Call(ctx context.Context, method string, payload, out any) error 
 	}
 	b, err := json.Marshal(req)
 	if err != nil {
-		return fmt.Errorf("rex %s: request を組めない: %w", method, err)
+		return 0, fmt.Errorf("rex %s: request を組めない: %w", method, err)
 	}
 	// Write の ctx が途中で終わると接続ごと閉じる (ライブラリの仕様)。書き込みは数 ms で済み、
 	// 書けないなら接続が壊れているので、呼び手の ctx をそのまま渡す。
 	if err := c.ws.Write(ctx, websocket.MessageText, b); err != nil {
-		return fmt.Errorf("rex %s: request を送れない: %w", method, err)
+		return 0, fmt.Errorf("rex %s: request を送れない: %w", method, err)
 	}
 	select {
 	case r := <-ch:
 		if r.err != nil {
 			e := *r.err
 			e.method = method
-			return &e
+			return r.seq, &e
 		}
 		if out == nil {
-			return nil
+			return r.seq, nil
 		}
 		if err := json.Unmarshal(r.payload, out); err != nil {
-			return fmt.Errorf("rex %s: 応答の parse に失敗: %w (payload=%q)", method, err, r.payload)
+			return r.seq, fmt.Errorf("rex %s: 応答の parse に失敗: %w (payload=%q)", method, err, r.payload)
 		}
-		return nil
+		return r.seq, nil
 	case <-ctx.Done():
-		return fmt.Errorf("rex %s: %w", method, ctx.Err())
+		return 0, fmt.Errorf("rex %s: %w", method, ctx.Err())
 	case <-c.done:
-		return fmt.Errorf("rex %s: 応答の前に接続が切れた: %w", method, c.Err())
+		return 0, fmt.Errorf("rex %s: 応答の前に接続が切れた: %w", method, c.Err())
 	}
 }
 
 // Done は接続が終わったら閉じる。
 func (c *Conn) Done() <-chan struct{} { return c.done }
+
+// Events は event を届いた順に渡す。接続が終わると、queue に残った event を渡し終えてから閉じる。EventBuffer が 0 の
+// 接続では nil。
+func (c *Conn) Events() <-chan Event { return c.events }
 
 // Err は接続が終わった理由。終わっていなければ nil。
 func (c *Conn) Err() error {
@@ -264,12 +297,18 @@ func (c *Conn) fail(err error) {
 	}
 }
 
-// readLoop は接続が終わるまで message を読み、response を待ち手へ渡す。event は読む口がまだ無いので捨てる。
+// readLoop は接続が終わるまで message を読み、response を待ち手へ、event を queue へ渡す。queue の空きは待たず、
+// 溢れたら close frame (1008) で接続を閉じる (読み手を待つと応答の受け取りが止まる。frame 無しで切ると server は
+// client を 60 秒残す)。溢れた後の event は捨て、close の握手が済んで Read が終わるまで読み続ける。
 // 読み続けることで server の ping にも答え、event の backlog で server に切られない。
 func (c *Conn) readLoop(ctx context.Context) {
+	overflowed := false
 	defer func() {
 		c.cancel()
 		_ = c.ws.CloseNow()
+		if c.events != nil {
+			close(c.events)
+		}
 		close(c.done)
 	}()
 	for {
@@ -282,8 +321,21 @@ func (c *Conn) readLoop(ctx context.Context) {
 		if err := json.Unmarshal(b, &m); err != nil {
 			continue // 読めない message は飛ばす (新しい server が足した形でありうる)
 		}
-		if m.Type == "response" {
+		switch m.Type {
+		case "response":
 			c.deliver(m)
+		case "event":
+			if c.events == nil || overflowed {
+				continue
+			}
+			select {
+			case c.events <- Event{Seq: m.Seq, Payload: m.Payload}:
+			default:
+				overflowed = true
+				c.fail(errEventOverflow)
+				// Close は相手の close frame を待つので、読むこの goroutine の外で送る。
+				go func() { _ = c.ws.Close(websocket.StatusPolicyViolation, "event queue overflow") }()
+			}
 		}
 	}
 }
@@ -295,7 +347,7 @@ func (c *Conn) deliver(m message) {
 	if ch == nil {
 		return // 待ち手が ctx で去った後の応答
 	}
-	r := response{payload: m.Payload}
+	r := response{payload: m.Payload, seq: m.Seq}
 	if m.Error != nil {
 		r.err = &apiError{code: m.Error.Code, message: m.Error.Message, status: m.Error.Status}
 	}

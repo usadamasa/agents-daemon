@@ -17,7 +17,7 @@ type State struct {
 	Process       wire.Process
 }
 
-// Ref は Apply が埋めるよう求めた block。flavor は event に載らないので、呼び手が block ls で確かめる。
+// Ref は Apply が埋めるよう求めた block。flavor は event に載らないので、呼び手が list_blocks で確かめる。
 // Block が空なら session_created で、その session の shell の block を全部埋める。
 type Ref struct {
 	Session string
@@ -38,28 +38,6 @@ func NewCache(blocks map[string]*State) *Cache {
 }
 
 // rex-premise: preview.30 api session.create の最初の block には block_created が来ず、session_created の後にその block の event が流れる
-
-// Relevant は Apply が読む type の行か。client の出入りのような雑音は rex の CLI の呼び出しのたびに流れるので、
-// 呼び手はこれで落としてから溜める。壊れた行は通し、Apply に error を出させる。
-func Relevant(line []byte) bool {
-	var l wire.Event
-	if err := json.Unmarshal(line, &l); err != nil {
-		return true
-	}
-	switch l.Type {
-	case "session_created", "session_destroyed":
-		return true
-	case "session_event":
-		if l.Payload.Event == nil {
-			return false
-		}
-		switch l.Payload.Event.Type {
-		case "block_event", "block_created", "block_closed":
-			return true
-		}
-	}
-	return false
-}
 
 // Apply は stream の 1 行を当てる。block_created と session_created のときだけ、埋めるべき block を返す。
 // 読まない type の行と、cache に無い block (shell 以外か、まだ埋めていない) の event は読み捨てる。
@@ -131,7 +109,7 @@ func (c *Cache) applyBlockEvent(raw json.RawMessage, line []byte) error {
 	case "child_exited":
 		// --keep-open の block は終了後に shell が前景へ戻らず process_changed が来ない。前景を空にして、
 		// 残った record を polling の経路 (終了後の応答に foreground が無い) と同じく未検証にする。
-		// rex-premise: preview.30 cli child_exited の後も idle の record は残る。process_changed は来ないか、来ても foreground は null
+		// rex-premise: preview.30 api child_exited の後も idle の record は残る。process_changed は来ないか、来ても foreground は null
 		st.Process.Foreground = nil
 	}
 	if err != nil {

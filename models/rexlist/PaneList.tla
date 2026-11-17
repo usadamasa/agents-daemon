@@ -1,27 +1,27 @@
 ---------------------------- MODULE PaneList ----------------------------
 (* rex の全列挙 (rex の snapshot) と、その途中で session が消える交錯を写したモデル。
-   全列挙は daemon の購読が未同期の間の PaneList と、購読を張り直すときの watchOnce が使う。
+   全列挙は daemon の購読が未同期の間の PaneList と、購読を張り直すときの watch の once が使う。
 
-   - 全列挙は `ls --json` で session の一覧を 1 回で取り、その一覧の session に 1 つずつ `block ls -s S` を打つ。
+   - 全列挙は `session.list` で session の一覧を 1 回で取り、その一覧の session に 1 つずつ `session.list_blocks` を打つ。
      session の順は決めず、残りのどれからでも打てることにして広く探す。
-   - 利用者はいつでも session を閉じられる (Close)。閉じた session への `block ls` は exit 3 (target not found) になる。
-   - rex の server はいつでも落ちうる (Down)。落ちた後の `block ls` は失敗し、これは本物の障害。
-   - SkipClosed が TRUE なら、`block ls` の exit 3 を「ls の後に閉じた session」として読み飛ばす
-     (block call の exit 3 を読み飛ばすのと同じ扱い)。FALSE なら全列挙の失敗にする。
+   - 利用者はいつでも session を閉じられる (Close)。閉じた session への `list_blocks` は session_not_found になる。
+   - rex の server はいつでも落ちうる (Down)。落ちた後の `list_blocks` は失敗し、これは本物の障害。
+   - SkipClosed が TRUE なら、`list_blocks` の session_not_found を「list の後に閉じた session」として読み飛ばす
+     (block の method の not_found を読み飛ばすのと同じ扱い)。FALSE なら全列挙の失敗にする。
    - 全列挙の失敗は daemon の tick の連続失敗に数え、10 回で daemon が終わる。購読の張り直しでは backoff になる。
      ここでは 1 回の全列挙の結果 (ok / fail) だけを見る。 *)
 
 CONSTANTS
   Sessions,    \* 全列挙を始めたときにある session
-  SkipClosed   \* `block ls` の exit 3 を読み飛ばすか
+  SkipClosed   \* `list_blocks` の session_not_found を読み飛ばすか
 
 VARIABLES
   live,     \* 今ある session
   down,     \* rex の server が落ちたか
   pc,       \* 全列挙の段: idle / listing / done
   listed,   \* `ls` が返した session
-  todo,     \* `block ls` をまだ打っていない session
-  skipped,  \* exit 3 で読み飛ばした session
+  todo,     \* `list_blocks` をまだ打っていない session
+  skipped,  \* session_not_found で読み飛ばした session
   result    \* 全列挙の結果: none / ok / fail
 
 vars == <<live, down, pc, listed, todo, skipped, result>>
@@ -56,7 +56,7 @@ Down ==
   /\ down' = TRUE
   /\ UNCHANGED <<live, pc, listed, todo, skipped, result>>
 
-\* `ls --json`: 今ある session を 1 回で取る。server が落ちていれば失敗する。
+\* `session.list`: 今ある session を 1 回で取る。server が落ちていれば失敗する。
 List ==
   /\ pc = "idle"
   /\ IF down
@@ -69,7 +69,7 @@ List ==
             /\ UNCHANGED result
   /\ UNCHANGED <<live, down, skipped>>
 
-\* `block ls -s S`: server が落ちていれば失敗。閉じた session は exit 3 で、SkipClosed なら読み飛ばす。
+\* `session.list_blocks S`: server が落ちていれば失敗。閉じた session は session_not_found で、SkipClosed なら読み飛ばす。
 BlockLs(s) ==
   /\ pc = "listing"
   /\ s \in todo

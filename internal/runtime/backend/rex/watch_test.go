@@ -2,16 +2,18 @@ package rex
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
+	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/api/apitest"
+	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/api/control/controltest"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/wire"
 )
 
@@ -59,35 +61,18 @@ func startWatch(t *testing.T, c *execClient) *logSink {
 	return sink
 }
 
-// ctx を止めると、Watch の返す channel は events の子プロセスを刈り取ってから閉じる。daemon はこれを待ってから
-// 終わるので、入れ替わりのたびに events の子が rex に繋がったまま残らない。
-func TestWatch_DoneAfterChildReaped(t *testing.T) {
-	f := newFakeRex(t)
-	api := ownBlockAPI(t)
-	f.put(t, "events.jsonl", measured(t, measuredOct27, "events.jsonl"))
-	f.put(t, "events-hold", "")
-	c := api.clientWith(f, staticResolver(nil))
-	c.watchBackoff = time.Hour
-	ctx, cancel := context.WithCancel(context.Background())
-	done := c.Watch(ctx, (&logSink{}).logf)
-	eventually(t, "同期済み", c.watch.synced)
-
-	cancel()
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("ctx を止めても 2 秒で購読が終わらない (events の子が残る)")
-	}
-	if c.watch.synced() {
-		t.Error("購読が終わった後も同期済みのまま")
-	}
+// synced は購読が同期して PaneList が cache から返す状態か。
+func synced(c *execClient) bool {
+	_, ok := c.watch.Panes(nil)
+	return ok
 }
 
-// clearCalls は calls.log を空にする。以降の rex の呼び出しだけを assertCalls で見る。
-func (f *fakeRex) clearCalls(t *testing.T) {
-	t.Helper()
-	if err := os.WriteFile(filepath.Join(f.dir, "calls.log"), nil, 0o600); err != nil {
-		t.Fatalf("calls.log を空にできない: %v", err)
+// emitLines は 1 行 1 event (`rex events --json` と同じ形) の lines を、attach_all した接続へ順に流す。
+func emitLines(f *fakeAPI, lines string) {
+	for _, line := range strings.Split(lines, "\n") {
+		if line != "" {
+			f.Protocol().Emit(json.RawMessage(line))
+		}
 	}
 }
 
@@ -100,19 +85,55 @@ func ownBlockAPI(t *testing.T) *fakeAPI {
 	return api
 }
 
-// 同期した後の PaneList は rex を叩かずに cache から返す。stream の event は全列挙の後に当たる。
-func TestWatch_PaneListFromCache(t *testing.T) {
-	f := newFakeRex(t)
+// 購読は呼び出しと別の接続で attach_all (event_scope all) を打つ。block_event は event_scope all の接続にだけ届く。
+// ctx を止めると、Watch の返す channel は購読の接続を close frame で閉じてから閉じる。daemon はこれを待ってから
+// 終わるので、入れ替わりのたびに購読の client が rex に残らない。
+func TestWatch_SubscribesOnOwnConnectionAndClosesIt(t *testing.T) {
 	api := ownBlockAPI(t)
-	f.put(t, "events.jsonl", measured(t, measuredOct27, "events.jsonl"))
-	f.put(t, "events-hold", "")
-	c := api.clientWith(f, staticResolver(map[string]string{blockOwn: sidOwn}))
+	c := api.client(staticResolver(nil))
+	c.watchBackoff = time.Hour
+	ctx, cancel := context.WithCancel(context.Background())
+	done := c.Watch(ctx, (&logSink{}).logf)
+	eventually(t, "同期済み", func() bool { return synced(c) })
+
+	var scopes []string
+	for _, p := range api.RequestsOf("session.attach_all") {
+		var req struct {
+			EventScope string `json:"event_scope"`
+		}
+		_ = json.Unmarshal(p, &req)
+		scopes = append(scopes, req.EventScope)
+	}
+	slices.Sort(scopes)
+	if !slices.Equal(scopes, []string{"all", "session"}) {
+		t.Errorf("attach_all の event_scope = %v, want 購読の all と呼び出しの session の 2 本", scopes)
+	}
+	if n := api.Protocol().Connections(); n != 2 {
+		t.Errorf("接続 = %d, want 購読と呼び出しの 2 本", n)
+	}
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("ctx を止めても 2 秒で購読が終わらない")
+	}
+	if synced(c) {
+		t.Error("購読が終わった後も同期済みのまま")
+	}
+	eventually(t, "購読の接続が閉じる", func() bool { return api.Protocol().Connections() == 1 })
+}
+
+// 同期した後の PaneList は rex を叩かずに cache から返す。同期の後に届いた event が cache に当たる。
+func TestWatch_PaneListFromCache(t *testing.T) {
+	api := ownBlockAPI(t)
+	c := api.client(staticResolver(map[string]string{blockOwn: sidOwn}))
 
 	startWatch(t, c)
-	eventually(t, "同期済み", c.watch.synced)
+	eventually(t, "同期済み", func() bool { return synced(c) })
+	emitLines(api, measured(t, measuredOct27, "events.jsonl"))
 	// stream の block_created と session_created が打つ list_blocks を待ってから数える。
-	eventually(t, "stream の event の list_blocks", func() bool { return len(api.Calls()) >= 6 })
-	f.clearCalls(t)
+	eventually(t, "stream の event の list_blocks", func() bool { return len(api.Calls()) >= 7 })
 	before := len(api.Calls())
 
 	panes, err := c.PaneList(context.Background())
@@ -126,41 +147,79 @@ func TestWatch_PaneListFromCache(t *testing.T) {
 	if !slices.Equal(panes, want) {
 		t.Errorf("PaneList() =\n%+v\nwant\n%+v", panes, want)
 	}
-	f.assertCalls(t)
 	if after := api.Calls()[before:]; len(after) != 0 {
 		t.Errorf("cache から返すはずが API を叩いた: %v", after)
 	}
 }
 
-// 購読は events --all --json を張り、最初の行を受けてから全列挙で cache を作る。stream の途中の block_created は
-// その session に list_blocks を打ち、shell の block なら program_status と process で埋める (使い捨ての block は
-// list_blocks に無いので埋めない)。
+// 購読を張ってから全列挙で cache を作る。stream の途中の block_created はその session に list_blocks を打ち、shell の
+// block なら program_status と process で埋める (使い捨ての block は list_blocks に無いので埋めない)。
 func TestWatch_Calls(t *testing.T) {
-	f := newFakeRex(t)
 	api := ownBlockAPI(t)
-	f.put(t, "events.jsonl", measured(t, measuredOct27, "events.jsonl"))
-	f.put(t, "events-hold", "")
-	c := api.clientWith(f, staticResolver(nil))
+	c := api.client(staticResolver(nil))
 
 	startWatch(t, c)
-	eventually(t, "同期済み", c.watch.synced)
-	eventually(t, "block_created と session_created の list_blocks", func() bool { return len(api.Calls()) >= 6 })
-	f.assertCalls(t, "--autostart=false events --all --json")
+	eventually(t, "同期済み", func() bool { return synced(c) })
+	emitLines(api, measured(t, measuredOct27, "events.jsonl"))
+	eventually(t, "block_created と session_created の list_blocks", func() bool { return len(api.Calls()) >= 7 })
 	api.assertCalls(t,
 		"session.list",
 		"session.list_blocks "+sessionOwn,
 		"program_status "+blockOwn,
 		"process "+blockOwn,
+		// 全列挙の後に購読の接続で打つ同期。応答の seq までの event を当ててから公開する。
+		"server.version",
 		"session.list_blocks "+sessionOwn,
 		// 実測の stream の session_created。fake にその session は無いので session_not_found で読み飛ばす。
 		"session.list_blocks session:01a17d51-a67b-7c38-bd8e-3265c5f30a95",
 	)
 }
 
-// 新しい session の最初の block には block_created が来ない (testdata の events-session-new.jsonl)。session_created で
-// その session の shell の block を全部埋め、以降の event が当たる。
+// 全列挙の途中に届いた event は、全列挙の後に順に当て直す。全列挙が読んだ後の変化を落とさない。
+func TestWatch_EventDuringSnapshotIsApplied(t *testing.T) {
+	api := ownBlockAPI(t)
+	// 全列挙が process を読む間に、block の Claude Code が done を報告する。
+	api.Protocol().Handle(apitest.TerminalMethod+"process", func(json.RawMessage) (any, error) {
+		emitLines(api, psChangedLine(sessionOwn, blockOwn, "done", "できた", pidOwn))
+		return json.RawMessage(processJSON(pidOwn, "claude", cwdOwn)), nil
+	})
+	c := api.client(staticResolver(nil))
+
+	startWatch(t, c)
+	eventually(t, "全列挙の途中の event が cache に当たる", func() bool {
+		panes, ok := c.watch.Panes(nil)
+		return ok && len(panes) == 1 && panes[0].AgentStatus == multiplexer.AgentStatusDone
+	})
+}
+
+// 全列挙が読んだ変化の event が全列挙の応答より後に届いても、同期の前に当てる。全列挙の途中に working → done と
+// 変わり、全列挙は done を読み、done の event だけ遅れて届く。同期の後の PaneList は一度も working (全列挙より古い
+// 状態) を返さない。
+func TestWatch_SyncCoversEventsTheSnapshotSaw(t *testing.T) {
+	api := ownBlockAPI(t)
+	api.Put("program_status", blockOwn, `{"records":[{"state":"done","app":"claude-code","msg":"できた","owner":{"pid":`+strconv.Itoa(pidOwn)+`}}]}`)
+	api.Protocol().Handle(apitest.TerminalMethod+"process", func(json.RawMessage) (any, error) {
+		emitLines(api, psChangedLine(sessionOwn, blockOwn, "working", "作業中", pidOwn))
+		api.Protocol().EmitDelayed(json.RawMessage(psChangedLine(sessionOwn, blockOwn, "done", "できた", pidOwn)), 300*time.Millisecond)
+		return json.RawMessage(processJSON(pidOwn, "claude", cwdOwn)), nil
+	})
+	c := api.client(staticResolver(nil))
+
+	startWatch(t, c)
+	eventually(t, "同期済み", func() bool { return synced(c) })
+	deadline := time.Now().Add(600 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		panes, ok := c.watch.Panes(nil)
+		if ok && (len(panes) != 1 || panes[0].AgentStatus != multiplexer.AgentStatusDone) {
+			t.Fatalf("同期の後に全列挙より古い状態を返した: %+v", panes)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// 新しい session の最初の block には block_created が来ない (testdata の events-session-new.jsonl、2026-11-18 に API の
+// event でも同じことを確かめた)。session_created でその session の shell の block を全部埋め、以降の event が当たる。
 func TestWatch_NewSessionBlocks(t *testing.T) {
-	f := newFakeRex(t)
 	api := newFakeAPI(t)
 	api.AddSession(sessionA)
 	// session B は全列挙の後にできた session なので、session.list には出さない。
@@ -169,38 +228,38 @@ func TestWatch_NewSessionBlocks(t *testing.T) {
 		[2]string{blockNotShell, "com.superlogical.browser"},
 	)
 	api.PutBlock(blockClaudeDone, psEmpty, processJSON(pidClaudeDone, "claude", "/b"))
-	f.put(t, "events.jsonl", strings.Join([]string{
-		`{"type":"session_created","payload":{"session":{"session_id":"` + sessionB + `","label":"new"}}}`,
-		psChangedLine(sessionB, blockClaudeDone, "done", "できた", pidClaudeDone),
-	}, "\n")+"\n")
-	f.put(t, "events-hold", "")
-	c := api.clientWith(f, staticResolver(nil))
+	c := api.client(staticResolver(nil))
 
 	startWatch(t, c)
+	eventually(t, "同期済み", func() bool { return synced(c) })
+	emitLines(api, strings.Join([]string{
+		`{"type":"session_created","payload":{"session":{"session_id":"` + sessionB + `","label":"new"}}}`,
+		psChangedLine(sessionB, blockClaudeDone, "done", "できた", pidClaudeDone),
+	}, "\n"))
 	eventually(t, "新しい session の block が cache に入る", func() bool {
-		panes, ok := c.watch.panes(nil)
+		panes, ok := c.watch.Panes(nil)
 		return ok && len(panes) == 1 && panes[0].AgentStatus == multiplexer.AgentStatusDone
 	})
-	panes, _ := c.watch.panes(nil)
+	panes, _ := c.watch.Panes(nil)
 	want := multiplexer.Pane{PaneID: blockClaudeDone, CWD: "/b", PID: pidClaudeDone, Agent: "claude", AgentStatus: multiplexer.AgentStatusDone, AgentMessage: "できた"}
 	if panes[0] != want {
 		t.Errorf("panes = %+v, want %+v", panes[0], want)
 	}
 }
 
-// stream が切れたら未同期に戻り、理由をログに残す。未同期の間の PaneList は全列挙で返す。
-func TestWatch_StreamEndFallsBackToListing(t *testing.T) {
-	f := newFakeRex(t)
+// 購読の接続が切れたら未同期に戻り、理由をログに残す。未同期の間の PaneList は全列挙で返す。
+func TestWatch_DisconnectFallsBackToListing(t *testing.T) {
 	api := ownBlockAPI(t)
-	f.put(t, "events.jsonl", measured(t, measuredOct27, "events.jsonl"))
-	c := api.clientWith(f, staticResolver(nil))
+	c := api.client(staticResolver(nil))
 
 	sink := startWatch(t, c)
+	eventually(t, "同期済み", func() bool { return synced(c) })
+	api.Protocol().CloseConnections()
 	eventually(t, "切断のログ", func() bool { return len(sink.snapshot()) > 0 })
-	if c.watch.synced() {
-		t.Error("stream が切れた後も同期済みのまま")
+	if synced(c) {
+		t.Error("購読が切れた後も同期済みのまま")
 	}
-	if got := sink.snapshot()[0]; !strings.Contains(got, "rex events の購読が切れ") {
+	if got := sink.snapshot()[0]; !strings.Contains(got, "rex の event の購読が切れ") {
 		t.Errorf("log = %q, want 購読が切れた旨", got)
 	}
 
@@ -214,14 +273,20 @@ func TestWatch_StreamEndFallsBackToListing(t *testing.T) {
 	}
 }
 
-// events を張れなければ (server が古い、落ちている) 同期せず、PaneList は全列挙のまま。
+// 購読を張れなければ (server が古い、event_scope all を断る) 同期せず、PaneList は全列挙のまま。
 func TestWatch_CannotSubscribe(t *testing.T) {
-	f := newFakeRex(t)
-	c := ownBlockAPI(t).clientWith(f, staticResolver(nil))
+	api := ownBlockAPI(t)
+	api.Protocol().Handle("session.attach_all", func(p json.RawMessage) (any, error) {
+		if strings.Contains(string(p), `"all"`) {
+			return nil, &controltest.Error{Code: "invalid_argument", Message: "unknown event_scope", Status: 400}
+		}
+		return map[string]any{}, nil
+	})
+	c := api.client(staticResolver(nil))
 
 	sink := startWatch(t, c)
 	eventually(t, "失敗のログ", func() bool { return len(sink.snapshot()) > 0 })
-	if _, ok := c.watch.panes(nil); ok {
+	if synced(c) {
 		t.Error("購読できないのに cache を返した")
 	}
 	panes, err := c.PaneList(context.Background())
@@ -232,14 +297,14 @@ func TestWatch_CannotSubscribe(t *testing.T) {
 
 // Watch を呼ばない Client (doctor、inspect、simulate) は購読しない。
 func TestWatch_NotStartedWithoutWatch(t *testing.T) {
-	f := newFakeRex(t)
-	c := ownBlockAPI(t).clientWith(f, staticResolver(nil))
+	api := ownBlockAPI(t)
+	c := api.client(staticResolver(nil))
 	if _, err := c.PaneList(context.Background()); err != nil {
 		t.Fatalf("PaneList() error = %v", err)
 	}
-	for _, line := range readLines(t, filepath.Join(f.dir, "calls.log")) {
-		if strings.Contains(line, "events") {
-			t.Errorf("Watch を呼んでいないのに events を張った: %s", line)
+	for _, p := range api.RequestsOf("session.attach_all") {
+		if strings.Contains(string(p), `"all"`) {
+			t.Errorf("Watch を呼んでいないのに購読した: %s", p)
 		}
 	}
 }

@@ -1,8 +1,8 @@
 # 点検の記録
 
 `catching-up-with-rex-changelog` を回すたびに 1 行足す。次回に読む changelog の範囲は、最後の行の Mac の版の次から。
-`rex_version`、`built_at`、`api_revision` は `rex version --json` の値 (`api_revision` は CLI が対応する API の版、
-無い版は `-`)。Mac は `(Mac)` の投稿の `preview.N` で、marker の `<version>` と同じ値。
+`rex_version`、`built_at`、`api_revision` は doctor の「rex の前提」の節が出す server (`server.version`) の値。
+2026-11-15 までの行は `rex version --json` (CLI) の値で、`api_revision` の無い版は `-`。Mac は `(Mac)` の投稿の `preview.N` で、marker の `<version>` と同じ値。
 CLI は `(Server & CLI)` の投稿の `preview.N` で、`rex_version` の末尾と同じ。2026-11-03 までの行は、当時の
 `(CLI)` の投稿の hash (`rex version --json` の `commit` の先頭 7 桁) で、投稿が無い版は `-`。
 `api_revision` が前回から上がっていれば、changelog に載らない record や応答の形の変更があり得る節目なので、

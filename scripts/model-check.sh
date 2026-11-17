@@ -74,9 +74,9 @@ run models/refstate RefState RefStateDroppedAsDone.cfg violated
 run models/refstate RefState RefStateNoRefetch.cfg violated
 # 済んだ状態に変わった引き直しのときだけ辺を消すと、済んだ PR へ後から書いた辺が残り続ける (EdgeRemoved の反例、#422)。
 run models/refstate RefState RefStateSweepOnTransition.cfg violated
-# rex の全列挙で block ls の exit 3 を、ls の後に閉じた session として読み飛ばす形 (#302)。
+# rex の全列挙で list_blocks の session_not_found を、list の後に閉じた session として読み飛ばす形 (#302)。
 run models/rexlist PaneList PaneList.cfg holds
-# exit 3 を全列挙の失敗にすると、session を閉じただけで失敗する (FailOnlyWhenDown の反例)。
+# session_not_found を全列挙の失敗にすると、session を閉じただけで失敗する (FailOnlyWhenDown の反例)。
 run models/rexlist PaneList PaneListNoSkip.cfg violated
 # 終了したセッションの完了タスクを作業の記録が消えるまで掃除しない形 (#483)。カードの状態を実装の式で導く。liveness も見る。
 run models/card Card Card.cfg holds

@@ -87,7 +87,7 @@ func TestExecClient_NewSession(t *testing.T) {
 	f := spawnAPI(t)
 	rex := newFakeRex(t)
 	self := useFakeSelf(t, rex)
-	c := f.clientWith(rex, staticResolver(nil))
+	c := f.client(staticResolver(nil))
 
 	prompt := "パーキングロットのメモ「x」をタスクにしてください。 詳細: a b"
 	argv := []string{"claude", "--session-id", sidDone, "--", prompt}
@@ -152,7 +152,7 @@ func TestExecClient_NewSession_DashLabel(t *testing.T) {
 			f := spawnAPI(t)
 			rex := newFakeRex(t)
 			useFakeSelf(t, rex)
-			if _, err := f.clientWith(rex, staticResolver(nil)).NewSession(context.Background(), tt.label, "/w/-x", []string{"claude"}); err != nil {
+			if _, err := f.client(staticResolver(nil)).NewSession(context.Background(), tt.label, "/w/-x", []string{"claude"}); err != nil {
 				t.Fatalf("NewSession() error = %v", err)
 			}
 			var req createRequest
@@ -269,7 +269,7 @@ func TestExecClient_NewSession_ClosesOnExit(t *testing.T) {
 			}
 			useFakeSelf(t, rex)
 			inner := []string{"/bin/sh", "-c", "exit " + strconv.Itoa(tt.exit)}
-			if _, err := f.clientWith(rex, staticResolver(nil)).NewSession(context.Background(), "x", "/w/x", inner); err != nil {
+			if _, err := f.client(staticResolver(nil)).NewSession(context.Background(), "x", "/w/x", inner); err != nil {
 				t.Fatalf("NewSession() error = %v", err)
 			}
 			runWrapped(t, spawnedArgv(t, f), []string{"REX_SESSION=session:spawned", "REX_BLOCK=block:own"}, tt.exit, tt.interrupt, rex)
@@ -299,7 +299,7 @@ func TestExecClient_NewSession_OwnProcessGroup(t *testing.T) {
 	rex.put(t, "block-ls-session:spawned.json", `{"blocks":[]}`)
 	useFakeSelf(t, rex)
 	inner := []string{"perl", "-e", `print getpgrp() == $$ ? "own" : "shared"`}
-	if _, err := f.clientWith(rex, staticResolver(nil)).NewSession(context.Background(), "x", "/w/x", inner); err != nil {
+	if _, err := f.client(staticResolver(nil)).NewSession(context.Background(), "x", "/w/x", inner); err != nil {
 		t.Fatalf("NewSession() error = %v", err)
 	}
 	argv := spawnedArgv(t, f)
@@ -348,7 +348,7 @@ func TestExecClient_NewSession_Failures(t *testing.T) {
 			}
 			rex := newFakeRex(t)
 			useFakeSelf(t, rex)
-			_, err := f.clientWith(rex, staticResolver(nil)).NewSession(context.Background(), "x", "/w/x", []string{"claude"})
+			_, err := f.client(staticResolver(nil)).NewSession(context.Background(), "x", "/w/x", []string{"claude"})
 			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 				t.Errorf("NewSession() error = %v, want containing %q", err, tt.wantErr)
 			}
@@ -489,7 +489,7 @@ func TestExecClient_NewWindow_ExitKeepsSession(t *testing.T) {
 			useFakeSelf(t, rex)
 			envOut := filepath.Join(rex.dir, "env.txt")
 			inner := []string{"/bin/sh", "-c", `printf %s "$` + sharedEnv + `" > "$0"; exit ` + strconv.Itoa(tt.exit), envOut}
-			if _, err := f.clientWith(rex, staticResolver(nil)).NewWindow(context.Background(), sharedSession, "x", "/w/x", inner); err != nil {
+			if _, err := f.client(staticResolver(nil)).NewWindow(context.Background(), sharedSession, "x", "/w/x", inner); err != nil {
 				t.Fatalf("NewWindow() error = %v", err)
 			}
 			var req newWindowRequest

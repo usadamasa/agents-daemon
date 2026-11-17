@@ -85,7 +85,7 @@ type rexHost struct {
 const claudeProgramStatusCommand = `printf '\033]7501;state=idle:app=claude-code\a'`
 
 // SplitPane は自分の block (REX_BLOCK) の下に block を作り、shell を挟まず script を直接走らせる。
-// rex の capture は可視領域しか返さないので、limit 風の画面が収まる高さ (40%) を取る (高さは rex が決める)。
+// rex の format は可視領域しか返さないので、limit 風の画面が収まる高さ (40%) を取る (高さは rex が決める)。
 // script が落ちたときに画面を読めるよう、終わっても block を残す。
 func (h *rexHost) SplitPane(ctx context.Context, scriptPath, screenPath string) (string, error) {
 	id, err := h.ops.SplitPane(ctx, h.ownBlock, simulateMetadataSource, []string{"/bin/sh", scriptPath, screenPath})

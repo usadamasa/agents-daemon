@@ -34,6 +34,8 @@ type Server struct {
 	// failing は method の短い名前と block か session で、internal の失敗を返すもの。
 	failing map[string]bool
 	status  string
+	// version は server.version の応答。空なら失敗を返す。既定は revision 14 の fake の版。
+	version string
 	// labels は session の label。
 	labels map[string]string
 	// closing は閉じかけの session。list_blocks が conflict になる。
@@ -48,8 +50,13 @@ func New(t testing.TB) *Server {
 	s := &Server{
 		srv: controltest.New(t), blocks: map[string][][2]string{}, results: map[string]string{}, failing: map[string]bool{},
 		labels: map[string]string{}, closing: map[string]bool{}, truncated: map[string]bool{},
+		// 購読の同期も server.version を打つので、既定で応える。
+		version: `{"rex_version":"0.0.0-fake","built_at":"2026-01-01T00:00:00Z","dirty":false,"api_revision":14}`,
 	}
 	s.srv.Handle("server.status", s.serverStatus)
+	s.srv.Handle("server.version", s.serverVersion)
+	// describe_block は block の method と同じく、Put で置いた応答を block ごとに返す。
+	s.srv.Handle("session.describe_block", func(p json.RawMessage) (any, error) { return s.blockMethod("describe_block", p) })
 	s.srv.Handle("session.list", s.listSessions)
 	s.srv.Handle("session.list_blocks", s.listBlocks)
 	s.srv.Handle("target.resolve", s.resolve)
@@ -121,6 +128,13 @@ func (s *Server) AddSession(session string, blocks ...[2]string) {
 	s.blocks[session] = append([][2]string{}, blocks...)
 }
 
+// SetBlocks は置いた session の block を差し替える。
+func (s *Server) SetBlocks(session string, blocks ...[2]string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.blocks[session] = append([][2]string{}, blocks...)
+}
+
 // AddUnlisted は block を持つが session.list に出ない session (全列挙の後にできた session) を置く。
 func (s *Server) AddUnlisted(session string, blocks ...[2]string) {
 	s.mu.Lock()
@@ -135,7 +149,7 @@ func (s *Server) ListOnly(session string) {
 	s.sessions = append(s.sessions, session)
 }
 
-// Put は block の method (短い名前) の応答を置く。format では画面の文字列を置く。
+// Put は block の method (短い名前と describe_block) の応答を置く。format では画面の文字列を置く。
 func (s *Server) Put(method, blockID, result string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -174,6 +188,13 @@ func (s *Server) SetStatus(status string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.status = status
+}
+
+// SetVersion は server.version の応答を置く。空なら失敗を返す。
+func (s *Server) SetVersion(version string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.version = version
 }
 
 // Calls は受けた request を "<method> <block か query か session>" の形で受けた順に返す。block の method は短い名前にする。
@@ -226,6 +247,15 @@ func (s *Server) serverStatus(json.RawMessage) (any, error) {
 		return nil, internalError()
 	}
 	return json.RawMessage(s.status), nil
+}
+
+func (s *Server) serverVersion(json.RawMessage) (any, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.version == "" {
+		return nil, internalError()
+	}
+	return json.RawMessage(s.version), nil
 }
 
 func (s *Server) listSessions(json.RawMessage) (any, error) {

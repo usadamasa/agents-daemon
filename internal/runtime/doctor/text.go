@@ -26,7 +26,7 @@ func write(w io.Writer, rep Report) {
 	}
 	writePanes(w, *rep.Panes)
 
-	_, _ = fmt.Fprintf(w, "\n-- %s CLI の前提 (自分の block への固定コマンドの応答の形) --\n", rep.Backend.Kind)
+	_, _ = fmt.Fprintf(w, "\n-- %s の前提 (自分の block に打つ固定の呼び出しの応答の形) --\n", rep.Backend.Kind)
 	writePremises(w, *rep.Premises)
 
 	_, _ = fmt.Fprintln(w, "\n-- statusline state (セッションごとの rate-limits) --")

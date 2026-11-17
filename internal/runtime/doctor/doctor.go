@@ -1,5 +1,5 @@
 // Package doctor は `doctor` サブコマンド (daemon が動作するための前提条件の診断) の実装を提供する。
-// 多重化ツールへの到達性、pane の見え方 (session の出どころと transcript の末尾を含む)、rex CLI の前提、statusline の
+// 多重化ツールへの到達性、pane の見え方 (session の出どころと transcript の末尾を含む)、rex の前提、statusline の
 // state、設定、daemon の稼働、peer messaging、解決済みパスを Report に集めてから書く。文字の出力 (write) と `--json` の
 // 出力が同じ判定を見るためで、JSON の形は Report の json tag が決める。他の読むだけの診断 (inspect / status / logs) は
 // verify パッケージ。
@@ -47,8 +47,8 @@ type Input struct {
 	// 空なら pane の session を補えず、transcript も読めない。
 	ClaudeConfigDir string
 	Now             time.Time
-	Getenv          func(string) string // peer messaging と rex CLI の前提 (REX_BLOCK / REX_SESSION) に使う環境 (通常は os.Getenv)
-	// Premises は rex CLI の前提の点検。Client がその口を持たなければ nil。
+	Getenv          func(string) string // peer messaging と rex の前提 (REX_BLOCK / REX_SESSION) に使う環境 (通常は os.Getenv)
+	// Premises は rex の前提の点検。Client がその口を持たなければ nil。
 	Premises multiplexer.PremiseChecker
 	// DreamPolicy は dream の規約 (config.json の dream.policy) を読み、読めた規約のパスを返す。
 	// dream は runtime の外の家族なので、cmd が組んで渡す。nil なら節を省く。
@@ -135,7 +135,7 @@ type EntryReport struct {
 	plan     monitor.Plan
 }
 
-// PremisesReport は rex CLI の前提の点検。点検しなかったときは Skipped に理由が入り Findings は空。
+// PremisesReport は rex の前提の点検。点検しなかったときは Skipped に理由が入り Findings は空。
 type PremisesReport struct {
 	Skipped  string                       `json:"skipped,omitempty"`
 	Findings []multiplexer.PremiseFinding `json:"findings"`

@@ -572,6 +572,7 @@ func connect(ctx context.Context, store sessionstate.Store) (kind string, client
 	reachCtx, cancel := context.WithTimeout(ctx, reachTimeout)
 	defer cancel()
 	if err := execClient.Reachable(reachCtx); err != nil {
+		backend.Close(execClient)
 		return "", nil, fmt.Errorf("%s に到達できないため起動しません: %w", kind, err)
 	}
 	return kind, execClient, nil
@@ -625,6 +626,7 @@ func RunForeground(ctx context.Context, p apppath.Paths, dryRun bool) error {
 	if err != nil {
 		return err
 	}
+	defer backend.Close(client)
 
 	if err := daemonstate.WritePIDFile(p.PIDFile(), os.Getpid()); err != nil {
 		return err

@@ -80,7 +80,7 @@ Init ==
 
 CloseVars == <<cpc, target, m, goneAtStart, startMarkedLive, refused, result, closeKilled>>
 
-\* ---- 包み (rex の closeOnExitScript) ----
+\* ---- 包み (rex/wrap の sessionScript) ----
 
 \* `spawned-session mark "$REX_SESSION"` (parkcli の mark → spawnedsession.Put)。
 WMark(s) ==

@@ -18,12 +18,10 @@ func (c *execClient) SessionBlocks(ctx context.Context, sessionID string) (n int
 	return len(blocks.Blocks), true, nil
 }
 
-// SessionKill は session を ID で閉じる。中の block も確認なしで閉じる。
-// rex-premise: preview.30 cli session kill は session ID を受ける
+// SessionKill は session を ID で閉じる。中の block も確認なしで閉じる。無い session は not found の error になる。
 func (c *execClient) SessionKill(ctx context.Context, sessionID string) error {
 	if sessionID == "" {
-		return errors.New("rex session kill: session ID が空")
+		return errors.New("rex の session を閉じられない: session ID が空")
 	}
-	_, err := c.cli.Run(ctx, "session", "kill", sessionID)
-	return err
+	return c.rex.DestroySession(ctx, sessionID)
 }

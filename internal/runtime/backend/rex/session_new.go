@@ -2,80 +2,74 @@ package rex
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/api"
+	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/wrap"
 )
 
 // selfBinary は包みが印を書くのに呼ぶ agents-daemon のパス。spawn を走らせている自分 (cache のバイナリ) を指す。
 // テストは差し替える (go test のバイナリを包みから起こさない)。
 var selfBinary = os.Executable
 
-// sessionNewResult は `session new --json` の応答。initial_windows[0].block_ids[0] が新しい session の pane。
-// rex-premise: preview.30 cli session new --json は session_id と initial_windows (window_id、block_ids) を返す
-type sessionNewResult struct {
-	SessionID      string `json:"session_id"`
-	InitialWindows []struct {
-		WindowID string   `json:"window_id"`
-		BlockIDs []string `json:"block_ids"`
-	} `json:"initial_windows"`
-}
+// rexBinary は包みが叩く rex のパス。テストは fake の rex に差し替える。
+var rexBinary = wrap.Locate
 
-// closeOnExitScript は起こしたコマンドを走らせ、終わったら session に残る block が自分 (REX_BLOCK) だけのときに
-// 自分の rex session を閉じる sh の本文。$1 が rex のバイナリ、$2 が agents-daemon のバイナリ、残りが起こす argv。
-// rex は中のコマンドが終わっても session を閉じず、pane が閉じても window が 0 の session が残る (#391)。
-//   - set -m で、起こすコマンドを自分のプロセスグループで端末の前景にする。sh と同じグループのままだと rex は sh を
-//     前景と見て、claude が立てた端末の題の持ち主を sh とし、サイドバーに題を出さない (#570)。
-//   - 起こす前に session の印を書く。後から開いた pane が残って自分では閉じられなかった session を、pane が空に
-//     なった後で daemon が閉じる (#557)。印を書けなくてもコマンドは起こす (失敗は画面に出る)。
-//   - 0 以外で終わったときは終わり方を出して Enter を待ち、それまで失敗の画面を残す。待つ間の Ctrl-C は Enter と同じ。
-//   - 後から開いた pane やタブがあると session kill が確認なしで巻き込むので、そのときは閉じない (自分の pane だけ閉じる)。
-//   - block ls か jq が失敗したときも閉じない側へ倒す。
-//
-// REX_SESSION は ID なので、起きた claude が session を rename しても当たる。peer-sessions skill の references/rex.md が
-// 同じ本文を single quote で囲んで載せるので、本文に single quote を入れない。
-// rex-premise: preview.30 cli block ls -s は session の全 window の block を返す。中のコマンドの終了で session は閉じない
-// rex-premise: preview.28 program_status サイドバーは端末の題の持ち主 (block call title の owner) が前景のプロセスのときだけ題を出す
-// macOS の /bin/sh (bash 3.2) は INT の trap の後も read を続けるので、閉じる処理 (c) を trap から直に呼んで抜ける。
-const closeOnExitScript = `set -m; rex="$1"; ad="$2"; shift 2; "$ad" spawned-session mark "$REX_SESSION" >/dev/null; "$@"; s=$?; ` +
-	`c() { if "$rex" --autostart=false block ls -s "$REX_SESSION" --json | ` +
-	`jq -e --arg b "$REX_BLOCK" ".blocks | length == 1 and .[0].block_id == \$b" >/dev/null; ` +
-	`then "$rex" --autostart=false session kill "$REX_SESSION"; fi; exit "$s"; }; ` +
-	`if [ "$s" -ne 0 ]; then trap c INT; printf "\n%s が exit %s で終わった。Enter で閉じる。\n" "$1" "$s"; read -r _; fi; c`
-
-// NewSession は `session new` で新しい rex session を作り、その最初の pane の ID を返す (spawn.Host)。label は session と
-// window の名前。argv は closeOnExitScript で包み、終わったら session を閉じる。異常終了では Enter まで画面を残す
-// (起動の失敗を画面で読める) ので、`--keep-open` は付けない。付けると終わった block が入力を受けないまま残る。
-// 起きたコマンドの REX_SESSION と REX_BLOCK は新しい session と block になる (実測)。argv は `--` の後にそのまま渡し、rex は login shell の環境で 1 引数ずつ子へ渡す
-// (空白、`$` を変えない。実測)。LABEL は位置引数で、rex は `-` で始まる値を flag と読んで拒むので、先頭の `-` を外す。
+// NewSession は新しい rex session を作り、その最初の pane で argv を起こして pane の ID を返す (spawn.Host)。label は
+// session と window の名前。argv は wrap の包みで起こし、終わったら session を閉じる。異常終了では包みが Enter まで画面を
+// 残すので、block は終わったら閉じる (rex の既定)。login shell の環境で起こし、CLI の session new と同じ環境と引数になる
+// (2026-11-17 に PATH と空白・`$` を含む引数が CLI と同じことを実機で確かめた)。起きたコマンドの REX_SESSION と
+// REX_BLOCK は新しい session と block になる。label の先頭の `-` は外す (CLI が flag と読んで拒んだ名残で、名前を揃える)。
 // 外して空なら label を付けない (rex の既定の名前になる)。
-// rex-premise: preview.30 cli session new は LABEL --cwd --window --json を取り、-- の後の argv をそのまま渡す
 func (c *execClient) NewSession(ctx context.Context, label, cwd string, argv []string) (string, error) {
-	label = strings.TrimLeft(label, "-")
-	args := []string{"session", "new"}
-	if label != "" {
-		args = append(args, label)
-	}
-	args = append(args, "--cwd", cwd)
-	if label != "" {
-		args = append(args, "--window", label)
-	}
-	bin, err := c.cli.Bin()
+	bin, err := rexBinary()
 	if err != nil {
-		return "", fmt.Errorf("rex session new: %w", err)
+		return "", fmt.Errorf("rex の session を作れない: 包みが叩く rex が分からない: %w", err)
 	}
 	self, err := selfBinary()
 	if err != nil {
-		return "", fmt.Errorf("rex session new: 印を書く agents-daemon のパスが分からない: %w", err)
+		return "", fmt.Errorf("rex の session を作れない: 印を書く agents-daemon のパスが分からない: %w", err)
 	}
-	args = append(args, "--json", "--", "/bin/sh", "-c", closeOnExitScript, "agents-daemon-spawn", bin, self)
-	args = append(args, argv...)
-	var res sessionNewResult
-	if err := c.cli.RunJSON(ctx, &res, args...); err != nil {
+	_, block, err := c.rex.CreateSession(ctx, strings.TrimLeft(label, "-"), api.Block{CWD: cwd, Command: wrap.SessionCommand(bin, self, argv)})
+	return block, err
+}
+
+// NewWindow は既存の rex session (ID か label) にタブ (window) を足し、その pane で argv を起こして pane の ID を返す
+// (spawn.Host)。label は window の名前で、先頭の `-` は NewSession と同じく外す。利用者が見ている window は動かさない。
+// argv は wrap のタブの包みで起こし、共有の session には触れない。足し先が無ければ not found の error を返す。
+func (c *execClient) NewWindow(ctx context.Context, session, label, cwd string, argv []string) (string, error) {
+	if session == "" {
+		return "", errors.New("rex のタブを足せない: 足し先の session が空")
+	}
+	sessionID, err := c.rex.ResolveSession(ctx, session)
+	if err != nil {
 		return "", err
 	}
-	if len(res.InitialWindows) == 0 || len(res.InitialWindows[0].BlockIDs) == 0 {
-		return "", fmt.Errorf("rex session new: 応答の block_ids が空で、起こした pane が分からない (session_id=%q)", res.SessionID)
+	return c.rex.NewWindow(ctx, sessionID, strings.TrimLeft(label, "-"), api.Block{CWD: cwd, Command: wrap.TabCommand(argv)})
+}
+
+// splitAnchorRatio は SplitPane が anchor (上) に残す取り分。CLI の split --ratio 40 (新しい block が 40%) と同じ
+// (2026-11-17 に実機で session.view の split の ratio が 0.6 になることを確かめた)。
+const splitAnchorRatio = 0.6
+
+// SplitPane は anchor の pane の下に pane を作り、shell を挟まずに argv を起こして pane の ID を返す (simulate の使い捨て
+// pane)。終わっても pane を残し、落ちた画面と exit code を読めるようにする。
+func (c *execClient) SplitPane(ctx context.Context, anchor, label string, argv []string) (string, error) {
+	session, err := c.rex.ResolveBlock(ctx, anchor)
+	if err != nil {
+		return "", err
 	}
-	return res.InitialWindows[0].BlockIDs[0], nil
+	return c.rex.NewSplit(ctx, session, anchor, splitAnchorRatio, api.Block{Label: label, Command: argv, NoShell: true, KeepOpen: true})
+}
+
+// ClosePane は pane を閉じる。無い pane は not found の error になる。
+func (c *execClient) ClosePane(ctx context.Context, paneID string) error {
+	session, err := c.rex.ResolveBlock(ctx, paneID)
+	if err != nil {
+		return err
+	}
+	return c.rex.CloseBlock(ctx, session, paneID)
 }

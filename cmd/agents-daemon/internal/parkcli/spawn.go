@@ -37,7 +37,9 @@ func newSpawnCmd() *cobra.Command {
 // spawnSession は req.Repo で新しいセッションを起こし、req.Prompt を最初のターンにする。依存図のアプリは rex の外で
 // 起きるので REX_SESSION を要求しない (ConnectRex)。rex の session は req.Session が空なら新しく作る。モデルはここで埋める。
 func spawnSession(ctx context.Context, paths apppath.Paths, req spawn.Request) (spawn.Result, error) {
-	host, ok := backend.ConnectRex(sessioncontext.New(paths.StateDir())).(spawn.Host)
+	client := backend.ConnectRex(sessioncontext.New(paths.StateDir()))
+	defer backend.Close(client)
+	host, ok := client.(spawn.Host)
 	if !ok {
 		return spawn.Result{}, errors.New("この backend は session を作れない")
 	}

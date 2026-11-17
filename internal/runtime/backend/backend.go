@@ -3,6 +3,7 @@ package backend
 
 import (
 	"errors"
+	"io"
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex"
@@ -29,6 +30,16 @@ func Connect(getenv func(string) string, contexts sessioncontext.Store) (string,
 		return "", nil, err
 	}
 	return kind, ConnectRex(contexts), nil
+}
+
+// Close は Connect / ConnectRex が返した Client の接続を閉じる。rex の Client は control API の接続を 1 本張ったまま
+// 使い回すので、使い終えたプロセスは閉じて close frame を送る (送らずに切ると server が client を 60 秒残す)。
+// 呼び手が自分の interface (spawn.Host など) で受けた値もそのまま渡せる。閉じる接続を持たない値 (テストの fake) では
+// 何もしない。閉じる失敗は呼び手にできることが無いので返さない。
+func Close(c any) {
+	if closer, ok := c.(io.Closer); ok {
+		_ = closer.Close()
+	}
 }
 
 // ConnectRex は REX_SESSION を確かめずに rex の Client を作る。依存図のアプリ (gui/) は rex の外で起きて spawn / tell /

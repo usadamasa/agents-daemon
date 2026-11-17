@@ -1,9 +1,7 @@
-package cli
+package wrap
 
 import (
-	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -27,10 +25,10 @@ func defaultVersionsDir() (string, bool) {
 	return filepath.Join(home, "Library", "Application Support", "com.superlogical.rex", "RexServer", "Versions"), true
 }
 
-// locateBinary は rex のバイナリの絶対パスを返す。REX_BIN_PATH があればそのまま、無ければ PATH を探す。
+// Locate は包みが叩く rex のバイナリの絶対パスを返す。REX_BIN_PATH があればそのまま、無ければ PATH を探す。
 // PATH で引けないとき (rex の block の外で起きたプロセス、覚えていた build が更新で消えた) は、
 // 既定の置き場の Current、無ければ一番新しい数字名の build を引く。どこにも無ければ exec.ErrNotFound を wrap した error を返す。
-func locateBinary() (string, error) {
+func Locate() (string, error) {
 	if bin := os.Getenv("REX_BIN_PATH"); bin != "" {
 		return bin, nil
 	}
@@ -69,10 +67,4 @@ func newestBuildIn(versions string) (bin string, ok bool) {
 		best, bin = n, candidate
 	}
 	return bin, best >= 0
-}
-
-// Vanished は rex の起動が「バイナリが無い」で落ちたかを判定する。名前で探して無いときは
-// exec.ErrNotFound、覚えていた絶対パスが消えていたときは fs.ErrNotExist になる。
-func Vanished(err error) bool {
-	return errors.Is(err, exec.ErrNotFound) || errors.Is(err, fs.ErrNotExist)
 }

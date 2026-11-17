@@ -36,6 +36,7 @@ func newDoctorCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			defer backend.Close(client)
 			// 点検の口は Client とは別の interface。持たない実装 (fake) では nil になり、節の中身を省く。
 			premises, _ := client.(multiplexer.PremiseChecker)
 			// Claude Code の設定ディレクトリが決まらなければ、登録簿と transcript の点検だけが欠ける。

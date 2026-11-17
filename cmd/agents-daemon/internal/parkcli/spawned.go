@@ -56,7 +56,9 @@ func newSpawnedSessionCmd() *cobra.Command {
 				if args[0] == "" {
 					return nil, errors.New("session ID が空")
 				}
-				closer, ok := backend.ConnectRex(sessioncontext.New(p.StateDir())).(sessionCloser)
+				client := backend.ConnectRex(sessioncontext.New(p.StateDir()))
+				defer backend.Close(client)
+				closer, ok := client.(sessionCloser)
 				if !ok {
 					return nil, errors.New("この backend は session を閉じられない")
 				}

@@ -1,6 +1,7 @@
 package rex
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +21,18 @@ type fakeAPI struct {
 func newFakeAPI(t *testing.T) *fakeAPI {
 	t.Helper()
 	return &fakeAPI{Server: apitest.New(t), rex: newFakeRex(t)}
+}
+
+// payloadOf は method の最初の request の payload を v へ読む。
+func (f *fakeAPI) payloadOf(t *testing.T, method string, v any) {
+	t.Helper()
+	reqs := f.RequestsOf(method)
+	if len(reqs) == 0 {
+		t.Fatalf("%s の request が無い", method)
+	}
+	if err := json.Unmarshal(reqs[0], v); err != nil {
+		t.Fatalf("%s の payload を読めない: %v", method, err)
+	}
 }
 
 func (f *fakeAPI) assertCalls(t *testing.T, want ...string) {

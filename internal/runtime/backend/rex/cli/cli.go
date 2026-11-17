@@ -1,20 +1,28 @@
-// Package cli は rex の CLI を子プロセスとして起こす層。バイナリの探索と自動更新で消えたバイナリの引き直し、
-// 子の環境、--autostart=false の付与、対象が無いことの exit code の判定を持つ。
-// rex の書き込み系と events の購読、premise の点検が使う (読み取りは control API へ移った)。
+// Package cli は rex の CLI を子プロセスとして起こす層。自動更新で消えたバイナリの引き直し、子の環境、
+// --autostart=false の付与、対象が無いことの exit code の判定を持つ。events の購読と premise の点検が移るまでの
+// 移行中だけ残す。バイナリの探索は wrap が持つ。
 package cli
 
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/wrap"
 )
+
+// Vanished は rex の起動が「バイナリが無い」で落ちたかを判定する。名前で探して無いときは
+// exec.ErrNotFound、覚えていた絶対パスが消えていたときは fs.ErrNotExist になる。
+func Vanished(err error) bool {
+	return errors.Is(err, exec.ErrNotFound) || errors.Is(err, fs.ErrNotExist)
+}
 
 // exitTargetNotFound は rex が block や session を解決できなかったときの exit code (実測)。
 // rex-premise: preview.30 cli 存在しない block への block call は exit 3
@@ -24,7 +32,7 @@ const exitTargetNotFound = 3
 type Runner struct {
 	// mu は binPath を守る。購読の goroutine と daemon の tick が並んで rex を呼ぶ。
 	mu sync.Mutex
-	// binPath は解決済みの rex の絶対パス。空なら次の呼び出しで locateBinary が埋める。
+	// binPath は解決済みの rex の絶対パス。空なら次の呼び出しで wrap.Locate が埋める。
 	binPath string
 	// timeout は 1 回の起動の制限時間。0 以下なら課さない (テスト用)。
 	timeout time.Duration
@@ -45,7 +53,7 @@ func (r *Runner) Bin() (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.binPath == "" {
-		bin, err := locateBinary()
+		bin, err := wrap.Locate()
 		if err != nil {
 			return "", err
 		}
@@ -135,18 +143,6 @@ func (r *Runner) runWith(ctx context.Context, bin string, args ...string) ([]byt
 		return nil, fmt.Errorf("rex %v: %w (stderr=%q)", args, runErr, strings.TrimSpace(errBuf.String()))
 	}
 	return outBuf.Bytes(), nil
-}
-
-// RunJSON は rex を実行し stdout の JSON を v へ読む。
-func (r *Runner) RunJSON(ctx context.Context, v any, args ...string) error {
-	out, err := r.Run(ctx, args...)
-	if err != nil {
-		return err
-	}
-	if err := json.Unmarshal(out, v); err != nil {
-		return fmt.Errorf("rex %v: 応答の parse に失敗: %w (stdout=%q)", args, err, out)
-	}
-	return nil
 }
 
 // TargetNotFound は rex が対象を解決できずに終わった (exit 3) かを判定する。

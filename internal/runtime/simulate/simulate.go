@@ -121,8 +121,9 @@ func Run(ctx context.Context, w io.Writer, p apppath.Paths, opts Options) (res R
 	if err != nil {
 		return res, err
 	}
+	defer backend.Close(execClient)
 	res.Backend = string(kind)
-	host, err := newSimulateHost(kind, os.Getenv)
+	host, err := newSimulateHost(kind, os.Getenv, execClient)
 	if err != nil {
 		return res, err
 	}

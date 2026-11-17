@@ -1,6 +1,7 @@
 // Package rex は rex を操作する multiplexer.Client の実装 (adapter) を提供する。rex の語彙を daemon の語彙 (Pane、
-// Geometry) へ写す。pane の読み取りは control API を api から呼び、書き込みと events の購読と doctor の前提点検は
-// rex の CLI (cli) を起こす。応答と event の形は wire、block の状態から Pane への写像は blockstate にある。
+// Geometry) へ写す。pane の読み書きと session の作成は control API を api から呼び、events の購読と doctor の前提点検は
+// rex の CLI (cli) を起こす。spawn した pane の中で走る包みは wrap、応答と event の形は wire、block の状態から Pane への
+// 写像は blockstate にある。
 package rex
 
 import (
@@ -30,7 +31,7 @@ type SessionResolver func() (map[string]string, error)
 type execClient struct {
 	// rex は control API を呼ぶ。
 	rex *api.Client
-	// cli は書き込み系と events の購読と前提点検で rex の CLI を起こす。
+	// cli は events の購読と前提点検で rex の CLI を起こす。
 	cli *cli.Runner
 	// resolve は block_id から session_id を引く (statusline が書いた sidecar)。
 	resolve SessionResolver
@@ -198,16 +199,6 @@ func tailLines(s string, n int) string {
 		tail += "\n"
 	}
 	return tail
-}
-
-func (c *execClient) SendText(ctx context.Context, paneID, text string) error {
-	_, err := c.cli.Run(ctx, "send", "-b", paneID, text)
-	return err
-}
-
-func (c *execClient) SendKeys(ctx context.Context, paneID string, keys ...string) error {
-	_, err := c.cli.Run(ctx, append([]string{"send-key", "-b", paneID}, keys...)...)
-	return err
 }
 
 // CheckPremises は doctor の前提点検 (multiplexer.PremiseChecker)。点検の中身は premise が持つ。

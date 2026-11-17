@@ -34,6 +34,8 @@ type Server struct {
 	// failing は method の短い名前と block か session で、internal の失敗を返すもの。
 	failing map[string]bool
 	status  string
+	// labels は session の label。
+	labels map[string]string
 	// closing は閉じかけの session。list_blocks が conflict になる。
 	closing map[string]bool
 	// truncated は blob_read が続きを返さない block。
@@ -45,7 +47,7 @@ func New(t testing.TB) *Server {
 	t.Helper()
 	s := &Server{
 		srv: controltest.New(t), blocks: map[string][][2]string{}, results: map[string]string{}, failing: map[string]bool{},
-		closing: map[string]bool{}, truncated: map[string]bool{},
+		labels: map[string]string{}, closing: map[string]bool{}, truncated: map[string]bool{},
 	}
 	s.srv.Handle("server.status", s.serverStatus)
 	s.srv.Handle("session.list", s.listSessions)
@@ -54,7 +56,53 @@ func New(t testing.TB) *Server {
 	for _, name := range []string{"program_status", "process", "size", "modes", "format", "blob_read"} {
 		s.srv.Handle(TerminalMethod+name, func(p json.RawMessage) (any, error) { return s.blockMethod(name, p) })
 	}
+	// 名指した session と block があれば成功する書き込み。作る method (session.create、new_window、new_split) の応答は
+	// テストが Protocol().Reply で決める。
+	for method, needBlock := range map[string]bool{
+		TerminalMethod + "write": true, "block.event": true, "block.close": true,
+		"session.destroy": false, "session.attach": false, "session.disown_block": false,
+	} {
+		s.srv.Handle(method, func(p json.RawMessage) (any, error) {
+			if err := s.exists(p, needBlock); err != nil {
+				return nil, err
+			}
+			return map[string]any{}, nil
+		})
+	}
+	// session.detach は実機と同じく、attach していなくても、session が無くても成功する。
+	s.srv.Handle("session.detach", func(json.RawMessage) (any, error) { return map[string]any{}, nil })
 	return s
+}
+
+// exists は request が名指す session (needBlock なら block も) が状態にあるかを見る。無ければ実機と同じ失敗を返す。
+func (s *Server) exists(p json.RawMessage, needBlock bool) error {
+	var req struct {
+		SessionID string `json:"session_id"`
+		BlockID   string `json:"block_id"`
+	}
+	_ = json.Unmarshal(p, &req)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	blocks, ok := s.blocks[req.SessionID]
+	if !ok {
+		return controltest.SessionNotFound(req.SessionID)
+	}
+	if !needBlock {
+		return nil
+	}
+	for _, b := range blocks {
+		if b[0] == req.BlockID {
+			return nil
+		}
+	}
+	return controltest.NotFound(req.BlockID)
+}
+
+// AddLabel は session に label を付ける。target.resolve が session を label でも引ける。
+func (s *Server) AddLabel(session, label string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.labels[session] = label
 }
 
 // Socket は待ち受けている socket のパス。
@@ -216,6 +264,7 @@ func (s *Server) listBlocks(p json.RawMessage) (any, error) {
 
 func (s *Server) resolve(p json.RawMessage) (any, error) {
 	var req struct {
+		Kinds   []string `json:"kinds"`
 		Queries []string `json:"queries"`
 	}
 	_ = json.Unmarshal(p, &req)
@@ -224,6 +273,10 @@ func (s *Server) resolve(p json.RawMessage) (any, error) {
 	results := make([]map[string]any, 0, len(req.Queries))
 	for _, q := range req.Queries {
 		r := map[string]any{"query": q, "status": "not_found"}
+		if len(req.Kinds) == 1 && req.Kinds[0] == "session" {
+			results = append(results, s.resolveSession(q))
+			continue
+		}
 		for session, blocks := range s.blocks {
 			for _, b := range blocks {
 				if b[0] == q {
@@ -234,6 +287,31 @@ func (s *Server) resolve(p json.RawMessage) (any, error) {
 		results = append(results, r)
 	}
 	return map[string]any{"results": results}, nil
+}
+
+// resolveSession は実機と同じく、完全な ID を先に、無ければ label を大小文字を区別せずに引く。label が 2 つ以上に
+// 当たれば ambiguous。s.mu を持って呼ぶ。
+func (s *Server) resolveSession(q string) map[string]any {
+	if _, ok := s.blocks[q]; ok {
+		return map[string]any{"query": q, "status": "resolved", "target": map[string]any{"kind": "session", "session_id": q, "label": s.labels[q]}}
+	}
+	var matched []string
+	for session, label := range s.labels {
+		if _, ok := s.blocks[session]; ok && strings.EqualFold(label, q) {
+			matched = append(matched, session)
+		}
+	}
+	switch len(matched) {
+	case 0:
+		return map[string]any{"query": q, "status": "not_found"}
+	case 1:
+		return map[string]any{"query": q, "status": "resolved", "target": map[string]any{"kind": "session", "session_id": matched[0], "label": s.labels[matched[0]]}}
+	}
+	candidates := make([]map[string]any, 0, len(matched))
+	for _, session := range matched {
+		candidates = append(candidates, map[string]any{"kind": "session", "session_id": session, "label": s.labels[session]})
+	}
+	return map[string]any{"query": q, "status": "ambiguous", "candidates": candidates}
 }
 
 func (s *Server) blockMethod(name string, p json.RawMessage) (any, error) {

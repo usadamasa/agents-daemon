@@ -3,8 +3,7 @@ package simulate
 import (
 	"context"
 	"errors"
-	"os"
-	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -17,14 +16,14 @@ import (
 func TestNewSimulateHost_前提チェック(t *testing.T) {
 	t.Run("rex は REX_BLOCK が要る", func(t *testing.T) {
 		env := map[string]string{"REX_SESSION": "session:01a1"}
-		_, err := newSimulateHost(sessioncontext.MultiplexerKindRex, func(k string) string { return env[k] })
+		_, err := newSimulateHost(sessioncontext.MultiplexerKindRex, func(k string) string { return env[k] }, &fakeOps{})
 		if err == nil || !strings.Contains(err.Error(), "REX_BLOCK") {
 			t.Fatalf("newSimulateHost(rex) error = %v, want REX_BLOCK に触れるエラー", err)
 		}
 	})
 	t.Run("rex は REX_BLOCK を anchor に持つ", func(t *testing.T) {
 		env := map[string]string{"REX_SESSION": "session:01a1", "REX_BLOCK": "block:mine"}
-		host, err := newSimulateHost(sessioncontext.MultiplexerKindRex, func(k string) string { return env[k] })
+		host, err := newSimulateHost(sessioncontext.MultiplexerKindRex, func(k string) string { return env[k] }, &fakeOps{})
 		if err != nil {
 			t.Fatalf("newSimulateHost(rex) error = %v", err)
 		}
@@ -36,8 +35,15 @@ func TestNewSimulateHost_前提チェック(t *testing.T) {
 			t.Errorf("ownBlock = %q, want block:mine", rh.ownBlock)
 		}
 	})
+	t.Run("pane を作れない client は error", func(t *testing.T) {
+		env := map[string]string{"REX_SESSION": "session:01a1", "REX_BLOCK": "block:mine"}
+		_, err := newSimulateHost(sessioncontext.MultiplexerKindRex, func(k string) string { return env[k] }, &multiplexerfake.Client{})
+		if err == nil || !strings.Contains(err.Error(), "pane を作れない") {
+			t.Fatalf("newSimulateHost(rex) error = %v, want pane を作れない error", err)
+		}
+	})
 	t.Run("未対応の kind は error", func(t *testing.T) {
-		_, err := newSimulateHost("tmux", func(string) string { return "" })
+		_, err := newSimulateHost("tmux", func(string) string { return "" }, &fakeOps{})
 		if err == nil || !strings.Contains(err.Error(), "未対応") {
 			t.Fatalf("newSimulateHost(tmux) error = %v, want 未対応の error", err)
 		}
@@ -74,65 +80,29 @@ func TestSimulateScript(t *testing.T) {
 	})
 }
 
-// fakeCLI は呼び出しを calls.log へ追記し、サブコマンドごとの fixture (stdout) を返す fake の CLI。
-type fakeCLI struct {
-	dir string
-	bin string
+// fakeOps は rex の Client が持つ pane の作成と後始末の口 (paneOps) を真似て、呼び出しを記録する。
+type fakeOps struct {
+	calls []string
 }
 
-// newFakeCLI は fixtures の key (引数の先頭の語を空白で繋いだもの) に一致する呼び出しにその内容を返す。
-// skipFirst は calls.log と fixture の照合から除く先頭の引数 (rex の --autostart=false)。
-func newFakeCLI(t *testing.T, name, skipFirst string, fixtures map[string]string) *fakeCLI {
-	t.Helper()
-	dir := t.TempDir()
-	script := `#!/bin/sh
-d='` + dir + `'
-printf '%s\n' "$*" >> "$d/calls.log"
-`
-	if skipFirst != "" {
-		script += `if [ "$1" != '` + skipFirst + `' ]; then echo "Error: ` + skipFirst + ` がない" >&2; exit 2; fi
-shift
-`
-	}
-	script += `case "$1 $2" in
-`
-	for key, content := range fixtures {
-		name := strings.ReplaceAll(key, " ", "-") + ".out"
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600); err != nil {
-			t.Fatalf("fixture の作成に失敗: %v", err)
-		}
-		script += `  "` + key + `"*) cat "$d/` + name + `" ;;` + "\n"
-	}
-	script += `  *) ;;
-esac
-`
-	bin := filepath.Join(dir, name)
-	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil { // #nosec G306 -- テスト用の実行ファイル
-		t.Fatalf("fake %s の作成に失敗: %v", name, err)
-	}
-	return &fakeCLI{dir: dir, bin: bin}
+func (o *fakeOps) SplitPane(_ context.Context, anchor, label string, argv []string) (string, error) {
+	o.calls = append(o.calls, "split "+anchor+" "+label+" "+strings.Join(argv, " "))
+	return "block:01a1-new", nil
 }
 
-func (f *fakeCLI) calls(t *testing.T) []string {
-	t.Helper()
-	data, err := os.ReadFile(filepath.Join(f.dir, "calls.log"))
-	if err != nil {
-		t.Fatalf("calls.log の読み込みに失敗: %v", err)
-	}
-	return strings.Split(strings.TrimSpace(string(data)), "\n")
+func (o *fakeOps) ClosePane(_ context.Context, paneID string) error {
+	o.calls = append(o.calls, "close "+paneID)
+	return nil
 }
 
-// 実測 (rex.md) の split --json の形。API の new_split は block_ids / anchor_block_id / split_ids / revision を返す。
-const rexSplitJSON = `{"anchor_block_id":"block:mine","block_ids":["block:01a1-new"],"split_ids":["split:01a1"],"revision":7,"window_id":"window:01a1"}`
-
-func newFakeRex(t *testing.T, splitJSON string) (*fakeCLI, *rexHost) {
-	t.Helper()
-	f := newFakeCLI(t, "rex", "--autostart=false", map[string]string{"split -b": splitJSON})
-	return f, &rexHost{bin: f.bin, ownBlock: "block:mine"}
+func newRexHost() (*fakeOps, *rexHost) {
+	ops := &fakeOps{}
+	return ops, &rexHost{ops: ops, ownBlock: "block:mine"}
 }
 
+// SplitPane は自分の block の下に、script を shell を挟まずに走らせる block を作る。label は metadata の source。
 func TestRexHost_SplitPane(t *testing.T) {
-	f, h := newFakeRex(t, rexSplitJSON)
+	ops, h := newRexHost()
 	got, err := h.SplitPane(context.Background(), "/tmp/sim/simulate.sh", "/tmp/sim/screen.txt")
 	if err != nil {
 		t.Fatalf("SplitPane() error = %v", err)
@@ -140,34 +110,19 @@ func TestRexHost_SplitPane(t *testing.T) {
 	if got != "block:01a1-new" {
 		t.Errorf("SplitPane() = %q, want block:01a1-new", got)
 	}
-	calls := f.calls(t)
-	if len(calls) != 1 {
-		t.Fatalf("呼び出し回数 = %d, want 1: %v", len(calls), calls)
-	}
-	for _, want := range []string{
-		"--autostart=false", "split", "-b block:mine", "--focus=false", "--keep-open", "--shell=none", "--json",
-		"-- /bin/sh /tmp/sim/simulate.sh /tmp/sim/screen.txt",
-	} {
-		if !strings.Contains(calls[0], want) {
-			t.Errorf("split の引数に %q が無い: %s", want, calls[0])
-		}
-	}
-}
-
-func TestRexHost_SplitPane_block_idsが空なら失敗(t *testing.T) {
-	_, h := newFakeRex(t, `{"anchor_block_id":"block:mine","block_ids":[],"split_ids":[],"revision":7}`)
-	if _, err := h.SplitPane(context.Background(), "/tmp/sim/simulate.sh", "/tmp/sim/screen.txt"); err == nil {
-		t.Fatal("SplitPane() error = nil, want block_ids が空のエラー")
+	want := []string{"split block:mine " + simulateMetadataSource + " /bin/sh /tmp/sim/simulate.sh /tmp/sim/screen.txt"}
+	if !slices.Equal(ops.calls, want) {
+		t.Errorf("calls = %q, want %q", ops.calls, want)
 	}
 }
 
 func TestRexHost_MarkAsClaudeAgentは外から何もしない(t *testing.T) {
-	f, h := newFakeRex(t, rexSplitJSON)
+	ops, h := newRexHost()
 	if _, err := h.MarkAsClaudeAgent(context.Background(), "block:01a1-new"); err != nil {
 		t.Fatalf("MarkAsClaudeAgent() error = %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(f.dir, "calls.log")); err == nil {
-		t.Errorf("rex を呼んでいる: %v", f.calls(t))
+	if len(ops.calls) != 0 {
+		t.Errorf("rex を呼んでいる: %v", ops.calls)
 	}
 	if h.ProgramStatusCommand() != claudeProgramStatusCommand {
 		t.Errorf("ProgramStatusCommand() = %q", h.ProgramStatusCommand())
@@ -175,13 +130,12 @@ func TestRexHost_MarkAsClaudeAgentは外から何もしない(t *testing.T) {
 }
 
 func TestRexHost_ClosePane(t *testing.T) {
-	f, h := newFakeRex(t, rexSplitJSON)
+	ops, h := newRexHost()
 	if err := h.ClosePane(context.Background(), "block:01a1-new"); err != nil {
 		t.Fatalf("ClosePane() error = %v", err)
 	}
-	calls := f.calls(t)
-	if len(calls) != 1 || calls[0] != "--autostart=false block close block:01a1-new" {
-		t.Errorf("呼び出し = %v, want block close", calls)
+	if !slices.Equal(ops.calls, []string{"close block:01a1-new"}) {
+		t.Errorf("calls = %v, want close", ops.calls)
 	}
 	if got := h.CloseCommand("block:01a1-new"); got != "rex block close block:01a1-new" {
 		t.Errorf("CloseCommand() = %q", got)

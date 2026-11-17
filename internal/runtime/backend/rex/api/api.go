@@ -27,6 +27,9 @@ const terminalPrefix = "com.superlogical.terminal."
 // errBlockNotFound は target.resolve が block を見つけられなかったことを表す。
 var errBlockNotFound = errors.New("block not found")
 
+// errAmbiguous は target.resolve の query が 2 つ以上に当たったことを表す (同じ label の session など)。not found ではない。
+var errAmbiguous = errors.New("ambiguous")
+
 // Client は control 接続を 1 本持ち、使い回す。method は並んで呼べる。
 type Client struct {
 	// socket は control API の socket のパスを返す。
@@ -55,7 +58,7 @@ func DefaultSocket() (string, error) {
 // IsNotFound は対象 (block、session) が無いことによる失敗かを返す。server の not_found / session_not_found と、
 // target.resolve が見つけられなかったことの両方を拾う。閉じた block や session を読み飛ばす判定に使う。
 func IsNotFound(err error) bool {
-	return control.IsNotFound(err) || errors.Is(err, errBlockNotFound)
+	return control.IsNotFound(err) || errors.Is(err, errBlockNotFound) || errors.Is(err, errSessionNotFound)
 }
 
 // IsConflict は今の状態では通らない失敗 (閉じかけの session など) かを返す。
@@ -111,27 +114,44 @@ func (c *Client) ListBlocks(ctx context.Context, session string) (wire.BlockList
 }
 
 // ResolveBlock は block の ID からそれを持つ session を引く。block の method は session_id が要る。
+func (c *Client) ResolveBlock(ctx context.Context, blockID string) (string, error) {
+	return c.resolve(ctx, "block", blockID, errBlockNotFound)
+}
+
+// resolve は target.resolve で kind の query 1 つを引き、それを持つ (session なら自身の) session の ID を返す。
 // 文脈を渡さないと全 session を探す (文脈の session を渡すとその中に閉じ、別 session の block が not_found になる)。
 // rex-premise: preview.30 api target.resolve は context が無ければ全 session から引き、target.session_id を返す
-func (c *Client) ResolveBlock(ctx context.Context, blockID string) (string, error) {
+func (c *Client) resolve(ctx context.Context, kind, query string, notFound error) (string, error) {
 	var res struct {
 		Results []struct {
 			Status string `json:"status"`
 			Target struct {
 				SessionID string `json:"session_id"`
 			} `json:"target"`
-			Reason string `json:"reason"`
+			Reason     string `json:"reason"`
+			Candidates []struct {
+				SessionID string `json:"session_id"`
+				Label     string `json:"label"`
+			} `json:"candidates"`
 		} `json:"results"`
 	}
-	if err := c.call(ctx, "target.resolve", map[string]any{"kinds": []string{"block"}, "queries": []string{blockID}}, &res); err != nil {
+	if err := c.call(ctx, "target.resolve", map[string]any{"kinds": []string{kind}, "queries": []string{query}}, &res); err != nil {
 		return "", err
+	}
+	// rex-premise: preview.30 api target.resolve の status は resolved / not_found / ambiguous。知らない値は not_found と読む
+	if len(res.Results) == 1 && res.Results[0].Status == "ambiguous" {
+		var names []string
+		for _, cand := range res.Results[0].Candidates {
+			names = append(names, cand.SessionID+" ("+cand.Label+")")
+		}
+		return "", fmt.Errorf("rex の %s %q は複数に当たる: %w [%s]", kind, query, errAmbiguous, strings.Join(names, ", "))
 	}
 	if len(res.Results) != 1 || res.Results[0].Status != "resolved" || res.Results[0].Target.SessionID == "" {
 		reason := ""
 		if len(res.Results) == 1 {
 			reason = res.Results[0].Reason
 		}
-		return "", fmt.Errorf("rex の block %s: %w %s", blockID, errBlockNotFound, reason)
+		return "", fmt.Errorf("rex の %s %q: %w %s", kind, query, notFound, reason)
 	}
 	return res.Results[0].Target.SessionID, nil
 }
@@ -218,6 +238,181 @@ func (c *Client) Format(ctx context.Context, session, blockID string, opts Forma
 		b.WriteString(part.Data)
 	}
 	return b.String(), nil
+}
+
+// errSessionNotFound は target.resolve が session を見つけられなかったことを表す。
+var errSessionNotFound = errors.New("session not found")
+
+// ResolveSession は session の ID か label から session の ID を引く (CLI の -s と同じく label でも名指せる)。
+func (c *Client) ResolveSession(ctx context.Context, name string) (string, error) {
+	return c.resolve(ctx, "session", name, errSessionNotFound)
+}
+
+// Write は文面を端末に打つ (Enter は押さない)。
+func (c *Client) Write(ctx context.Context, session, blockID, data string) error {
+	return c.blockCall(ctx, session, blockID, "write", map[string]any{"data": data}, nil)
+}
+
+// Key は block.event で送る key。
+type Key struct {
+	name      string
+	codepoint int
+}
+
+// KeyEnter と KeyEscape は daemon が送る key。text は空でも block は key として受ける
+// (2026-11-17 に cat -v へ届く文字が CLI の send-key enter / esc と同じことを実機で確かめた)。
+var (
+	KeyEnter  = Key{name: "enter", codepoint: 13}
+	KeyEscape = Key{name: "escape", codepoint: 27}
+)
+
+// PressKeys は key ごとに press と release を送る (CLI の send-key と同じ)。block.event は同じ接続の中で送った順に届く。
+// rex-premise: preview.30 api block.event の key の payload は key、mods、consumed_mods、text、unshifted_codepoint、composing、action
+func (c *Client) PressKeys(ctx context.Context, session, blockID string, keys ...Key) error {
+	for _, k := range keys {
+		for _, action := range []string{"press", "release"} {
+			payload := map[string]any{
+				"key": k.name, "mods": "", "consumed_mods": "", "text": "",
+				"unshifted_codepoint": k.codepoint, "composing": false, "action": action,
+			}
+			req := map[string]any{"session_id": session, "block_id": blockID, "event": map[string]any{"type": "key", "payload": payload}}
+			if err := c.call(ctx, "block.event", req, nil); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// Block は作る terminal の block。
+type Block struct {
+	// Label は block の名前。空なら付けない。
+	Label string
+	// CWD は起こすコマンドの作業ディレクトリ。空なら rex の既定 (home)。
+	CWD string
+	// Command は起こすコマンド。shell を通すときも 1 引数ずつ子へ渡る (空白と `$` を変えない。実測)。
+	Command []string
+	// NoShell は shell を挟まずに Command を直に起こす。login も切る (切らないと /usr/bin/login を挟んで起き、
+	// Command の exit code が 0 に化ける。2026-11-17 に実測)。false なら login shell の環境で起こす (CLI の session new と同じ)。
+	NoShell bool
+	// KeepOpen は Command が終わっても block を残し、画面と exit code を読めるようにする。
+	KeepOpen bool
+}
+
+// layout は Block 1 つの layout。
+// rex-premise: preview.30 api com.superlogical.terminal.shell の options は cwd、command、shell、login、exit を取る
+func (b Block) layout() map[string]any {
+	options := map[string]any{"command": b.Command}
+	if b.CWD != "" {
+		options["cwd"] = b.CWD
+	}
+	if b.NoShell {
+		options["shell"] = "none"
+		options["login"] = false
+	}
+	if b.KeepOpen {
+		options["exit"] = map[string]any{"on_completion": false}
+	}
+	block := map[string]any{"flavor": wire.ShellFlavor, "options": options}
+	if b.Label != "" {
+		block["label"] = b.Label
+	}
+	return map[string]any{"block": block}
+}
+
+// CreateSession は window 1 つと block 1 つを持つ session を作り、session と block の ID を返す。label が空なら
+// session と window に名前を付けない (rex の既定の名前になる)。
+// rex-premise: preview.30 api session.create は session_id と initial_windows (window_id、block_ids) を返す
+func (c *Client) CreateSession(ctx context.Context, label string, b Block) (session, blockID string, err error) {
+	window := map[string]any{"layout": b.layout()}
+	req := map[string]any{"initial_windows": []any{window}}
+	if label != "" {
+		req["label"] = label
+		window["window_label"] = label
+	}
+	var res struct {
+		SessionID      string `json:"session_id"`
+		InitialWindows []struct {
+			BlockIDs []string `json:"block_ids"`
+		} `json:"initial_windows"`
+	}
+	if err := c.call(ctx, "session.create", req, &res); err != nil {
+		return "", "", err
+	}
+	if len(res.InitialWindows) == 0 || len(res.InitialWindows[0].BlockIDs) == 0 {
+		return "", "", fmt.Errorf("rex の session.create の応答の block_ids が空で、作った block が分からない (session_id=%q)", res.SessionID)
+	}
+	blockID = res.InitialWindows[0].BlockIDs[0]
+	c.release(ctx, res.SessionID, blockID)
+	return res.SessionID, blockID, nil
+}
+
+// NewWindow は session に window (タブ) を足し、その block の ID を返す。利用者が見ている window は動かさない。
+// rex-premise: preview.30 api session.new_window は window_id と block_ids を返す
+func (c *Client) NewWindow(ctx context.Context, session, label string, b Block) (string, error) {
+	req := map[string]any{"session_id": session, "focus": false, "layout": b.layout()}
+	if label != "" {
+		req["window_label"] = label
+	}
+	var res struct {
+		WindowID string   `json:"window_id"`
+		BlockIDs []string `json:"block_ids"`
+	}
+	if err := c.call(ctx, "session.new_window", req, &res); err != nil {
+		return "", err
+	}
+	if len(res.BlockIDs) == 0 || res.BlockIDs[0] == "" {
+		return "", fmt.Errorf("rex の session.new_window の応答の block_ids が空で、作った block が分からない (window_id=%q)", res.WindowID)
+	}
+	c.release(ctx, session, res.BlockIDs[0])
+	return res.BlockIDs[0], nil
+}
+
+// NewSplit は anchor の block の下に block を作り、その ID を返す。ratio は上 (anchor) の取り分。focus は動かさない。
+func (c *Client) NewSplit(ctx context.Context, session, anchor string, ratio float64, b Block) (string, error) {
+	req := map[string]any{
+		"session_id": session, "anchor_id": anchor, "direction": "vertical", "side": "after",
+		"ratio": ratio, "focus": false, "layout": b.layout(),
+	}
+	var res struct {
+		BlockIDs []string `json:"block_ids"`
+	}
+	if err := c.call(ctx, "session.new_split", req, &res); err != nil {
+		return "", err
+	}
+	if len(res.BlockIDs) == 0 || res.BlockIDs[0] == "" {
+		return "", fmt.Errorf("rex の session.new_split の応答の block_ids が空で、作った block が分からない (anchor=%s)", anchor)
+	}
+	c.release(ctx, session, res.BlockIDs[0])
+	return res.BlockIDs[0], nil
+}
+
+// release は作った block を、作ったこの接続の持ち物から外す。block を作った client は owner になり、owner がいる間
+// terminal は owner の大きさを使う。CLI の window new と split が作った block は owner を持たないので揃える。張ったままの
+// 接続 (attach_all) で作った block は接続を閉じても owner が残る (2026-11-17 に実測)。disown は session.attach した接続で
+// しか通らない。手放せなくても block は動いているので、作成の失敗には数えない。
+// rex-premise: preview.30 api 作った client が block の owner になる。disown_block は session.attach の後だけ通る
+// 手放した後は session.detach で attach を外す (attach したままだと、その session の block_event がこの接続に流れ続ける。
+// attach_all の event_scope session は attach した session の block_event を止めない)。detach しても attach_all の
+// 範囲で session の method は通り続ける。
+// rex-premise: preview.30 api session.detach は attach だけを外し、attach_all の event と他の attach は残す
+func (c *Client) release(ctx context.Context, session, blockID string) {
+	if err := c.call(ctx, "session.attach", map[string]any{"session_id": session}, nil); err != nil {
+		return
+	}
+	_ = c.call(ctx, "session.disown_block", map[string]any{"session_id": session, "block_ids": []string{blockID}}, nil)
+	_ = c.call(ctx, "session.detach", map[string]any{"session_id": session}, nil)
+}
+
+// CloseBlock は block を閉じる。無い block は not_found。
+func (c *Client) CloseBlock(ctx context.Context, session, blockID string) error {
+	return c.call(ctx, "block.close", map[string]any{"session_id": session, "block_id": blockID}, nil)
+}
+
+// DestroySession は session を中の block ごと閉じる。無い session は session_not_found。
+// rex-premise: preview.30 api session.destroy は session と中の block を閉じる
+func (c *Client) DestroySession(ctx context.Context, session string) error {
+	return c.call(ctx, "session.destroy", map[string]any{"session_id": session}, nil)
 }
 
 // version は hello で名乗る版。go build のバイナリが持つ module の版で、取れなければ dev。

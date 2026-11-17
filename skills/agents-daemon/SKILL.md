@@ -23,7 +23,7 @@ plugin root の `README.md` の「役割」が持つ。コマンド、設定キ�
 | `doctor` の pane 一覧が全部 `agent_status=unknown` (rex を上げた直後) | `doctor` の「rex の前提」の `⚠`。rex の版への追従が要るので issue にする |
 | daemon が起きない・バイナリがビルドされない | `$STATE/logs/build.log`。operations.md の「build の失敗から建て直す」と「既知の制約」(go が PATH に無い、rex の外) |
 | plugin を更新したのに古い daemon が動いている | operations.md の「plugin の更新後に daemon を入れ替える」 |
-| 送信が block に届かない | operations.md の「既知の制約」(block 内 tmux、rex の送信は未測定) |
+| 送信が block に届かない | operations.md の「既知の制約」(block 内 tmux) |
 | `doctor` の pane 一覧が `session_id=(なし)` になる | statusline の配線 (`agents-daemon:setup` skill の `references/statusline.md`) |
 | rex のセッションなのに daemon が起きない | `doctor` の daemon の節。`REX_SESSION` の無い起動では起こさない |
 | `stop` が `operation not permitted` で弾かれる | operations.md の「既知の制約」 |

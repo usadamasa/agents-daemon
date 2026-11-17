@@ -1,5 +1,12 @@
 # Changelog
 
+## [2026.1117.1](https://github.com/usadamasa/agents-daemon/compare/2026.1117.0...2026.1117.1) - 2026-11-17
+
+### Refactoring
+- rex の control API の client を足し、読み取り系を CLI の fork から API の呼び出しへ置き換える by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/639
+- rex の書き込み系と spawn を CLI の fork から control API の呼び出しへ置き換える by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/640
+- rex の購読と前提点検を control API へ移し、rex の CLI を起こす層を消す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/641
+
 ## [2026.1117.0](https://github.com/usadamasa/agents-daemon/compare/2026.1116.0...2026.1117.0) - 2026-11-17
 
 ### Features

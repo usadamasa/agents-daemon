@@ -69,6 +69,8 @@ func New(t testing.TB) *Server {
 			return map[string]any{}, nil
 		})
 	}
+	// session.detach は実機と同じく、attach していなくても、session が無くても成功する。
+	s.srv.Handle("session.detach", func(json.RawMessage) (any, error) { return map[string]any{}, nil })
 	return s
 }
 
@@ -272,12 +274,7 @@ func (s *Server) resolve(p json.RawMessage) (any, error) {
 	for _, q := range req.Queries {
 		r := map[string]any{"query": q, "status": "not_found"}
 		if len(req.Kinds) == 1 && req.Kinds[0] == "session" {
-			for session := range s.blocks {
-				if session == q || s.labels[session] == q {
-					r = map[string]any{"query": q, "status": "resolved", "target": map[string]any{"kind": "session", "session_id": session, "label": s.labels[session]}}
-				}
-			}
-			results = append(results, r)
+			results = append(results, s.resolveSession(q))
 			continue
 		}
 		for session, blocks := range s.blocks {
@@ -290,6 +287,31 @@ func (s *Server) resolve(p json.RawMessage) (any, error) {
 		results = append(results, r)
 	}
 	return map[string]any{"results": results}, nil
+}
+
+// resolveSession は実機と同じく、完全な ID を先に、無ければ label を大小文字を区別せずに引く。label が 2 つ以上に
+// 当たれば ambiguous。s.mu を持って呼ぶ。
+func (s *Server) resolveSession(q string) map[string]any {
+	if _, ok := s.blocks[q]; ok {
+		return map[string]any{"query": q, "status": "resolved", "target": map[string]any{"kind": "session", "session_id": q, "label": s.labels[q]}}
+	}
+	var matched []string
+	for session, label := range s.labels {
+		if _, ok := s.blocks[session]; ok && strings.EqualFold(label, q) {
+			matched = append(matched, session)
+		}
+	}
+	switch len(matched) {
+	case 0:
+		return map[string]any{"query": q, "status": "not_found"}
+	case 1:
+		return map[string]any{"query": q, "status": "resolved", "target": map[string]any{"kind": "session", "session_id": matched[0], "label": s.labels[matched[0]]}}
+	}
+	candidates := make([]map[string]any, 0, len(matched))
+	for _, session := range matched {
+		candidates = append(candidates, map[string]any{"kind": "session", "session_id": session, "label": s.labels[session]})
+	}
+	return map[string]any{"query": q, "status": "ambiguous", "candidates": candidates}
 }
 
 func (s *Server) blockMethod(name string, p json.RawMessage) (any, error) {

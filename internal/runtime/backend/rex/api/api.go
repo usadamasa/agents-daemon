@@ -27,6 +27,9 @@ const terminalPrefix = "com.superlogical.terminal."
 // errBlockNotFound は target.resolve が block を見つけられなかったことを表す。
 var errBlockNotFound = errors.New("block not found")
 
+// errAmbiguous は target.resolve の query が 2 つ以上に当たったことを表す (同じ label の session など)。not found ではない。
+var errAmbiguous = errors.New("ambiguous")
+
 // Client は control 接続を 1 本持ち、使い回す。method は並んで呼べる。
 type Client struct {
 	// socket は control API の socket のパスを返す。
@@ -125,11 +128,23 @@ func (c *Client) resolve(ctx context.Context, kind, query string, notFound error
 			Target struct {
 				SessionID string `json:"session_id"`
 			} `json:"target"`
-			Reason string `json:"reason"`
+			Reason     string `json:"reason"`
+			Candidates []struct {
+				SessionID string `json:"session_id"`
+				Label     string `json:"label"`
+			} `json:"candidates"`
 		} `json:"results"`
 	}
 	if err := c.call(ctx, "target.resolve", map[string]any{"kinds": []string{kind}, "queries": []string{query}}, &res); err != nil {
 		return "", err
+	}
+	// rex-premise: preview.30 api target.resolve の status は resolved / not_found / ambiguous。知らない値は not_found と読む
+	if len(res.Results) == 1 && res.Results[0].Status == "ambiguous" {
+		var names []string
+		for _, cand := range res.Results[0].Candidates {
+			names = append(names, cand.SessionID+" ("+cand.Label+")")
+		}
+		return "", fmt.Errorf("rex の %s %q は複数に当たる: %w [%s]", kind, query, errAmbiguous, strings.Join(names, ", "))
 	}
 	if len(res.Results) != 1 || res.Results[0].Status != "resolved" || res.Results[0].Target.SessionID == "" {
 		reason := ""
@@ -377,11 +392,16 @@ func (c *Client) NewSplit(ctx context.Context, session, anchor string, ratio flo
 // 接続 (attach_all) で作った block は接続を閉じても owner が残る (2026-11-17 に実測)。disown は session.attach した接続で
 // しか通らない。手放せなくても block は動いているので、作成の失敗には数えない。
 // rex-premise: preview.30 api 作った client が block の owner になる。disown_block は session.attach の後だけ通る
+// 手放した後は session.detach で attach を外す (attach したままだと、その session の block_event がこの接続に流れ続ける。
+// attach_all の event_scope session は attach した session の block_event を止めない)。detach しても attach_all の
+// 範囲で session の method は通り続ける。
+// rex-premise: preview.30 api session.detach は attach だけを外し、attach_all の event と他の attach は残す
 func (c *Client) release(ctx context.Context, session, blockID string) {
 	if err := c.call(ctx, "session.attach", map[string]any{"session_id": session}, nil); err != nil {
 		return
 	}
 	_ = c.call(ctx, "session.disown_block", map[string]any{"session_id": session, "block_ids": []string{blockID}}, nil)
+	_ = c.call(ctx, "session.detach", map[string]any{"session_id": session}, nil)
 }
 
 // CloseBlock は block を閉じる。無い block は not_found。

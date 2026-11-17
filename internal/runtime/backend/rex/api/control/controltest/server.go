@@ -295,6 +295,12 @@ func (s *Server) dispatch(c *serverConn, method string, payload json.RawMessage,
 	_ = json.Unmarshal(payload, &named)
 	switch method {
 	case "session.attach_all":
+		// handler があれば先に通す (購読を断る server を真似る)。断ったら attach しない。
+		if h != nil {
+			if _, err := h(payload); err != nil {
+				return nil, err
+			}
+		}
 		c.mu.Lock()
 		c.attachedAll = true
 		c.mu.Unlock()

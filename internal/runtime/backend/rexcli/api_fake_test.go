@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rexcli/cli"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rexcli/control/controltest"
@@ -91,13 +92,20 @@ func newFakeAPI(t *testing.T) *fakeAPI {
 		}
 		return map[string]any{"results": results}, nil
 	})
-	for _, name := range []string{"program_status", "process", "size", "modes", "format"} {
+	for _, name := range []string{"program_status", "process", "size", "modes", "format", "blob_read"} {
 		f.srv.Handle(terminalMethod+name, func(p json.RawMessage) (any, error) {
 			var req struct {
 				BlockID string `json:"block_id"`
+				Args    struct {
+					MaxBytes int `json:"max_bytes"`
+					Offset   int `json:"offset"`
+				} `json:"args"`
 			}
 			_ = json.Unmarshal(p, &req)
 			key := name + "-" + req.BlockID
+			if name == "blob_read" {
+				key = "format-" + req.BlockID
+			}
 			f.mu.Lock()
 			defer f.mu.Unlock()
 			if f.failing[key] {
@@ -107,14 +115,44 @@ func newFakeAPI(t *testing.T) *fakeAPI {
 			if !ok {
 				return nil, controltest.NotFound(req.BlockID)
 			}
-			if name == "format" {
-				return map[string]string{"content": res}, nil
+			switch name {
+			case "format":
+				return formatReply(res, req.Args.MaxBytes)
+			case "blob_read":
+				return blobReply(res, req.Args.Offset, req.Args.MaxBytes), nil
 			}
 			return json.RawMessage(res), nil
 		})
 	}
 	return f
 }
+
+// blobID は fake の format が大きな画面に振る id。
+const blobID = 7
+
+// formatReply は実機の format と同じく、max_bytes が 0 なら全体を返し、server の上限 (fakeMessageLimit) を
+// 超えれば too_large で断る。max_bytes を超える画面は先頭だけを返し、続きを blob_read で読ませる id を付ける。
+// fixture は ASCII だけなので、バイト数と JSON の文字列の長さは同じになる。
+func formatReply(content string, maxBytes int) (any, error) {
+	if maxBytes == 0 {
+		if len(content) > fakeMessageLimit {
+			return nil, &controltest.Error{Code: "too_large", Message: "control response exceeds 1048576 bytes", Status: 413}
+		}
+		return map[string]any{"content": content}, nil
+	}
+	if len(content) <= maxBytes {
+		return map[string]any{"content": content, "total": len(content), "eof": true}, nil
+	}
+	return map[string]any{"content": content[:maxBytes], "id": blobID, "total": len(content), "eof": false}, nil
+}
+
+func blobReply(content string, offset, maxBytes int) map[string]any {
+	end := min(offset+maxBytes, len(content))
+	return map[string]any{"id": blobID, "data": content[offset:end], "total": len(content), "eof": end == len(content)}
+}
+
+// fakeMessageLimit は実機の welcome の max_message_bytes。
+const fakeMessageLimit = 1 << 20
 
 // addSession は session と、その block (block ID と flavor の組) を置く。
 func (f *fakeAPI) addSession(session string, blocks ...[2]string) {
@@ -209,14 +247,18 @@ func (f *fakeAPI) assertCalls(t *testing.T, want ...string) {
 	}
 }
 
+// apiTimeout は fake の API への request の制限時間。本番と同じく呼び出しごとに ctx を切り、
+// 切った ctx が接続を巻き込まないことをどのテストも通す。
+const apiTimeout = 5 * time.Second
+
 // apiClient は fake の API だけに繋ぐ Client。CLI を叩く method は fake の rex が無いので失敗する。
 func (f *fakeAPI) client(resolve SessionResolver) *execClient {
-	return &execClient{cli: cli.New("/nonexistent/rex", noCommandTimeout), timeout: noCommandTimeout, resolve: resolve, socket: fixedSocket(f.srv.Path)}
+	return &execClient{cli: cli.New("/nonexistent/rex", noCommandTimeout), timeout: apiTimeout, resolve: resolve, socket: fixedSocket(f.srv.Path)}
 }
 
 // clientWith は fake の rex (書き込みと購読) と fake の API (読み取り) の両方に繋ぐ Client。
 func (f *fakeAPI) clientWith(rex *fakeRex, resolve SessionResolver) *execClient {
-	return &execClient{cli: cli.New(rex.bin, noCommandTimeout), timeout: noCommandTimeout, resolve: resolve, socket: fixedSocket(f.srv.Path)}
+	return &execClient{cli: cli.New(rex.bin, noCommandTimeout), timeout: apiTimeout, resolve: resolve, socket: fixedSocket(f.srv.Path)}
 }
 
 func fixedSocket(path string) func() (string, error) {

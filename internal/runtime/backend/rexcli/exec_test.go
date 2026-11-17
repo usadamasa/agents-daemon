@@ -452,9 +452,10 @@ func TestExecClient_TargetNotFoundIsError(t *testing.T) {
 	}
 }
 
-// PaneRead は format の content に改行を 1 つ足して返す。rex の CLI の capture は出力の末尾に改行を足し、
-// 末尾の n 行を切り出す tailLines と呼び手はその形を前提にしている (2026-11-17 に実機で capture と format を
-// バイト単位で比べた)。
+// PaneRead は format の content が改行で終わっていなければ改行を 1 つ足す。rex の CLI の capture は出力を必ず
+// 改行で終え (help の Output always ends with a newline)、末尾の n 行を切り出す tailLines と呼び手はその形を
+// 前提にしている。trim:true の content は改行で終わらないので、実機では capture は content と改行 1 つに
+// バイト単位で一致する (2026-11-17 に text と vt で比べた)。
 func TestExecClient_PaneRead(t *testing.T) {
 	const content = "line1\nline2\nline3\nline4"
 	tests := []struct {
@@ -467,6 +468,7 @@ func TestExecClient_PaneRead(t *testing.T) {
 		{"末尾 2 行", content, 2, "line3\nline4\n"},
 		{"行数より多ければ全体", content, 10, content + "\n"},
 		{"空の画面は改行 1 つ", "", 0, "\n"},
+		{"改行で終わっていれば足さない", content + "\n", 0, content + "\n"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -482,12 +484,53 @@ func TestExecClient_PaneRead(t *testing.T) {
 				t.Errorf("PaneRead() = %q, want %q", got, tt.want)
 			}
 			f.assertCalls(t, "target.resolve "+blockClaudeWorking, "format "+blockClaudeWorking)
-			assertFormatArgs(t, f, `{"trim":true,"unwrap":true}`)
+			assertFormatArgs(t, f, `{"trim":true,"unwrap":true,"max_bytes":983040}`)
 		})
 	}
 }
 
-// assertFormatArgs は最後の format の args を want (JSON) と比べる。CLI の capture --trim --unwrap と同じ args になる。
+// 1 回の応答の上限 (1 MiB) を超える画面は、format の max_bytes で先頭を受け、続きを blob_read で読み足す。
+// max_bytes を付けずに頼むと too_large で落ちる (2026-11-17 に 3 MB の scrollback で実測。CLI の capture は全体を返した)。
+func TestExecClient_PaneRead_LargeScreen(t *testing.T) {
+	f := newFakeAPI(t)
+	f.addSession(sessionA, [2]string{blockClaudeWorking, blockstate.ShellFlavor})
+	line := strings.Repeat("x", 99) + "\n"
+	content := strings.Repeat(line, 25000) + "last" // 約 2.5 MB
+	f.put("format-"+blockClaudeWorking, content)
+
+	got, err := f.client(staticResolver(nil)).PaneRead(context.Background(), blockClaudeWorking, multiplexer.PaneReadOptions{})
+	if err != nil {
+		t.Fatalf("PaneRead() error = %v", err)
+	}
+	if got != content+"\n" {
+		t.Errorf("PaneRead() の長さ = %d, want %d (全体に改行 1 つ)", len(got), len(content)+1)
+	}
+	f.assertCalls(t,
+		"target.resolve "+blockClaudeWorking,
+		"format "+blockClaudeWorking,
+		"blob_read "+blockClaudeWorking,
+		"blob_read "+blockClaudeWorking,
+	)
+	// 続きは format が返した id から、受け取った分の後ろを読む。
+	for i, p := range f.requestsOf(terminalMethod + "blob_read") {
+		var req struct {
+			Args struct {
+				ID       int `json:"id"`
+				Offset   int `json:"offset"`
+				MaxBytes int `json:"max_bytes"`
+			} `json:"args"`
+		}
+		if err := json.Unmarshal(p, &req); err != nil {
+			t.Fatal(err)
+		}
+		if want := (i + 1) * 983040; req.Args.ID != blobID || req.Args.Offset != want || req.Args.MaxBytes != 983040 {
+			t.Errorf("%d 回目の blob_read の args = %+v, want id %d offset %d", i+1, req.Args, blobID, want)
+		}
+	}
+}
+
+// assertFormatArgs は最後の format の args を want (JSON) と比べる。trim と unwrap は CLI の capture --trim --unwrap と
+// 同じ。max_bytes は 1 回の応答の上限に収まる大きさ (server が受ける最大の 960 KiB)。
 func assertFormatArgs(t *testing.T, f *fakeAPI, want string) {
 	t.Helper()
 	reqs := f.requestsOf(terminalMethod + "format")
@@ -526,7 +569,7 @@ func TestExecClient_PaneRead_styled(t *testing.T) {
 	if got != "❯ \x1b[2mhint\x1b[0m  \n" {
 		t.Errorf("PaneRead() = %q", got)
 	}
-	assertFormatArgs(t, f, `{"trim":true,"unwrap":true,"format":"vt"}`)
+	assertFormatArgs(t, f, `{"trim":true,"unwrap":true,"format":"vt","max_bytes":983040}`)
 }
 
 // PaneGeometry は size と modes の 2 回で block の高さと screen を返す。screen の未知の値は primary と見る

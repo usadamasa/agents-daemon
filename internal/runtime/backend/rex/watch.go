@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
+	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/api"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/blockstate"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/watch"
 )
@@ -18,22 +19,15 @@ var _ multiplexer.Watcher = (*execClient)(nil)
 // 呼んだらすぐ戻る。ctx が終わるまで、切れるたびに張り直す。購読の失敗と張り直しは logf に書く。
 // PaneList と並ぶ前 (daemon の最初の tick より前) に 1 回だけ呼ぶ。
 func (c *execClient) Watch(ctx context.Context, logf func(format string, args ...any)) <-chan struct{} {
-	subscribe := func(ctx context.Context) (watch.Stream, error) { return c.rex.Subscribe(ctx, eventBuffer) }
-	c.watch = watch.New(subscribe, watchSource{c}, c.watchBackoff)
+	subscribe := func(ctx context.Context) (*api.Subscription, error) { return c.rex.Subscribe(ctx, eventBuffer) }
+	c.watch = watch.New(subscribe, watch.Reads{Snapshot: c.snapshot, Fill: c.fillCreated}, c.watchBackoff)
 	return c.watch.Run(ctx, logf)
 }
 
-// watchSource は購読の cache を rex の読み取りで埋める (watch.Source)。
-type watchSource struct{ c *execClient }
-
-func (s watchSource) Snapshot(ctx context.Context) (map[string]*blockstate.State, error) {
-	return s.c.snapshot(ctx)
-}
-
-// Fill は作られた block のうち shell のものを program_status と process で埋める。ref.Block が空 (session_created) なら
+// fillCreated は作られた block のうち shell のものを program_status と process で埋める。ref.Block が空 (session_created) なら
 // その session の shell の block を全部埋める。shell でない、もう閉じた block は入れない。
-func (s watchSource) Fill(ctx context.Context, ref blockstate.Ref) (map[string]*blockstate.State, error) {
-	shells, err := s.c.shellBlocks(ctx, ref.Session)
+func (c *execClient) fillCreated(ctx context.Context, ref blockstate.Ref) (map[string]*blockstate.State, error) {
+	shells, err := c.shellBlocks(ctx, ref.Session)
 	if err != nil {
 		if isNotFound(err) {
 			return nil, nil
@@ -48,7 +42,7 @@ func (s watchSource) Fill(ctx context.Context, ref blockstate.Ref) (map[string]*
 	}
 	created := map[string]*blockstate.State{}
 	for _, id := range shells {
-		st, err := s.c.fetchBlock(ctx, ref.Session, id)
+		st, err := c.fetchBlock(ctx, ref.Session, id)
 		if isNotFound(err) {
 			continue
 		}

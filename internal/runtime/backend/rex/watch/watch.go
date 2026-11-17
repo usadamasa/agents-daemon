@@ -1,16 +1,16 @@
 // Package watch は rex の event の購読で、shell の block の状態の cache (blockstate.Cache) を保つ。購読を張ってから
 // 全列挙し、全列挙の後に購読の event を当て続ける。購読が切れたら同期を外し、間隔を空けて張り直す。
-// 購読の接続と、全列挙・作られた block の埋め方は呼び手 (rex) が渡す。
+// 購読の張り方と、全列挙・作られた block の埋め方は呼び手 (rex) が関数で渡す。
 package watch
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
+	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/api"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/blockstate"
 )
 
@@ -23,29 +23,19 @@ const (
 	healthy = time.Minute
 )
 
-// Stream は購読の接続 1 本。
-type Stream interface {
-	// Events は event を届いた順に渡し、接続が終わると閉じる。
-	Events() <-chan json.RawMessage
-	// Err は接続が終わった理由。
-	Err() error
-	// Close は接続を閉じる。
-	Close() error
-}
-
-// Source は cache を埋める読み取り。
-type Source interface {
+// Reads は cache を埋める読み取り。
+type Reads struct {
 	// Snapshot は全 session の shell の block の状態を読む。
-	Snapshot(ctx context.Context) (map[string]*blockstate.State, error)
+	Snapshot func(ctx context.Context) (map[string]*blockstate.State, error)
 	// Fill は作られた block (ref.Block が空なら session の全 block) のうち shell のものの状態を読む。
 	// もう無い block と session は入れずに返す。
-	Fill(ctx context.Context, ref blockstate.Ref) (map[string]*blockstate.State, error)
+	Fill func(ctx context.Context, ref blockstate.Ref) (map[string]*blockstate.State, error)
 }
 
 // Watcher は購読と、それで保つ cache。nil の Watcher (購読していない) は常に未同期。
 type Watcher struct {
-	subscribe func(context.Context) (Stream, error)
-	src       Source
+	subscribe func(context.Context) (*api.Subscription, error)
+	reads     Reads
 	backoff   time.Duration
 
 	mu sync.Mutex
@@ -54,11 +44,11 @@ type Watcher struct {
 }
 
 // New は Watcher を返す。backoff は張り直しの最初の間隔で、0 以下なら 1 秒。購読は Run で始める。
-func New(subscribe func(context.Context) (Stream, error), src Source, backoff time.Duration) *Watcher {
+func New(subscribe func(context.Context) (*api.Subscription, error), reads Reads, backoff time.Duration) *Watcher {
 	if backoff <= 0 {
 		backoff = defaultBackoff
 	}
-	return &Watcher{subscribe: subscribe, src: src, backoff: backoff}
+	return &Watcher{subscribe: subscribe, reads: reads, backoff: backoff}
 }
 
 // Panes は同期済みなら cache の Pane を block ID の順に返す。sessions は block ID から session_id への対応。
@@ -125,7 +115,7 @@ func (w *Watcher) once(ctx context.Context) error {
 	}
 	defer func() { _ = stream.Close() }()
 
-	blocks, err := w.src.Snapshot(ctx)
+	blocks, err := w.reads.Snapshot(ctx)
 	if err != nil {
 		return fmt.Errorf("購読を始めるときの全列挙に失敗: %w", err)
 	}
@@ -161,7 +151,7 @@ func (w *Watcher) once(ctx context.Context) error {
 }
 
 // ended は購読の接続が終わった理由。
-func ended(stream Stream) error {
+func ended(stream *api.Subscription) error {
 	return fmt.Errorf("購読の接続が終わった: %w", stream.Err())
 }
 
@@ -180,7 +170,7 @@ func (w *Watcher) apply(ctx context.Context, cache *blockstate.Cache, mu *sync.M
 	if err != nil || ref == (blockstate.Ref{}) {
 		return err
 	}
-	created, err := w.src.Fill(ctx, ref)
+	created, err := w.reads.Fill(ctx, ref)
 	if err != nil {
 		return fmt.Errorf("作られた block (session %s、block %q) を埋められない: %w", ref.Session, ref.Block, err)
 	}

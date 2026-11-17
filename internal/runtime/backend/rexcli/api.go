@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"runtime/debug"
+	"strings"
 
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rexcli/cli"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rexcli/control"
@@ -93,6 +94,45 @@ func (c *execClient) blockCall(ctx context.Context, session, blockID, method str
 		payload["args"] = args
 	}
 	return c.call(ctx, terminalPrefix+method, payload, out)
+}
+
+// formatChunkBytes は format と blob_read の 1 回で受ける大きさ。server が受ける最大 (960 KiB) にし、
+// 1 回の応答の上限 (1 MiB) に収める。max_bytes を付けない format は上限を超えると too_large で落ちる
+// (scrollback は 64 MiB まで溜まる)。
+// rex-premise: preview.30 api format は max_bytes を超える続きに id を付け、blob_read で offset から読ませる。max_bytes の上限は 983040
+const formatChunkBytes = 983040
+
+// formatResult は format と blob_read の応答。format は content、blob_read は data に本文を入れる。
+type formatResult struct {
+	Content string `json:"content"`
+	Data    string `json:"data"`
+	ID      int64  `json:"id"`
+	EOF     bool   `json:"eof"`
+}
+
+// readFormat は format を打ち、続きがあれば (応答に id があれば) blob_read で終わりまで読み足す。
+// 続きは format の結果を server が保つ 5 分の間に読む。
+func (c *execClient) readFormat(ctx context.Context, session, blockID string, args map[string]any) (string, error) {
+	var first formatResult
+	if err := c.blockCall(ctx, session, blockID, "format", args, &first); err != nil {
+		return "", err
+	}
+	if first.ID == 0 {
+		return first.Content, nil
+	}
+	var b strings.Builder
+	b.WriteString(first.Content)
+	for {
+		var part formatResult
+		blob := map[string]any{"id": first.ID, "offset": b.Len(), "max_bytes": formatChunkBytes}
+		if err := c.blockCall(ctx, session, blockID, "blob_read", blob, &part); err != nil {
+			return "", err
+		}
+		b.WriteString(part.Data)
+		if part.EOF || part.Data == "" {
+			return b.String(), nil
+		}
+	}
 }
 
 // resolveResult は target.resolve の応答のうち使う欄。

@@ -165,33 +165,30 @@ func (c *execClient) fetchBlock(ctx context.Context, session, blockID string) (*
 	return st, nil
 }
 
-// formatResult は format の応答。
-type formatResult struct {
-	Content string `json:"content"`
-}
-
 // PaneRead は block の画面を返す。Claude Code は alternate screen で描くので、Claude の block では
 // 可視の行数で頭打ちになる (alternate screen でない block では scrollback も返る)。
 // opts.Lines > 0 なら末尾 Lines 行に絞る。opts.Styled なら制御シーケンスを保つ。
-// content の末尾に改行を 1 つ足し、CLI の capture と同じ形にする (tailLines と検知は末尾の改行のある画面で書いた)。
-// format の trim は行末の空白を消す。CLI の capture --trim も同じ trim を送っており、出力は content と改行 1 つで
-// バイト単位で一致する (2026-11-17 に text と vt の両方で実測)。
-// rex-premise: preview.30 api format は alternate screen では可視の行だけ、通常の画面では scrollback も返す。content は末尾に改行を持たない
+// 画面が改行で終わっていなければ改行を 1 つ足し、CLI の capture と同じ形にする (tailLines と検知は末尾の改行のある
+// 画面で書いた)。format の trim は行末の空白を消す。CLI の capture --trim も同じ trim を送っており、出力は content と
+// 改行 1 つでバイト単位で一致する (2026-11-17 に text と vt の両方で実測)。
+// rex-premise: preview.30 api format は alternate screen では可視の行だけ、通常の画面では scrollback も返す。trim の content は改行で終わらない
 // rex-premise: preview.30 api format の vt は制御シーケンス (SGR、CR) を保つ
 func (c *execClient) PaneRead(ctx context.Context, paneID string, opts multiplexer.PaneReadOptions) (string, error) {
 	session, err := c.blockSession(ctx, paneID)
 	if err != nil {
 		return "", err
 	}
-	args := map[string]any{"trim": true, "unwrap": true}
+	args := map[string]any{"trim": true, "unwrap": true, "max_bytes": formatChunkBytes}
 	if opts.Styled {
 		args["format"] = "vt"
 	}
-	var res formatResult
-	if err := c.blockCall(ctx, session, paneID, "format", args, &res); err != nil {
+	out, err := c.readFormat(ctx, session, paneID, args)
+	if err != nil {
 		return "", err
 	}
-	out := res.Content + "\n"
+	if !strings.HasSuffix(out, "\n") {
+		out += "\n"
+	}
 	if opts.Lines > 0 {
 		return tailLines(out, opts.Lines), nil
 	}

@@ -68,6 +68,9 @@ vendors:
   # rexcli のテストが fake の rex に渡った引数列を戻すのに使う。
   shellquote:
     in: github.com/kballard/go-shellquote
+  # rexcli が rex server の control API (WebSocket) を呼ぶのと、そのテストの fake server に使う。
+  websocket:
+    in: github.com/coder/websocket
   # protocol が mod と受け渡す JSON を schema で確かめるのに使う。
   jsonschema:
     in: github.com/google/jsonschema-go/jsonschema
@@ -99,6 +102,7 @@ deps:
       - runtime
     canUse:
       - shellquote
+      - websocket
   dream:
     mayDependOn:
       - shared

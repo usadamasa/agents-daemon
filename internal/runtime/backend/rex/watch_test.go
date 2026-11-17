@@ -133,7 +133,7 @@ func TestWatch_PaneListFromCache(t *testing.T) {
 	eventually(t, "同期済み", func() bool { return synced(c) })
 	emitLines(api, measured(t, measuredOct27, "events.jsonl"))
 	// stream の block_created と session_created が打つ list_blocks を待ってから数える。
-	eventually(t, "stream の event の list_blocks", func() bool { return len(api.Calls()) >= 6 })
+	eventually(t, "stream の event の list_blocks", func() bool { return len(api.Calls()) >= 7 })
 	before := len(api.Calls())
 
 	panes, err := c.PaneList(context.Background())
@@ -161,12 +161,14 @@ func TestWatch_Calls(t *testing.T) {
 	startWatch(t, c)
 	eventually(t, "同期済み", func() bool { return synced(c) })
 	emitLines(api, measured(t, measuredOct27, "events.jsonl"))
-	eventually(t, "block_created と session_created の list_blocks", func() bool { return len(api.Calls()) >= 6 })
+	eventually(t, "block_created と session_created の list_blocks", func() bool { return len(api.Calls()) >= 7 })
 	api.assertCalls(t,
 		"session.list",
 		"session.list_blocks "+sessionOwn,
 		"program_status "+blockOwn,
 		"process "+blockOwn,
+		// 全列挙の後に購読の接続で打つ同期。応答の seq までの event を当ててから公開する。
+		"server.version",
 		"session.list_blocks "+sessionOwn,
 		// 実測の stream の session_created。fake にその session は無いので session_not_found で読み飛ばす。
 		"session.list_blocks session:01a17d51-a67b-7c38-bd8e-3265c5f30a95",

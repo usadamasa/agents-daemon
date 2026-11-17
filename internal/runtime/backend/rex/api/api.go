@@ -58,6 +58,9 @@ func IsNotFound(err error) bool {
 	return control.IsNotFound(err) || errors.Is(err, errBlockNotFound) || errors.Is(err, errSessionNotFound)
 }
 
+// IsConflict は今の状態では通らない失敗 (閉じかけの session など) かを返す。
+func IsConflict(err error) bool { return control.IsConflict(err) }
+
 // Close は control 接続を閉じる。短命のサブコマンドは終わる前に呼び、close frame で server に client を片付けさせる。
 func (c *Client) Close() error {
 	c.mu.Lock()
@@ -193,6 +196,7 @@ func (c *Client) Format(ctx context.Context, session, blockID string, opts Forma
 		Content string `json:"content"`
 		Data    string `json:"data"`
 		ID      int64  `json:"id"`
+		Total   int    `json:"total"`
 		EOF     bool   `json:"eof"`
 	}
 	var first chunk
@@ -204,17 +208,21 @@ func (c *Client) Format(ctx context.Context, session, blockID string, opts Forma
 	}
 	var b strings.Builder
 	b.WriteString(first.Content)
-	for {
+	// blob_read は続きが残っていても max_bytes より短く返しうるので、受けた分だけ offset を進め、total に届くまで読む。
+	// 届く前に空の data が来たら、途中までの画面を返さずに失敗にする。
+	// rex-premise: preview.30 api blob_read の data は max_bytes より短いことがあり、offset は受けた data のバイト数で進める
+	for b.Len() < first.Total {
 		var part chunk
 		blob := map[string]any{"id": first.ID, "offset": b.Len(), "max_bytes": formatChunkBytes}
 		if err := c.blockCall(ctx, session, blockID, "blob_read", blob, &part); err != nil {
 			return "", err
 		}
-		b.WriteString(part.Data)
-		if part.EOF || part.Data == "" {
-			return b.String(), nil
+		if part.Data == "" {
+			return "", fmt.Errorf("rex の blob_read が %d バイト目で空を返した (全体は %d バイト)", b.Len(), first.Total)
 		}
+		b.WriteString(part.Data)
 	}
+	return b.String(), nil
 }
 
 // errSessionNotFound は target.resolve が session を見つけられなかったことを表す。

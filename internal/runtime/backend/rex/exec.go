@@ -79,9 +79,9 @@ func (c *execClient) snapshot(ctx context.Context) (map[string]*blockstate.State
 	for _, session := range sessions {
 		shells, err := c.shellBlocks(ctx, session)
 		if err != nil {
-			// list の後に閉じた session は読み飛ばす。block の場合と同じく、失敗を返すと session の close だけで
-			// daemon が PaneList の連続失敗に数える。
-			if isNotFound(err) {
+			// list の後に閉じた session と閉じかけの session (conflict) は読み飛ばす。block の場合と同じく、失敗を
+			// 返すと session の close だけで daemon が PaneList の連続失敗に数える。
+			if isNotFound(err) || api.IsConflict(err) {
 				continue
 			}
 			return nil, err
@@ -89,9 +89,9 @@ func (c *execClient) snapshot(ctx context.Context) (map[string]*blockstate.State
 		for _, id := range shells {
 			st, err := c.fetchBlock(ctx, session, id)
 			if err != nil {
-				// list_blocks の後に閉じた block は読み飛ばす。ここで失敗を返すと daemon が
-				// PaneList の連続失敗に数え、block の開け閉めだけで終了しかねない。
-				if isNotFound(err) {
+				// list_blocks の後に閉じた block (閉じかけの session の conflict を含む) は読み飛ばす。ここで失敗を
+				// 返すと daemon が PaneList の連続失敗に数え、block の開け閉めだけで終了しかねない。
+				if isNotFound(err) || api.IsConflict(err) {
 					continue
 				}
 				return nil, err

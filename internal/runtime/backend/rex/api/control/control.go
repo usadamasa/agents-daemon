@@ -50,6 +50,14 @@ func IsNotFound(err error) bool {
 	return errors.As(err, &e) && (e.code == "not_found" || e.code == "session_not_found")
 }
 
+// IsConflict は err が今の状態では通らない失敗 (session が閉じかけ、layout が動く間に block が閉じた、attach していない)
+// かを返す。
+// rex-premise: preview.30 api 閉じかけの session と、layout の変更中に閉じた block は conflict (status 409)
+func IsConflict(err error) bool {
+	var e *apiError
+	return errors.As(err, &e) && e.code == "conflict"
+}
+
 // Options は Dial の設定。
 type Options struct {
 	// ClientName と ClientVersion は hello の client に載せる (rex の client 一覧に出る)。
@@ -137,12 +145,17 @@ func Dial(ctx context.Context, socketPath string, opts Options) (*Conn, error) {
 	return c, nil
 }
 
-// handshake は hello を送り、welcome の type と protocol を確かめる。
+// handshake は hello を送り、welcome の type と protocol と revision を確かめる。api_min_revision を api_revision と
+// 同じにして、server に古い revision へ落とさせない (応答の形が daemon の読む形と変わる)。落とせない server は
+// 1008 で接続を断り、welcome の Read が理由を添えて失敗する。api_min_revision を知らない古い server は
+// 別の revision を選びうるので、welcome の revision も確かめる。
+// rex-premise: preview.30 api hello の api_min_revision を server が対応できなければ 1008 で閉じる。welcome の api_revision が選ばれた revision
 func handshake(ctx context.Context, ws *websocket.Conn, opts Options) (welcome, error) {
 	hello, err := json.Marshal(map[string]any{
-		"type":         "hello",
-		"api_revision": APIRevision,
-		"client":       map[string]any{"kind": "agent", "name": opts.ClientName, "version": opts.ClientVersion},
+		"type":             "hello",
+		"api_revision":     APIRevision,
+		"api_min_revision": APIRevision,
+		"client":           map[string]any{"kind": "agent", "name": opts.ClientName, "version": opts.ClientVersion},
 	})
 	if err != nil {
 		return welcome{}, err
@@ -160,6 +173,9 @@ func handshake(ctx context.Context, ws *websocket.Conn, opts Options) (welcome, 
 	}
 	if m.Type != "welcome" || m.Protocol != subprotocol {
 		return welcome{}, fmt.Errorf("rex の最初の message が %s の welcome でない (type=%q protocol=%q)", subprotocol, m.Type, m.Protocol)
+	}
+	if m.APIRevision != APIRevision {
+		return welcome{}, fmt.Errorf("rex の server が API revision %d を選んだ (daemon は %d を話す。rex か agents-daemon を更新する)", m.APIRevision, APIRevision)
 	}
 	return welcome{apiRevision: m.APIRevision, maxMessageBytes: max(m.Limits.MaxMessageBytes, minMessageBytes)}, nil
 }

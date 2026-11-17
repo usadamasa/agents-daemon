@@ -214,38 +214,8 @@ func TestCallHonorsContext(t *testing.T) {
 	}
 }
 
-func TestEventsAreDeliveredInOrder(t *testing.T) {
-	srv := controltest.New(t)
-	c := dial(t, srv, control.Options{EventBuffer: 16})
-	if err := c.Call(callCtx(t), "session.attach_all", map[string]any{"event_scope": "all"}, nil); err != nil {
-		t.Fatalf("attach_all: %v", err)
-	}
-	for i := range 3 {
-		srv.Emit(map[string]any{"type": "session_event", "payload": map[string]any{"n": i}})
-	}
-	for i := range 3 {
-		select {
-		case ev := <-c.Events():
-			if ev.Seq != int64(i+1) {
-				t.Errorf("%d 番目の seq = %d", i, ev.Seq)
-			}
-			var p struct {
-				Type    string `json:"type"`
-				Payload struct {
-					N int `json:"n"`
-				} `json:"payload"`
-			}
-			if err := json.Unmarshal(ev.Payload, &p); err != nil || p.Type != "session_event" || p.Payload.N != i {
-				t.Errorf("%d 番目の payload = %s", i, ev.Payload)
-			}
-		case <-time.After(5 * time.Second):
-			t.Fatalf("%d 番目の event が届かない", i)
-		}
-	}
-}
-
-// 購読しない接続 (EventBuffer が 0) は event を捨て、応答を受け続ける。
-func TestEventsAreDroppedWithoutBuffer(t *testing.T) {
+// event を読む口はまだ無い。event が流れても応答を受け続ける (読み手を待って止まらない)。
+func TestEventsDoNotBlockResponses(t *testing.T) {
 	srv := controltest.New(t)
 	srv.Reply("server.status", map[string]any{"pid": 1})
 	c := dial(t, srv, control.Options{})
@@ -256,38 +226,7 @@ func TestEventsAreDroppedWithoutBuffer(t *testing.T) {
 		srv.Emit(map[string]any{"type": "session_event"})
 	}
 	if err := c.Call(callCtx(t), "server.status", nil, nil); err != nil {
-		t.Fatalf("event を捨てた後の Call: %v", err)
-	}
-	if c.Events() != nil {
-		t.Error("EventBuffer が 0 なのに Events が nil でない")
-	}
-}
-
-// event の queue が溢れたら接続を閉じる。読み手を待って応答の受け取りを止めず、欠けた event で cache を進めさせない。
-func TestEventOverflowClosesConnection(t *testing.T) {
-	srv := controltest.New(t)
-	c := dial(t, srv, control.Options{EventBuffer: 2})
-	if err := c.Call(callCtx(t), "session.attach_all", map[string]any{"event_scope": "all"}, nil); err != nil {
-		t.Fatalf("attach_all: %v", err)
-	}
-	for range 5 {
-		srv.Emit(map[string]any{"type": "session_event"})
-	}
-	select {
-	case <-c.Done():
-	case <-time.After(5 * time.Second):
-		t.Fatal("queue が溢れても接続が閉じない")
-	}
-	if !errors.Is(c.Err(), control.ErrEventOverflow) {
-		t.Errorf("Err = %v、ErrEventOverflow のはず", c.Err())
-	}
-	// 溢れる前に queue に入った event は読める。閉じた後に Events は閉じる。
-	n := 0
-	for range c.Events() {
-		n++
-	}
-	if n != 2 {
-		t.Errorf("読めた event = %d、queue の長さ 2 のはず", n)
+		t.Fatalf("event の後の Call: %v", err)
 	}
 }
 
@@ -320,7 +259,7 @@ func TestServerDisconnectFailsPendingAndLaterCalls(t *testing.T) {
 
 func TestCloseEndsConnection(t *testing.T) {
 	srv := controltest.New(t)
-	c := dial(t, srv, control.Options{EventBuffer: 1})
+	c := dial(t, srv, control.Options{})
 	if err := c.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
@@ -328,9 +267,6 @@ func TestCloseEndsConnection(t *testing.T) {
 	case <-c.Done():
 	case <-time.After(5 * time.Second):
 		t.Fatal("Close の後に Done が閉じない")
-	}
-	if _, ok := <-c.Events(); ok {
-		t.Error("Close の後に Events が閉じない")
 	}
 	deadline := time.Now().Add(5 * time.Second)
 	for srv.Connections() > 0 && time.Now().Before(deadline) {

@@ -59,17 +59,66 @@ peer の session は、起こしたときに控えた `session_id` で指す。l
   `REX_BLOCK` を既定にするが、`send` はそうとは書かれていない。block が 1 つの session は `-s <session>` だけで指せる。
 - `--json` を付けて ID を結果から読む。`split` と `run` は `block_ids[0]` に新しいブロックを返す。
   `session new` は `session_id` と `initial_windows[0].window_id`、`initial_windows[0].block_ids[0]` を返す。
-- `split` は同じ window に並べ、`run` は新しい window を作る。別のエージェントは、新しい作業のまとまりなら
-  `session new` で新しい session に、同じまとまりなら既存の session に `window new` でタブとして立てる
-  (1 作業のまとまり = 1 session)。タブで起きた claude が rex の案内どおりに session を rename しないよう、
-  タブの包みが環境変数を渡し、plugin の SessionStart hook が rename を止める案内を出す。
+- `split` は同じ window に並べ、`run` は新しい window を作る。別のエージェントを起こすときの既定は、
+  既存の session (多くは起こす側の `$REX_SESSION`) に `window new` でタブとして立てること。
+  `session new` で新しい session を作るのは、利用者が session の分離を明示したときだけにする
+  (SKILL.md の「足し先の session を決める」)。タブで起きた claude が rex の案内どおりに session を
+  rename しないよう、タブの包みが環境変数を渡し、plugin の SessionStart hook が rename を止める案内を出す。
 - コマンドはログインシェルの環境で動く。PATH は効くが alias は効かない。
 
 ## peer の Claude セッションを立てる
 
-足し先 (新しい session か既存の session のタブ) の決め方は SKILL.md の「足し先の session を決める」。
+足し先 (既存の session のタブか、利用者が明示した新しい session) の決め方は SKILL.md の
+「足し先の session を決める」。既定はタブなので、まずこちらを使う。
 
-### 新しい session に立てる
+### 既存の session にタブとして立てる (既定)
+
+足し先は session の ID で指す。label は起きた claude や利用者が rename すると変わる。自分の session に足すなら
+`"$REX_SESSION"`、ほかの作業の session ならその peer を起こしたときに控えた `session_id` を渡す。
+
+```sh
+sid=$(uuidgen | tr '[:upper:]' '[:lower:]'); echo "claude session_id: $sid"
+rex window new -s "$REX_SESSION" <作業名> --cwd "$PWD" --focus=false --json -- \
+  /bin/sh -c 'set -m; export AGENTS_DAEMON_SHARED_REX_SESSION=1; "$@"; s=$?; c() { exit "$s"; }; if [ "$s" -ne 0 ]; then trap c INT; printf "\n%s が exit %s で終わった。Enter で閉じる。\n" "$1" "$s"; read -r _; fi; c' \
+  agents-daemon-spawn claude --session-id "$sid" --model "${CLAUDE_CODE_SUBAGENT_MODEL:?}" -- "$(cat ./tmp/brief-<作業名>.md)"
+```
+
+worktree 隔離のセッションでは、guard が変数展開を含むコマンドを拒む。この内容をそのまま
+`./tmp/spawn-<作業名>.sh` に Write で書き、`sh ./tmp/spawn-<作業名>.sh` で起こす。新しい session の script
+(下) とは `rex` の副コマンドと包みの中身が違うので、新しい session 用の script を書き換えて使い回さない。
+
+```sh
+#!/bin/sh
+set -e
+sid="<uuidgen で決めた値>"
+rex window new -s "$REX_SESSION" <作業名> --cwd "<cwd>" --focus=false --json -- \
+  /bin/sh -c 'set -m; export AGENTS_DAEMON_SHARED_REX_SESSION=1; "$@"; s=$?; c() { exit "$s"; }; if [ "$s" -ne 0 ]; then trap c INT; printf "\n%s が exit %s で終わった。Enter で閉じる。\n" "$1" "$s"; read -r _; fi; c' \
+  agents-daemon-spawn claude --session-id "$sid" --model "<model>" -- "$(cat <brief のパス>)"
+```
+
+<!-- rex-premise: preview.30 cli window new のコマンドが終わると pane と window が閉じ、session は残る。REX_SESSION は足し先の session になる -->
+
+`<作業名>` はタブ (window) の名前になる。`--focus=false` が無いと、新しいタブが足し先の session の表示を奪う。
+結果の `window_id` (畳むときに使う) を控える。
+
+タブの包みは session に触れない。印を書かず、claude が終わっても session を閉じない。claude が終われば pane が
+閉じ、最後の pane を失ったタブは rex が閉じるので、ほかのタブは残る。包みが渡す
+`AGENTS_DAEMON_SHARED_REX_SESSION` を plugin の SessionStart hook が見て、起きた claude に
+`rex session rename` を打たず自分のタブにだけ名前を付ける案内を出す。rex の hook の案内は利用者の settings
+にあり、plugin からは止められない。本文は spawn の `closeOnExitTabScript` (`rexcli`) と同じにする。
+
+渡したい `session_id` が `session target "..." not found` で見つからなければ、その session は既に閉じている。
+新しい session へは逃げず、自分の `"$REX_SESSION"` のタブへ倒す (SKILL.md「足し先の session を決める」)。
+
+依頼文は最初のターンとして入るので、peer の inbox が開くのを待たずに渡せる。最初のターンを終えると
+Claude Code が AI の題を作り、rex のサイドバーに出る。`--name` を付けるとこの題が作られない。
+peer は依頼文に従って受領を `SendMessage` で返し、その `from` が以後の宛先になる。`ListAgents` の名前は
+`<cwd の basename>-<連番>` で、rex の rename では変わらない。
+画面へ直接投入するなら `send -s <session_id> '<本文>'` と `send-key -s <session_id> enter` を使う。
+
+<!-- cc-premise: 2.1.325 osc7501 --name の無いセッションは最初のターンの後に ai-title を作り、端末の題にする -->
+
+### 新しい session に立てる (利用者が session の分離を明示したときだけ)
 
 ```sh
 sid=$(uuidgen | tr '[:upper:]' '[:lower:]'); echo "claude session_id: $sid"
@@ -96,40 +145,19 @@ rename するよう案内する。label が既に作業を表していればそ�
 起こす前に session の印を書くので、ほかの pane が残っていて閉じられなかった session も、pane が空になると
 daemon が閉じる。本文は spawn の `closeOnExitScript` (`rexcli`) と同じにする。
 
-依頼文は最初のターンとして入るので、peer の inbox が開くのを待たずに渡せる。最初のターンを終えると
-Claude Code が AI の題を作り、rex のサイドバーに出る。`--name` を付けるとこの題が作られない。
-peer は依頼文に従って受領を `SendMessage` で返し、その `from` が以後の宛先になる。`ListAgents` の名前は
-`<cwd の basename>-<連番>` で、rex の rename では変わらない。
-画面へ直接投入するなら `send -s <session_id> '<本文>'` と `send-key -s <session_id> enter` を使う。
-
-<!-- cc-premise: 2.1.325 osc7501 --name の無いセッションは最初のターンの後に ai-title を作り、端末の題にする -->
-
-### 既存の session にタブとして立てる
-
-足し先は session の ID で指す。label は起きた claude や利用者が rename すると変わる。自分の session に足すなら
-`"$REX_SESSION"`、ほかの作業の session ならその peer を起こしたときに控えた `session_id` を渡す。
-
-```sh
-sid=$(uuidgen | tr '[:upper:]' '[:lower:]'); echo "claude session_id: $sid"
-rex window new -s "$REX_SESSION" <作業名> --cwd "$PWD" --focus=false --json -- \
-  /bin/sh -c 'set -m; export AGENTS_DAEMON_SHARED_REX_SESSION=1; "$@"; s=$?; c() { exit "$s"; }; if [ "$s" -ne 0 ]; then trap c INT; printf "\n%s が exit %s で終わった。Enter で閉じる。\n" "$1" "$s"; read -r _; fi; c' \
-  agents-daemon-spawn claude --session-id "$sid" --model "${CLAUDE_CODE_SUBAGENT_MODEL:?}" -- "$(cat ./tmp/brief-<作業名>.md)"
-```
-
-<!-- rex-premise: preview.30 cli window new のコマンドが終わると pane と window が閉じ、session は残る。REX_SESSION は足し先の session になる -->
-
-`<作業名>` はタブ (window) の名前になる。`--focus=false` が無いと、新しいタブが足し先の session の表示を奪う。
-結果の `window_id` (畳むときに使う) を控える。worktree 隔離のセッションでは新しい session と同じく script に書いて起こす。
-
-タブの包みは session に触れない。印を書かず、claude が終わっても session を閉じない。claude が終われば pane が
-閉じ、最後の pane を失ったタブは rex が閉じるので、ほかのタブは残る。`set -m` と異常終了の Enter 待ちは新しい
-session と同じ。包みが渡す `AGENTS_DAEMON_SHARED_REX_SESSION` を plugin の SessionStart hook が見て、
-起きた claude に `rex session rename` を打たず自分のタブにだけ名前を付ける案内を出す。rex の hook の案内は
-利用者の settings にあり、plugin からは止められない。本文は spawn の `closeOnExitTabScript` (`rexcli`) と同じにする。
-
 ### 畳む
 
-新しい session に立てた peer が `/exit` で終われば session は閉じる。異常終了で画面が残っているときは、その pane で Enter を押すと閉じる。
+タブに立てた peer (既定) が `/exit` で終われば、そのタブだけが閉じる。すぐ畳むなら、控えた `window_id` でそのタブだけを閉じる。
+
+```sh
+rex window close -s <足し先の session_id> <window_id>
+```
+
+共有の session には `spawned-session close` も `session kill` も打たない。ほかのタブを確認なしで巻き込む。
+足し先が `session new` で起こした session (印のある session) なら、最後のタブが閉じて空になった後で daemon が閉じる。
+利用者が開いた session は、空になっても残る。
+
+利用者が明示して新しい session に立てた peer が `/exit` で終われば session は閉じる。異常終了で画面が残っているときは、その pane で Enter を押すと閉じる。
 peer の session に pane を足していると、claude の pane だけが閉じて session は残る。残りの pane を閉じて空に
 なれば daemon が閉じる。すぐ畳むなら、起こしたときに控えた `session_id` で session ごと畳む。
 
@@ -141,16 +169,6 @@ peer の session に pane を足していると、claude の pane だけが閉�
 peer が先に終わって session が既に無ければ、印が残っていても daemon が消した後でも、exit 0 で
 `{"session_id":"…","killed":false}` を返す。`killed:true` は close が閉じたときだけ。
 `rex session kill` は起こしていない session も閉じられるので、peer を畳むのには使わない。
-
-タブに立てた peer が `/exit` で終われば、そのタブだけが閉じる。すぐ畳むなら、控えた `window_id` でそのタブだけを閉じる。
-
-```sh
-rex window close -s <足し先の session_id> <window_id>
-```
-
-共有の session には `spawned-session close` も `session kill` も打たない。ほかのタブを確認なしで巻き込む。
-足し先が `session new` で起こした session (印のある session) なら、最後のタブが閉じて空になった後で daemon が閉じる。
-利用者が開いた session は、空になっても残る。
 
 <!-- rex-premise: preview.28 cli session kill は session ID を受ける。最後の window を閉じても session は残る -->
 
@@ -202,6 +220,7 @@ rex block call -b work process
 | ---- | ---- |
 | `connect: operation not permitted` | sandbox が socket を塞いでいる。ハーネス側の設定の問題で CLI の問題ではない。`agents-daemon:setup` skill の「多重化ツールの到達性」 |
 | `session target "<label>" not found` | 起きた claude が session を rename した。起こしたときに控えた `session_id` で指す |
+| `window new -s <session_id>` が `session target "<session_id>" not found` で失敗する | `session_id` で指しても無ければ、その session は閉じている (`/exit` で畳まれた等)。新しい session を作らず、自分の `"$REX_SESSION"` のタブへ倒す |
 | `block target "<label>" not found` | 別の session の block なら `-s <session>` を付ける。それ以外はコマンドが終わってブロックが閉じたので、`--keep-open` を付けて作り直す |
 | `window target "<id>" not found` | 別の session の window なら `-s <session>` を付ける。それ以外は ID の桁の間違いで、`rex window ls` の ID 列をそのまま使う |
 | `rex -S <node>` が `x509: certificate is valid for <node>.<tailnet>.ts.net, not <node>` で落ちる | tsnet のノードの証明書は FQDN にしか発行されていない。`rex -S <node>.<tailnet>.ts.net` と FQDN で渡す。同時に出るポート 7297 への `connection refused` は fallback の probe で無害 |

@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/coder/websocket"
 )
@@ -63,6 +64,8 @@ type Server struct {
 	welcome map[string]any
 	// hellos は受けた hello。
 	hellos []json.RawMessage
+	// closeStatuses は client が閉じた接続の close frame の status。
+	closeStatuses []websocket.StatusCode
 }
 
 // New は socket を開いて fake server を起こす。t の終わりに閉じる。
@@ -144,6 +147,43 @@ func (s *Server) Emit(event any) {
 	for _, c := range conns {
 		c.emit(b)
 	}
+}
+
+// EmitDelayed は Emit と同じく seq をすぐ振るが、届けるのは delay の後にする。seq を振った後に打たれた request の応答が
+// event より先に届く (応答の seq がまだ届いていない event を含む) 形を真似る。
+func (s *Server) EmitDelayed(event any, delay time.Duration) {
+	s.t.Helper()
+	b, err := json.Marshal(event)
+	if err != nil {
+		s.t.Fatalf("event の marshal に失敗: %v", err)
+	}
+	s.mu.Lock()
+	conns := make([]*serverConn, 0, len(s.conns))
+	for c := range s.conns {
+		conns = append(conns, c)
+	}
+	s.mu.Unlock()
+	for _, c := range conns {
+		c.mu.Lock()
+		if !c.attachedAll {
+			c.mu.Unlock()
+			continue
+		}
+		c.seq++
+		msg, _ := json.Marshal(map[string]any{"type": "event", "seq": c.seq, "payload": json.RawMessage(b)})
+		c.mu.Unlock()
+		go func() {
+			time.Sleep(delay)
+			_ = c.ws.Write(context.Background(), websocket.MessageText, msg)
+		}()
+	}
+}
+
+// CloseStatuses は client が閉じた接続の close frame の status を、閉じた順に返す。close frame 無しで切れた接続は -1。
+func (s *Server) CloseStatuses() []websocket.StatusCode {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]websocket.StatusCode(nil), s.closeStatuses...)
 }
 
 // Connections は開いている接続の数を返す。
@@ -246,6 +286,9 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	for {
 		_, b, err := ws.Read(ctx)
 		if err != nil {
+			s.mu.Lock()
+			s.closeStatuses = append(s.closeStatuses, websocket.CloseStatus(err))
+			s.mu.Unlock()
 			return
 		}
 		go s.answer(c, b)

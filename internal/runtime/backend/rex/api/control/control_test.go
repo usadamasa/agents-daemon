@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/coder/websocket"
 
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/api/control"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/api/control/controltest"
@@ -244,12 +247,32 @@ func TestEventsAreDeliveredInOrder(t *testing.T) {
 					N int `json:"n"`
 				} `json:"payload"`
 			}
-			if err := json.Unmarshal(ev, &p); err != nil || p.Type != "session_event" || p.Payload.N != i {
-				t.Errorf("%d 番目の event = %s", i, ev)
+			if err := json.Unmarshal(ev.Payload, &p); err != nil || p.Type != "session_event" || p.Payload.N != i {
+				t.Errorf("%d 番目の event = %s", i, ev.Payload)
+			}
+			if ev.Seq != int64(i+1) {
+				t.Errorf("%d 番目の event の seq = %d, want %d", i, ev.Seq, i+1)
 			}
 		case <-time.After(5 * time.Second):
 			t.Fatalf("%d 番目の event が届かない", i)
 		}
+	}
+}
+
+// CallSeq は応答の seq (server が request を始めた時点で積んでいた最後の event) を返す。event がまだ届いていなくても
+// seq は進んでいる (応答が event を追い越しうる)。
+func TestCallSeqCoversQueuedEvents(t *testing.T) {
+	srv := controltest.New(t)
+	srv.Reply("server.version", map[string]any{"rex_version": "x"})
+	c := dial(t, srv, control.Options{EventBuffer: 16})
+	if err := c.Call(callCtx(t), "session.attach_all", map[string]any{"event_scope": "all"}, nil); err != nil {
+		t.Fatalf("attach_all: %v", err)
+	}
+	srv.Emit(map[string]any{"type": "session_event"})
+	srv.EmitDelayed(map[string]any{"type": "session_event"}, 200*time.Millisecond)
+	seq, err := c.CallSeq(callCtx(t), "server.version", nil, nil)
+	if err != nil || seq != 2 {
+		t.Fatalf("CallSeq() = %d, %v; want 2 (遅れて届く event も含む)", seq, err)
 	}
 }
 
@@ -297,6 +320,14 @@ func TestEventOverflowClosesConnection(t *testing.T) {
 	}
 	if n != 2 {
 		t.Errorf("読めた event = %d、queue の長さ 2 のはず", n)
+	}
+	// close frame (1008) を送って閉じる。frame 無しで切ると server は client を 60 秒残す。
+	deadline := time.Now().Add(5 * time.Second)
+	for !slices.Contains(srv.CloseStatuses(), websocket.StatusPolicyViolation) {
+		if time.Now().After(deadline) {
+			t.Fatalf("close の status = %v, want 1008 の close frame", srv.CloseStatuses())
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 

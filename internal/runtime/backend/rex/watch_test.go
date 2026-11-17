@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -187,6 +188,31 @@ func TestWatch_EventDuringSnapshotIsApplied(t *testing.T) {
 		panes, ok := c.watch.Panes(nil)
 		return ok && len(panes) == 1 && panes[0].AgentStatus == multiplexer.AgentStatusDone
 	})
+}
+
+// 全列挙が読んだ変化の event が全列挙の応答より後に届いても、同期の前に当てる。全列挙の途中に working → done と
+// 変わり、全列挙は done を読み、done の event だけ遅れて届く。同期の後の PaneList は一度も working (全列挙より古い
+// 状態) を返さない。
+func TestWatch_SyncCoversEventsTheSnapshotSaw(t *testing.T) {
+	api := ownBlockAPI(t)
+	api.Put("program_status", blockOwn, `{"records":[{"state":"done","app":"claude-code","msg":"できた","owner":{"pid":`+strconv.Itoa(pidOwn)+`}}]}`)
+	api.Protocol().Handle(apitest.TerminalMethod+"process", func(json.RawMessage) (any, error) {
+		emitLines(api, psChangedLine(sessionOwn, blockOwn, "working", "作業中", pidOwn))
+		api.Protocol().EmitDelayed(json.RawMessage(psChangedLine(sessionOwn, blockOwn, "done", "できた", pidOwn)), 300*time.Millisecond)
+		return json.RawMessage(processJSON(pidOwn, "claude", cwdOwn)), nil
+	})
+	c := api.client(staticResolver(nil))
+
+	startWatch(t, c)
+	eventually(t, "同期済み", func() bool { return synced(c) })
+	deadline := time.Now().Add(600 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		panes, ok := c.watch.Panes(nil)
+		if ok && (len(panes) != 1 || panes[0].AgentStatus != multiplexer.AgentStatusDone) {
+			t.Fatalf("同期の後に全列挙より古い状態を返した: %+v", panes)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 }
 
 // 新しい session の最初の block には block_created が来ない (testdata の events-session-new.jsonl、2026-11-18 に API の

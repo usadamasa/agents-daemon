@@ -41,7 +41,7 @@ func simulateScript(programStatusCommand string) string {
 	return s
 }
 
-// paneOps は rex の Client (rexcli) が持つ、pane を作って閉じる口。simulate だけが使うので multiplexer.Client には無く、
+// paneOps は rex の Client (rex) が持つ、pane を作って閉じる口。simulate だけが使うので multiplexer.Client には無く、
 // backend.Connect が返す Client から取り出す。
 type paneOps interface {
 	// SplitPane は anchor の pane の下に pane を作り、shell を挟まず argv を起こす。終わっても pane を残す。
@@ -72,7 +72,7 @@ func newSimulateHost(kind string, getenv func(string) string, client any) (simul
 // rexHost は rex の Client の SplitPane / ClosePane で使い捨て block を扱う。
 // rex には pane を外から Claude agent に登録する手段が無く、Claude の判定は Claude Code 自身が出す
 // OSC 7501 (program_status の record) に頼る。そこで使い捨て block の script に
-// 同じ OSC 7501 を printf させ、本番と同じ判定 (rexcli/blockstate の ToPane) を通す。
+// 同じ OSC 7501 を printf させ、本番と同じ判定 (rex/blockstate の ToPane) を通す。
 type rexHost struct {
 	ops      paneOps
 	ownBlock string
@@ -80,12 +80,12 @@ type rexHost struct {
 
 // claudeProgramStatusCommand は Claude Code が入力待ちで出すものと同じ書式の OSC 7501。
 // cc-premise: 2.1.302 osc7501 payload の書式 (state=…:app=claude-code)
-// payload は `key=value` を `:` で繋ぎ、終端は BEL。rexcli は record の owner.pid と foreground の pid を
+// payload は `key=value` を `:` で繋ぎ、終端は BEL。rex は record の owner.pid と foreground の pid を
 // 突き合わせるので、printf は script 自身 (sh の builtin) が出し、その後 exec で同じ pid のまま居座る。
 const claudeProgramStatusCommand = `printf '\033]7501;state=idle:app=claude-code\a'`
 
 // SplitPane は自分の block (REX_BLOCK) の下に block を作り、shell を挟まず script を直接走らせる。
-// rex の capture は可視領域しか返さないので、limit 風の画面が収まる高さ (40%) を取る (高さは rexcli が決める)。
+// rex の capture は可視領域しか返さないので、limit 風の画面が収まる高さ (40%) を取る (高さは rex が決める)。
 // script が落ちたときに画面を読めるよう、終わっても block を残す。
 func (h *rexHost) SplitPane(ctx context.Context, scriptPath, screenPath string) (string, error) {
 	id, err := h.ops.SplitPane(ctx, h.ownBlock, simulateMetadataSource, []string{"/bin/sh", scriptPath, screenPath})

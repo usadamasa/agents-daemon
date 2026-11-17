@@ -46,7 +46,7 @@ const (
 	pasteEnd   = "\x1b[201~"
 )
 
-// Host は送る先の多重化ツール。rexcli の Client が満たす。
+// Host は送る先の多重化ツール。rex の Client が満たす。
 type Host interface {
 	// PaneGet は pane の今の前景と自己申告 (multiplexer.Client と同じ)。
 	PaneGet(ctx context.Context, paneID string) (multiplexer.Pane, error)

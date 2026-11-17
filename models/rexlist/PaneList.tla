@@ -1,5 +1,5 @@
 ---------------------------- MODULE PaneList ----------------------------
-(* rex の全列挙 (rexcli の snapshot) と、その途中で session が消える交錯を写したモデル。
+(* rex の全列挙 (rex の snapshot) と、その途中で session が消える交錯を写したモデル。
    全列挙は daemon の購読が未同期の間の PaneList と、購読を張り直すときの watchOnce が使う。
 
    - 全列挙は `ls --json` で session の一覧を 1 回で取り、その一覧の session に 1 つずつ `block ls -s S` を打つ。

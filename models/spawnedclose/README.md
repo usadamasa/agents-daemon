@@ -22,11 +22,11 @@ daemon の reaper、利用者の交錯を TLA+ に写したもの (#596)。
 
 | モデルの動作 | 実装 |
 | ---- | ---- |
-| `WMark` | 包みの sh (`rexcli` の `closeOnExitScript`) が打つ `spawned-session mark` → `spawnedsession.Store.Put` |
+| `WMark` | 包みの sh (`rex/wrap` の `sessionScript`) が打つ `spawned-session mark` → `spawnedsession.Store.Put` |
 | `WExit`、`WClean` | 包みの sh の claude の終了と `c()` (`block ls` で自分の block だけなら `session kill`) |
 | `Reap` | `reaper.reapOne` (not found なら印を消す、block が 0 なら閉じて印を消す) |
 | `CloseStart`、`CGetMark` | `closeSpawnedSession` の入口と `store.Get` |
-| `CCount` | `closer.SessionBlocks` (`rexcli` の `execClient.SessionBlocks`) と、その結果の振り分け |
+| `CCount` | `closer.SessionBlocks` (`rex` の `execClient.SessionBlocks`) と、その結果の振り分け |
 | `CKill` | `killOrGone` の `closer.SessionKill` |
 | `CRecount` | `killOrGone` の数え直し |
 | `Found`、`CountFails` | `SessionBlocks` が target not found のときだけ `found=false`、ほかの失敗は error |

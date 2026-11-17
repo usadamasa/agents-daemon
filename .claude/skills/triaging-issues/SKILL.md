@@ -22,7 +22,7 @@ description: >-
 | `area: deps-graph` | 依存図と agent-tasks アプリ (`gui/`)、タスクの記録 (`tasklog`、`ingest-task`)、辺 (`edge`)、`deps` |
 | `area: parking` | パーキングロット。`parking`、`park` の tool とコマンド、ファイルのメモの通知 |
 | `area: handoff` | peer セッションへの送達。`tell`、`spawn`、`park hand`、peer-sessions skill、handoff-notice |
-| `area: rex` | rex の backend (`rexcli`、`multiplexer`) と、rex の前提への追従 |
+| `area: rex` | rex の backend (`rex`、`multiplexer`) と、rex の前提への追従 |
 | `area: housekeeping` | worktree の回収と保持期間での掃除。`worktree`、`daemon/housekeeping.go` |
 | `area: lifecycle` | バイナリの用意と更新、daemon の起動と入れ替え、`doctor`、setup skill、CLI 共通のオプション |
 | `area: mod` | Claude Code の mod (`hooks/*.ts`、`hooks/*.tsx`) の仕組みそのものと、本体の拡張点 (mod、MCP) を daemon に取り込む検討 |

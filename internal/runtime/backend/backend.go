@@ -6,7 +6,7 @@ import (
 	"io"
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
-	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rexcli"
+	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex"
 	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
 )
 
@@ -49,5 +49,5 @@ func ConnectRex(contexts sessioncontext.Store) multiplexer.Client {
 	resolve := func() (map[string]string, error) {
 		return contexts.ListMultiplexerBlocks(sessioncontext.MultiplexerKindRex)
 	}
-	return rexcli.NewExecClient(resolve)
+	return rex.NewExecClient(resolve)
 }

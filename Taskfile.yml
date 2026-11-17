@@ -76,7 +76,7 @@ tasks:
   test:
     desc: Go テストと bats テストを実行
     cmds:
-      - go test ./...
+      - go test -race ./...
       - bats tests/
 
   fuzz:

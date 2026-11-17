@@ -507,13 +507,11 @@ func TestExecClient_PaneRead_LargeScreen(t *testing.T) {
 	if got != content+"\n" {
 		t.Errorf("PaneRead() の長さ = %d, want %d (全体に改行 1 つ)", len(got), len(content)+1)
 	}
-	f.assertCalls(t,
-		"target.resolve "+blockClaudeWorking,
-		"format "+blockClaudeWorking,
-		"blob_read "+blockClaudeWorking,
-		"blob_read "+blockClaudeWorking,
-	)
-	// 続きは format が返した id から、受け取った分の後ろを読む。
+	if calls := f.Calls(); len(calls) < 3 || calls[1] != "format "+blockClaudeWorking || calls[2] != "blob_read "+blockClaudeWorking {
+		t.Errorf("calls = %v, want target.resolve、format、blob_read の続き", calls)
+	}
+	// 続きは format が返した id から、受け取った分の後ろを読む。fake の blob_read は max_bytes の半分しか返さない
+	// (実機も max_bytes より短く返しうる) ので、offset は受けた data の累計で進む。
 	for i, p := range f.RequestsOf(apitest.TerminalMethod + "blob_read") {
 		var req struct {
 			Args struct {
@@ -525,9 +523,33 @@ func TestExecClient_PaneRead_LargeScreen(t *testing.T) {
 		if err := json.Unmarshal(p, &req); err != nil {
 			t.Fatal(err)
 		}
-		if want := (i + 1) * 983040; req.Args.ID != apitest.BlobID || req.Args.Offset != want || req.Args.MaxBytes != 983040 {
+		if want := 983040 + i*983040/2; req.Args.ID != apitest.BlobID || req.Args.Offset != want || req.Args.MaxBytes != 983040 {
 			t.Errorf("%d 回目の blob_read の args = %+v, want id %d offset %d", i+1, req.Args, apitest.BlobID, want)
 		}
+	}
+}
+
+// 続きが残っているのに blob_read が空の data を返したら、途中までの画面を返さずに error にする。
+func TestExecClient_PaneRead_TruncatedBlobIsError(t *testing.T) {
+	f := newFakeAPI(t)
+	f.AddSession(sessionA, [2]string{blockClaudeWorking, wire.ShellFlavor})
+	f.Put("format", blockClaudeWorking, strings.Repeat("x", 2*983040))
+	f.TruncateBlob(blockClaudeWorking)
+	if got, err := f.client(staticResolver(nil)).PaneRead(context.Background(), blockClaudeWorking, multiplexer.PaneReadOptions{}); err == nil {
+		t.Errorf("PaneRead() = %d バイト, want error (total に届かない)", len(got))
+	}
+}
+
+// 閉じかけの session (list_blocks が conflict) は、閉じた session と同じく全列挙で読み飛ばす。
+func TestExecClient_PaneList_SkipsClosingSession(t *testing.T) {
+	f := newFakeAPI(t)
+	f.AddSession(sessionA, [2]string{blockClaudeWorking, wire.ShellFlavor})
+	f.AddSession(sessionB, [2]string{blockClaudeDone, wire.ShellFlavor})
+	f.PutBlock(blockClaudeDone, measured(t, measuredOct10, "program_status-done.json"), processJSON(pidClaudeDone, "claude", "/w"))
+	f.Closing(sessionA)
+	panes, err := f.client(staticResolver(nil)).PaneList(context.Background())
+	if err != nil || len(panes) != 1 || panes[0].PaneID != blockClaudeDone {
+		t.Errorf("PaneList() = %+v, %v; want 閉じかけの session を飛ばした 1 件", panes, err)
 	}
 }
 

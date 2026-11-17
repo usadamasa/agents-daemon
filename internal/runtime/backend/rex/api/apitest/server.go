@@ -34,12 +34,19 @@ type Server struct {
 	// failing は method の短い名前と block か session で、internal の失敗を返すもの。
 	failing map[string]bool
 	status  string
+	// closing は閉じかけの session。list_blocks が conflict になる。
+	closing map[string]bool
+	// truncated は blob_read が続きを返さない block。
+	truncated map[string]bool
 }
 
 // New は fake の rex server を起こす。t の終わりに閉じる。
 func New(t testing.TB) *Server {
 	t.Helper()
-	s := &Server{srv: controltest.New(t), blocks: map[string][][2]string{}, results: map[string]string{}, failing: map[string]bool{}}
+	s := &Server{
+		srv: controltest.New(t), blocks: map[string][][2]string{}, results: map[string]string{}, failing: map[string]bool{},
+		closing: map[string]bool{}, truncated: map[string]bool{},
+	}
 	s.srv.Handle("server.status", s.serverStatus)
 	s.srv.Handle("session.list", s.listSessions)
 	s.srv.Handle("session.list_blocks", s.listBlocks)
@@ -98,6 +105,20 @@ func (s *Server) Fail(method, target string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.failing[key(method, target)] = true
+}
+
+// Closing は session を閉じかけにする。list_blocks は実機の閉じかけの session と同じく conflict を返す。
+func (s *Server) Closing(session string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.closing[session] = true
+}
+
+// TruncateBlob は block の blob_read に、続きがあるのに空の data を返させる。
+func (s *Server) TruncateBlob(blockID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.truncated[blockID] = true
 }
 
 // SetStatus は server.status の応答を置く。空なら失敗を返す。
@@ -179,6 +200,9 @@ func (s *Server) listBlocks(p json.RawMessage) (any, error) {
 	if s.failing[key("session.list_blocks", req.SessionID)] {
 		return nil, internalError()
 	}
+	if s.closing[req.SessionID] {
+		return nil, &controltest.Error{Code: "conflict", Message: "session " + req.SessionID + " is shutting down", Status: 409}
+	}
 	blocks, ok := s.blocks[req.SessionID]
 	if !ok {
 		return nil, controltest.SessionNotFound(req.SessionID)
@@ -238,7 +262,7 @@ func (s *Server) blockMethod(name string, p json.RawMessage) (any, error) {
 	case "format":
 		return formatReply(res, req.Args.MaxBytes)
 	case "blob_read":
-		return blobReply(res, req.Args.Offset, req.Args.MaxBytes), nil
+		return blobReply(res, req.Args.Offset, req.Args.MaxBytes, s.truncated[req.BlockID]), nil
 	}
 	return json.RawMessage(res), nil
 }
@@ -259,7 +283,13 @@ func formatReply(content string, maxBytes int) (any, error) {
 	return map[string]any{"content": content[:maxBytes], "id": BlobID, "total": len(content), "eof": false}, nil
 }
 
-func blobReply(content string, offset, maxBytes int) map[string]any {
-	end := min(offset+maxBytes, len(content))
+// blobReply は実機と同じく、続きが残っていても max_bytes より短く返しうる (実機は文字の途中で切らず、JSON に
+// encode した長さで量る)。fake は毎回 max_bytes の半分だけ返し、呼び手が受けた分だけ offset を進めるかを試す。
+// truncated なら続きがあるのに空の data を返す。
+func blobReply(content string, offset, maxBytes int, truncated bool) map[string]any {
+	if truncated {
+		return map[string]any{"id": BlobID, "data": "", "total": len(content), "eof": false}
+	}
+	end := min(offset+maxBytes/2, len(content))
 	return map[string]any{"id": BlobID, "data": content[offset:end], "total": len(content), "eof": end == len(content)}
 }

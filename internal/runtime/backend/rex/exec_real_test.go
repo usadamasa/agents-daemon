@@ -2,7 +2,6 @@ package rex
 
 import (
 	"context"
-	"os/exec"
 	"slices"
 	"testing"
 	"time"
@@ -11,13 +10,8 @@ import (
 )
 
 // TestExecClient_RealRex_PaneList は実 rex に対する読み取りだけの統合テスト。
-// rex が PATH に無い、または server が起動していないマシンでは skip する。
-// --autostart=false が付くので、落ちている server を起こすことは無い。
+// rex の server に繋がらないマシンでは skip する。control API は落ちている server を起こさない。
 func TestExecClient_RealRex_PaneList(t *testing.T) {
-	if _, err := exec.LookPath("rex"); err != nil {
-		t.Skip("rex が PATH に無いので skip する")
-	}
-
 	// 実際の state dir を読まないよう、対応は空で渡す。
 	c := newExecClientWithTimeout(func() (map[string]string, error) { return nil, nil }, 5*time.Second)
 	if err := c.Reachable(context.Background()); err != nil {
@@ -39,9 +33,6 @@ func TestExecClient_RealRex_PaneList(t *testing.T) {
 // TestExecClient_RealRex_WatchMatchesListing は実 rex に購読を張り、同期した cache の一覧と全列挙の一覧で
 // block の集合が同じかを見る。状態 (working / done) は 2 回の取得の間に変わりうるので比べない。
 func TestExecClient_RealRex_WatchMatchesListing(t *testing.T) {
-	if _, err := exec.LookPath("rex"); err != nil {
-		t.Skip("rex が PATH に無いので skip する")
-	}
 	noSessions := func() (map[string]string, error) { return nil, nil }
 	listing := newExecClientWithTimeout(noSessions, 5*time.Second)
 	if err := listing.Reachable(context.Background()); err != nil {

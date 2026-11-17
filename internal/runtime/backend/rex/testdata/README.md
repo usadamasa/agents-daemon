@@ -1,22 +1,24 @@
 # rex の実測 fixture
 
-rex に打ったコマンドの応答をそのまま置く。ディレクトリ名は `<実測の日付>_rex-<版>_cc-<Claude Code の版>`。
+rex の応答をそのまま置く。ディレクトリ名は `<実測の日付>_rex-<版>_cc-<Claude Code の版>`。
 rex の `<版>` は Mac の changelog の版 (`preview.30`) で、下の `rex-premise` marker の `<version>` と同じ。
 Server & CLI の版 (`rex_version`) は書かない。
+2026-11-17 より前の応答は rex の CLI で取った。CLI は control API の応答をそのまま出すので、daemon はどれも API の応答として読む。
 実測に無い形 (owner の欠けた record など) はテストの Go のコードに直接書き、ここには置かない。
-応答の取り方は `.claude/skills/catching-up-with-rex-changelog/references/cli-checks.md` にある。
+応答の取り方は `.claude/skills/catching-up-with-rex-changelog/references/api-checks.md` にある。
 
 <!-- rex-premise: preview.30 program_status 2026-10-17 の record は Claude Code の自己申告だけ -->
-<!-- rex-premise: preview.30 cli 2026-10-18 の version / block ls / block inspect --json は doctor の点検 (premise) が読む形 -->
-<!-- rex-premise: preview.30 cli 2026-10-20 の modes.json は preview.16 で増えた method の応答、size.json は PaneGeometry が読む rows / columns -->
-<!-- rex-premise: preview.30 cli 2026-10-20 の server_status.json は api call server.status の応答で api_revision を持つ。tailscale の object (DNS 名とアカウント) は落としてある -->
-<!-- rex-premise: preview.30 cli 2026-10-24 の block inspect --json は api.methods の一覧の基準 (次回の増減をこれと diff する)。api_revision 6 で blob_read が増え、format と selection_copied の schema が変わった -->
-<!-- rex-premise: preview.30 cli 2026-10-25 の api-list.json は api list --json の応答で、server の method 一覧の基準 (次回の増減をこれと diff する)。api_revision 7 で block の api は 2026-10-24 と同じ -->
-<!-- rex-premise: preview.30 cli 2026-10-27 の events.jsonl は events --all --json の 1 行 1 event。自分の session と使い捨ての block の分だけを抜き、process_changed の ancestors は落としてある -->
-<!-- rex-premise: preview.30 cli 2026-10-27 の events-session-new.jsonl は session new の直後の行。最初の block には block_created が来ず、session_created の後にいきなりその block の event が流れる -->
-<!-- rex-premise: preview.30 cli 2026-11-03 の block-inspect.json と api-list.json は 2026-11-15 の基準の前の版。api_revision 10 で server に session.set_layer_state が増え、block の api は program_status_removed.reason の説明に foreground が載っただけ -->
-<!-- rex-premise: preview.30 cli 2026-11-15 の block-inspect.json と api-list.json は次回の増減の基準。api_revision 14 で block に download_begin / upload_begin、server.status に listeners が増え、daemon が読む method と event の schema は 2026-11-03 と同じ -->
-<!-- rex-premise: preview.25 cli 2026-11-03 の events-close-working.jsonl は state=working の block を block close で閉じた行。program_status_removed も child_exited も来ず、block_closed で終わる -->
+<!-- rex-premise: preview.30 api 2026-10-18 の program_status / process / block ls は doctor の点検 (premise) が読む形 -->
+<!-- rex-premise: preview.30 api 2026-10-20 の modes.json は preview.16 で増えた method の応答、size.json は PaneGeometry が読む rows / columns -->
+<!-- rex-premise: preview.30 api 2026-10-20 の server_status.json は server.status の応答で api_revision を持つ。tailscale の object (DNS 名とアカウント) は落としてある -->
+<!-- rex-premise: preview.30 api 2026-10-24 の block-inspect.json は describe_block の応答に session_id を足した形で、api.methods の一覧の基準 (次回の増減をこれと diff する)。api_revision 6 で blob_read が増え、format と selection_copied の schema が変わった -->
+<!-- rex-premise: preview.30 api 2026-10-25 の api-list.json は api list --json の応答で、server の method 一覧の基準 (次回の増減をこれと diff する)。api_revision 7 で block の api は 2026-10-24 と同じ -->
+<!-- rex-premise: preview.30 api 2026-10-27 の events.jsonl は event の payload を 1 行 1 event で並べたもの (events --all --json の出力と同じ形)。自分の session と使い捨ての block の分だけを抜き、process_changed の ancestors は落としてある -->
+<!-- rex-premise: preview.30 api 2026-10-27 の events-session-new.jsonl は session new の直後の行。最初の block には block_created が来ず、session_created の後にいきなりその block の event が流れる (2026-11-18 に session.create と event_scope all の接続でも同じ) -->
+<!-- rex-premise: preview.30 api 2026-11-03 の block-inspect.json と api-list.json は 2026-11-15 の基準の前の版。api_revision 10 で server に session.set_layer_state が増え、block の api は program_status_removed.reason の説明に foreground が載っただけ -->
+<!-- rex-premise: preview.30 api 2026-11-15 の block-inspect.json と api-list.json は次回の増減の基準。api_revision 14 で block に download_begin / upload_begin、server.status に listeners が増え、daemon が読む method と event の schema は 2026-11-03 と同じ -->
+<!-- rex-premise: preview.30 api 2026-11-18 の server-version.json は server.version の応答で、doctor の点検が rex_version、built_at、api_revision を読む -->
+<!-- rex-premise: preview.25 api 2026-11-03 の events-close-working.jsonl は state=working の block を block close で閉じた行。program_status_removed も child_exited も来ず、block_closed で終わる -->
 
 `blockstate` のテストもこの testdata を読む (`../testdata`)。実測の応答を 1 か所に置くため。
 

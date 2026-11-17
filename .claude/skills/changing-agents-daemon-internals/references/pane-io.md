@@ -26,10 +26,10 @@ Claude Code は alternate screen で描くので、Claude の block の capture 
 
 ### block が alternate screen にいるかは `modes` で見える
 
-<!-- rex-premise: preview.30 cli block call modes の screen は primary か alternate。idle の terminal を起こさない (changelog。idle の定義は docs に無い) -->
+<!-- rex-premise: preview.30 api modes の screen は primary か alternate。idle の terminal を起こさない (changelog。idle の定義は docs に無い) -->
 <!-- cc-premise: 2.1.304 limit-screen 起動直後の trust dialog は primary screen、本体の画面は alternate (?1049)。/exit で primary に戻す -->
 
-rex preview.16 の `block call modes` は `screen` (`primary` / `alternate`) を返す。`doctor` の「rex CLI の前提」が
+rex preview.16 の `modes` は `screen` (`primary` / `alternate`) を返す。`doctor` の「rex の前提」が
 自分の block で `alternate` を点検し、pane 一覧に pane ごとの値を出す。使い捨ての block で Claude Code を起こして
 測った値は次のとおり (2026-10-20、rex preview.16、Claude Code 2.1.304)。
 

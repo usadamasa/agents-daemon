@@ -9,14 +9,16 @@ description: >-
 
 # rex の changelog に追従する
 
-agents-daemon の rex backend (`rex`) は rex の CLI の応答の形の上に建っている。record の `owner.pid`
-は OSC 7501 の仕様に無い rex 独自の欄で、`block call` の exit code や `block ls` の `-s` 必須も実測。rex は数日おきに
+agents-daemon の rex backend (`rex`) は rex の control API の応答と event の形の上に建っている。record の `owner.pid`
+は OSC 7501 の仕様に無い rex 独自の欄で、対象が無いときの error の code や、新しい session の最初の block に
+`block_created` が来ないことも実測。spawn の包みだけは pane の中から rex の CLI を叩く。rex は数日おきに
 preview が出るので、上げたら changelog と実機の応答をこの repo の前提と突き合わせる。
 
 | 資料 | 何が分かるか | 読み方 |
 | ---- | ---- | ---- |
 | changelog (superlogical MCP) | 版ごとの変更。投稿は platform ごと (Mac、Server & CLI、iOS) に分かれる | `list_changelog` の一覧から範囲の投稿を `read_changelog` に ID で渡して 1 投稿ずつ本文を読む。`search_changelog` は検索語の裏取りに使う |
-| 実機の CLI (自分の block) | 応答の JSON の欄、exit code、flag の有無 | `doctor` の「rex CLI の前提」の節が固定コマンドを打って欄を名指しで出す。streaming と一覧の増減だけ人が打つ ([references/cli-checks.md](references/cli-checks.md)) |
+| 実機の control API (自分の block) | 応答の JSON の欄、error の code、API revision | `doctor` の「rex の前提」の節が固定の呼び出しを打って欄を名指しで出す。event と一覧の増減だけ人が見る ([references/api-checks.md](references/api-checks.md)) |
+| server の docs (`/llms.txt`、`/api/help`) | method と event の schema、API revision ごとの変更、event と応答を組み合わせる決めごと | 同じ socket から `curl --unix-socket` で取る ([references/api-checks.md](references/api-checks.md) の「人が見る行」) |
 | rex docs | OSC 7501 の仕様 (何が仕様で何が rex 独自か) | [program-status](https://www.superlogical.com/rex/docs/build/program-status) |
 
 前提: superlogical MCP (`list_changelog` / `read_changelog`) が繋がっていること、rex の block の中で動いていること
@@ -33,17 +35,18 @@ preview が出るので、上げたら changelog と実機の応答をこの rep
 go run ./cmd/agents-daemon doctor
 ```
 
-「rex CLI の前提」の節の `rex_version`、`built_at`、`api_revision` を控える (手順 4 の実機の点検もこの節が兼ねる)。
+「rex の前提」の節の `rex_version`、`built_at`、`api_revision` を控える (手順 4 の実機の点検もこの節が兼ねる)。
 機械で読むなら `--json doctor | jq '.premises.findings'` で同じ節だけを取り出せる。
-`api_revision` は CLI が対応する API の版。同じ節が server の版と比べ、食い違えば `⚠` になる
-(CLI と server が別々に更新された状態)。
+`rex_version` と `api_revision` は server (`server.version`) の値。同じ節が、server の対応する revision の幅に
+daemon の revision が入るかを見て、外れれば `⚠` になる (幅を外れると daemon は rex に接続できない)。
+`api_revision` が前回 (`last-checked.md`) から上がっていたら、手順 4 で `/llms.txt` の「API Revisions」を読む。
 
 changelog の投稿は platform ごとに分かれ、`preview.N` の数列も platform ごとに別。手元の build に当たる投稿を
 2 つ決める。
 
-- **Server & CLI** (`Rex v0.1.0-preview.N (Server & CLI)`): CLI と server の版。`rex version --json` の
-  `rex_version` (`0.1.0-preview.N`) と同じ `preview.N` の投稿を取る。embedded server が CLI と同じ build かは
-  `rex whoami --json` の `rex_version` (server の版) が CLI の `rex_version` と同じことで確かめる。
+- **Server & CLI** (`Rex v0.1.0-preview.N (Server & CLI)`): server と CLI の版。doctor の `rex_version`
+  (`0.1.0-preview.N`) と同じ `preview.N` の投稿を取る。spawn の包みが叩く CLI が server と同じ build かは
+  `rex version --json` の `rex_version` が doctor の `rex_version` と同じことで確かめる。
   食い違えば server が旧 build のまま動いている (app の更新後に restart していない) ので、server を再起動して
   手順 1 をやり直す
 - **Mac** (`Rex v0.1.0-preview.N-<build>-<hash> (Mac)`): app の版。本文の末尾の「Includes embedded server
@@ -63,7 +66,7 @@ Server & CLI の `preview.N` と同じ数字が別の時期を指すため。iOS
 引くと Server & CLI と Mac の `preview.N` が衝突して別の投稿が返る。要約で済ませない (1 行の変更が前提を壊す)。
 投稿ごとに読む範囲が違う。
 
-- **Server & CLI**: 全文。`cli` と `program_status` の前提はほぼここに載る
+- **Server & CLI**: 全文。`api`、`cli`、`program_status` の前提はほぼここに載る
 - **Mac**: server の項目 (OSC 7501、program status、Kitty、「server restart」が要る項目)。app の UI の項目は飛ばす
 
 読みながら 2 つの観点で拾う。
@@ -75,7 +78,7 @@ Server & CLI の `preview.N` と同じ数字が別の時期を指すため。iOS
 ### 3. marker の一覧を出す
 
 ```sh
-rg -n -o --hidden 'rex-premise: preview\.[0-9]+ (program_status|cli).*' --glob '!tmp/**' --glob '!.git/**' . | sort -t' ' -k3,3 -k2,2V
+rg -n -o --hidden 'rex-premise: preview\.[0-9]+ (program_status|cli|api).*' --glob '!tmp/**' --glob '!.git/**' . | sort -t' ' -k3,3 -k2,2V
 ```
 
 AGENTS.md の説明文の行は `rex-premise:` の後に版が続かないので、この pattern には当たらない。
@@ -99,13 +102,15 @@ guard が拒否する。先に `printenv REX_BLOCK REX_SESSION` で値を取り�
 - 「pane 一覧」: 自分の block (`REX_BLOCK` の値) の `pane=` 行を見る。`agent_status=working` で `unknown の理由` の行が
   付いていなければ、record の `owner.pid` と foreground の process の pid の突き合わせは通っている。
   Bash ツールの実行中は working になる。理由の行が出たら、その文面が欄の有無を言っている (`record に owner.pid が無い`)。
-- 「rex CLI の前提」: コードが読む欄と exit code を自分の block に打って名指しで出す。`⚠` の行がずれ。
-  全部 `OK:` なら判断の要らない点検は済んでいる。
+- 「rex の前提」: コードが読む欄と、対象が無いときの error の code を自分の block に打って名指しで出す。
+  `⚠` の行がずれ。全部 `OK:` なら判断の要らない点検は済んでいる。
 
-残りは人が打つ。streaming の `events` と、`block inspect` の method / event の一覧の増減は判断が要るので doctor に
-入れていない。コマンドと見る欄は [references/cli-checks.md](references/cli-checks.md) の「人が見る行」を Read で読む。
-実機の JSON には fixture に無い欄がある (`block ls` の `owner` など)。それはずれではない。
-ずれとして扱うのは、コードが読む欄の欠落・名前の違い・型の違い・exit code の違い。
+残りは人が見る。購読の event と、method / event の一覧と schema の増減、revision の変更は判断が要るので doctor に
+入れていない。打つものと見る欄は [references/api-checks.md](references/api-checks.md) の「人が見る行」を Read で読む。
+実機の JSON には fixture に無い欄がある (`list_blocks` の `owner` など)。それはずれではない。
+ずれとして扱うのは、コードが読む欄の欠落・名前の違い・型の違い・error の code の違い。
+spawn の包みが叩く CLI (`wrap` の `sessionScript` の `block ls` と `session kill`) は `cli` の marker が指す。
+包みのテストの fake の rex (`wrap_fake_test.go`) が実機と同じ引数と exit code かを、marker の版が古いときに確かめる。
 
 ### 5. レポートを書いて issue にする
 
@@ -149,7 +154,8 @@ rex-premise: <version> <topic> [メモ]
 | topic | 前提が支える機能 | changelog の検索語 |
 | ---- | ---- | ---- |
 | `program_status` | record から Agent と `agent_status` を決める | OSC7501, OSC 7501, program status, activity, owner, record, status report |
-| `cli` | `block call` / `block ls` / `capture` / `send` の引数と応答、exit code、`--autostart` | rex CLI, block call, block ls, capture, send-key, autostart, exit code, `--json`, events |
+| `api` | daemon が control API で打つ method の引数と応答、error の code、event の payload、API revision | API revision, control, method, event, session.create, attach, format, target.resolve, not_found |
+| `cli` | spawn の包みと peer-sessions skill が叩く rex の CLI の引数と応答、exit code、`--autostart`、rex の置き場 | rex CLI, block ls, session kill, session new, window new, autostart, exit code, `--json` |
 
 表に無い topic が出てきたら、この表と AGENTS.md の topic の列挙に足す。
 

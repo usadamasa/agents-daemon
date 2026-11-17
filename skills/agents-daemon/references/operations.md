@@ -237,7 +237,7 @@ error で止まる。flag の組み合わせで JSON にできないもの (`dae
 | `version` | 建てた元の plugin の version |
 
 ```sh
-agents-daemon --json doctor | jq '.premises.findings'   # rex CLI の前提の点検だけを取り出す
+agents-daemon --json doctor | jq '.premises.findings'   # rex の前提の点検だけを取り出す
 agents-daemon --json status | jq '.snapshot.panes'      # 監視中の pane
 agents-daemon --json inspect --pane <block id> | jq '{kind, plan, hint, entry: .transcript.last_entry.error, wake: .wake.wake_at}'
 ```
@@ -254,7 +254,7 @@ agents-daemon daemon --foreground --dry-run  # 送信せずに検知だけを流
 `doctor` は rex の server への到達性と、Claude pane の一覧 (`session_id` が引けなければ `(なし)`、block の高さ) を出す。
 peer messaging と dream の規約 (config.json の `dream.policy` が読めるか) も出す。
 rex の外 (`REX_SESSION` なし) では exit 1 で止まる。
-「rex CLI の前提」の節に `⚠` が出たら、rex の版で daemon が読む欄が変わった疑いがある。daemon 側の追従が要るので
+「rex の前提」の節に `⚠` が出たら、rex の版で daemon が読む欄が変わった疑いがある。daemon 側の追従が要るので
 issue にする。
 
 ## 設定

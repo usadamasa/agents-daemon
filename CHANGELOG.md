@@ -1,5 +1,12 @@
 # Changelog
 
+## [2026.1117.0](https://github.com/usadamasa/agents-daemon/compare/2026.1116.0...2026.1117.0) - 2026-11-17
+
+### Features
+- dream skill を skillGuides が空なら止める by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/630
+### Bug Fixes
+- peer を起こす既定を起こす側の session のタブにする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/637
+
 ## [2026.1116.0](https://github.com/usadamasa/agents-daemon/compare/2026.1115.4...2026.1116.0) - 2026-11-16
 
 ### Features

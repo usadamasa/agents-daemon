@@ -53,7 +53,7 @@ func TestExecClient_RealRex_WatchMatchesListing(t *testing.T) {
 	defer cancel()
 	watching.Watch(ctx, t.Logf)
 	deadline := time.Now().Add(15 * time.Second)
-	for !watching.watch.synced() {
+	for !synced(watching) {
 		if time.Now().After(deadline) {
 			t.Fatal("15 秒で購読が同期しない")
 		}

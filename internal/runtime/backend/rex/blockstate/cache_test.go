@@ -296,36 +296,6 @@ func TestCache_SessionCreated(t *testing.T) {
 	}
 }
 
-// Relevant は実測の stream のうち Apply が読む行だけを通す。client の出入り、window、view の行は落とす。
-func TestRelevant(t *testing.T) {
-	var kept []string
-	for line := range strings.SplitSeq(strings.TrimSpace(measured(t, measuredOct27, "events.jsonl")), "\n") {
-		if !Relevant([]byte(line)) {
-			continue
-		}
-		var l wire.Event
-		if err := json.Unmarshal([]byte(line), &l); err != nil {
-			t.Fatal(err)
-		}
-		kind := l.Type
-		if l.Payload.Event != nil {
-			kind = l.Payload.Event.Type
-		}
-		kept = append(kept, kind)
-	}
-	want := []string{
-		"block_event", "block_event", // 自分の block の process_changed と program_status_changed
-		"block_created", "block_event", "block_event", "block_event", "block_event", "block_event", "block_event",
-		"block_closed", "session_created", "session_destroyed",
-	}
-	if !slices.Equal(kept, want) {
-		t.Errorf("通した行 = %v, want %v", kept, want)
-	}
-	if !Relevant([]byte("not json")) {
-		t.Error("壊れた行を落とした (Apply に error を出させるべき)")
-	}
-}
-
 func TestCache_BrokenLineIsError(t *testing.T) {
 	// payload を読むのは cache にある block の event だけなので、block を置いておく。
 	c := NewCache(map[string]*State{

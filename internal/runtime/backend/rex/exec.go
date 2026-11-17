@@ -16,6 +16,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/blockstate"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/cli"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/premise"
+	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/watch"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/wire"
 )
 
@@ -36,7 +37,7 @@ type execClient struct {
 	// resolve は block_id から session_id を引く (statusline が書いた sidecar)。
 	resolve SessionResolver
 	// watch は Watch が始めた購読の cache。nil なら購読しておらず、PaneList は毎回全列挙する。
-	watch *watchState
+	watch *watch.Watcher
 	// watchBackoff は購読が切れてから張り直すまでの最初の間隔。0 なら defaultWatchBackoff。
 	watchBackoff time.Duration
 }
@@ -58,7 +59,7 @@ func (c *execClient) PaneList(ctx context.Context) ([]multiplexer.Pane, error) {
 	if err != nil {
 		return nil, fmt.Errorf("block と session の対応の読み込みに失敗: %w", err)
 	}
-	if panes, ok := c.watch.panes(sessions); ok {
+	if panes, ok := c.watch.Panes(sessions); ok {
 		return panes, nil
 	}
 	blocks, err := c.snapshot(ctx)

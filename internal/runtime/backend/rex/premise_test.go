@@ -2,31 +2,43 @@ package rex
 
 import (
 	"context"
-	"path/filepath"
-	"slices"
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/premise"
+	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/wire"
 )
 
 // 2026-10-18 の実測で doctor を打った自分の block と session (testdata の measuredOct18 の応答はこの ID のもの)。
 const (
 	blockSelfOct18   = "block:01a14d5d-0dea-72fd-938b-169746065cb2"
 	sessionSelfOct18 = "session:01a14d5d-0dea-71ec-97b7-ece67015d584"
+	// sessionOther は自分の session と別の session。
+	sessionOther = "session:01a14d5d-0000-7000-8000-000000000003"
 )
 
-// selfFixtures は実測どおりの応答を全部そろえた fake を返す。テストはここから 1 つずつ崩す。
-func selfFixtures(t *testing.T) *fakeRex {
+// fakeRexPath は包みが叩く rex として premise に見せるパス。
+const fakeRexPath = "/fake/Versions/Current/rex"
+
+// errRexMissing は包みが叩く rex が見つからないときの失敗。
+var errRexMissing = errors.New("rex が PATH にも既定の置き場にも無い")
+
+// selfFixtures は実測どおりの応答を全部そろえた fake の API を返す。テストはここから 1 つずつ崩す。
+// program_status、process は 10-18 の実測、describe_block と modes は 10-20 の実測 (CLI の block inspect は describe_block の
+// 応答に session_id を足した形)、server.version は 11-18 の実測。
+func selfFixtures(t *testing.T) *fakeAPI {
 	t.Helper()
-	f := newFakeRex(t)
-	f.put(t, "version.json", measured(t, measuredOct18, "version.json"))
-	f.put(t, "block-ls-"+sessionSelfOct18+".json", measured(t, measuredOct18, "block-ls.json"))
-	f.putBlock(t, blockSelfOct18, measured(t, measuredOct18, "program_status.json"), measured(t, measuredOct18, "process.json"))
-	// inspect と modes は preview.16 (10-20) の実測。modes はそこで増えた method で、10-18 の inspect には無い。
-	f.put(t, "inspect-"+blockSelfOct18+".json", measured(t, measuredOct20, "block-inspect.json"))
-	f.put(t, "modes-"+blockSelfOct18+".json", measured(t, measuredOct20, "modes.json"))
+	f := newFakeAPI(t)
+	f.AddSession(sessionSelfOct18, [2]string{blockSelfOct18, wire.ShellFlavor})
+	f.PutBlock(blockSelfOct18, measured(t, measuredOct18, "program_status.json"), measured(t, measuredOct18, "process.json"))
+	f.Put("describe_block", blockSelfOct18, measured(t, measuredOct20, "block-inspect.json"))
+	f.Put("modes", blockSelfOct18, measured(t, measuredOct20, "modes.json"))
+	f.SetVersion(measured(t, measuredNov18, "server-version.json"))
+	saved := rexBinary
+	rexBinary = func() (string, error) { return fakeRexPath, nil }
+	t.Cleanup(func() { rexBinary = saved })
 	return f
 }
 
@@ -42,7 +54,17 @@ func findingTexts(findings []multiplexer.PremiseFinding) []string {
 	return out
 }
 
-// 実測どおりの応答なら全部 OK で、打つコマンドは cli-checks.md の「doctor が見る行」と同じ。
+func ngTexts(findings []multiplexer.PremiseFinding) []string {
+	var ng []string
+	for _, f := range findings {
+		if !f.OK {
+			ng = append(ng, f.Text)
+		}
+	}
+	return ng
+}
+
+// 実測どおりの応答なら全部 OK で、打つ method は api-checks.md の「doctor が見る行」と同じ。
 func TestCheckPremises_AllOK(t *testing.T) {
 	f := selfFixtures(t)
 	findings := f.client(staticResolver(nil)).CheckPremises(context.Background(), blockSelfOct18, sessionSelfOct18)
@@ -54,10 +76,12 @@ func TestCheckPremises_AllOK(t *testing.T) {
 	}
 	joined := strings.Join(findingTexts(findings), "\n")
 	for _, want := range []string{
-		"rex_version: 0.0.1792158932-g88fd41",
-		"built_at 2026-10-16T13:55:32Z",
-		"呼んだ rex は " + f.bin, // doctor が解決した binary (rex の自動更新で Versions/ のどれを引いたか)
-		"exit 3",
+		"rex_version: 0.1.0-preview.19",
+		"built_at 2026-11-13T19:49:36Z",
+		"api_revision 14",
+		fakeRexPath, // 包みが叩く rex (rex の自動更新で Versions/ のどれを引いたか)
+		"not_found",
+		"session_not_found",
 		"owner.pid",
 		"argv0",
 		"com.superlogical.terminal.shell",
@@ -69,55 +93,66 @@ func TestCheckPremises_AllOK(t *testing.T) {
 		}
 	}
 	f.assertCalls(t,
-		"--autostart=false version --json",
-		"--autostart=false block call -b "+premise.ProbeMissingBlock+" program_status",
-		"--autostart=false block call -b "+blockSelfOct18+" program_status",
-		"--autostart=false block call -b "+blockSelfOct18+" process",
-		"--autostart=false block ls -s "+sessionSelfOct18+" --json",
-		"--autostart=false block inspect "+blockSelfOct18+" --json",
-		"--autostart=false block call -b "+blockSelfOct18+" modes",
+		"server.version",
+		"target.resolve "+premise.ProbeMissingBlock,
+		"program_status "+premise.ProbeMissingBlock,
+		"session.list_blocks "+premise.ProbeMissingSession,
+		"program_status "+blockSelfOct18,
+		"process "+blockSelfOct18,
+		"session.list_blocks "+sessionSelfOct18,
+		"session.describe_block "+blockSelfOct18,
+		"modes "+blockSelfOct18,
 	)
 }
 
-// 欄が欠けた応答は、その欄を名指しした NG になる。他の点検は巻き込まれない。
+// 欄が欠けた応答や想定と違う失敗は、それを名指しした NG になる。他の点検は巻き込まれない。
 func TestCheckPremises_NamesMissingField(t *testing.T) {
 	tests := []struct {
 		name    string
-		degrade func(t *testing.T, f *fakeRex)
+		degrade func(t *testing.T, f *fakeAPI)
 		wantNG  string // NG の finding に含まれる文言
 	}{
-		{"version --json が失敗", func(t *testing.T, f *fakeRex) { f.put(t, "fail-version.json", "") }, "version --json"},
-		{"version --json に rex_version が無い", func(t *testing.T, f *fakeRex) { f.put(t, "version.json", `{"platform":"darwin_arm64"}`) }, "rex_version"},
-		{"存在しない block への block call が exit 1", func(t *testing.T, f *fakeRex) { f.put(t, "fail-program_status-"+premise.ProbeMissingBlock+".json", "") }, "exit 3"},
-		{"存在しない block への block call が成功してしまう", func(t *testing.T, f *fakeRex) { f.put(t, "program_status-"+premise.ProbeMissingBlock+".json", psEmpty) }, "exit 3"},
-		{"root record に owner.pid が無い", func(t *testing.T, f *fakeRex) { f.put(t, "program_status-"+blockSelfOct18+".json", psNoOwner) }, "owner.pid"},
-		{"root record が無い", func(t *testing.T, f *fakeRex) { f.put(t, "program_status-"+blockSelfOct18+".json", psEmpty) }, "root record"},
-		{"process の foreground に cwd が無い", func(t *testing.T, f *fakeRex) {
-			f.put(t, "process-"+blockSelfOct18+".json", `{"foreground":{"pid":29795,"argv0":"claude"}}`)
+		{"server.version が失敗", func(t *testing.T, f *fakeAPI) { f.SetVersion("") }, "server.version"},
+		{"server.version に rex_version が無い", func(t *testing.T, f *fakeAPI) { f.SetVersion(`{"platform":"darwin_arm64","api_revision":14}`) }, "rex_version"},
+		{"server.version に api_revision が無い", func(t *testing.T, f *fakeAPI) {
+			f.SetVersion(`{"rex_version":"0.1.0-preview.1","built_at":"2026-10-01T00:00:00Z"}`)
+		}, "api_revision"},
+		{"server の api_revision が daemon より古い", func(t *testing.T, f *fakeAPI) {
+			f.SetVersion(`{"rex_version":"0.1.0-preview.1","built_at":"2026-10-01T00:00:00Z","api_revision":13}`)
+		}, "13"},
+		{"server の api_min_revision が daemon より新しい", func(t *testing.T, f *fakeAPI) {
+			f.SetVersion(`{"rex_version":"0.2.0","built_at":"2027-01-01T00:00:00Z","api_revision":20,"api_min_revision":15}`)
+		}, "api_min_revision"},
+		{"包みが叩く rex が見つからない", func(t *testing.T, _ *fakeAPI) {
+			rexBinary = func() (string, error) { return "", errRexMissing }
+		}, "包み"},
+		{"存在しない block が target.resolve で解決する", func(t *testing.T, f *fakeAPI) {
+			f.AddUnlisted(sessionOther, [2]string{premise.ProbeMissingBlock, wire.ShellFlavor})
+		}, "存在しない block"},
+		{"存在しない block への block の method が成功してしまう", func(t *testing.T, f *fakeAPI) { f.Put("program_status", premise.ProbeMissingBlock, psEmpty) }, "存在しない block"},
+		{"存在しない session の list_blocks が成功してしまう", func(t *testing.T, f *fakeAPI) { f.AddUnlisted(premise.ProbeMissingSession) }, "存在しない session"},
+		{"root record に owner.pid が無い", func(t *testing.T, f *fakeAPI) { f.Put("program_status", blockSelfOct18, psNoOwner) }, "owner.pid"},
+		{"root record が無い", func(t *testing.T, f *fakeAPI) { f.Put("program_status", blockSelfOct18, psEmpty) }, "root record"},
+		{"process の foreground に cwd が無い", func(t *testing.T, f *fakeAPI) {
+			f.Put("process", blockSelfOct18, `{"foreground":{"pid":29795,"argv0":"claude"}}`)
 		}, "cwd"},
-		{"process の foreground が無い", func(t *testing.T, f *fakeRex) { f.put(t, "process-"+blockSelfOct18+".json", `{"foreground":null}`) }, "foreground"},
-		{"block ls に自分の block が無い", func(t *testing.T, f *fakeRex) { f.put(t, "block-ls-"+sessionSelfOct18+".json", blockLsJSON()) }, "自分の block"},
-		{"自分の block の flavor が shell でない", func(t *testing.T, f *fakeRex) {
-			f.put(t, "block-ls-"+sessionSelfOct18+".json", blockLsJSON([2]string{blockSelfOct18, "com.superlogical.browser"}))
+		{"process の foreground が無い", func(t *testing.T, f *fakeAPI) { f.Put("process", blockSelfOct18, `{"foreground":null}`) }, "foreground"},
+		{"list_blocks に自分の block が無い", func(t *testing.T, f *fakeAPI) { f.SetBlocks(sessionSelfOct18) }, "自分の block"},
+		{"自分の block の flavor が shell でない", func(t *testing.T, f *fakeAPI) {
+			f.SetBlocks(sessionSelfOct18, [2]string{blockSelfOct18, "com.superlogical.browser"})
 		}, "flavor"},
-		{"inspect に program_status_changed が無い", func(t *testing.T, f *fakeRex) {
-			f.put(t, "inspect-"+blockSelfOct18+".json", `{"api":{"methods":{"program_status":{},"process":{}},"events":{"process_changed":{}}}}`)
+		{"describe_block に program_status_changed が無い", func(t *testing.T, f *fakeAPI) {
+			f.Put("describe_block", blockSelfOct18, `{"api":{"methods":{"program_status":{},"process":{},"size":{},"modes":{}},"events":{"program_status_removed":{},"process_changed":{},"child_exited":{}}}}`)
 		}, "program_status_changed"},
-		{"inspect に program_status_removed が無い", func(t *testing.T, f *fakeRex) {
-			f.put(t, "inspect-"+blockSelfOct18+".json", `{"api":{"methods":{"program_status":{},"process":{},"size":{},"modes":{}},"events":{"program_status_changed":{},"process_changed":{}}}}`)
-		}, "program_status_removed"},
-		{"inspect に process_changed が無い", func(t *testing.T, f *fakeRex) {
-			f.put(t, "inspect-"+blockSelfOct18+".json", `{"api":{"methods":{"program_status":{},"process":{},"size":{},"modes":{}},"events":{"program_status_changed":{},"program_status_removed":{}}}}`)
-		}, "process_changed"},
-		{"inspect に process の method が無い", func(t *testing.T, f *fakeRex) {
-			f.put(t, "inspect-"+blockSelfOct18+".json", `{"api":{"methods":{"program_status":{},"size":{},"modes":{}},"events":{"program_status_changed":{}}}}`)
+		{"describe_block に process の method が無い", func(t *testing.T, f *fakeAPI) {
+			f.Put("describe_block", blockSelfOct18, `{"api":{"methods":{"program_status":{},"size":{},"modes":{}},"events":{"program_status_changed":{},"program_status_removed":{},"process_changed":{},"child_exited":{}}}}`)
 		}, "process"},
-		{"inspect に size と modes の method が無い", func(t *testing.T, f *fakeRex) {
-			f.put(t, "inspect-"+blockSelfOct18+".json", measured(t, measuredOct18, "block-inspect.json"))
+		{"describe_block に size と modes の method が無い", func(t *testing.T, f *fakeAPI) {
+			f.Put("describe_block", blockSelfOct18, measured(t, measuredOct18, "block-inspect.json"))
 		}, "modes"},
-		{"modes が失敗", func(t *testing.T, f *fakeRex) { f.put(t, "fail-modes-"+blockSelfOct18+".json", "") }, "modes"},
-		{"自分の block の screen が primary", func(t *testing.T, f *fakeRex) {
-			f.put(t, "modes-"+blockSelfOct18+".json", `{"screen":"primary","modes":[]}`)
+		{"modes が失敗", func(t *testing.T, f *fakeAPI) { f.Fail("modes", blockSelfOct18) }, "modes"},
+		{"自分の block の screen が primary", func(t *testing.T, f *fakeAPI) {
+			f.Put("modes", blockSelfOct18, `{"screen":"primary","modes":[]}`)
 		}, "primary"},
 	}
 	for _, tt := range tests {
@@ -126,104 +161,41 @@ func TestCheckPremises_NamesMissingField(t *testing.T) {
 			tt.degrade(t, f)
 			findings := f.client(staticResolver(nil)).CheckPremises(context.Background(), blockSelfOct18, sessionSelfOct18)
 
-			ng := 0
-			for _, fd := range findings {
-				if fd.OK {
-					continue
-				}
-				ng++
-				if !strings.Contains(fd.Text, tt.wantNG) {
-					t.Errorf("NG の finding %q に %q が無い", fd.Text, tt.wantNG)
-				}
+			ng := ngTexts(findings)
+			if len(ng) != 1 {
+				t.Fatalf("NG の件数 = %d, want 1:\n%s", len(ng), strings.Join(findingTexts(findings), "\n"))
 			}
-			if ng != 1 {
-				t.Errorf("NG の件数 = %d, want 1:\n%s", ng, strings.Join(findingTexts(findings), "\n"))
+			if !strings.Contains(ng[0], tt.wantNG) {
+				t.Errorf("NG の finding %q に %q が無い", ng[0], tt.wantNG)
 			}
 		})
 	}
 }
 
-// preview.16 で version --json に増えた api_revision は、あるときだけ出して server (api call server.status) の
-// api_revision と比べる。無い版 (Oct18) では出さず、server にも打たない。
-func TestCheckPremises_APIRevision(t *testing.T) {
-	t.Run("CLI と server が同じ版なら OK に api_revision を出す", func(t *testing.T) {
-		f := selfFixtures(t)
-		f.put(t, "version.json", measured(t, measuredOct20, "version.json"))
-		f.put(t, "server-status.json", measured(t, measuredOct20, "server_status.json"))
-		findings := f.client(staticResolver(nil)).CheckPremises(context.Background(), blockSelfOct18, sessionSelfOct18)
-
-		joined := strings.Join(findingTexts(findings), "\n")
-		if !strings.Contains(joined, "api_revision 4") || strings.Contains(joined, "NG: ") {
-			t.Errorf("api_revision 4 の OK が無いか NG がある:\n%s", joined)
-		}
-		calls := readLines(t, filepath.Join(f.dir, "calls.log"))
-		if !slices.Contains(calls, "'--autostart=false' 'api' 'call' 'server.status' ") {
-			t.Errorf("api call server.status を打っていない:\n%s", strings.Join(calls, "\n"))
-		}
-	})
-
-	t.Run("CLI と server の api_revision が食い違えば NG 1 件", func(t *testing.T) {
-		f := selfFixtures(t)
-		f.put(t, "version.json", measured(t, measuredOct20, "version.json"))
-		f.put(t, "server-status.json", `{"pid":31416,"api_revision":3}`)
-		findings := f.client(staticResolver(nil)).CheckPremises(context.Background(), blockSelfOct18, sessionSelfOct18)
-
-		var ng []string
-		for _, fd := range findings {
-			if !fd.OK {
-				ng = append(ng, fd.Text)
-			}
-		}
-		if len(ng) != 1 || !strings.Contains(ng[0], "api_revision") || !strings.Contains(ng[0], "4") || !strings.Contains(ng[0], "3") {
-			t.Errorf("NG = %q, want api_revision の 4 と 3 を名指しした 1 件", ng)
-		}
-	})
-
-	t.Run("server status に api_revision が無ければ NG 1 件", func(t *testing.T) {
-		f := selfFixtures(t)
-		f.put(t, "version.json", measured(t, measuredOct20, "version.json"))
-		f.put(t, "server-status.json", measured(t, measuredOct10, "server_status.json"))
-		findings := f.client(staticResolver(nil)).CheckPremises(context.Background(), blockSelfOct18, sessionSelfOct18)
-
-		var ng []string
-		for _, fd := range findings {
-			if !fd.OK {
-				ng = append(ng, fd.Text)
-			}
-		}
-		if len(ng) != 1 || !strings.Contains(ng[0], "api_revision") {
-			t.Errorf("NG = %q, want api_revision を名指しした 1 件", ng)
-		}
-	})
-
-	t.Run("CLI に api_revision が無い版では出さず server にも打たない", func(t *testing.T) {
-		f := selfFixtures(t)
-		findings := f.client(staticResolver(nil)).CheckPremises(context.Background(), blockSelfOct18, sessionSelfOct18)
-
-		// finding に添える rex のパスは TempDir (subtest 名を含む) なので、文面の判定から外す。
-		joined := strings.ReplaceAll(strings.Join(findingTexts(findings), "\n"), f.bin, "<bin>")
-		if strings.Contains(joined, "api_revision") {
-			t.Errorf("api_revision の無い版で api_revision に触れている:\n%s", joined)
-		}
-		for _, line := range readLines(t, filepath.Join(f.dir, "calls.log")) {
-			if strings.Contains(line, "server.status") {
-				t.Errorf("api_revision の無い版で server に打っている: %s", line)
-			}
-		}
-	})
-}
-
-// session が分からなければ block ls の点検だけを飛ばし、理由を NG で残す。
-func TestCheckPremises_WithoutSession(t *testing.T) {
+// session が分からなければ (REX_SESSION の無い呼び出し) 自分の block から target.resolve で引き、全部を点検する。
+func TestCheckPremises_ResolvesSession(t *testing.T) {
 	f := selfFixtures(t)
 	findings := f.client(staticResolver(nil)).CheckPremises(context.Background(), blockSelfOct18, "")
-	joined := strings.Join(findingTexts(findings), "\n")
-	if !strings.Contains(joined, "NG: ") || !strings.Contains(joined, "session") {
-		t.Errorf("session 無しの finding が無い:\n%s", joined)
+	if ng := ngTexts(findings); len(ng) != 0 {
+		t.Errorf("session を引けるのに NG がある: %q", ng)
 	}
-	for _, line := range findingTexts(findings) {
-		if strings.Contains(line, "block ls") && strings.HasPrefix(line, "OK") {
-			t.Errorf("session 無しで block ls を点検している: %s", line)
+	if calls := f.Calls(); len(calls) < 2 || calls[1] != "target.resolve "+blockSelfOct18 {
+		t.Errorf("calls = %v, want server.version の次に自分の block の target.resolve", calls)
+	}
+}
+
+// 自分の block の session を引けなければ、その理由を NG 1 件で残し、session の要る点検を飛ばす。
+func TestCheckPremises_UnresolvableSession(t *testing.T) {
+	f := selfFixtures(t)
+	f.SetBlocks(sessionSelfOct18)
+	findings := f.client(staticResolver(nil)).CheckPremises(context.Background(), blockSelfOct18, "")
+	ng := ngTexts(findings)
+	if len(ng) != 1 || !strings.Contains(ng[0], "session") {
+		t.Errorf("NG = %q, want session を引けない旨の 1 件", ng)
+	}
+	for _, line := range f.Calls() {
+		if strings.HasPrefix(line, "program_status "+blockSelfOct18) || strings.HasPrefix(line, "session.describe_block") {
+			t.Errorf("session を引けないのに block の点検を打った: %s", line)
 		}
 	}
 }

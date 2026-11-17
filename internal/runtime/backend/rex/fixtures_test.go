@@ -13,6 +13,7 @@ const (
 	measuredOct18 = "2026-10-18_rex-preview.15_cc-2.1.302"
 	measuredOct20 = "2026-10-20_rex-preview.16_cc-2.1.304"
 	measuredOct27 = "2026-10-27_rex-preview.21_cc-2.1.311"
+	measuredNov18 = "2026-11-18_rex-preview.30_cc-2.1.326"
 )
 
 // 実測の fixture の owner.pid。foreground の process の pid と突き合わせる。

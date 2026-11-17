@@ -204,13 +204,8 @@ func tailLines(s string, n int) string {
 
 // CheckPremises は doctor の前提点検 (multiplexer.PremiseChecker)。点検の中身は premise が持つ。
 func (c *execClient) CheckPremises(ctx context.Context, blockID, sessionID string) []multiplexer.PremiseFinding {
-	return premise.Check(ctx, premiseRunner{c.cli}, blockID, sessionID)
+	return premise.Check(ctx, c.rex, rexBinary, blockID, sessionID)
 }
-
-// premiseRunner は CLI の Runner に exit 3 の判定を足して premise.Runner にする。
-type premiseRunner struct{ *cli.Runner }
-
-func (premiseRunner) TargetNotFound(err error) bool { return cli.TargetNotFound(err) }
 
 // Reachable は server.status で rex server の生死を確かめる。
 func (c *execClient) Reachable(ctx context.Context) error {

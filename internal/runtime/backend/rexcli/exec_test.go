@@ -15,6 +15,7 @@ import (
 	"github.com/kballard/go-shellquote"
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
+	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rexcli/api"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rexcli/blockstate"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rexcli/cli"
 )
@@ -165,7 +166,7 @@ func splitArgs(t *testing.T, lines []string) [][]string {
 }
 
 func (f *fakeRex) client(resolve SessionResolver) *execClient {
-	return &execClient{cli: cli.New(f.bin, noCommandTimeout), timeout: noCommandTimeout, resolve: resolve}
+	return &execClient{cli: cli.New(f.bin, noCommandTimeout), resolve: resolve}
 }
 
 // noCommandTimeout はタイムアウトを課さない。fake の shell 起動の遅れでテストが落ちないようにする。
@@ -327,7 +328,7 @@ func TestExecClient_PaneList_FailureIsError(t *testing.T) {
 		})
 	}
 	t.Run("server に繋がらない", func(t *testing.T) {
-		c := &execClient{resolve: staticResolver(nil), socket: fixedSocket(t.TempDir() + "/none.sock")}
+		c := &execClient{resolve: staticResolver(nil), rex: api.New(fixedSocket(t.TempDir()+"/none.sock"), apiTimeout)}
 		if _, err := c.PaneList(context.Background()); err == nil {
 			t.Fatal("繋がらないのに PaneList が成功した")
 		}
@@ -656,7 +657,7 @@ func TestExecClient_Reachable(t *testing.T) {
 		})
 	}
 	t.Run("server に繋がらない", func(t *testing.T) {
-		c := &execClient{resolve: staticResolver(nil), socket: fixedSocket(t.TempDir() + "/none.sock")}
+		c := &execClient{resolve: staticResolver(nil), rex: api.New(fixedSocket(t.TempDir()+"/none.sock"), apiTimeout)}
 		if err := c.Reachable(context.Background()); err == nil {
 			t.Fatal("繋がらないのに Reachable が成功した")
 		}
@@ -715,7 +716,7 @@ func TestExecClient_APITimeout(t *testing.T) {
 	t.Cleanup(func() { close(block) })
 	f.srv.Handle("server.status", func(json.RawMessage) (any, error) { <-block; return nil, nil })
 	c := f.client(staticResolver(nil))
-	c.timeout = 50 * time.Millisecond
+	c.rex = api.New(fixedSocket(f.srv.Path), 50*time.Millisecond)
 	start := time.Now()
 	err := c.Reachable(context.Background())
 	if !errors.Is(err, context.DeadlineExceeded) {
@@ -728,8 +729,8 @@ func TestExecClient_APITimeout(t *testing.T) {
 
 func TestNewExecClient_BinPath(t *testing.T) {
 	t.Setenv("REX_BIN_PATH", "/custom/rex")
-	if c := NewExecClient(staticResolver(nil)).(*execClient); c.cli.BinPath() != "/custom/rex" || c.timeout != 10*time.Second {
-		t.Errorf("binPath = %q, timeout = %v, want /custom/rex, 10s", c.cli.BinPath(), c.timeout)
+	if c := NewExecClient(staticResolver(nil)).(*execClient); c.cli.BinPath() != "/custom/rex" {
+		t.Errorf("binPath = %q, want /custom/rex", c.cli.BinPath())
 	}
 	// 未設定なら最初の呼び出しで PATH から引く (daemon の起動時点で rex が無くても Client は作れる)。
 	t.Setenv("REX_BIN_PATH", "")
@@ -738,11 +739,11 @@ func TestNewExecClient_BinPath(t *testing.T) {
 	}
 }
 
-// NewExecClient は REX_SERVER から socket を引く。rex の外 (REX_SERVER が無い) では既定の場所を使う。
-func TestNewExecClient_Socket(t *testing.T) {
+// NewExecClient が使う socket は REX_SERVER から引く。rex の外 (REX_SERVER が無い) では既定の場所を使う。
+func TestDefaultSocket(t *testing.T) {
 	t.Setenv("REX_SERVER", "unix:///tmp/x%20y/server.sock")
-	got, err := NewExecClient(staticResolver(nil)).(*execClient).socket()
+	got, err := api.DefaultSocket()
 	if err != nil || got != "/tmp/x y/server.sock" {
-		t.Errorf("socket = %q, %v", got, err)
+		t.Errorf("DefaultSocket() = %q, %v", got, err)
 	}
 }

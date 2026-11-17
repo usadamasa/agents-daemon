@@ -1,12 +1,11 @@
 // Package cli は rex の CLI を子プロセスとして起こす層。バイナリの探索と自動更新で消えたバイナリの引き直し、
 // 子の環境、--autostart=false の付与、対象が無いことの exit code の判定を持つ。
-// rexcli の書き込み系と events の購読、premise の点検が使う (読み取りは control API へ移った)。
+// rexcli の events の購読と premise の点検が使い、spawn の包みへ渡す rex のパスもここで引く。
 package cli
 
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -135,18 +134,6 @@ func (r *Runner) runWith(ctx context.Context, bin string, args ...string) ([]byt
 		return nil, fmt.Errorf("rex %v: %w (stderr=%q)", args, runErr, strings.TrimSpace(errBuf.String()))
 	}
 	return outBuf.Bytes(), nil
-}
-
-// RunJSON は rex を実行し stdout の JSON を v へ読む。
-func (r *Runner) RunJSON(ctx context.Context, v any, args ...string) error {
-	out, err := r.Run(ctx, args...)
-	if err != nil {
-		return err
-	}
-	if err := json.Unmarshal(out, v); err != nil {
-		return fmt.Errorf("rex %v: 応答の parse に失敗: %w (stdout=%q)", args, err, out)
-	}
-	return nil
 }
 
 // TargetNotFound は rex が対象を解決できずに終わった (exit 3) かを判定する。

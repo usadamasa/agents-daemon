@@ -5,14 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rexcli/api"
 )
 
 // SharedSessionEnv は、タブの包みが起こすコマンドに渡す環境変数。値は 1。plugin の SessionStart hook
 // (hooks/shared-rex-session.sh) がこれを見て、起きた claude に session を rename させない案内を出す。
 const SharedSessionEnv = "AGENTS_DAEMON_SHARED_REX_SESSION"
 
-// windowNewResult は `window new --json` の応答。block_ids[0] が新しい window の pane。
-// rex-premise: preview.30 cli window new --json は window_id と block_ids を返す
+// windowNewResult は session.new_window の応答。block_ids[0] が新しい window の pane。
+// rex-premise: preview.30 api session.new_window は window_id と block_ids を返す
 type windowNewResult struct {
 	WindowID string   `json:"window_id"`
 	BlockIDs []string `json:"block_ids"`
@@ -29,25 +31,32 @@ const closeOnExitTabScript = `set -m; export ` + SharedSessionEnv + `=1; "$@"; s
 
 // NewWindow は既存の rex session (ID か label) にタブ (window) を足し、その pane で argv を起こして pane の ID を返す
 // (spawn.Host)。label は window の名前で、先頭の `-` は NewSession と同じく外す。利用者が見ている window を動かさないよう
-// --focus=false を付ける。argv は closeOnExitTabScript で包む。足し先が無ければ rex の error をそのまま返す。
-// rex-premise: preview.30 cli window new は -s LABEL --cwd --focus --json を取り、-- の後の argv をそのまま渡す
+// focus を false にする。argv は closeOnExitTabScript で包む。足し先が無ければ not found の error を返す。
 func (c *execClient) NewWindow(ctx context.Context, session, label, cwd string, argv []string) (string, error) {
 	if session == "" {
-		return "", errors.New("rex window new: 足し先の session が空")
+		return "", errors.New("rex のタブを足せない: 足し先の session が空")
+	}
+	sessionID, err := c.rex.SessionByName(ctx, session)
+	if err != nil {
+		return "", err
 	}
 	label = strings.TrimLeft(label, "-")
-	args := []string{"window", "new", "-s", session}
-	if label != "" {
-		args = append(args, label)
+	command := append([]string{"/bin/sh", "-c", closeOnExitTabScript, "agents-daemon-spawn"}, argv...)
+	req := map[string]any{
+		"session_id": sessionID, "focus": false,
+		"layout": api.ShellLayout("", map[string]any{"cwd": cwd, "command": command}),
 	}
-	args = append(args, "--cwd", cwd, "--focus=false", "--json", "--", "/bin/sh", "-c", closeOnExitTabScript, "agents-daemon-spawn")
-	args = append(args, argv...)
+	if label != "" {
+		req["window_label"] = label
+	}
 	var res windowNewResult
-	if err := c.cli.RunJSON(ctx, &res, args...); err != nil {
+	if err := c.rex.Call(ctx, "session.new_window", req, &res); err != nil {
 		return "", err
 	}
 	if len(res.BlockIDs) == 0 {
-		return "", fmt.Errorf("rex window new: 応答の block_ids が空で、起こした pane が分からない (window_id=%q)", res.WindowID)
+		return "", fmt.Errorf("rex の session.new_window の応答の block_ids が空で、起こした pane が分からない (window_id=%q)", res.WindowID)
 	}
-	return res.BlockIDs[0], nil
+	block := res.BlockIDs[0]
+	_ = c.rex.Release(ctx, sessionID, []string{block}) // 手放せなくても pane は動いている (api.Client.Release)
+	return block, nil
 }

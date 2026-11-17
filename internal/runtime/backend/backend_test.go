@@ -43,3 +43,20 @@ func TestConnect(t *testing.T) {
 		}
 	})
 }
+
+type closeCounter struct{ n int }
+
+func (c *closeCounter) Close() error {
+	c.n++
+	return errors.New("server が先に切った")
+}
+
+// Close は閉じる口を持つ値だけを閉じ、閉じる失敗は呼び手へ返さない。持たない値は何もしない。
+func TestClose(t *testing.T) {
+	c := &closeCounter{}
+	Close(c)
+	if c.n != 1 {
+		t.Errorf("Close の回数 = %d, want 1", c.n)
+	}
+	Close(struct{}{})
+}

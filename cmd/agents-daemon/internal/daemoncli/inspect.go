@@ -46,6 +46,7 @@ func newInspectCmd() *cobra.Command {
 				if _, in.Client, err = backend.Connect(os.Getenv, sessioncontext.New(p.StateDir())); err != nil {
 					return err
 				}
+				defer backend.Close(in.Client)
 			}
 			if !jsonflag.Enabled(cmd) {
 				return verify.RunInspect(cmd.Context(), cmd.OutOrStdout(), in)

@@ -1,13 +1,9 @@
 package simulate
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"os/exec"
-	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
 )
@@ -45,52 +41,40 @@ func simulateScript(programStatusCommand string) string {
 	return s
 }
 
-// rawCommandTimeout は backend の CLI を直接叩く 1 回あたりの上限。
-const rawCommandTimeout = 10 * time.Second
+// paneOps は rex の Client (rexcli) が持つ、pane を作って閉じる口。simulate だけが使うので multiplexer.Client には無く、
+// backend.Connect が返す Client から取り出す。
+type paneOps interface {
+	// SplitPane は anchor の pane の下に pane を作り、shell を挟まず argv を起こす。終わっても pane を残す。
+	SplitPane(ctx context.Context, anchor, label string, argv []string) (string, error)
+	// ClosePane は pane を閉じる。
+	ClosePane(ctx context.Context, paneID string) error
+}
 
 // newSimulateHost は kind の host を作り、使い捨て pane を割り出す基準になる自分の pane が
-// 環境から分かることを確かめる。
-func newSimulateHost(kind string, getenv func(string) string) (simulateHost, error) {
+// 環境から分かることを確かめる。client は backend.Connect が返した Client で、pane を作る口 (paneOps) を持つこと。
+func newSimulateHost(kind string, getenv func(string) string, client any) (simulateHost, error) {
 	switch kind {
 	case sessioncontext.MultiplexerKindRex:
 		own := getenv("REX_BLOCK")
 		if own == "" {
 			return nil, errors.New("REX_BLOCK のある rex の block 内で実行してください (使い捨て block を割り出す anchor になる自分の block が要ります)")
 		}
-		return &rexHost{bin: binPath(getenv, "REX_BIN_PATH", "rex"), ownBlock: own}, nil
+		ops, ok := client.(paneOps)
+		if !ok {
+			return nil, fmt.Errorf("この backend の Client (%T) は pane を作れない", client)
+		}
+		return &rexHost{ops: ops, ownBlock: own}, nil
 	default:
 		return nil, fmt.Errorf("未対応の多重化ツール: %q", kind)
 	}
 }
 
-func binPath(getenv func(string) string, key, fallback string) string {
-	if v := getenv(key); v != "" {
-		return v
-	}
-	return fallback
-}
-
-// runRaw は backend の CLI を直接叩き stdout を返す。失敗は stderr を添えた error にする。
-func runRaw(ctx context.Context, bin string, args ...string) ([]byte, error) {
-	runCtx, cancel := context.WithTimeout(ctx, rawCommandTimeout)
-	defer cancel()
-
-	cmd := exec.CommandContext(runCtx, bin, args...) // #nosec G204,G702 -- bin は固定既定値/環境変数、args はこのファイル内で組み立てた引数のみ
-	var outBuf, errBuf bytes.Buffer
-	cmd.Stdout = &outBuf
-	cmd.Stderr = &errBuf
-	if err := cmd.Run(); err != nil {
-		return outBuf.Bytes(), fmt.Errorf("%s %v: %w (stderr=%q)", bin, args, err, errBuf.Bytes())
-	}
-	return outBuf.Bytes(), nil
-}
-
-// rexHost は rex の split / block close で使い捨て block を扱う。
+// rexHost は rex の Client の SplitPane / ClosePane で使い捨て block を扱う。
 // rex には pane を外から Claude agent に登録する手段が無く、Claude の判定は Claude Code 自身が出す
-// OSC 7501 (`block call program_status` の record) に頼る。そこで使い捨て block の script に
+// OSC 7501 (program_status の record) に頼る。そこで使い捨て block の script に
 // 同じ OSC 7501 を printf させ、本番と同じ判定 (rexcli/blockstate の ToPane) を通す。
 type rexHost struct {
-	bin      string
+	ops      paneOps
 	ownBlock string
 }
 
@@ -100,29 +84,15 @@ type rexHost struct {
 // 突き合わせるので、printf は script 自身 (sh の builtin) が出し、その後 exec で同じ pid のまま居座る。
 const claudeProgramStatusCommand = `printf '\033]7501;state=idle:app=claude-code\a'`
 
-// run は rex を実行する。server が落ちているときに CLI が起こさないよう autostart を切る (rexcli と同じ)。
-func (h *rexHost) run(ctx context.Context, args ...string) ([]byte, error) {
-	return runRaw(ctx, h.bin, append([]string{"--autostart=false"}, args...)...)
-}
-
-// SplitPane は自分の block (REX_BLOCK) の下に block を作り、shell を挟まず script を直接走らせる
-// (--shell=none)。rex の capture は可視領域しか返さないので、limit 風の画面が収まる高さ (40%) を取る。
-// script が落ちたときに画面を読めるよう --keep-open を付ける。
+// SplitPane は自分の block (REX_BLOCK) の下に block を作り、shell を挟まず script を直接走らせる。
+// rex の capture は可視領域しか返さないので、limit 風の画面が収まる高さ (40%) を取る (高さは rexcli が決める)。
+// script が落ちたときに画面を読めるよう、終わっても block を残す。
 func (h *rexHost) SplitPane(ctx context.Context, scriptPath, screenPath string) (string, error) {
-	out, err := h.run(ctx, "split", "-b", h.ownBlock, "--split=below", "--ratio", "40", "--focus=false", "--keep-open", "--shell=none", "--label", simulateMetadataSource, "--json", "--", "/bin/sh", scriptPath, screenPath)
+	id, err := h.ops.SplitPane(ctx, h.ownBlock, simulateMetadataSource, []string{"/bin/sh", scriptPath, screenPath})
 	if err != nil {
 		return "", fmt.Errorf("使い捨て block の作成に失敗: %w", err)
 	}
-	var res struct {
-		BlockIDs []string `json:"block_ids"`
-	}
-	if err := json.Unmarshal(bytes.TrimSpace(out), &res); err != nil {
-		return "", fmt.Errorf("split の応答を解釈できません: %w (stdout=%q)", err, out)
-	}
-	if len(res.BlockIDs) == 0 || res.BlockIDs[0] == "" {
-		return "", fmt.Errorf("split の応答に block_ids が含まれていません (stdout=%q)", out)
-	}
-	return res.BlockIDs[0], nil
+	return id, nil
 }
 
 func (h *rexHost) MarkAsClaudeAgent(context.Context, string) (string, error) {
@@ -132,8 +102,7 @@ func (h *rexHost) MarkAsClaudeAgent(context.Context, string) (string, error) {
 func (h *rexHost) ProgramStatusCommand() string { return claudeProgramStatusCommand }
 
 func (h *rexHost) ClosePane(ctx context.Context, paneID string) error {
-	_, err := h.run(ctx, "block", "close", paneID)
-	return err
+	return h.ops.ClosePane(ctx, paneID)
 }
 
 func (h *rexHost) CloseCommand(paneID string) string {

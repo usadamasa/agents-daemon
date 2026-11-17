@@ -34,6 +34,7 @@ func newTellCmd() *cobra.Command {
 				if err != nil {
 					return nil, err
 				}
+				defer backend.Close(runner.Host)
 				res, err := runner.Run(cmd.Context(), tell.Request{ToSession: req.ToSession, Text: req.Text})
 				tellSent(paths.StateDir(), req.SessionID, req.ToSession, res.PaneID, err, time.Now())
 				if err != nil {

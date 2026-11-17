@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rexcli/api"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rexcli/cli"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rexcli/control/controltest"
 )
@@ -326,12 +327,12 @@ const apiTimeout = 5 * time.Second
 // client は fake の API と、fixture を何も置かない fake の rex に繋ぐ Client。CLI を叩く method は fake の rex が
 // exit 3 で断る。無いパスの rex を渡すと Runner が既定の置き場から本物の rex を引き直して叩くので、必ず fake を渡す。
 func (f *fakeAPI) client(resolve SessionResolver) *execClient {
-	return &execClient{cli: cli.New(f.rex.bin, noCommandTimeout), timeout: apiTimeout, resolve: resolve, socket: fixedSocket(f.srv.Path)}
+	return &execClient{cli: cli.New(f.rex.bin, noCommandTimeout), rex: api.New(fixedSocket(f.srv.Path), apiTimeout), resolve: resolve}
 }
 
 // clientWith は fake の rex (書き込みと購読) と fake の API (読み取り) の両方に繋ぐ Client。
 func (f *fakeAPI) clientWith(rex *fakeRex, resolve SessionResolver) *execClient {
-	return &execClient{cli: cli.New(rex.bin, noCommandTimeout), timeout: apiTimeout, resolve: resolve, socket: fixedSocket(f.srv.Path)}
+	return &execClient{cli: cli.New(rex.bin, noCommandTimeout), rex: api.New(fixedSocket(f.srv.Path), apiTimeout), resolve: resolve}
 }
 
 func fixedSocket(path string) func() (string, error) {

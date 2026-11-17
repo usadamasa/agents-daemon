@@ -1,7 +1,7 @@
 // Package rexcli は rex を操作する multiplexer.Client の実装を提供する。
-// 読み取りは rex server の control API (control) を api.go の接続から呼び、書き込みと events の購読は
-// rex の CLI を fork する (exec.go、watch.go)。応答と events の形、block の状態から multiplexer.Pane への写像は
-// blockstate、doctor の前提点検は premise にある。
+// pane の読み書きと session の作成は rex server の control API を api から呼び、events の購読と doctor の前提点検は
+// rex の CLI (cli) を起こす (watch.go、premise)。応答と events の形、block の状態から multiplexer.Pane への写像は
+// blockstate にある。
 package rexcli
 
 import (
@@ -9,13 +9,12 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
+	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rexcli/api"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rexcli/blockstate"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rexcli/cli"
-	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rexcli/control"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rexcli/premise"
 )
 
@@ -29,21 +28,16 @@ type SessionResolver func() (map[string]string, error)
 
 // execClient は rex を操作する multiplexer.Client 実装。
 type execClient struct {
-	// cli は書き込み系と events の購読で rex の CLI を起こす。
+	// cli は events の購読と前提点検で rex の CLI を起こし、spawn の包みに渡す rex のパスを引く。
 	cli *cli.Runner
-	// timeout は control API の request 1 回の制限時間。0 以下なら課さない (テスト用)。
-	timeout time.Duration
+	// rex は control API を呼ぶ。
+	rex *api.Client
 	// resolve は block_id から session_id を引く (statusline が書いた sidecar)。
 	resolve SessionResolver
 	// watch は Watch が始めた購読の cache。nil なら購読しておらず、PaneList は毎回全列挙する。
 	watch *watchState
 	// watchBackoff は購読が切れてから張り直すまでの最初の間隔。0 なら defaultWatchBackoff。
 	watchBackoff time.Duration
-	// socket は control API の socket のパスを返す。
-	socket func() (string, error)
-	// apiMu は api を守る。api は使い回す control 接続で、nil なら次の呼び出しで張る。
-	apiMu sync.Mutex
-	api   *control.Conn
 }
 
 // NewExecClient は実 rex バイナリを叩く Client を返す。
@@ -53,7 +47,7 @@ func NewExecClient(resolve SessionResolver) multiplexer.Client {
 }
 
 func newExecClientWithTimeout(resolve SessionResolver, timeout time.Duration) *execClient {
-	return &execClient{cli: cli.FromEnv(timeout), timeout: timeout, resolve: resolve, socket: defaultSocket}
+	return &execClient{cli: cli.FromEnv(timeout), rex: api.New(api.DefaultSocket, timeout), resolve: resolve}
 }
 
 type lsResult struct {
@@ -83,7 +77,7 @@ func (c *execClient) PaneList(ctx context.Context) ([]multiplexer.Pane, error) {
 // 1 回で session.list 1 回、session ごとに list_blocks 1 回、shell の block ごとに 2 回の request になる。
 func (c *execClient) snapshot(ctx context.Context) (map[string]*blockstate.State, error) {
 	var ls lsResult
-	if err := c.call(ctx, "session.list", nil, &ls); err != nil {
+	if err := c.rex.Call(ctx, "session.list", nil, &ls); err != nil {
 		return nil, err
 	}
 	blocks := map[string]*blockstate.State{}
@@ -117,7 +111,7 @@ func (c *execClient) snapshot(ctx context.Context) (map[string]*blockstate.State
 // rex-premise: preview.30 api session.list_blocks は session の全 window と detached の block を返し、無い session は session_not_found
 func (c *execClient) listBlocks(ctx context.Context, session string) (blockstate.BlockList, error) {
 	var blocks blockstate.BlockList
-	err := c.call(ctx, "session.list_blocks", map[string]any{"session_id": session}, &blocks)
+	err := c.rex.Call(ctx, "session.list_blocks", map[string]any{"session_id": session}, &blocks)
 	return blocks, err
 }
 
@@ -141,7 +135,7 @@ func (c *execClient) PaneGet(ctx context.Context, paneID string) (multiplexer.Pa
 	if err != nil {
 		return multiplexer.Pane{}, fmt.Errorf("block と session の対応の読み込みに失敗: %w", err)
 	}
-	session, err := c.blockSession(ctx, paneID)
+	session, err := c.rex.BlockSession(ctx, paneID)
 	if err != nil {
 		return multiplexer.Pane{}, err
 	}
@@ -156,10 +150,10 @@ func (c *execClient) PaneGet(ctx context.Context, paneID string) (multiplexer.Pa
 // rex-premise: preview.30 api program_status と process の結果は CLI の block call と同じ形
 func (c *execClient) fetchBlock(ctx context.Context, session, blockID string) (*blockstate.State, error) {
 	st := &blockstate.State{Session: session}
-	if err := c.blockCall(ctx, session, blockID, "program_status", nil, &st.ProgramStatus); err != nil {
+	if err := c.rex.BlockCall(ctx, session, blockID, "program_status", nil, &st.ProgramStatus); err != nil {
 		return nil, err
 	}
-	if err := c.blockCall(ctx, session, blockID, "process", nil, &st.Process); err != nil {
+	if err := c.rex.BlockCall(ctx, session, blockID, "process", nil, &st.Process); err != nil {
 		return nil, err
 	}
 	return st, nil
@@ -174,15 +168,15 @@ func (c *execClient) fetchBlock(ctx context.Context, session, blockID string) (*
 // rex-premise: preview.30 api format は alternate screen では可視の行だけ、通常の画面では scrollback も返す。trim の content は改行で終わらない
 // rex-premise: preview.30 api format の vt は制御シーケンス (SGR、CR) を保つ
 func (c *execClient) PaneRead(ctx context.Context, paneID string, opts multiplexer.PaneReadOptions) (string, error) {
-	session, err := c.blockSession(ctx, paneID)
+	session, err := c.rex.BlockSession(ctx, paneID)
 	if err != nil {
 		return "", err
 	}
-	args := map[string]any{"trim": true, "unwrap": true, "max_bytes": formatChunkBytes}
+	args := map[string]any{"trim": true, "unwrap": true}
 	if opts.Styled {
 		args["format"] = "vt"
 	}
-	out, err := c.readFormat(ctx, session, paneID, args)
+	out, err := c.rex.ReadFormat(ctx, session, paneID, args)
 	if err != nil {
 		return "", err
 	}
@@ -209,16 +203,16 @@ type modesResult struct {
 // rex-premise: preview.30 api size は rows と columns を返す
 // rex-premise: preview.30 api modes は screen (primary / alternate) を返す
 func (c *execClient) PaneGeometry(ctx context.Context, paneID string) (multiplexer.Geometry, error) {
-	session, err := c.blockSession(ctx, paneID)
+	session, err := c.rex.BlockSession(ctx, paneID)
 	if err != nil {
 		return multiplexer.Geometry{}, err
 	}
 	var size sizeResult
-	if err := c.blockCall(ctx, session, paneID, "size", nil, &size); err != nil {
+	if err := c.rex.BlockCall(ctx, session, paneID, "size", nil, &size); err != nil {
 		return multiplexer.Geometry{}, err
 	}
 	var modes modesResult
-	if err := c.blockCall(ctx, session, paneID, "modes", nil, &modes); err != nil {
+	if err := c.rex.BlockCall(ctx, session, paneID, "modes", nil, &modes); err != nil {
 		return multiplexer.Geometry{}, err
 	}
 	return multiplexer.Geometry{Rows: size.Rows, Columns: size.Columns, AlternateScreen: modes.Screen == blockstate.ScreenAlternate}, nil
@@ -236,16 +230,6 @@ func tailLines(s string, n int) string {
 		tail += "\n"
 	}
 	return tail
-}
-
-func (c *execClient) SendText(ctx context.Context, paneID, text string) error {
-	_, err := c.cli.Run(ctx, "send", "-b", paneID, text)
-	return err
-}
-
-func (c *execClient) SendKeys(ctx context.Context, paneID string, keys ...string) error {
-	_, err := c.cli.Run(ctx, append([]string{"send-key", "-b", paneID}, keys...)...)
-	return err
 }
 
 type serverStatusResult struct {
@@ -266,7 +250,7 @@ func (premiseRunner) TargetNotFound(err error) bool { return cli.TargetNotFound(
 // Reachable は server.status で rex server の生死を確かめる。
 func (c *execClient) Reachable(ctx context.Context) error {
 	var st serverStatusResult
-	if err := c.call(ctx, "server.status", nil, &st); err != nil {
+	if err := c.rex.Call(ctx, "server.status", nil, &st); err != nil {
 		return err
 	}
 	if st.PID <= 0 {

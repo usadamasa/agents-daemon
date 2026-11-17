@@ -127,25 +127,24 @@ func TestExecClient_RelocatesWhenBinaryVanishes(t *testing.T) {
 	t.Setenv("REX_BIN_PATH", "")
 	root := filepath.Dir(installedVersions(isolateHome(t)))
 	f := fakeRexInVersions(t, root, "100")
-	f.put(t, "server-status.json", measured(t, measuredOct10, "server_status.json"))
 	t.Setenv("PATH", searchPath(versionsDir(root, "100")))
 
 	c := newExecClientWithTimeout(staticResolver(nil), noCommandTimeout)
-	if err := c.Reachable(context.Background()); err != nil {
-		t.Fatalf("更新前の Reachable() error = %v", err)
+	if err := c.SessionKill(context.Background(), sessionA); err != nil {
+		t.Fatalf("更新前の SessionKill() error = %v", err)
 	}
 	if err := os.Rename(filepath.Join(root, "Versions", "100"), filepath.Join(root, "Versions", "101")); err != nil {
 		t.Fatal(err)
 	}
-	if err := c.Reachable(context.Background()); err != nil {
-		t.Fatalf("更新後の Reachable() error = %v", err)
+	if err := c.SessionKill(context.Background(), sessionA); err != nil {
+		t.Fatalf("更新後の SessionKill() error = %v", err)
 	}
 	if want := filepath.Join(versionsDir(root, "101"), "rex"); c.binPath != want {
 		t.Errorf("binPath = %q, want %q", c.binPath, want)
 	}
 	f.assertCalls(t,
-		"--autostart=false api call server.status",
-		"--autostart=false api call server.status",
+		"--autostart=false session kill "+sessionA,
+		"--autostart=false session kill "+sessionA,
 	)
 }
 
@@ -153,7 +152,6 @@ func TestExecClient_RelocatesWhenBinaryVanishes(t *testing.T) {
 func TestExecClient_PinnedBinPathIsNotRelocated(t *testing.T) {
 	root := t.TempDir()
 	f := fakeRexInVersions(t, root, "100")
-	f.put(t, "server-status.json", measured(t, measuredOct10, "server_status.json"))
 	fakeRexInVersions(t, root, "101")
 	t.Setenv("REX_BIN_PATH", f.bin)
 	t.Setenv("PATH", searchPath(versionsDir(root, "100")))
@@ -162,8 +160,8 @@ func TestExecClient_PinnedBinPathIsNotRelocated(t *testing.T) {
 	if err := os.RemoveAll(filepath.Join(root, "Versions", "100")); err != nil {
 		t.Fatal(err)
 	}
-	err := c.Reachable(context.Background())
+	err := c.SessionKill(context.Background(), sessionA)
 	if !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("Reachable() error = %v, want os.ErrNotExist (引き直さない)", err)
+		t.Fatalf("SessionKill() error = %v, want os.ErrNotExist (引き直さない)", err)
 	}
 }

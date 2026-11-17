@@ -45,7 +45,15 @@ type execClient struct {
 	watch *watchState
 	// watchBackoff は購読が切れてから張り直すまでの最初の間隔。0 なら defaultWatchBackoff。
 	watchBackoff time.Duration
+	// socket は control API の socket のパスを返す。
+	socket func() (string, error)
 }
+
+// Close は control 接続を閉じる。
+func (c *execClient) Close() error { return nil }
+
+// isNotFound は対象が無いことによる失敗かを返す。
+func isNotFound(err error) bool { return isTargetNotFound(err) }
 
 // NewExecClient は実 rex バイナリを叩く Client を返す。
 // バイナリは最初の呼び出しで PATH から引く。環境変数 REX_BIN_PATH があればそれで固定する。

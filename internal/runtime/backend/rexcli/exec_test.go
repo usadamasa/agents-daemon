@@ -2,8 +2,11 @@ package rexcli
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -29,15 +32,6 @@ const (
 	sidWorking = "0d5e717f-82c5-4e71-ac74-799f7197e0de"
 	sidDone    = "6b1f3c2a-1111-4222-8333-944455556666"
 )
-
-// lsJSON は `ls --json` の応答。形は 2026-10-10 の実測。
-func lsJSON(sessions ...string) string {
-	parts := make([]string, 0, len(sessions))
-	for _, s := range sessions {
-		parts = append(parts, `{"session_id":"`+s+`","label":"shy-alcove"}`)
-	}
-	return `{"sessions":[` + strings.Join(parts, ",") + `]}`
-}
 
 // blockLsJSON は `block ls --json` の応答。形は 2026-10-10 の実測。
 func blockLsJSON(blocks ...[2]string) string {
@@ -201,23 +195,22 @@ func staticResolver(m map[string]string) SessionResolver {
 }
 
 // TestExecClient_PaneList は 2 session を回る 1 回の PaneList の配線を見る。session A に作業中の Claude と
-// shell 以外の block、session B に block ls の後に閉じた block、program_status と process の間に閉じた block、
+// shell 以外の block、session B に list_blocks の後に閉じた block、program_status と process の間に閉じた block、
 // 入力待ちの Claude を置く。
 func TestExecClient_PaneList(t *testing.T) {
-	f := newFakeRex(t)
-	f.put(t, "ls.json", lsJSON(sessionA, sessionB))
-	f.put(t, "block-ls-"+sessionA+".json", blockLsJSON(
+	f := newFakeAPI(t)
+	f.addSession(sessionA,
 		[2]string{blockClaudeWorking, blockstate.ShellFlavor},
 		[2]string{blockNotShell, "com.superlogical.browser"},
-	))
-	f.put(t, "block-ls-"+sessionB+".json", blockLsJSON(
+	)
+	f.addSession(sessionB,
 		[2]string{blockClosed, blockstate.ShellFlavor},
 		[2]string{blockClosedMidway, blockstate.ShellFlavor},
 		[2]string{blockClaudeDone, blockstate.ShellFlavor},
-	))
-	f.putBlock(t, blockClaudeWorking, measured(t, measuredOct10, "program_status-working.json"), processJSON(pidClaudeWorking, "claude", "/w/agents-daemon"))
-	f.put(t, "program_status-"+blockClosedMidway+".json", psEmpty)
-	f.putBlock(t, blockClaudeDone, measured(t, measuredOct10, "program_status-done.json"), processJSON(pidClaudeDone, "claude", "/w/guard"))
+	)
+	f.putBlock(blockClaudeWorking, measured(t, measuredOct10, "program_status-working.json"), processJSON(pidClaudeWorking, "claude", "/w/agents-daemon"))
+	f.put("program_status-"+blockClosedMidway, psEmpty)
+	f.putBlock(blockClaudeDone, measured(t, measuredOct10, "program_status-done.json"), processJSON(pidClaudeDone, "claude", "/w/guard"))
 
 	resolves := 0
 	c := f.client(func() (map[string]string, error) {
@@ -241,17 +234,35 @@ func TestExecClient_PaneList(t *testing.T) {
 	})
 	t.Run("shell の block にだけ method を打つ", func(t *testing.T) {
 		f.assertCalls(t,
-			"--autostart=false ls --json",
-			"--autostart=false block ls -s "+sessionA+" --json",
-			"--autostart=false block call -b "+blockClaudeWorking+" program_status",
-			"--autostart=false block call -b "+blockClaudeWorking+" process",
-			"--autostart=false block ls -s "+sessionB+" --json",
-			"--autostart=false block call -b "+blockClosed+" program_status",
-			"--autostart=false block call -b "+blockClosedMidway+" program_status",
-			"--autostart=false block call -b "+blockClosedMidway+" process",
-			"--autostart=false block call -b "+blockClaudeDone+" program_status",
-			"--autostart=false block call -b "+blockClaudeDone+" process",
+			"session.list",
+			"session.list_blocks "+sessionA,
+			"program_status "+blockClaudeWorking,
+			"process "+blockClaudeWorking,
+			"session.list_blocks "+sessionB,
+			"program_status "+blockClosed,
+			"program_status "+blockClosedMidway,
+			"process "+blockClosedMidway,
+			"program_status "+blockClaudeDone,
+			"process "+blockClaudeDone,
 		)
+	})
+	t.Run("block の method は block の session を名指す", func(t *testing.T) {
+		for _, p := range f.requestsOf(terminalMethod + "process") {
+			var req struct {
+				SessionID string `json:"session_id"`
+				BlockID   string `json:"block_id"`
+			}
+			if err := json.Unmarshal(p, &req); err != nil {
+				t.Fatal(err)
+			}
+			want := sessionB
+			if req.BlockID == blockClaudeWorking {
+				want = sessionA
+			}
+			if req.SessionID != want {
+				t.Errorf("%s の process の session_id = %q, want %q", req.BlockID, req.SessionID, want)
+			}
+		}
 	})
 	t.Run("resolve は 1 回", func(t *testing.T) {
 		if resolves != 1 {
@@ -260,12 +271,12 @@ func TestExecClient_PaneList(t *testing.T) {
 	})
 }
 
-// ls の後に閉じた session (block ls が exit 3) を飛ばし、残りの session へ進む。
+// list の後に閉じた session (list_blocks が session_not_found) を飛ばし、残りの session へ進む。
 func TestExecClient_PaneList_SkipsClosedSession(t *testing.T) {
-	f := newFakeRex(t)
-	f.put(t, "ls.json", lsJSON(sessionA, sessionB))
-	f.put(t, "block-ls-"+sessionB+".json", blockLsJSON([2]string{blockClaudeDone, blockstate.ShellFlavor}))
-	f.putBlock(t, blockClaudeDone, measured(t, measuredOct10, "program_status-done.json"), processJSON(pidClaudeDone, "claude", "/w/guard"))
+	f := newFakeAPI(t)
+	f.listOnly(sessionA)
+	f.addSession(sessionB, [2]string{blockClaudeDone, blockstate.ShellFlavor})
+	f.putBlock(blockClaudeDone, measured(t, measuredOct10, "program_status-done.json"), processJSON(pidClaudeDone, "claude", "/w/guard"))
 
 	panes, err := f.client(staticResolver(nil)).PaneList(context.Background())
 	if err != nil {
@@ -275,47 +286,51 @@ func TestExecClient_PaneList_SkipsClosedSession(t *testing.T) {
 		t.Errorf("PaneList() = %+v, want %s の 1 件", panes, blockClaudeDone)
 	}
 	f.assertCalls(t,
-		"--autostart=false ls --json",
-		"--autostart=false block ls -s "+sessionA+" --json",
-		"--autostart=false block ls -s "+sessionB+" --json",
-		"--autostart=false block call -b "+blockClaudeDone+" program_status",
-		"--autostart=false block call -b "+blockClaudeDone+" process",
+		"session.list",
+		"session.list_blocks "+sessionA,
+		"session.list_blocks "+sessionB,
+		"program_status "+blockClaudeDone,
+		"process "+blockClaudeDone,
 	)
 }
 
 // not found 以外の失敗は block を飛ばさずエラーにする。
 func TestExecClient_PaneList_FailureIsError(t *testing.T) {
-	oneBlock := func(programStatus string) map[string]string {
-		return map[string]string{
-			"ls.json":                        lsJSON(sessionA),
-			"block-ls-" + sessionA + ".json": blockLsJSON([2]string{blockClaudeWorking, blockstate.ShellFlavor}),
-			"program_status-" + blockClaudeWorking + ".json": programStatus,
-		}
+	oneBlock := func(f *fakeAPI, programStatus string) {
+		f.addSession(sessionA, [2]string{blockClaudeWorking, blockstate.ShellFlavor})
+		f.put("program_status-"+blockClaudeWorking, programStatus)
 	}
-	failing := oneBlock(psEmpty)
-	failing["fail-program_status-"+blockClaudeWorking+".json"] = ""
 	tests := []struct {
-		name     string
-		fixtures map[string]string
-		wantErr  string
+		name    string
+		setup   func(f *fakeAPI)
+		wantErr string
 	}{
-		{"ls が失敗", nil, "not found"},
-		{"block ls が exit 3 以外で失敗", map[string]string{"ls.json": lsJSON(sessionA), "fail-block-ls-" + sessionA + ".json": ""}, "server error"},
-		{"block call が exit 3 以外で失敗", failing, "server error"},
-		{"program_status が JSON でない", oneBlock("not json"), "応答の parse に失敗"},
+		{"list_blocks が not found 以外で失敗", func(f *fakeAPI) {
+			f.addSession(sessionA)
+			f.fail("list_blocks-" + sessionA)
+		}, "server error"},
+		{"block の method が not found 以外で失敗", func(f *fakeAPI) {
+			oneBlock(f, psEmpty)
+			f.fail("program_status-" + blockClaudeWorking)
+		}, "server error"},
+		{"program_status が records の形でない", func(f *fakeAPI) { oneBlock(f, `"not records"`) }, "応答の parse に失敗"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			f := newFakeRex(t)
-			for name, content := range tt.fixtures {
-				f.put(t, name, content)
-			}
+			f := newFakeAPI(t)
+			tt.setup(f)
 			_, err := f.client(staticResolver(nil)).PaneList(context.Background())
 			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 				t.Fatalf("PaneList() error = %v, want %q を含む", err, tt.wantErr)
 			}
 		})
 	}
+	t.Run("server に繋がらない", func(t *testing.T) {
+		c := &execClient{resolve: staticResolver(nil), socket: fixedSocket(t.TempDir() + "/none.sock")}
+		if _, err := c.PaneList(context.Background()); err == nil {
+			t.Fatal("繋がらないのに PaneList が成功した")
+		}
+	})
 }
 
 func TestExecClient_DropsRexSessionFromChildEnv(t *testing.T) {
@@ -323,10 +338,9 @@ func TestExecClient_DropsRexSessionFromChildEnv(t *testing.T) {
 	t.Setenv("REX_BLOCK", blockClaudeWorking)
 	t.Setenv("REX_FAKE_KEEP", "kept")
 	f := newFakeRex(t)
-	f.put(t, "server-status.json", measured(t, measuredOct10, "server_status.json"))
 
-	if err := f.client(staticResolver(nil)).Reachable(context.Background()); err != nil {
-		t.Fatalf("Reachable() error = %v", err)
+	if err := f.client(staticResolver(nil)).SessionKill(context.Background(), sessionA); err != nil {
+		t.Fatalf("SessionKill() error = %v", err)
 	}
 	env := readLines(t, filepath.Join(f.dir, "env.log"))
 	if len(env) == 0 {
@@ -346,9 +360,11 @@ func TestExecClient_DropsRexSessionFromChildEnv(t *testing.T) {
 	}
 }
 
+// PaneGet は block の session を target.resolve で引いてから block の method を打つ (block の method は session_id が要る)。
 func TestExecClient_PaneGet(t *testing.T) {
-	f := newFakeRex(t)
-	f.putBlock(t, blockClaudeDone, measured(t, measuredOct10, "program_status-done.json"), processJSON(pidClaudeDone, "claude", "/w"))
+	f := newFakeAPI(t)
+	f.addSession(sessionB, [2]string{blockClaudeDone, blockstate.ShellFlavor})
+	f.putBlock(blockClaudeDone, measured(t, measuredOct10, "program_status-done.json"), processJSON(pidClaudeDone, "claude", "/w"))
 	c := f.client(staticResolver(map[string]string{blockClaudeDone: sidDone}))
 
 	got, err := c.PaneGet(context.Background(), blockClaudeDone)
@@ -359,10 +375,26 @@ func TestExecClient_PaneGet(t *testing.T) {
 	if got != want {
 		t.Errorf("PaneGet() = %+v, want %+v", got, want)
 	}
+	f.assertCalls(t,
+		"target.resolve "+blockClaudeDone,
+		"program_status "+blockClaudeDone,
+		"process "+blockClaudeDone,
+	)
+	// 文脈を付けずに全 session から引く (文脈の session に閉じると別 session の block が not_found になる)。
+	var req struct {
+		Kinds   []string        `json:"kinds"`
+		Context json.RawMessage `json:"context"`
+	}
+	if err := json.Unmarshal(f.requestsOf("target.resolve")[0], &req); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(req.Kinds, []string{"block"}) || req.Context != nil {
+		t.Errorf("target.resolve の kinds = %v, context = %s", req.Kinds, req.Context)
+	}
 }
 
-// 1 block を相手にする method は、block が無ければ rex の stderr を添えたエラーを返す。
-func TestExecClient_TargetNotFoundIsError(t *testing.T) {
+// API で読む method は、block が無ければ not found の error を返す (target.resolve が見つけられない)。
+func TestExecClient_ReadTargetNotFoundIsError(t *testing.T) {
 	tests := []struct {
 		name string
 		call func(c *execClient) error
@@ -375,6 +407,37 @@ func TestExecClient_TargetNotFoundIsError(t *testing.T) {
 			_, err := c.PaneRead(context.Background(), blockClosed, multiplexer.PaneReadOptions{})
 			return err
 		}},
+		{"PaneGeometry", func(c *execClient) error {
+			_, err := c.PaneGeometry(context.Background(), blockClosed)
+			return err
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.call(newFakeAPI(t).client(staticResolver(nil)))
+			if err == nil || !strings.Contains(err.Error(), "not found") || !isNotFound(err) {
+				t.Errorf("error = %v, want not found", err)
+			}
+		})
+	}
+}
+
+// resolve の後に閉じた block は block の method が not_found で返し、not found の error になる。
+func TestExecClient_PaneGet_ClosedAfterResolve(t *testing.T) {
+	f := newFakeAPI(t)
+	f.addSession(sessionB, [2]string{blockClosedMidway, blockstate.ShellFlavor})
+	_, err := f.client(staticResolver(nil)).PaneGet(context.Background(), blockClosedMidway)
+	if !isNotFound(err) {
+		t.Errorf("PaneGet() error = %v, want not found", err)
+	}
+}
+
+// CLI で送る method は、block が無ければ rex の stderr を添えたエラーを返す。
+func TestExecClient_TargetNotFoundIsError(t *testing.T) {
+	tests := []struct {
+		name string
+		call func(c *execClient) error
+	}{
 		{"SendText", func(c *execClient) error { return c.SendText(context.Background(), blockClosed, "続けて") }},
 		{"SendKeys", func(c *execClient) error { return c.SendKeys(context.Background(), blockClosed, "enter") }},
 	}
@@ -388,23 +451,27 @@ func TestExecClient_TargetNotFoundIsError(t *testing.T) {
 	}
 }
 
+// PaneRead は format の content に改行を 1 つ足して返す。rex の CLI の capture は出力の末尾に改行を足し、
+// 末尾の n 行を切り出す tailLines と呼び手はその形を前提にしている (2026-11-17 に実機で capture と format を
+// バイト単位で比べた)。
 func TestExecClient_PaneRead(t *testing.T) {
-	const screen = "line1\nline2\nline3\nline4\n"
+	const content = "line1\nline2\nline3\nline4"
 	tests := []struct {
-		name   string
-		screen string
-		lines  int
-		want   string
+		name    string
+		content string
+		lines   int
+		want    string
 	}{
-		{"Lines 0 は全体", screen, 0, screen},
-		{"末尾 2 行", screen, 2, "line3\nline4\n"},
-		{"行数より多ければ全体", screen, 10, screen},
-		{"末尾に改行が無ければ足さない", "a\nb\nc", 2, "b\nc"},
+		{"Lines 0 は全体に改行を足す", content, 0, content + "\n"},
+		{"末尾 2 行", content, 2, "line3\nline4\n"},
+		{"行数より多ければ全体", content, 10, content + "\n"},
+		{"空の画面は改行 1 つ", "", 0, "\n"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			f := newFakeRex(t)
-			f.put(t, "capture-"+blockClaudeWorking+".txt", tt.screen)
+			f := newFakeAPI(t)
+			f.addSession(sessionA, [2]string{blockClaudeWorking, blockstate.ShellFlavor})
+			f.put("format-"+blockClaudeWorking, tt.content)
 			got, err := f.client(staticResolver(nil)).PaneRead(context.Background(), blockClaudeWorking,
 				multiplexer.PaneReadOptions{Lines: tt.lines})
 			if err != nil {
@@ -413,24 +480,52 @@ func TestExecClient_PaneRead(t *testing.T) {
 			if got != tt.want {
 				t.Errorf("PaneRead() = %q, want %q", got, tt.want)
 			}
-			f.assertCalls(t, "--autostart=false capture -b "+blockClaudeWorking+" --trim --unwrap")
+			f.assertCalls(t, "target.resolve "+blockClaudeWorking, "format "+blockClaudeWorking)
+			assertFormatArgs(t, f, `{"trim":true,"unwrap":true}`)
 		})
 	}
 }
 
-// Styled は制御シーケンスを保ったまま読む (--format=vt)。
+// assertFormatArgs は最後の format の args を want (JSON) と比べる。CLI の capture --trim --unwrap と同じ args になる。
+func assertFormatArgs(t *testing.T, f *fakeAPI, want string) {
+	t.Helper()
+	reqs := f.requestsOf(terminalMethod + "format")
+	var req struct {
+		SessionID string          `json:"session_id"`
+		Args      json.RawMessage `json:"args"`
+	}
+	if err := json.Unmarshal(reqs[len(reqs)-1], &req); err != nil {
+		t.Fatal(err)
+	}
+	var got, w any
+	if err := json.Unmarshal(req.Args, &got); err != nil {
+		t.Fatalf("args を読めない: %s", req.Args)
+	}
+	if err := json.Unmarshal([]byte(want), &w); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, w) {
+		t.Errorf("format の args = %s, want %s", req.Args, want)
+	}
+	if req.SessionID != sessionA {
+		t.Errorf("format の session_id = %q, want %q", req.SessionID, sessionA)
+	}
+}
+
+// Styled は制御シーケンスを保ったまま読む (format: vt)。末尾の改行は text と同じく足す。
 func TestExecClient_PaneRead_styled(t *testing.T) {
-	f := newFakeRex(t)
-	f.put(t, "capture-"+blockClaudeWorking+".txt", "❯ \x1b[2mhint\x1b[0m\r\n")
+	f := newFakeAPI(t)
+	f.addSession(sessionA, [2]string{blockClaudeWorking, blockstate.ShellFlavor})
+	f.put("format-"+blockClaudeWorking, "❯ \x1b[2mhint\x1b[0m  ")
 	got, err := f.client(staticResolver(nil)).PaneRead(context.Background(), blockClaudeWorking,
 		multiplexer.PaneReadOptions{Styled: true})
 	if err != nil {
 		t.Fatalf("PaneRead() error = %v", err)
 	}
-	if got != "❯ \x1b[2mhint\x1b[0m\r\n" {
+	if got != "❯ \x1b[2mhint\x1b[0m  \n" {
 		t.Errorf("PaneRead() = %q", got)
 	}
-	f.assertCalls(t, "--autostart=false capture -b "+blockClaudeWorking+" --trim --unwrap --format=vt")
+	assertFormatArgs(t, f, `{"trim":true,"unwrap":true,"format":"vt"}`)
 }
 
 // PaneGeometry は size と modes の 2 回で block の高さと screen を返す。screen の未知の値は primary と見る
@@ -447,9 +542,10 @@ func TestExecClient_PaneGeometry(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			f := newFakeRex(t)
-			f.put(t, "size-"+blockClaudeWorking+".json", measured(t, measuredOct20, "size.json"))
-			f.put(t, "modes-"+blockClaudeWorking+".json", tt.modes)
+			f := newFakeAPI(t)
+			f.addSession(sessionA, [2]string{blockClaudeWorking, blockstate.ShellFlavor})
+			f.put("size-"+blockClaudeWorking, measured(t, measuredOct20, "size.json"))
+			f.put("modes-"+blockClaudeWorking, tt.modes)
 			got, err := f.client(staticResolver(nil)).PaneGeometry(context.Background(), blockClaudeWorking)
 			if err != nil {
 				t.Fatalf("PaneGeometry() error = %v", err)
@@ -458,19 +554,12 @@ func TestExecClient_PaneGeometry(t *testing.T) {
 				t.Errorf("PaneGeometry() = %+v, want %+v", got, tt.want)
 			}
 			f.assertCalls(t,
-				"--autostart=false block call -b "+blockClaudeWorking+" size",
-				"--autostart=false block call -b "+blockClaudeWorking+" modes",
+				"target.resolve "+blockClaudeWorking,
+				"size "+blockClaudeWorking,
+				"modes "+blockClaudeWorking,
 			)
 		})
 	}
-
-	t.Run("閉じた block は exit 3 の error", func(t *testing.T) {
-		f := newFakeRex(t)
-		_, err := f.client(staticResolver(nil)).PaneGeometry(context.Background(), blockClosed)
-		if !isTargetNotFound(err) {
-			t.Fatalf("PaneGeometry() error = %v, want exit 3", err)
-		}
-	})
 }
 
 func TestExecClient_SendTextAndKeys(t *testing.T) {
@@ -494,26 +583,93 @@ func TestExecClient_SendTextAndKeys(t *testing.T) {
 func TestExecClient_Reachable(t *testing.T) {
 	tests := []struct {
 		name    string
-		status  string // 空なら fixture を置かない (exit 3)
+		status  string // 空なら server.status が失敗する
 		wantErr bool
 	}{
 		{"pid があれば到達", measured(t, measuredOct10, "server_status.json"), false},
 		{"pid 0 は到達でない", `{"pid":0}`, true},
-		{"壊れた JSON", "not json", true},
-		{"非 0 exit", "", true},
+		{"pid が数でない", `{"pid":"x"}`, true},
+		{"server.status が失敗", "", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			f := newFakeRex(t)
-			if tt.status != "" {
-				f.put(t, "server-status.json", tt.status)
-			}
+			f := newFakeAPI(t)
+			f.setStatus(tt.status)
 			err := f.client(staticResolver(nil)).Reachable(context.Background())
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("Reachable() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			f.assertCalls(t, "--autostart=false api call server.status")
+			f.assertCalls(t, "server.status")
 		})
+	}
+	t.Run("server に繋がらない", func(t *testing.T) {
+		c := &execClient{resolve: staticResolver(nil), socket: fixedSocket(t.TempDir() + "/none.sock")}
+		if err := c.Reachable(context.Background()); err == nil {
+			t.Fatal("繋がらないのに Reachable が成功した")
+		}
+	})
+}
+
+// 接続は 1 本を使い回し、張った直後に session.attach_all を打つ (attach していないと session を名指す method が
+// conflict になる)。購読はまだ CLI なので、event は block_event を含まない session の範囲に絞る。
+func TestExecClient_ReusesOneConnection(t *testing.T) {
+	f := newFakeAPI(t)
+	f.setStatus(`{"pid":1}`)
+	f.addSession(sessionA, [2]string{blockClaudeWorking, blockstate.ShellFlavor})
+	f.put("format-"+blockClaudeWorking, "x")
+	c := f.client(staticResolver(nil))
+	for range 3 {
+		if err := c.Reachable(context.Background()); err != nil {
+			t.Fatalf("Reachable() error = %v", err)
+		}
+	}
+	if _, err := c.PaneRead(context.Background(), blockClaudeWorking, multiplexer.PaneReadOptions{}); err != nil {
+		t.Fatalf("PaneRead() error = %v", err)
+	}
+	if n := len(f.srv.Hellos()); n != 1 {
+		t.Errorf("接続を %d 回張った (1 回のはず)", n)
+	}
+	attaches := f.requestsOf("session.attach_all")
+	if len(attaches) != 1 || string(attaches[0]) != `{"event_scope":"session"}` {
+		t.Errorf("attach_all = %s", attaches)
+	}
+	if err := c.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	eventually(t, "server の接続が閉じる", func() bool { return f.srv.Connections() == 0 })
+}
+
+// server が切れたら次の呼び出しで張り直す (rex の server の再起動、更新)。
+func TestExecClient_RedialsAfterDisconnect(t *testing.T) {
+	f := newFakeAPI(t)
+	f.setStatus(`{"pid":1}`)
+	c := f.client(staticResolver(nil))
+	if err := c.Reachable(context.Background()); err != nil {
+		t.Fatalf("Reachable() error = %v", err)
+	}
+	f.srv.CloseConnections()
+	eventually(t, "server の接続が閉じる", func() bool { return f.srv.Connections() == 0 })
+	eventually(t, "張り直した Reachable が通る", func() bool { return c.Reachable(context.Background()) == nil })
+	if n := len(f.srv.Hellos()); n != 2 {
+		t.Errorf("接続を %d 回張った (2 回のはず)", n)
+	}
+}
+
+// 応答が返らない request は Client の timeout で打ち切る。
+func TestExecClient_APITimeout(t *testing.T) {
+	f := newFakeAPI(t)
+	block := make(chan struct{})
+	t.Cleanup(func() { close(block) })
+	f.srv.Handle("server.status", func(json.RawMessage) (any, error) { <-block; return nil, nil })
+	c := f.client(staticResolver(nil))
+	c.timeout = 50 * time.Millisecond
+	start := time.Now()
+	err := c.Reachable(context.Background())
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Reachable() error = %v, want DeadlineExceeded", err)
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Errorf("elapsed = %v, want タイムアウトで打ち切る", elapsed)
 	}
 }
 
@@ -525,9 +681,9 @@ func TestExecClient_Timeout(t *testing.T) {
 	}
 	c := &execClient{binPath: bin, timeout: 50 * time.Millisecond, resolve: staticResolver(nil)}
 	start := time.Now()
-	err := c.Reachable(context.Background())
+	err := c.SessionKill(context.Background(), sessionA)
 	if err == nil || !strings.Contains(err.Error(), "タイムアウト") {
-		t.Fatalf("Reachable() error = %v, want タイムアウト", err)
+		t.Fatalf("SessionKill() error = %v, want タイムアウト", err)
 	}
 	if elapsed := time.Since(start); elapsed > time.Second {
 		t.Errorf("elapsed = %v, want タイムアウトで打ち切る", elapsed)
@@ -543,5 +699,14 @@ func TestNewExecClient_BinPath(t *testing.T) {
 	t.Setenv("REX_BIN_PATH", "")
 	if c := NewExecClient(staticResolver(nil)).(*execClient); c.binPath != "" {
 		t.Errorf("binPath = %q, want 空 (未解決)", c.binPath)
+	}
+}
+
+// NewExecClient は REX_SERVER から socket を引く。rex の外 (REX_SERVER が無い) では既定の場所を使う。
+func TestNewExecClient_Socket(t *testing.T) {
+	t.Setenv("REX_SERVER", "unix:///tmp/x%20y/server.sock")
+	got, err := NewExecClient(staticResolver(nil)).(*execClient).socket()
+	if err != nil || got != "/tmp/x y/server.sock" {
+		t.Errorf("socket = %q, %v", got, err)
 	}
 }

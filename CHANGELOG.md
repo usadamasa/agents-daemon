@@ -1,5 +1,12 @@
 # Changelog
 
+## [2026.1117.2](https://github.com/usadamasa/agents-daemon/compare/2026.1117.1...2026.1117.2) - 2026-11-17
+
+### Refactoring
+- rex の CLI 層を消した後に残った testdata と baseline.json の旧パスを片付ける by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/649
+### Documentation
+- operations.md の既知の制約から「rex の送信は実機で測っていない」を消す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/651
+
 ## [2026.1117.1](https://github.com/usadamasa/agents-daemon/compare/2026.1117.0...2026.1117.1) - 2026-11-17
 
 ### Refactoring

@@ -43,7 +43,7 @@ func (c *execClient) NewWindow(ctx context.Context, session, label, cwd string, 
 	args = append(args, "--cwd", cwd, "--focus=false", "--json", "--", "/bin/sh", "-c", closeOnExitTabScript, "agents-daemon-spawn")
 	args = append(args, argv...)
 	var res windowNewResult
-	if err := c.runJSON(ctx, &res, args...); err != nil {
+	if err := c.cli.RunJSON(ctx, &res, args...); err != nil {
 		return "", err
 	}
 	if len(res.BlockIDs) == 0 {

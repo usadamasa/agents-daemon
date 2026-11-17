@@ -60,7 +60,7 @@ func (c *execClient) NewSession(ctx context.Context, label, cwd string, argv []s
 	if label != "" {
 		args = append(args, "--window", label)
 	}
-	bin, err := c.bin()
+	bin, err := c.cli.Bin()
 	if err != nil {
 		return "", fmt.Errorf("rex session new: %w", err)
 	}
@@ -71,7 +71,7 @@ func (c *execClient) NewSession(ctx context.Context, label, cwd string, argv []s
 	args = append(args, "--json", "--", "/bin/sh", "-c", closeOnExitScript, "agents-daemon-spawn", bin, self)
 	args = append(args, argv...)
 	var res sessionNewResult
-	if err := c.runJSON(ctx, &res, args...); err != nil {
+	if err := c.cli.RunJSON(ctx, &res, args...); err != nil {
 		return "", err
 	}
 	if len(res.InitialWindows) == 0 || len(res.InitialWindows[0].BlockIDs) == 0 {

@@ -1,43 +1,37 @@
-// Package rexcli は rex CLI を叩く multiplexer.Client の実装を提供する。
-// CLI の呼び出しは exec.go、events の購読は watch.go が持つ。応答と events の形、block の状態から
-// multiplexer.Pane への写像は blockstate、doctor の前提点検は premise にある。
+// Package rexcli は rex を操作する multiplexer.Client の実装を提供する。
+// 読み取りは rex server の control API (control) を api.go の接続から呼び、書き込みと events の購読は
+// rex の CLI を fork する (exec.go、watch.go)。応答と events の形、block の状態から multiplexer.Pane への写像は
+// blockstate、doctor の前提点検は premise にある。
 package rexcli
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"os/exec"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rexcli/blockstate"
+	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rexcli/cli"
+	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rexcli/control"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rexcli/premise"
 )
 
-// defaultTimeout は rex コマンド 1 回あたりのタイムアウト。
+// defaultTimeout は rex の呼び出し 1 回あたりのタイムアウト (CLI の起動と API の request のどちらも)。
 const defaultTimeout = 10 * time.Second
-
-// exitTargetNotFound は rex が block や session を解決できなかったときの exit code (実測)。
-// rex-premise: preview.30 cli 存在しない block への block call は exit 3
-const exitTargetNotFound = 3
 
 // SessionResolver は block の ID から Claude Code の session_id への対応を返す。
 // 実体は statusline が `context/<sid>.json` の multiplexer に書いた記録 (sessioncontext.Store.ListMultiplexerBlocks)。
 // PaneList / PaneGet の呼び出しごとに 1 回だけ呼ぶ。
 type SessionResolver func() (map[string]string, error)
 
-// execClient は rex CLI を subprocess として呼び出す multiplexer.Client 実装。
+// execClient は rex を操作する multiplexer.Client 実装。
 type execClient struct {
-	// binMu は binPath を守る。Watch の購読の goroutine と daemon の tick が並んで rex を呼ぶ。
-	binMu sync.Mutex
-	// binPath は解決済みの rex の絶対パス。空なら次の呼び出しで locateBinary が埋める。
-	binPath string
+	// cli は書き込み系と events の購読で rex の CLI を起こす。
+	cli *cli.Runner
+	// timeout は control API の request 1 回の制限時間。0 以下なら課さない (テスト用)。
 	timeout time.Duration
 	// resolve は block_id から session_id を引く (statusline が書いた sidecar)。
 	resolve SessionResolver
@@ -47,13 +41,10 @@ type execClient struct {
 	watchBackoff time.Duration
 	// socket は control API の socket のパスを返す。
 	socket func() (string, error)
+	// apiMu は api を守る。api は使い回す control 接続で、nil なら次の呼び出しで張る。
+	apiMu sync.Mutex
+	api   *control.Conn
 }
-
-// Close は control 接続を閉じる。
-func (c *execClient) Close() error { return nil }
-
-// isNotFound は対象が無いことによる失敗かを返す。
-func isNotFound(err error) bool { return isTargetNotFound(err) }
 
 // NewExecClient は実 rex バイナリを叩く Client を返す。
 // バイナリは最初の呼び出しで PATH から引く。環境変数 REX_BIN_PATH があればそれで固定する。
@@ -62,115 +53,7 @@ func NewExecClient(resolve SessionResolver) multiplexer.Client {
 }
 
 func newExecClientWithTimeout(resolve SessionResolver, timeout time.Duration) *execClient {
-	return &execClient{binPath: os.Getenv("REX_BIN_PATH"), timeout: timeout, resolve: resolve}
-}
-
-// bin は rex の絶対パスを返す。未解決なら PATH から引いて覚える。
-func (c *execClient) bin() (string, error) {
-	c.binMu.Lock()
-	defer c.binMu.Unlock()
-	if c.binPath == "" {
-		bin, err := locateBinary()
-		if err != nil {
-			return "", err
-		}
-		c.binPath = bin
-	}
-	return c.binPath, nil
-}
-
-// forgetBin は覚えていた rex が消えたとき、次の bin で引き直させる。並んだ呼び出しが先に引き直していれば触らない。
-// REX_BIN_PATH で固定していれば引き直しても同じパスになる。
-func (c *execClient) forgetBin(stale string) {
-	c.binMu.Lock()
-	defer c.binMu.Unlock()
-	if c.binPath == stale {
-		c.binPath = ""
-	}
-}
-
-// childEnv は rex に渡す環境。REX_SESSION があると rex は block の解決をその session の中に
-// 閉じるので、daemon が hook 経由で継承した値を外し、完全 ID で全 session の block を引けるようにする。
-func childEnv() []string {
-	env := os.Environ()
-	out := make([]string, 0, len(env))
-	for _, kv := range env {
-		if strings.HasPrefix(kv, "REX_SESSION=") || strings.HasPrefix(kv, "REX_BLOCK=") {
-			continue
-		}
-		out = append(out, kv)
-	}
-	return out
-}
-
-// run は rex を実行し stdout を返す。失敗は stderr を添えた error にする。
-// rex の自動更新で覚えていたバイナリが消えていたら、引き直して同じ呼び出しを 1 回だけやり直す
-// (tick の失敗に数えさせない)。REX_BIN_PATH で固定していれば引き直しても同じパスなので、そのまま失敗を返す。
-func (c *execClient) run(ctx context.Context, args ...string) ([]byte, error) {
-	bin, err := c.bin()
-	if err != nil {
-		return nil, fmt.Errorf("rex %v: %w", args, err)
-	}
-	out, err := c.runWith(ctx, bin, args...)
-	if !binaryVanished(err) {
-		return out, err
-	}
-	c.forgetBin(bin)
-	again, locateErr := c.bin()
-	if locateErr != nil || again == bin {
-		return nil, err
-	}
-	return c.runWith(ctx, again, args...)
-}
-
-// runWith は bin を rex として実行する。timeout が 0 以下なら制限時間を課さない (テスト用)。
-func (c *execClient) runWith(ctx context.Context, bin string, args ...string) ([]byte, error) {
-	runCtx := ctx
-	if c.timeout > 0 {
-		var cancel context.CancelFunc
-		runCtx, cancel = context.WithTimeout(ctx, c.timeout)
-		defer cancel()
-	}
-
-	// server が落ちているときに CLI が起こさないよう、全呼び出しで autostart を切る。
-	// rex-premise: preview.30 cli --autostart は global option で既定 true
-	full := append([]string{"--autostart=false"}, args...)
-	// #nosec G204 -- bin は PATH か REX_BIN_PATH から引いた rex (利用者自身の環境)、args はこの
-	// パッケージ内で組み立てた固定のサブコマンドと block ID のみ。
-	cmd := exec.CommandContext(runCtx, bin, full...)
-	cmd.Env = childEnv()
-	var outBuf, errBuf bytes.Buffer
-	cmd.Stdout = &outBuf
-	cmd.Stderr = &errBuf
-	// 期限超過で kill した後、パイプを継承した孫プロセスで Wait が止まらないようにする。
-	cmd.WaitDelay = 100 * time.Millisecond
-	runErr := cmd.Run()
-
-	if errors.Is(runCtx.Err(), context.DeadlineExceeded) {
-		return nil, fmt.Errorf("rex %v: %s でタイムアウトした: %w", args, c.timeout, runCtx.Err())
-	}
-	if runErr != nil {
-		return nil, fmt.Errorf("rex %v: %w (stderr=%q)", args, runErr, strings.TrimSpace(errBuf.String()))
-	}
-	return outBuf.Bytes(), nil
-}
-
-// runJSON は rex を実行し stdout の JSON を v へ読む。
-func (c *execClient) runJSON(ctx context.Context, v any, args ...string) error {
-	out, err := c.run(ctx, args...)
-	if err != nil {
-		return err
-	}
-	if err := json.Unmarshal(out, v); err != nil {
-		return fmt.Errorf("rex %v: 応答の parse に失敗: %w (stdout=%q)", args, err, out)
-	}
-	return nil
-}
-
-// isTargetNotFound は rex が対象を解決できずに終わった (exit 3) かを判定する。
-func isTargetNotFound(err error) bool {
-	var exitErr *exec.ExitError
-	return errors.As(err, &exitErr) && exitErr.ExitCode() == exitTargetNotFound
+	return &execClient{cli: cli.FromEnv(timeout), timeout: timeout, resolve: resolve, socket: defaultSocket}
 }
 
 type lsResult struct {
@@ -197,19 +80,19 @@ func (c *execClient) PaneList(ctx context.Context) ([]multiplexer.Pane, error) {
 }
 
 // snapshot は全 session の shell の block に program_status と process を打つ。
-// 1 回で `ls` 1 回、session ごとに `block ls` 1 回、shell の block ごとに 2 回の fork になる。
+// 1 回で session.list 1 回、session ごとに list_blocks 1 回、shell の block ごとに 2 回の request になる。
 func (c *execClient) snapshot(ctx context.Context) (map[string]*blockstate.State, error) {
 	var ls lsResult
-	if err := c.runJSON(ctx, &ls, "ls", "--json"); err != nil {
+	if err := c.call(ctx, "session.list", nil, &ls); err != nil {
 		return nil, err
 	}
 	blocks := map[string]*blockstate.State{}
 	for _, s := range ls.Sessions {
 		shells, err := c.shellBlocks(ctx, s.SessionID)
 		if err != nil {
-			// ls の後に閉じた session は読み飛ばす。block の場合と同じく、失敗を返すと session の close だけで
+			// list の後に閉じた session は読み飛ばす。block の場合と同じく、失敗を返すと session の close だけで
 			// daemon が PaneList の連続失敗に数える。
-			if isTargetNotFound(err) {
+			if isNotFound(err) {
 				continue
 			}
 			return nil, err
@@ -217,9 +100,9 @@ func (c *execClient) snapshot(ctx context.Context) (map[string]*blockstate.State
 		for _, id := range shells {
 			st, err := c.fetchBlock(ctx, s.SessionID, id)
 			if err != nil {
-				// block ls の後に閉じた block は読み飛ばす。ここで失敗を返すと daemon が
+				// list_blocks の後に閉じた block は読み飛ばす。ここで失敗を返すと daemon が
 				// PaneList の連続失敗に数え、block の開け閉めだけで終了しかねない。
-				if isTargetNotFound(err) {
+				if isNotFound(err) {
 					continue
 				}
 				return nil, err
@@ -230,12 +113,18 @@ func (c *execClient) snapshot(ctx context.Context) (map[string]*blockstate.State
 	return blocks, nil
 }
 
+// listBlocks は session の block を flavor を問わず返す。
+// rex-premise: preview.30 api session.list_blocks は session の全 window と detached の block を返し、無い session は session_not_found
+func (c *execClient) listBlocks(ctx context.Context, session string) (blockstate.BlockList, error) {
+	var blocks blockstate.BlockList
+	err := c.call(ctx, "session.list_blocks", map[string]any{"session_id": session}, &blocks)
+	return blocks, err
+}
+
 // shellBlocks は session の shell の block の ID を返す。これ以外の block は program_status を持たない。
 func (c *execClient) shellBlocks(ctx context.Context, session string) ([]string, error) {
-	// block ls だけは -s が必須 (無いと exit 2)。
-	// rex-premise: preview.30 cli block ls は -s 必須
-	var blocks blockstate.BlockList
-	if err := c.runJSON(ctx, &blocks, "block", "ls", "-s", session, "--json"); err != nil {
+	blocks, err := c.listBlocks(ctx, session)
+	if err != nil {
 		return nil, err
 	}
 	var ids []string
@@ -252,7 +141,11 @@ func (c *execClient) PaneGet(ctx context.Context, paneID string) (multiplexer.Pa
 	if err != nil {
 		return multiplexer.Pane{}, fmt.Errorf("block と session の対応の読み込みに失敗: %w", err)
 	}
-	st, err := c.fetchBlock(ctx, "", paneID)
+	session, err := c.blockSession(ctx, paneID)
+	if err != nil {
+		return multiplexer.Pane{}, err
+	}
+	st, err := c.fetchBlock(ctx, session, paneID)
 	if err != nil {
 		return multiplexer.Pane{}, err
 	}
@@ -260,35 +153,49 @@ func (c *execClient) PaneGet(ctx context.Context, paneID string) (multiplexer.Pa
 }
 
 // fetchBlock は 1 block に program_status と process を打つ。
+// rex-premise: preview.30 api program_status と process の結果は CLI の block call と同じ形
 func (c *execClient) fetchBlock(ctx context.Context, session, blockID string) (*blockstate.State, error) {
 	st := &blockstate.State{Session: session}
-	if err := c.runJSON(ctx, &st.ProgramStatus, "block", "call", "-b", blockID, "program_status"); err != nil {
+	if err := c.blockCall(ctx, session, blockID, "program_status", nil, &st.ProgramStatus); err != nil {
 		return nil, err
 	}
-	if err := c.runJSON(ctx, &st.Process, "block", "call", "-b", blockID, "process"); err != nil {
+	if err := c.blockCall(ctx, session, blockID, "process", nil, &st.Process); err != nil {
 		return nil, err
 	}
 	return st, nil
 }
 
+// formatResult は format の応答。
+type formatResult struct {
+	Content string `json:"content"`
+}
+
 // PaneRead は block の画面を返す。Claude Code は alternate screen で描くので、Claude の block では
 // 可視の行数で頭打ちになる (alternate screen でない block では scrollback も返る)。
 // opts.Lines > 0 なら末尾 Lines 行に絞る。opts.Styled なら制御シーケンスを保つ。
-// rex-premise: preview.30 cli capture は alternate screen では可視の行だけ、通常の画面では scrollback も返す。--trim と --unwrap がある
-// rex-premise: preview.30 cli capture --format=vt は制御シーケンス (SGR、CR) を保つ
+// content の末尾に改行を 1 つ足し、CLI の capture と同じ形にする (tailLines と検知は末尾の改行のある画面で書いた)。
+// format の trim は行末の空白を消す。CLI の capture --trim も同じ trim を送っており、出力は content と改行 1 つで
+// バイト単位で一致する (2026-11-17 に text と vt の両方で実測)。
+// rex-premise: preview.30 api format は alternate screen では可視の行だけ、通常の画面では scrollback も返す。content は末尾に改行を持たない
+// rex-premise: preview.30 api format の vt は制御シーケンス (SGR、CR) を保つ
 func (c *execClient) PaneRead(ctx context.Context, paneID string, opts multiplexer.PaneReadOptions) (string, error) {
-	args := []string{"capture", "-b", paneID, "--trim", "--unwrap"}
-	if opts.Styled {
-		args = append(args, "--format=vt")
-	}
-	out, err := c.run(ctx, args...)
+	session, err := c.blockSession(ctx, paneID)
 	if err != nil {
 		return "", err
 	}
-	if opts.Lines > 0 {
-		return tailLines(string(out), opts.Lines), nil
+	args := map[string]any{"trim": true, "unwrap": true}
+	if opts.Styled {
+		args["format"] = "vt"
 	}
-	return string(out), nil
+	var res formatResult
+	if err := c.blockCall(ctx, session, paneID, "format", args, &res); err != nil {
+		return "", err
+	}
+	out := res.Content + "\n"
+	if opts.Lines > 0 {
+		return tailLines(out, opts.Lines), nil
+	}
+	return out, nil
 }
 
 type sizeResult struct {
@@ -302,15 +209,19 @@ type modesResult struct {
 
 // PaneGeometry は size と modes の 2 回で block の高さと screen を返す。modes は idle の terminal を起こさない
 // (changelog)。
-// rex-premise: preview.30 cli block call size は rows と columns を返す
-// rex-premise: preview.30 cli block call modes は screen (primary / alternate) を返す
+// rex-premise: preview.30 api size は rows と columns を返す
+// rex-premise: preview.30 api modes は screen (primary / alternate) を返す
 func (c *execClient) PaneGeometry(ctx context.Context, paneID string) (multiplexer.Geometry, error) {
+	session, err := c.blockSession(ctx, paneID)
+	if err != nil {
+		return multiplexer.Geometry{}, err
+	}
 	var size sizeResult
-	if err := c.runJSON(ctx, &size, "block", "call", "-b", paneID, "size"); err != nil {
+	if err := c.blockCall(ctx, session, paneID, "size", nil, &size); err != nil {
 		return multiplexer.Geometry{}, err
 	}
 	var modes modesResult
-	if err := c.runJSON(ctx, &modes, "block", "call", "-b", paneID, "modes"); err != nil {
+	if err := c.blockCall(ctx, session, paneID, "modes", nil, &modes); err != nil {
 		return multiplexer.Geometry{}, err
 	}
 	return multiplexer.Geometry{Rows: size.Rows, Columns: size.Columns, AlternateScreen: modes.Screen == blockstate.ScreenAlternate}, nil
@@ -331,12 +242,12 @@ func tailLines(s string, n int) string {
 }
 
 func (c *execClient) SendText(ctx context.Context, paneID, text string) error {
-	_, err := c.run(ctx, "send", "-b", paneID, text)
+	_, err := c.cli.Run(ctx, "send", "-b", paneID, text)
 	return err
 }
 
 func (c *execClient) SendKeys(ctx context.Context, paneID string, keys ...string) error {
-	_, err := c.run(ctx, append([]string{"send-key", "-b", paneID}, keys...)...)
+	_, err := c.cli.Run(ctx, append([]string{"send-key", "-b", paneID}, keys...)...)
 	return err
 }
 
@@ -347,28 +258,18 @@ type serverStatusResult struct {
 // CheckPremises は doctor の前提点検 (multiplexer.PremiseChecker)。点検の中身は premise が持ち、rex はこの Client と
 // 同じ呼び方で打つ。
 func (c *execClient) CheckPremises(ctx context.Context, blockID, sessionID string) []multiplexer.PremiseFinding {
-	return premise.Check(ctx, premiseRunner{c}, blockID, sessionID)
+	return premise.Check(ctx, premiseRunner{c.cli}, blockID, sessionID)
 }
 
-// premiseRunner は execClient を premise.Runner として渡す。execClient の公開の口を増やさないための包み。
-type premiseRunner struct{ c *execClient }
+// premiseRunner は CLI の Runner に exit 3 の判定を足して premise.Runner にする。
+type premiseRunner struct{ *cli.Runner }
 
-func (r premiseRunner) Run(ctx context.Context, args ...string) ([]byte, error) {
-	return r.c.run(ctx, args...)
-}
+func (premiseRunner) TargetNotFound(err error) bool { return cli.TargetNotFound(err) }
 
-func (r premiseRunner) TargetNotFound(err error) bool { return isTargetNotFound(err) }
-
-func (r premiseRunner) BinPath() string {
-	r.c.binMu.Lock()
-	defer r.c.binMu.Unlock()
-	return r.c.binPath
-}
-
-// Reachable は `api call server.status` で rex server の生死を確かめる。
+// Reachable は server.status で rex server の生死を確かめる。
 func (c *execClient) Reachable(ctx context.Context) error {
 	var st serverStatusResult
-	if err := c.runJSON(ctx, &st, "api", "call", "server.status"); err != nil {
+	if err := c.call(ctx, "server.status", nil, &st); err != nil {
 		return err
 	}
 	if st.PID <= 0 {

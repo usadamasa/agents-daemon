@@ -55,7 +55,7 @@ func TestDialSendsHelloWithRevisionAndClient(t *testing.T) {
 		h.Client.Name != "agents-daemon" || h.Client.Version != "1.2.3" {
 		t.Errorf("hello = %s", hellos[0])
 	}
-	if got := c.Welcome().APIRevision; got != 14 {
+	if got := c.WelcomeRevision(); got != 14 {
 		t.Errorf("welcome の api_revision = %d、14 のはず", got)
 	}
 }
@@ -120,9 +120,8 @@ func TestCallReturnsServerError(t *testing.T) {
 	srv.Fail("server.status", &controltest.Error{Code: "internal", Message: "boom", Status: 500})
 
 	err := c.Call(callCtx(t), "com.superlogical.terminal.program_status", map[string]any{"session_id": "s", "block_id": "block:x"}, nil)
-	var apiErr *control.Error
-	if !errors.As(err, &apiErr) || apiErr.Code != "not_found" || apiErr.Status != 404 {
-		t.Fatalf("error = %v、not_found の *control.Error のはず", err)
+	if code, status := control.ErrorCode(err); code != "not_found" || status != 404 {
+		t.Fatalf("error = %v、not_found (404) のはず", err)
 	}
 	if !control.IsNotFound(err) {
 		t.Error("not_found を IsNotFound が拾わない")
@@ -145,8 +144,7 @@ func TestCallBeforeAttachIsConflict(t *testing.T) {
 	srv.Reply("com.superlogical.terminal.size", map[string]any{"rows": 1})
 	c := dial(t, srv, control.Options{})
 	err := c.Call(callCtx(t), "com.superlogical.terminal.size", map[string]any{"session_id": "s", "block_id": "b"}, nil)
-	var apiErr *control.Error
-	if !errors.As(err, &apiErr) || apiErr.Code != "conflict" {
+	if code, _ := control.ErrorCode(err); code != "conflict" {
 		t.Fatalf("attach 前の error = %v、conflict のはず", err)
 	}
 }

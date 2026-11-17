@@ -2,7 +2,6 @@ package control_test
 
 import (
 	"context"
-	"errors"
 	"os"
 	"testing"
 	"time"
@@ -28,7 +27,7 @@ func TestRealServer(t *testing.T) {
 		t.Skipf("rex server に繋がらないので skip する: %v", err)
 	}
 	defer func() { _ = c.Close() }()
-	if got := c.Welcome().APIRevision; got != control.APIRevision {
+	if got := c.WelcomeRevision(); got != control.APIRevision {
 		t.Errorf("welcome の api_revision = %d、名乗った %d のはず", got, control.APIRevision)
 	}
 
@@ -58,8 +57,7 @@ func TestRealServer(t *testing.T) {
 	session := list.Sessions[0].SessionID
 	err = c.Call(ctx, "com.superlogical.terminal.program_status",
 		map[string]any{"session_id": session, "block_id": "block:01a12599-0000-7000-8000-000000000001"}, nil)
-	var apiErr *control.Error
-	if !errors.As(err, &apiErr) || !control.IsNotFound(err) {
-		t.Errorf("無い block の error = %v、not found の *control.Error のはず", err)
+	if code, _ := control.ErrorCode(err); code != "not_found" || !control.IsNotFound(err) {
+		t.Errorf("無い block の error = %v、not_found のはず", err)
 	}
 }

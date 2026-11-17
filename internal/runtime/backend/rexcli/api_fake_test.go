@@ -6,6 +6,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rexcli/cli"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rexcli/control/controltest"
 )
 
@@ -210,12 +211,12 @@ func (f *fakeAPI) assertCalls(t *testing.T, want ...string) {
 
 // apiClient は fake の API だけに繋ぐ Client。CLI を叩く method は fake の rex が無いので失敗する。
 func (f *fakeAPI) client(resolve SessionResolver) *execClient {
-	return &execClient{binPath: "/nonexistent/rex", timeout: noCommandTimeout, resolve: resolve, socket: fixedSocket(f.srv.Path)}
+	return &execClient{cli: cli.New("/nonexistent/rex", noCommandTimeout), timeout: noCommandTimeout, resolve: resolve, socket: fixedSocket(f.srv.Path)}
 }
 
 // clientWith は fake の rex (書き込みと購読) と fake の API (読み取り) の両方に繋ぐ Client。
 func (f *fakeAPI) clientWith(rex *fakeRex, resolve SessionResolver) *execClient {
-	return &execClient{binPath: rex.bin, timeout: noCommandTimeout, resolve: resolve, socket: fixedSocket(f.srv.Path)}
+	return &execClient{cli: cli.New(rex.bin, noCommandTimeout), timeout: noCommandTimeout, resolve: resolve, socket: fixedSocket(f.srv.Path)}
 }
 
 func fixedSocket(path string) func() (string, error) {

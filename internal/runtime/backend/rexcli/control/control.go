@@ -30,24 +30,24 @@ const minMessageBytes = 64 * 1024
 // errClosed は Close の後の呼び出しの失敗。
 var errClosed = errors.New("rex の control 接続は閉じている")
 
-// Error は server が response の error で返した失敗。分岐は Code で行い、Message は人向けの文面。
-type Error struct {
-	Method  string
-	Code    string
-	Message string
-	Status  int
+// apiError は server が response の error で返した失敗。分岐は code で行い、message は人向けの文面。
+type apiError struct {
+	method  string
+	code    string
+	message string
+	status  int
 }
 
-func (e *Error) Error() string {
-	return fmt.Sprintf("rex %s: %s (%s, status %d)", e.Method, e.Message, e.Code, e.Status)
+func (e *apiError) Error() string {
+	return fmt.Sprintf("rex %s: %s (%s, status %d)", e.method, e.message, e.code, e.status)
 }
 
 // IsNotFound は err が対象 (block、window、session) が無いことによる失敗かを返す。
 // 閉じた block や session を読み飛ばす判定に使う。
 // rex-premise: preview.30 api 無い block は not_found、無い session は session_not_found (status 404)
 func IsNotFound(err error) bool {
-	var e *Error
-	return errors.As(err, &e) && (e.Code == "not_found" || e.Code == "session_not_found")
+	var e *apiError
+	return errors.As(err, &e) && (e.code == "not_found" || e.code == "session_not_found")
 }
 
 // Options は Dial の設定。
@@ -57,16 +57,16 @@ type Options struct {
 	ClientVersion string
 }
 
-// Welcome は server が hello に返した welcome のうち、client が使うもの。
-type Welcome struct {
-	APIRevision     int
-	MaxMessageBytes int
+// welcome は server が hello に返した welcome のうち、client が使うもの。
+type welcome struct {
+	apiRevision     int
+	maxMessageBytes int
 }
 
 // Conn は control 接続 1 本。method は並んで呼べる。
 type Conn struct {
 	ws      *websocket.Conn
-	welcome Welcome
+	welcome welcome
 	nextID  atomic.Uint64
 
 	mu      sync.Mutex
@@ -79,7 +79,7 @@ type Conn struct {
 
 type response struct {
 	payload json.RawMessage
-	err     *Error
+	err     *apiError
 }
 
 // message は server が送る message の、種類を見分けるのに要る欄。
@@ -118,17 +118,17 @@ func Dial(ctx context.Context, socketPath string, opts Options) (*Conn, error) {
 	if err != nil {
 		return nil, fmt.Errorf("rex の control 接続 (%s) を張れない: %w", socketPath, err)
 	}
-	welcome, err := handshake(ctx, ws, opts)
+	w, err := handshake(ctx, ws, opts)
 	if err != nil {
 		_ = ws.CloseNow()
 		return nil, err
 	}
-	ws.SetReadLimit(int64(welcome.MaxMessageBytes))
+	ws.SetReadLimit(int64(w.maxMessageBytes))
 
 	readCtx, cancel := context.WithCancel(context.Background())
 	c := &Conn{
 		ws:      ws,
-		welcome: welcome,
+		welcome: w,
 		pending: map[string]chan response{},
 		done:    make(chan struct{}),
 		cancel:  cancel,
@@ -138,36 +138,34 @@ func Dial(ctx context.Context, socketPath string, opts Options) (*Conn, error) {
 }
 
 // handshake は hello を送り、welcome の type と protocol を確かめる。
-func handshake(ctx context.Context, ws *websocket.Conn, opts Options) (Welcome, error) {
+func handshake(ctx context.Context, ws *websocket.Conn, opts Options) (welcome, error) {
 	hello, err := json.Marshal(map[string]any{
 		"type":         "hello",
 		"api_revision": APIRevision,
 		"client":       map[string]any{"kind": "agent", "name": opts.ClientName, "version": opts.ClientVersion},
 	})
 	if err != nil {
-		return Welcome{}, err
+		return welcome{}, err
 	}
 	if err := ws.Write(ctx, websocket.MessageText, hello); err != nil {
-		return Welcome{}, fmt.Errorf("rex へ hello を送れない: %w", err)
+		return welcome{}, fmt.Errorf("rex へ hello を送れない: %w", err)
 	}
 	_, b, err := ws.Read(ctx)
 	if err != nil {
-		return Welcome{}, fmt.Errorf("rex から welcome を受けられない: %w", err)
+		return welcome{}, fmt.Errorf("rex から welcome を受けられない: %w", err)
 	}
 	var m message
 	if err := json.Unmarshal(b, &m); err != nil {
-		return Welcome{}, fmt.Errorf("rex の welcome を読めない: %w", err)
+		return welcome{}, fmt.Errorf("rex の welcome を読めない: %w", err)
 	}
 	if m.Type != "welcome" || m.Protocol != subprotocol {
-		return Welcome{}, fmt.Errorf("rex の最初の message が %s の welcome でない (type=%q protocol=%q)", subprotocol, m.Type, m.Protocol)
+		return welcome{}, fmt.Errorf("rex の最初の message が %s の welcome でない (type=%q protocol=%q)", subprotocol, m.Type, m.Protocol)
 	}
-	return Welcome{APIRevision: m.APIRevision, MaxMessageBytes: max(m.Limits.MaxMessageBytes, minMessageBytes)}, nil
+	return welcome{apiRevision: m.APIRevision, maxMessageBytes: max(m.Limits.MaxMessageBytes, minMessageBytes)}, nil
 }
 
-// Welcome は server が welcome で返した値。
-func (c *Conn) Welcome() Welcome { return c.welcome }
-
-// Call は method を呼び、response の payload を out へ読む (out が nil なら読まない)。server の失敗は *Error で返す。
+// Call は method を呼び、response の payload を out へ読む (out が nil なら読まない)。server の失敗は code を持つ
+// error で返し、対象が無い失敗は IsNotFound で見分ける。
 // ctx が終われば待つのをやめる (server は request を走らせ終えることがある)。
 func (c *Conn) Call(ctx context.Context, method string, payload, out any) error {
 	id := strconv.FormatUint(c.nextID.Add(1), 10)
@@ -203,7 +201,7 @@ func (c *Conn) Call(ctx context.Context, method string, payload, out any) error 
 	case r := <-ch:
 		if r.err != nil {
 			e := *r.err
-			e.Method = method
+			e.method = method
 			return &e
 		}
 		if out == nil {
@@ -283,7 +281,7 @@ func (c *Conn) deliver(m message) {
 	}
 	r := response{payload: m.Payload}
 	if m.Error != nil {
-		r.err = &Error{Code: m.Error.Code, Message: m.Error.Message, Status: m.Error.Status}
+		r.err = &apiError{code: m.Error.Code, message: m.Error.Message, status: m.Error.Status}
 	}
 	ch <- r
 }

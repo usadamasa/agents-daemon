@@ -1,4 +1,4 @@
-package rexcli
+package cli
 
 import (
 	"errors"
@@ -71,8 +71,8 @@ func newestBuildIn(versions string) (bin string, ok bool) {
 	return bin, best >= 0
 }
 
-// binaryVanished は rex の呼び出しが「バイナリが無い」で落ちたかを判定する。名前で探して無いときは
+// Vanished は rex の起動が「バイナリが無い」で落ちたかを判定する。名前で探して無いときは
 // exec.ErrNotFound、覚えていた絶対パスが消えていたときは fs.ErrNotExist になる。
-func binaryVanished(err error) bool {
+func Vanished(err error) bool {
 	return errors.Is(err, exec.ErrNotFound) || errors.Is(err, fs.ErrNotExist)
 }

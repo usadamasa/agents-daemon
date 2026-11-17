@@ -16,6 +16,7 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rexcli/blockstate"
+	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rexcli/cli"
 )
 
 // fake の rex に渡す ID。session と Claude の block は 2026-10-10 の実測、閉じた block と shell 以外の block は作り物。
@@ -164,7 +165,7 @@ func splitArgs(t *testing.T, lines []string) [][]string {
 }
 
 func (f *fakeRex) client(resolve SessionResolver) *execClient {
-	return &execClient{binPath: f.bin, timeout: noCommandTimeout, resolve: resolve}
+	return &execClient{cli: cli.New(f.bin, noCommandTimeout), timeout: noCommandTimeout, resolve: resolve}
 }
 
 // noCommandTimeout はタイムアウトを課さない。fake の shell 起動の遅れでテストが落ちないようにする。
@@ -679,7 +680,7 @@ func TestExecClient_Timeout(t *testing.T) {
 	if err := os.WriteFile(bin, []byte("#!/bin/sh\nsleep 2\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	c := &execClient{binPath: bin, timeout: 50 * time.Millisecond, resolve: staticResolver(nil)}
+	c := &execClient{cli: cli.New(bin, 50*time.Millisecond), resolve: staticResolver(nil)}
 	start := time.Now()
 	err := c.SessionKill(context.Background(), sessionA)
 	if err == nil || !strings.Contains(err.Error(), "タイムアウト") {
@@ -692,13 +693,13 @@ func TestExecClient_Timeout(t *testing.T) {
 
 func TestNewExecClient_BinPath(t *testing.T) {
 	t.Setenv("REX_BIN_PATH", "/custom/rex")
-	if c := NewExecClient(staticResolver(nil)).(*execClient); c.binPath != "/custom/rex" || c.timeout != 10*time.Second {
-		t.Errorf("binPath = %q, timeout = %v, want /custom/rex, 10s", c.binPath, c.timeout)
+	if c := NewExecClient(staticResolver(nil)).(*execClient); c.cli.BinPath() != "/custom/rex" || c.timeout != 10*time.Second {
+		t.Errorf("binPath = %q, timeout = %v, want /custom/rex, 10s", c.cli.BinPath(), c.timeout)
 	}
 	// 未設定なら最初の呼び出しで PATH から引く (daemon の起動時点で rex が無くても Client は作れる)。
 	t.Setenv("REX_BIN_PATH", "")
-	if c := NewExecClient(staticResolver(nil)).(*execClient); c.binPath != "" {
-		t.Errorf("binPath = %q, want 空 (未解決)", c.binPath)
+	if c := NewExecClient(staticResolver(nil)).(*execClient); c.cli.BinPath() != "" {
+		t.Errorf("binPath = %q, want 空 (未解決)", c.cli.BinPath())
 	}
 }
 

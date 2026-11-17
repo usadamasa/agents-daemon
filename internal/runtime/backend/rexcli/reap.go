@@ -3,17 +3,14 @@ package rexcli
 import (
 	"context"
 	"errors"
-
-	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rexcli/blockstate"
 )
 
 // SessionBlocks は session の block を flavor を問わず数える (daemon が空になった起こした session を閉じる。#557)。
-// 購読の cache は shell の block しか持たないので、毎回 block ls で引く。session が無ければ found=false。
-// rex-premise: preview.30 cli block ls -s は session の全 window の block を返し、無い session は exit 3
+// 購読の cache は shell の block しか持たないので、毎回 list_blocks で引く。session が無ければ found=false。
 func (c *execClient) SessionBlocks(ctx context.Context, sessionID string) (n int, found bool, err error) {
-	var blocks blockstate.BlockList
-	if err := c.runJSON(ctx, &blocks, "block", "ls", "-s", sessionID, "--json"); err != nil {
-		if isTargetNotFound(err) {
+	blocks, err := c.listBlocks(ctx, sessionID)
+	if err != nil {
+		if isNotFound(err) {
 			return 0, false, nil
 		}
 		return 0, false, err
@@ -27,6 +24,6 @@ func (c *execClient) SessionKill(ctx context.Context, sessionID string) error {
 	if sessionID == "" {
 		return errors.New("rex session kill: session ID が空")
 	}
-	_, err := c.run(ctx, "session", "kill", sessionID)
+	_, err := c.cli.Run(ctx, "session", "kill", sessionID)
 	return err
 }

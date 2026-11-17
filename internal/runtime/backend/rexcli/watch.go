@@ -14,6 +14,7 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rexcli/blockstate"
+	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rexcli/cli"
 )
 
 const (
@@ -191,7 +192,7 @@ func (c *execClient) applyLine(ctx context.Context, cache *blockstate.Cache, mu 
 func (c *execClient) fetchCreated(ctx context.Context, ref blockstate.Ref) (map[string]*blockstate.State, error) {
 	shells, err := c.shellBlocks(ctx, ref.Session)
 	if err != nil {
-		if isTargetNotFound(err) {
+		if isNotFound(err) {
 			return nil, nil
 		}
 		return nil, err
@@ -205,7 +206,7 @@ func (c *execClient) fetchCreated(ctx context.Context, ref blockstate.Ref) (map[
 	created := map[string]*blockstate.State{}
 	for _, id := range shells {
 		st, err := c.fetchBlock(ctx, ref.Session, id)
-		if isTargetNotFound(err) {
+		if isNotFound(err) {
 			continue
 		}
 		if err != nil {
@@ -217,7 +218,8 @@ func (c *execClient) fetchCreated(ctx context.Context, ref blockstate.Ref) (map[
 }
 
 // awaitFirstLine は購読が始まった (server が event を流し始めた) ことを最初の行で確かめる。rex の CLI の呼び出しは
-// それだけで client_joined を流すので、待っても来なければ 1 回呼んで起こす。
+// それだけで client_joined を流すので、待っても来なければ CLI を 1 回呼んで起こす (control API の呼び出しは
+// 張ったままの接続を使うので client_joined を流さない)。
 func (c *execClient) awaitFirstLine(ctx context.Context, stream *eventStream) error {
 	for attempt := 0; ; attempt++ {
 		select {
@@ -231,7 +233,7 @@ func (c *execClient) awaitFirstLine(ctx context.Context, stream *eventStream) er
 			if attempt > 0 {
 				return fmt.Errorf("rex events が %s 待っても流れない", 2*firstLineWait)
 			}
-			if err := c.Reachable(ctx); err != nil {
+			if _, err := c.cli.Run(ctx, "api", "call", "server.status"); err != nil {
 				return err
 			}
 		}
@@ -254,13 +256,13 @@ type eventStream struct {
 // startEvents は events を起こす。覚えていた rex が消えていたら、次の張り直しで引き直させる。
 // rex-premise: preview.30 cli events --all --json は全 session の block_event を 1 行 1 event で server が切れるまで流す
 func (c *execClient) startEvents(ctx context.Context) (*eventStream, error) {
-	bin, err := c.bin()
+	bin, err := c.cli.Bin()
 	if err != nil {
 		return nil, err
 	}
 	// #nosec G204 -- bin は PATH か REX_BIN_PATH から引いた rex、引数は固定。
 	cmd := exec.CommandContext(ctx, bin, "--autostart=false", "events", "--all", "--json")
-	cmd.Env = childEnv()
+	cmd.Env = cli.Env()
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, fmt.Errorf("rex events: %w", err)
@@ -275,8 +277,8 @@ func (c *execClient) startEvents(ctx context.Context) (*eventStream, error) {
 	cmd.Stderr = s.stderr
 	cmd.WaitDelay = 100 * time.Millisecond
 	if err := cmd.Start(); err != nil {
-		if binaryVanished(err) {
-			c.forgetBin(bin)
+		if cli.Vanished(err) {
+			c.cli.Forget(bin)
 		}
 		return nil, fmt.Errorf("rex events: %w", err)
 	}

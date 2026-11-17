@@ -1,4 +1,4 @@
-package rexcli
+package cli
 
 import (
 	"context"
@@ -18,16 +18,30 @@ func versionsDir(root, build string) string {
 	return filepath.Join(root, "Versions", build, versionsBinDir)
 }
 
-// searchPath は dirs を PATH の形に繋ぐ。fake の rex (sh script) が使う sed と cat が引けるよう /usr/bin と /bin を後ろに足す。
+// searchPath は dirs を PATH の形に繋ぐ。fake の rex (sh script) が使うコマンドが引けるよう /usr/bin と /bin を後ろに足す。
 func searchPath(dirs ...string) string {
 	return strings.Join(append(dirs, "/usr/bin", "/bin"), string(os.PathListSeparator))
 }
 
-// fakeRexInVersions は build のディレクトリに fake の rex を置く。fixture は root/fixtures から読むので、
-// build のディレクトリを rename しても応答は変わらない。
-func fakeRexInVersions(t *testing.T, root, build string) *fakeRex {
+// writeRex は bin に、受けた引数を log へ 1 行ずつ追記して exit 0 する fake の rex を書く。
+// log は bin の置き場とは別のディレクトリに置くので、build のディレクトリを rename しても追記先は変わらない。
+func writeRex(t *testing.T, bin, log string) {
 	t.Helper()
-	return newFakeRexAt(t, filepath.Join(root, "fixtures"), filepath.Join(versionsDir(root, build), "rex"))
+	if err := os.MkdirAll(filepath.Dir(bin), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	script := "#!/bin/sh\necho \"$*\" >> '" + log + "'\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// rexInVersions は build のディレクトリに fake の rex を置き、そのパスを返す。
+func rexInVersions(t *testing.T, root, build string) string {
+	t.Helper()
+	bin := filepath.Join(versionsDir(root, build), "rex")
+	writeRex(t, bin, filepath.Join(root, "calls.log"))
+	return bin
 }
 
 // launchdPath は Finder や Dock から起きた .app が受け取る PATH。rex の項を持たない。
@@ -58,11 +72,13 @@ func TestLocateBinary(t *testing.T) {
 
 	t.Run("PATH にあれば絶対パスで返す", func(t *testing.T) {
 		t.Setenv("REX_BIN_PATH", "")
-		f := newFakeRex(t)
-		t.Setenv("PATH", filepath.Dir(f.bin))
+		dir := t.TempDir()
+		bin := filepath.Join(dir, "rex")
+		writeRex(t, bin, filepath.Join(dir, "calls.log"))
+		t.Setenv("PATH", dir)
 		got, err := locateBinary()
-		if err != nil || got != f.bin {
-			t.Fatalf("locateBinary() = %q, %v; want %q", got, err, f.bin)
+		if err != nil || got != bin {
+			t.Fatalf("locateBinary() = %q, %v; want %q", got, err, bin)
 		}
 	})
 
@@ -71,7 +87,7 @@ func TestLocateBinary(t *testing.T) {
 		t.Setenv("REX_BIN_PATH", "")
 		isolateHome(t)
 		root := t.TempDir()
-		fakeRexInVersions(t, root, "1203")
+		rexInVersions(t, root, "1203")
 		t.Setenv("PATH", searchPath(versionsDir(root, "100")))
 		_, err := locateBinary()
 		if !errors.Is(err, exec.ErrNotFound) {
@@ -83,8 +99,8 @@ func TestLocateBinary(t *testing.T) {
 	t.Run("PATH に rex が無ければ既定の置き場の Current を引く", func(t *testing.T) {
 		t.Setenv("REX_BIN_PATH", "")
 		root := installedVersions(isolateHome(t))
-		fakeRexInVersions(t, filepath.Dir(root), "1973")
-		want := fakeRexInVersions(t, filepath.Dir(root), "Current").bin
+		rexInVersions(t, filepath.Dir(root), "1973")
+		want := rexInVersions(t, filepath.Dir(root), "Current")
 		t.Setenv("PATH", launchdPath)
 		got, err := locateBinary()
 		if err != nil || got != want {
@@ -97,8 +113,8 @@ func TestLocateBinary(t *testing.T) {
 		root := filepath.Dir(installedVersions(isolateHome(t)))
 		// 999 と 1203 は rex を持ち、1300 はダウンロード途中でまだ無い。辞書順なら 999 が勝つが数値順で 1203。
 		// .staging-… (ダウンロードの途中経過) は数字名でないので候補にしない。
-		fakeRexInVersions(t, root, "999")
-		want := fakeRexInVersions(t, root, "1203").bin
+		rexInVersions(t, root, "999")
+		want := rexInVersions(t, root, "1203")
 		for _, dir := range []string{versionsDir(root, "1300"), versionsDir(root, ".staging-659F4200")} {
 			if err := os.MkdirAll(dir, 0o755); err != nil {
 				t.Fatal(err)
@@ -123,45 +139,48 @@ func TestLocateBinary(t *testing.T) {
 }
 
 // rex の自動更新で旧 build のディレクトリが消えても、同じ呼び出しが既定の置き場から引き直した rex で通る。
-func TestExecClient_RelocatesWhenBinaryVanishes(t *testing.T) {
+func TestRunner_RelocatesWhenBinaryVanishes(t *testing.T) {
 	t.Setenv("REX_BIN_PATH", "")
 	root := filepath.Dir(installedVersions(isolateHome(t)))
-	f := fakeRexInVersions(t, root, "100")
+	rexInVersions(t, root, "100")
 	t.Setenv("PATH", searchPath(versionsDir(root, "100")))
 
-	c := newExecClientWithTimeout(staticResolver(nil), noCommandTimeout)
-	if err := c.SessionKill(context.Background(), sessionA); err != nil {
-		t.Fatalf("更新前の SessionKill() error = %v", err)
+	r := FromEnv(0)
+	if _, err := r.Run(context.Background(), "session", "kill", "session:a"); err != nil {
+		t.Fatalf("更新前の Run() error = %v", err)
 	}
 	if err := os.Rename(filepath.Join(root, "Versions", "100"), filepath.Join(root, "Versions", "101")); err != nil {
 		t.Fatal(err)
 	}
-	if err := c.SessionKill(context.Background(), sessionA); err != nil {
-		t.Fatalf("更新後の SessionKill() error = %v", err)
+	if _, err := r.Run(context.Background(), "session", "kill", "session:a"); err != nil {
+		t.Fatalf("更新後の Run() error = %v", err)
 	}
-	if want := filepath.Join(versionsDir(root, "101"), "rex"); c.binPath != want {
-		t.Errorf("binPath = %q, want %q", c.binPath, want)
+	if want := filepath.Join(versionsDir(root, "101"), "rex"); r.BinPath() != want {
+		t.Errorf("BinPath() = %q, want %q", r.BinPath(), want)
 	}
-	f.assertCalls(t,
-		"--autostart=false session kill "+sessionA,
-		"--autostart=false session kill "+sessionA,
-	)
+	b, err := os.ReadFile(filepath.Join(root, "calls.log")) // #nosec G304 -- テストの一時ディレクトリ
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(b), strings.Repeat("--autostart=false session kill session:a\n", 2); got != want {
+		t.Errorf("calls = %q, want %q", got, want)
+	}
 }
 
 // REX_BIN_PATH で固定したときは引き直さず、そのまま失敗を返す。
-func TestExecClient_PinnedBinPathIsNotRelocated(t *testing.T) {
+func TestRunner_PinnedBinPathIsNotRelocated(t *testing.T) {
 	root := t.TempDir()
-	f := fakeRexInVersions(t, root, "100")
-	fakeRexInVersions(t, root, "101")
-	t.Setenv("REX_BIN_PATH", f.bin)
+	bin := rexInVersions(t, root, "100")
+	rexInVersions(t, root, "101")
+	t.Setenv("REX_BIN_PATH", bin)
 	t.Setenv("PATH", searchPath(versionsDir(root, "100")))
 
-	c := newExecClientWithTimeout(staticResolver(nil), noCommandTimeout)
+	r := FromEnv(0)
 	if err := os.RemoveAll(filepath.Join(root, "Versions", "100")); err != nil {
 		t.Fatal(err)
 	}
-	err := c.SessionKill(context.Background(), sessionA)
+	_, err := r.Run(context.Background(), "session", "kill", "session:a")
 	if !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("SessionKill() error = %v, want os.ErrNotExist (引き直さない)", err)
+		t.Fatalf("Run() error = %v, want os.ErrNotExist (引き直さない)", err)
 	}
 }

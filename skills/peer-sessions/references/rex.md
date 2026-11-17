@@ -105,7 +105,7 @@ rex window new -s "$REX_SESSION" <作業名> --cwd "<cwd>" --focus=false --json 
 閉じ、最後の pane を失ったタブは rex が閉じるので、ほかのタブは残る。包みが渡す
 `AGENTS_DAEMON_SHARED_REX_SESSION` を plugin の SessionStart hook が見て、起きた claude に
 `rex session rename` を打たず自分のタブにだけ名前を付ける案内を出す。rex の hook の案内は利用者の settings
-にあり、plugin からは止められない。本文は spawn の `closeOnExitTabScript` (`rexcli`) と同じにする。
+にあり、plugin からは止められない。本文は spawn の `closeOnExitTabScript` (agents-daemon の `rex` パッケージ) と同じにする。
 
 渡したい `session_id` が `session target "..." not found` で見つからなければ、その session は既に閉じている。
 新しい session へは逃げず、自分の `"$REX_SESSION"` のタブへ倒す (SKILL.md「足し先の session を決める」)。
@@ -143,7 +143,7 @@ rename するよう案内する。label が既に作業を表していればそ�
 `/bin/sh -c` の包みは、claude が終わったとき session に残る block が自分だけなら session を閉じる。rex は中の
 コマンドが終わっても session を閉じない。異常終了では終わり方を出して Enter を待ち、それまで失敗の画面が残る。
 起こす前に session の印を書くので、ほかの pane が残っていて閉じられなかった session も、pane が空になると
-daemon が閉じる。本文は spawn の `closeOnExitScript` (`rexcli`) と同じにする。
+daemon が閉じる。本文は spawn の `closeOnExitScript` (agents-daemon の `rex` パッケージ) と同じにする。
 
 ### 畳む
 

@@ -1,6 +1,6 @@
 # rex の全列挙のモデル (TLA+)
 
-rex の全列挙 (`rexcli` の `snapshot`) と、その途中の session の close と server の停止の交錯を TLA+ に写したもの (#302)。
+rex の全列挙 (`rex` の `snapshot`) と、その途中の session の close と server の停止の交錯を TLA+ に写したもの (#302)。
 回し方と期待の突き合わせは `models/handoff/README.md` と同じ `task model-check`。
 
 | cfg | 性質 | 成り立つ理由 |
@@ -10,7 +10,7 @@ rex の全列挙 (`rexcli` の `snapshot`) と、その途中の session の clo
 | | `OkCoversListed`: 成功した全列挙は `ls` が返した session を全部打ち終えている | 読み飛ばしても残りの session へ進む |
 | `PaneListNoSkip.cfg` | `FailOnlyWhenDown` が破れる (`violated` を期待) | exit 3 を全列挙の失敗にすると、session を閉じただけで失敗する。読み飛ばす根拠 |
 
-同じ性質を実装に対して `rexcli/exec_test.go` が持つ。
+同じ性質を実装に対して `rex/exec_test.go` が持つ。
 
 | 性質 | テスト |
 | ---- | ---- |

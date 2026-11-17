@@ -281,8 +281,8 @@ issue にする。
 | `idleShutdownMinutes` | `30` | Claude pane が 0 のまま続いたら自己終了する |
 | `deferToNativeAutoContinue` | `true` | ネイティブの auto-continue が再開を予約している間は手を出さない |
 
-dream が読む `dream.policy` は、daemon の設定と違って既定値に落ちない。キーが無ければ dream は規約なしで動き、
-キーがあるのに規約が読めなければ dream のコマンドがエラーで止まる。
+dream が読む `dream.policy` は、daemon の設定と違って既定値に落ちない。キーが無ければ dream のコマンドは規約なしで動き、
+キーがあるのに規約が読めなければ dream のコマンドがエラーで止まる。dream skill は `skillGuides` が空なら進まない。
 形と挙動は [README の「利用者の設定」](../../../README.md#利用者の設定) にある。
 
 ### 送る文面

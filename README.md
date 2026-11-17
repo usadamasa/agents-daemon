@@ -123,6 +123,8 @@ dream が読むキーは `dream.policy` だけ。dream の規約のファイル�
   並べた順につなぐ。PII の規則もこの順に当てる。`version` は各ファイルで `1` にする。
 - キーが無ければ、dream は規約なしで動く。PII は組み込みの規則 (email、日本の携帯電話番号) だけを伏せ、
   skill の走査は `~/.claude/skills` と project の `.claude/skills` だけ、skill 名の接頭辞は外さない。
+- dream skill は `skillGuides` が空なら進まない (キーが無いときも)。skill を作る・直すときに従う規範を、
+  plugin の側では決めないため。dream を使うなら、規約のファイルに `skillGuides` を書く。
 - キーがあるのに config.json か規約のファイルが読めない・壊れている・未知のフィールドがあると、
   `dream harvest` と `dream mine` はエラーで止まる。PII の規則が外れたまま記録を書かないため。
   harvest は Stop hook から裏で動くので、止まったことは `${XDG_STATE_HOME:-~/.local/state}/agents-daemon/logs/dream-harvest.log` と

@@ -54,7 +54,7 @@ func TestItemTitle(t *testing.T) {
 
 // 辺の端点にできるのは todo 以外の形。todo は並びが変わると別の項目を指す。
 func TestEndpoint(t *testing.T) {
-	for _, r := range []string{"session:ad-134", "sid:2e0b-11", "issue:usadamasa/agents-daemon#134", "pr:usadamasa/agents-config.x#7", "task:2e0b-11/3"} {
+	for _, r := range []string{"session:ad-134", "sid:2e0b-11", "issue:usadamasa/agents-daemon#134", "pr:example/example-repo.x#7", "task:2e0b-11/3"} {
 		if !Endpoint(r) {
 			t.Errorf("Endpoint(%q) = false, want true", r)
 		}

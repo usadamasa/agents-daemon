@@ -76,7 +76,7 @@ exec して stdout を返すだけで、JSON はフロントエンド (`gui/fron
 - 送る前に pane を読み、利用者の答えを待つ prompt (`multiplexer.WaitingOnPrompt`、permission / question / auth)、
   上限の画面 (`detect` の分類。cmd が注入する)、入力欄の打ちかけの文のどれかに当たれば送らずに exit 1 で理由を返す。
   入力欄は `❯` で始まる最後の行で、空のときは `❯` の後に NBSP だけ。`❯` の行が無ければ送らない。残りがあるときは
-  制御シーケンス付き (`rex capture --format=vt`、`PaneReadOptions.Styled`) で読み直し、薄字 (SGR 2) だけなら Claude Code の
+  制御シーケンス付き (`format` の `format: vt`、`PaneReadOptions.Styled`) で読み直し、薄字 (SGR 2) だけなら Claude Code の
   次の prompt の提案とみなして送る (提案は打つと消える。実測)。素の字が 1 文字でもあれば打ちかけの文として拒む
 - 文面の制御文字 (改行とタブ以外の C0、DEL、C1) は落としてから打つ。文面はメモ (セッションが書いたもの) や利用者の入力で、
   ESC が混じると pane ではキーとして読まれる (ターンの中断、埋め込まれた paste の終わりの印)

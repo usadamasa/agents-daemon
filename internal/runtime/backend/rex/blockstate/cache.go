@@ -17,7 +17,7 @@ type State struct {
 	Process       wire.Process
 }
 
-// Ref は Apply が埋めるよう求めた block。flavor は event に載らないので、呼び手が block ls で確かめる。
+// Ref は Apply が埋めるよう求めた block。flavor は event に載らないので、呼び手が list_blocks で確かめる。
 // Block が空なら session_created で、その session の shell の block を全部埋める。
 type Ref struct {
 	Session string

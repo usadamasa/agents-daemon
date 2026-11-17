@@ -5,15 +5,15 @@
 
 ## 読み取り元
 
-rex は `capture -b BLOCK --trim --unwrap` で読み、末尾 `readLines` 行に絞る。通知欄の判定 (`detect.ClassifyScreen`) は
+rex は block の `format` (`trim`、`unwrap`) で読み、末尾 `readLines` 行に絞る。通知欄の判定 (`detect.ClassifyScreen`) は
 更に末尾 `detectionTailLines` 行だけを見るので、`readLines` がそれ以上あれば判定は変わらない。
 
-<!-- rex-premise: preview.30 cli capture は alternate screen では可視の行だけ、通常の画面では scrollback も返す -->
+<!-- rex-premise: preview.30 api format は alternate screen では可視の行だけ、通常の画面では scrollback も返す -->
 <!-- cc-premise: 2.1.302 limit-screen Claude Code は alternate screen (?1049h) で描き、上限の文は画面の下から 10 行目に出る -->
 
-Claude Code は alternate screen で描くので、Claude の block の capture は可視の行数で頭打ちになる
+Claude Code は alternate screen で描くので、Claude の block の `format` は可視の行数で頭打ちになる
 (24 行の block で 24 行。alternate screen でない shell の block は scrollback ごと返り、500 行出すと 512 行)。
-`format` method の入力にも scrollback や行数の指定が無く、block を小さく分割していると `readLines` に
+`format` method の入力に scrollback や行数の指定が無く、block を小さく分割していると `readLines` に
 何を指定しても表示行数で頭打ちになる。
 
 読むのは prompt のそばの通知欄 (`Usage limit reached` の status と、字下げした next の行) で、画面の下端に出る。
@@ -22,7 +22,7 @@ Claude Code は alternate screen で描くので、Claude の block の capture 
 切り替えてから高さの下限は無く (`detect.MinDetectableRows` と `doctor` の ⚠ は #528 で消した)、通知欄が下端にある限り
 高さに依らない。`/rate-limit-options` のメニューが出た状態は測っておらず、daemon が送った瞬間の画面と block の高さを
 `limit-events/` に残す ([verification.md](verification.md)「次に上限を踏んだとき」)。
-`--unwrap` で端末の折り返しは 1 行に戻るが、Claude Code が自分で改行した行は戻らない。
+`unwrap` で端末の折り返しは 1 行に戻るが、Claude Code が自分で改行した行は戻らない。
 
 ### block が alternate screen にいるかは `modes` で見える
 
@@ -42,11 +42,11 @@ rex preview.16 の `modes` は `screen` (`primary` / `alternate`) を返す。`d
 
 SIGKILL では画面も record も残るので、`screen` で Claude Code の終了は見分けられない。終了の判定は
 `process` の foreground の pid と record の owner の突き合わせのまま ([program-status.md](program-status.md))。
-`screen` は「capture が可視の行だけを返す前提に乗っているか」を見るためだけに使う。
+`screen` は「`format` が可視の行だけを返す前提に乗っているか」を見るためだけに使う。
 
 ## 送信
 
-`send` / `send-key` で送る ([multiplexer.md](multiplexer.md) の対応表)。
+block の `write` と `block.event` の key で送る ([multiplexer.md](multiplexer.md) の対応表)。
 Escape → テキスト → Enter を**別々のキーストロークとして**送る。まとめて送ると Claude の
 ペースト検知に引っかかり、`/rate-limit-options` メニューが出ていると解除できない。
 

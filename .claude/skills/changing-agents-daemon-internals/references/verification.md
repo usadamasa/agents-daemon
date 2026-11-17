@@ -46,7 +46,7 @@ shell を受け手にすると ESC の直後の文字を Meta として食う (z
 | `REX_BLOCK` の block | `rex split --shell=none -- /bin/sh …` で shell を挟まず直接 | script の先頭で Claude Code と同じ OSC 7501 (`state=idle:app=claude-code`) を `printf` し、`program_status` の record に載せる | `rex block close` |
 
 登録が rex に載ったことを daemon と同じ経路 (`PaneGet` → `IsClaudeAgent`) で待ってから画面を読む。
-rex の `capture` は可視領域しか返さないので、使い捨て block は自分の block の 40% の高さで割る。
+rex の `format` は可視領域しか返さないので、使い捨て block は自分の block の 40% の高さで割る。
 OSC 7501 の書式と判定の条件は [program-status.md](program-status.md)。
 
 `doctor` は rex の server への到達性、Claude pane の一覧 (`session_id` とその出どころ (statusline / registry)、

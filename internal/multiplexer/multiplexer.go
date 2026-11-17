@@ -1,7 +1,7 @@
 // Package multiplexer は端末多重化ツールの pane 操作を表す interface と型を持つ。
 //
 // 実装は rex (backend/rex) の 1 つだけだが、interface は意図して残している (#73)。daemon / monitor / doctor / verify /
-// simulate / spawn が rex の CLI (exec.Command と rex 固有の JSON) に直接依存しないための境界であり、テストが
+// simulate / spawn が rex の control API (接続と rex 固有の JSON) に直接依存しないための境界であり、テストが
 // multiplexerfake を差し込む口でもある。複数 backend を抽象する目的の層ではない。
 //
 // Client は実装が満たす全部入りで、呼び手は要る method だけを自分の側で interface にして受ける (#301):

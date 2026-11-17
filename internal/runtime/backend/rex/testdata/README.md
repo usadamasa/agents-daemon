@@ -8,7 +8,7 @@ Server & CLI の版 (`rex_version`) は書かない。
 応答の取り方は `.claude/skills/catching-up-with-rex-changelog/references/api-checks.md` にある。
 
 <!-- rex-premise: preview.30 program_status 2026-10-17 の record は Claude Code の自己申告だけ -->
-<!-- rex-premise: preview.30 api 2026-10-18 の program_status / process / block ls は doctor の点検 (premise) が読む形 -->
+<!-- rex-premise: preview.30 api 2026-10-18 の program_status / process は doctor の点検 (premise) が読む形。version.json と block-ls.json は CLI の点検の頃の記録で、テストは読まない -->
 <!-- rex-premise: preview.30 api 2026-10-20 の modes.json は preview.16 で増えた method の応答、size.json は PaneGeometry が読む rows / columns -->
 <!-- rex-premise: preview.30 api 2026-10-20 の server_status.json は server.status の応答で api_revision を持つ。tailscale の object (DNS 名とアカウント) は落としてある -->
 <!-- rex-premise: preview.30 api 2026-10-24 の block-inspect.json は describe_block の応答に session_id を足した形で、api.methods の一覧の基準 (次回の増減をこれと diff する)。api_revision 6 で blob_read が増え、format と selection_copied の schema が変わった -->

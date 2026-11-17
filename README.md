@@ -59,7 +59,7 @@ plugin が持つもの:
 
 ## 前提
 
-- **rex**: daemon は rex の CLI (`rex ls` / `block call` / `capture` / `send`) で block を見て送信する。
+- **rex**: daemon は rex の control API (server の socket の上の WebSocket) で block を見て送信する。
   rex の外で動く Claude Code には何も届かず、`REX_SESSION` の無いセッションの SessionStart では daemon を起こさない
   (statusline は rex の外でも動く)。server の socket は `~/Library/Application Support/rex/server.sock`。
   sandbox の中から rex を叩くときの設定は「利用者の設定」にある。

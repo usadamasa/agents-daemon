@@ -536,12 +536,12 @@ func spawnDetached(exe string, dryRun bool, p apppath.Paths) error {
 	return cmd.Process.Release()
 }
 
-// watchStopWait は購読を止めてから後始末 (events の子の刈り取り) を待つ上限。子は kill から 100ms で刈り取られる。
+// watchStopWait は購読を止めてから後始末 (購読の接続を close frame で閉じ終える) を待つ上限。
 const watchStopWait = 2 * time.Second
 
-// startWatch は client が多重化ツールの出来事を購読できれば始める。tick の pane の一覧が fork せずに取れるようになり、
-// 購読できない間は tick が全列挙する。返す stop は購読を止めて後始末を待つ。daemon は終わる前に呼び、
-// 入れ替わりのたびに events の子が多重化ツールに繋がったまま残らないようにする。
+// startWatch は client が多重化ツールの出来事を購読できれば始める。tick の pane の一覧が多重化ツールを叩かずに取れる
+// ようになり、購読できない間は tick が全列挙する。返す stop は購読を止めて後始末を待つ。daemon は終わる前に呼び、
+// 入れ替わりのたびに購読の client が多重化ツールに残らないようにする。
 func startWatch(ctx context.Context, client multiplexerClient, log *applog.Logger) (stop func()) {
 	w, ok := client.(multiplexer.Watcher)
 	if !ok {

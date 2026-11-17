@@ -21,7 +21,7 @@ func newDoctorCmd() *cobra.Command {
 		Use:   "doctor",
 		Short: "daemon が動作するための前提条件を診断する",
 		Long: "多重化ツール (rex) の到達性、Claude pane の見え方 (session_id の出どころと、上限の判定に読む transcript の末尾)、\n" +
-			"rex CLI の応答の形 (自分の block に固定のコマンドを打ち、コードが読む欄と exit code が変わっていないか)、statusline state、\n" +
+			"rex の control API の応答の形 (自分の block に固定の呼び出しを打ち、コードが読む欄と error の code が変わっていないか)、statusline state、\n" +
 			"設定ファイルの状態、dream の規約 (config.json の dream.policy) が読めるか、daemon の稼働状況、\n" +
 			"peer messaging の socket (CLAUDE_CODE_MESSAGING_SOCKET)、\n" +
 			"解決済みパスを順に確認して報告する。rex の外 (REX_SESSION なし) と、rex の server へ\n" +

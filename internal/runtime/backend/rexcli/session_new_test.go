@@ -2,6 +2,7 @@ package rexcli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -13,10 +14,17 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rexcli/blockstate"
+	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rexcli/control/controltest"
 )
 
-// sessionNewJSON は `session new --json` の応答。形は 2026-11-07 の実測。
-const sessionNewJSON = `{"session_id":"session:01a1b37a-0560-743d-adfd-959e5e1c53a9","initial_windows":[{"window_id":"window:01a1b37a-056e-70fa-90fd-15d50af005a9","block_ids":["block:01a1b37a-0560-74ce-af88-d37d23de33b9"],"revision":1}]}`
+// spawned の session と block は session.create の応答。形は 2026-11-17 の実測。
+const (
+	spawnedSession = "session:01a1b37a-0560-743d-adfd-959e5e1c53a9"
+	spawnedBlock   = "block:01a1b37a-0560-74ce-af88-d37d23de33b9"
+	sessionNewJSON = `{"session_id":"` + spawnedSession + `","initial_windows":[{"window_id":"window:01a1b37a-056e-70fa-90fd-15d50af005a9","block_ids":["` + spawnedBlock + `"],"revision":1}]}`
+)
 
 // useFakeSelf は包みが印を書くのに呼ぶ agents-daemon を、引数を self.log へ 1 行ずつ書くだけの script に差し替える。
 func useFakeSelf(t *testing.T, f *fakeRex) string {
@@ -33,62 +41,132 @@ func useFakeSelf(t *testing.T, f *fakeRex) string {
 	return path
 }
 
-// wrapPrefix は NewSession が argv の前に置く、印を書いて終了を見張る sh の語。
-func wrapPrefix(f *fakeRex, self string) string {
-	return "/bin/sh -c " + shellQuote(closeOnExitScript) + " agents-daemon-spawn " + shellQuote(f.bin) + " " + shellQuote(self)
+// spawnAPI は session.create が spawned の session を返し、その session に attach と disown が通る fake の API を返す。
+func spawnAPI(t *testing.T) *fakeAPI {
+	t.Helper()
+	f := newFakeAPI(t)
+	f.srv.Reply("session.create", json.RawMessage(sessionNewJSON))
+	f.addUnlisted(spawnedSession, [2]string{spawnedBlock, blockstate.ShellFlavor})
+	return f
 }
 
-// TestExecClient_NewSession は新しい rex session でコマンドを起こす配線を見る。起こす側の session を指さず (-s を付けない)、
-// argv は sh の包みの後にそのまま渡す (空白を含む引数も 1 つのまま。改行を含む引数が 1 つのまま
-// 子へ届くことは fake の calls.log が行で割れるのでここでは見ず、実機で確かめた)。失敗の画面は包みが Enter まで残すので、
-// --keep-open は付けない (付けると終わった block が残り、session に空の pane が溜まる)。
+// blockOptions は作った block の flavor と options。
+type blockOptions struct {
+	Flavor  string `json:"flavor"`
+	Label   string `json:"label"`
+	Options struct {
+		CWD     string   `json:"cwd"`
+		Command []string `json:"command"`
+		Shell   *string  `json:"shell"`
+		Login   *bool    `json:"login"`
+		Exit    *struct {
+			OnCompletion bool `json:"on_completion"`
+		} `json:"exit"`
+	} `json:"options"`
+}
+
+// createRequest は session.create の payload。
+type createRequest struct {
+	Label          *string `json:"label"`
+	InitialWindows []struct {
+		WindowLabel *string `json:"window_label"`
+		Layout      struct {
+			Block blockOptions `json:"block"`
+		} `json:"layout"`
+	} `json:"initial_windows"`
+}
+
+// TestExecClient_NewSession は新しい rex session でコマンドを起こす配線を見る。argv は sh の包みの後にそのまま command へ
+// 渡す (空白や `$` を含む引数も 1 つのまま。実機で確かめた)。CLI の session new と同じく shell と login は既定のまま
+// (login shell の環境で起こす) にし、失敗の画面は包みが Enter まで残すので exit も既定のままにする。
+// 作った block は CLI と同じく、作った client の持ち物にしない (session.attach の後に disown_block で手放す)。
 func TestExecClient_NewSession(t *testing.T) {
-	f := newFakeRex(t)
-	f.put(t, "session-new.json", sessionNewJSON)
-	self := useFakeSelf(t, f)
-	c := f.client(staticResolver(nil))
+	f := spawnAPI(t)
+	rex := newFakeRex(t)
+	self := useFakeSelf(t, rex)
+	c := f.clientWith(rex, staticResolver(nil))
 
 	prompt := "パーキングロットのメモ「x」をタスクにしてください。 詳細: a b"
-	got, err := c.NewSession(context.Background(), "example-repo", "/w/example-repo", []string{"claude", "--session-id", sidDone, "--", prompt})
+	argv := []string{"claude", "--session-id", sidDone, "--", prompt}
+	got, err := c.NewSession(context.Background(), "example-repo", "/w/example-repo", argv)
 	if err != nil {
 		t.Fatalf("NewSession() error = %v", err)
 	}
-	if want := "block:01a1b37a-0560-74ce-af88-d37d23de33b9"; got != want {
-		t.Errorf("NewSession() = %q, want %q", got, want)
+	if got != spawnedBlock {
+		t.Errorf("NewSession() = %q, want %q", got, spawnedBlock)
 	}
-	f.assertCalls(t,
-		"--autostart=false session new example-repo --cwd /w/example-repo --window example-repo --json -- "+wrapPrefix(f, self)+" claude --session-id "+sidDone+" -- "+shellQuote(prompt),
-	)
+	f.assertCalls(t, "session.create", "session.attach "+spawnedSession, "session.disown_block "+spawnedSession)
+
+	var req createRequest
+	f.payloadOf(t, "session.create", &req)
+	if req.Label == nil || *req.Label != "example-repo" || len(req.InitialWindows) != 1 ||
+		req.InitialWindows[0].WindowLabel == nil || *req.InitialWindows[0].WindowLabel != "example-repo" {
+		t.Errorf("session.create の label と window_label = %+v", req)
+	}
+	block := req.InitialWindows[0].Layout.Block
+	wantCommand := append([]string{"/bin/sh", "-c", closeOnExitScript, "agents-daemon-spawn", rex.bin, self}, argv...)
+	if block.Flavor != blockstate.ShellFlavor || block.Options.CWD != "/w/example-repo" || !slices.Equal(block.Options.Command, wantCommand) {
+		t.Errorf("block = %+v\nwant command %q", block, wantCommand)
+	}
+	if block.Options.Shell != nil || block.Options.Login != nil || block.Options.Exit != nil {
+		t.Errorf("shell / login / exit を既定から変えた: %+v", block.Options)
+	}
+	var disown struct {
+		BlockIDs []string `json:"block_ids"`
+	}
+	f.payloadOf(t, "session.disown_block", &disown)
+	if !slices.Equal(disown.BlockIDs, []string{spawnedBlock}) {
+		t.Errorf("disown_block の block_ids = %q", disown.BlockIDs)
+	}
 }
 
-// rex は `-` で始まる LABEL を flag と読んで拒むので (実測)、label の先頭の `-` を外す。外して空なら label を付けない。
+// label は session と window の名前。先頭の `-` は外し (CLI が flag と読んで拒んだ名残で、名前を揃える)、
+// 外して空なら label を付けない (rex の既定の名前になる)。
 func TestExecClient_NewSession_DashLabel(t *testing.T) {
 	tests := []struct {
 		label string
-		want  string
+		want  string // 空なら label と window_label を送らない
 	}{
-		{label: "-x", want: "--autostart=false session new x --cwd /w/-x --window x --json -- "},
-		{label: "--", want: "--autostart=false session new --cwd /w/-x --json -- "},
+		{label: "-x", want: "x"},
+		{label: "--", want: ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			f := newFakeRex(t)
-			f.put(t, "session-new.json", sessionNewJSON)
-			self := useFakeSelf(t, f)
-			c := f.client(staticResolver(nil))
-			if _, err := c.NewSession(context.Background(), tt.label, "/w/-x", []string{"claude"}); err != nil {
+			f := spawnAPI(t)
+			rex := newFakeRex(t)
+			useFakeSelf(t, rex)
+			if _, err := f.clientWith(rex, staticResolver(nil)).NewSession(context.Background(), tt.label, "/w/-x", []string{"claude"}); err != nil {
 				t.Fatalf("NewSession() error = %v", err)
 			}
-			f.assertCalls(t, tt.want+wrapPrefix(f, self)+" claude")
+			var req createRequest
+			f.payloadOf(t, "session.create", &req)
+			gotLabel, gotWindow := "", ""
+			if req.Label != nil {
+				gotLabel = *req.Label
+			}
+			if req.InitialWindows[0].WindowLabel != nil {
+				gotWindow = *req.InitialWindows[0].WindowLabel
+			}
+			if gotLabel != tt.want || gotWindow != tt.want || (tt.want == "" && (req.Label != nil || req.InitialWindows[0].WindowLabel != nil)) {
+				t.Errorf("label = %v, window_label = %v, want %q", req.Label, req.InitialWindows[0].WindowLabel, tt.want)
+			}
 		})
 	}
+}
+
+// spawnedArgv は session.create に渡した command を返す。rex が block の中で起こす argv そのもの。
+func spawnedArgv(t *testing.T, f *fakeAPI) []string {
+	t.Helper()
+	var req createRequest
+	f.payloadOf(t, "session.create", &req)
+	return req.InitialWindows[0].Layout.Block.Options.Command
 }
 
 // TestExecClient_NewSession_ClosesOnExit は rex が起こす argv を実際に走らせ、session (REX_SESSION) に残る block が
 // 自分 (REX_BLOCK) だけのときだけ session を閉じ、exit code をそのまま返すことを見る。0 以外で終わったときは終わり方を
 // 出して Enter を待ち、押されるまで失敗の画面を残す。後から開いた pane があれば巻き込まないよう閉じない (#391)。
 // どの場合も、コマンドを起こす前に agents-daemon で session の印を書く (後から pane が空になった session を
-// daemon が閉じる。#557)。
+// daemon が閉じる。#557)。包みの中は rex の CLI を叩く (この包みは control API へ移していない)。
 func TestExecClient_NewSession_ClosesOnExit(t *testing.T) {
 	const (
 		own   = `{"block_id":"block:own","window_id":"window:1"}`
@@ -113,26 +191,18 @@ func TestExecClient_NewSession_ClosesOnExit(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			f := newFakeRex(t)
-			f.put(t, "session-new.json", sessionNewJSON)
+			f := spawnAPI(t)
+			rex := newFakeRex(t)
 			if tt.blocks != "" {
-				f.put(t, "block-ls-session:spawned.json", tt.blocks)
+				rex.put(t, "block-ls-session:spawned.json", tt.blocks)
 			}
-			useFakeSelf(t, f)
-			c := f.client(staticResolver(nil))
+			useFakeSelf(t, rex)
+			c := f.clientWith(rex, staticResolver(nil))
 			inner := []string{"/bin/sh", "-c", "exit " + strconv.Itoa(tt.exit)}
 			if _, err := c.NewSession(context.Background(), "x", "/w/x", inner); err != nil {
 				t.Fatalf("NewSession() error = %v", err)
 			}
-			calls := splitArgs(t, readLines(t, filepath.Join(f.dir, "calls.log")))
-			if len(calls) != 1 {
-				t.Fatalf("calls = %q, want 1 call", calls)
-			}
-			sep := slices.Index(calls[0], "--")
-			if sep < 0 {
-				t.Fatalf("session new の引数に -- が無い: %q", calls[0])
-			}
-			argv := calls[0][sep+1:]
+			argv := spawnedArgv(t, f)
 
 			cmd := exec.Command(argv[0], argv[1:]...) // #nosec G204 -- テストが組んだ argv
 			cmd.Env = append(os.Environ(), "REX_SESSION=session:spawned", "REX_BLOCK=block:own")
@@ -154,7 +224,7 @@ func TestExecClient_NewSession_ClosesOnExit(t *testing.T) {
 					t.Fatalf("Enter の前に終わった (error = %v, stdout = %q)", err, stdout.String())
 				case <-time.After(500 * time.Millisecond):
 				}
-				if got := readLines(t, filepath.Join(f.dir, "calls.log")); len(got) != 1 {
+				if got := readLines(t, filepath.Join(rex.dir, "calls.log")); len(got) != 0 {
 					t.Fatalf("Enter の前に rex を呼んだ: %q", got)
 				}
 				answerPrompt(t, cmd, stdin, tt.interrupt)
@@ -182,12 +252,11 @@ func TestExecClient_NewSession_ClosesOnExit(t *testing.T) {
 				t.Fatalf("包んだ argv の実行 error = %v, want exit %d", err, tt.exit)
 			}
 
-			want := append([][]string{calls[0]}, tt.wantAfter...)
-			if got := splitArgs(t, readLines(t, filepath.Join(f.dir, "calls.log"))); !slices.EqualFunc(got, want, slices.Equal[[]string]) {
-				t.Errorf("calls =\n%q\nwant\n%q", got, want)
+			if got := splitArgs(t, readLines(t, filepath.Join(rex.dir, "calls.log"))); !slices.EqualFunc(got, tt.wantAfter, slices.Equal[[]string]) {
+				t.Errorf("calls =\n%q\nwant\n%q", got, tt.wantAfter)
 			}
 			wantMark := [][]string{{"spawned-session", "mark", "session:spawned"}}
-			if got := splitArgs(t, readLines(t, filepath.Join(f.dir, "self.log"))); !slices.EqualFunc(got, wantMark, slices.Equal[[]string]) {
+			if got := splitArgs(t, readLines(t, filepath.Join(rex.dir, "self.log"))); !slices.EqualFunc(got, wantMark, slices.Equal[[]string]) {
 				t.Errorf("agents-daemon の呼び出し = %q, want %q", got, wantMark)
 			}
 		})
@@ -203,18 +272,16 @@ func TestExecClient_NewSession_OwnProcessGroup(t *testing.T) {
 	if runtime.GOOS != "darwin" {
 		t.Skip("包みが相手にするのは macOS の /bin/sh。dash は端末が無いと set -m を効かせない")
 	}
-	f := newFakeRex(t)
-	f.put(t, "session-new.json", sessionNewJSON)
-	f.put(t, "block-ls-session:spawned.json", `{"blocks":[]}`)
-	useFakeSelf(t, f)
-	c := f.client(staticResolver(nil))
+	f := spawnAPI(t)
+	rex := newFakeRex(t)
+	rex.put(t, "block-ls-session:spawned.json", `{"blocks":[]}`)
+	useFakeSelf(t, rex)
+	c := f.clientWith(rex, staticResolver(nil))
 	inner := []string{"perl", "-e", `print getpgrp() == $$ ? "own" : "shared"`}
 	if _, err := c.NewSession(context.Background(), "x", "/w/x", inner); err != nil {
 		t.Fatalf("NewSession() error = %v", err)
 	}
-	calls := splitArgs(t, readLines(t, filepath.Join(f.dir, "calls.log")))
-	sep := slices.Index(calls[0], "--")
-	argv := calls[0][sep+1:]
+	argv := spawnedArgv(t, f)
 
 	cmd := exec.Command(argv[0], argv[1:]...) // #nosec G204 -- テストが組んだ argv
 	cmd.Env = append(os.Environ(), "REX_SESSION=session:spawned", "REX_BLOCK=block:own")
@@ -259,21 +326,24 @@ func TestCloseOnExitScript_MatchesPeerSessionsSkill(t *testing.T) {
 func TestExecClient_NewSession_Failures(t *testing.T) {
 	tests := []struct {
 		name    string
-		fixture map[string]string
+		reply   string // session.create の応答。空なら失敗を返す
 		wantErr string
 	}{
-		{name: "rex が失敗したら stderr を添える", fixture: map[string]string{"session-new.json": sessionNewJSON, "fail-session-new.json": ""}, wantErr: "server error"},
-		{name: "window が無ければ pane が分からないので error", fixture: map[string]string{"session-new.json": `{"session_id":"session:x","initial_windows":[]}`}, wantErr: "block_ids"},
-		{name: "block_ids が空なら pane が分からないので error", fixture: map[string]string{"session-new.json": `{"session_id":"session:x","initial_windows":[{"window_id":"window:x","block_ids":[],"revision":1}]}`}, wantErr: "block_ids"},
+		{name: "rex が失敗したら message を添える", wantErr: "too many sessions"},
+		{name: "window が無ければ pane が分からないので error", reply: `{"session_id":"session:x","initial_windows":[]}`, wantErr: "block_ids"},
+		{name: "block_ids が空なら pane が分からないので error", reply: `{"session_id":"session:x","initial_windows":[{"window_id":"window:x","block_ids":[],"revision":1}]}`, wantErr: "block_ids"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			f := newFakeRex(t)
-			for name, content := range tt.fixture {
-				f.put(t, name, content)
+			f := newFakeAPI(t)
+			if tt.reply == "" {
+				f.srv.Fail("session.create", &controltest.Error{Code: "conflict", Message: "too many sessions", Status: 409})
+			} else {
+				f.srv.Reply("session.create", json.RawMessage(tt.reply))
 			}
-			c := f.client(staticResolver(nil))
-			_, err := c.NewSession(context.Background(), "x", "/w/x", []string{"claude"})
+			rex := newFakeRex(t)
+			useFakeSelf(t, rex)
+			_, err := f.clientWith(rex, staticResolver(nil)).NewSession(context.Background(), "x", "/w/x", []string{"claude"})
 			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 				t.Errorf("NewSession() error = %v, want containing %q", err, tt.wantErr)
 			}

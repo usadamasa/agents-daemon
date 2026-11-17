@@ -18,6 +18,8 @@ const terminalMethod = "com.superlogical.terminal."
 // 状態に無い session は session_not_found、無い block の method は not_found で答える (実機と同じ)。
 type fakeAPI struct {
 	srv *controltest.Server
+	// rex は client が CLI を起こすときの fake の rex。
+	rex *fakeRex
 
 	mu       sync.Mutex
 	sessions []string
@@ -28,11 +30,14 @@ type fakeAPI struct {
 	// failing は "<method の短い名前>-<block>" か "list_blocks-<session>" で、internal の失敗を返す。
 	failing map[string]bool
 	status  string
+	// labels は session の label。target.resolve が session を label でも引ける。
+	labels map[string]string
 }
 
 func newFakeAPI(t *testing.T) *fakeAPI {
 	t.Helper()
-	f := &fakeAPI{srv: controltest.New(t), blocks: map[string][][2]string{}, results: map[string]string{}, failing: map[string]bool{}}
+	f := &fakeAPI{srv: controltest.New(t), rex: newFakeRex(t), blocks: map[string][][2]string{}, results: map[string]string{}, failing: map[string]bool{}, labels: map[string]string{}}
+	f.handleWrites()
 	f.srv.Handle("server.status", func(json.RawMessage) (any, error) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
@@ -81,6 +86,15 @@ func newFakeAPI(t *testing.T) *fakeAPI {
 		results := make([]map[string]any, 0, len(req.Queries))
 		for _, q := range req.Queries {
 			r := map[string]any{"query": q, "status": "not_found"}
+			if len(req.Kinds) == 1 && req.Kinds[0] == "session" {
+				for session := range f.blocks {
+					if session == q || f.labels[session] == q {
+						r = map[string]any{"query": q, "status": "resolved", "target": map[string]any{"kind": "session", "session_id": session, "label": f.labels[session]}}
+					}
+				}
+				results = append(results, r)
+				continue
+			}
 			for session, blocks := range f.blocks {
 				for _, b := range blocks {
 					if b[0] == q {
@@ -125,6 +139,64 @@ func newFakeAPI(t *testing.T) *fakeAPI {
 		})
 	}
 	return f
+}
+
+// handleWrites は名指した session と block があれば成功する書き込みの method を載せる。無ければ実機と同じく
+// session_not_found か not_found で断る。作る method (session.create、new_window、new_split) の応答は
+// テストが srv.Reply で決める。
+func (f *fakeAPI) handleWrites() {
+	check := func(p json.RawMessage, needBlock bool) error {
+		var req struct {
+			SessionID string `json:"session_id"`
+			BlockID   string `json:"block_id"`
+		}
+		_ = json.Unmarshal(p, &req)
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		blocks, ok := f.blocks[req.SessionID]
+		if !ok {
+			return controltest.SessionNotFound(req.SessionID)
+		}
+		if !needBlock {
+			return nil
+		}
+		for _, b := range blocks {
+			if b[0] == req.BlockID {
+				return nil
+			}
+		}
+		return controltest.NotFound(req.BlockID)
+	}
+	for method, needBlock := range map[string]bool{
+		terminalMethod + "write": true, "block.event": true, "block.close": true,
+		"session.destroy": false, "session.attach": false, "session.disown_block": false,
+	} {
+		f.srv.Handle(method, func(p json.RawMessage) (any, error) {
+			if err := check(p, needBlock); err != nil {
+				return nil, err
+			}
+			return map[string]any{}, nil
+		})
+	}
+}
+
+// addLabel は session に label を付ける。
+func (f *fakeAPI) addLabel(session, label string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.labels[session] = label
+}
+
+// payloadOf は method の最初の request の payload を読む。
+func (f *fakeAPI) payloadOf(t *testing.T, method string, v any) {
+	t.Helper()
+	reqs := f.requestsOf(method)
+	if len(reqs) == 0 {
+		t.Fatalf("%s の request が無い", method)
+	}
+	if err := json.Unmarshal(reqs[0], v); err != nil {
+		t.Fatalf("%s の payload を読めない: %v", method, err)
+	}
 }
 
 // blobID は fake の format が大きな画面に振る id。
@@ -251,9 +323,10 @@ func (f *fakeAPI) assertCalls(t *testing.T, want ...string) {
 // 切った ctx が接続を巻き込まないことをどのテストも通す。
 const apiTimeout = 5 * time.Second
 
-// apiClient は fake の API だけに繋ぐ Client。CLI を叩く method は fake の rex が無いので失敗する。
+// client は fake の API と、fixture を何も置かない fake の rex に繋ぐ Client。CLI を叩く method は fake の rex が
+// exit 3 で断る。無いパスの rex を渡すと Runner が既定の置き場から本物の rex を引き直して叩くので、必ず fake を渡す。
 func (f *fakeAPI) client(resolve SessionResolver) *execClient {
-	return &execClient{cli: cli.New("/nonexistent/rex", noCommandTimeout), timeout: apiTimeout, resolve: resolve, socket: fixedSocket(f.srv.Path)}
+	return &execClient{cli: cli.New(f.rex.bin, noCommandTimeout), timeout: apiTimeout, resolve: resolve, socket: fixedSocket(f.srv.Path)}
 }
 
 // clientWith は fake の rex (書き込みと購読) と fake の API (読み取り) の両方に繋ぐ Client。

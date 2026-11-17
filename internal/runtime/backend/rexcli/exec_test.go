@@ -334,33 +334,6 @@ func TestExecClient_PaneList_FailureIsError(t *testing.T) {
 	})
 }
 
-func TestExecClient_DropsRexSessionFromChildEnv(t *testing.T) {
-	t.Setenv("REX_SESSION", sessionA)
-	t.Setenv("REX_BLOCK", blockClaudeWorking)
-	t.Setenv("REX_FAKE_KEEP", "kept")
-	f := newFakeRex(t)
-
-	if err := f.client(staticResolver(nil)).SessionKill(context.Background(), sessionA); err != nil {
-		t.Fatalf("SessionKill() error = %v", err)
-	}
-	env := readLines(t, filepath.Join(f.dir, "env.log"))
-	if len(env) == 0 {
-		t.Fatal("env.log が空")
-	}
-	kept := false
-	for _, line := range env {
-		if strings.HasPrefix(line, "REX_SESSION=") || strings.HasPrefix(line, "REX_BLOCK=") {
-			t.Errorf("子プロセスに渡った: %q", line)
-		}
-		if line == "REX_FAKE_KEEP=kept" {
-			kept = true
-		}
-	}
-	if !kept {
-		t.Error("REX_SESSION / REX_BLOCK 以外の環境変数まで落ちている")
-	}
-}
-
 // PaneGet は block の session を target.resolve で引いてから block の method を打つ (block の method は session_id が要る)。
 func TestExecClient_PaneGet(t *testing.T) {
 	f := newFakeAPI(t)
@@ -394,7 +367,7 @@ func TestExecClient_PaneGet(t *testing.T) {
 	}
 }
 
-// API で読む method は、block が無ければ not found の error を返す (target.resolve が見つけられない)。
+// block を相手にする method は、block が無ければ not found の error を返す (target.resolve が見つけられない)。
 func TestExecClient_ReadTargetNotFoundIsError(t *testing.T) {
 	tests := []struct {
 		name string
@@ -412,6 +385,8 @@ func TestExecClient_ReadTargetNotFoundIsError(t *testing.T) {
 			_, err := c.PaneGeometry(context.Background(), blockClosed)
 			return err
 		}},
+		{"SendText", func(c *execClient) error { return c.SendText(context.Background(), blockClosed, "続けて") }},
+		{"SendKeys", func(c *execClient) error { return c.SendKeys(context.Background(), blockClosed, "enter") }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -430,25 +405,6 @@ func TestExecClient_PaneGet_ClosedAfterResolve(t *testing.T) {
 	_, err := f.client(staticResolver(nil)).PaneGet(context.Background(), blockClosedMidway)
 	if !isNotFound(err) {
 		t.Errorf("PaneGet() error = %v, want not found", err)
-	}
-}
-
-// CLI で送る method は、block が無ければ rex の stderr を添えたエラーを返す。
-func TestExecClient_TargetNotFoundIsError(t *testing.T) {
-	tests := []struct {
-		name string
-		call func(c *execClient) error
-	}{
-		{"SendText", func(c *execClient) error { return c.SendText(context.Background(), blockClosed, "続けて") }},
-		{"SendKeys", func(c *execClient) error { return c.SendKeys(context.Background(), blockClosed, "enter") }},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := tt.call(newFakeRex(t).client(staticResolver(nil)))
-			if err == nil || !strings.Contains(err.Error(), "not found") {
-				t.Errorf("error = %v, want rex の stderr (not found) を含む", err)
-			}
-		})
 	}
 }
 
@@ -606,12 +562,13 @@ func TestExecClient_PaneGeometry(t *testing.T) {
 	}
 }
 
+// SendText は文面を write の data にそのまま渡し、SendKeys は key ごとに block.event の press と release を送る
+// (CLI の send-key と同じ。2026-11-17 に実機で cat -v に届く文字が CLI と同じことを確かめた)。
 func TestExecClient_SendTextAndKeys(t *testing.T) {
-	f := newFakeRex(t)
-	f.put(t, "target-"+blockClaudeDone, "")
+	f := newFakeAPI(t)
+	f.addSession(sessionB, [2]string{blockClaudeDone, blockstate.ShellFlavor})
 	c := f.client(staticResolver(nil))
 
-	// 文面は空白を含んでも 1 引数、キーは 1 つずつ別の引数で渡る。
 	if err := c.SendText(context.Background(), blockClaudeDone, "続けて ください"); err != nil {
 		t.Fatalf("SendText() error = %v", err)
 	}
@@ -619,9 +576,61 @@ func TestExecClient_SendTextAndKeys(t *testing.T) {
 		t.Fatalf("SendKeys() error = %v", err)
 	}
 	f.assertCalls(t,
-		"--autostart=false send -b "+blockClaudeDone+" '続けて ください'",
-		"--autostart=false send-key -b "+blockClaudeDone+" esc enter",
+		"target.resolve "+blockClaudeDone,
+		"write "+blockClaudeDone,
+		"target.resolve "+blockClaudeDone,
+		"block.event "+blockClaudeDone,
+		"block.event "+blockClaudeDone,
+		"block.event "+blockClaudeDone,
+		"block.event "+blockClaudeDone,
 	)
+	var write struct {
+		SessionID string `json:"session_id"`
+		Args      struct {
+			Data string `json:"data"`
+		} `json:"args"`
+	}
+	f.payloadOf(t, terminalMethod+"write", &write)
+	if write.SessionID != sessionB || write.Args.Data != "続けて ください" {
+		t.Errorf("write の payload = %+v", write)
+	}
+	want := []string{
+		`{"key":"escape","mods":"","consumed_mods":"","text":"","unshifted_codepoint":27,"composing":false,"action":"press"}`,
+		`{"key":"escape","mods":"","consumed_mods":"","text":"","unshifted_codepoint":27,"composing":false,"action":"release"}`,
+		`{"key":"enter","mods":"","consumed_mods":"","text":"","unshifted_codepoint":13,"composing":false,"action":"press"}`,
+		`{"key":"enter","mods":"","consumed_mods":"","text":"","unshifted_codepoint":13,"composing":false,"action":"release"}`,
+	}
+	for i, p := range f.requestsOf("block.event") {
+		var ev struct {
+			SessionID string `json:"session_id"`
+			Event     struct {
+				Type    string          `json:"type"`
+				Payload json.RawMessage `json:"payload"`
+			} `json:"event"`
+		}
+		if err := json.Unmarshal(p, &ev); err != nil {
+			t.Fatal(err)
+		}
+		var got, w any
+		_ = json.Unmarshal(ev.Event.Payload, &got)
+		_ = json.Unmarshal([]byte(want[i]), &w)
+		if ev.SessionID != sessionB || ev.Event.Type != "key" || !reflect.DeepEqual(got, w) {
+			t.Errorf("%d 番目の block.event = %s, want key %s", i, p, want[i])
+		}
+	}
+}
+
+// 知らない key の名前は何も送らずに error にする (CLI の key binding の構文は持たない。daemon が送るのは esc と enter だけ)。
+func TestExecClient_SendKeys_UnknownKey(t *testing.T) {
+	f := newFakeAPI(t)
+	f.addSession(sessionB, [2]string{blockClaudeDone, blockstate.ShellFlavor})
+	err := f.client(staticResolver(nil)).SendKeys(context.Background(), blockClaudeDone, "enter", "ctrl+c")
+	if err == nil || !strings.Contains(err.Error(), "ctrl+c") {
+		t.Fatalf("SendKeys() error = %v, want 知らない key の error", err)
+	}
+	if got := f.requestsOf("block.event"); len(got) != 0 {
+		t.Errorf("知らない key を含むのに送った: %s", got)
+	}
 }
 
 func TestExecClient_Reachable(t *testing.T) {
@@ -711,23 +720,6 @@ func TestExecClient_APITimeout(t *testing.T) {
 	err := c.Reachable(context.Background())
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Reachable() error = %v, want DeadlineExceeded", err)
-	}
-	if elapsed := time.Since(start); elapsed > time.Second {
-		t.Errorf("elapsed = %v, want タイムアウトで打ち切る", elapsed)
-	}
-}
-
-func TestExecClient_Timeout(t *testing.T) {
-	dir := t.TempDir()
-	bin := filepath.Join(dir, "rex")
-	if err := os.WriteFile(bin, []byte("#!/bin/sh\nsleep 2\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	c := &execClient{cli: cli.New(bin, 50*time.Millisecond), resolve: staticResolver(nil)}
-	start := time.Now()
-	err := c.SessionKill(context.Background(), sessionA)
-	if err == nil || !strings.Contains(err.Error(), "タイムアウト") {
-		t.Fatalf("SessionKill() error = %v, want タイムアウト", err)
 	}
 	if elapsed := time.Since(start); elapsed > time.Second {
 		t.Errorf("elapsed = %v, want タイムアウトで打ち切る", elapsed)

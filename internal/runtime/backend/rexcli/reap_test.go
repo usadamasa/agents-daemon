@@ -47,18 +47,23 @@ func TestExecClient_SessionBlocks(t *testing.T) {
 	}
 }
 
-// SessionKill は session を ID で閉じる。
+// SessionKill は session を ID で session.destroy に渡して閉じる。無い session は not found の error になる。
 func TestExecClient_SessionKill(t *testing.T) {
-	f := newFakeRex(t)
-	if err := f.client(staticResolver(nil)).SessionKill(context.Background(), "session:x"); err != nil {
+	f := newFakeAPI(t)
+	f.addSession("session:x")
+	c := f.client(staticResolver(nil))
+	if err := c.SessionKill(context.Background(), "session:x"); err != nil {
 		t.Fatalf("SessionKill() error = %v", err)
 	}
-	f.assertCalls(t, "--autostart=false session kill session:x")
+	f.assertCalls(t, "session.destroy session:x")
+	if err := c.SessionKill(context.Background(), "session:gone"); !isNotFound(err) {
+		t.Errorf("無い session の SessionKill() error = %v, want not found", err)
+	}
 }
 
-// 空の ID では rex を叩かない (rex は空の target を選択中の session と読みうる)。
+// 空の ID では rex を叩かない。
 func TestExecClient_SessionKill_Empty(t *testing.T) {
-	f := newFakeRex(t)
+	f := newFakeAPI(t)
 	err := f.client(staticResolver(nil)).SessionKill(context.Background(), "")
 	if err == nil || !strings.Contains(err.Error(), "空") {
 		t.Errorf("SessionKill(\"\") error = %v, want 空の ID の error", err)

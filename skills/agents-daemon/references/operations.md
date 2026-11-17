@@ -338,14 +338,12 @@ dream が読む `dream.policy` は、daemon の設定と違って既定値に落
   通知欄 (prompt のすぐ上の 2 行) だけなので、block の高さで検知が変わることは無い。
 - **待機中のラベルは出ない。** 表示に使える `block rename` は利用者が付けた label を潰すため。
   待機の状況は `agents-daemon status` で見る。
-- **rex の送信は実機で測っていない。** `send` / `send-key` の組み立ては fake の rex で確かめただけで、
-  daemon が渡すキー名 (`esc` `enter`) が rex でそのまま通るかは未測定。
 - **rex の状態は Claude Code の OSC 7501 の報告に頼る。** どの状況でどの値が来るかは公式ドキュメントに無く、
   Claude Code の版で変わりうる。
 - **kind の無い `blocked` (Session paused などの dialog) が開いた pane にも再開を送る。** 送らないのは kind が
   `permission` / `question` / `auth` のときだけ。上限到達時の record が kind 無しの `blocked` で来るかを
   実測していないため、全部の `blocked` を止めると上限からの再開そのものが止まりかねない (#77)。
   上限を踏んだときの record は daemon.log の「待機に入りました」の行に `agent_status=… kind=… msg="…"` で残る。
-- rex 側の制約 (可視領域だけ、ラベルが出ない、送信が未測定) が今の版でも残っているかは、
+- rex 側の制約 (可視領域だけ、ラベルが出ない) が今の版でも残っているかは、
   `agents-daemon:peer-sessions` skill の `references/rex.md` の「使い方・不具合・新機能の情報源」で
   docs と feedback を引いて確かめる。

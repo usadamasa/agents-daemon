@@ -78,7 +78,7 @@ mod が呼ぶコマンドは入力を stdin の JSON で受け、出力を JSON 
 ## 文章を書くときの決めごと
 
 - 句読点は全角の「。」「、」を使う。半角の「｡」「､」は使わない (md、コメント、ログとエラーの文面のどれも)。
-- 実装のパッケージは `internal/` からのパスではなくパッケージ名で指す (`detect`、`rexcli/blockstate`)。名前だけで
+- 実装のパッケージは `internal/` からのパスではなくパッケージ名で指す (`detect`、`rex/blockstate`)。名前だけで
   一意に決まらないものは親を 1 つ添える (`tasklog/record`、`deps/graph`)。ファイル名まで要るときはパッケージからの相対
   (`detect/turn_test.go`)。パスを書くのはこのファイルと `.go-arch-lint.yml` とコマンド
   (`go run ./cmd/agents-daemon`) だけ。
@@ -116,9 +116,9 @@ mod が呼ぶコマンドは入力を stdin の JSON で受け、出力を JSON 
   (Go と sh はコメント、md は `<!-- -->`)。`<version>` は最後に確かめた Claude Code の版、`<topic>` は
   `.claude/skills/catching-up-with-claude-code-changelog/SKILL.md` の topic 一覧のどれか。
   skill がこの marker を grep して、更新後に見直す箇所の一覧にする。確かめ直したら `<version>` を上げる。
-- rex の版で変わりうる挙動 (`program_status` の record の中身、CLI の引数と exit code) も同じ形で
+- rex の版で変わりうる挙動 (`program_status` の record の中身、CLI の引数と exit code、control API の method と error) も同じ形で
   `rex-premise: <version> <topic> [メモ]` を置く。`<version>` は Mac の changelog の版 (`preview.30`。Server & CLI の版ではない)、`<topic>` は
-  `program_status` か `cli`。rex を上げたら `.claude/skills/catching-up-with-rex-changelog/SKILL.md` の手順で
+  `program_status`、`cli`、`api` のどれか。rex を上げたら `.claude/skills/catching-up-with-rex-changelog/SKILL.md` の手順で
   一覧し、changelog (superlogical MCP の `read_changelog`) と実機の応答に突き合わせる。
 
 ## state を書くときの決めごと

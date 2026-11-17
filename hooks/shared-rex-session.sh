@@ -1,6 +1,6 @@
 #!/bin/bash
 # SessionStart hook: ほかの作業と共有する rex の session にタブとして起きた claude へ、session を rename しない案内を出す。
-# 印の環境変数はタブの包み (rexcli の closeOnExitTabScript と peer-sessions skill の手順) が渡す。
+# 印の環境変数はタブの包み (agents-daemon の rex パッケージの closeOnExitTabScript と peer-sessions skill の手順) が渡す。
 # cc-premise: 2.1.325 hooks SessionStart の command hook の stdout は会話の context に入る
 set -euo pipefail
 

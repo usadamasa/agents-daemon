@@ -33,7 +33,7 @@ const (
 	defaultWaitInterval = 200 * time.Millisecond
 )
 
-// Host は起こす先の多重化ツール。rexcli の Client が満たす。
+// Host は起こす先の多重化ツール。rex の Client が満たす。
 type Host interface {
 	// NewSession は新しい多重化ツールの session を作り、その最初の pane で argv を起こして pane の ID を返す。コマンドが
 	// 終わり、session にほかの pane が無ければ session を閉じる。異常終了では Enter まで pane を残す (起動の失敗を画面で

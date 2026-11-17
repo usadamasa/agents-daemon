@@ -250,7 +250,7 @@ func weeklyFar(e *transcript.Entry, now time.Time) bool {
 
 // Client は Tick が pane に対して使う操作。多重化ツールの全部入りの multiplexer.Client のうち、画面を読む・送る
 // の 3 つだけを要る側で切り出したもの (#301)。daemon はこれに列挙・端末の大きさ・到達性を足した自分の interface を持ち、
-// dry-run や simulate の包みは送信の 2 つを握りつぶすだけでよい。rexcli の実装と multiplexerfake.Client が満たす。
+// dry-run や simulate の包みは送信の 2 つを握りつぶすだけでよい。rex の実装と multiplexerfake.Client が満たす。
 type Client interface {
 	// PaneRead は pane の画面テキストを返す。
 	PaneRead(ctx context.Context, paneID string, opts multiplexer.PaneReadOptions) (string, error)

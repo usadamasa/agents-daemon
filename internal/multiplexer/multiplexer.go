@@ -1,6 +1,6 @@
 // Package multiplexer は端末多重化ツールの pane 操作を表す interface と型を持つ。
 //
-// 実装は rex (rexcli) の 1 つだけだが、interface は意図して残している (#73)。daemon / monitor / doctor / verify /
+// 実装は rex (backend/rex) の 1 つだけだが、interface は意図して残している (#73)。daemon / monitor / doctor / verify /
 // simulate / spawn が rex の CLI (exec.Command と rex 固有の JSON) に直接依存しないための境界であり、テストが
 // multiplexerfake を差し込む口でもある。複数 backend を抽象する目的の層ではない。
 //
@@ -129,7 +129,7 @@ type PremiseFinding struct {
 
 // PremiseChecker は多重化ツールの CLI に置いている前提 (応答の欄、exit code、flag) を、自分の pane に固定の
 // コマンドを打って点検する口。doctor だけが使い、daemon の判定には関わらない。Client とは別にしてあるのは、
-// 判定の経路 (daemon / monitor) とそのテスト (multiplexerfake) に点検の口を見せないため。実装は rexcli。
+// 判定の経路 (daemon / monitor) とそのテスト (multiplexerfake) に点検の口を見せないため。実装は rex。
 type PremiseChecker interface {
 	// CheckPremises は paneID (自分の pane) と sessionID (その pane の session) を使って点検し、
 	// 1 点検 1 件で返す。点検の失敗は error でなく OK=false の finding にする。
@@ -138,7 +138,7 @@ type PremiseChecker interface {
 
 // Watcher は多重化ツールの出来事を背後で購読し、PaneList を毎回の全列挙から購読の cache へ切り替える口。
 // daemon だけが使う。doctor や inspect のような 1 回きりの呼び手は購読せず、全列挙のまま。Client とは別にしてあるのは、
-// multiplexerfake と判定の経路に購読を持ち込まないため。実装は rexcli。
+// multiplexerfake と判定の経路に購読を持ち込まないため。実装は rex。
 type Watcher interface {
 	// Watch は購読を始めてすぐ戻る。ctx が終わるまで、切れるたびに張り直す。購読の失敗と張り直しは logf に書く。
 	// 返す channel は ctx が終わって購読の後始末 (子プロセスの刈り取り) が済んだら閉じる。
@@ -146,7 +146,7 @@ type Watcher interface {
 	Watch(ctx context.Context, logf func(format string, args ...any)) <-chan struct{}
 }
 
-// Client は多重化ツールが提供する pane 操作の全部入り。実装は rexcli.NewExecClient と multiplexerfake.Client の
+// Client は多重化ツールが提供する pane 操作の全部入り。実装は rex.NewExecClient と multiplexerfake.Client の
 // 2 つで、backend.Connect がこれを返す。呼び手はこの型で受けず、要る method だけの自分の interface で受ける
 // (package doc)。
 type Client interface {

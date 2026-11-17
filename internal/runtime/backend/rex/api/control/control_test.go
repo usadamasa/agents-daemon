@@ -40,9 +40,10 @@ func TestDialSendsHelloWithRevisionAndClient(t *testing.T) {
 		t.Fatalf("hello が %d 回 (1 回のはず)", len(hellos))
 	}
 	var h struct {
-		Type        string `json:"type"`
-		APIRevision int    `json:"api_revision"`
-		Client      struct {
+		Type           string `json:"type"`
+		APIRevision    int    `json:"api_revision"`
+		APIMinRevision int    `json:"api_min_revision"`
+		Client         struct {
 			Kind    string `json:"kind"`
 			Name    string `json:"name"`
 			Version string `json:"version"`
@@ -51,7 +52,8 @@ func TestDialSendsHelloWithRevisionAndClient(t *testing.T) {
 	if err := json.Unmarshal(hellos[0], &h); err != nil {
 		t.Fatalf("hello の parse: %v", err)
 	}
-	if h.Type != "hello" || h.APIRevision != control.APIRevision || h.Client.Kind != "agent" ||
+	// api_min_revision も同じ値にし、古い revision へ黙って落とさせない (落とせない server は 1008 で断る)。
+	if h.Type != "hello" || h.APIRevision != control.APIRevision || h.APIMinRevision != control.APIRevision || h.Client.Kind != "agent" ||
 		h.Client.Name != "agents-daemon" || h.Client.Version != "1.2.3" {
 		t.Errorf("hello = %s", hellos[0])
 	}
@@ -66,6 +68,17 @@ func TestDialRejectsWelcomeOfOtherProtocol(t *testing.T) {
 	_, err := control.Dial(callCtx(t), srv.Path, control.Options{})
 	if err == nil || !strings.Contains(err.Error(), "rex.control.v2") {
 		t.Fatalf("Dial の error = %v、protocol の食い違いを言うはず", err)
+	}
+}
+
+// welcome が別の revision を選んだら (api_min_revision を知らない server)、その接続の応答の形は daemon の読む形と
+// 違うので Dial を失敗にする。
+func TestDialRejectsOtherRevision(t *testing.T) {
+	srv := controltest.New(t)
+	srv.SetWelcome(map[string]any{"type": "welcome", "protocol": "rex.control.v1", "api_revision": 13, "limits": map[string]any{"max_message_bytes": 65536}})
+	_, err := control.Dial(callCtx(t), srv.Path, control.Options{})
+	if err == nil || !strings.Contains(err.Error(), "13") {
+		t.Fatalf("Dial の error = %v、welcome の revision 13 を言うはず", err)
 	}
 }
 

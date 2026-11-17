@@ -98,7 +98,9 @@ func TestExecClient_NewSession(t *testing.T) {
 	if got != spawnedBlock {
 		t.Errorf("NewSession() = %q, want %q", got, spawnedBlock)
 	}
-	f.assertCalls(t, "session.create", "session.attach "+spawnedSession, "session.disown_block "+spawnedSession)
+	// 手放した後は session.detach で attach を外す。attach したままだと、その session の block_event がこの呼び出しの
+	// 接続 (event_scope session) に流れ続ける。
+	f.assertCalls(t, "session.create", "session.attach "+spawnedSession, "session.disown_block "+spawnedSession, "session.detach "+spawnedSession)
 
 	var req createRequest
 	f.payloadOf(t, "session.create", &req)
@@ -121,6 +123,18 @@ func TestExecClient_NewSession(t *testing.T) {
 	if !slices.Equal(disown.BlockIDs, []string{spawnedBlock}) {
 		t.Errorf("disown_block の block_ids = %q", disown.BlockIDs)
 	}
+}
+
+// 作った block を手放せなくても (disown_block の失敗)、block は動いているので作成は成功にし、attach は外す。
+func TestExecClient_NewSession_ReleaseFailureStillSucceeds(t *testing.T) {
+	f := spawnAPI(t)
+	useFakeSelf(t, newFakeRex(t))
+	f.Protocol().Fail("session.disown_block", &controltest.Error{Code: "internal", Message: "boom", Status: 500})
+	got, err := f.client(staticResolver(nil)).NewSession(context.Background(), "x", "/w/x", []string{"claude"})
+	if err != nil || got != spawnedBlock {
+		t.Fatalf("NewSession() = %q, %v; want 作った block", got, err)
+	}
+	f.assertCalls(t, "session.create", "session.attach "+spawnedSession, "session.disown_block "+spawnedSession, "session.detach "+spawnedSession)
 }
 
 // label は session と window の名前。先頭の `-` は外し (CLI が flag と読んで拒んだ名残で、名前を揃える)、
@@ -389,6 +403,7 @@ func TestExecClient_NewWindow(t *testing.T) {
 		"session.new_window "+sharedSession,
 		"session.attach "+sharedSession,
 		"session.disown_block "+sharedSession,
+		"session.detach "+sharedSession,
 	)
 	var req newWindowRequest
 	f.payloadOf(t, "session.new_window", &req)
@@ -409,6 +424,31 @@ func TestExecClient_NewWindow(t *testing.T) {
 	if !slices.Equal(resolve.Kinds, []string{"session"}) {
 		t.Errorf("target.resolve の kinds = %v", resolve.Kinds)
 	}
+}
+
+// 足し先の label は実機と同じく大小文字を区別せずに引く。同じ label の session が 2 つあれば、どちらに足すかを
+// 決めずに error にし、閉じた session (not found) とは分ける (呼び手が「無い」と誤読しない)。
+func TestExecClient_NewWindow_LabelMatching(t *testing.T) {
+	t.Run("大小文字を区別しない", func(t *testing.T) {
+		f := windowAPI(t)
+		f.AddLabel(sharedSession, "work")
+		if _, err := f.client(staticResolver(nil)).NewWindow(context.Background(), "Work", "x", "/w/x", []string{"claude"}); err != nil {
+			t.Fatalf("NewWindow() error = %v", err)
+		}
+	})
+	t.Run("2 つに当たれば ambiguous", func(t *testing.T) {
+		f := windowAPI(t)
+		f.AddLabel(sharedSession, "work")
+		f.AddUnlisted(sessionB)
+		f.AddLabel(sessionB, "WORK")
+		_, err := f.client(staticResolver(nil)).NewWindow(context.Background(), "work", "x", "/w/x", []string{"claude"})
+		if err == nil || !strings.Contains(err.Error(), "ambiguous") || isNotFound(err) {
+			t.Errorf("NewWindow() error = %v, want not found でない ambiguous の error", err)
+		}
+		if calls := f.Calls(); slices.Contains(calls, "session.new_window "+sharedSession) {
+			t.Errorf("ambiguous なのに window を足した: %v", calls)
+		}
+	})
 }
 
 // label は window の名前で、先頭の `-` は NewSession と同じく外す。外して空なら label を付けない。
@@ -529,6 +569,7 @@ func TestExecClient_SplitPane(t *testing.T) {
 		"session.new_split "+sessionA,
 		"session.attach "+sessionA,
 		"session.disown_block "+sessionA,
+		"session.detach "+sessionA,
 	)
 	var req struct {
 		AnchorID  string  `json:"anchor_id"`

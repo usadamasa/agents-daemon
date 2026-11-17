@@ -35,7 +35,7 @@ const sessionScript = `set -m; rex="$1"; ad="$2"; shift 2; "$ad" spawned-session
 // 足し先の session はほかの作業と共有するので、印を書かず session も閉じない。コマンドが終われば pane が閉じ、
 // 最後の pane を失った window は rex が閉じるので、ほかのタブは残る。set -m (サイドバーの題) と 0 以外で終わったときの
 // 待ちは sessionScript と同じ。
-// rex-premise: preview.30 api new_window のコマンドが終わると pane と window が閉じ、session は残る
+// rex-premise: preview.30 api new_window のコマンドが終わると pane と window が閉じ、session は残る (shell の options が既定のまま。2026-11-18 に実測)
 const tabScript = `set -m; export ` + sharedSessionEnv + `=1; "$@"; s=$?; c() { exit "$s"; }; ` +
 	`if [ "$s" -ne 0 ]; then trap c INT; printf "\n%s が exit %s で終わった。Enter で閉じる。\n" "$1" "$s"; read -r _; fi; c`
 

@@ -108,6 +108,8 @@ func (w *Watcher) loop(ctx context.Context, logf func(format string, args ...any
 // 全列挙は購読を張った (attach_all が応えた) 後に打ち、それまでに溜まった event を全部、全列挙の後に順に当てる。
 // 購読は欠けず順序を保つので、全列挙より古い event が当たっても、その後の変化の event が後ろに必ずあり、cache は
 // 最新に追いつく。全列挙の後に読んだ変化を 2 度当てても害は無い (record と前景は置き換え、close は消すだけ)。
+// 全列挙が読んだ変化の event がまだ届いていない間に公開すると、その間だけ全列挙より古い状態が見えるので、全列挙の後に
+// 購読の接続で Sync を打ち、その seq までの event を当て終えてから公開する。
 func (w *Watcher) once(ctx context.Context) error {
 	stream, err := w.subscribe(ctx)
 	if err != nil {
@@ -119,18 +121,24 @@ func (w *Watcher) once(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("購読を始めるときの全列挙に失敗: %w", err)
 	}
+	upTo, err := stream.Sync(ctx)
+	if err != nil {
+		return fmt.Errorf("購読を始めるときの同期に失敗: %w", err)
+	}
 	cache := blockstate.NewCache(blocks)
-	for drained := false; !drained; {
+	var seen int64
+	for seen < upTo {
 		select {
+		case <-ctx.Done():
+			return ctx.Err()
 		case ev, ok := <-stream.Events():
 			if !ok {
 				return ended(stream)
 			}
-			if err := w.apply(ctx, cache, nil, ev); err != nil {
+			seen = ev.Seq
+			if err := w.apply(ctx, cache, nil, ev.Payload); err != nil {
 				return err
 			}
-		default:
-			drained = true
 		}
 	}
 	w.set(cache)
@@ -143,7 +151,7 @@ func (w *Watcher) once(ctx context.Context) error {
 			if !ok {
 				return ended(stream)
 			}
-			if err := w.apply(ctx, cache, &w.mu, ev); err != nil {
+			if err := w.apply(ctx, cache, &w.mu, ev.Payload); err != nil {
 				return err
 			}
 		}

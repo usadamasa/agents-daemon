@@ -34,7 +34,7 @@ type Server struct {
 	// failing は method の短い名前と block か session で、internal の失敗を返すもの。
 	failing map[string]bool
 	status  string
-	// version は server.version の応答。空なら失敗を返す。
+	// version は server.version の応答。空なら失敗を返す。既定は revision 14 の fake の版。
 	version string
 	// labels は session の label。
 	labels map[string]string
@@ -50,6 +50,8 @@ func New(t testing.TB) *Server {
 	s := &Server{
 		srv: controltest.New(t), blocks: map[string][][2]string{}, results: map[string]string{}, failing: map[string]bool{},
 		labels: map[string]string{}, closing: map[string]bool{}, truncated: map[string]bool{},
+		// 購読の同期も server.version を打つので、既定で応える。
+		version: `{"rex_version":"0.0.0-fake","built_at":"2026-01-01T00:00:00Z","dirty":false,"api_revision":14}`,
 	}
 	s.srv.Handle("server.status", s.serverStatus)
 	s.srv.Handle("server.version", s.serverVersion)

@@ -2,15 +2,19 @@ package api
 
 import (
 	"context"
-	"encoding/json"
+	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/api/control"
 )
 
+// Event は購読で届いた event 1 件 (seq と、event の名前と欄を持つ payload)。
+type Event = control.Event
+
 // Subscription は event を受けるためだけの control 接続 1 本。切れても張り直さない (張り直した接続は seq が 1 から
 // 数え直しで、その間の event は失われる)。切れたら呼び手が Subscribe し直し、状態を読み直す。
 type Subscription struct {
-	conn *control.Conn
+	conn    *control.Conn
+	timeout time.Duration
 }
 
 // Subscribe は呼び出しと別の接続を張り、session.attach_all (event_scope all) で server と全 session の event を
@@ -34,11 +38,23 @@ func (c *Client) Subscribe(ctx context.Context, buffer int) (*Subscription, erro
 		_ = conn.Close()
 		return nil, err
 	}
-	return &Subscription{conn: conn}, nil
+	return &Subscription{conn: conn, timeout: c.timeout}, nil
 }
 
-// Events は event (`{"type": <名前>, "payload": <欄>}`) を届いた順に渡す。接続が終わると閉じる。
-func (s *Subscription) Events() <-chan json.RawMessage { return s.conn.Events() }
+// Events は event を届いた順に渡す。接続が終わると閉じる。
+func (s *Subscription) Events() <-chan Event { return s.conn.Events() }
+
+// Sync はこの接続に安い request (server.version) を 1 本打ち、応答の seq を返す。この呼び出しより前に起きた変化の
+// event は、seq がこの値以下になる (応答がまだ届いていない event を追い越していても seq は進んでいる)。別の接続で
+// 読んだ結果に、どこまでの event が含まれうるかの境目に使う。
+func (s *Subscription) Sync(ctx context.Context) (int64, error) {
+	if s.timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, s.timeout)
+		defer cancel()
+	}
+	return s.conn.CallSeq(ctx, "server.version", nil, nil)
+}
 
 // Err は接続が終わった理由。終わっていなければ nil。
 func (s *Subscription) Err() error { return s.conn.Err() }

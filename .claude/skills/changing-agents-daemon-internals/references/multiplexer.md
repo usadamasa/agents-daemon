@@ -55,7 +55,9 @@ daemon は起動時に `multiplexer.Watcher` の `Watch` で購読を 1 本張�
 1. 呼び出しと別の control 接続を張り、`session.attach_all` (`event_scope: all`) を打つ。この応答の後に起きた event が届く
 2. 全列挙で cache を作る (呼び出しの接続で打つ)。全列挙の間に届いた event は捨てずに溜め、全列挙の後に順に当てる。
    購読は欠けず順序を保つので、snapshot より古い event が当たっても、その後の変化の event が後ろに必ずあり、
-   cache は最新に追いつく
+   cache は最新に追いつく。全列挙の後に購読の接続で `server.version` を 1 本打ち、その応答の seq までの event を
+   当て終えてから公開する (応答は event を追い越しうるので、全列挙が読んだ変化の event が届く前に公開すると、
+   その間だけ全列挙より古い状態が見える)
 3. 以降は event を当て続け、`PaneList` は rex を叩かずに cache を `ToPane` へ渡す (`rex/blockstate`)
 
 | event | cache への当て方 |
@@ -70,7 +72,7 @@ daemon は起動時に `multiplexer.Watcher` の `Watch` で購読を 1 本張�
 
 それ以外の event (client の出入り、window、view の変化、ほかの block の event) は読み捨てる。
 
-event の queue は 16384 件で、溢れたら接続を閉じて張り直す (読み手を待つと応答の受け取りが止まり、捨てると
+event の queue は 16384 件で、溢れたら close frame (1008) で接続を閉じて張り直す (読み手を待つと応答の受け取りが止まり、捨てると
 欠けた event で cache を進める)。daemon が終わるとき (入れ替わりを含む) は購読の接続を close frame で閉じてから
 終わる。購読が切れたら (接続の切断、queue の溢れ、壊れた event、`block_created` / `session_created` の後の
 `list_blocks` の失敗) cache を捨てて未同期に戻し、1 秒から倍、上限 30 秒の間隔で張り直す。張り直した接続は seq を

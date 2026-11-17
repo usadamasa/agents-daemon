@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
+	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/wire"
 )
 
 // session と block は 2026-10-10 の実測の ID。
@@ -226,7 +227,7 @@ func TestCache_ChildExitedKeepsIdleRecord(t *testing.T) {
 	}
 	applyAll(t, c, []string{blockEventLine(sessionOwn, blockOwn, "child_exited", `{"exit_code":137}`)})
 	got := c.Panes(nil)
-	want := []multiplexer.Pane{ToPane(blockOwn, c.blocks[blockOwn].ProgramStatus, Process{}, "")}
+	want := []multiplexer.Pane{ToPane(blockOwn, c.blocks[blockOwn].ProgramStatus, wire.Process{}, "")}
 	if !slices.Equal(got, want) {
 		t.Errorf("panes() = %+v, want %+v (前景の無い block の pane)", got, want)
 	}
@@ -302,7 +303,7 @@ func TestRelevant(t *testing.T) {
 		if !Relevant([]byte(line)) {
 			continue
 		}
-		var l streamLine
+		var l wire.Event
 		if err := json.Unmarshal([]byte(line), &l); err != nil {
 			t.Fatal(err)
 		}

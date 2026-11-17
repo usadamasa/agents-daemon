@@ -27,10 +27,10 @@ func TestExecClient_SessionBlocks(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			f := newFakeAPI(t)
 			if !tt.missing {
-				f.addSession("session:x", tt.blocks...)
+				f.AddSession("session:x", tt.blocks...)
 			}
 			if tt.fail {
-				f.fail("list_blocks-session:x")
+				f.Fail("session.list_blocks", "session:x")
 			}
 			n, found, err := f.client(staticResolver(nil)).SessionBlocks(context.Background(), "session:x")
 			if (err != nil) != tt.wantErr {

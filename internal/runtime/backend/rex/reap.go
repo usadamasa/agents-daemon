@@ -8,7 +8,7 @@ import (
 // SessionBlocks は session の block を flavor を問わず数える (daemon が空になった起こした session を閉じる。#557)。
 // 購読の cache は shell の block しか持たないので、毎回 list_blocks で引く。session が無ければ found=false。
 func (c *execClient) SessionBlocks(ctx context.Context, sessionID string) (n int, found bool, err error) {
-	blocks, err := c.listBlocks(ctx, sessionID)
+	blocks, err := c.rex.ListBlocks(ctx, sessionID)
 	if err != nil {
 		if isNotFound(err) {
 			return 0, false, nil

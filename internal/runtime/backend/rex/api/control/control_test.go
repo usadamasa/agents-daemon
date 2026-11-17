@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/control"
-	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/control/controltest"
+	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/api/control"
+	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/api/control/controltest"
 )
 
 func dial(t *testing.T, srv *controltest.Server, opts control.Options) *control.Conn {

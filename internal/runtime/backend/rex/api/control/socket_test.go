@@ -3,7 +3,7 @@ package control_test
 import (
 	"testing"
 
-	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/control"
+	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/api/control"
 )
 
 func TestSocketPath(t *testing.T) {

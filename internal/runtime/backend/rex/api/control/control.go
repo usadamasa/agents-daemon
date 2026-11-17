@@ -1,6 +1,6 @@
 // Package control は rex server の control API (Unix socket の上の WebSocket、subprotocol rex.control.v1) の client。
 // 接続 1 本の上で request と response を id で突き合わせ、server が求めずに送る event を queue へ渡す。
-// どの method をどう呼ぶか、attach をいつ打つかは呼び手 (rex) が持つ。プロトコルの原本は server の `/llms.txt`。
+// どの method をどう呼ぶか、attach をいつ打つかは呼び手 (api) が持つ。プロトコルの原本は server の `/llms.txt`。
 package control
 
 import (

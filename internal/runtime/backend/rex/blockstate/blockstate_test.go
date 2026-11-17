@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
+	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/wire"
 )
 
 // 実測の fixture は rex の testdata に 1 か所で置く (rex のテストも同じ応答を使う)。中身の由来は
@@ -97,11 +98,11 @@ func TestToPane(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var ps ProgramStatus
+			var ps wire.ProgramStatus
 			if err := json.Unmarshal([]byte(tt.ps), &ps); err != nil {
 				t.Fatalf("program_status の parse に失敗: %v", err)
 			}
-			var proc Process
+			var proc wire.Process
 			if err := json.Unmarshal([]byte(processJSON(tt.pid, tt.argv0, "/w")), &proc); err != nil {
 				t.Fatalf("process の parse に失敗: %v", err)
 			}
@@ -141,11 +142,11 @@ func TestToPane_KindAndMessage(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var ps ProgramStatus
+			var ps wire.ProgramStatus
 			if err := json.Unmarshal([]byte(tt.ps), &ps); err != nil {
 				t.Fatalf("program_status の parse に失敗: %v", err)
 			}
-			var proc Process
+			var proc wire.Process
 			if err := json.Unmarshal([]byte(processJSON(tt.pid, "claude", "/w")), &proc); err != nil {
 				t.Fatalf("process の parse に失敗: %v", err)
 			}

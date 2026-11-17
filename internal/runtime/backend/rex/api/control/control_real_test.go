@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/control"
+	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/api/control"
 )
 
 // TestRealServer は実機の rex server に control 接続を張り、読み取りだけの method を呼ぶ。

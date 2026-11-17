@@ -1,4 +1,5 @@
-// Package controltest は rex server の control API を真似る fake server を提供する。rex と control のテストが使う。
+// Package controltest は rex server の control API のプロトコルを真似る fake server を提供する。control のテストと、
+// rex の状態から応答を組む apitest が使う。
 // 実機と同じく hello を先に求め、attach していない接続から session を名指す request を conflict で断る。
 package controltest
 

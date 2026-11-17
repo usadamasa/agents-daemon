@@ -7,13 +7,14 @@ import (
 	"sort"
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
+	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/wire"
 )
 
 // State は shell の block 1 つ分の状態。program_status と process の応答と同じ形で持ち、ToPane に渡す。
 type State struct {
 	Session       string
-	ProgramStatus ProgramStatus
-	Process       Process
+	ProgramStatus wire.ProgramStatus
+	Process       wire.Process
 }
 
 // Ref は Apply が埋めるよう求めた block。flavor は event に載らないので、呼び手が block ls で確かめる。
@@ -36,45 +37,12 @@ func NewCache(blocks map[string]*State) *Cache {
 	return &Cache{blocks: blocks}
 }
 
-// streamLine は `events --all --json` の 1 行のうち読む部分。
-// rex-premise: preview.30 cli events --all --json は session_event の payload.event に block_event / block_created / block_closed を、top level に session_created / session_destroyed を流す
-// rex-premise: preview.30 cli session new の最初の block には block_created が来ず、session_created の後にその block の event が流れる
-type streamLine struct {
-	Type    string `json:"type"`
-	Payload struct {
-		SessionID string `json:"session_id"`
-		Session   struct {
-			SessionID string `json:"session_id"`
-		} `json:"session"`
-		Event *struct {
-			Type    string          `json:"type"`
-			Payload json.RawMessage `json:"payload"`
-		} `json:"event"`
-	} `json:"payload"`
-}
-
-// blockEvent は block_event の payload。Payload の形は Name で決まる。
-type blockEvent struct {
-	BlockID string          `json:"block_id"`
-	Name    string          `json:"name"`
-	Payload json.RawMessage `json:"payload"`
-}
-
-// rex-premise: preview.30 cli program_status_changed は {id, record, reason}、program_status_removed は {ids, reason}、process_changed は {generation, foreground}
-type (
-	programStatusChanged struct {
-		ID     string `json:"id"`
-		Record Record `json:"record"`
-	}
-	programStatusRemoved struct {
-		IDs []string `json:"ids"`
-	}
-)
+// rex-premise: preview.30 api session.create の最初の block には block_created が来ず、session_created の後にその block の event が流れる
 
 // Relevant は Apply が読む type の行か。client の出入りのような雑音は rex の CLI の呼び出しのたびに流れるので、
 // 呼び手はこれで落としてから溜める。壊れた行は通し、Apply に error を出させる。
 func Relevant(line []byte) bool {
-	var l streamLine
+	var l wire.Event
 	if err := json.Unmarshal(line, &l); err != nil {
 		return true
 	}
@@ -97,7 +65,7 @@ func Relevant(line []byte) bool {
 // 読まない type の行と、cache に無い block (shell 以外か、まだ埋めていない) の event は読み捨てる。
 // 壊れた行は error にする (呼び手は stream を張り直して全列挙からやり直す)。
 func (c *Cache) Apply(line []byte) (Ref, error) {
-	var l streamLine
+	var l wire.Event
 	if err := json.Unmarshal(line, &l); err != nil {
 		return Ref{}, fmt.Errorf("events の行の parse に失敗: %w (line=%q)", err, line)
 	}
@@ -135,7 +103,7 @@ func (c *Cache) Apply(line []byte) (Ref, error) {
 }
 
 func (c *Cache) applyBlockEvent(raw json.RawMessage, line []byte) error {
-	var ev blockEvent
+	var ev wire.BlockEvent
 	if err := json.Unmarshal(raw, &ev); err != nil {
 		return fmt.Errorf("block_event の parse に失敗: %w (line=%q)", err, line)
 	}
@@ -146,16 +114,16 @@ func (c *Cache) applyBlockEvent(raw json.RawMessage, line []byte) error {
 	var err error
 	switch ev.Name {
 	case "program_status_changed":
-		var p programStatusChanged
+		var p wire.ProgramStatusChanged
 		if err = json.Unmarshal(ev.Payload, &p); err == nil {
 			// record の id は root では欠けるので、payload の id (root は空) で埋める。
 			p.Record.ID = p.ID
 			st.ProgramStatus.Records = replaceRecord(st.ProgramStatus.Records, p.Record)
 		}
 	case "program_status_removed":
-		var p programStatusRemoved
+		var p wire.ProgramStatusRemoved
 		if err = json.Unmarshal(ev.Payload, &p); err == nil {
-			st.ProgramStatus.Records = slices.DeleteFunc(st.ProgramStatus.Records, func(r Record) bool { return slices.Contains(p.IDs, r.ID) })
+			st.ProgramStatus.Records = slices.DeleteFunc(st.ProgramStatus.Records, func(r wire.Record) bool { return slices.Contains(p.IDs, r.ID) })
 		}
 	case "process_changed":
 		// 前景の置き換え。stream は順序を保つので generation は見ない。
@@ -173,7 +141,7 @@ func (c *Cache) applyBlockEvent(raw json.RawMessage, line []byte) error {
 }
 
 // replaceRecord は id が同じ record を置き換え、無ければ足す。report は record を丸ごと置き換える (OSC 7501)。
-func replaceRecord(records []Record, r Record) []Record {
+func replaceRecord(records []wire.Record, r wire.Record) []wire.Record {
 	for i := range records {
 		if records[i].ID == r.ID {
 			records[i] = r

@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
-	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/blockstate"
+	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/wire"
 )
 
 // logSink は Watch の logf が書いた行を集める。
@@ -95,8 +95,8 @@ func (f *fakeRex) clearCalls(t *testing.T) {
 func ownBlockAPI(t *testing.T) *fakeAPI {
 	t.Helper()
 	api := newFakeAPI(t)
-	api.addSession(sessionOwn, [2]string{blockOwn, blockstate.ShellFlavor})
-	api.putBlock(blockOwn, psEmpty, processJSON(pidOwnShell, "-zsh", cwdOwn))
+	api.AddSession(sessionOwn, [2]string{blockOwn, wire.ShellFlavor})
+	api.PutBlock(blockOwn, psEmpty, processJSON(pidOwnShell, "-zsh", cwdOwn))
 	return api
 }
 
@@ -111,9 +111,9 @@ func TestWatch_PaneListFromCache(t *testing.T) {
 	startWatch(t, c)
 	eventually(t, "同期済み", c.watch.synced)
 	// stream の block_created と session_created が打つ list_blocks を待ってから数える。
-	eventually(t, "stream の event の list_blocks", func() bool { return len(api.calls()) >= 6 })
+	eventually(t, "stream の event の list_blocks", func() bool { return len(api.Calls()) >= 6 })
 	f.clearCalls(t)
-	before := len(api.calls())
+	before := len(api.Calls())
 
 	panes, err := c.PaneList(context.Background())
 	if err != nil {
@@ -127,7 +127,7 @@ func TestWatch_PaneListFromCache(t *testing.T) {
 		t.Errorf("PaneList() =\n%+v\nwant\n%+v", panes, want)
 	}
 	f.assertCalls(t)
-	if after := api.calls()[before:]; len(after) != 0 {
+	if after := api.Calls()[before:]; len(after) != 0 {
 		t.Errorf("cache から返すはずが API を叩いた: %v", after)
 	}
 }
@@ -144,7 +144,7 @@ func TestWatch_Calls(t *testing.T) {
 
 	startWatch(t, c)
 	eventually(t, "同期済み", c.watch.synced)
-	eventually(t, "block_created と session_created の list_blocks", func() bool { return len(api.calls()) >= 6 })
+	eventually(t, "block_created と session_created の list_blocks", func() bool { return len(api.Calls()) >= 6 })
 	f.assertCalls(t, "--autostart=false events --all --json")
 	api.assertCalls(t,
 		"session.list",
@@ -162,13 +162,13 @@ func TestWatch_Calls(t *testing.T) {
 func TestWatch_NewSessionBlocks(t *testing.T) {
 	f := newFakeRex(t)
 	api := newFakeAPI(t)
-	api.addSession(sessionA)
+	api.AddSession(sessionA)
 	// session B は全列挙の後にできた session なので、session.list には出さない。
-	api.addUnlisted(sessionB,
-		[2]string{blockClaudeDone, blockstate.ShellFlavor},
+	api.AddUnlisted(sessionB,
+		[2]string{blockClaudeDone, wire.ShellFlavor},
 		[2]string{blockNotShell, "com.superlogical.browser"},
 	)
-	api.putBlock(blockClaudeDone, psEmpty, processJSON(pidClaudeDone, "claude", "/b"))
+	api.PutBlock(blockClaudeDone, psEmpty, processJSON(pidClaudeDone, "claude", "/b"))
 	f.put(t, "events.jsonl", strings.Join([]string{
 		`{"type":"session_created","payload":{"session":{"session_id":"` + sessionB + `","label":"new"}}}`,
 		psChangedLine(sessionB, blockClaudeDone, "done", "できた", pidClaudeDone),
@@ -204,12 +204,12 @@ func TestWatch_StreamEndFallsBackToListing(t *testing.T) {
 		t.Errorf("log = %q, want 購読が切れた旨", got)
 	}
 
-	before := len(api.calls())
+	before := len(api.Calls())
 	if _, err := c.PaneList(context.Background()); err != nil {
 		t.Fatalf("PaneList() error = %v", err)
 	}
 	want := []string{"session.list", "session.list_blocks " + sessionOwn, "program_status " + blockOwn, "process " + blockOwn}
-	if got := api.calls()[before:]; !slices.Equal(got, want) {
+	if got := api.Calls()[before:]; !slices.Equal(got, want) {
 		t.Errorf("全列挙の calls = %v, want %v", got, want)
 	}
 }

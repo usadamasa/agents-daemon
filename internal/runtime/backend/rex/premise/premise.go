@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
-	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/blockstate"
+	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/wire"
 )
 
 // ProbeMissingBlock は存在しない block の ID。exit code と stderr の形を見るためだけに打つ
@@ -69,7 +69,7 @@ func (c checker) checkModes(ctx context.Context, blockID string, add addFinding)
 		return
 	}
 	screen, _ := m["screen"].(string)
-	if screen != blockstate.ScreenAlternate {
+	if screen != wire.ScreenAlternate {
 		add(false, "自分の block の screen が %q (Claude Code は alternate screen で描く前提。起動直後の dialog か、Claude Code の画面でない)", screen)
 		return
 	}
@@ -135,7 +135,7 @@ func (c checker) checkMissingTarget(ctx context.Context, add addFinding) {
 	}
 }
 
-// checkProgramStatus は自分の block の root record に blockstate.Record が読む欄があることを見る。
+// checkProgramStatus は自分の block の root record に wire.Record が読む欄があることを見る。
 func (c checker) checkProgramStatus(ctx context.Context, blockID string, add addFinding) {
 	m, err := c.runMap(ctx, "block", "call", "-b", blockID, "program_status")
 	if err != nil {
@@ -147,11 +147,11 @@ func (c checker) checkProgramStatus(ctx context.Context, blockID string, add add
 		add(false, "program_status に root record が無い (Claude Code の自己申告がまだ無いか、record の id の形が変わった)")
 		return
 	}
-	if missing := missingPaths(root, blockstate.RecordFields...); len(missing) > 0 {
-		add(false, "program_status の root record に %s が無い (blockstate.Record が読む欄。無いと agent_status が unknown のままになる)", strings.Join(missing, " / "))
+	if missing := missingPaths(root, wire.RecordFields...); len(missing) > 0 {
+		add(false, "program_status の root record に %s が無い (wire.Record が読む欄。無いと agent_status が unknown のままになる)", strings.Join(missing, " / "))
 		return
 	}
-	add(true, "program_status の root record に %s がある", strings.Join(blockstate.RecordFields, " / "))
+	add(true, "program_status の root record に %s がある", strings.Join(wire.RecordFields, " / "))
 }
 
 // rootRecordMap は records の中から subagent でない record (id が無いか空) を返す。
@@ -169,7 +169,7 @@ func rootRecordMap(m map[string]any) map[string]any {
 	return nil
 }
 
-// checkProcess は自分の block の process の foreground に blockstate.Foreground が読む欄があることを見る。
+// checkProcess は自分の block の process の foreground に wire.Foreground が読む欄があることを見る。
 func (c checker) checkProcess(ctx context.Context, blockID string, add addFinding) {
 	m, err := c.runMap(ctx, "block", "call", "-b", blockID, "process")
 	if err != nil {
@@ -181,11 +181,11 @@ func (c checker) checkProcess(ctx context.Context, blockID string, add addFindin
 		add(false, "process に foreground が無い (前景の pid を取れず、record の owner と突き合わせられない)")
 		return
 	}
-	if missing := missingPaths(fg, blockstate.ForegroundFields...); len(missing) > 0 {
-		add(false, "process の foreground に %s が無い (blockstate.Foreground が読む欄)", strings.Join(missing, " / "))
+	if missing := missingPaths(fg, wire.ForegroundFields...); len(missing) > 0 {
+		add(false, "process の foreground に %s が無い (wire.Foreground が読む欄)", strings.Join(missing, " / "))
 		return
 	}
-	add(true, "process の foreground に %s がある", strings.Join(blockstate.ForegroundFields, " / "))
+	add(true, "process の foreground に %s がある", strings.Join(wire.ForegroundFields, " / "))
 }
 
 // checkBlockLs は自分の session の block ls に自分の block があり、flavor が shell であることを見る。
@@ -195,7 +195,7 @@ func (c checker) checkBlockLs(ctx context.Context, blockID, sessionID string, ad
 		add(false, "session が分からないため block ls の点検を飛ばした (REX_SESSION を持つ block の中から呼ぶ)")
 		return
 	}
-	var blocks blockstate.BlockList
+	var blocks wire.BlockList
 	if err := c.runJSON(ctx, &blocks, "block", "ls", "-s", sessionID, "--json"); err != nil {
 		add(false, "block ls -s が失敗: %v", err)
 		return
@@ -204,11 +204,11 @@ func (c checker) checkBlockLs(ctx context.Context, blockID, sessionID string, ad
 		if b.BlockID != blockID {
 			continue
 		}
-		if b.Flavor != blockstate.ShellFlavor {
-			add(false, "自分の block の flavor が %q (コードは %q を shell と見る。違うと PaneList が全 block を読み飛ばす)", b.Flavor, blockstate.ShellFlavor)
+		if b.Flavor != wire.ShellFlavor {
+			add(false, "自分の block の flavor が %q (コードは %q を shell と見る。違うと PaneList が全 block を読み飛ばす)", b.Flavor, wire.ShellFlavor)
 			return
 		}
-		add(true, "block ls -s に自分の block があり flavor は %s", blockstate.ShellFlavor)
+		add(true, "block ls -s に自分の block があり flavor は %s", wire.ShellFlavor)
 		return
 	}
 	add(false, "block ls -s に自分の block (%s) が無い", blockID)
@@ -227,7 +227,7 @@ func (c checker) checkInspect(ctx context.Context, blockID string, add addFindin
 			missing = append(missing, "method "+name)
 		}
 	}
-	for _, name := range blockstate.BlockEvents {
+	for _, name := range wire.BlockEvents {
 		if !hasPath(m, "api.events."+name) {
 			missing = append(missing, "event "+name)
 		}
@@ -237,7 +237,7 @@ func (c checker) checkInspect(ctx context.Context, blockID string, add addFindin
 		return
 	}
 	add(true, "block inspect の api に method %s と event %s がある",
-		strings.Join(inspectMethods, " / "), strings.Join(blockstate.BlockEvents, " / "))
+		strings.Join(inspectMethods, " / "), strings.Join(wire.BlockEvents, " / "))
 }
 
 // runJSON は rex を実行し stdout の JSON を v へ読む。

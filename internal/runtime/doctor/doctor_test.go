@@ -248,7 +248,7 @@ func TestRunDoctor_PremisesSection(t *testing.T) {
 		ReachableFunc: func(context.Context) error { return nil },
 		PaneListFunc:  func(context.Context) ([]multiplexer.Pane, error) { return nil, nil },
 	}
-	checker := &fakePremises{findings: []multiplexer.PremiseFinding{{OK: true, Text: "exit 3"}}}
+	checker := &fakePremises{findings: []multiplexer.PremiseFinding{{OK: true, Text: "無い block は not_found"}}}
 	in := Input{
 		Client: client, Kind: sessioncontext.MultiplexerKindRex, Paths: apppath.New(t.TempDir(), "", ""),
 		Now: time.Now(), Getenv: envOf(map[string]string{"REX_BLOCK": "block:self", "REX_SESSION": "session:self"}),
@@ -258,8 +258,9 @@ func TestRunDoctor_PremisesSection(t *testing.T) {
 	if err := Run(context.Background(), &buf, in); err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if !strings.Contains(buf.String(), "-- rex CLI の前提") || !strings.Contains(buf.String(), "OK: exit 3") {
-		t.Errorf("rex CLI の前提の節が無い:\n%s", buf.String())
+	// 点検は control API の応答を見るので、節の名前に CLI を出さない。
+	if !strings.Contains(buf.String(), "-- rex の前提 (") || !strings.Contains(buf.String(), "OK: 無い block は not_found") {
+		t.Errorf("rex の前提の節が無い:\n%s", buf.String())
 	}
 }
 

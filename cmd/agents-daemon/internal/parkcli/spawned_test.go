@@ -217,7 +217,6 @@ func TestCloseSpawnedSession_FailureKeepsMark(t *testing.T) {
 // `spawned-session close` は印の無い session を、rex で無いと確かめられなければ成功にしない。
 func TestSpawnedSessionClose_UnmarkedUnreachable(t *testing.T) {
 	parkTestEnv(t)
-	t.Setenv("REX_BIN_PATH", filepath.Join(t.TempDir(), "rex-missing"))
 	if _, err := runSpawnedSession(t, "close", "session:not-spawned"); err == nil || !strings.Contains(err.Error(), "印") {
 		t.Errorf("error = %v, want 印が無いことを述べる error", err)
 	}

@@ -17,13 +17,15 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/parking"
 )
 
-// parkTestEnv は HOME と XDG_* を root へ向ける。
+// parkTestEnv は HOME と XDG_* を root へ向ける。rex の socket は誰も待たない root の下のパスへ向け、rex の中で
+// テストを回しても実機の rex に繋がない。
 func parkTestEnv(t *testing.T) (root string) {
 	t.Helper()
 	root = t.TempDir()
 	t.Setenv("HOME", root)
 	t.Setenv("XDG_STATE_HOME", filepath.Join(root, "state"))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
+	t.Setenv("REX_SERVER", "unix://"+filepath.Join(root, "rex.sock"))
 	return root
 }
 

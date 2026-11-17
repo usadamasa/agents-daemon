@@ -4,20 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"os"
-	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/kballard/go-shellquote"
-
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/api"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/api/apitest"
-	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/cli"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/wire"
 )
 
@@ -35,163 +30,6 @@ const (
 	sidWorking = "0d5e717f-82c5-4e71-ac74-799f7197e0de"
 	sidDone    = "6b1f3c2a-1111-4222-8333-944455556666"
 )
-
-// blockLsJSON は `block ls --json` の応答。形は 2026-10-10 の実測。
-func blockLsJSON(blocks ...[2]string) string {
-	parts := make([]string, 0, len(blocks))
-	for _, b := range blocks {
-		parts = append(parts, `{"block_id":"`+b[0]+`","label":"shell","creator_name":"com.superlogical.terminal","flavor":"`+b[1]+`","host_id":"dfd31eaf-0189-45ad-9a36-10c09f3cb111","placement":"placed","window_id":"window:01a1250f-c11a-7a87-b4b5-eca09f61b728"}`)
-	}
-	return `{"blocks":[` + strings.Join(parts, ",") + `]}`
-}
-
-// fakeRex は fixture のディレクトリと、それを読む fake の rex。
-type fakeRex struct {
-	dir string
-	bin string
-}
-
-// newFakeRex は引数で fixture を選んで返す fake の rex を書く。fixture が無ければ実機と同じく
-// `block target "…" not found` を stderr に出して exit 3 になる。`fail-<fixture 名>` を置くと exit 1 になる。
-// `events` は events.jsonl を流して終わる (server の切断)。`events-hold` を置くと流した後も stream を開けておく。
-// 呼び出しごとに引数を 1 つずつ single quote で囲って calls.log へ、環境変数を env.log へ追記する。
-// --autostart=false が先頭に無い呼び出しは拒むので、成功を確かめるテストはどれも autostart を切っていることを確かめている。
-func newFakeRex(t *testing.T) *fakeRex {
-	t.Helper()
-	dir := t.TempDir()
-	return newFakeRexAt(t, dir, filepath.Join(dir, "rex"))
-}
-
-// newFakeRexAt は fixture を dir から読む fake の rex を bin に書く。dir と bin の親ディレクトリは作る。
-func newFakeRexAt(t *testing.T, dir, bin string) *fakeRex {
-	t.Helper()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatalf("fixture の置き場の作成に失敗: %v", err)
-	}
-	script := `#!/bin/sh
-d=` + shellQuote(dir) + `
-env >> "$d/env.log"
-for a in "$@"; do
-  printf "'%s' " "$(printf '%s' "$a" | sed "s/'/'\\\\''/g")"
-done >> "$d/calls.log"
-echo >> "$d/calls.log"
-if [ "$1" != "--autostart=false" ]; then
-  echo "Error: --autostart=false がない" >&2
-  exit 2
-fi
-shift
-emit() {
-  if [ -f "$d/fail-$1" ]; then
-    echo "Error: server error" >&2
-    exit 1
-  elif [ -f "$d/$1" ]; then
-    cat "$d/$1"
-  else
-    echo "Error: block target \"$2\" not found" >&2
-    exit 3
-  fi
-}
-case "$1" in
-  ls) emit ls.json sessions ;;
-  version) emit version.json version ;;
-  block)
-    case "$2" in
-      ls) emit "block-ls-$4.json" "$4" ;;
-      call) emit "$5-$4.json" "$4" ;;
-      inspect) emit "inspect-$3.json" "$3" ;;
-      *) echo "Error: unknown block subcommand $2" >&2; exit 2 ;;
-    esac ;;
-  capture) emit "capture-$3.txt" "$3" ;;
-  session)
-    case "$2" in
-      new) emit session-new.json session ;;
-      kill) exit 0 ;;
-      *) echo "Error: unknown session subcommand $2" >&2; exit 2 ;;
-    esac ;;
-  window)
-    case "$2" in
-      new) emit window-new.json session ;;
-      *) echo "Error: unknown window subcommand $2" >&2; exit 2 ;;
-    esac ;;
-  api) emit server-status.json server ;;
-  events)
-    emit events.jsonl events
-    if [ -f "$d/events-hold" ]; then exec sleep 30; fi ;;
-  send|send-key) emit "target-$3" "$3" ;;
-  *) echo "Error: unknown command $1" >&2; exit 2 ;;
-esac
-`
-	if err := os.MkdirAll(filepath.Dir(bin), 0o755); err != nil {
-		t.Fatalf("fake rex の置き場の作成に失敗: %v", err)
-	}
-	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
-		t.Fatalf("fake rex の作成に失敗: %v", err)
-	}
-	return &fakeRex{dir: dir, bin: bin}
-}
-
-func (f *fakeRex) put(t *testing.T, name, content string) {
-	t.Helper()
-	if err := os.WriteFile(filepath.Join(f.dir, name), []byte(content), 0o600); err != nil {
-		t.Fatalf("fixture %s の作成に失敗: %v", name, err)
-	}
-}
-
-func (f *fakeRex) putBlock(t *testing.T, blockID, programStatus, process string) {
-	t.Helper()
-	f.put(t, "program_status-"+blockID+".json", programStatus)
-	f.put(t, "process-"+blockID+".json", process)
-}
-
-// assertCalls は rex に渡った引数列を、呼び出しごとに want と比べる。want は shell の語で書き、
-// 空白を含む 1 引数は引用符で囲む。
-func (f *fakeRex) assertCalls(t *testing.T, want ...string) {
-	t.Helper()
-	got := splitArgs(t, readLines(t, filepath.Join(f.dir, "calls.log")))
-	if w := splitArgs(t, want); !slices.EqualFunc(got, w, slices.Equal[[]string]) {
-		t.Errorf("calls =\n%q\nwant\n%q", got, w)
-	}
-}
-
-func splitArgs(t *testing.T, lines []string) [][]string {
-	t.Helper()
-	out := make([][]string, 0, len(lines))
-	for _, line := range lines {
-		args, err := shellquote.Split(line)
-		if err != nil {
-			t.Fatalf("%q を引数に分けられない: %v", line, err)
-		}
-		out = append(out, args)
-	}
-	return out
-}
-
-func (f *fakeRex) client(resolve SessionResolver) *execClient {
-	return &execClient{cli: cli.New(f.bin, noCommandTimeout), resolve: resolve}
-}
-
-// noCommandTimeout はタイムアウトを課さない。fake の shell 起動の遅れでテストが落ちないようにする。
-const noCommandTimeout = 0
-
-func readLines(t *testing.T, path string) []string {
-	t.Helper()
-	b, err := os.ReadFile(path) // #nosec G304 -- テストの一時ディレクトリ
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		t.Fatalf("%s の読み込みに失敗: %v", path, err)
-	}
-	s := strings.TrimRight(string(b), "\n")
-	if s == "" {
-		return nil
-	}
-	return strings.Split(s, "\n")
-}
-
-func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
-}
 
 func staticResolver(m map[string]string) SessionResolver {
 	return func() (map[string]string, error) { return m, nil }
@@ -731,18 +569,6 @@ func TestExecClient_APITimeout(t *testing.T) {
 	}
 	if elapsed := time.Since(start); elapsed > time.Second {
 		t.Errorf("elapsed = %v, want タイムアウトで打ち切る", elapsed)
-	}
-}
-
-func TestNewExecClient_BinPath(t *testing.T) {
-	t.Setenv("REX_BIN_PATH", "/custom/rex")
-	if c := NewExecClient(staticResolver(nil)).(*execClient); c.cli.BinPath() != "/custom/rex" {
-		t.Errorf("binPath = %q, want /custom/rex", c.cli.BinPath())
-	}
-	// 未設定なら最初の呼び出しで PATH から引く (daemon の起動時点で rex が無くても Client は作れる)。
-	t.Setenv("REX_BIN_PATH", "")
-	if c := NewExecClient(staticResolver(nil)).(*execClient); c.cli.BinPath() != "" {
-		t.Errorf("binPath = %q, want 空 (未解決)", c.cli.BinPath())
 	}
 }
 

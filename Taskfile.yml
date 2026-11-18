@@ -122,8 +122,8 @@ tasks:
       - go-arch-lint check
       # go-arch-lint はコードが設定に違反していないかしか見ない。設定そのものが
       # パッケージツリーの転記へ劣化していく方向はこちらが止める。指標の意味と対処は
-      # `go tool analyze-arch-lint --metrics`。
-      - go tool analyze-arch-lint --strict .
+      # `analyze-arch-lint --metrics`。
+      - analyze-arch-lint --strict .
       - task: vulncheck
       # gui/ は別 module (Wails のアプリ) で、gui:test が自分で gosec を回す。./... は入れ子の module の .go も拾うので外す。
       # -quiet が無いとファイルごとの進捗が出力を埋め、後ろの段の失敗が読めなくなる
@@ -134,11 +134,11 @@ tasks:
   vulncheck:
     desc: govulncheck を symbol モードで実行 (lint と週次の vulncheck workflow が呼ぶ)
     cmds:
-      - go tool vulncheck ./...
+      - vulncheck ./...
 
   vulncheck:module:
     desc: govulncheck を module モードで実行 (週次の vulncheck workflow が表示だけに使う)
     # 到達しない修正版無しの脆弱性でも落ちるため、合否には入れない
     cmds:
       # -scan module はルートに Go ファイルが無いと落ちるので、main パッケージのディレクトリで回す
-      - go tool vulncheck -C cmd/agents-daemon -scan module
+      - vulncheck -C cmd/agents-daemon -scan module

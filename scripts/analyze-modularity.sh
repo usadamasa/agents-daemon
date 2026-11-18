@@ -1,12 +1,12 @@
 #!/bin/bash
 set -euo pipefail
 # analyze-modularity.sh
-# `go tool analyze-modularity --strict --quiet` を、base の commit で測ったレポートと比べて回す。`task lint` が呼ぶ。
+# `analyze-modularity --strict --quiet` を、base の commit で測ったレポートと比べて回す。`task lint` が呼ぶ。
 # 揮発の窓は判定する変更自身の commit も含むので、base から D を悪くしたパッケージだけを落とす。
 #
 # BASE_SHA は比べる先。CI は pull_request の base.sha か push の before を渡す。
 # 未設定なら origin/main との merge-base と比べる。空かすべて 0 (新しいブランチの最初の push) なら比べない。
-# base も今の checkout の go.mod が固定する同じバイナリで測る (go tool を今の checkout を cwd にして呼ぶ)。
+# base も今の checkout の flake.lock が固定する、PATH の同じバイナリで測る。
 
 cd "$(dirname "$0")/.."
 
@@ -18,7 +18,7 @@ readonly BASE_SHA
 case "$BASE_SHA" in
   "" | 0000000*)
     printf '%s\n' "analyze-modularity: 比べる base が無いので --baseline なしで判定する" >&2
-    exec go tool analyze-modularity --strict --quiet .
+    exec analyze-modularity --strict --quiet .
     ;;
 esac
 
@@ -33,5 +33,5 @@ cleanup() {
 trap cleanup EXIT
 
 git worktree add --quiet --detach "$work/base" "$BASE_SHA"
-go tool analyze-modularity "$work/base" > "$work/base.json"
-go tool analyze-modularity --strict --quiet --baseline "$work/base.json" .
+analyze-modularity "$work/base" > "$work/base.json"
+analyze-modularity --strict --quiet --baseline "$work/base.json" .

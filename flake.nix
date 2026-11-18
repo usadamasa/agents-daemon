@@ -1,10 +1,15 @@
 {
   description = "agents-daemon の開発環境 (Go と lint・テストのツール)";
 
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    # flake.lock は go-arch-metrics plugin の版の tag の commit に固定する (nix flake update で最新を取らない)
+    go-arch-metrics.url = "github:usadamasa/go-arch-metrics";
+    go-arch-metrics.inputs.nixpkgs.follows = "nixpkgs";
+  };
 
   outputs =
-    { nixpkgs, ... }:
+    { nixpkgs, go-arch-metrics, ... }:
     let
       systems = [
         "aarch64-darwin"
@@ -48,31 +53,41 @@
           }
         else
           pkgs.go_1_27;
+      basePackages =
+        pkgs: with pkgs; [
+          # go.mod の go 行と同じ系列。ずれたら GOTOOLCHAIN=local で即座に失敗させる
+          (devGo pkgs)
+          go-task
+          golangci-lint
+          go-arch-lint
+          gosec
+          bats
+          shellcheck
+          # hook と bats のテストが呼ぶ
+          jq
+          # models/ の TLA+ のモデル検査 (tlc)
+          tlaplus
+          # mod (hooks/*.ts、*.tsx) の型検査 (tsc)。nixpkgs の typescript は 7 系 (Go 実装、旧 typescript-go)。
+          # 型は Claude Code が .claude-plugin/types/ に置く
+          typescript
+          # gui/frontend の npm (task gui:frontend)。配置の library を取るだけで bundler は使わない
+          nodejs
+        ];
     in
     {
       devShells = forAllSystems (pkgs: {
         default = pkgs.mkShellNoCC {
-          # analyze-* と vulncheck は go.mod の tool を Taskfile が go tool で動かすので含めない。
-          # go-arch-lint は analyze-arch-lint が PATH から呼ぶので tool ではなくここに置く
-          packages = with pkgs; [
-            # go.mod の go 行と同じ系列。ずれたら GOTOOLCHAIN=local で即座に失敗させる
-            (devGo pkgs)
-            go-task
-            golangci-lint
-            go-arch-lint
-            gosec
-            bats
-            shellcheck
-            # hook と bats のテストが呼ぶ
-            jq
-            # models/ の TLA+ のモデル検査 (tlc)
-            tlaplus
-            # mod (hooks/*.ts、*.tsx) の型検査 (tsc)。nixpkgs の typescript は 7 系 (Go 実装、旧 typescript-go)。
-            # 型は Claude Code が .claude-plugin/types/ に置く
-            typescript
-            # gui/frontend の npm (task gui:frontend)。配置の library を取るだけで bundler は使わない
-            nodejs
+          packages = basePackages pkgs ++ [
+            # analyze-arch-lint、analyze-modularity、vulncheck、arch-baseline。Taskfile と CI は PATH から呼ぶ。
+            # 実行時に PATH の go、git、golangci-lint、go-arch-lint を呼ぶ
+            go-arch-metrics.packages.${pkgs.stdenv.hostPlatform.system}.default
           ];
+          env.GOTOOLCHAIN = "local";
+        };
+        # default から go-arch-metrics を除いたもの。binary cache に無くジョブごとにビルドされるので、
+        # それを呼ばない CI のジョブ (task lint と task vulncheck 以外) はこちらを使う
+        base = pkgs.mkShellNoCC {
+          packages = basePackages pkgs;
           env.GOTOOLCHAIN = "local";
         };
         # task gui:test が使うものだけ。CI の macOS の job は nix の取得が遅いので、default の closure を引かない

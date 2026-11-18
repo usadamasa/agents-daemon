@@ -19,6 +19,8 @@ permissions:
 
 # Go と lint・テストのツールは flake.nix の devShell から取る (usadamasa/gh-manage の setup-nix)。版の正本は flake.lock
 # nix store の cache は Linux でも macOS でも restore の方が binary cache からの取得より遅いので、全 job で cache: false にする
+# go-arch-metrics は binary cache に無くジョブごとにビルドされるので、それを呼ぶ go lint だけが default を使い、
+# ほかのジョブは除いた devShells.base を使う
 jobs:
   go-test:
     name: go test
@@ -29,6 +31,7 @@ jobs:
       - uses: usadamasa/gh-manage/actions/setup-nix@main
         with:
           cache: false
+          devshell: base
 
       - name: go vet
         run: go vet ./...
@@ -69,6 +72,7 @@ jobs:
       - uses: usadamasa/gh-manage/actions/setup-nix@main
         with:
           cache: false
+          devshell: base
 
       # hook のテストは fake の go とバイナリで回るが、ソースが build できることもここで確かめる。
       - name: Build Go binaries
@@ -87,6 +91,7 @@ jobs:
       - uses: usadamasa/gh-manage/actions/setup-nix@main
         with:
           cache: false
+          devshell: base
 
       - name: Run shellcheck
         run: shellcheck hooks/*.sh hooks/lib/*.sh scripts/*.sh tests/lib/*.bash tests/fixtures/fake-go .envrc
@@ -122,6 +127,7 @@ jobs:
       - uses: usadamasa/gh-manage/actions/setup-nix@main
         with:
           cache: false
+          devshell: base
 
       - name: Typecheck the mod
         run: task typecheck
@@ -198,6 +204,7 @@ jobs:
       - uses: usadamasa/gh-manage/actions/setup-nix@main
         with:
           cache: false
+          devshell: base
 
       - name: Run TLC
         run: task model-check

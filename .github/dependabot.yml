@@ -23,7 +23,12 @@ updates:
   # nix の対象は flake.lock の input の更新だけで、security updates は出ない。
   # flake.nix の devGo の差し替えは channel の go_1_27 が追いつくと外れ、以後の
   # Go のパッチ更新もこの PR に乗る。1.27 から 1.28 への系列上げは対象外。
+  #
+  # go-arch-metrics の input は go-arch-metrics plugin の版の tag の commit に手で
+  # 合わせる。Dependabot は default branch の HEAD へ上げるので対象から外す。
   - package-ecosystem: nix
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: go-arch-metrics

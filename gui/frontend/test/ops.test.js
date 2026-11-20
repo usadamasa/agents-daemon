@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Graph } from "../src/graph.js";
-import { bulkDismissable, canAdopt, canDismiss, canRename, candidates, canTell, destinationLabel, isOwnTask, issueDestinations, pathDestination, peerDestinations, spawnDestinations, spawnLabel, taskDestinations } from "../src/ops.js";
+import { bulkDismissable, canAdopt, canDismiss, canRename, candidates, canTell, destinationLabel, isOwnTask, memoDestinations, pathDestination, peerDestinations, spawnDestinations, spawnLabel } from "../src/ops.js";
 
 const node = (key, extra = {}) => ({ key, kind: "task", state: "pending", title: key, live: true, depth: 0, downstream: 0, parked: 0, memos: [], blocked_by: [], deadlock: false, halted: false, stuck: false, endpoint: true, session_id: "s1", ...extra });
 
@@ -138,11 +138,14 @@ test("宛先はメモの repo のセッション、ほかの repo、持ち主を
   const b = { session_id: "s2", session: "b", subject: "", live: true };
   const gone = { session_id: "s3", session: "c", subject: "", live: false };
   const data = { repos: [{ repo: "/r/x", sessions: [a, gone] }, { repo: "/r/y", sessions: [b, a] }] };
-  assert.deepEqual(taskDestinations(data.repos[1]).map((t) => t.session_id), ["s2", "s1"]);
-  assert.deepEqual(issueDestinations(data, data.repos[1]).map((t) => t.session_id), ["s2", "s1"]);
-  assert.deepEqual(issueDestinations(data, data.repos[0]).map((t) => t.session_id), ["s1", "s2"]);
+  // Task と Issue の宛先は同じ: メモの repo のセッションを先に、続けてほかの repo の生きているセッション。
+  assert.deepEqual(memoDestinations(data, data.repos[1]).map((t) => t.session_id), ["s2", "s1"]);
+  assert.deepEqual(memoDestinations(data, data.repos[0]).map((t) => t.session_id), ["s1", "s2"]);
+  // メモの repo に生きているセッションが無くても、ほかの repo のセッションへ渡せる。
+  const empty = { repo: "/r/z", sessions: [gone] };
+  assert.deepEqual(memoDestinations({ repos: [...data.repos, empty] }, empty).map((t) => t.session_id), ["s1", "s2"]);
   assert.deepEqual(peerDestinations(data, "s1").map((t) => t.session_id), ["s2"]);
-  assert.equal(destinationLabel(taskDestinations(data.repos[0])[0]), "a (lint)");
+  assert.equal(destinationLabel(memoDestinations(data, data.repos[0])[0]), "a (lint)");
   assert.equal(destinationLabel({ route: "peer", session_id: "s2", session: "b", subject: "" }), "b");
   assert.equal(destinationLabel({ route: "spawn", repo: "/r/x", title: "x" }), "x");
 });

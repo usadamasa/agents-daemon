@@ -100,6 +100,8 @@ func TestRunner_Run_toSession(t *testing.T) {
 	text := strings.TrimPrefix(f.told[0], peerSID+"\n")
 	for _, s := range []string{
 		"メモ「lint の閾値を見直す」(種類: scope・adopted) をタスクにしてください。",
+		"対象の repo は agents-daemon (" + repo + ")。",
+		"このセッションの作業ディレクトリが別の repo なら、",
 		"先に、メモの前提",
 		"メモの id (" + memoID + ")",
 		"詳細: 複雑度の上限が低い",
@@ -191,6 +193,21 @@ func TestRunner_Run_toRepo(t *testing.T) {
 	}
 }
 
+// 新しいセッションへ task で渡すと、起こした repo を対象にする。利用者が選んだ repo なので、メモの repo と違っても
+// 受け手に引き継がせない。
+func TestRunner_Run_toRepo_task(t *testing.T) {
+	f := newFixture()
+	req := toRepo()
+	req.Intent = "task"
+	if _, err := f.runner().Run(context.Background(), req); err != nil {
+		t.Fatal(err)
+	}
+	prompt := f.spawned[0]
+	if !strings.Contains(prompt, "対象の repo は example-repo (/src/github.com/usadamasa/example-repo)。") {
+		t.Errorf("起こした repo が対象になっていない:\n%s", prompt)
+	}
+}
+
 // 起きたか分からない (claude が前景にならなかった) メモは戻さない。戻すと押し直しで 2 つ目が起きる。
 func TestRunner_Run_toRepo_unknown(t *testing.T) {
 	f := newFixture()
@@ -251,14 +268,14 @@ func TestRunner_Run_rejectsInput(t *testing.T) {
 
 // 文面の雛形: task は TaskCreate を頼み、issue は起票を頼む。補足は空なら足さない。
 func TestText(t *testing.T) {
-	task := text(memo, "task", "agents-daemon", "", nil)
+	task := text(memo, "task", repo, "", nil)
 	if !strings.Contains(task, "TaskCreate で作り") || strings.Contains(task, "利用者からの補足") {
 		t.Errorf("task:\n%s", task)
 	}
 	if !strings.Contains(task, "作ったら基本すぐ着手してください。") || !strings.Contains(task, "着手できない理由があるときだけ見送ってください。") {
 		t.Errorf("task に着手の既定が無い:\n%s", task)
 	}
-	issue := text(memo, "issue", "agents-daemon", "URL を貼って", nil)
+	issue := text(memo, "issue", repo, "URL を貼って", nil)
 	if !strings.Contains(issue, "repo: agents-daemon。") || !strings.HasSuffix(issue, "\n利用者からの補足: URL を貼って") {
 		t.Errorf("issue:\n%s", issue)
 	}

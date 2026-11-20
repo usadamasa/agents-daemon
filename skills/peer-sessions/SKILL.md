@@ -57,8 +57,8 @@ printenv REX_SESSION
 4. peer の受領の `SendMessage` を待つ。その `from` が peer の宛先になる。完了は依頼文で求めた
    `SendMessage` の報告で受けるので、`notify_when_idle` は付けない (下の「相手の完了を知る」)
 
-spawn は `--name` を付けずに起こす。付けると Claude Code が AI の題を作らず、rex のサイドバーの題が名前のまま固定される。
-`ListAgents` の名前は `<cwd の basename>-<連番>` になり、起こす側からは決められないので、
+spawn は `--name` を付けずに起こす。付けると Claude Code が AI の題を作らず、rex のサイドバーの題が
+名前のまま固定される。`ListAgents` の名前は `<cwd の basename>-<連番>` になり、起こす側からは決められないので、
 宛先は受領の `from` で知る。
 
 <!-- cc-premise: 2.1.325 osc7501 --name を付けると ai-title を作らず、端末の題が名前のまま -->
@@ -230,8 +230,8 @@ settings の `env` は Claude Code のプロセスにだけ注入されるので
 本文は、今どこまで進んだかと、止まっているならその理由を返すよう頼む 1 行にする。
 
 子がユーザーへの質問や許可の確認で止まっていると、メッセージは次のツール呼び出しまで読まれず、返事が来ない。
-聞いたあとのターンでも返事が無ければ、子の block を `rex capture -s <rex_session_id> -b <pane_id>` で読んで止まった理由を
-確かめる (`references/rex.md`「画面の読み方」)。どちらも起こしたときに控えたもので、label は rename されている。
+聞いたあとのターンでも返事が無ければ、子の block を `rex capture -s <rex_session_id> -b <pane_id>` で読んで
+止まった理由を確かめる (`references/rex.md`「画面の読み方」)。どちらも起こしたときに控えたもので、label は rename されている。
 
 ### idle 通知が報告と重なったとき
 
@@ -276,7 +276,8 @@ settings の `env` は Claude Code のプロセスにだけ注入されるので
 寿命は担当 PR に揃える。担当 PR がクローズ (マージ含む) されたら、peer を畳む。
 タブに立てた peer (既定) はそのタブだけを畳み、足し先の session には触れない。利用者が明示して
 新しい session に立てた peer は、その session ごと畳む。
-畳むときは起こしたときに控えた `rex_session_id` (タブなら `window_id` も) で指す。label は起きた claude が rename するので使わない。
+畳むときは起こしたときに控えた `rex_session_id` (タブなら `window_id` も) で指す。label は起きた claude が
+rename するので使わない。
 閉じるコマンドは `references/rex.md` の「畳む」にある。
 複数 PR を 1 セッションへ束ねるなら、束ねた全部が閉じるまでが寿命。渡すときからこれを前提に
 スコープを切る。

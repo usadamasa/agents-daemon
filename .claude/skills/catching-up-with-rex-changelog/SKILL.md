@@ -155,7 +155,7 @@ rex-premise: <version> <topic> [メモ]
 | ---- | ---- | ---- |
 | `program_status` | record から Agent と `agent_status` を決める | OSC7501, OSC 7501, program status, activity, owner, record, status report |
 | `api` | daemon が control API で打つ method の引数と応答、error の code、event の payload、API revision | API revision, control, method, event, session.create, attach, format, target.resolve, not_found |
-| `cli` | spawn の包みと peer-sessions skill が叩く rex の CLI の引数と応答、exit code、`--autostart`、rex の置き場 | rex CLI, block ls, session kill, session new, window new, autostart, exit code, `--json` |
+| `cli` | spawn の包みと peer-sessions skill (読む・送る・畳む) が叩く rex の CLI の引数と応答、exit code、`--autostart`、rex の置き場 | rex CLI, block ls, session kill, window close, capture, autostart, exit code, `--json` |
 
 表に無い topic が出てきたら、この表と AGENTS.md の topic の列挙に足す。
 

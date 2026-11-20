@@ -69,11 +69,18 @@ peer の session は、起こしたときに控えた `rex_session_id` で指す
 コマンドに変数展開が無いので、worktree 隔離のセッションでもこのまま打てる。
 
 ```json
-{"repo": "<渡す先の cwd の絶対パス>", "prompt_file": "./tmp/brief-<作業名>.md", "label": "<作業名>", "session_id": "<uuidgen の値を小文字で>"}
+{"repo": "<渡す先の cwd の絶対パス>", "prompt_file": "./tmp/brief-<作業名>.md", "label": "<作業名>"}
 ```
 
 ```sh
 ~/.cache/agents-daemon/bin/agents-daemon spawn < ./tmp/spawn-<作業名>.json
+```
+
+起こす前に依存の辺を書くときは、claude の session_id を先に決めて `"session_id"` に書く。spawn は小文字の UUID
+だけを受けるので、macOS の `uuidgen` (大文字を出す) は小文字にして使う。
+
+```sh
+uuidgen | tr A-Z a-z
 ```
 
 | 欄 | 書くとき | 省いたとき |
@@ -95,11 +102,12 @@ claude が前景になると、spawn は結果を 1 行の JSON で出す。
 ```
 
 `session_id` (辺と宛先に使う)、`rex_session_id` と `window_id` (畳むときに使う) を控える。`foreground` が `false` なら
-pane は残っていて claude が起き切っていない。`detail` を読み、`rex capture -s <rex_session_id> -b <pane_id>` で画面を確かめる。
-`session` で指した session が閉じていれば `session not found` の error で何も起こさない。新しい session には
-逃げず、`session` を省いて起こし直す (起こす側の session のタブになる)。
+pane は残っていて claude が起き切っていない。`detail` を読み、`rex capture -s <rex_session_id> -b <pane_id>` で
+画面を確かめる。`session` で指した session が閉じていれば `session not found` の error で何も起こさない。
+新しい session には逃げず、`session` を省いて起こし直す (起こす側の session のタブになる)。
 
-spawn は control API で block を作るので、block は owner を持たず、表示しているアプリの画面の大きさに追従する。
+spawn は control API で block を作って手放すので、block は owner を持たない。CLI の `rex session new` で作った
+block のように、終わった CLI の client が owner のまま残って size が 80x24 で止まることはない。
 タブで起きた claude には包みが `AGENTS_DAEMON_SHARED_REX_SESSION` を渡し、plugin の SessionStart hook が
 `rex session rename` を打たず自分のタブにだけ名前を付ける案内を出す。新しい session の包みは印
 (`spawned-session mark`) を書き、claude が終わって残る block が自分だけなら session を閉じる。どちらも異常終了では
@@ -111,13 +119,15 @@ Enter まで失敗の画面を残す。包みの本文は agents-daemon の `rex
 Claude Code が AI の題を作り、rex のサイドバーに出る。spawn は `--name` を付けないので、この題が作られる。
 peer は依頼文に従って受領を `SendMessage` で返し、その `from` が以後の宛先になる。`ListAgents` の名前は
 `<cwd の basename>-<連番>` で、rex の rename では変わらない。
-画面へ直接投入するなら `send -s <rex_session_id> -b <pane_id> '<本文>'` と `send-key -s <rex_session_id> -b <pane_id> enter` を使う。
+画面へ直接投入するなら `send -s <rex_session_id> -b <pane_id> '<本文>'` と
+`send-key -s <rex_session_id> -b <pane_id> enter` を使う。
 
 <!-- cc-premise: 2.1.325 osc7501 --name の無いセッションは最初のターンの後に ai-title を作り、端末の題にする -->
 
-新しい session に立てたとき、rex の SessionStart の hook は起きた claude に session を作業の名前へ rename するよう案内する。
-label が既に作業を表していればそのまま残すよう添えるので、`label` を作業名にすればサイドバーの名前が作業を
-表したままになる。それでも claude は付け替えうるので、session は label でなく `rex_session_id` で指す。
+新しい session に立てたとき、rex の SessionStart の hook は起きた claude に、session を作業の名前へ
+rename するよう案内する。label が既に作業を表していればそのまま残すよう添えるので、`label` を作業名にすれば
+サイドバーの名前が作業を表したままになる。それでも claude は付け替えうるので、session は label でなく
+`rex_session_id` で指す。
 
 <!-- rex-premise: preview.28 cli SessionStart の hook は作業を表す label ならそのまま残すよう案内する -->
 

@@ -89,8 +89,10 @@ exec して stdout を返すだけで、JSON はフロントエンド (`gui/fron
 <!-- cc-premise: 2.1.319 input-line 入力欄は ❯ で始まる行で、空のときは NBSP。複数行は bracketed paste で 1 つの貼り付けになる。次の prompt の提案は薄字で打つと消える -->
 
 アプリは rex の外で起きるので、`spawn` / `tell` / `park hand` は REX_SESSION を要求しない (`backend.ConnectRex`)。
-`spawn` は起こすたびに `rex session new` で専用の rex session を作る。起きた claude は rex の案内に従って
-自分の REX_SESSION を rename するので、起こす側の session に相乗りさせない (#376)。
+アプリの `spawn` と `park hand` は起こすたびに `session.create` で専用の rex session を作る (アプリは REX_SESSION を
+持たず、`park hand` は読まない)。起きた claude は rex の案内に従って自分の REX_SESSION を rename するので、
+起こす側の session に相乗りさせない (#376)。REX_SESSION のタブを既定にするのは、peer-sessions skill が rex の中から
+打つ `spawn` サブコマンドだけ (#636)。
 claude が終わり、session に残る block が自分だけなら、包んだ sh がその session を閉じる。異常終了では Enter まで
 画面を残してから閉じる (#391)。ほかの pane が残っていて閉じなかった session は、包んだ sh が起こす前に書いた印
 (`spawnedsession`) を daemon が回り、pane が無くなったら閉じる (#557)。

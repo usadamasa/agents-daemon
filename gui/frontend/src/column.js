@@ -82,10 +82,21 @@ export function frameTree(linked, free) {
 // TONES は枠の色の数。style.css の :is(.frame, .group).tone-N と揃える。
 export const TONES = 4;
 
-// rexTones は rex の session の id → 枠の色の番号。id の順に回すので、カードの並びが変わっても色は入れ替わらない。
+// rexTones は rex の session の id → 枠の色の番号。色は id の hash だけで決め、session が閉じたり図に出る session が
+// 変わったりしても、残りの session の色を動かさない。別の session が同じ色になることはある。
 export function rexTones(nodes) {
-  const ids = [...new Set(nodes.filter((n) => n.rex).map((n) => n.rex.session_id))].sort();
-  return new Map(ids.map((id, i) => [id, i % TONES]));
+  const ids = new Set(nodes.filter((n) => n.rex).map((n) => n.rex.session_id));
+  return new Map([...ids].map((id) => [id, toneOf(id)]));
+}
+
+// toneOf は id の FNV-1a (32 bit) を色の数で割った余り。
+function toneOf(id) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < id.length; i++) {
+    h ^= id.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h % TONES;
 }
 
 // heads は枠の小見出しの数。小見出しの無い区切りは数えない。

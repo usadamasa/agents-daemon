@@ -8,19 +8,19 @@ import (
 	"testing"
 )
 
-// peer-sessions skill は peer を起こす手順に包みと同じ本文を single quote で囲んで載せる。
-// 片方だけ直してずれないよう、skill の本文に今の定数がそのまま入っていることを見る。
-func TestScripts_MatchPeerSessionsSkill(t *testing.T) {
-	b, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "..", "skills", "peer-sessions", "references", "rex.md"))
-	if err != nil {
-		t.Fatalf("skill の読み込みに失敗: %v", err)
-	}
-	for name, script := range map[string]string{"sessionScript": sessionScript, "tabScript": tabScript} {
-		if strings.Contains(script, "'") {
-			t.Errorf("%s に single quote がある (skill が single quote で囲めない): %s", name, script)
+// peer-sessions skill は peer を `agents-daemon spawn` で起こし、包みの本文を写さない。包みの本文は
+// このパッケージだけが持つ。
+func TestScripts_NotCopiedIntoPeerSessionsSkill(t *testing.T) {
+	dir := filepath.Join("..", "..", "..", "..", "..", "skills", "peer-sessions")
+	for _, name := range []string{"SKILL.md", filepath.Join("references", "rex.md")} {
+		b, err := os.ReadFile(filepath.Join(dir, name)) // #nosec G304 -- repo の固定のファイル
+		if err != nil {
+			t.Fatalf("skill の読み込みに失敗: %v", err)
 		}
-		if !strings.Contains(string(b), "/bin/sh -c '"+script+"'") {
-			t.Errorf("peer-sessions skill の references/rex.md に %s と同じ本文が無い:\n%s", name, script)
+		for script, body := range map[string]string{"sessionScript": sessionScript, "tabScript": tabScript} {
+			if strings.Contains(string(b), body) {
+				t.Errorf("peer-sessions skill の %s に %s の写しがある。起動は agents-daemon spawn に任せる", name, script)
+			}
 		}
 	}
 }

@@ -124,8 +124,21 @@ func TestRunner_Run_toSession(t *testing.T) {
 	if strings.Contains(text, "新しいセッションとして起こしました") {
 		t.Errorf("セッションへ送る文面に起こした経緯がある:\n%s", text)
 	}
+	assertCleanup(t, text, "completed")
 	if strings.Contains(text, handOnMarker) {
 		t.Errorf("メモの repo のセッションへの文面に引き継ぎの依頼がある:\n%s", text)
+	}
+}
+
+// assertCleanup は、受け手が片付けに使う語が文面にあるかを見る。渡したメモは handed で unpark を受け付けない
+// (parking の TestWithdraw) ので、文面が片付け方を書かないと、受け手の会話にある unpark の tool がサジェストに出る (#544)。
+// finish は受け手が依頼を終える操作の語。
+func assertCleanup(t *testing.T, text string, finish ...string) {
+	t.Helper()
+	for _, s := range append([]string{"unpark は要りません"}, finish...) {
+		if !strings.Contains(text, s) {
+			t.Errorf("片付け方に %q が無い:\n%s", s, text)
+		}
 	}
 }
 
@@ -260,6 +273,8 @@ func TestRunner_Run_toRepo(t *testing.T) {
 	if strings.Contains(prompt, "利用者からの補足") {
 		t.Errorf("補足が無いのに補足の行がある:\n%s", prompt)
 	}
+	// issue は起票が終わりで、起票は依頼の文で既に頼んでいるので、終える操作の語は見ない。
+	assertCleanup(t, prompt)
 }
 
 // 新しいセッションへ task で渡すと、起こした repo で着手させる。利用者が選んだ repo なので、メモの repo と違っても

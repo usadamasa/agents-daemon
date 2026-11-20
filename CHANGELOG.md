@@ -1,5 +1,16 @@
 # Changelog
 
+## [2026.1120.0](https://github.com/usadamasa/agents-daemon/compare/2026.1117.2...2026.1120.0) - 2026-11-20
+
+### Refactoring
+- go-arch-metrics を flake input で入れ、tool directive と baseline.json を外す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/653
+### Documentation
+- peer-sessions の受領の返事から完了の見込みを外す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/652
+### Dependencies
+- Bump nixpkgs from `f4a03c0` to `d5cc683` by @dependabot[bot] in https://github.com/usadamasa/agents-daemon/pull/655
+### Other
+- peer-sessions skill の起動手順を agents-daemon spawn に寄せ、足し先の既定をコードで決める by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/656
+
 ## [2026.1117.2](https://github.com/usadamasa/agents-daemon/compare/2026.1117.1...2026.1117.2) - 2026-11-17
 
 ### Refactoring

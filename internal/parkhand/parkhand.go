@@ -44,6 +44,8 @@ type Runner struct {
 	Spawn func(ctx context.Context, repo, prompt string) (protocol.SpawnResult, error)
 	// SessionNames は session ID から名前への対応 (sessioncontext.Store.ListSessionNames)。nil なら ID のまま書く。
 	SessionNames func() map[string]string
+	// SessionRepo は生きているセッションの repo の鍵 (メモの repo と同じ規則)。引けなければ空。
+	SessionRepo func(sessionID string) string
 }
 
 // Run は req のメモを宛先へ渡す。取る前に落ちる (入力が違う、メモが無い、取れない) ときは error で、何も変えていない。
@@ -78,7 +80,11 @@ func (r Runner) Run(ctx context.Context, req Request) (Result, error) {
 
 // tell は取ったメモを生きているセッションへ打つ。届かなければ戻す。
 func (r Runner) tell(ctx context.Context, req Request, item parking.Item, names map[string]string) Result {
-	told, err := r.Tell(ctx, req.ToSession, text(item, req.Intent, item.Repo, req.Note, names))
+	body := text(item, req.Intent, item.Repo, req.Note, names)
+	if req.Intent == IntentTask {
+		body = handOn(item.Repo, r.SessionRepo(req.ToSession), body)
+	}
+	told, err := r.Tell(ctx, req.ToSession, body)
 	if err != nil {
 		return r.revert(req.ID, Result{To: req.ToSession, Reason: err.Error()})
 	}
@@ -118,23 +124,28 @@ const (
 	premiseGone  = "前提が成り立たないとき (該当箇所が無くなった、別の変更で直った) は、その理由を 1 行で返して終えてください。"
 )
 
+// handOn は task の依頼文を、メモの repo (memoRepo) と違う repo (sessionRepo) のセッションへ送る文面にする。
+// タスクはメモの repo で作業するセッションが持つものなので、受け手には着手させず、依頼文をそのまま
+// メモの repo のセッションへ渡させる。sessionRepo が空 (引けない) か memoRepo と同じなら body のまま。
+func handOn(memoRepo, sessionRepo, body string) string {
+	if sessionRepo == "" || sessionRepo == memoRepo {
+		return body
+	}
+	return fmt.Sprintf("このメモの repo は %s (%s) で、このセッションの repo (%s) と違います。", filepath.Base(memoRepo), memoRepo, filepath.Base(sessionRepo)) +
+		"ここでは TaskCreate も着手もせず、区切り (---) の後の依頼文を、" + filepath.Base(memoRepo) +
+		" の生きているセッションか新しく起こすセッションへそのまま渡してください (agents-daemon:peer-sessions skill)。\n---\n" + body
+}
+
 // text は渡す文面。intent が task ならタスクにする依頼 (依存図はタスクの description に書かれた id でメモと照合する)、
 // issue なら target の repo に issue を立てる依頼。target は生きているセッションへ渡すならメモの repo、起こすなら起こした
 // repo。note (利用者の補足) は空でなければ末尾に足す。names は補足を書いたセッションの名前 (無ければ ID のまま)。
-//
-// task の宛先にはほかの repo のセッション (他リポジトリのメモを振り分ける母艦など) も選べるが、宛先の repo はここで分からない。
-// 作業ディレクトリを確実に知る受け手に、target と違えば着手せず target の repo のセッションへ引き継ぐよう頼む。
 func text(item parking.Item, intent, target, note string, names map[string]string) string {
-	title := filepath.Base(target)
 	var head string
 	if intent == IntentIssue {
-		head = fmt.Sprintf("パーキングロットのメモ「%s」を GitHub の issue にしてください。repo: %s。", item.Title, title) +
+		head = fmt.Sprintf("パーキングロットのメモ「%s」を GitHub の issue にしてください。repo: %s。", item.Title, filepath.Base(target)) +
 			premiseCheck + "成り立つときは起票し、URL を返してください。" + premiseGone
 	} else {
 		head = fmt.Sprintf("パーキングロットのメモ「%s」(種類: %s) をタスクにしてください。", item.Title, kindLabel(item)) +
-			fmt.Sprintf("対象の repo は %s (%s)。", title, target) +
-			"このセッションの作業ディレクトリが別の repo なら、ここでは TaskCreate も着手もせず、" +
-			"この文面をその repo の生きているセッションか新しいセッションへ引き継いでください (agents-daemon:peer-sessions skill)。" +
 			premiseCheck +
 			fmt.Sprintf("成り立つときは TaskCreate で作り、タスクの description にメモの id (%s) を入れてください。", item.ID) +
 			"既にこのメモを扱うタスクがあれば、新しく作らずにその description に id を書き足すだけで構いません。" +

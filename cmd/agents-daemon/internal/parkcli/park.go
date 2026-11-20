@@ -71,10 +71,7 @@ func newParkCmd() *cobra.Command {
 			repo = gitrepo.RepoKey(cwd)
 		}
 		items, err := parking.New(p.StateDir()).Find(repo, req.Status)
-		if err != nil || req.Task == "" {
-			return protocol.ParkingItemList(items), err
-		}
-		return protocol.ParkingItemList(parking.PlacedDuring(items, req.SessionID, req.Task)), nil
+		return protocol.ParkingItemList(items), err
 	}))
 	discard := sub("discard", "stdin の ParkDiscardRequest で古い open のメモを discarded にし、捨てたメモを ParkingItemList で出す", statecmd.Decoded("ParkDiscardRequest", func(p apppath.Paths, req protocol.ParkDiscardRequest) (any, error) {
 		items, err := parkDiscard(p.StateDir(), parking.New(p.StateDir()), req.SessionID, req.Days, time.Now())

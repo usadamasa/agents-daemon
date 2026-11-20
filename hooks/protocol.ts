@@ -91,11 +91,6 @@ export const definitions = {
         "repo"
       ]
     },
-    "dependentRequired": {
-      "task": [
-        "session_id"
-      ]
-    },
     "properties": {
       "cwd": {
         "type": "string",
@@ -117,14 +112,6 @@ export const definitions = {
           "discarded"
         ],
         "description": "status で絞る"
-      },
-      "task": {
-        "type": "string",
-        "description": "session_id のセッションがこのタスクの途中で置いたメモで絞る"
-      },
-      "session_id": {
-        "type": "string",
-        "description": "task で絞るセッションの ID"
       }
     }
   },

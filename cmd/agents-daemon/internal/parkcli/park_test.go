@@ -400,22 +400,13 @@ func TestParkAdopt(t *testing.T) {
 	}
 }
 
-// task はそのセッションがそのタスクの途中で置いたメモで絞る。session_id が無ければ受け付けない。
-func TestParkList_task(t *testing.T) {
-	root := parkTestEnv(t)
-	cwd := filepath.Join(root, "src", "home", "a")
-	if err := os.MkdirAll(cwd, 0o750); err != nil {
-		t.Fatal(err)
-	}
-	writeTaskRecord(t, root, "s1", `{"id": "3", "subject": "a", "status": "in_progress", "session_id": "s1"}`)
-	during := add(t, addReq(t, "s1", cwd, memoTitle)).Item
-	add(t, addReq(t, "s2", cwd, "別のメモ"))
-
-	if items := listItems(t, `{"status": "open", "task": "3", "session_id": "s1"}`); len(items) != 1 || items[0].ID != during.ID {
-		t.Errorf("task = %+v, want %s だけ", items, during.ID)
-	}
-	if _, _, err := runPark(t, "list", `{"task": "3"}`); err == nil {
-		t.Errorf("session_id の無い task を受け付けた")
+// タスクで絞る入口は持たない。task と session_id は schema に無いキーとして受け付けない。
+func TestParkList_noTaskFilter(t *testing.T) {
+	parkTestEnv(t)
+	for _, stdin := range []string{`{"task": "3", "session_id": "s1"}`, `{"session_id": "s1"}`} {
+		if _, _, err := runPark(t, "list", stdin); err == nil {
+			t.Errorf("park list %s を受け付けた", stdin)
+		}
 	}
 }
 

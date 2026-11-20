@@ -42,10 +42,6 @@ export type ParkListRequest = {
   repo?: string
   // status で絞る
   status?: 'open' | 'handed' | 'discarded'
-  // session_id のセッションがこのタスクの途中で置いたメモで絞る
-  task?: string
-  // task で絞るセッションの ID
-  session_id?: string
 }
 
 // park discard の stdin。最後に置かれてから days 日より経った open のメモを discarded にし、捨てたメモを ParkingItemList で出す

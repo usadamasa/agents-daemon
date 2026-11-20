@@ -8,7 +8,7 @@ import { fitEdges, spreadPorts } from "./ports.js";
 import { findJumps, jumpPath } from "./jumps.js";
 import { PR_STAGE, STATE_LABEL, cardHint, cardText, emphasis, leadStage, markClass, toneOf } from "./card.js";
 import { isStale, kindLabel, lastPlacedAt, stamp } from "./memo.js";
-import { bulkDismissable, canAdopt, canDismiss, canRename, canTell, candidates, isOwnTask, issueDestinations, lastSeenAgo, pathDestination, peerDestinations, spawnDestinations, taskDestinations } from "./ops.js";
+import { bulkDismissable, canAdopt, canDismiss, canRename, canTell, candidates, isOwnTask, lastSeenAgo, memoDestinations, pathDestination, peerDestinations, spawnDestinations } from "./ops.js";
 import { addBlocker, adopt, askUnlink, discard, discardStale, dismissAll, dismissOne, handOff, handOffTask, instruct, rename, setStatus, start, toParking, unlink } from "./actions.js";
 import { openTarget, pickFolder } from "./daemon.js";
 import { edgeNoteRepo, segments, textNoteRepo } from "./links.js";
@@ -827,9 +827,8 @@ function repoOf(n) {
 
 // memoHandPicker は「タスクにする」「issue にする」の宛先: 生きているセッションと、新しく起こす repo。
 function memoHandPicker(memo, repo, intent) {
-  const peers = intent === "task" ? taskDestinations(repo) : issueDestinations(state.data, repo);
   const pick = (to) => act(() => handOff(memo, to, intent, state.note));
-  return picker([noteField(), refusalLine(), destinationRows(peers, pick), spawnRows({ repo: repo.repo, title: repo.title }, pick)]);
+  return picker([noteField(), refusalLine(), destinationRows(memoDestinations(state.data, repo), pick), spawnRows({ repo: repo.repo, title: repo.title }, pick)]);
 }
 
 // taskHandPicker は「渡す」の宛先: 持ち主を除く生きているセッションと、新しく起こす repo。

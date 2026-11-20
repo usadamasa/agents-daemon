@@ -29,7 +29,7 @@ export function partition(nodes, links, order) {
 // 置かれていない block と参照の区切りは小見出しを持たない。
 function frameOf(n) {
   if (n.kind === "ref") return { key: "ref", label: "Refs", part: "", partLabel: "" };
-  if (n.rex) return { key: `rex:${n.rex.session_id}`, label: n.rex.session_label, part: n.rex.window_id ?? "", partLabel: n.rex.window_label ?? "" };
+  if (n.rex) return { key: `rex:${n.rex.session_id}`, label: n.rex.session_label, part: n.rex.window_id ?? "", partLabel: n.rex.window_label ?? "", rex: n.rex.session_id };
   return { key: "outside", label: "Outside rex", part: n.session_id, partLabel: n.session };
 }
 
@@ -39,21 +39,22 @@ export function groupByRex(nodes) {
   const groups = new Map();
   for (const n of nodes) {
     const f = frameOf(n);
-    if (!groups.has(f.key)) groups.set(f.key, { key: f.key, label: f.label, parts: new Map() });
+    if (!groups.has(f.key)) groups.set(f.key, { key: f.key, label: f.label, rex: f.rex, parts: new Map() });
     const parts = groups.get(f.key).parts;
     if (!parts.has(f.part)) parts.set(f.part, { label: f.partLabel, nodes: [] });
     parts.get(f.part).nodes.push(n);
   }
   return [...groups.values()].map((g) => {
     const parts = [...g.parts.values()];
-    return { key: g.key, label: g.label, parts, nodes: parts.flatMap((p) => p.nodes) };
+    return { key: g.key, label: g.label, rex: g.rex, parts, nodes: parts.flatMap((p) => p.nodes) };
   });
 }
 
 // frameTree は線のある図 (dagre) で描く枠を決める。辺のあるノードを frameOf の枠 (session) と区切り (window) に入れ、
 // その枠に属する辺の無いノード (free) も同じ枠へ引き入れる。終わったノードは rex の置き場があるときだけ枠に入れ、
 // 同じ window の線が枠の外から長く横切らないようにする。参照と、置き場の無い終わったノードは枠に入れない。
-// frames は枠の { key, label, level, parent } (level は h2 / h3)、parentOf はノードの key → 直の親の枠の key。
+// frames は枠の { key, label, level, parent, rex } (level は h2 / h3、rex は rex の session の id)、parentOf はノードの
+// key → 直の親の枠の key。
 // 小見出しの無い区切りは枠を作らず、ノードを session の枠へ直に入れる。nodes は図に入るノード (linked の後ろに
 // 引き入れた free を順に足す)、free は下の枠に残るもの。枠の key は "\0" で始め、ノードの key と重ならない。
 export function frameTree(linked, free) {
@@ -67,15 +68,24 @@ export function frameTree(linked, free) {
     if (!framable(n)) continue;
     const f = frameOf(n);
     const top = `\0${f.key}`;
-    if (!frames.has(top)) frames.set(top, { key: top, label: f.label, level: "h2" });
+    if (!frames.has(top)) frames.set(top, { key: top, label: f.label, level: "h2", rex: f.rex });
     let parent = top;
     if (f.partLabel !== "") {
       parent = `\0${f.key}\0${f.part}`;
-      if (!frames.has(parent)) frames.set(parent, { key: parent, label: f.partLabel, level: "h3", parent: top });
+      if (!frames.has(parent)) frames.set(parent, { key: parent, label: f.partLabel, level: "h3", parent: top, rex: f.rex });
     }
     parentOf.set(n.key, parent);
   }
   return { nodes, free: free.filter((n) => !used.has(frameOf(n).key)), frames: [...frames.values()], parentOf };
+}
+
+// TONES は枠の色の数。style.css の :is(.frame, .group).tone-N と揃える。
+export const TONES = 4;
+
+// rexTones は rex の session の id → 枠の色の番号。id の順に回すので、カードの並びが変わっても色は入れ替わらない。
+export function rexTones(nodes) {
+  const ids = [...new Set(nodes.filter((n) => n.rex).map((n) => n.rex.session_id))].sort();
+  return new Map(ids.map((id, i) => [id, i % TONES]));
 }
 
 // heads は枠の小見出しの数。小見出しの無い区切りは数えない。

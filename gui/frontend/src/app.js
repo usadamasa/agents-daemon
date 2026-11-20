@@ -3,7 +3,7 @@
 // オブジェクトはタスク (図の箱) とメモ (下の一覧の行)。選ぶとそのそばにポップアップで単体ビューが開く。
 import * as dagre from "./vendor/dagre.esm.js";
 import { Graph } from "./graph.js";
-import { GROUP_W, fitLimit, frameTree, groupByRex, partition, placeGroups } from "./column.js";
+import { GROUP_W, fitLimit, frameTree, groupByRex, partition, placeGroups, rexTones } from "./column.js";
 import { fitEdges, spreadPorts } from "./ports.js";
 import { findJumps, jumpPath } from "./jumps.js";
 import { PR_STAGE, STATE_LABEL, cardHint, cardText, emphasis, leadStage, markClass, toneOf } from "./card.js";
@@ -406,6 +406,7 @@ function renderGraph() {
   const { nodes, links, depth } = state.graph.view(state.showCompleted);
   const { connected, free, ended } = partition(nodes, links, graph.column_order);
   const tree = frameTree(connected, free);
+  const tones = rexTones(nodes);
   const highlight = highlightKeys();
   renderColumn(ended, highlight);
   const scroll = { left: host.scrollLeft, top: host.scrollTop };
@@ -420,8 +421,8 @@ function renderGraph() {
 
   const canvas = document.createElement("div");
   canvas.className = "canvas";
-  const graphSize = connected.length > 0 ? renderLinked(canvas, tree, links, depth, graph, highlight) : { width: 0, height: 0 };
-  const groups = renderGroups(canvas, tree.free, highlight, graphSize, { width: host.clientWidth, height: host.clientHeight - CONTROLS_BAND });
+  const graphSize = connected.length > 0 ? renderLinked(canvas, tree, tones, links, depth, graph, highlight) : { width: 0, height: 0 };
+  const groups = renderGroups(canvas, tree.free, tones, highlight, graphSize, { width: host.clientWidth, height: host.clientHeight - CONTROLS_BAND });
   canvas.style.width = `${Math.ceil(Math.max(graphSize.width, groups.width))}px`;
   canvas.style.height = `${Math.ceil(Math.max(graphSize.height, groups.height))}px`;
   host.append(canvas);
@@ -429,10 +430,10 @@ function renderGraph() {
 }
 
 // renderLinked は線のある図のノードを枠と線と箱で canvas に描き、その大きさを返す。枠は線と箱より奥に置く。
-function renderLinked(canvas, tree, links, depth, graph, highlight) {
+function renderLinked(canvas, tree, tones, links, depth, graph, highlight) {
   const connected = tree.nodes;
   const { g, pos, boxes, back, width, height } = layout(tree, links, depth);
-  renderFrames(canvas, tree.frames, boxes);
+  renderFrames(canvas, tree.frames, tones, boxes);
 
   const svg = document.createElementNS(SVG, "svg");
   svg.setAttribute("class", "edges");
@@ -464,13 +465,18 @@ function renderLinked(canvas, tree, links, depth, graph, highlight) {
   return { width, height };
 }
 
+// toneClass は rex の session の枠の色の class。rex の外と参照の枠は色を持たない。
+function toneClass(tones, rex) {
+  return tones.has(rex) ? ` tone-${tones.get(rex)}` : "";
+}
+
 // renderFrames は線のある図の枠 (session は h2、window は h3 の見出し) を dagre の矩形に描く。親の枠を先に描き、
 // 子の枠が上に重なる。
-function renderFrames(canvas, frames, boxes) {
+function renderFrames(canvas, frames, tones, boxes) {
   for (const f of frames) {
     const b = boxes.get(f.key);
     const section = document.createElement("section");
-    section.className = `frame ${f.level}`;
+    section.className = `frame ${f.level}${toneClass(tones, f.rex)}`;
     section.setAttribute("aria-label", f.label);
     section.style.left = `${Math.round(b.x - b.width / 2)}px`;
     section.style.top = `${Math.round(b.y - b.height / 2)}px`;
@@ -487,7 +493,7 @@ function renderFrames(canvas, frames, boxes) {
 // renderGroups は辺の無い動いているノードを rex の session の枠にして (中は window の小見出しで区切る)、線のあるかたまりの
 // 下に並べる。折り返しは、図全体を見える領域 (view) に収める拡大率がいちばん大きくなる列の数で決める (fitLimit)。
 // 全体表示がオフでも同じ折り返しにし、拡大縮小で並びを動かさない。枠が無ければ大きさは 0。
-function renderGroups(canvas, free, highlight, graphSize, view) {
+function renderGroups(canvas, free, tones, highlight, graphSize, view) {
   if (free.length === 0) return { width: 0, height: 0 };
   const groups = groupByRex(free);
   const top = graphSize.height > 0 ? graphSize.height : MARGIN_Y;
@@ -495,7 +501,7 @@ function renderGroups(canvas, free, highlight, graphSize, view) {
   const { places, right, bottom } = placeGroups(groups, MARGIN_X, top, limit);
   groups.forEach((g, i) => {
     const section = document.createElement("section");
-    section.className = "group";
+    section.className = `group${toneClass(tones, g.rex)}`;
     section.setAttribute("aria-label", g.label);
     section.style.left = `${places[i].x}px`;
     section.style.top = `${places[i].y}px`;

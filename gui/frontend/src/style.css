@@ -33,6 +33,15 @@
   --blue: #0969da;
   --blue-ink: #0969da;
   --blue-soft: #ddf4ff;
+  /* rex の session の枠の色。状態の色 (緑、橙、紫、赤、青) と被らない色相を選ぶ */
+  --teal: #1b7c83;
+  --teal-soft: #e2f6f7;
+  --pink: #bf3989;
+  --pink-soft: #ffeff7;
+  --olive: #5f7322;
+  --olive-soft: #f0f4dc;
+  --auburn: #9d615c;
+  --auburn-soft: #f7eeed;
   --closed: #59636e;
   --gray-dot: #818b98;
   --gray-soft: #818b981f;
@@ -129,24 +138,31 @@ select { font: inherit; color: inherit; }
 .column h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 14px; font-weight: 600; }
 .column h2 .ph { font: inherit; color: inherit; }
 /* 辺の無い動いているカードの枠 (rex の session、rex の外、参照)。寸法は column.js の GROUP_W と groupHeight が同じ数を持つ */
+/* 枠の線 (--frame)、session の塗り (--frame-soft)、見出し (--frame-ink) の色。既定は灰で、rex の session の枠は
+   tone-N (column.js の rexTones) で色を替える */
+:is(.frame, .group) { --frame: var(--line-strong); --frame-soft: var(--hover); --frame-ink: var(--muted); }
+:is(.frame, .group).tone-0 { --frame: var(--teal); --frame-soft: var(--teal-soft); --frame-ink: var(--teal); }
+:is(.frame, .group).tone-1 { --frame: var(--pink); --frame-soft: var(--pink-soft); --frame-ink: var(--pink); }
+:is(.frame, .group).tone-2 { --frame: var(--olive); --frame-soft: var(--olive-soft); --frame-ink: var(--olive); }
+:is(.frame, .group).tone-3 { --frame: var(--auburn); --frame-soft: var(--auburn-soft); --frame-ink: var(--auburn); }
 .group {
   position: absolute; box-sizing: border-box; padding: 12px;
   display: flex; flex-direction: column; gap: 10px;
-  border: max(1px, calc(1px / var(--zoom, 1))) solid var(--line-strong); border-radius: 6px;
+  border: max(1px, calc(1px / var(--zoom, 1))) solid var(--frame); border-radius: 6px; background: var(--frame-soft);
 }
 /* 見出しは 1 行に収める (groupHeight が 1 行で数える)。切れた分は title で読む */
-.group h2 { margin: 0; font-size: 12px; font-weight: 600; line-height: 16px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.group h2 { margin: 0; font-size: 12px; font-weight: 600; line-height: 16px; color: var(--frame-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* 小見出し (rex の window、rex の外は Claude のセッション) も 1 行に収め、続くカードとの間を 4 に詰める
    (groupHeight は 1 つを 20 で数える) */
-.group h3 { margin: 0 0 -6px; font-size: 11px; font-weight: 500; line-height: 16px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.group h3 { margin: 0 0 -6px; font-size: 11px; font-weight: 500; line-height: 16px; color: var(--frame-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .group .node { position: relative; flex: 0 0 auto; }
 /* 線のある図の枠。矩形は dagre が決め、見出しは上の境界とカードの間 (1 段の余白) に置く。線はカードの縁取りと同じく
-   縮小しても 1px より細くしない。塗りは session と window で濃さを変え、白いカードとも分ける */
-.frame { position: absolute; box-sizing: border-box; border: max(1px, calc(1px / var(--zoom, 1))) solid var(--line-strong); border-radius: 6px; pointer-events: none; }
-.frame.h2 { background: var(--hover); }
-.frame.h3 { background: var(--active); border-style: dashed; }
+   縮小しても 1px より細くしない。window の小枠は session の塗りの上に白を透かして重ね、白いカードとも分ける */
+.frame { position: absolute; box-sizing: border-box; border: max(1px, calc(1px / var(--zoom, 1))) solid var(--frame); border-radius: 6px; pointer-events: none; }
+.frame.h2 { background: var(--frame-soft); }
+.frame.h3 { background: var(--panel-veil); border-style: dashed; }
 .frame > :is(h2, h3) {
-  position: absolute; top: 3px; left: 12px; right: 12px; margin: 0; line-height: 16px; color: var(--muted);
+  position: absolute; top: 3px; left: 12px; right: 12px; margin: 0; line-height: 16px; color: var(--frame-ink);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: auto;
 }
 .frame > h2 { font-size: 12px; font-weight: 600; }

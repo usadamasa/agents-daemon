@@ -115,7 +115,8 @@ func TestCache_ReplaysMeasuredStream(t *testing.T) {
 		}
 	}
 
-	wantRefs := []Ref{{Session: sessionOwn, Block: blockProbe}, {Session: "session:01a17d51-a67b-7c38-bd8e-3265c5f30a95"}}
+	// session_view_changed は view を持っていない session なので読み直しを求める。
+	wantRefs := []Ref{{Session: sessionOwn, Block: blockProbe}, {Session: sessionOwn, View: true}, {Session: "session:01a17d51-a67b-7c38-bd8e-3265c5f30a95"}}
 	if want := wantRefs; !slices.Equal(created, want) {
 		t.Errorf("block_created が求めた block = %+v, want %+v", created, want)
 	}

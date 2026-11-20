@@ -56,18 +56,21 @@
         "key": "task:alpha/1", "kind": "task", "state": "completed", "title": "スキーマを決める",
         "endpoint": true, "cwd": "/repo/agents-daemon", "task_id": "1", "description": "deps の JSON の形を決める",
         "session_id": "sid-alpha", "session": "alpha", "session_name": "alpha", "live": true,
+        "rex": { "session_id": "session:work", "session_label": "work", "window_id": "window:alpha", "window_label": "alpha-tab" },
         "depth": 0, "downstream": 6, "parked": 0, "memos": [], "blocked_by": [], "deadlock": false, "halted": false, "stuck": false
       },
       {
         "key": "task:alpha/2", "kind": "task", "state": "working", "title": "API を実装する",
         "endpoint": true, "cwd": "/repo/agents-daemon", "task_id": "2", "description": "deps のサブコマンドを足す",
         "session_id": "sid-alpha", "session": "alpha", "session_name": "alpha", "live": true,
+        "rex": { "session_id": "session:work", "session_label": "work", "window_id": "window:alpha", "window_label": "alpha-tab" },
         "depth": 1, "downstream": 5, "parked": 1, "memos": [], "blocked_by": [], "deadlock": false, "halted": false, "stuck": false
       },
       {
         "key": "task:beta/1", "kind": "task", "state": "question", "title": "画面を描く",
         "endpoint": true, "cwd": "/repo/agents-daemon", "task_id": "1", "description": "依存図の箱と線を描く",
         "session_id": "sid-beta", "session": "beta", "session_name": "beta", "live": true,
+        "rex": { "session_id": "session:work", "session_label": "work", "window_id": "window:beta", "window_label": "beta-tab" },
         "depth": 2, "downstream": 2, "parked": 1,
         "memos": [{ "id": "memo-0", "title": "色の決め方", "status": "handed" }],
         "blocked_by": [], "deadlock": false, "halted": true, "stuck": true
@@ -81,6 +84,7 @@
         "key": "task:alpha/3", "kind": "task", "state": "completed", "title": "テストを直す",
         "endpoint": true, "cwd": "/repo/agents-daemon", "task_id": "3",
         "session_id": "sid-alpha", "session": "alpha", "session_name": "alpha", "live": true,
+        "rex": { "session_id": "session:work", "session_label": "work", "window_id": "window:alpha", "window_label": "alpha-tab" },
         "depth": 2, "downstream": 1, "parked": 0, "memos": [], "blocked_by": [], "deadlock": false, "halted": false, "stuck": false
       },
       {
@@ -88,6 +92,7 @@
         "endpoint": true, "cwd": "/repo/agents-daemon", "repo": "/repo/agents-daemon", "task_id": "2",
         "description": "https://example.com/a と #12 と gui/main.go:5 を見る",
         "session_id": "sid-beta", "session": "beta", "session_name": "beta", "live": true,
+        "rex": { "session_id": "session:work", "session_label": "work", "window_id": "window:beta", "window_label": "beta-tab" },
         "depth": 3, "downstream": 1, "parked": 0, "memos": [], "blocked_by": ["task:beta/1"], "deadlock": false, "halted": false, "stuck": false
       },
       {
@@ -105,18 +110,21 @@
         "endpoint": true, "cwd": "/repo/agents-daemon", "repo": "/repo/agents-daemon", "task_id": "4",
         "description": "pr:usadamasa/workspace#3 を待ってから #3 と #9 を見る",
         "session_id": "sid-alpha", "session": "alpha", "session_name": "alpha", "live": true,
+        "rex": { "session_id": "session:work", "session_label": "work", "window_id": "window:alpha", "window_label": "alpha-tab" },
         "depth": 3, "downstream": 0, "parked": 0, "memos": [], "blocked_by": [], "deadlock": false, "halted": false, "stuck": false
       },
       {
         "key": "task:alpha/5", "kind": "task", "state": "pending", "title": "PR #254 の設定の読み方に合わせて移す",
         "endpoint": true, "cwd": "/repo/agents-daemon", "task_id": "5",
         "session_id": "sid-alpha", "session": "alpha", "session_name": "alpha", "live": true,
+        "rex": { "session_id": "session:work", "session_label": "work", "window_id": "window:alpha", "window_label": "alpha-tab" },
         "depth": 1, "downstream": 0, "parked": 0, "memos": [], "blocked_by": ["pr:usadamasa/agents-daemon#254"], "deadlock": false, "halted": false, "stuck": false
       },
       {
         "key": "task:beta/3", "kind": "task", "state": "pending", "title": "PR を作る",
         "endpoint": true, "cwd": "/repo/agents-daemon", "task_id": "3",
         "session_id": "sid-beta", "session": "beta", "session_name": "beta", "live": true,
+        "rex": { "session_id": "session:work", "session_label": "work", "window_id": "window:beta", "window_label": "beta-tab" },
         "depth": 4, "downstream": 0, "parked": 0, "memos": [], "blocked_by": ["task:beta/2", "task:beta/1"], "deadlock": false, "halted": false, "stuck": false
       }
     ],

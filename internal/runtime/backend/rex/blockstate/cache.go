@@ -22,7 +22,12 @@ type State struct {
 type Ref struct {
 	Session string
 	Block   string
+	// View なら block は埋めず、session の view (session.view) だけを読み直す。
+	View bool
 }
+
+// PutView は session の view を置く。
+func (c *Cache) PutView(session string, view wire.SessionView) {}
 
 // Cache は events の stream を当てて保つ shell の block の状態。並行には呼ばない (呼び手が lock を持つ)。
 type Cache struct {

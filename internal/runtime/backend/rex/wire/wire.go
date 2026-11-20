@@ -51,6 +51,29 @@ type BlockList struct {
 	} `json:"blocks"`
 }
 
+// SessionView は session.view の応答のうち使う部分。window に置かれた block だけが載り、detached の block は載らない。
+// rex-premise: preview.30 api session.view は revision、label、windows[].window_id / label / layers[].blocks[].block_id を返す
+type SessionView struct {
+	Revision  int64        `json:"revision"`
+	SessionID string       `json:"session_id"`
+	Label     string       `json:"label"`
+	Windows   []ViewWindow `json:"windows"`
+}
+
+// ViewWindow は session.view の window 1 つ。
+type ViewWindow struct {
+	WindowID string      `json:"window_id"`
+	Label    string      `json:"label"`
+	Layers   []ViewLayer `json:"layers"`
+}
+
+// ViewLayer は window の layer 1 つ (tiled と floating)。
+type ViewLayer struct {
+	Blocks []struct {
+		BlockID string `json:"block_id"`
+	} `json:"blocks"`
+}
+
 // Size は size の応答のうち使う部分。
 type Size struct {
 	Rows    int `json:"rows"`

@@ -35,6 +35,16 @@ export function groupBySession(nodes) {
   return [...groups.values()];
 }
 
+// groupByRex は未実装 (#633)。
+export function groupByRex(nodes) {
+  return groupBySession(nodes).map((g) => ({ ...g, parts: [{ label: "", nodes: g.nodes }] }));
+}
+
+// heads は未実装 (#633)。
+export function heads() {
+  return 0;
+}
+
 // 枠の寸法。style.css の .group と揃える (カードの幅 240 と高さ 72、余白 12、枠線 1、見出し 16、間 10)。
 export const GROUP_W = 266;
 const GROUP_CHROME = 42;

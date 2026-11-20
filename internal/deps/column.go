@@ -30,6 +30,9 @@ var columnTier = map[string]int{
 	graph.StateExited:     6,
 }
 
+// groupByRex は未実装 (#633)。
+func groupByRex(order []string, nodes []protocol.GraphNode) []string { return order }
+
 // lastActive はノードの key → 最後に動いた時刻 (タスクと TodoWrite の記録の更新時刻、作業の記録の更新時刻)。作業の
 // 記録の無いセッションは活動の変わった時刻を daemon が持たないので載らない。
 func lastActive(tasks []record.Task, todos []record.TodoList, works []worklog.Record) map[string]time.Time {

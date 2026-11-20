@@ -27,6 +27,8 @@ const (
 	blockNotShell      = "block:01a12599-0000-7000-8000-000000000002"
 	blockClosedMidway  = "block:01a12599-0000-7000-8000-000000000003"
 
+	windowA = "window:01a1f8fb-31ab-7af4-a1c6-699a246f65ab"
+
 	sidWorking = "0d5e717f-82c5-4e71-ac74-799f7197e0de"
 	sidDone    = "6b1f3c2a-1111-4222-8333-944455556666"
 )
@@ -52,6 +54,8 @@ func TestExecClient_PaneList(t *testing.T) {
 	f.PutBlock(blockClaudeWorking, measured(t, measuredOct10, "program_status-working.json"), processJSON(pidClaudeWorking, "claude", "/w/agents-daemon"))
 	f.Put("program_status", blockClosedMidway, psEmpty)
 	f.PutBlock(blockClaudeDone, measured(t, measuredOct10, "program_status-done.json"), processJSON(pidClaudeDone, "claude", "/w/guard"))
+	f.SetView(sessionA, `{"revision":4,"session_id":"`+sessionA+`","label":"work","windows":[{"window_id":"`+windowA+`","label":"peer-a",`+
+		`"layers":[{"kind":"tiled","blocks":[{"block_id":"`+blockClaudeWorking+`"},{"block_id":"`+blockNotShell+`"}]}]}]}`)
 
 	resolves := 0
 	c := f.client(func() (map[string]string, error) {
@@ -63,23 +67,27 @@ func TestExecClient_PaneList(t *testing.T) {
 		t.Fatalf("PaneList() error = %v (閉じた block は読み飛ばすべき)", err)
 	}
 
-	t.Run("閉じた block を飛ばし session_id を埋める", func(t *testing.T) {
-		// msg は fixture の実測値 (作業中の要約と、ターン終了の要約)。
+	t.Run("閉じた block を飛ばし session_id と session と window を埋める", func(t *testing.T) {
+		// msg は fixture の実測値 (作業中の要約と、ターン終了の要約)。session B の view は window を持たない。
 		want := []multiplexer.Pane{
-			{PaneID: blockClaudeWorking, CWD: "/w/agents-daemon", PID: pidClaudeWorking, Agent: "claude", AgentStatus: multiplexer.AgentStatusWorking, AgentMessage: "Showing rex CLI help for relevant subcommands", SessionID: sidWorking},
-			{PaneID: blockClaudeDone, CWD: "/w/guard", PID: pidClaudeDone, Agent: "claude", AgentStatus: multiplexer.AgentStatusDone, AgentMessage: "guard-gql-read の PR 作成待ち", SessionID: sidDone},
+			{PaneID: blockClaudeWorking, CWD: "/w/agents-daemon", PID: pidClaudeWorking, Agent: "claude", AgentStatus: multiplexer.AgentStatusWorking, AgentMessage: "Showing rex CLI help for relevant subcommands", SessionID: sidWorking,
+				Location: multiplexer.Location{SessionID: sessionA, SessionLabel: "work", WindowID: windowA, WindowLabel: "peer-a"}},
+			{PaneID: blockClaudeDone, CWD: "/w/guard", PID: pidClaudeDone, Agent: "claude", AgentStatus: multiplexer.AgentStatusDone, AgentMessage: "guard-gql-read の PR 作成待ち", SessionID: sidDone,
+				Location: multiplexer.Location{SessionID: sessionB, SessionLabel: apitest.DefaultSessionLabel}},
 		}
 		if !slices.Equal(panes, want) {
 			t.Errorf("PaneList() =\n%+v\nwant\n%+v", panes, want)
 		}
 	})
-	t.Run("shell の block にだけ method を打つ", func(t *testing.T) {
+	t.Run("shell の block にだけ method を打ち、session ごとに view を 1 回読む", func(t *testing.T) {
 		f.assertCalls(t,
 			"session.list",
 			"session.list_blocks "+sessionA,
+			"session.view "+sessionA,
 			"program_status "+blockClaudeWorking,
 			"process "+blockClaudeWorking,
 			"session.list_blocks "+sessionB,
+			"session.view "+sessionB,
 			"program_status "+blockClosed,
 			"program_status "+blockClosedMidway,
 			"process "+blockClosedMidway,
@@ -130,9 +138,27 @@ func TestExecClient_PaneList_SkipsClosedSession(t *testing.T) {
 		"session.list",
 		"session.list_blocks "+sessionA,
 		"session.list_blocks "+sessionB,
+		"session.view "+sessionB,
 		"program_status "+blockClaudeDone,
 		"process "+blockClaudeDone,
 	)
+}
+
+// view の読み取りが失敗しても pane の一覧は返す。置き場は表示にしか使わないので、view を読めない session の pane は
+// 置き場を空にする (session の置き場の読み取りで daemon の PaneList を失敗に数えない)。
+func TestExecClient_PaneList_ViewFailureLeavesLocationEmpty(t *testing.T) {
+	f := newFakeAPI(t)
+	f.AddSession(sessionB, [2]string{blockClaudeDone, wire.ShellFlavor})
+	f.PutBlock(blockClaudeDone, measured(t, measuredOct10, "program_status-done.json"), processJSON(pidClaudeDone, "claude", "/w/guard"))
+	f.Fail("session.view", sessionB)
+
+	panes, err := f.client(staticResolver(nil)).PaneList(context.Background())
+	if err != nil || len(panes) != 1 {
+		t.Fatalf("PaneList() = %+v, %v; want 1 件", panes, err)
+	}
+	if panes[0].Location != (multiplexer.Location{}) {
+		t.Errorf("Location = %+v, want 空", panes[0].Location)
+	}
 }
 
 // not found 以外の失敗は block を飛ばさずエラーにする。

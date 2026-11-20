@@ -163,6 +163,12 @@ function groups() {
   }));
 }
 
+// subheads は見出しが label の枠の小見出し (rex の window、rex の外は Claude のセッション) を描いた順に返す。
+function subheads(label) {
+  const g = [...document.querySelectorAll("#graph .group")].find((e) => e.querySelector("h2").textContent === label);
+  return [...g.querySelectorAll("h3")].map((h) => h.textContent);
+}
+
 test("完了を隠した既定の図: 辺でつながるノードを段の浅い順に上から描き、辺の無い動いているノードをセッションの枠に、終わったノードを右の列に並べる", () => {
   const graph = cards("#graph");
   assert.deepEqual([...graph.keys()].sort(), [
@@ -184,7 +190,9 @@ test("完了を隠した既定の図: 辺でつながるノードを段の浅い
   assert.deepEqual([...cards("#column").keys()], ["sid:gamma"]);
   assert.equal(q("#column h2 .ph").textContent, "Ended");
   assert.equal(q("#column h2 .counter").textContent, "1");
-  assert.deepEqual(groups(), [{ label: "zeta", keys: ["sid:zeta"] }]);
+  // rex の置き場の無い生きているノードは「rex の外」の枠に入り、Claude のセッションの小見出しで区切る (#633)。
+  assert.deepEqual(groups(), [{ label: "Outside rex", keys: ["sid:zeta"] }]);
+  assert.deepEqual(subheads("Outside rex"), ["zeta"]);
   // 枠は線のあるかたまりの下に置く。
   const lowest = Math.max(...[...graph.values()].filter((c) => !Number.isNaN(c.top)).map((c) => c.top));
   assert.ok(parseFloat(q("#graph .group").style.top) >= lowest + 72);
@@ -194,10 +202,20 @@ test("完了を隠した既定の図: 辺でつながるノードを段の浅い
 test("セッションの枠の見出しは 1 行に収め、切れた分は tooltip で読める", () => {
   const head = q("#graph .group h2");
   assert.equal(head.title, head.textContent);
-  const rule = css.match(/^\.group h2 \{([^}]*)\}/m)[1];
-  assert.match(rule, /white-space: nowrap/);
-  assert.match(rule, /text-overflow: ellipsis/);
-  assert.match(rule, /overflow: hidden/);
+  for (const selector of ["h2", "h3"]) {
+    const rule = css.match(new RegExp(`^\\.group ${selector} \\{([^}]*)\\}`, "m"))[1];
+    assert.match(rule, /white-space: nowrap/);
+    assert.match(rule, /text-overflow: ellipsis/);
+    assert.match(rule, /overflow: hidden/);
+  }
+  const sub = q("#graph .group h3");
+  assert.equal(sub.title, sub.textContent);
+});
+
+test("完了を隠した既定の図: 線のあるカードは副題の先頭に rex の session と window を添える", () => {
+  const sub = q('.node[data-key="task:alpha/2"] small').textContent;
+  assert.ok(sub.startsWith("work › alpha-tab · "), sub);
+  assert.equal(q('.node[data-key="pr:usadamasa/agents-daemon#254"] small').textContent.includes("›"), false);
 });
 
 test("完了を隠した既定の図: 枠の中のカードはセッション名を繰り返さず、題がセッション名なら今の作業を題にする", () => {
@@ -371,8 +389,12 @@ test("線が 1 本も無い図: 動いているカードをセッションの枠
   try {
     assert.equal(count(EDGE), 0);
     assert.equal(count("#graph .empty"), 0);
-    assert.deepEqual(groups().map((g) => g.label).sort(), ["Refs", "alpha", "beta", "zeta"]);
+    // 枠は rex の session ごと。中は window ごとに、column_order で最初に来るカードの順に区切る (#633)。
+    assert.deepEqual(groups().map((g) => g.label).sort(), ["Outside rex", "Refs", "work"]);
     assert.deepEqual(groups().find((g) => g.label === "Refs").keys, ["pr:usadamasa/agents-daemon#254"]);
+    assert.deepEqual(subheads("work"), ["beta-tab", "alpha-tab"]);
+    assert.deepEqual(groups().find((g) => g.label === "work").keys, ["task:beta/1", "task:beta/2", "task:beta/3", "task:alpha/2", "task:alpha/4", "task:alpha/5"]);
+    assert.deepEqual(subheads("Refs"), []);
     assert.deepEqual([...cards("#column").keys()], ["sid:gamma"]);
     assert.equal(q("#legend").hidden, false);
     const v = view();
@@ -392,10 +414,10 @@ test("線が 1 本も無い図: 窓の大きさに合わせて枠を折り返し
   await loadDeps(JSON.stringify(withoutLinks()));
   const rows = () => new Set([...document.querySelectorAll("#graph .group")].map((g) => g.style.top)).size;
   try {
-    assert.ok(rows() < 4, `広い窓の行数 ${rows()}`);
+    assert.ok(rows() < 3, `広い窓の行数 ${rows()}`);
     // 縦に長い細い窓では、1 列に積むのが 100% のまま収まる並べ方になる。
     resize({ width: 400, height: 1600 });
-    assert.equal(rows(), 4);
+    assert.equal(rows(), 3);
   } finally {
     resize(HOST);
     await loadDeps(fixtureDeps);

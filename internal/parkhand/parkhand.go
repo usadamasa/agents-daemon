@@ -44,6 +44,8 @@ type Runner struct {
 	Spawn func(ctx context.Context, repo, prompt string) (protocol.SpawnResult, error)
 	// SessionNames は session ID から名前への対応 (sessioncontext.Store.ListSessionNames)。nil なら ID のまま書く。
 	SessionNames func() map[string]string
+	// SessionRepo は生きているセッションの repo の鍵 (メモの repo と同じ規則)。引けなければ空。
+	SessionRepo func(sessionID string) string
 }
 
 // Run は req のメモを宛先へ渡す。取る前に落ちる (入力が違う、メモが無い、取れない) ときは error で、何も変えていない。
@@ -78,7 +80,11 @@ func (r Runner) Run(ctx context.Context, req Request) (Result, error) {
 
 // tell は取ったメモを生きているセッションへ打つ。届かなければ戻す。
 func (r Runner) tell(ctx context.Context, req Request, item parking.Item, names map[string]string) Result {
-	told, err := r.Tell(ctx, req.ToSession, text(item, req.Intent, filepath.Base(item.Repo), req.Note, names))
+	body := text(item, req.Intent, item.Repo, req.Note, names)
+	if req.Intent == IntentTask {
+		body = handOn(item.Repo, r.SessionRepo(req.ToSession), body)
+	}
+	told, err := r.Tell(ctx, req.ToSession, body)
 	if err != nil {
 		return r.revert(req.ID, Result{To: req.ToSession, Reason: err.Error()})
 	}
@@ -89,7 +95,7 @@ func (r Runner) tell(ctx context.Context, req Request, item parking.Item, names 
 // ときは claude が起きているかもしれないので戻さない (戻すと押し直しで 2 つ目のセッションが起きる)。
 func (r Runner) spawn(ctx context.Context, req Request, item parking.Item, names map[string]string) Result {
 	title := filepath.Base(req.ToRepo)
-	prompt := fmt.Sprintf("このメモを渡すため、%s (%s) で新しいセッションとして起こしました。\n%s", title, req.ToRepo, text(item, req.Intent, title, req.Note, names))
+	prompt := fmt.Sprintf("このメモを渡すため、%s (%s) で新しいセッションとして起こしました。\n%s", title, req.ToRepo, text(item, req.Intent, req.ToRepo, req.Note, names))
 	res, err := r.Spawn(ctx, req.ToRepo, prompt)
 	if err != nil {
 		return r.revert(req.ID, Result{Reason: err.Error()})
@@ -118,13 +124,25 @@ const (
 	premiseGone  = "前提が成り立たないとき (該当箇所が無くなった、別の変更で直った) は、その理由を 1 行で返して終えてください。"
 )
 
+// handOn は task の依頼文を、メモの repo (memoRepo) と違う repo (sessionRepo) のセッションへ送る文面にする。
+// タスクはメモの repo で作業するセッションが持つものなので、受け手には着手させず、依頼文をそのまま
+// メモの repo のセッションへ渡させる。sessionRepo が空 (引けない) か memoRepo と同じなら body のまま。
+func handOn(memoRepo, sessionRepo, body string) string {
+	if sessionRepo == "" || sessionRepo == memoRepo {
+		return body
+	}
+	return fmt.Sprintf("このメモの repo は %s (%s) で、このセッションの repo (%s) と違います。", filepath.Base(memoRepo), memoRepo, filepath.Base(sessionRepo)) +
+		"ここでは TaskCreate も着手もせず、区切り (---) の後の依頼文を、" + filepath.Base(memoRepo) +
+		" の生きているセッションか新しく起こすセッションへそのまま渡してください (agents-daemon:peer-sessions skill)。\n---\n" + body
+}
+
 // text は渡す文面。intent が task ならタスクにする依頼 (依存図はタスクの description に書かれた id でメモと照合する)、
-// issue なら repoTitle の repo に issue を立てる依頼。note (利用者の補足) は空でなければ末尾に足す。names は補足を書いた
-// セッションの名前 (無ければ ID のまま)。
-func text(item parking.Item, intent, repoTitle, note string, names map[string]string) string {
+// issue なら target の repo に issue を立てる依頼。target は生きているセッションへ渡すならメモの repo、起こすなら起こした
+// repo。note (利用者の補足) は空でなければ末尾に足す。names は補足を書いたセッションの名前 (無ければ ID のまま)。
+func text(item parking.Item, intent, target, note string, names map[string]string) string {
 	var head string
 	if intent == IntentIssue {
-		head = fmt.Sprintf("パーキングロットのメモ「%s」を GitHub の issue にしてください。repo: %s。", item.Title, repoTitle) +
+		head = fmt.Sprintf("パーキングロットのメモ「%s」を GitHub の issue にしてください。repo: %s。", item.Title, filepath.Base(target)) +
 			premiseCheck + "成り立つときは起票し、URL を返してください。" + premiseGone
 	} else {
 		head = fmt.Sprintf("パーキングロットのメモ「%s」(種類: %s) をタスクにしてください。", item.Title, kindLabel(item)) +

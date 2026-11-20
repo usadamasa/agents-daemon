@@ -39,10 +39,13 @@ type fixture struct {
 	spawnRes  protocol.SpawnResult
 	spawnErr  error
 	missingID bool
+	// sessionRepo は宛先のセッションの repo。既定はメモと同じ repo。
+	sessionRepo string
+	repoAsked   []string
 }
 
 func newFixture() *fixture {
-	return &fixture{setErr: map[string]error{}, spawnRes: protocol.SpawnResult{SessionID: newSID, PaneID: paneID, Foreground: true}}
+	return &fixture{setErr: map[string]error{}, spawnRes: protocol.SpawnResult{SessionID: newSID, PaneID: paneID, Foreground: true}, sessionRepo: repo}
 }
 
 func (f *fixture) runner() Runner {
@@ -69,6 +72,10 @@ func (f *fixture) runner() Runner {
 			return f.spawnRes, f.spawnErr
 		},
 		SessionNames: func() map[string]string { return map[string]string{"s-new": "lint-review"} },
+		SessionRepo: func(sessionID string) string {
+			f.repoAsked = append(f.repoAsked, sessionID)
+			return f.sessionRepo
+		},
 	}
 }
 
@@ -116,6 +123,70 @@ func TestRunner_Run_toSession(t *testing.T) {
 	}
 	if strings.Contains(text, "新しいセッションとして起こしました") {
 		t.Errorf("セッションへ送る文面に起こした経緯がある:\n%s", text)
+	}
+	if strings.Contains(text, handOnMarker) {
+		t.Errorf("メモの repo のセッションへの文面に引き継ぎの依頼がある:\n%s", text)
+	}
+}
+
+// handOnMarker はほかの repo のセッションへ渡す文面にだけ入る、引き継ぎの依頼の語。
+const handOnMarker = "そのまま渡してください"
+
+// ほかの repo のセッションへ task で渡すと、受け手には着手させず、メモの repo のセッションへ渡す依頼を先に置く。
+// 引き継ぐ依頼文は、メモの repo のセッションへ直接渡すときと同じ文面にする。
+func TestRunner_Run_toSession_otherRepo(t *testing.T) {
+	f := newFixture()
+	f.sessionRepo = "/src/github.com/usadamasa/workspace"
+	if _, err := f.runner().Run(context.Background(), toSession()); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.repoAsked) != 1 || f.repoAsked[0] != peerSID {
+		t.Fatalf("宛先の repo を引いていない: %q", f.repoAsked)
+	}
+	got := strings.TrimPrefix(f.told[0], peerSID+"\n")
+	head, body, ok := strings.Cut(got, "\n---\n")
+	if !ok {
+		t.Fatalf("引き継ぎの依頼と依頼文の区切りが無い:\n%s", got)
+	}
+	for _, s := range []string{
+		"agents-daemon (" + repo + ")",
+		"workspace",
+		"TaskCreate も着手もせず",
+		handOnMarker,
+		"agents-daemon:peer-sessions",
+	} {
+		if !strings.Contains(head, s) {
+			t.Errorf("引き継ぎの依頼に %q が無い:\n%s", s, head)
+		}
+	}
+	if want := text(memo, "task", repo, " 急ぎ ", map[string]string{"s-new": "lint-review"}); body != want {
+		t.Errorf("引き継ぐ依頼文がメモの repo のセッションへの文面と違う:\n%s\nwant:\n%s", body, want)
+	}
+}
+
+// 宛先の repo が引けない (status.json に pane が無い) ときは、メモの repo のセッションへの文面で送る。
+func TestRunner_Run_toSession_unknownRepo(t *testing.T) {
+	f := newFixture()
+	f.sessionRepo = ""
+	if _, err := f.runner().Run(context.Background(), toSession()); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(f.told[0], handOnMarker) {
+		t.Errorf("repo が分からないのに引き継ぎを頼んでいる:\n%s", f.told[0])
+	}
+}
+
+// issue は repo を名指しして起票を頼むので、ほかの repo のセッションへも引き継がせない。
+func TestRunner_Run_toSession_otherRepoIssue(t *testing.T) {
+	f := newFixture()
+	f.sessionRepo = "/src/github.com/usadamasa/workspace"
+	req := toSession()
+	req.Intent = "issue"
+	if _, err := f.runner().Run(context.Background(), req); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(f.told[0], handOnMarker) || !strings.Contains(f.told[0], "repo: agents-daemon。") {
+		t.Errorf("issue の文面:\n%s", f.told[0])
 	}
 }
 
@@ -191,6 +262,20 @@ func TestRunner_Run_toRepo(t *testing.T) {
 	}
 }
 
+// 新しいセッションへ task で渡すと、起こした repo で着手させる。利用者が選んだ repo なので、メモの repo と違っても
+// 引き継がせない。
+func TestRunner_Run_toRepo_task(t *testing.T) {
+	f := newFixture()
+	req := toRepo()
+	req.Intent = "task"
+	if _, err := f.runner().Run(context.Background(), req); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(f.spawned[0], handOnMarker) {
+		t.Errorf("起こしたセッションに引き継ぎを頼んでいる:\n%s", f.spawned[0])
+	}
+}
+
 // 起きたか分からない (claude が前景にならなかった) メモは戻さない。戻すと押し直しで 2 つ目が起きる。
 func TestRunner_Run_toRepo_unknown(t *testing.T) {
 	f := newFixture()
@@ -251,14 +336,14 @@ func TestRunner_Run_rejectsInput(t *testing.T) {
 
 // 文面の雛形: task は TaskCreate を頼み、issue は起票を頼む。補足は空なら足さない。
 func TestText(t *testing.T) {
-	task := text(memo, "task", "agents-daemon", "", nil)
+	task := text(memo, "task", repo, "", nil)
 	if !strings.Contains(task, "TaskCreate で作り") || strings.Contains(task, "利用者からの補足") {
 		t.Errorf("task:\n%s", task)
 	}
 	if !strings.Contains(task, "作ったら基本すぐ着手してください。") || !strings.Contains(task, "着手できない理由があるときだけ見送ってください。") {
 		t.Errorf("task に着手の既定が無い:\n%s", task)
 	}
-	issue := text(memo, "issue", "agents-daemon", "URL を貼って", nil)
+	issue := text(memo, "issue", repo, "URL を貼って", nil)
 	if !strings.Contains(issue, "repo: agents-daemon。") || !strings.HasSuffix(issue, "\n利用者からの補足: URL を貼って") {
 		t.Errorf("issue:\n%s", issue)
 	}

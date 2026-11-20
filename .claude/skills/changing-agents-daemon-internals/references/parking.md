@@ -41,8 +41,8 @@ schema の `Park*Request` が持つ。
   パーキングの見出しに出し、`park discard` (days 30) で open のメモをまとめて discarded にする。30 日はバイナリ
   (`parking` の `StaleAfter`) が持ち、`deps` の `stale_memo_days` でアプリに渡す。CLI に既定は無い。housekeeping が
   open を 90 日で黙って消す前に、人が見て捨てる区切り (関係は `daemon/retention_test.go`)。捨てたメモは 7 日残り、`logs --events` の `park.discard` に残る id を `park set` で status open に戻せる
-- タスクにする・issue にする: 宛先は生きているセッションか、新しく起こすセッションの repo。タスクにするの宛先はメモの
-  repo の `sessions`、issue にするの宛先はメモの repo の `sessions` を先に、続けてほかの repo の `sessions`。宛先の名前には
+- タスクにする・issue にする: 宛先は生きているセッションか、新しく起こすセッションの repo。生きているセッションは
+  どちらもメモの repo の `sessions` を先に、続けてほかの repo の `sessions` (#573)。宛先の名前には
   `subject` を添える (#191)。補足欄に書いた文は渡す文面の末尾に足す (#310)
 - 新しいセッションを起こして渡す: 生きているセッションの無い repo へ渡す経路 (#162)。宛先の下に repo の候補 (メモの
   repo、依存図の repo、セッション台帳で最近動いた repo の新しい順。#309) を並べる。台帳の repo は deps の `recent_repos`
@@ -63,7 +63,10 @@ schema の `Park*Request` が持つ。
   失敗して何もせず exit 1 (ほかが先に渡した、捨てた)。2 つの呼び手が同じメモを渡そうとしても取れるのは 1 つ。
   宛先は status と同じ書き込みで書く (別の書き込みにすると宛先の無い handed が見える)
 - 文面を組む: タスクにする (TaskCreate を頼み、description にメモの id を入れさせる。着手の時期は受け手の計画に任せる) か
-  issue にする (起票して URL を返させる)。どちらも先にメモの前提が今のコードと計画で成り立つかを確かめさせ、
+  issue にする (起票して URL を返させる)。タスクにするを生きているセッションへ送るときは、宛先の repo を status.json の pane の
+  cwd から引き (メモの repo と同じ鍵)、メモの repo と違えば、着手させずに依頼文をメモの repo のセッションへ渡させる依頼を
+  先に置く (`parkhand` の `handOn`)。引けなければメモの repo のセッションへの文面で送る。issue は repo を名指しするので、
+  新しく起こすセッションは利用者が repo を選んだので、どちらも引き継がせない。どちらも先にメモの前提が今のコードと計画で成り立つかを確かめさせ、
   成り立たなければ理由を 1 行で返して終えさせる (`parkhand` の `premiseCheck`)。メモは置いた時点の前提で書かれ、渡すまでに
   レビューや別の変更で前提が消えることがある。受け手はメモの status を触らない。渡したメモは handed で一覧に
   出ず、タスクが無ければどこにも出ないまま 7 日で消える。補足を書いたセッションの名前は statusline の記録から引く

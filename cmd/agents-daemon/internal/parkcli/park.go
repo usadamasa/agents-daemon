@@ -149,5 +149,24 @@ func newHandRunner(p apppath.Paths, viewer string) (parkhand.Runner, error) {
 			names, _ := sessioncontext.New(p.StateDir()).ListSessionNames()
 			return names
 		},
+		SessionRepo: func(sessionID string) string {
+			// 宛先の候補は依存図が同じ status.json から出すので、daemon が動いていれば引ける。
+			_, snap, _ := daemonstate.Running(p)
+			return paneRepo(snap, sessionID, gitrepo.RepoKey)
+		},
 	}, nil
+}
+
+// paneRepo は status.json の pane からセッションの cwd を引き、key (gitrepo.RepoKey) で repo の鍵にする。
+// メモの repo と同じ鍵なので、worktree で動くセッションも main の checkout の repo になる。pane が無ければ空。
+func paneRepo(snap *daemonstate.StatusSnapshot, sessionID string, key func(cwd string) string) string {
+	if snap == nil {
+		return ""
+	}
+	for _, pane := range snap.Panes {
+		if pane.SessionID == sessionID && pane.CWD != "" {
+			return key(pane.CWD)
+		}
+	}
+	return ""
 }

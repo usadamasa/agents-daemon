@@ -136,13 +136,9 @@ function uniqueLive(sessions, exclude) {
   return out;
 }
 
-// taskDestinations は「タスクにする」の宛先: メモの repo の生きているセッション。
-export function taskDestinations(repo) {
-  return uniqueLive(repo.sessions);
-}
-
-// issueDestinations は「issue にする」の宛先: メモの repo のセッションを先に、続けてほかの repo の生きているセッション。
-export function issueDestinations(data, repo) {
+// memoDestinations は「タスクにする」「issue にする」の宛先: メモの repo のセッションを先に、続けてほかの repo の
+// 生きているセッション。ほかの repo のセッションが受けたときの引き継ぎは、渡す文面 (parkhand) が受け手に頼む。
+export function memoDestinations(data, repo) {
   return uniqueLive([...repo.sessions, ...data.repos.flatMap((r) => r.sessions)]);
 }
 

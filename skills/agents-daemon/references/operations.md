@@ -27,7 +27,7 @@ agents-daemon prune-worktrees [--dry-run]      # 放置された Claude Code の
 agents-daemon edge add|rm|list                 # セッションをまたぐ作業の依存を書く・消す・一覧する (下の「セッションをまたぐ辺を書く」)
 agents-daemon park list|set                    # パーキングのメモを一覧する・書き換える (stdin の JSON で受ける)
 agents-daemon park hand < request.json         # メモを取って渡し、届かなければ戻す (アプリが呼ぶ)
-agents-daemon spawn < request.json             # prompt を最初のターンにした Claude Code を repo の新しい rex session か、session で指したタブに起こす (アプリが呼ぶ)
+agents-daemon spawn < request.json             # 本文を最初のターンにした Claude Code を repo を cwd にして rex に起こす (アプリと peer-sessions skill が呼ぶ)。足し先の既定は REX_SESSION のタブ、無ければ新しい session
 agents-daemon tell < request.json              # 生きているセッションの入力欄に文面を打つ (アプリが呼ぶ)
 ```
 

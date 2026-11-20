@@ -46,7 +46,7 @@ help と同じ役。docs と feedback の代わりにはならない。
 
 別の session の block と window は、`capture` `send` `send-key` `window close` に `-s <session>` を添えて指す。
 `-s` は session の label と完全 ID のどちらでも通る。
-peer の session は、起こしたときに控えた `session_id` で指す。label は起きた claude が rename するので、
+peer の session は、起こしたときに控えた `rex_session_id` で指す。label は起きた claude が rename するので、
 起こしたときの名前では当たらなくなる。
 
 <!-- rex-premise: preview.26 cli 別 session の block と window は -s が無いと not found (exit 3)。-s は label を受ける -->
@@ -59,110 +59,86 @@ peer の session は、起こしたときに控えた `session_id` で指す。l
   `REX_BLOCK` を既定にするが、`send` はそうとは書かれていない。block が 1 つの session は `-s <session>` だけで指せる。
 - `--json` を付けて ID を結果から読む。`split` と `run` は `block_ids[0]` に新しいブロックを返す。
   `session new` は `session_id` と `initial_windows[0].window_id`、`initial_windows[0].block_ids[0]` を返す。
-- `split` は同じ window に並べ、`run` は新しい window を作る。別のエージェントを起こすときの既定は、
-  既存の session (多くは起こす側の `$REX_SESSION`) に `window new` でタブとして立てること。
-  `session new` で新しい session を作るのは、利用者が session の分離を明示したときだけにする
-  (SKILL.md の「足し先の session を決める」)。タブで起きた claude が rex の案内どおりに session を
-  rename しないよう、タブの包みが環境変数を渡し、plugin の SessionStart hook が rename を止める案内を出す。
+- `split` は同じ window に並べ、`run` は新しい window を作る。別の Claude セッションは `rex` で直に起こさず、
+  下の「peer の Claude セッションを立てる」の `agents-daemon spawn` で起こす。
 - コマンドはログインシェルの環境で動く。PATH は効くが alias は効かない。
 
 ## peer の Claude セッションを立てる
 
-足し先 (既存の session のタブか、利用者が明示した新しい session) の決め方は SKILL.md の
-「足し先の session を決める」。既定はタブなので、まずこちらを使う。
+起こす指定を JSON で `./tmp/spawn-<作業名>.json` に Write で書き、`agents-daemon spawn` の stdin へ渡す。
+コマンドに変数展開が無いので、worktree 隔離のセッションでもこのまま打てる。
 
-### 既存の session にタブとして立てる (既定)
-
-足し先は session の ID で指す。label は起きた claude や利用者が rename すると変わる。自分の session に足すなら
-`"$REX_SESSION"`、ほかの作業の session ならその peer を起こしたときに控えた `session_id` を渡す。
-
-```sh
-sid=$(uuidgen | tr '[:upper:]' '[:lower:]'); echo "claude session_id: $sid"
-rex window new -s "$REX_SESSION" <作業名> --cwd "$PWD" --focus=false --json -- \
-  /bin/sh -c 'set -m; export AGENTS_DAEMON_SHARED_REX_SESSION=1; "$@"; s=$?; c() { exit "$s"; }; if [ "$s" -ne 0 ]; then trap c INT; printf "\n%s が exit %s で終わった。Enter で閉じる。\n" "$1" "$s"; read -r _; fi; c' \
-  agents-daemon-spawn claude --session-id "$sid" --model "${CLAUDE_CODE_SUBAGENT_MODEL:?}" -- "$(cat ./tmp/brief-<作業名>.md)"
+```json
+{"repo": "<渡す先の cwd の絶対パス>", "prompt_file": "./tmp/brief-<作業名>.md", "label": "<作業名>", "session_id": "<uuidgen の値を小文字で>"}
 ```
 
-worktree 隔離のセッションでは、guard が変数展開を含むコマンドを拒む。この内容をそのまま
-`./tmp/spawn-<作業名>.sh` に Write で書き、`sh ./tmp/spawn-<作業名>.sh` で起こす。新しい session の script
-(下) とは `rex` の副コマンドと包みの中身が違うので、新しい session 用の script を書き換えて使い回さない。
-
 ```sh
-#!/bin/sh
-set -e
-sid="<uuidgen で決めた値>"
-rex window new -s "$REX_SESSION" <作業名> --cwd "<cwd>" --focus=false --json -- \
-  /bin/sh -c 'set -m; export AGENTS_DAEMON_SHARED_REX_SESSION=1; "$@"; s=$?; c() { exit "$s"; }; if [ "$s" -ne 0 ]; then trap c INT; printf "\n%s が exit %s で終わった。Enter で閉じる。\n" "$1" "$s"; read -r _; fi; c' \
-  agents-daemon-spawn claude --session-id "$sid" --model "<model>" -- "$(cat <brief のパス>)"
+~/.cache/agents-daemon/bin/agents-daemon spawn < ./tmp/spawn-<作業名>.json
 ```
 
-<!-- rex-premise: preview.30 cli window new のコマンドが終わると pane と window が閉じ、session は残る。REX_SESSION は足し先の session になる -->
+| 欄 | 書くとき | 省いたとき |
+| ---- | ---- | ---- |
+| `repo` | 必ず | — |
+| `prompt_file` | 依頼文のファイル (相対パスは打った cwd から) | `prompt` に本文を書く |
+| `label` | タブ (新しい session なら session) の名前を作業名にする | repo の basename |
+| `session_id` | 起こす前に依存の辺を書くとき (SKILL.md「依存の辺を書く」) | spawn が作り、結果で返す |
+| `model` | 定型の横展開で軽いモデルにするとき (SKILL.md「モデルの指定」) | settings の `CLAUDE_CODE_SUBAGENT_MODEL` |
+| `session` | 続きの作業を、控えた `rex_session_id` の session のタブに足すとき | 起こす側の session (`REX_SESSION`) のタブ |
+| `new_session` | 利用者が session の分離を明示したとき (`true`。`session` とは併用しない) | 同上 |
 
-`<作業名>` はタブ (window) の名前になる。`--focus=false` が無いと、新しいタブが足し先の session の表示を奪う。
-結果の `window_id` (畳むときに使う) を控える。
+足し先の選び方は SKILL.md「足し先の session を決める」。
 
-タブの包みは session に触れない。印を書かず、claude が終わっても session を閉じない。claude が終われば pane が
-閉じ、最後の pane を失ったタブは rex が閉じるので、ほかのタブは残る。包みが渡す
-`AGENTS_DAEMON_SHARED_REX_SESSION` を plugin の SessionStart hook が見て、起きた claude に
-`rex session rename` を打たず自分のタブにだけ名前を付ける案内を出す。rex の hook の案内は利用者の settings
-にあり、plugin からは止められない。本文は spawn の `tabScript` (agents-daemon の `rex/wrap` パッケージ) と同じにする。
+claude が前景になると、spawn は結果を 1 行の JSON で出す。
 
-渡したい `session_id` が `session target "..." not found` で見つからなければ、その session は既に閉じている。
-新しい session へは逃げず、自分の `"$REX_SESSION"` のタブへ倒す (SKILL.md「足し先の session を決める」)。
+```json
+{"session_id": "<claude の session_id>", "pane_id": "block:…", "rex_session_id": "session:…", "window_id": "window:…", "foreground": true}
+```
+
+`session_id` (辺と宛先に使う)、`rex_session_id` と `window_id` (畳むときに使う) を控える。`foreground` が `false` なら
+pane は残っていて claude が起き切っていない。`detail` を読み、`rex capture -s <rex_session_id> -b <pane_id>` で画面を確かめる。
+`session` で指した session が閉じていれば `session not found` の error で何も起こさない。新しい session には
+逃げず、`session` を省いて起こし直す (起こす側の session のタブになる)。
+
+spawn は control API で block を作るので、block は owner を持たず、表示しているアプリの画面の大きさに追従する。
+タブで起きた claude には包みが `AGENTS_DAEMON_SHARED_REX_SESSION` を渡し、plugin の SessionStart hook が
+`rex session rename` を打たず自分のタブにだけ名前を付ける案内を出す。新しい session の包みは印
+(`spawned-session mark`) を書き、claude が終わって残る block が自分だけなら session を閉じる。どちらも異常終了では
+Enter まで失敗の画面を残す。包みの本文は agents-daemon の `rex/wrap` パッケージだけが持つ。
+
+<!-- rex-premise: preview.30 api 作った client が block の owner になる。disown_block は session.attach の後だけ通る -->
 
 依頼文は最初のターンとして入るので、peer の inbox が開くのを待たずに渡せる。最初のターンを終えると
-Claude Code が AI の題を作り、rex のサイドバーに出る。`--name` を付けるとこの題が作られない。
+Claude Code が AI の題を作り、rex のサイドバーに出る。spawn は `--name` を付けないので、この題が作られる。
 peer は依頼文に従って受領を `SendMessage` で返し、その `from` が以後の宛先になる。`ListAgents` の名前は
 `<cwd の basename>-<連番>` で、rex の rename では変わらない。
-画面へ直接投入するなら `send -s <session_id> '<本文>'` と `send-key -s <session_id> enter` を使う。
+画面へ直接投入するなら `send -s <rex_session_id> -b <pane_id> '<本文>'` と `send-key -s <rex_session_id> -b <pane_id> enter` を使う。
 
 <!-- cc-premise: 2.1.325 osc7501 --name の無いセッションは最初のターンの後に ai-title を作り、端末の題にする -->
 
-### 新しい session に立てる (利用者が session の分離を明示したときだけ)
-
-```sh
-sid=$(uuidgen | tr '[:upper:]' '[:lower:]'); echo "claude session_id: $sid"
-rex session new <作業名> --cwd "$PWD" --json -- \
-  /bin/sh -c 'set -m; rex="$1"; ad="$2"; shift 2; "$ad" spawned-session mark "$REX_SESSION" >/dev/null; "$@"; s=$?; c() { if "$rex" --autostart=false block ls -s "$REX_SESSION" --json | jq -e --arg b "$REX_BLOCK" ".blocks | length == 1 and .[0].block_id == \$b" >/dev/null; then "$rex" --autostart=false session kill "$REX_SESSION"; fi; exit "$s"; }; if [ "$s" -ne 0 ]; then trap c INT; printf "\n%s が exit %s で終わった。Enter で閉じる。\n" "$1" "$s"; read -r _; fi; c' \
-  agents-daemon-spawn rex "${XDG_CACHE_HOME:-$HOME/.cache}/agents-daemon/bin/agents-daemon" \
-  claude --session-id "$sid" --model "${CLAUDE_CODE_SUBAGENT_MODEL:?}" -- "$(cat ./tmp/brief-<作業名>.md)"
-```
-
-worktree 隔離のセッションでは、guard が変数展開を含むコマンドを拒む。この内容を `./tmp/spawn-<作業名>.sh` に
-Write で書き、`sh ./tmp/spawn-<作業名>.sh` で起こす。
-
-<!-- rex-premise: preview.26 cli session new は --focus を持たず、起きたコマンドの REX_SESSION は新しい session になる -->
-
-`session new` は選択中の pane を動かさない。
-結果の `session_id` を控えておく。rex の SessionStart の hook は、起きた claude に session を作業の名前へ
-rename するよう案内する。label が既に作業を表していればそのまま残すよう添えるので、`<作業名>` で作れば
-サイドバーの名前が作業を表したままになる。それでも claude は付け替えうるので、session は label でなく
-`session_id` で指す。`session_id` は rename で変わらない。
+新しい session に立てたとき、rex の SessionStart の hook は起きた claude に session を作業の名前へ rename するよう案内する。
+label が既に作業を表していればそのまま残すよう添えるので、`label` を作業名にすればサイドバーの名前が作業を
+表したままになる。それでも claude は付け替えうるので、session は label でなく `rex_session_id` で指す。
 
 <!-- rex-premise: preview.28 cli SessionStart の hook は作業を表す label ならそのまま残すよう案内する -->
-`/bin/sh -c` の包みは、claude が終わったとき session に残る block が自分だけなら session を閉じる。rex は中の
-コマンドが終わっても session を閉じない。異常終了では終わり方を出して Enter を待ち、それまで失敗の画面が残る。
-起こす前に session の印を書くので、ほかの pane が残っていて閉じられなかった session も、pane が空になると
-daemon が閉じる。本文は spawn の `sessionScript` (agents-daemon の `rex/wrap` パッケージ) と同じにする。
 
 ### 畳む
 
 タブに立てた peer (既定) が `/exit` で終われば、そのタブだけが閉じる。すぐ畳むなら、控えた `window_id` でそのタブだけを閉じる。
 
 ```sh
-rex window close -s <足し先の session_id> <window_id>
+rex window close -s <rex_session_id> <window_id>
 ```
 
 共有の session には `spawned-session close` も `session kill` も打たない。ほかのタブを確認なしで巻き込む。
-足し先が `session new` で起こした session (印のある session) なら、最後のタブが閉じて空になった後で daemon が閉じる。
+足し先が `new_session` で起こした session (印のある session) なら、最後のタブが閉じて空になった後で daemon が閉じる。
 利用者が開いた session は、空になっても残る。
 
 利用者が明示して新しい session に立てた peer が `/exit` で終われば session は閉じる。異常終了で画面が残っているときは、その pane で Enter を押すと閉じる。
 peer の session に pane を足していると、claude の pane だけが閉じて session は残る。残りの pane を閉じて空に
-なれば daemon が閉じる。すぐ畳むなら、起こしたときに控えた `session_id` で session ごと畳む。
+なれば daemon が閉じる。すぐ畳むなら、控えた `rex_session_id` で session ごと畳む。
 
 ```sh
-"${XDG_CACHE_HOME:-$HOME/.cache}/agents-daemon/bin/agents-daemon" spawned-session close <session_id>
+~/.cache/agents-daemon/bin/agents-daemon spawned-session close <rex_session_id>
 ```
 
 閉じるのは包みが印 (`spawned-session mark`) を書いた session だけで、rex に居る印の無い session は理由を出して拒否する。
@@ -219,8 +195,8 @@ rex block call -b work process
 | 症状 | 対処 |
 | ---- | ---- |
 | `connect: operation not permitted` | sandbox が socket を塞いでいる。ハーネス側の設定の問題で CLI の問題ではない。`agents-daemon:setup` skill の「多重化ツールの到達性」 |
-| `session target "<label>" not found` | 起きた claude が session を rename した。起こしたときに控えた `session_id` で指す |
-| `window new -s <session_id>` が `session target "<session_id>" not found` で失敗する | `session_id` で指しても無ければ、その session は閉じている (`/exit` で畳まれた等)。新しい session を作らず、自分の `"$REX_SESSION"` のタブへ倒す |
+| `session target "<label>" not found` | 起きた claude が session を rename した。起こしたときに控えた `rex_session_id` で指す |
+| `agents-daemon spawn` が `session not found` で失敗する | `session` で指した session は閉じている (`/exit` で畳まれた等)。`new_session` にせず、`session` を省いて起こし直す (起こす側の session のタブになる) |
 | `block target "<label>" not found` | 別の session の block なら `-s <session>` を付ける。それ以外はコマンドが終わってブロックが閉じたので、`--keep-open` を付けて作り直す |
 | `window target "<id>" not found` | 別の session の window なら `-s <session>` を付ける。それ以外は ID の桁の間違いで、`rex window ls` の ID 列をそのまま使う |
 | `rex -S <node>` が `x509: certificate is valid for <node>.<tailnet>.ts.net, not <node>` で落ちる | tsnet のノードの証明書は FQDN にしか発行されていない。`rex -S <node>.<tailnet>.ts.net` と FQDN で渡す。同時に出るポート 7297 への `connection refused` は fallback の probe で無害 |

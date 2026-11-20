@@ -479,8 +479,14 @@ func subjectOf(prompt string) string {
 	if m := wrapperPattern.FindStringSubmatch(prompt); m != nil {
 		prompt = m[1]
 	}
-	return firstLine(prompt, subjectLimit)
+	return firstLine(pastePattern.ReplaceAllString(prompt, "\n$1\n"), subjectLimit)
 }
+
+// pastePattern は貼り付けの包み。中身に現れる <pasted_content は Claude Code が <\pasted_content に逃がすので、
+// 最短一致で閉じを取り違えない。閉じの無いもの、id が 16 進 4 桁でないものは包みと見なさない。
+// cc-premise: 2.1.329 input-line 貼り付けた文面 (bracketed paste、spawn の prompt_file) は prompt の中で
+// \n<pasted_content id="hex4">\n中身\n</pasted_content id="hex4">\n に包まれる。包むかは本体の feature gate が決め、条件は確かめていない
+var pastePattern = regexp.MustCompile(`(?s)<pasted_content id="[0-9a-f]{4}">\n(.*?)\n</pasted_content id="[0-9a-f]{4}">`)
 
 // firstLine は text の最初の空でない行を、空白を 1 つに詰めて limit (rune) で切ったもの。超えたら … を付ける。
 func firstLine(text string, limit int) string {

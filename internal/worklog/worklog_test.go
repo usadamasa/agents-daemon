@@ -74,6 +74,78 @@ func TestIngest_peerのdeliveryは包みを剥いて題にする(t *testing.T) {
 	}
 }
 
+// 貼り付けた文面は pasted_content の包みごと prompt に入る (spawn の prompt_file で実測)。題は包みを剥いた中身の 1 行目。
+// cc-premise: 2.1.329 input-line 貼り付けは \n<pasted_content id="hex4">\n中身\n</pasted_content id="hex4">\n で包まれ、中身の <pasted_content は <\pasted_content になる
+func TestIngest_貼り付けの包みを剥いて題にする(t *testing.T) {
+	s := New(t.TempDir())
+	prompt := `\n<pasted_content id=\"10e7\">\n# 依頼: 今日マージした修正を確かめる\n\n本文\n</pasted_content id=\"10e7\">\n`
+	mustIngest(t, s, hook("UserPromptSubmit", `"prompt": "`+prompt+`"`), now)
+	if got := mustGet(t, s, "s1").Subject; got != "# 依頼: 今日マージした修正を確かめる" {
+		t.Errorf("Subject = %q", got)
+	}
+}
+
+func TestSubjectOf_貼り付けの包み(t *testing.T) {
+	tests := []struct {
+		name, prompt, want string
+	}{
+		{
+			name:   "全体が 1 つの貼り付け",
+			prompt: "\n<pasted_content id=\"10e7\">\n# 依頼: 直す\n本文\n</pasted_content id=\"10e7\">\n",
+			want:   "# 依頼: 直す",
+		},
+		{
+			name:   "打った文の後に貼り付け",
+			prompt: "このログを見て\n<pasted_content id=\"ab12\">\nERROR foo\n</pasted_content id=\"ab12\">\n",
+			want:   "このログを見て",
+		},
+		{
+			name:   "貼り付けの後に打った文",
+			prompt: "<pasted_content id=\"ab12\">\nERROR foo\n</pasted_content id=\"ab12\">\nこれを直して",
+			want:   "ERROR foo",
+		},
+		{
+			name: "中身が空白だけの貼り付けの次の貼り付け",
+			prompt: "\n<pasted_content id=\"0001\">\n   \n</pasted_content id=\"0001\">\n" +
+				"\n<pasted_content id=\"0002\">\n二つ目\n</pasted_content id=\"0002\">\n",
+			want: "二つ目",
+		},
+		{
+			name:   "中身が空の貼り付けだけ",
+			prompt: "\n<pasted_content id=\"0001\">\n\n</pasted_content id=\"0001\">\n",
+			want:   "",
+		},
+		{
+			name: "peer の delivery の中の貼り付け",
+			prompt: "<cross-session-message from=\"uds:/tmp/cc-socks/1.sock\">\n" +
+				"<pasted_content id=\"beef\">\n依頼の本文\n</pasted_content id=\"beef\">\n</cross-session-message>",
+			want: "依頼の本文",
+		},
+		{
+			name:   "打った文に書かれた逃がし済みのタグは本文のまま",
+			prompt: "# 依頼: 題が `<\\pasted_content id=\"…\">` になる\n本文",
+			want:   "# 依頼: 題が `<\\pasted_content id=\"…\">` になる",
+		},
+		{
+			name:   "id が 16 進 4 桁でないタグは包みではない",
+			prompt: "<pasted_content id=\"zz\">\n中身\n</pasted_content id=\"zz\">\n",
+			want:   "<pasted_content id=\"zz\">",
+		},
+		{
+			name:   "閉じのタグが無いものは包みではない",
+			prompt: "<pasted_content id=\"10e7\">\n中身\n",
+			want:   "<pasted_content id=\"10e7\">",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := subjectOf(tt.prompt); got != tt.want {
+				t.Errorf("subjectOf(%q) = %q, want %q", tt.prompt, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestIngest_題は空行を飛ばして120字で切る(t *testing.T) {
 	s := New(t.TempDir())
 	long := strings.Repeat("あ", 130)

@@ -114,8 +114,9 @@ Claude Code の sandbox の中で叩くと、`git worktree remove` は main work
 
 ### セッションをまたぐ辺を書く
 
-作業を別のセッションへ渡す側が、渡すときに「何の後か」を書く (#134)。after に置くタスクの選び方と、
-peer の成果が PR のときの鎖の形は `agents-daemon:peer-sessions` skill の「依存の辺を書く」が持つ。
+作業を別のセッションへ渡す側が、渡すときに「何の後か」を書く (#134)。辺の形と参照の書式はこの節が持つ。
+どの向きの辺を書くか、after に置くタスクの選び方、peer の成果が PR になったときの付け替えは
+`agents-daemon:peer-sessions` skill の「依存の辺を書く」が持つ。
 辺は「before が済まないと after を始められない」を表す。結果は JSON で stdout に出る。
 渡す操作から両端を自動で決めることはせず、辺の無い生きているセッションへ `SendMessage` で送ると、
 その tool の結果で送った model に辺の書き方を伝える (#172)。
@@ -125,11 +126,17 @@ stdin の JSON だけで受ける。
 形と欄の意味はバイナリに埋め込んだ JSON Schema (`protocol/protocol.schema.json`) の `$defs` が持ち、
 外れた入力は schema の検証の文言で弾く。人が打つときも同じ JSON を渡す。
 
+例の `agents-daemon` は置き場のパス (`${XDG_CACHE_HOME:-$HOME/.cache}/agents-daemon/bin/agents-daemon`) に読み替える。
+
 ```sh
+printf '%s' '{"before":{"ref":"sid:<待つ相手の uuid>","cwd":"<その session に渡した cwd>"},"after":{"ref":"sid:<peer の uuid>","cwd":"<peer に渡した cwd>"},"note":"<何の後か>"}' \
+  | agents-daemon edge add                                 # EdgeAddRequest → EdgeAdded。peer が別の作業の後
+printf '%s' '{"before":{"ref":"sid:<peer の uuid>","cwd":"<peer に渡した cwd>"},"after":{"task":"3"},"note":"<何の後か>"}' \
+  | agents-daemon edge add                                 # 自分のセッションのタスク 3 が peer の完了の後
+printf '%s' '{"before":{"ref":"pr:usadamasa/agents-daemon#143","cwd":"/abs/repo"},"after":{"task":"3"},"note":"PR #143 のマージの後"}' \
+  | agents-daemon edge add                                 # 自分のセッションのタスク 3 が PR のマージの後
 printf '%s' '{"before":{"ref":"session:ad-135","cwd":"/abs/repo"},"after":{"ref":"issue:usadamasa/agents-daemon#143","cwd":"/abs/repo"},"note":"段 4 のリリースの後"}' \
-  | agents-daemon edge add                                 # EdgeAddRequest → EdgeAdded
-printf '%s' '{"before":{"ref":"session:ad-135","cwd":"/abs/repo"},"after":{"task":"3"}}' \
-  | agents-daemon edge add                                 # 自分のセッションのタスク 3 が ad-135 の後
+  | agents-daemon edge add                                 # 名前で指す端点 (下の session:<名前>)
 printf '%s' '{"before":{...},"after":{...}}' | agents-daemon edge rm   # EdgeRemoveRequest → EdgeRemoved
 agents-daemon edge list --cwd <dir> [--here | --repo <main worktree>] [--ref <参照>]
 ```
@@ -142,6 +149,10 @@ agents-daemon edge list --cwd <dir> [--here | --repo <main worktree>] [--ref <�
   `CLAUDE_CODE_SESSION_ID` から組み (無ければエラー)、cwd を省くとバイナリの cwd になる。`edge rm` も同じ形で当たる
 - `ref` の端点の cwd は、その作業のセッションを起こしたディレクトリ (絶対パス)。端点の repo はここから決め、
   書く側のセッション自身の cwd は見ない
+- peer の `sid:<uuid>` は `spawn` の結果の `session_id`。`spawn` の指定に `session_id` (`uuidgen` の値を小文字で) を
+  書けば起こす前から決まるので、起こす前にも辺を書ける
+- note に書く番号は端点の参照の番号 (PR 番号) に揃える。依存図は note の `#N` を、番号の合う端点の参照の repo へ
+  リンクする。PR が閉じる issue の番号を書くと、repo をまたぐ辺ではリンクにならない
 - 同じ参照の組 (向きを含む) は同じ辺になる。登録し直すと note と repo を書き直し、保持期間 (7 日) を数え直す
 - `session:<名前>` の端点は、daemon が tick ごとにセッション台帳 (`sessions/`) を見て 1 回だけ session ID に結びつけ、
   `sid:<session_id>` に書き換える (元の参照は `bound_from` に残る)。辺を書いた時点で動いていた同名のセッションが
@@ -168,7 +179,8 @@ agents-daemon edge list --cwd <dir> [--here | --repo <main worktree>] [--ref <�
   セッションが 1 つだけのときに書く。そのセッションが同じ PR を待つ辺 (`pr:` → 自分のタスクか `sid:`) があれば
   書かない。後から待つ辺が書かれたら導いた辺を消す。`sid:` → `pr:` の辺を `edge rm` (アプリの Unlink も) で消すと、
   その組は導き直さない (記録 `edges/<id>.declined` は導く条件が途切れて 7 日で消える)。同じ参照の組で `edge add`
-  すると人の辺になり、記録も消える
+  すると人の辺になり、記録も消える。PR がマージされても導いた辺 (`pr:` は after) は残り、出したセッションが
+  終われば依存図から畳まれ、保持期間 (7 日) で消える
 - `list` はすべての辺を出す。`--ref` は今の参照 (結びついた後なら `sid:`) で絞る。`--cwd` は `--here` の基準で、`--repo` / `--here` / `--ref` はどちらかの端点で絞る
 
 ### パーキングのメモを一覧する・書き換える

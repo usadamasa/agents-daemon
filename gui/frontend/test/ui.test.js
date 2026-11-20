@@ -212,10 +212,59 @@ test("セッションの枠の見出しは 1 行に収め、切れた分は tool
   assert.equal(sub.title, sub.textContent);
 });
 
-test("完了を隠した既定の図: 線のあるカードは副題の状態の後ろに rex の session と window を添える", () => {
+// frames は線のある図の枠を、見出し (session は h2、window は h3) と矩形で返す。
+function frames() {
+  return [...document.querySelectorAll("#graph .frame")].map((f) => ({
+    label: f.querySelector(":scope > :is(h2, h3)").textContent,
+    level: f.querySelector(":scope > :is(h2, h3)").tagName.toLowerCase(),
+    left: parseFloat(f.style.left),
+    top: parseFloat(f.style.top),
+    width: parseFloat(f.style.width),
+    height: parseFloat(f.style.height),
+  }));
+}
+
+// inside はカードの箱 (幅 240、高さ 72) が枠の矩形に収まるか。
+function inside(card, frame) {
+  return card.left >= frame.left && card.top >= frame.top && card.left + 240 <= frame.left + frame.width && card.top + 72 <= frame.top + frame.height;
+}
+
+test("完了を隠した既定の図: 線のあるカードも rex の session の枠と window の小枠の中に描く", () => {
+  const graph = cards("#graph");
+  const f = frames();
+  assert.deepEqual(f.map((x) => `${x.level}:${x.label}`).sort(), ["h2:work", "h3:alpha-tab", "h3:beta-tab"]);
+  const byLabel = (label) => f.find((x) => x.label === label);
+  for (const key of ["task:alpha/2", "task:alpha/4", "task:alpha/5"]) {
+    assert.ok(inside(graph.get(key), byLabel("alpha-tab")), key);
+    assert.ok(!inside(graph.get(key), byLabel("beta-tab")), key);
+  }
+  for (const key of ["task:beta/1", "task:beta/2", "task:beta/3"]) assert.ok(inside(graph.get(key), byLabel("beta-tab")), key);
+  for (const key of ["task:alpha/2", "task:beta/3"]) assert.ok(inside(graph.get(key), byLabel("work")), key);
+  // 参照は枠に入れない。
+  assert.ok(!inside(graph.get("pr:usadamasa/agents-daemon#254"), byLabel("work")));
+  // 線のある図の枠に入ったカードは、下のセッションの枠には重ねて出さない。
+  assert.deepEqual(groups().flatMap((g) => g.keys).filter((k) => k.startsWith("task:")), []);
+});
+
+test("完了を隠した既定の図: 枠の中の線のあるカードは rex の置き場を副題で繰り返さず、枠の外の参照は今の副題のまま", () => {
   const sub = q('.node[data-key="task:alpha/2"] small').textContent;
-  assert.ok(sub.startsWith("Working · work › alpha-tab · "), sub);
+  assert.ok(sub.startsWith("Working"), sub);
+  assert.equal(sub.includes("›"), false, sub);
   assert.equal(q('.node[data-key="pr:usadamasa/agents-daemon#254"] small').textContent.includes("›"), false);
+});
+
+test("完了も表示した図: 線の端に残る完了のノードは枠の外に描く", async () => {
+  q("#completed-check").click();
+  try {
+    const graph = cards("#graph");
+    const work = frames().find((x) => x.label === "work");
+    assert.ok(graph.has("task:alpha/1"));
+    assert.ok(!inside(graph.get("task:alpha/1"), work));
+    assert.ok(inside(graph.get("task:alpha/2"), work));
+    await snapshot("graph-frames-completed");
+  } finally {
+    q("#completed-check").click();
+  }
 });
 
 test("完了を隠した既定の図: 枠の中のカードはセッション名を繰り返さず、題がセッション名なら今の作業を題にする", () => {

@@ -276,14 +276,13 @@ func TestWatch_NewSessionBlocks(t *testing.T) {
 		panes, ok := c.watch.Panes(nil)
 		return ok && len(panes) == 1 && panes[0].AgentStatus == multiplexer.AgentStatusDone
 	})
-	panes, _ := c.watch.Panes(nil)
 	want := multiplexer.Pane{PaneID: blockClaudeDone, CWD: "/b", PID: pidClaudeDone, Agent: "claude", AgentStatus: multiplexer.AgentStatusDone, AgentMessage: "できた",
 		Location: multiplexer.Location{SessionID: sessionB, SessionLabel: apitest.DefaultSessionLabel}}
 	eventually(t, "新しい session の view が cache に入る", func() bool {
 		panes, _ := c.watch.Panes(nil)
 		return len(panes) == 1 && panes[0].Location.SessionID == sessionB
 	})
-	panes, _ = c.watch.Panes(nil)
+	panes, _ := c.watch.Panes(nil)
 	if panes[0] != want {
 		t.Errorf("panes = %+v, want %+v", panes[0], want)
 	}

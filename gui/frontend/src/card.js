@@ -78,7 +78,7 @@ export function toneOf(n) {
 
 // cardText はカードの題と副題。grouped は枠の中のカードで、見出しと小見出しが持つ rex の置き場とセッション名を
 // 繰り返さない。題がセッション名のまま (作業の記録に題が無い) の枠の中のカードは、今の作業があればそれを題にする。
-// label は状態の語。線でつながるカードは rex の置き場 (session › window) を添える (#633)。副題は 1 行で切れるので、
+// label は状態の語。枠の外の線でつながるカードは rex の置き場 (session › window) を添える (#633)。副題は 1 行で切れるので、
 // 置き場は状態の語の後ろに置き、window の label と同じセッション名は繰り返さない。
 export function cardText(n, label, grouped) {
   const summaryAsTitle = Boolean(grouped && n.title === n.session && n.summary);

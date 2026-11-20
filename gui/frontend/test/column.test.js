@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { GROUP_W, fitLimit, groupByRex, groupHeight, heads, partition, placeGroups } from "../src/column.js";
+import { GROUP_W, fitLimit, frameTree, groupByRex, groupHeight, heads, partition, placeGroups } from "../src/column.js";
 
 const keys = (nodes) => nodes.map((n) => n.key);
 
@@ -68,6 +68,68 @@ test("groupByRex はセッションを持たない参照を「参照」の枠に
     { key: "issue:2", kind: "ref" },
   ]);
   assert.deepEqual(shape(groups), [{ label: "Refs", parts: [["", ["pr:1", "issue:2"]]] }]);
+});
+
+// tree は frameTree の枠を key → [見出し, 親の key] で、ノードを key → 親の枠の key で返す。
+const tree = ({ frames, parentOf }) => ({
+  frames: Object.fromEntries(frames.map((f) => [f.key, [f.label, f.parent ?? null]])),
+  parents: Object.fromEntries(parentOf),
+});
+
+test("frameTree は辺のある生きているノードを rex の window の枠に、window の枠を session の枠に入れる", () => {
+  const linked = [
+    { key: "a", kind: "task", state: "working", session_id: "sa", session: "alpha", rex: rex("S1", "w1", "alpha-tab") },
+    { key: "b", kind: "task", state: "pending", session_id: "sb", session: "beta", rex: rex("S1", "w2", "beta-tab") },
+  ];
+  const t = frameTree(linked, []);
+  const w1 = t.parentOf.get("a");
+  const w2 = t.parentOf.get("b");
+  assert.notEqual(w1, w2);
+  const { frames } = tree(t);
+  assert.deepEqual(frames[w1], ["alpha-tab", t.frames.find((f) => f.label === "S1-label").key]);
+  assert.deepEqual(frames[w2], ["beta-tab", frames[w1][1]]);
+  assert.deepEqual(frames[frames[w1][1]], ["S1-label", null]);
+  // 枠の鍵はノードの key と重ならない。
+  for (const f of t.frames) assert.ok(!linked.some((n) => n.key === f.key), f.key);
+  assert.deepEqual(keys(t.nodes), ["a", "b"]);
+});
+
+test("frameTree は参照と終わったノードを枠に入れない", () => {
+  const linked = [
+    { key: "pr:o/r#1", kind: "ref", state: "waiting" },
+    { key: "x", kind: "task", state: "exited", session_id: "sx", session: "x", rex: rex("S1", "w1") },
+    { key: "y", kind: "task", state: "completed", session_id: "sy", session: "y", rex: rex("S1", "w1") },
+  ];
+  const t = frameTree(linked, []);
+  assert.deepEqual(t.frames, []);
+  assert.equal(t.parentOf.size, 0);
+  assert.deepEqual(keys(t.nodes), ["pr:o/r#1", "x", "y"]);
+});
+
+test("frameTree は辺のあるノードを持つ枠へ、同じ枠の辺の無いノードも入れ、ほかの枠の辺の無いノードは free に残す", () => {
+  const linked = [{ key: "a", kind: "task", state: "working", session_id: "sa", session: "alpha", rex: rex("S1", "w1") }];
+  const free = [
+    { key: "f1", kind: "task", state: "pending", session_id: "sz", session: "zeta", rex: rex("S2", "w9") },
+    { key: "f2", kind: "session", state: "working", session_id: "sc", session: "gamma", rex: rex("S1", "w2") },
+    { key: "f3", kind: "task", state: "pending", session_id: "so", session: "out" },
+  ];
+  const t = frameTree(linked, free);
+  assert.deepEqual(keys(t.nodes), ["a", "f2"]);
+  assert.deepEqual(keys(t.free), ["f1", "f3"]);
+  const { frames, parents } = tree(t);
+  assert.deepEqual(frames[parents.f2], ["w2", frames[parents.a][1]]);
+});
+
+test("frameTree は小見出しの無い区切り (window に置かれていない block) のノードを session の枠へ直に入れる", () => {
+  const t = frameTree([{ key: "d", kind: "task", state: "working", session_id: "s1", session: "x", rex: { session_id: "S1", session_label: "work" } }], []);
+  assert.deepEqual(tree(t), { frames: { [t.parentOf.get("d")]: ["work", null] }, parents: { d: t.parentOf.get("d") } });
+});
+
+test("frameTree は rex の外の辺のある生きているノードを「rex の外」の枠に、Claude のセッションの区切りで入れる", () => {
+  const t = frameTree([{ key: "o", kind: "session", state: "working", session_id: "so", session: "outside" }], []);
+  const { frames, parents } = tree(t);
+  assert.deepEqual(frames[parents.o], ["outside", frames[parents.o][1]]);
+  assert.deepEqual(frames[frames[parents.o][1]], ["Outside rex", null]);
 });
 
 test("groupHeight は枠の中のカードと小見出しの数で決まる", () => {

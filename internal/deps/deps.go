@@ -68,6 +68,7 @@ func build(in input) Deps {
 	d := Deps{Repos: []protocol.DepsRepo{}, StaleMemoDays: int(parking.StaleAfter / (24 * time.Hour))}
 	var panes map[string]*daemonstate.PaneStatus
 	d.DaemonRunning, d.UpdatedAt, panes = livePanes(in)
+	d.RexPlacement = d.UpdatedAt != nil && in.Snapshot.RexPlacement
 	cards := collect(in, panes)
 	open := parking.Filter(in.Parking, "", parking.StatusOpen)
 	names := sessionNames(sessionIDs(cards, open), in.SessionNames)

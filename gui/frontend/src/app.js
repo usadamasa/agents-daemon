@@ -405,7 +405,7 @@ function renderGraph() {
   const graph = state.data.graph;
   const { nodes, links, depth } = state.graph.view(state.showCompleted);
   const { connected, free, ended } = partition(nodes, links, graph.column_order);
-  const tree = frameTree(connected, free);
+  const tree = frameTree(connected, free, state.data.rex_placement);
   const tones = rexTones(nodes);
   const highlight = highlightKeys();
   renderColumn(ended, highlight);
@@ -495,7 +495,7 @@ function renderFrames(canvas, frames, tones, boxes) {
 // 全体表示がオフでも同じ折り返しにし、拡大縮小で並びを動かさない。枠が無ければ大きさは 0。
 function renderGroups(canvas, free, tones, highlight, graphSize, view) {
   if (free.length === 0) return { width: 0, height: 0 };
-  const groups = groupByRex(free);
+  const groups = groupByRex(free, state.data.rex_placement);
   const top = graphSize.height > 0 ? graphSize.height : MARGIN_Y;
   const limit = fitLimit(groups, { left: MARGIN_X, top, bottom: MARGIN_Y, graph: graphSize, view });
   const { places, right, bottom } = placeGroups(groups, MARGIN_X, top, limit);

@@ -24,21 +24,24 @@ export function partition(nodes, links, order) {
   };
 }
 
-// frameOf はノードの枠と区切り (#633)。枠は rex の session (見出しは session の label、区切りは window)、rex の外の
-// 生きているノード (区切りは Claude のセッション。名前は重なりうるので session_id で分ける)、参照の 3 種類。window に
-// 置かれていない block と参照の区切りは小見出しを持たない。
-function frameOf(n) {
+// frameOf はノードの枠と区切り (#633)。枠は rex の session (見出しは session の label、区切りは window)、置き場の
+// 分からない生きているノード (区切りは Claude のセッション。名前は重なりうるので session_id で分ける)、参照の 3 種類。
+// window に置かれていない block と参照の区切りは小見出しを持たない。生きているノードは rex の block からしか立たない
+// ので、置き場が無いのは daemon が置き場を書けていないとき (#662)。placement (deps の rex_placement) が無ければ
+// daemon が置き場を書く前のものなので、見出しで更新を促す。
+function frameOf(n, placement) {
   if (n.kind === "ref") return { key: "ref", label: "Refs", part: "", partLabel: "" };
   if (n.rex) return { key: `rex:${n.rex.session_id}`, label: n.rex.session_label, part: n.rex.window_id ?? "", partLabel: n.rex.window_label ?? "", rex: n.rex.session_id };
-  return { key: "outside", label: "Outside rex", part: n.session_id, partLabel: n.session };
+  const label = placement ? "Rex placement unknown" : "Rex placement unknown: update the daemon";
+  return { key: "unplaced", label, part: n.session_id, partLabel: n.session };
 }
 
 // groupByRex は辺の無い動いているノードを枠にまとめ、枠の中を区切りに分ける。枠と区切りの順は最初のカードの順
-// (column_order)。nodes は枠の中のカードを区切りの順に並べたもの。
-export function groupByRex(nodes) {
+// (column_order)。nodes は枠の中のカードを区切りの順に並べたもの。placement は deps の rex_placement。
+export function groupByRex(nodes, placement) {
   const groups = new Map();
   for (const n of nodes) {
-    const f = frameOf(n);
+    const f = frameOf(n, placement);
     if (!groups.has(f.key)) groups.set(f.key, { key: f.key, label: f.label, rex: f.rex, parts: new Map() });
     const parts = groups.get(f.key).parts;
     if (!parts.has(f.part)) parts.set(f.part, { label: f.partLabel, nodes: [] });
@@ -57,16 +60,18 @@ export function groupByRex(nodes) {
 // key → 直の親の枠の key。
 // 小見出しの無い区切りは枠を作らず、ノードを session の枠へ直に入れる。nodes は図に入るノード (linked の後ろに
 // 引き入れた free を順に足す)、free は下の枠に残るもの。枠の key は "\0" で始め、ノードの key と重ならない。
-export function frameTree(linked, free) {
+// placement は deps の rex_placement。
+export function frameTree(linked, free, placement) {
   const framable = (n) => n.kind !== "ref" && (!ENDED.has(n.state) || Boolean(n.rex));
-  const used = new Set(linked.filter(framable).map((n) => frameOf(n).key));
-  const pulled = free.filter((n) => used.has(frameOf(n).key));
+  const frameIn = (n) => frameOf(n, placement);
+  const used = new Set(linked.filter(framable).map((n) => frameIn(n).key));
+  const pulled = free.filter((n) => used.has(frameIn(n).key));
   const nodes = [...linked, ...pulled];
   const frames = new Map();
   const parentOf = new Map();
   for (const n of nodes) {
     if (!framable(n)) continue;
-    const f = frameOf(n);
+    const f = frameIn(n);
     const top = `\0${f.key}`;
     if (!frames.has(top)) frames.set(top, { key: top, label: f.label, level: "h2", rex: f.rex });
     let parent = top;
@@ -76,7 +81,7 @@ export function frameTree(linked, free) {
     }
     parentOf.set(n.key, parent);
   }
-  return { nodes, free: free.filter((n) => !used.has(frameOf(n).key)), frames: [...frames.values()], parentOf };
+  return { nodes, free: free.filter((n) => !used.has(frameIn(n).key)), frames: [...frames.values()], parentOf };
 }
 
 // TONES は枠の色の数。style.css の :is(.frame, .group).tone-N と揃える。

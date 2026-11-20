@@ -60,8 +60,8 @@ func TestColumnOrder(t *testing.T) {
 	}
 }
 
-// 枠 (rex の session、rex の外の生きているセッション) は中で一番先に来るノードの位置に並べ、枠の中は window (rex の
-// 外は Claude のセッション) ごとに、最初に来るノードの順にまとめる。まとめないノード (終了したもの、参照) は
+// 枠 (rex の session、置き場の分からない生きているセッション) は中で一番先に来るノードの位置に並べ、枠の中は window
+// (置き場の分からないものは Claude のセッション) ごとに、最初に来るノードの順にまとめる。まとめないノード (終了したもの、参照) は
 // 互いの順を保つ (#633)。
 func TestGroupByRex(t *testing.T) {
 	rex := func(session, window string) *protocol.RexPlacement {

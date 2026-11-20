@@ -51,7 +51,7 @@ type StatusSnapshot struct {
 // WriteStatusSnapshot は status.json を原子的に書き込む (statefile)。
 // 人が cat して読む想定なので indent 付きで書く。
 func WriteStatusSnapshot(path string, pid int, backend string, startedAt, now time.Time, panes []PaneStatus) error {
-	snap := StatusSnapshot{PID: pid, Backend: backend, StartedAt: startedAt, UpdatedAt: now, Panes: panes}
+	snap := StatusSnapshot{PID: pid, Backend: backend, RexPlacement: true, StartedAt: startedAt, UpdatedAt: now, Panes: panes}
 	data, err := json.MarshalIndent(snap, "", "  ")
 	if err != nil {
 		return fmt.Errorf("status snapshot の JSON 化に失敗: %w", err)

@@ -16,8 +16,10 @@ type Task struct {
 	Owner       string   `json:"owner,omitempty"`
 	SessionID   string   `json:"session_id"`
 	// AgentID はサブエージェントが作ったタスクのとき、そのエージェントの ID。main なら空。
-	AgentID   string    `json:"agent_id,omitempty"`
-	CWD       string    `json:"cwd"`
+	AgentID string `json:"agent_id,omitempty"`
+	CWD     string `json:"cwd"`
+	// Repo は cwd の repo の鍵 (gitrepo.RepoKey)。worktree が消えた後も本来の repo を引けるよう、cwd を書くときに残す。
+	Repo      string    `json:"repo,omitempty"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
@@ -32,6 +34,7 @@ type Todo struct {
 type TodoList struct {
 	SessionID string    `json:"session_id"`
 	CWD       string    `json:"cwd"`
+	Repo      string    `json:"repo,omitempty"`
 	Todos     []Todo    `json:"todos"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

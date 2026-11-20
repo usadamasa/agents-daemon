@@ -86,7 +86,7 @@ func (w *adoptWorld) writeRecord(at time.Time) error {
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return err
 	}
-	t := record.Task{ID: deadTask, Subject: "README を直す", Status: "in_progress", SessionID: deadSession, CWD: w.cwd, UpdatedAt: at}
+	t := record.Task{ID: deadTask, Subject: "README を直す", Status: "in_progress", SessionID: deadSession, CWD: w.cwd, Repo: w.cwd, UpdatedAt: at}
 	return statefile.WriteJSONAtomic(filepath.Join(dir, deadTask+".json"), ".task.*", t)
 }
 

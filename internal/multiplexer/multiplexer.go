@@ -72,6 +72,10 @@ type Pane struct {
 	UnknownReason string
 	// Location は pane が居る session と window。backend が引けていなければゼロ値。依存図がセッションをまとめるのに使う。
 	Location Location
+	// LocationReason は backend が置き場を読めなかった理由 (応答の形の崩れを含む)。空なら読めているか、閉じた session
+	// のように読む対象が無い。読めなくなっても前に読んだ Location は残るので、Location が古いことも表す。置き場が空な
+	// ことと区別できるよう、daemon はログに出す。
+	LocationReason string
 }
 
 // Location は pane の居る session と window の ID と label。window に置かれていない pane では Window が空。

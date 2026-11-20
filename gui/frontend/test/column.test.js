@@ -43,17 +43,28 @@ test("groupByRex は rex の session ごとに最初に現れた順で枠にし�
   assert.deepEqual(keys(groupByRex(nodes)[1].nodes), ["a1", "a2", "c1"]);
 });
 
-test("groupByRex は rex の外の生きているノードを 1 つの枠にまとめ、中を Claude のセッションで区切る (同じ名前でも session_id で分ける)", () => {
-  const groups = groupByRex([
-    { key: "a", kind: "task", session_id: "s1", session: "same" },
-    { key: "r", kind: "task", session_id: "s3", session: "other", rex: rex("S1", "w1") },
-    { key: "b", kind: "task", session_id: "s2", session: "same" },
-    { key: "c", kind: "task", session_id: "s1", session: "same" },
-  ]);
+test("groupByRex は置き場の分からない生きているノードを 1 つの枠にまとめ、中を Claude のセッションで区切る (同じ名前でも session_id で分ける)", () => {
+  const groups = groupByRex(
+    [
+      { key: "a", kind: "task", session_id: "s1", session: "same" },
+      { key: "r", kind: "task", session_id: "s3", session: "other", rex: rex("S1", "w1") },
+      { key: "b", kind: "task", session_id: "s2", session: "same" },
+      { key: "c", kind: "task", session_id: "s1", session: "same" },
+    ],
+    true,
+  );
   assert.deepEqual(shape(groups), [
-    { label: "Outside rex", parts: [["same", ["a", "c"]], ["same", ["b"]]] },
+    { label: "Rex placement unknown", parts: [["same", ["a", "c"]], ["same", ["b"]]] },
     { label: "S1-label", parts: [["w1", ["r"]]] },
   ]);
+});
+
+// daemon の live は rex の block からしか立たないので、置き場の無い生きているノードは rex の外ではなく、daemon が置き場を
+// 書けていない。置き場を書く前の daemon (rex_placement が無い) なら、daemon の更新を促す見出しにする (#662)。
+test("groupByRex は置き場を書かない daemon のとき、置き場の無いノードの枠を daemon の更新を促す見出しにする", () => {
+  const node = { key: "a", kind: "task", session_id: "s1", session: "same" };
+  assert.deepEqual(groupByRex([node], false).map((g) => g.label), ["Rex placement unknown: update the daemon"]);
+  assert.deepEqual(groupByRex([node], undefined).map((g) => g.label), ["Rex placement unknown: update the daemon"]);
 });
 
 test("groupByRex は window に置かれていない block のノードを小見出しの無い区切りにする", () => {
@@ -154,11 +165,14 @@ test("frameTree は小見出しの無い区切り (window に置かれていな�
   assert.deepEqual(tree(t), { frames: { [t.parentOf.get("d")]: ["work", null] }, parents: { d: t.parentOf.get("d") } });
 });
 
-test("frameTree は rex の外の辺のある生きているノードを「rex の外」の枠に、Claude のセッションの区切りで入れる", () => {
-  const t = frameTree([{ key: "o", kind: "session", state: "working", session_id: "so", session: "outside" }], []);
+test("frameTree は置き場の分からない辺のある生きているノードを「置き場が分からない」枠に、Claude のセッションの区切りで入れる", () => {
+  const o = { key: "o", kind: "session", state: "working", session_id: "so", session: "outside" };
+  const t = frameTree([o], [], true);
   const { frames, parents } = tree(t);
   assert.deepEqual(frames[parents.o], ["outside", frames[parents.o][1]]);
-  assert.deepEqual(frames[frames[parents.o][1]], ["Outside rex", null]);
+  assert.deepEqual(frames[frames[parents.o][1]], ["Rex placement unknown", null]);
+  const stale = tree(frameTree([o], [], false));
+  assert.deepEqual(stale.frames[stale.frames[stale.parents.o][1]], ["Rex placement unknown: update the daemon", null]);
 });
 
 test("rexTones は rex の session の色をその id だけで決め、図に出るほかの session の有無で変えない", () => {

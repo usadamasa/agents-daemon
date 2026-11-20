@@ -211,6 +211,35 @@ func TestWatch_ViewChangedRelabels(t *testing.T) {
 	eventually(t, "改名した window の label", func() bool { return label() == "peer-b" })
 }
 
+// session_view_changed の読み直しが失敗したら、その理由を pane の LocationReason に載せる。読み直せたら消す。
+func TestWatch_ViewReadFailureSetsReason(t *testing.T) {
+	api := ownBlockAPI(t)
+	c := api.client(staticResolver(nil))
+	startWatch(t, c)
+	eventually(t, "同期済み", func() bool { return synced(c) })
+	reason := func() string {
+		panes, _ := c.watch.Panes(nil)
+		if len(panes) != 1 {
+			return "<pane なし>"
+		}
+		return panes[0].LocationReason
+	}
+	if got := reason(); got != "" {
+		t.Fatalf("同期の直後の LocationReason = %q, want 空", got)
+	}
+	changed := func(revision int) string {
+		return `{"type":"session_event","payload":{"session_id":"` + sessionOwn + `","event":{"type":"session_view_changed","payload":{"revision":` +
+			strconv.Itoa(revision) + `}}}}`
+	}
+	api.SetView(sessionOwn, `{"revision":5,"session_id":"`+sessionOwn+`","label":"work"}`)
+	emitLines(api, changed(5))
+	eventually(t, "読み直しの失敗の理由", func() bool { return strings.Contains(reason(), "windows") })
+
+	api.SetView(sessionOwn, `{"revision":6,"session_id":"`+sessionOwn+`","label":"work","windows":[]}`)
+	emitLines(api, changed(6))
+	eventually(t, "読み直せたら理由が消える", func() bool { return reason() == "" })
+}
+
 // 全列挙の途中に届いた event は、全列挙の後に順に当て直す。全列挙が読んだ後の変化を落とさない。
 func TestWatch_EventDuringSnapshotIsApplied(t *testing.T) {
 	api := ownBlockAPI(t)

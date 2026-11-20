@@ -30,13 +30,15 @@ var columnTier = map[string]int{
 	graph.StateExited:     6,
 }
 
-// outsideRex は rex の外の生きているノードを集める枠の鍵。rex の session の ID と重ならない。
-const outsideRex = "\x00outside-rex"
+// unplaced は置き場の分からない生きているノードを集める枠の鍵。rex の session の ID と重ならない。生きているノードは
+// rex の block の pane からしか作らないので、置き場が無いのは rex の外だからではなく、daemon が置き場を書けていない
+// (古い daemon、session.view を読めない) から (#662)。
+const unplaced = "\x00rex-unplaced"
 
 // groupByRex は order (columnOrder) を、アプリが描く枠 (#633) ごとにまとまる順へ並べ直す。枠は rex の session と、
-// rex の外の生きているノードの 2 種類で、中で一番先に来るノードの位置に並べる。枠の中は区切り (rex の window、rex の
-// 外は Claude のセッション) ごとに、最初に来るノードの順にまとめる。どの枠にも入らないノード (終了したもの、参照) は
-// 自分だけの枠として、互いの順を保つ。アプリは辺の無いノードをこの順に枠へ入れる。
+// 置き場の分からない生きているノードの 2 種類で、中で一番先に来るノードの位置に並べる。枠の中は区切り (rex の window、
+// 置き場の分からないものは Claude のセッション) ごとに、最初に来るノードの順にまとめる。どの枠にも入らないノード
+// (終了したもの、参照) は自分だけの枠として、互いの順を保つ。アプリは辺の無いノードをこの順に枠へ入れる。
 //
 // 枠の位置は辺のあるノードも数えて決める。辺のあるノードは下の枠に出ないが、それを持つ枠は、同じ枠の辺の無いノード
 // ごとアプリが線のある図へ引き入れる (frameTree) ので、下に並ぶ枠には辺のあるノードを持つ枠が無い。下の枠の並びは
@@ -83,8 +85,8 @@ func groupByRex(order []string, nodes []protocol.GraphNode) []string {
 }
 
 // frameOf はノードの枠と区切りの鍵。終わったノード (アプリが右の Ended の列に並べる) はノード自身。rex の置き場が
-// あれば rex の session と window、rex の外の生きているノードは outsideRex と Claude のセッション、どちらでもなければ
-// ノード自身。
+// あれば rex の session と window、置き場の分からない生きているノードは unplaced と Claude のセッション、どちらでも
+// なければノード自身。
 func frameOf(n *protocol.GraphNode) (frame, part string) {
 	switch {
 	case n.State == graph.StateCompleted || n.State == graph.StateExited:
@@ -92,7 +94,7 @@ func frameOf(n *protocol.GraphNode) (frame, part string) {
 	case n.Rex != nil:
 		return n.Rex.SessionID, n.Rex.WindowID
 	case n.Live && n.Kind != graph.KindRef:
-		return outsideRex, n.SessionID
+		return unplaced, n.SessionID
 	default:
 		return n.Key, ""
 	}

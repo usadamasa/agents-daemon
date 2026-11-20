@@ -325,6 +325,8 @@ type TellResult struct {
 // DepsData は deps の出力。依存の DAG と、repo ごとの生きているセッションと open のメモ。
 type DepsData struct {
 	DaemonRunning bool `json:"daemon_running"`
+	// 動いている daemon が pane の rex の置き場を status.json に書くか。false なら置き場の無いノードは daemon が古いか止まっている。
+	RexPlacement bool `json:"rex_placement"`
 	// status.json の更新時刻。daemon が動いていないか、まだ書いていなければ無い。
 	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 	// open のメモを「古い」とみなす日数。アプリはこれより前に最後に置かれたメモをまとめて捨てるボタンを出す。

@@ -20,7 +20,7 @@ daemon は rex を control API (Unix socket の上の WebSocket) だけで操作
 | 操作 | rex の method |
 | ---- | ---- |
 | PaneList | daemon では購読の cache (下の「event の購読」)。購読していない呼び手と未同期の間は全列挙: `session.list`、session ごとに `session.list_blocks` と `session.view`、flavor が `com.superlogical.terminal.shell` の block ごとに `program_status` と `process` |
-| Pane の Location (依存図のまとめ方、#633) | `session.view` の `label` と、block を含む window の `window_id`・`label`。window に無い (detached の) block は session だけ。view はどの失敗でも空にして PaneList を失敗にしない |
+| Pane の Location (依存図のまとめ方、#633) | `session.view` の `label` と、block を含む window の `window_id`・`label`。window に無い (detached の) block は session だけ。view を読めなくても PaneList を失敗にしない。閉じた session (not found、conflict) 以外の失敗と、読むキーの欠落 (`wire.ErrViewShape`) は Pane の LocationReason に載り、daemon が理由の変わったときにログへ出す |
 | PaneGet、PaneRead、PaneGeometry、SendText、SendKeys | `target.resolve` で block の session を引いてから、block の method (`com.superlogical.terminal.<名前>`) を打つ |
 | PaneRead | `format` (`trim`、`unwrap`、色付きなら `format: vt`) の `content` に、改行で終わっていなければ改行を 1 つ足し、末尾 N 行に絞る。続きがあれば `blob_read` で読み足す |
 | SendText | `write` (Enter は押さない) |

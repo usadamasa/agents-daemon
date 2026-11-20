@@ -3,7 +3,11 @@
 // 型は control API の応答と CLI の出力のどちらにも同じ形で当たる (CLI は API の応答をそのまま出す)。
 package wire
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+)
 
 // ShellFlavor は terminal の block の flavor。これ以外の block は program_status を持たない。
 // rex-premise: preview.30 api list_blocks の flavor の値
@@ -69,9 +73,73 @@ type ViewWindow struct {
 
 // ViewLayer は window の layer 1 つ (tiled と floating)。
 type ViewLayer struct {
-	Blocks []struct {
-		BlockID string `json:"block_id"`
-	} `json:"blocks"`
+	Blocks []ViewBlock `json:"blocks"`
+}
+
+// ViewBlock は layer に置かれた block 1 つ。
+type ViewBlock struct {
+	BlockID string `json:"block_id"`
+}
+
+// ErrViewShape は session.view の応答に読むキーが無いことを表す。型付きの decode はキーの欠落をゼロ値に読むので、
+// 検査しないと rex の応答の形が変わったときに置き場が黙って空になる (window の無い session と見分けられない)。
+var ErrViewShape = errors.New("session.view の応答の形が想定と違う")
+
+// UnmarshalJSON は SessionView を読み、読むキー (revision、session_id、windows[].window_id / layers[].blocks[].block_id)
+// のどれかが無ければ ErrViewShape で失敗する。label は付いていない session と window があるので見ない。
+func (v *SessionView) UnmarshalJSON(b []byte) error {
+	var raw struct {
+		Revision  *int64  `json:"revision"`
+		SessionID *string `json:"session_id"`
+		Label     string  `json:"label"`
+		Windows   *[]struct {
+			WindowID *string `json:"window_id"`
+			Label    string  `json:"label"`
+			Layers   *[]struct {
+				Blocks *[]struct {
+					BlockID *string `json:"block_id"`
+				} `json:"blocks"`
+			} `json:"layers"`
+		} `json:"windows"`
+	}
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	missing := func(path string) error { return fmt.Errorf("%w: %s が無い", ErrViewShape, path) }
+	switch {
+	case raw.Revision == nil:
+		return missing("revision")
+	case raw.SessionID == nil:
+		return missing("session_id")
+	case raw.Windows == nil:
+		return missing("windows")
+	}
+	view := SessionView{Revision: *raw.Revision, SessionID: *raw.SessionID, Label: raw.Label, Windows: make([]ViewWindow, 0, len(*raw.Windows))}
+	for i, w := range *raw.Windows {
+		if w.WindowID == nil {
+			return missing(fmt.Sprintf("windows[%d].window_id", i))
+		}
+		if w.Layers == nil {
+			return missing(fmt.Sprintf("windows[%d].layers", i))
+		}
+		window := ViewWindow{WindowID: *w.WindowID, Label: w.Label, Layers: make([]ViewLayer, 0, len(*w.Layers))}
+		for j, l := range *w.Layers {
+			if l.Blocks == nil {
+				return missing(fmt.Sprintf("windows[%d].layers[%d].blocks", i, j))
+			}
+			var layer ViewLayer
+			for k, blk := range *l.Blocks {
+				if blk.BlockID == nil {
+					return missing(fmt.Sprintf("windows[%d].layers[%d].blocks[%d].block_id", i, j, k))
+				}
+				layer.Blocks = append(layer.Blocks, ViewBlock{BlockID: *blk.BlockID})
+			}
+			window.Layers = append(window.Layers, layer)
+		}
+		view.Windows = append(view.Windows, window)
+	}
+	*v = view
+	return nil
 }
 
 // Size は size の応答のうち使う部分。

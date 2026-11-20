@@ -325,6 +325,8 @@ export type TellResult = {
 // deps の出力。依存の DAG と、repo ごとの生きているセッションと open のメモ
 export type DepsData = {
   daemon_running: boolean
+  // 動いている daemon が pane の rex の置き場を status.json に書くか。false なら置き場の無いノードは daemon が古いか止まっている
+  rex_placement: boolean
   // status.json の更新時刻。daemon が動いていないか、まだ書いていなければ無い
   updated_at?: string
   // open のメモを「古い」とみなす日数。アプリはこれより前に最後に置かれたメモをまとめて捨てるボタンを出す

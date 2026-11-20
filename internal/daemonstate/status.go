@@ -39,16 +39,19 @@ type StatusSnapshot struct {
 	PID int `json:"pid"`
 	// Backend は daemon が見ている多重化ツール (rex)。status / doctor が表示に使う。
 	// 記録を始める前の daemon が書いたものでは空になる。
-	Backend   string       `json:"backend,omitempty"`
-	StartedAt time.Time    `json:"started_at"`
-	UpdatedAt time.Time    `json:"updated_at"`
-	Panes     []PaneStatus `json:"panes"`
+	Backend string `json:"backend,omitempty"`
+	// RexPlacement は pane の置き場 (PaneStatus.Rex) を書く daemon が付ける印。印の無い status.json は置き場を書く前の
+	// daemon が書いたもので、依存図は置き場の無いノードに daemon の更新を促す。
+	RexPlacement bool         `json:"rex_placement,omitempty"`
+	StartedAt    time.Time    `json:"started_at"`
+	UpdatedAt    time.Time    `json:"updated_at"`
+	Panes        []PaneStatus `json:"panes"`
 }
 
 // WriteStatusSnapshot は status.json を原子的に書き込む (statefile)。
 // 人が cat して読む想定なので indent 付きで書く。
 func WriteStatusSnapshot(path string, pid int, backend string, startedAt, now time.Time, panes []PaneStatus) error {
-	snap := StatusSnapshot{PID: pid, Backend: backend, StartedAt: startedAt, UpdatedAt: now, Panes: panes}
+	snap := StatusSnapshot{PID: pid, Backend: backend, RexPlacement: true, StartedAt: startedAt, UpdatedAt: now, Panes: panes}
 	data, err := json.MarshalIndent(snap, "", "  ")
 	if err != nil {
 		return fmt.Errorf("status snapshot の JSON 化に失敗: %w", err)

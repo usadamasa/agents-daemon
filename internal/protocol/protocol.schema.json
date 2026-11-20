@@ -373,9 +373,10 @@
       "description": "deps の出力。依存の DAG と、repo ごとの生きているセッションと open のメモ",
       "type": "object",
       "additionalProperties": false,
-      "required": ["daemon_running", "stale_memo_days", "repos", "recent_repos", "graph"],
+      "required": ["daemon_running", "rex_placement", "stale_memo_days", "repos", "recent_repos", "graph"],
       "properties": {
         "daemon_running": { "type": "boolean" },
+        "rex_placement": { "type": "boolean", "description": "動いている daemon が pane の rex の置き場を status.json に書くか。false なら置き場の無いノードは daemon が古いか止まっている" },
         "updated_at": { "type": "string", "format": "date-time", "description": "status.json の更新時刻。daemon が動いていないか、まだ書いていなければ無い" },
         "stale_memo_days": { "type": "integer", "description": "open のメモを「古い」とみなす日数。アプリはこれより前に最後に置かれたメモをまとめて捨てるボタンを出す" },
         "repos": { "type": "array", "items": { "$ref": "#/$defs/DepsRepo" } },

@@ -161,6 +161,69 @@ func TestExecClient_PaneList_ViewFailureLeavesLocationEmpty(t *testing.T) {
 	}
 }
 
+// view を読めない理由 (server の失敗、応答の形の崩れ) は pane の LocationReason に載り、置き場が空なこと (window に
+// 置かれていない block) と区別できる。キーの欠落は型付きの decode では失敗しないので、欠けたら形の崩れとして扱う。
+func TestExecClient_PaneList_ViewFailureReason(t *testing.T) {
+	window := func(layers string) string {
+		return `{"revision":4,"session_id":"` + sessionB + `","label":"work","windows":[{"window_id":"` + windowA + `","label":"w",` + layers + `}]}`
+	}
+	tests := []struct {
+		name   string
+		setup  func(f *fakeAPI)
+		reason string
+	}{
+		{"server の失敗", func(f *fakeAPI) { f.Fail("session.view", sessionB) }, "server error"},
+		{"windows の欠落", func(f *fakeAPI) {
+			f.SetView(sessionB, `{"revision":4,"session_id":"`+sessionB+`","label":"work"}`)
+		}, "windows"},
+		{"session_id の欠落", func(f *fakeAPI) {
+			f.SetView(sessionB, `{"revision":4,"label":"work","windows":[]}`)
+		}, "session_id"},
+		{"layers の改名", func(f *fakeAPI) {
+			f.SetView(sessionB, window(`"panes":[{"blocks":[{"block_id":"`+blockClaudeDone+`"}]}]`))
+		}, "layers"},
+		{"blocks の欠落", func(f *fakeAPI) { f.SetView(sessionB, window(`"layers":[{"kind":"tiled"}]`)) }, "blocks"},
+		{"block_id の欠落", func(f *fakeAPI) { f.SetView(sessionB, window(`"layers":[{"blocks":[{"id":"x"}]}]`)) }, "block_id"},
+		{"window_id の欠落", func(f *fakeAPI) {
+			f.SetView(sessionB, `{"revision":4,"session_id":"`+sessionB+`","label":"work","windows":[{"label":"w","layers":[]}]}`)
+		}, "window_id"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newFakeAPI(t)
+			f.AddSession(sessionB, [2]string{blockClaudeDone, wire.ShellFlavor})
+			f.PutBlock(blockClaudeDone, measured(t, measuredOct10, "program_status-done.json"), processJSON(pidClaudeDone, "claude", "/w/guard"))
+			tt.setup(f)
+
+			panes, err := f.client(staticResolver(nil)).PaneList(context.Background())
+			if err != nil || len(panes) != 1 {
+				t.Fatalf("PaneList() = %+v, %v; want 1 件", panes, err)
+			}
+			if panes[0].Location != (multiplexer.Location{}) {
+				t.Errorf("Location = %+v, want 空", panes[0].Location)
+			}
+			if !strings.Contains(panes[0].LocationReason, tt.reason) {
+				t.Errorf("LocationReason = %q, want %q を含む", panes[0].LocationReason, tt.reason)
+			}
+		})
+	}
+}
+
+// window に置かれていない block (detached) は置き場の session だけを持ち、読めなかった理由は空。
+func TestExecClient_PaneList_DetachedHasNoReason(t *testing.T) {
+	f := newFakeAPI(t)
+	f.AddSession(sessionB, [2]string{blockClaudeDone, wire.ShellFlavor})
+	f.PutBlock(blockClaudeDone, measured(t, measuredOct10, "program_status-done.json"), processJSON(pidClaudeDone, "claude", "/w/guard"))
+
+	panes, err := f.client(staticResolver(nil)).PaneList(context.Background())
+	if err != nil || len(panes) != 1 {
+		t.Fatalf("PaneList() = %+v, %v; want 1 件", panes, err)
+	}
+	if panes[0].LocationReason != "" || panes[0].Location.SessionID != sessionB {
+		t.Errorf("Location = %+v、LocationReason = %q; want session だけを持ち理由は空", panes[0].Location, panes[0].LocationReason)
+	}
+}
+
 // not found 以外の失敗は block を飛ばさずエラーにする。
 func TestExecClient_PaneList_FailureIsError(t *testing.T) {
 	oneBlock := func(f *fakeAPI, programStatus string) {

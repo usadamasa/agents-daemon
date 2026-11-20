@@ -34,10 +34,12 @@ func writeTask(t *testing.T, stateDir string, task record.Task) string {
 func exited(string, time.Time) error { return nil }
 
 // 終了したセッションの未完了のタスクは、kind scope、出自 adopted のメモにしてからタスクの記録を消す。
+// メモの repo はタスクの記録の repo の鍵で、worktree (cwd) が消えていても本来の repo になる (#618)。
 func TestAdopt_movesTaskToParking(t *testing.T) {
 	stateDir := t.TempDir()
-	cwd := t.TempDir()
-	path := writeTask(t, stateDir, record.Task{ID: "4", Subject: "README を直す", Description: "表の列がずれている", Status: "in_progress", SessionID: "dead", CWD: cwd})
+	repo := t.TempDir()
+	cwd := filepath.Join(repo, ".claude", "worktrees", "gone")
+	path := writeTask(t, stateDir, record.Task{ID: "4", Subject: "README を直す", Description: "表の列がずれている", Status: "in_progress", SessionID: "dead", CWD: cwd, Repo: repo})
 	s := New(stateDir)
 
 	added, err := s.Adopt("dead", "4", tasklog.New(stateDir), exited, testNow)
@@ -45,7 +47,7 @@ func TestAdopt_movesTaskToParking(t *testing.T) {
 		t.Fatalf("Adopt() error = %v", err)
 	}
 	item := added.Item
-	if !added.Created || item.Kind != KindScope || item.Origin != OriginAdopted || item.Title != "README を直す" || item.Detail != "表の列がずれている" || item.Repo != cwd {
+	if !added.Created || item.Kind != KindScope || item.Origin != OriginAdopted || item.Title != "README を直す" || item.Detail != "表の列がずれている" || item.Repo != repo {
 		t.Errorf("item = %+v", item)
 	}
 	if item.DefaultTaken != AdoptedDefault {
@@ -59,16 +61,19 @@ func TestAdopt_movesTaskToParking(t *testing.T) {
 	}
 }
 
-// 完了したタスクと記録の無いタスクは移さない。
+// 完了したタスク、記録の無いタスク、repo の鍵の無い記録 (鍵を残す前に書かれた記録) は移さない
+// (AdoptWork と同じ)。
 func TestAdopt_rejects(t *testing.T) {
 	stateDir := t.TempDir()
 	cwd := t.TempDir()
-	done := writeTask(t, stateDir, record.Task{ID: "1", Subject: "済み", Status: "completed", SessionID: "dead", CWD: cwd})
+	done := writeTask(t, stateDir, record.Task{ID: "1", Subject: "済み", Status: "completed", SessionID: "dead", CWD: cwd, Repo: cwd})
+	keyless := writeTask(t, stateDir, record.Task{ID: "2", Subject: "鍵が無い", Status: "pending", SessionID: "dead", CWD: cwd})
 	s := New(stateDir)
 	p := tasklog.New(stateDir)
 
 	for _, c := range []struct{ name, session, task string }{
 		{"完了", "dead", "1"},
+		{"repo の鍵が無い", "dead", "2"},
 		{"記録が無い", "dead", "9"},
 		{"ファイル名に使えない", "../x", "1"},
 	} {
@@ -76,8 +81,10 @@ func TestAdopt_rejects(t *testing.T) {
 			t.Errorf("%s: Adopt() error = nil", c.name)
 		}
 	}
-	if _, err := os.Stat(done); err != nil {
-		t.Errorf("移さなかったタスクの記録が消えた: %v", err)
+	for _, path := range []string{done, keyless} {
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("移さなかったタスクの記録が消えた: %v", err)
+		}
 	}
 	if got, _ := s.list(); len(got) != 0 {
 		t.Errorf("メモができた: %+v", got)
@@ -90,7 +97,7 @@ func TestAdopt_requiresExitedSession(t *testing.T) {
 	stateDir := t.TempDir()
 	cwd := t.TempDir()
 	updated := testNow.Add(-time.Hour)
-	path := writeTask(t, stateDir, record.Task{ID: "4", Subject: "まだ動いている", Status: "in_progress", SessionID: "alive", CWD: cwd, UpdatedAt: updated})
+	path := writeTask(t, stateDir, record.Task{ID: "4", Subject: "まだ動いている", Status: "in_progress", SessionID: "alive", CWD: cwd, Repo: cwd, UpdatedAt: updated})
 	s := New(stateDir)
 	var askedFor string
 	var askedAfter time.Time

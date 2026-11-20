@@ -66,7 +66,7 @@ func TestParkEvents(t *testing.T) {
 	if _, err := parkSet(dir, s, "viewer", added.Item.ID, parking.StatusHanded, parking.StatusOpen, parking.ToSession("S2"), now); err == nil {
 		t.Fatal("捨てたメモを from open で取れた")
 	}
-	writeTestConfig(t, filepath.Join(dir, "tasks", "dead", "4.json"), `{"id": "4", "subject": "秘密のタスク", "status": "pending", "session_id": "dead", "cwd": "/src/a"}`)
+	writeTestConfig(t, filepath.Join(dir, "tasks", "dead", "4.json"), `{"id": "4", "subject": "秘密のタスク", "status": "pending", "session_id": "dead", "cwd": "/src/a", "repo": "/src/a"}`)
 	exited := func(string, time.Time) error { return nil }
 	adopted, err := parkAdopt(dir, s, p, "viewer", "dead", "4", exited, now)
 	if err != nil {

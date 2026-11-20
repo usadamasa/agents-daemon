@@ -41,6 +41,32 @@ func TestDepsOutputIsValid(t *testing.T) {
 
 var t0 = time.Date(2026, 10, 18, 9, 0, 0, 0, time.UTC)
 
+// rex_placement は、動いている daemon が置き場を書く daemon かを status.json の印から写す。印の無い status.json
+// (置き場を書く前の daemon)、前の daemon が残した status.json、daemon が動いていないときは false。
+func TestBuild_RexPlacement(t *testing.T) {
+	marked := snapshot()
+	marked.RexPlacement = true
+	tests := []struct {
+		name string
+		pid  int
+		snap *daemonstate.StatusSnapshot
+		want bool
+	}{
+		{"印のある status.json", 42, marked, true},
+		{"印の無い status.json", 42, snapshot(), false},
+		{"前の daemon の status.json", 7, marked, false},
+		{"daemon が動いていない", 0, marked, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := build(input{PID: tt.pid, Snapshot: tt.snap, Locate: places(nil), GitHubRepo: func(string) string { return "" }})
+			if d.RexPlacement != tt.want {
+				t.Errorf("RexPlacement = %v, want %v", d.RexPlacement, tt.want)
+			}
+		})
+	}
+}
+
 // places は cwd → Place の表を Locate にする。表に無い cwd は git の外。
 func places(m map[string]gitrepo.Place) func(string) gitrepo.Place {
 	return func(cwd string) gitrepo.Place { return m[cwd] }

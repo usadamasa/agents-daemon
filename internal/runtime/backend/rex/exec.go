@@ -75,6 +75,7 @@ func (c *execClient) snapshot(ctx context.Context) (*blockstate.Cache, error) {
 	}
 	blocks := map[string]*blockstate.State{}
 	views := map[string]wire.SessionView{}
+	failures := map[string]error{}
 	for _, session := range sessions {
 		shells, err := c.shellBlocks(ctx, session)
 		if err != nil {
@@ -85,8 +86,12 @@ func (c *execClient) snapshot(ctx context.Context) (*blockstate.Cache, error) {
 			}
 			return nil, err
 		}
-		if view, ok := c.view(ctx, session); ok {
+		view, ok, failure := c.view(ctx, session)
+		if ok {
 			views[session] = view
+		}
+		if failure != nil {
+			failures[session] = failure
 		}
 		for _, id := range shells {
 			st, err := c.fetchBlock(ctx, session, id)
@@ -105,15 +110,26 @@ func (c *execClient) snapshot(ctx context.Context) (*blockstate.Cache, error) {
 	for session, view := range views {
 		cache.PutView(session, view)
 	}
+	for session, failure := range failures {
+		cache.PutViewFailure(session, failure)
+	}
 	return cache, nil
 }
 
-// view は session の view を読む。読めなければ (閉じた session、失敗) ok が false で、その session の pane は置き場を
-// 持たない。置き場は依存図のまとめ方にしか使わないので、読めないことで PaneList を失敗にしない (daemon が連続失敗に
+// view は session の view を読む。読めれば ok が true。閉じた session と閉じかけの session (not found、conflict) は
+// ok も failure も空で、それ以外の失敗 (応答の形の崩れを含む) は failure に返し、呼び手が pane の LocationReason に
+// 載せる。置き場は依存図のまとめ方にしか使わないので、読めないことで PaneList を失敗にしない (daemon が連続失敗に
 // 数えて終了しかねない)。
-func (c *execClient) view(ctx context.Context, session string) (wire.SessionView, bool) {
+func (c *execClient) view(ctx context.Context, session string) (view wire.SessionView, ok bool, failure error) {
 	view, err := c.rex.SessionView(ctx, session)
-	return view, err == nil
+	switch {
+	case err == nil:
+		return view, true, nil
+	case isNotFound(err) || api.IsConflict(err):
+		return wire.SessionView{}, false, nil
+	default:
+		return wire.SessionView{}, false, err
+	}
 }
 
 // shellBlocks は session の shell の block の ID を返す。これ以外の block は program_status を持たない。

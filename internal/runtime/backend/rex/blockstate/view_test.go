@@ -42,7 +42,7 @@ func sessionView(t *testing.T, session, label string, revision int, windows ...[
 		SessionID string   `json:"session_id"`
 		Label     string   `json:"label"`
 		Windows   []window `json:"windows"`
-	}{Revision: revision, SessionID: session, Label: label}
+	}{Revision: revision, SessionID: session, Label: label, Windows: []window{}}
 	for _, w := range windows {
 		raw.Windows = append(raw.Windows, window{WindowID: w[0], Label: w[1], Layers: []layer{{Blocks: []block{{BlockID: w[2]}}}}})
 	}

@@ -118,10 +118,19 @@ func (r Runner) revert(id string, res Result) Result {
 }
 
 // premiseCheck は渡す文面で依頼の前に置く確かめ。メモは置いた時点の前提で書かれていて、渡すまでにレビューや別の変更で
-// 前提が消えていることがある。渡したメモは handed になり一覧から消えるので、受け手はメモの status を触らずに終えてよい。
+// 前提が消えていることがある。
 const (
 	premiseCheck = "先に、メモの前提 (詳細と関係するファイル) が今のコードと計画で成り立つかを確かめてください。"
 	premiseGone  = "前提が成り立たないとき (該当箇所が無くなった、別の変更で直った) は、その理由を 1 行で返して終えてください。"
+)
+
+// taskCleanup と issueCleanup は受け手への片付け方 (handedNote は両方の前置き)。渡したメモは handed で unpark を
+// 受け付けず、受け手はメモの status を触らずに終えてよい。書かないと、受け手の会話にある unpark の tool が
+// サジェストに出る (#544)。
+const (
+	handedNote   = "このメモは渡した時点で " + parking.StatusHanded + " になっています。"
+	taskCleanup  = handedNote + "タスクを completed にすれば片付くので、unpark は要りません。"
+	issueCleanup = handedNote + "起票すれば片付くので、unpark は要りません。"
 )
 
 // handOn は task の依頼文を、メモの repo (memoRepo) と違う repo (sessionRepo) のセッションへ送る文面にする。
@@ -143,13 +152,13 @@ func text(item parking.Item, intent, target, note string, names map[string]strin
 	var head string
 	if intent == IntentIssue {
 		head = fmt.Sprintf("パーキングロットのメモ「%s」を GitHub の issue にしてください。repo: %s。", item.Title, filepath.Base(target)) +
-			premiseCheck + "成り立つときは起票し、URL を返してください。" + premiseGone
+			premiseCheck + "成り立つときは起票し、URL を返してください。" + premiseGone + issueCleanup
 	} else {
 		head = fmt.Sprintf("パーキングロットのメモ「%s」(種類: %s) をタスクにしてください。", item.Title, kindLabel(item)) +
 			premiseCheck +
 			fmt.Sprintf("成り立つときは TaskCreate で作り、タスクの description にメモの id (%s) を入れてください。", item.ID) +
 			"既にこのメモを扱うタスクがあれば、新しく作らずにその description に id を書き足すだけで構いません。" +
-			"作ったら基本すぐ着手してください。承認待ちや未完了の依存タスクのような、着手できない理由があるときだけ見送ってください。" + premiseGone
+			"作ったら基本すぐ着手してください。承認待ちや未完了の依存タスクのような、着手できない理由があるときだけ見送ってください。" + premiseGone + taskCleanup
 	}
 	body := strings.Join(append([]string{head}, contextLines(item, names)...), "\n")
 	if said := strings.TrimSpace(note); said != "" {

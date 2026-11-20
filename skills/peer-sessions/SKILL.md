@@ -47,18 +47,18 @@ printenv REX_SESSION
 1. 依頼文を `./tmp/brief-<作業名>.md` に Write で書く。`<作業名>` は作業を表す 2〜4 語の小文字を
    ハイフンでつないだもの (`fix-note-repo-link`)。依頼文の先頭で、着手前に `SendMessage` で自分へ受領を
    1 行返すよう求める。自分の名前は `ListAgents` の先頭行 (`This session is <名前>`) にある
-2. claude の session_id を `uuidgen` で決め、`references/rex.md` の手順で、既存の session のタブ (既定) か
-   利用者が明示した新しい rex session を `<作業名>` の label で作り、`claude --session-id <uuid> --model ... -- <依頼文>` で起こす。
-   渡す先が別リポジトリなら cwd をそのパスにする。自分の worktree は渡さない。
-   結果の rex の `session_id` (タブなら足し先の `session_id` と `window_id`。畳むときに使う) と claude の
-   `<uuid>` (辺に使う) を控える
+2. 起こす指定を `./tmp/spawn-<作業名>.json` に Write で書き、`agents-daemon spawn` で起こす
+   (`references/rex.md`「peer の Claude セッションを立てる」)。`label` は `<作業名>`、`prompt_file` は手順 1 の依頼文。
+   足し先は下の「足し先の session を決める」で決め、既定 (起こす側の session のタブ) なら足し先の欄を書かない。
+   `repo` は渡す先の絶対パスで、別リポジトリならそのパスにする。自分の worktree は渡さない。
+   結果の claude の `session_id` (辺に使う) と、rex の `rex_session_id`・`window_id` (畳むときに使う) を控える
 3. 渡す作業に「これが済まないと始められない」相手 (別の peer の作業、マージ待ちの PR) があれば、
    辺を書く (下の「依存の辺を書く」)
 4. peer の受領の `SendMessage` を待つ。その `from` が peer の宛先になる。完了は依頼文で求めた
    `SendMessage` の報告で受けるので、`notify_when_idle` は付けない (下の「相手の完了を知る」)
 
-`--name` は付けない。付けると Claude Code が AI の題を作らず、rex のサイドバーの題が名前のまま固定される。
-付けなければ `ListAgents` の名前は `<cwd の basename>-<連番>` になり、起こす側からは決められないので、
+spawn は `--name` を付けずに起こす。付けると Claude Code が AI の題を作らず、rex のサイドバーの題が
+名前のまま固定される。`ListAgents` の名前は `<cwd の basename>-<連番>` になり、起こす側からは決められないので、
 宛先は受領の `from` で知る。
 
 <!-- cc-premise: 2.1.325 osc7501 --name を付けると ai-title を作らず、端末の題が名前のまま -->
@@ -66,22 +66,22 @@ printenv REX_SESSION
 
 ### 足し先の session を決める
 
-**既定は、起こす側の session (`"$REX_SESSION"`) にタブとして足す。** 新しい依頼を渡すときも、渡す先が
-別リポジトリのときも、既定はタブ。rex の session をまたいで新しく作るのは、利用者が別の session を
-明示したときだけにする。
+**既定は、起こす側の session にタブとして足す。** `agents-daemon spawn` は足し先の欄が無ければ、起こす側の
+`REX_SESSION` のタブに起こす。新しい依頼を渡すときも、渡す先が別リポジトリのときも、既定はタブ。rex の session を
+またいで新しく作るのは、利用者が別の session を明示したときだけにする。
 
-| 状況 | 足し先 |
+| 状況 | spawn の指定 |
 | ---- | ---- |
-| 既にある作業の続きで、その peer を起こしたときに控えた `session_id` がまだ生きている | その `session_id` のタブ |
-| その `session_id` が無くなっている (`session target "..." not found`) | 新しい session へ逃げず、自分の session (`"$REX_SESSION"`) のタブへ倒す |
-| 利用者が「新しいセッションで」「別の rex session で」のように session そのものの分離を明示した | 新しい session |
-| 上のどれにも当たらない (自分の作業の一部、dispatcher からの新しい依頼を含む) | 自分の session (`"$REX_SESSION"`) のタブ |
+| 既にある作業の続きで、その peer を起こしたときに控えた `rex_session_id` がまだ生きている | `session` にその ID |
+| その session が無くなっている (spawn が `session not found` で落ちた) | `session` を省いて起こし直す (新しい session へは逃げない) |
+| 利用者が「新しいセッションで」「別の rex session で」のように session そのものの分離を明示した | `new_session: true` |
+| 上のどれにも当たらない (自分の作業の一部、dispatcher からの新しい依頼を含む) | 足し先の欄を書かない |
 
 「引き継いで」「フレッシュな頭で」は peer を起こす依頼ではあっても、session を分けろという指示ではない。
-既定 (タブ) のまま進める。渡す先の cwd が自分と違うリポジトリでも、タブの `--cwd` は session と別に
-指定できるので、別リポジトリだから新しい session にする理由にはならない。
+既定 (タブ) のまま進める。渡す先の cwd が自分と違うリポジトリでも、`repo` は session と別に指定できるので、
+別リポジトリだから新しい session にする理由にはならない。
 
-迷ったら新しい session ではなく自分の session のタブにする。
+迷ったら `new_session` を書かない。
 
 ### 依存の辺を書く
 
@@ -124,7 +124,8 @@ printf '%s' '{"before":{"ref":"pr:<owner>/<repo>#<番号>","cwd":"<この sessio
   図から畳まれ、保持期間 (7 日) で消える。マージせずに閉じた PR の辺は消えないので、付け替えるか `edge rm` する
 
 before の ref は `pr:<owner>/<repo>#<番号>` や `issue:` でもよい。peer は `sid:<uuid>` で指す。`<uuid>` は
-手順 2 で `--session-id` に渡した値で、起こす前から決まっているので、起こす前にも辺を書ける。
+手順 2 の spawn の結果の `session_id`。spawn の指定に `session_id` (`uuidgen` の値を小文字で) を書けば
+起こす前から決まるので、起こす前にも辺を書ける。
 参照の形 (名前で結びつける `session:<名前>` を含む) と、`rm` / `list` は `agents-daemon:agents-daemon` skill の `references/operations.md`
 「セッションをまたぐ辺を書く」。
 
@@ -153,18 +154,13 @@ before の ref は `pr:<owner>/<repo>#<番号>` や `issue:` でもよい。peer
 
 ### モデルの指定
 
-モデルは起動時に明示する。指定しなければ peer はメインと同じモデルで立つ。既定は subagent と同じモデル
-(`$CLAUDE_CODE_SUBAGENT_MODEL`) に揃える。判断や調査が要る作業に、それより軽いモデルを指定しない。
-workflow の 1 行を消すような定型の横展開だけ、`--model sonnet` を明示してよい。
+peer のモデルは subagent と同じモデル (settings の `env.CLAUDE_CODE_SUBAGENT_MODEL`) に揃える。
+`agents-daemon spawn` は `model` の欄が無ければこの値で起こす。判断や調査が要る作業に、それより軽いモデルを
+指定しない。workflow の 1 行を消すような定型の横展開だけ、`"model": "sonnet"` を書いてよい。
 
-自分で起動するときは `$CLAUDE_CODE_SUBAGENT_MODEL` を読む。この変数はハーネスの settings の
-`env` が定義しており、Claude Code セッションの中からは環境変数として見える。
-
-```sh
-claude --model "${CLAUDE_CODE_SUBAGENT_MODEL:?}"
-```
-
-ユーザーへ起動を頼むときは、この変数を自分で展開した値に置き換えてから渡し、
+ユーザーへ起動を頼むときは `--model` を明示する。指定しなければ peer はメインと同じモデルで立つ。
+`$CLAUDE_CODE_SUBAGENT_MODEL` はハーネスの settings の `env` が定義しており、Claude Code セッションの中からは
+環境変数として見える。この変数を自分で展開した値に置き換えてから渡し、
 シングルクォートで囲む。
 
 ```sh
@@ -234,8 +230,8 @@ settings の `env` は Claude Code のプロセスにだけ注入されるので
 本文は、今どこまで進んだかと、止まっているならその理由を返すよう頼む 1 行にする。
 
 子がユーザーへの質問や許可の確認で止まっていると、メッセージは次のツール呼び出しまで読まれず、返事が来ない。
-聞いたあとのターンでも返事が無ければ、子の block を `rex capture -s <session_id>` で読んで止まった理由を確かめる
-(`references/rex.md`「画面の読み方」)。`<session_id>` は起こしたときに控えたもので、label は rename されている。
+聞いたあとのターンでも返事が無ければ、子の block を `rex capture -s <rex_session_id> -b <pane_id>` で読んで
+止まった理由を確かめる (`references/rex.md`「画面の読み方」)。どちらも起こしたときに控えたもので、label は rename されている。
 
 ### idle 通知が報告と重なったとき
 
@@ -266,7 +262,7 @@ settings の `env` は Claude Code のプロセスにだけ注入されるので
 
 ## 引き継ぎ内容の渡し方
 
-新しく起こす peer には、依頼文を `claude` の最後の引数で最初のターンとして渡す (手順 2)。
+新しく起こす peer には、依頼文を spawn の `prompt_file` で最初のターンとして渡す (手順 2)。
 既に動いているセッションへの依頼と、起こした peer への追加の指示は `SendMessage` の本文に入れる。
 受け手はどちらもそのまま指示として読む。
 
@@ -280,7 +276,8 @@ settings の `env` は Claude Code のプロセスにだけ注入されるので
 寿命は担当 PR に揃える。担当 PR がクローズ (マージ含む) されたら、peer を畳む。
 タブに立てた peer (既定) はそのタブだけを畳み、足し先の session には触れない。利用者が明示して
 新しい session に立てた peer は、その session ごと畳む。
-畳むときは起こしたときに控えた `session_id` (タブなら `window_id` も) で指す。label は起きた claude が rename するので使わない。
+畳むときは起こしたときに控えた `rex_session_id` (タブなら `window_id` も) で指す。label は起きた claude が
+rename するので使わない。
 閉じるコマンドは `references/rex.md` の「畳む」にある。
 複数 PR を 1 セッションへ束ねるなら、束ねた全部が閉じるまでが寿命。渡すときからこれを前提に
 スコープを切る。

@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/api/control/controltest"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/wire"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/wrap"
@@ -24,7 +25,8 @@ import (
 const (
 	spawnedSession = "session:01a1b37a-0560-743d-adfd-959e5e1c53a9"
 	spawnedBlock   = "block:01a1b37a-0560-74ce-af88-d37d23de33b9"
-	sessionNewJSON = `{"session_id":"` + spawnedSession + `","initial_windows":[{"window_id":"window:01a1b37a-056e-70fa-90fd-15d50af005a9","block_ids":["` + spawnedBlock + `"],"revision":1}]}`
+	spawnedWindow  = "window:01a1b37a-056e-70fa-90fd-15d50af005a9"
+	sessionNewJSON = `{"session_id":"` + spawnedSession + `","initial_windows":[{"window_id":"` + spawnedWindow + `","block_ids":["` + spawnedBlock + `"],"revision":1}]}`
 )
 
 // useFakeSelf は包みが印を書くのに呼ぶ agents-daemon を、引数を self.log へ 1 行ずつ書くだけの script に差し替え、
@@ -95,8 +97,8 @@ func TestExecClient_NewSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSession() error = %v", err)
 	}
-	if got != spawnedBlock {
-		t.Errorf("NewSession() = %q, want %q", got, spawnedBlock)
+	if want := (multiplexer.Placement{SessionID: spawnedSession, WindowID: spawnedWindow, PaneID: spawnedBlock}); got != want {
+		t.Errorf("NewSession() = %+v, want %+v", got, want)
 	}
 	// 手放した後は session.detach で attach を外す。attach したままだと、その session の block_event がこの呼び出しの
 	// 接続 (event_scope session) に流れ続ける。
@@ -131,8 +133,8 @@ func TestExecClient_NewSession_ReleaseFailureStillSucceeds(t *testing.T) {
 	useFakeSelf(t, newFakeRex(t))
 	f.Protocol().Fail("session.disown_block", &controltest.Error{Code: "internal", Message: "boom", Status: 500})
 	got, err := f.client(staticResolver(nil)).NewSession(context.Background(), "x", "/w/x", []string{"claude"})
-	if err != nil || got != spawnedBlock {
-		t.Fatalf("NewSession() = %q, %v; want 作った block", got, err)
+	if err != nil || got.PaneID != spawnedBlock {
+		t.Fatalf("NewSession() = %+v, %v; want 作った block", got, err)
 	}
 	f.assertCalls(t, "session.create", "session.attach "+spawnedSession, "session.disown_block "+spawnedSession, "session.detach "+spawnedSession)
 }
@@ -359,7 +361,8 @@ func TestExecClient_NewSession_Failures(t *testing.T) {
 // windowNewJSON は session.new_window の応答。形は 2026-11-17 の実測。
 const (
 	windowBlock   = "block:01a1e34c-5b6c-7101-a782-d4602aeca5d0"
-	windowNewJSON = `{"window_id":"window:01a1e34c-5b7b-7a1d-9408-649609748f1e","block_ids":["` + windowBlock + `"],"revision":2}`
+	windowID      = "window:01a1e34c-5b7b-7a1d-9408-649609748f1e"
+	windowNewJSON = `{"window_id":"` + windowID + `","block_ids":["` + windowBlock + `"],"revision":2}`
 	sharedSession = "session:01a1e34c-4967-743d-a75c-0b5c50b43026"
 )
 
@@ -395,8 +398,9 @@ func TestExecClient_NewWindow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWindow() error = %v", err)
 	}
-	if got != windowBlock {
-		t.Errorf("NewWindow() = %q, want %q", got, windowBlock)
+	// 足し先は label で指しても、返す session は resolve した ID (畳むときに label の rename で外れない)。
+	if want := (multiplexer.Placement{SessionID: sharedSession, WindowID: windowID, PaneID: windowBlock}); got != want {
+		t.Errorf("NewWindow() = %+v, want %+v", got, want)
 	}
 	f.assertCalls(t,
 		"target.resolve work",

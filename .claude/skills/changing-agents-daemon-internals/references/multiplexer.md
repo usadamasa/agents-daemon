@@ -26,8 +26,8 @@ daemon は rex を control API (Unix socket の上の WebSocket) だけで操作
 | SendKeys | key ごとに `block.event` の press と release (`enter` と `esc` だけを知る) |
 | Reachable | `server.status` の `pid` が正 |
 | session_id | `context/<sid>.json` の `multiplexer.block` から逆引き ([statusline-state.md](statusline-state.md)) |
-| NewSession (`spawn` の Host。Client には無い) | `session.create` の `initial_windows[0].block_ids[0]`。block の command は `wrap.SessionCommand` (包みの sh。ARGV を起こす前に `spawned-session mark` で印を書き、ARGV が終わったら session の block が自分だけなら rex の CLI で `session kill` する)。argv は login shell の環境で 1 引数ずつ子へ渡る (空白、`$` を変えない。実測) |
-| NewWindow (`spawn` の Host) | `target.resolve` (足し先を ID か label で引く) と `session.new_window` (`focus: false`)。command は `wrap.TabCommand` |
+| NewSession (`spawn` の Host。Client には無い) | `session.create` の `session_id` と `initial_windows[0]` の `window_id`・`block_ids[0]` (`multiplexer.Placement`)。block の command は `wrap.SessionCommand` (包みの sh。ARGV を起こす前に `spawned-session mark` で印を書き、ARGV が終わったら session の block が自分だけなら rex の CLI で `session kill` する)。argv は login shell の環境で 1 引数ずつ子へ渡る (空白、`$` を変えない。実測) |
+| NewWindow (`spawn` の Host) | `target.resolve` (足し先を ID か label で引く) と `session.new_window` (`focus: false`)。resolve した session の ID と `window_id`・`block_ids[0]` を返す。command は `wrap.TabCommand` |
 | SplitPane / ClosePane (`simulate` の使い捨て pane) | `session.new_split` (ratio 0.6、`shell: none`、`login: false`、`exit.on_completion: false`) と `block.close` |
 | SessionBlocks / SessionKill (daemon の後片付け。Client には無く、daemon が型で確かめる) | `session.list_blocks` の block を flavor を問わず数える (`session_not_found` は session が無い)。`session.destroy` |
 

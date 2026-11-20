@@ -101,21 +101,9 @@ func (r Runner) Run(ctx context.Context, req Request) (Result, error) {
 	}
 	// `--` は本文が `-` で始まっても flag と読まれないため。
 	argv := []string{"claude", "--session-id", launch.sessionID, "--model", launch.model, "--", launch.prompt}
-	into := target(req)
-	var placed multiplexer.Placement
-	if into == "" {
-		placed, err = r.Host.NewSession(ctx, launch.label, req.Repo, argv)
-		if err != nil {
-			return Result{}, fmt.Errorf("多重化ツールの session を作れない: %w", err)
-		}
-	} else {
-		placed, err = r.Host.NewWindow(ctx, into, launch.label, req.Repo, argv)
-		if err != nil {
-			if req.Session != "" {
-				return Result{}, fmt.Errorf("多重化ツールの session %s にタブを足せない (session を省くと起こす側の session に足す): %w", req.Session, err)
-			}
-			return Result{}, fmt.Errorf("起こす側の多重化ツールの session %s にタブを足せない: %w", into, err)
-		}
+	placed, err := r.place(ctx, req, launch.label, argv)
+	if err != nil {
+		return Result{}, err
 	}
 	res := Result{SessionID: launch.sessionID, PaneID: placed.PaneID, RexSessionID: placed.SessionID, WindowID: placed.WindowID, Foreground: true}
 	if err := r.waitForClaude(ctx, placed.PaneID); err != nil {
@@ -125,6 +113,27 @@ func (r Runner) Run(ctx context.Context, req Request) (Result, error) {
 		res.Foreground, res.Detail = false, err.Error()
 	}
 	return res, nil
+}
+
+// place は target の決めた先 (新しい session かタブ) に argv を起こす。
+func (r Runner) place(ctx context.Context, req Request, label string, argv []string) (multiplexer.Placement, error) {
+	into := target(req)
+	if into == "" {
+		placed, err := r.Host.NewSession(ctx, label, req.Repo, argv)
+		if err != nil {
+			return placed, fmt.Errorf("多重化ツールの session を作れない: %w", err)
+		}
+		return placed, nil
+	}
+	placed, err := r.Host.NewWindow(ctx, into, label, req.Repo, argv)
+	switch {
+	case err == nil:
+		return placed, nil
+	case req.Session != "":
+		return placed, fmt.Errorf("多重化ツールの session %s にタブを足せない (session を省くと起こす側の session に足す): %w", req.Session, err)
+	default:
+		return placed, fmt.Errorf("起こす側の多重化ツールの session %s にタブを足せない: %w", into, err)
+	}
 }
 
 // target はタブを足す先の session を返す。空なら新しい session を作る。

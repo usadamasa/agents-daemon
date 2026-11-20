@@ -31,6 +31,8 @@ type Ref struct {
 type Cache struct {
 	blocks map[string]*State
 	views  map[string]wire.SessionView
+	// viewFailures は session の view を最後に読もうとして失敗した理由。読めたら消す。
+	viewFailures map[string]string
 }
 
 // NewCache は全列挙の snapshot (block ID から状態) から Cache を作る。view は PutView で置く。
@@ -38,16 +40,23 @@ func NewCache(blocks map[string]*State) *Cache {
 	if blocks == nil {
 		blocks = map[string]*State{}
 	}
-	return &Cache{blocks: blocks, views: map[string]wire.SessionView{}}
+	return &Cache{blocks: blocks, views: map[string]wire.SessionView{}, viewFailures: map[string]string{}}
 }
 
 // PutView は session の view を置く。持っている view より古い revision の view は捨てる (読み直しの応答が入れ違いに
-// 届いたとき)。
+// 届いたとき)。読めたので、前の読み取りの失敗は消す。
 func (c *Cache) PutView(session string, view wire.SessionView) {
+	delete(c.viewFailures, session)
 	if cur, ok := c.views[session]; ok && view.Revision < cur.Revision {
 		return
 	}
 	c.views[session] = view
+}
+
+// PutViewFailure は session の view を読めなかった理由を置く。持っている view は残す (Pane の Location は古いまま
+// 出し、LocationReason で古いことを伝える)。
+func (c *Cache) PutViewFailure(session string, err error) {
+	c.viewFailures[session] = err.Error()
 }
 
 // viewChanged は session_view_changed が、持っている view より新しいかを返す。event は revision の順に届くとは限らない。
@@ -101,6 +110,7 @@ func (c *Cache) Apply(line []byte) (Ref, error) {
 	case "session_destroyed":
 		c.dropSession(l.Payload.SessionID)
 		delete(c.views, l.Payload.SessionID)
+		delete(c.viewFailures, l.Payload.SessionID)
 		return Ref{}, nil
 	case "session_event":
 	default:
@@ -209,6 +219,7 @@ func (c *Cache) Panes(sessions map[string]string) []multiplexer.Pane {
 		st := c.blocks[id]
 		pane := ToPane(id, st.ProgramStatus, st.Process, sessions[id])
 		pane.Location = c.location(id, st)
+		pane.LocationReason = c.viewFailures[st.Session]
 		panes = append(panes, pane)
 	}
 	return panes

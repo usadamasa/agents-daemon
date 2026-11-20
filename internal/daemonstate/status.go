@@ -44,8 +44,8 @@ type StatusSnapshot struct {
 	// daemon が書いたもので、依存図は置き場の無いノードに daemon の更新を促す。
 	RexPlacement bool         `json:"rex_placement,omitempty"`
 	StartedAt    time.Time    `json:"started_at"`
-	UpdatedAt time.Time    `json:"updated_at"`
-	Panes     []PaneStatus `json:"panes"`
+	UpdatedAt    time.Time    `json:"updated_at"`
+	Panes        []PaneStatus `json:"panes"`
 }
 
 // WriteStatusSnapshot は status.json を原子的に書き込む (statefile)。

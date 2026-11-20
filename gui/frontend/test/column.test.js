@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { GROUP_W, fitLimit, frameTree, groupByRex, groupHeight, heads, partition, placeGroups, rexTones } from "../src/column.js";
+import { GROUP_W, TONES, fitLimit, frameTree, groupByRex, groupHeight, heads, partition, placeGroups, rexTones } from "../src/column.js";
 
 const keys = (nodes) => nodes.map((n) => n.key);
 
@@ -144,14 +144,19 @@ test("frameTree は rex の外の辺のある生きているノードを「rex �
   assert.deepEqual(frames[frames[parents.o][1]], ["Outside rex", null]);
 });
 
-test("rexTones は rex の session の id の順に色の番号を回し、出てくる順に依らない", () => {
+test("rexTones は rex の session の色をその id だけで決め、図に出るほかの session の有無で変えない", () => {
   const n = (session) => ({ key: session, kind: "task", rex: rex(session, "w") });
-  const tones = rexTones([n("S3"), n("S1"), { key: "o", kind: "task" }, n("S2"), n("S1")]);
-  assert.deepEqual([...tones.entries()].sort(), [["S1", 0], ["S2", 1], ["S3", 2]]);
-  assert.deepEqual(rexTones([n("S2"), n("S3"), n("S1")]), tones);
-  // 色の数を超えた session は先頭の色に戻る。
-  const many = rexTones(["a", "b", "c", "d", "e"].map(n));
-  assert.equal(many.get("e"), many.get("a"));
+  const ids = Array.from({ length: 12 }, (_, i) => `session:01a1f9${i.toString(16).padStart(2, "0")}-80db-702a-adb9-e82c81bcf47d`);
+  const all = rexTones([...ids.map(n), { key: "o", kind: "task" }]);
+  assert.deepEqual([...all.keys()].sort(), [...ids].sort());
+  for (const id of ids) {
+    // 1 つだけのときも、ほかと並んだときも、並びを逆にしても同じ色。
+    assert.equal(rexTones([n(id)]).get(id), all.get(id), id);
+    assert.equal(rexTones([...ids].reverse().map(n)).get(id), all.get(id), id);
+    assert.ok(Number.isInteger(all.get(id)) && all.get(id) >= 0 && all.get(id) < TONES, id);
+  }
+  // id が違えば色は散らばる (全部が同じ色にならない)。
+  assert.ok(new Set(all.values()).size > 1);
 });
 
 test("groupHeight は枠の中のカードと小見出しの数で決まる", () => {

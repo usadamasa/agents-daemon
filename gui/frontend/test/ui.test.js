@@ -212,9 +212,9 @@ test("枠は縮小しても 1px より細くならない線で描き、session �
 
 test("rex の session の枠は session ごとの色で描き、中の window の小枠と下の枠も同じ色にする", async () => {
   const toneOf = (e) => [...e.classList].find((c) => c.startsWith("tone-"));
-  const work = q('#graph .frame.h2[aria-label="work"]');
-  assert.equal(toneOf(work), "tone-0");
-  for (const f of document.querySelectorAll("#graph .frame.h3")) assert.equal(toneOf(f), "tone-0", f.getAttribute("aria-label"));
+  const work = toneOf(q('#graph .frame.h2[aria-label="work"]'));
+  assert.match(work ?? "", /^tone-\d$/);
+  for (const f of document.querySelectorAll("#graph .frame.h3")) assert.equal(toneOf(f), work, f.getAttribute("aria-label"));
   // rex の外の枠は色を持たない。
   assert.equal(toneOf(q('#graph .group[aria-label="Outside rex"]')), undefined);
   // 色ごとに線と塗りと見出しの色を決める。状態の色 (緑、橙、紫、赤、青) は使わない。
@@ -225,7 +225,7 @@ test("rex の session の枠は session ごとの色で描き、中の window �
   }
   await loadDeps(JSON.stringify(withoutLinks()));
   try {
-    assert.equal(toneOf(q('#graph .group[aria-label="work"]')), "tone-0");
+    assert.equal(toneOf(q('#graph .group[aria-label="work"]')), work);
   } finally {
     await loadDeps(fixtureDeps);
   }

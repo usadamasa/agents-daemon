@@ -70,4 +70,21 @@ func TestExecClient_RealRex_WatchMatchesListing(t *testing.T) {
 		t.Errorf("cache の block = %v, 全列挙の block = %v", got, want)
 	}
 	t.Logf("cache と全列挙の block 数: %d", len(cached))
+	// 置き場 (session と window の ID と label) は session.view から引く。2 回の取得の間に改名しない限り同じ。
+	locations := func(panes []multiplexer.Pane) []multiplexer.Location {
+		out := make([]multiplexer.Location, 0, len(panes))
+		for _, p := range panes {
+			out = append(out, p.Location)
+		}
+		return out
+	}
+	if got, want := locations(cached), locations(listed); !slices.Equal(got, want) {
+		t.Errorf("cache の置き場 = %+v, 全列挙の置き場 = %+v", got, want)
+	}
+	for _, p := range listed {
+		if p.Location.SessionID == "" {
+			t.Errorf("%s の置き場が空 (session.view を読めていない)", p.PaneID)
+		}
+		t.Logf("%s: %+v", p.PaneID, p.Location)
+	}
 }

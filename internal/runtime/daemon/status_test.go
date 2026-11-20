@@ -31,6 +31,10 @@ func TestDaemonRuntimeTick_StatusRecordsBackend(t *testing.T) {
 	if snap.Backend != "rex" {
 		t.Errorf("snap.Backend = %q, want rex", snap.Backend)
 	}
+	// 置き場を書く daemon は印を付け、依存図が古い daemon と見分けられるようにする。
+	if !snap.RexPlacement {
+		t.Error("snap.RexPlacement = false, want true")
+	}
 }
 
 // session_id は依存図がタスクとセッションを突き合わせる鍵で、指示を送る宛先にもなるので、pane から status.json へ写す。

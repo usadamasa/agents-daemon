@@ -52,6 +52,8 @@ type paneEntry struct {
 	lastLogKey string // 直前にログへ書いた内容の識別子 (同じ状態が続く間の重複を抑える)
 	// loggedUnknownReason は最後にログへ書いた Pane.UnknownReason。同じ理由が続く間は書かない。
 	loggedUnknownReason string
+	// loggedLocationReason は最後にログへ書いた Pane.LocationReason。同じ理由が続く間は書かない。
+	loggedLocationReason string
 	// loggedMismatch は最後にログへ書いた「StopFailure の記録と transcript の判定の食い違い」の鍵。同じ間は書かない。
 	loggedMismatch string
 }
@@ -244,6 +246,7 @@ func (r *daemonRuntime) tickPane(ctx context.Context, deps monitor.Deps, pane mu
 	}
 	entry.lastSeenAt = now
 	r.logUnknownReason(pane, entry)
+	r.logLocationReason(pane, entry)
 
 	outcome, tickErr := monitor.Tick(ctx, deps, pane, entry.state, now)
 	failure, failureErr := r.turnFailures.Load(pane.SessionID)
@@ -302,6 +305,18 @@ func (r *daemonRuntime) logUnknownReason(pane multiplexer.Pane, entry *paneEntry
 	entry.loggedUnknownReason = pane.UnknownReason
 	if pane.UnknownReason != "" {
 		r.log.Logf("pane %s: agent_status を判定できません: %s", pane.PaneID, pane.UnknownReason)
+	}
+}
+
+// logLocationReason は置き場 (rex の session と window) を読めなかった理由を、理由が変わったときだけログに残す。
+// 残さないと、依存図で置き場が無いのが rex の変更で壊れたからか、置き場が本当に空なのかを見分けられない。
+func (r *daemonRuntime) logLocationReason(pane multiplexer.Pane, entry *paneEntry) {
+	if pane.LocationReason == entry.loggedLocationReason {
+		return
+	}
+	entry.loggedLocationReason = pane.LocationReason
+	if pane.LocationReason != "" {
+		r.log.Logf("pane %s: rex の置き場を読めません: %s", pane.PaneID, pane.LocationReason)
 	}
 }
 

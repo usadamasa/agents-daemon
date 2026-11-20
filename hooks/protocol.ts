@@ -895,6 +895,7 @@ export const definitions = {
     "additionalProperties": false,
     "required": [
       "daemon_running",
+      "rex_placement",
       "stale_memo_days",
       "repos",
       "recent_repos",
@@ -903,6 +904,10 @@ export const definitions = {
     "properties": {
       "daemon_running": {
         "type": "boolean"
+      },
+      "rex_placement": {
+        "type": "boolean",
+        "description": "動いている daemon が pane の rex の置き場を status.json に書くか。false なら置き場の無いノードは daemon が古いか止まっている"
       },
       "updated_at": {
         "type": "string",

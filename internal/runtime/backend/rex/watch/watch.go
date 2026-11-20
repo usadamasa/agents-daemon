@@ -31,8 +31,9 @@ type Reads struct {
 	// Fill は作られた block (ref.Block が空なら session の全 block) のうち shell のものの状態を読む。
 	// もう無い block と session は入れずに返す。
 	Fill func(ctx context.Context, ref blockstate.Ref) (map[string]*blockstate.State, error)
-	// View は session の view を読む。読めなければ ok が false で、cache の view は変えない。
-	View func(ctx context.Context, session string) (view wire.SessionView, ok bool)
+	// View は session の view を読む。読めなければ ok が false で、cache の view は変えない。閉じた session でない
+	// 読み取りの失敗は failure に返り、cache が読めなかった理由として持つ。
+	View func(ctx context.Context, session string) (view wire.SessionView, ok bool, failure error)
 }
 
 // Watcher は購読と、それで保つ cache。nil の Watcher (購読していない) は常に未同期。
@@ -192,11 +193,15 @@ func (w *Watcher) apply(ctx context.Context, cache *blockstate.Cache, mu *sync.M
 		unlock()
 	}
 	if ref.View || ref.Block == "" {
-		if view, ok := w.reads.View(ctx, ref.Session); ok {
-			lock()
+		view, ok, failure := w.reads.View(ctx, ref.Session)
+		lock()
+		if ok {
 			cache.PutView(ref.Session, view)
-			unlock()
 		}
+		if failure != nil {
+			cache.PutViewFailure(ref.Session, failure)
+		}
+		unlock()
 	}
 	return nil
 }

@@ -190,9 +190,9 @@ test("完了を隠した既定の図: 辺でつながるノードを段の浅い
   assert.deepEqual([...cards("#column").keys()], ["sid:gamma"]);
   assert.equal(q("#column h2 .ph").textContent, "Ended");
   assert.equal(q("#column h2 .counter").textContent, "1");
-  // rex の置き場の無い生きているノードは「rex の外」の枠に入り、Claude のセッションの小見出しで区切る (#633)。
-  assert.deepEqual(groups(), [{ label: "Outside rex", keys: ["sid:zeta"] }]);
-  assert.deepEqual(subheads("Outside rex"), ["zeta"]);
+  // rex の置き場の無い生きているノードは「置き場が分からない」枠に入り、Claude のセッションの小見出しで区切る (#633、#662)。
+  assert.deepEqual(groups(), [{ label: "Rex placement unknown", keys: ["sid:zeta"] }]);
+  assert.deepEqual(subheads("Rex placement unknown"), ["zeta"]);
   // 枠は線のあるかたまりの下に置く。
   const lowest = Math.max(...[...graph.values()].filter((c) => !Number.isNaN(c.top)).map((c) => c.top));
   assert.ok(parseFloat(q("#graph .group").style.top) >= lowest + 72);
@@ -215,8 +215,8 @@ test("rex の session の枠は session ごとの色で描き、中の window �
   const work = toneOf(q('#graph .frame.h2[aria-label="work"]'));
   assert.match(work ?? "", /^tone-\d$/);
   for (const f of document.querySelectorAll("#graph .frame.h3")) assert.equal(toneOf(f), work, f.getAttribute("aria-label"));
-  // rex の外の枠は色を持たない。
-  assert.equal(toneOf(q('#graph .group[aria-label="Outside rex"]')), undefined);
+  // 置き場の分からない枠は色を持たない。
+  assert.equal(toneOf(q('#graph .group[aria-label="Rex placement unknown"]')), undefined);
   // 色ごとに線と塗りと見出しの色を決める。状態の色 (緑、橙、紫、赤、青) は使わない。
   for (let i = 0; i < 4; i++) {
     const rule = css.match(new RegExp(`^:is\\(\\.frame, \\.group\\)\\.tone-${i} \\{([^}]*)\\}`, "m"))?.[1] ?? "";
@@ -296,8 +296,19 @@ test("辺のあるノードを持つ rex の枠は、同じ枠の辺の無いノ
     const graph = cards("#graph");
     const tab = frames().find((x) => x.label === "beta-tab");
     for (const key of ["task:beta/1", "task:beta/2", "task:beta/3"]) assert.ok(inside(graph.get(key), tab), key);
-    assert.deepEqual(groups().map((g) => g.label), ["Outside rex"]);
+    assert.deepEqual(groups().map((g) => g.label), ["Rex placement unknown"]);
     await snapshot("graph-frames-pulled");
+  } finally {
+    await loadDeps(fixtureDeps);
+  }
+});
+
+test("置き場を書かない daemon (rex_placement が無い) の図: 置き場の無いノードの枠は daemon の更新を促す見出しにする", async () => {
+  const data = JSON.parse(fixtureDeps);
+  delete data.rex_placement;
+  await loadDeps(JSON.stringify(data));
+  try {
+    assert.deepEqual(groups().map((g) => g.label), ["Rex placement unknown: update the daemon"]);
   } finally {
     await loadDeps(fixtureDeps);
   }
@@ -489,7 +500,7 @@ test("線が 1 本も無い図: 動いているカードをセッションの枠
     assert.equal(count(EDGE), 0);
     assert.equal(count("#graph .empty"), 0);
     // 枠は rex の session ごと。中は window ごとに、column_order で最初に来るカードの順に区切る (#633)。
-    assert.deepEqual(groups().map((g) => g.label).sort(), ["Outside rex", "Refs", "work"]);
+    assert.deepEqual(groups().map((g) => g.label).sort(), ["Refs", "Rex placement unknown", "work"]);
     assert.deepEqual(groups().find((g) => g.label === "Refs").keys, ["pr:usadamasa/agents-daemon#254"]);
     assert.deepEqual(subheads("work"), ["beta-tab", "alpha-tab"]);
     assert.deepEqual(groups().find((g) => g.label === "work").keys, ["task:beta/1", "task:beta/2", "task:beta/3", "task:alpha/2", "task:alpha/4", "task:alpha/5"]);

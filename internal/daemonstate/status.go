@@ -39,8 +39,11 @@ type StatusSnapshot struct {
 	PID int `json:"pid"`
 	// Backend は daemon が見ている多重化ツール (rex)。status / doctor が表示に使う。
 	// 記録を始める前の daemon が書いたものでは空になる。
-	Backend   string       `json:"backend,omitempty"`
-	StartedAt time.Time    `json:"started_at"`
+	Backend string `json:"backend,omitempty"`
+	// RexPlacement は pane の置き場 (PaneStatus.Rex) を書く daemon が付ける印。印の無い status.json は置き場を書く前の
+	// daemon が書いたもので、依存図は置き場の無いノードに daemon の更新を促す。
+	RexPlacement bool         `json:"rex_placement,omitempty"`
+	StartedAt    time.Time    `json:"started_at"`
 	UpdatedAt time.Time    `json:"updated_at"`
 	Panes     []PaneStatus `json:"panes"`
 }

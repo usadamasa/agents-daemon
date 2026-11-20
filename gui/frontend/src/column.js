@@ -50,13 +50,14 @@ export function groupByRex(nodes) {
   });
 }
 
-// frameTree は線のある図 (dagre) で描く枠を決める。辺のある生きているノードを frameOf の枠 (session) と区切り
-// (window) に入れ、その枠に属する辺の無いノード (free) も同じ枠へ引き入れる。参照と終わったノードは枠に入れない。
+// frameTree は線のある図 (dagre) で描く枠を決める。辺のあるノードを frameOf の枠 (session) と区切り (window) に入れ、
+// その枠に属する辺の無いノード (free) も同じ枠へ引き入れる。終わったノードは rex の置き場があるときだけ枠に入れ、
+// 同じ window の線が枠の外から長く横切らないようにする。参照と、置き場の無い終わったノードは枠に入れない。
 // frames は枠の { key, label, level, parent } (level は h2 / h3)、parentOf はノードの key → 直の親の枠の key。
 // 小見出しの無い区切りは枠を作らず、ノードを session の枠へ直に入れる。nodes は図に入るノード (linked の後ろに
 // 引き入れた free を順に足す)、free は下の枠に残るもの。枠の key は "\0" で始め、ノードの key と重ならない。
 export function frameTree(linked, free) {
-  const framable = (n) => n.kind !== "ref" && !ENDED.has(n.state);
+  const framable = (n) => n.kind !== "ref" && (!ENDED.has(n.state) || Boolean(n.rex));
   const used = new Set(linked.filter(framable).map((n) => frameOf(n).key));
   const pulled = free.filter((n) => used.has(frameOf(n).key));
   const nodes = [...linked, ...pulled];

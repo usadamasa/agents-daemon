@@ -1,5 +1,12 @@
 # Changelog
 
+## [2026.1120.2](https://github.com/usadamasa/agents-daemon/compare/2026.1120.1...2026.1120.2) - 2026-11-20
+
+### Features
+- 依存図で辺のあるノードも rex の枠の中に描く by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/666
+### Bug Fixes
+- 依存図のセッションの題が貼り付けの開きのタグになるのを直す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/664
+
 ## [2026.1120.1](https://github.com/usadamasa/agents-daemon/compare/2026.1120.0...2026.1120.1) - 2026-11-20
 
 ### Features

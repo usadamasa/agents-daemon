@@ -253,6 +253,23 @@ test("完了を隠した既定の図: 枠の中の線のあるカードは rex �
   assert.equal(q('.node[data-key="pr:usadamasa/agents-daemon#254"] small').textContent.includes("›"), false);
 });
 
+test("辺のあるノードを持つ rex の枠は、同じ枠の辺の無いノードも線のある図の枠に入れ、下の枠に分けて出さない", async () => {
+  const data = JSON.parse(fixtureDeps);
+  const beta = (key) => key.startsWith("task:beta/");
+  data.graph.links = data.graph.links.filter((l) => !beta(l.before) && !beta(l.after));
+  data.graph.folded.links = data.graph.folded.links.filter((l) => !beta(l.before) && !beta(l.after));
+  await loadDeps(JSON.stringify(data));
+  try {
+    const graph = cards("#graph");
+    const tab = frames().find((x) => x.label === "beta-tab");
+    for (const key of ["task:beta/1", "task:beta/2", "task:beta/3"]) assert.ok(inside(graph.get(key), tab), key);
+    assert.deepEqual(groups().map((g) => g.label), ["Outside rex"]);
+    await snapshot("graph-frames-pulled");
+  } finally {
+    await loadDeps(fixtureDeps);
+  }
+});
+
 test("完了も表示した図: 線の端に残る完了のノードは枠の外に描く", async () => {
   q("#completed-check").click();
   try {

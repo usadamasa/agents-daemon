@@ -40,8 +40,8 @@
   --pink-soft: #ffeff7;
   --olive: #5f7322;
   --olive-soft: #f0f4dc;
-  --auburn: #9d615c;
-  --auburn-soft: #f7eeed;
+  --gold: #9a6700;
+  --gold-soft: #fff8c5;
   --closed: #59636e;
   --gray-dot: #818b98;
   --gray-soft: #818b981f;
@@ -144,7 +144,7 @@ select { font: inherit; color: inherit; }
 :is(.frame, .group).tone-0 { --frame: var(--teal); --frame-soft: var(--teal-soft); --frame-ink: var(--teal); }
 :is(.frame, .group).tone-1 { --frame: var(--pink); --frame-soft: var(--pink-soft); --frame-ink: var(--pink); }
 :is(.frame, .group).tone-2 { --frame: var(--olive); --frame-soft: var(--olive-soft); --frame-ink: var(--olive); }
-:is(.frame, .group).tone-3 { --frame: var(--auburn); --frame-soft: var(--auburn-soft); --frame-ink: var(--auburn); }
+:is(.frame, .group).tone-3 { --frame: var(--gold); --frame-soft: var(--gold-soft); --frame-ink: var(--gold); }
 .group {
   position: absolute; box-sizing: border-box; padding: 12px;
   display: flex; flex-direction: column; gap: 10px;

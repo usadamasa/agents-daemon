@@ -1,5 +1,13 @@
 # Changelog
 
+## [2026.1120.1](https://github.com/usadamasa/agents-daemon/compare/2026.1120.0...2026.1120.1) - 2026-11-20
+
+### Features
+- パーキングロットの Task でもほかの repo の生きているセッションを宛先に出す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/658
+- 依存図で rex の session と window ごとにセッションをまとめる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/660
+### Bug Fixes
+- 渡したメモの文面に片付け方を書き、受け手に unpark を促さない by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/657
+
 ## [2026.1120.0](https://github.com/usadamasa/agents-daemon/compare/2026.1117.2...2026.1120.0) - 2026-11-20
 
 ### Refactoring

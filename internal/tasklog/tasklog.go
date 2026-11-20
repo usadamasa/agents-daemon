@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/statefile"
 	"github.com/usadamasa/agents-daemon/internal/tasklog/record"
 )
@@ -46,11 +47,13 @@ const todosFile = "todos.json"
 // Store は tasks/ の置き場所を持つ。ゼロ値は Dir が空で、書き込みはエラー、読み込みは空になる。
 type Store struct {
 	Dir string
+	// repoKey は cwd の repo の鍵を求める (テストが git を起こさずに差し替える継ぎ目)。
+	repoKey func(cwd string) string
 }
 
 // New は XDG state ディレクトリ (apppath.Paths.StateDir) から置き場所を導出する。
 func New(stateDir string) Store {
-	return Store{Dir: filepath.Join(stateDir, "tasks")}
+	return Store{Dir: filepath.Join(stateDir, "tasks"), repoKey: gitrepo.RepoKey}
 }
 
 // hookInput は PostToolUse hook の stdin のうち、記録に使う欄。
@@ -93,7 +96,7 @@ func (s Store) Ingest(input []byte, now time.Time) (Result, error) {
 		return Result{}, nil
 	}
 	res := Result{Tool: in.ToolName, SessionID: in.SessionID, AgentID: in.AgentID}
-	w := &writer{dir: filepath.Join(s.Dir, in.SessionID), in: in, now: now}
+	w := &writer{dir: filepath.Join(s.Dir, in.SessionID), in: in, now: now, repoKey: s.repoKey}
 	var err error
 	switch in.ToolName {
 	case "TaskCreate":
@@ -143,6 +146,36 @@ type writer struct {
 	in               hookInput
 	now              time.Time
 	written, removed int
+	repoKey          func(cwd string) string
+	// repo と keyed は in.CWD の鍵を 1 回の hook 入力で 1 回だけ求めて覚える (TaskList は全件を書くため)。
+	repo  string
+	keyed bool
+}
+
+// setCWD は hook の cwd を記録の cwd と repo に書く。規則は worklog の Store.setCWD と同じで、鍵は記録が新しいか
+// cwd が変わったときだけ求め、cwd が無くなっていれば記録の鍵を残す。worktree が消えると cwd から鍵を引けず、
+// 鍵が worktree のパスになるため (#618、models/prlink の PRRepoKey)。
+func (w *writer) setCWD(cwd, repo *string) {
+	if w.in.CWD == "" {
+		return
+	}
+	if *repo != "" && (w.in.CWD == *cwd || !dirExists(w.in.CWD)) {
+		*cwd = w.in.CWD
+		return
+	}
+	*cwd, *repo = w.in.CWD, w.key()
+}
+
+func (w *writer) key() string {
+	if !w.keyed {
+		w.repo, w.keyed = w.repoKey(w.in.CWD), true
+	}
+	return w.repo
+}
+
+func dirExists(dir string) bool {
+	info, err := os.Stat(dir)
+	return err == nil && info.IsDir()
 }
 
 func (w *writer) create() error {
@@ -205,7 +238,7 @@ func (w *writer) update() error {
 	setIf(&t.Owner, input.Owner)
 	t.Blocks = appendUnique(t.Blocks, input.AddBlocks)
 	t.BlockedBy = appendUnique(t.BlockedBy, input.AddBlockedBy)
-	t.CWD = w.in.CWD
+	w.setCWD(&t.CWD, &t.Repo)
 	t.UpdatedAt = w.now
 	return w.write(t)
 }
@@ -246,7 +279,7 @@ func (w *writer) sync() error {
 		t.Status = item.Status
 		t.Owner = item.Owner
 		t.BlockedBy = item.BlockedBy
-		t.CWD = w.in.CWD
+		w.setCWD(&t.CWD, &t.Repo)
 		t.UpdatedAt = w.now
 		if err := w.write(t); err != nil {
 			return err
@@ -283,11 +316,15 @@ func (w *writer) todos() error {
 	if err := json.Unmarshal(w.in.ToolInput, &input); err != nil {
 		return fmt.Errorf("TodoWrite の入力を読めない: %w", err)
 	}
-	list := record.TodoList{SessionID: w.in.SessionID, CWD: w.in.CWD, Todos: input.Todos, UpdatedAt: w.now}
+	path := filepath.Join(w.dir, todosFile)
+	// リスト全体を置き換えるが、cwd と repo の鍵は前の記録から引き継いで setCWD の規則に掛ける。
+	prev := readTodos(path)
+	list := record.TodoList{SessionID: w.in.SessionID, CWD: prev.CWD, Repo: prev.Repo, Todos: input.Todos, UpdatedAt: w.now}
+	w.setCWD(&list.CWD, &list.Repo)
 	if list.Todos == nil {
 		list.Todos = []record.Todo{}
 	}
-	if err := statefile.WriteJSONAtomic(filepath.Join(w.dir, todosFile), ".todos.*", list); err != nil {
+	if err := statefile.WriteJSONAtomic(path, ".todos.*", list); err != nil {
 		return err
 	}
 	w.written = len(list.Todos)
@@ -296,7 +333,9 @@ func (w *writer) todos() error {
 
 // base は hook 入力から埋まる欄だけを持つタスク。
 func (w *writer) base(id string) record.Task {
-	return record.Task{ID: id, SessionID: w.in.SessionID, AgentID: w.in.AgentID, CWD: w.in.CWD, UpdatedAt: w.now}
+	t := record.Task{ID: id, SessionID: w.in.SessionID, AgentID: w.in.AgentID, UpdatedAt: w.now}
+	w.setCWD(&t.CWD, &t.Repo)
+	return t
 }
 
 func (w *writer) path(id string) (string, error) {

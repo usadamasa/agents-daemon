@@ -40,11 +40,16 @@ func (s Store) Adopt(sessionID, taskID string, tasks Tasks, exited func(sessionI
 	if t.Status == "completed" {
 		return Added{}, fmt.Errorf("タスク %s/%s は完了している", sessionID, taskID)
 	}
+	// メモの repo はタスクの記録の repo の鍵で、worktree が消えていても本来の repo になる (#618、models/prlink の
+	// MemoRepo)。鍵の無い記録は AdoptWork と同じく移さない。
+	if t.Repo == "" {
+		return Added{}, fmt.Errorf("タスク %s/%s の記録に repo の鍵が無い", sessionID, taskID)
+	}
 	if err := exited(sessionID, t.UpdatedAt); err != nil {
 		return Added{}, fmt.Errorf("タスク %s/%s は移さない: %w", sessionID, taskID, err)
 	}
 	e := Entry{Kind: KindScope, Title: t.Subject, Detail: t.Description, DefaultTaken: AdoptedDefault}
-	added, err := s.add(gitrepo.RepoKey(t.CWD), e, OriginAdopted, Source{SessionID: sessionID, TaskID: taskID, CWD: t.CWD, At: now})
+	added, err := s.add(t.Repo, e, OriginAdopted, Source{SessionID: sessionID, TaskID: taskID, CWD: t.CWD, At: now})
 	if err != nil {
 		return Added{}, err
 	}

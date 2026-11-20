@@ -753,6 +753,25 @@ test("PR のノードの単体ビュー: 見出しは PR の題で、番号と r
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
 });
 
+test("PR のノードの単体ビュー: Open で PR を開き、単体ビューは閉じない (#559)", async () => {
+  q('.node[data-key="pr:usadamasa/agents-daemon#254"]').click();
+  const pop = q("#pop");
+  const open = [...pop.querySelectorAll(".act")].find((b) => b.textContent === "Open");
+  assert.ok(open, "Open の動詞が無い");
+  opened.length = 0;
+  open.click();
+  await flush();
+  assert.deepEqual(opened, ["https://github.com/usadamasa/agents-daemon/pull/254"]);
+  assert.equal(pop.hidden, false);
+  escape();
+});
+
+test("参照でないノードの単体ビューには Open の動詞を出さない", () => {
+  q('.node[data-key="task:beta/2"]').click();
+  assert.deepEqual([...q("#pop").querySelectorAll(".act")].filter((b) => b.textContent === "Open"), []);
+  escape();
+});
+
 test("状態の丸の色は .dot と .st で 1 つの規則を共有し、色の鍵の無い丸は灰で出る", () => {
   for (const tone of new Set(Object.values(STATE_TONE))) {
     assert.match(css, new RegExp(`^:is\\(\\.dot, \\.st\\)\\.${tone} \\{ background: `, "m"), tone);

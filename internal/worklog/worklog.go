@@ -479,69 +479,14 @@ func subjectOf(prompt string) string {
 	if m := wrapperPattern.FindStringSubmatch(prompt); m != nil {
 		prompt = m[1]
 	}
-	return firstLine(unwrapPastes(prompt), subjectLimit)
+	return firstLine(pastePattern.ReplaceAllString(prompt, "\n$1\n"), subjectLimit)
 }
 
-// 貼り付けの包み。id は 16 進の小文字 4 桁で、開きと閉じに同じ id が付く。中身に現れる <pasted_content は
-// Claude Code が <\pasted_content に逃がすので、包みと取り違えない。
+// pastePattern は貼り付けの包み。中身に現れる <pasted_content は Claude Code が <\pasted_content に逃がすので、
+// 最短一致で閉じを取り違えない。閉じの無いもの、id が 16 進 4 桁でないものは包みと見なさない。
 // cc-premise: 2.1.329 input-line 貼り付けた文面 (bracketed paste、spawn の prompt_file) は prompt の中で
 // \n<pasted_content id="hex4">\n中身\n</pasted_content id="hex4">\n に包まれる。包むかは本体の feature gate が決め、条件は確かめていない
-const (
-	pasteOpenPrefix = `<pasted_content id="`
-	pasteIDLen      = 4
-	pasteOpenSuffix = "\">\n"
-)
-
-// unwrapPastes は text の貼り付けの包みを中身に置き換える。閉じのタグが無いもの、id の形が違うものは包みと見なさず残す
-// (Claude Code 自身の読み方に揃える)。
-func unwrapPastes(text string) string {
-	var b strings.Builder
-	rest := text
-	for {
-		i := strings.Index(rest, pasteOpenPrefix)
-		if i < 0 {
-			break
-		}
-		idStart := i + len(pasteOpenPrefix)
-		id, ok := pasteID(rest[idStart:])
-		if !ok {
-			b.WriteString(rest[:idStart])
-			rest = rest[idStart:]
-			continue
-		}
-		bodyStart := idStart + pasteIDLen + len(pasteOpenSuffix)
-		// 中身が空なら、開きの行末の改行が閉じの前の改行を兼ねる。
-		closer := "\n</pasted_content id=\"" + id + "\">"
-		j := strings.Index(rest[bodyStart-1:], closer)
-		if j < 0 {
-			break
-		}
-		bodyEnd := bodyStart - 1 + j
-		b.WriteString(rest[:i])
-		b.WriteString("\n")
-		if bodyEnd > bodyStart {
-			b.WriteString(rest[bodyStart:bodyEnd])
-		}
-		b.WriteString("\n")
-		rest = rest[bodyEnd+len(closer):]
-	}
-	b.WriteString(rest)
-	return b.String()
-}
-
-// pasteID は開きのタグの id 以降 (s) から id を取る。16 進の小文字 4 桁に `">` と改行が続かなければ false。
-func pasteID(s string) (string, bool) {
-	if len(s) < pasteIDLen+len(pasteOpenSuffix) || s[pasteIDLen:pasteIDLen+len(pasteOpenSuffix)] != pasteOpenSuffix {
-		return "", false
-	}
-	id := s[:pasteIDLen]
-	for _, c := range id {
-		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
-			return "", false
-		}
-	}
-	return id, true
-}
+var pastePattern = regexp.MustCompile(`(?s)<pasted_content id="[0-9a-f]{4}">\n(.*?)\n</pasted_content id="[0-9a-f]{4}">`)
 
 // firstLine は text の最初の空でない行を、空白を 1 つに詰めて limit (rune) で切ったもの。超えたら … を付ける。
 func firstLine(text string, limit int) string {

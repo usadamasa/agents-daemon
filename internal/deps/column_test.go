@@ -90,6 +90,24 @@ func TestGroupByRex(t *testing.T) {
 	}
 }
 
+// 生きているセッションの完了したノードは rex の置き場を持つが、アプリは右の Ended の列に並べるので枠にまとめない。
+// Ended の列の順 (最後に動いた時刻の新しい順) を保つ。
+func TestGroupByRex_endedKeepOrder(t *testing.T) {
+	rex := func(session string) *protocol.RexPlacement {
+		return &protocol.RexPlacement{SessionID: session, SessionLabel: session, WindowID: "w-" + session}
+	}
+	nodes := []protocol.GraphNode{
+		{Key: "a", State: "completed", Live: true, SessionID: "A", Rex: rex("S1")},
+		{Key: "b", State: "completed", Live: true, SessionID: "B", Rex: rex("S2")},
+		{Key: "c", State: "completed", Live: true, SessionID: "C", Rex: rex("S1")},
+		{Key: "d", State: "exited", Live: true, SessionID: "D", Rex: rex("S1")},
+	}
+	order := []string{"a", "b", "c", "d"}
+	if got := groupByRex(order, nodes); !reflect.DeepEqual(got, order) {
+		t.Errorf("groupByRex = %v, want %v (終わったノードの順を変えない)", got, order)
+	}
+}
+
 // 生きているセッションのノードには、status.json の pane の rex の置き場を写す。終了したセッションのノードには付けない。
 // column_order は rex の session ごとにまとまる。
 func TestBuild_rexPlacement(t *testing.T) {

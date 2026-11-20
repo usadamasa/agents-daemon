@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { GROUP_W, fitLimit, groupBySession, groupHeight, partition, placeGroups } from "../src/column.js";
+import { GROUP_W, fitLimit, groupByRex, groupHeight, heads, partition, placeGroups } from "../src/column.js";
 
 const keys = (nodes) => nodes.map((n) => n.key);
 
@@ -25,35 +25,61 @@ test("partition は column_order の順に free を並べ、無いノードは�
   assert.deepEqual(keys(partition(nodes, [], ["Z"]).free), ["Z", "X", "Y"]);
 });
 
-test("groupBySession は session_id ごとに最初に現れた順でまとめ、枠の中は受け取った順を保つ", () => {
-  const a1 = { key: "a1", kind: "task", session_id: "sa", session: "alpha" };
-  const b1 = { key: "b1", kind: "task", session_id: "sb", session: "beta" };
-  const a2 = { key: "a2", kind: "task", session_id: "sa", session: "alpha" };
-  assert.deepEqual(
-    groupBySession([b1, a1, a2]).map((g) => ({ label: g.label, keys: keys(g.nodes) })),
-    [{ label: "beta", keys: ["b1"] }, { label: "alpha", keys: ["a1", "a2"] }],
-  );
-});
+const rex = (session, window, label = window) => ({ session_id: session, session_label: `${session}-label`, window_id: window, window_label: label });
+// shape は枠を見出し、小見出しごとのカードの key で返す。
+const shape = (groups) => groups.map((g) => ({ label: g.label, parts: g.parts.map((p) => [p.label, keys(p.nodes)]) }));
 
-test("groupBySession は同じ名前でも session_id が違えば別の枠にする", () => {
-  const groups = groupBySession([
-    { key: "a", kind: "task", session_id: "s1", session: "same" },
-    { key: "b", kind: "task", session_id: "s2", session: "same" },
+test("groupByRex は rex の session ごとに最初に現れた順で枠にし、中を window ごとに最初に現れた順で区切る", () => {
+  const nodes = [
+    { key: "b1", kind: "task", session_id: "sb", session: "beta", rex: rex("S2", "w3") },
+    { key: "a1", kind: "task", session_id: "sa", session: "alpha", rex: rex("S1", "w1") },
+    { key: "c1", kind: "task", session_id: "sc", session: "gamma", rex: rex("S1", "w2") },
+    { key: "a2", kind: "task", session_id: "sa", session: "alpha", rex: rex("S1", "w1") },
+  ];
+  assert.deepEqual(shape(groupByRex(nodes)), [
+    { label: "S2-label", parts: [["w3", ["b1"]]] },
+    { label: "S1-label", parts: [["w1", ["a1", "a2"]], ["w2", ["c1"]]] },
   ]);
-  assert.equal(groups.length, 2);
+  assert.deepEqual(keys(groupByRex(nodes)[1].nodes), ["a1", "a2", "c1"]);
 });
 
-test("groupBySession はセッションを持たない参照を「参照」の枠にまとめる", () => {
-  const groups = groupBySession([
+test("groupByRex は rex の外の生きているノードを 1 つの枠にまとめ、中を Claude のセッションで区切る (同じ名前でも session_id で分ける)", () => {
+  const groups = groupByRex([
+    { key: "a", kind: "task", session_id: "s1", session: "same" },
+    { key: "r", kind: "task", session_id: "s3", session: "other", rex: rex("S1", "w1") },
+    { key: "b", kind: "task", session_id: "s2", session: "same" },
+    { key: "c", kind: "task", session_id: "s1", session: "same" },
+  ]);
+  assert.deepEqual(shape(groups), [
+    { label: "Outside rex", parts: [["same", ["a", "c"]], ["same", ["b"]]] },
+    { label: "S1-label", parts: [["w1", ["r"]]] },
+  ]);
+});
+
+test("groupByRex は window に置かれていない block のノードを小見出しの無い区切りにする", () => {
+  const groups = groupByRex([{ key: "d", kind: "task", session_id: "s1", session: "x", rex: { session_id: "S1", session_label: "work" } }]);
+  assert.deepEqual(shape(groups), [{ label: "work", parts: [["", ["d"]]] }]);
+  assert.equal(heads(groups[0]), 0);
+});
+
+test("groupByRex はセッションを持たない参照を「参照」の枠にまとめ、小見出しを付けない", () => {
+  const groups = groupByRex([
     { key: "pr:1", kind: "ref" },
     { key: "issue:2", kind: "ref" },
   ]);
-  assert.deepEqual(groups.map((g) => [g.label, keys(g.nodes)]), [["Refs", ["pr:1", "issue:2"]]]);
+  assert.deepEqual(shape(groups), [{ label: "Refs", parts: [["", ["pr:1", "issue:2"]]] }]);
 });
 
-test("groupHeight は枠の中のカードの数で決まる", () => {
+test("groupHeight は枠の中のカードと小見出しの数で決まる", () => {
   assert.equal(groupHeight(1), 124);
   assert.equal(groupHeight(3), 288);
+  assert.equal(groupHeight(3, 2), 288 + 2 * 20);
+});
+
+test("placeGroups は小見出しの分だけ枠を高くして次の行を下げる", () => {
+  const withHeads = { nodes: [{ key: "a" }, { key: "b" }], parts: [{ label: "w1", nodes: [{ key: "a" }] }, { label: "w2", nodes: [{ key: "b" }] }] };
+  const { places } = placeGroups([withHeads, { nodes: [{ key: "c" }] }], 64, 24, 100);
+  assert.equal(places[1].y, 24 + groupHeight(2, 2) + 16);
 });
 
 test("placeGroups は枠を左から並べ、limit を超える枠を次の行へ送り、行の高さは一番高い枠に合わせる", () => {

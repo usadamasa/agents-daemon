@@ -21,3 +21,5 @@ rex の全列挙 (`rex` の `snapshot`) と、その途中の session の close 
 - `session.list` と `session.list_blocks` はそれぞれ 1 ステップ。
 - 全列挙の途中で新しく作られた session は置かない。`session.list` の後に作られた session は次の全列挙で拾う。
 - block の method の `not_found` (block の close) は置かない。session の `session_not_found` と同じ読み飛ばしで、失敗の条件を増やさない。
+- `session.view` (依存図の置き場) は置かない。どの失敗でも置き場を空にして続け、全列挙の失敗にも読み飛ばしにも関わらない
+  (`TestExecClient_PaneList_ViewFailureLeavesLocationEmpty`)。

@@ -1289,6 +1289,10 @@ export const definitions = {
       "live": {
         "type": "boolean"
       },
+      "rex": {
+        "$ref": "#/$defs/RexPlacement",
+        "description": "セッションの pane が居る rex の session と window。生きていて daemon が置き場を引けたノードだけに付く"
+      },
       "depth": {
         "type": "integer",
         "description": "段 (前提をたどった最長の深さ)"
@@ -1326,6 +1330,33 @@ export const definitions = {
       "stuck": {
         "type": "boolean",
         "description": "止まっているノードか (halted か、完了していない待ちの輪)。mod は状態の語から決めない"
+      }
+    }
+  },
+  "RexPlacement": {
+    "description": "rex の session と window (GraphNode.session_id の Claude のセッションとは別の ID)。window が空なら window に置かれていない (detached の) block",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "session_id",
+      "session_label"
+    ],
+    "properties": {
+      "session_id": {
+        "type": "string",
+        "description": "rex の session の ID"
+      },
+      "session_label": {
+        "type": "string",
+        "description": "rex の session の label"
+      },
+      "window_id": {
+        "type": "string",
+        "description": "rex の window の ID"
+      },
+      "window_label": {
+        "type": "string",
+        "description": "rex の window の label"
       }
     }
   },

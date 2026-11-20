@@ -8,6 +8,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/daemonstate"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
+	"github.com/usadamasa/agents-daemon/internal/protocol"
 	"github.com/usadamasa/agents-daemon/internal/runtime/monitor"
 	"github.com/usadamasa/agents-daemon/internal/transcript"
 )
@@ -38,6 +39,22 @@ func TestPaneStatus_sessionID(t *testing.T) {
 	got := paneStatus(multiplexer.Pane{PaneID: "p1", SessionID: "s1"}, &paneEntry{state: &monitor.PaneState{}}, 0, nil, now)
 	if got.SessionID != "s1" {
 		t.Errorf("SessionID = %q, want s1", got.SessionID)
+	}
+}
+
+// pane の居る rex の session と window は status.json に写し、依存図がセッションをまとめる。置き場の引けていない
+// pane は省く。
+func TestPaneStatus_rex(t *testing.T) {
+	now := time.Date(2026, 11, 20, 9, 0, 0, 0, time.UTC)
+	entry := &paneEntry{state: &monitor.PaneState{}}
+	loc := multiplexer.Location{SessionID: "session:1", SessionLabel: "work", WindowID: "window:1", WindowLabel: "peer"}
+	got := paneStatus(multiplexer.Pane{PaneID: "p1", Location: loc}, entry, 0, nil, now)
+	want := protocol.RexPlacement{SessionID: "session:1", SessionLabel: "work", WindowID: "window:1", WindowLabel: "peer"}
+	if got.Rex == nil || *got.Rex != want {
+		t.Errorf("Rex = %+v, want %+v", got.Rex, want)
+	}
+	if got := paneStatus(multiplexer.Pane{PaneID: "p1"}, entry, 0, nil, now); got.Rex != nil {
+		t.Errorf("Rex = %+v, want nil (置き場が引けていない)", got.Rex)
 	}
 }
 

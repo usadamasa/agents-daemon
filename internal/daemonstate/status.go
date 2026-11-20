@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
+	"github.com/usadamasa/agents-daemon/internal/protocol"
 	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
 
@@ -28,6 +29,8 @@ type PaneStatus struct {
 	// doctor がそのまま出す。
 	DetectReason string    `json:"detect_reason,omitempty"`
 	LastTickAt   time.Time `json:"last_tick_at"`
+	// Rex は pane の居る rex の session と window。引けていなければ省く。依存図 (deps) がノードに写す。
+	Rex *protocol.RexPlacement `json:"rex,omitempty"`
 }
 
 // StatusSnapshot は status.json (XDG state 配下、apppath.StatusFile) の内容。daemon が

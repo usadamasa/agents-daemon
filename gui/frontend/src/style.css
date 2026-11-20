@@ -128,7 +128,7 @@ select { font: inherit; color: inherit; }
 .column .node { position: relative; flex: 0 0 auto; }
 .column h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 14px; font-weight: 600; }
 .column h2 .ph { font: inherit; color: inherit; }
-/* 辺の無い動いているカードのセッションの枠。寸法は column.js の GROUP_W と groupHeight が同じ数を持つ */
+/* 辺の無い動いているカードの枠 (rex の session、rex の外、参照)。寸法は column.js の GROUP_W と groupHeight が同じ数を持つ */
 .group {
   position: absolute; box-sizing: border-box; padding: 12px;
   display: flex; flex-direction: column; gap: 10px;
@@ -136,6 +136,9 @@ select { font: inherit; color: inherit; }
 }
 /* 見出しは 1 行に収める (groupHeight が 1 行で数える)。切れた分は title で読む */
 .group h2 { margin: 0; font-size: 12px; font-weight: 600; line-height: 16px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 小見出し (rex の window、rex の外は Claude のセッション) も 1 行に収め、続くカードとの間を 4 に詰める
+   (groupHeight は 1 つを 20 で数える) */
+.group h3 { margin: 0 0 -6px; font-size: 11px; font-weight: 500; line-height: 16px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .group .node { position: relative; flex: 0 0 auto; }
 .graph .canvas { position: relative; transform-origin: 0 0; }
 /* 拡大縮小した canvas を包む枠。transform はレイアウトの大きさを変えないので、拡大率を掛けた大きさを枠に持たせて

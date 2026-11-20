@@ -18,28 +18,76 @@ type State struct {
 }
 
 // Ref は Apply が埋めるよう求めた block。flavor は event に載らないので、呼び手が list_blocks で確かめる。
-// Block が空なら session_created で、その session の shell の block を全部埋める。
+// Block が空なら session_created で、その session の shell の block を全部埋め、session の view も読む。
 type Ref struct {
 	Session string
 	Block   string
+	// View なら block は埋めず、session の view (session.view) だけを読み直す。
+	View bool
 }
 
-// Cache は events の stream を当てて保つ shell の block の状態。並行には呼ばない (呼び手が lock を持つ)。
+// Cache は events の stream を当てて保つ shell の block の状態と、session ごとの view (block の居る window と label)。
+// 並行には呼ばない (呼び手が lock を持つ)。
 type Cache struct {
 	blocks map[string]*State
+	views  map[string]wire.SessionView
 }
 
-// NewCache は全列挙の snapshot (block ID から状態) から Cache を作る。
+// NewCache は全列挙の snapshot (block ID から状態) から Cache を作る。view は PutView で置く。
 func NewCache(blocks map[string]*State) *Cache {
 	if blocks == nil {
 		blocks = map[string]*State{}
 	}
-	return &Cache{blocks: blocks}
+	return &Cache{blocks: blocks, views: map[string]wire.SessionView{}}
+}
+
+// PutView は session の view を置く。持っている view より古い revision の view は捨てる (読み直しの応答が入れ違いに
+// 届いたとき)。
+func (c *Cache) PutView(session string, view wire.SessionView) {
+	if cur, ok := c.views[session]; ok && view.Revision < cur.Revision {
+		return
+	}
+	c.views[session] = view
+}
+
+// viewChanged は session_view_changed が、持っている view より新しいかを返す。event は revision の順に届くとは限らない。
+// rex-premise: preview.30 api session_view_changed は payload に revision だけを持ち、window と session の改名、block の出入りの後に来る
+func (c *Cache) viewChanged(session string, raw json.RawMessage, line []byte) (bool, error) {
+	var p struct {
+		Revision int64 `json:"revision"`
+	}
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return false, fmt.Errorf("session_view_changed の parse に失敗: %w (line=%q)", err, line)
+	}
+	cur, ok := c.views[session]
+	return !ok || p.Revision > cur.Revision, nil
+}
+
+// location は block の居る session と window。view を読めていない session の block はゼロ値、window に置かれていない
+// block は session だけ。
+func (c *Cache) location(blockID string, st *State) multiplexer.Location {
+	view, ok := c.views[st.Session]
+	if !ok {
+		return multiplexer.Location{}
+	}
+	loc := multiplexer.Location{SessionID: st.Session, SessionLabel: view.Label}
+	for _, w := range view.Windows {
+		for _, layer := range w.Layers {
+			for _, b := range layer.Blocks {
+				if b.BlockID == blockID {
+					loc.WindowID, loc.WindowLabel = w.WindowID, w.Label
+					return loc
+				}
+			}
+		}
+	}
+	return loc
 }
 
 // rex-premise: preview.30 api session.create の最初の block には block_created が来ず、session_created の後にその block の event が流れる
 
-// Apply は stream の 1 行を当てる。block_created と session_created のときだけ、埋めるべき block を返す。
+// Apply は stream の 1 行を当てる。block_created と session_created のときは埋めるべき block を、持っている view より
+// 新しい session_view_changed のときは読み直す session (View) を返す。
 // 読まない type の行と、cache に無い block (shell 以外か、まだ埋めていない) の event は読み捨てる。
 // 壊れた行は error にする (呼び手は stream を張り直して全列挙からやり直す)。
 func (c *Cache) Apply(line []byte) (Ref, error) {
@@ -52,6 +100,7 @@ func (c *Cache) Apply(line []byte) (Ref, error) {
 		return Ref{Session: l.Payload.Session.SessionID}, nil
 	case "session_destroyed":
 		c.dropSession(l.Payload.SessionID)
+		delete(c.views, l.Payload.SessionID)
 		return Ref{}, nil
 	case "session_event":
 	default:
@@ -64,6 +113,12 @@ func (c *Cache) Apply(line []byte) (Ref, error) {
 	switch ev.Type {
 	case "block_event":
 		return Ref{}, c.applyBlockEvent(ev.Payload, line)
+	case "session_view_changed":
+		changed, err := c.viewChanged(l.Payload.SessionID, ev.Payload, line)
+		if err != nil || !changed {
+			return Ref{}, err
+		}
+		return Ref{Session: l.Payload.SessionID, View: true}, nil
 	case "block_created", "block_closed":
 		var p struct {
 			BlockID string `json:"block_id"`
@@ -152,7 +207,9 @@ func (c *Cache) Panes(sessions map[string]string) []multiplexer.Pane {
 	panes := make([]multiplexer.Pane, 0, len(ids))
 	for _, id := range ids {
 		st := c.blocks[id]
-		panes = append(panes, ToPane(id, st.ProgramStatus, st.Process, sessions[id]))
+		pane := ToPane(id, st.ProgramStatus, st.Process, sessions[id])
+		pane.Location = c.location(id, st)
+		panes = append(panes, pane)
 	}
 	return panes
 }

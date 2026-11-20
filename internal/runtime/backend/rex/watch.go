@@ -20,7 +20,7 @@ var _ multiplexer.Watcher = (*execClient)(nil)
 // PaneList と並ぶ前 (daemon の最初の tick より前) に 1 回だけ呼ぶ。
 func (c *execClient) Watch(ctx context.Context, logf func(format string, args ...any)) <-chan struct{} {
 	subscribe := func(ctx context.Context) (*api.Subscription, error) { return c.rex.Subscribe(ctx, eventBuffer) }
-	c.watch = watch.New(subscribe, watch.Reads{Snapshot: c.snapshot, Fill: c.fillCreated}, c.watchBackoff)
+	c.watch = watch.New(subscribe, watch.Reads{Snapshot: c.snapshot, Fill: c.fillCreated, View: c.view}, c.watchBackoff)
 	return c.watch.Run(ctx, logf)
 }
 

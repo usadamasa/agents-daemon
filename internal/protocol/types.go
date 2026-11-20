@@ -438,6 +438,8 @@ type GraphNode struct {
 	// ListAgents の名前 (SendMessage の宛先に書く形)。表示名とは別。
 	SessionName string `json:"session_name,omitempty"`
 	Live        bool   `json:"live"`
+	// セッションの pane が居る rex の session と window。生きていて daemon が置き場を引けたノードだけに付く。
+	Rex *RexPlacement `json:"rex,omitempty"`
 	// 段 (前提をたどった最長の深さ)。
 	Depth int `json:"depth"`
 	// 下流 (このノードが済まないと始められないノード) の数。
@@ -454,6 +456,18 @@ type GraphNode struct {
 	Halted bool `json:"halted"`
 	// 止まっているノードか (halted か、完了していない待ちの輪)。mod は状態の語から決めない。
 	Stuck bool `json:"stuck"`
+}
+
+// RexPlacement は rex の session と window (GraphNode.session_id の Claude のセッションとは別の ID)。window が空なら window に置かれていない (detached の) block。
+type RexPlacement struct {
+	// rex の session の ID。
+	SessionID string `json:"session_id"`
+	// rex の session の label。
+	SessionLabel string `json:"session_label"`
+	// rex の window の ID。
+	WindowID string `json:"window_id,omitempty"`
+	// rex の window の label。
+	WindowLabel string `json:"window_label,omitempty"`
 }
 
 // MemoRef はタスクが扱うメモ 1 つ。

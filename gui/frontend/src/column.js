@@ -23,26 +23,47 @@ export function partition(nodes, links, order) {
   };
 }
 
-// groupBySession は辺の無い動いているノードをセッションごとの枠にまとめる。枠の順は最初のカードの順 (column_order) で、
-// 名前は重なりうるので session_id で分ける。参照はセッションを持たないので「参照」の枠に集める。
-export function groupBySession(nodes) {
-  const groups = new Map();
-  for (const n of nodes) {
-    const key = n.kind === "ref" ? "ref" : n.session_id;
-    if (!groups.has(key)) groups.set(key, { key, label: n.kind === "ref" ? "Refs" : n.session, nodes: [] });
-    groups.get(key).nodes.push(n);
-  }
-  return [...groups.values()];
+// frameOf はノードの枠と区切り (#633)。枠は rex の session (見出しは session の label、区切りは window)、rex の外の
+// 生きているノード (区切りは Claude のセッション。名前は重なりうるので session_id で分ける)、参照の 3 種類。window に
+// 置かれていない block と参照の区切りは小見出しを持たない。
+function frameOf(n) {
+  if (n.kind === "ref") return { key: "ref", label: "Refs", part: "", partLabel: "" };
+  if (n.rex) return { key: `rex:${n.rex.session_id}`, label: n.rex.session_label, part: n.rex.window_id ?? "", partLabel: n.rex.window_label ?? "" };
+  return { key: "outside", label: "Outside rex", part: n.session_id, partLabel: n.session };
 }
 
-// 枠の寸法。style.css の .group と揃える (カードの幅 240 と高さ 72、余白 12、枠線 1、見出し 16、間 10)。
+// groupByRex は辺の無い動いているノードを枠にまとめ、枠の中を区切りに分ける。枠と区切りの順は最初のカードの順
+// (column_order)。nodes は枠の中のカードを区切りの順に並べたもの。
+export function groupByRex(nodes) {
+  const groups = new Map();
+  for (const n of nodes) {
+    const f = frameOf(n);
+    if (!groups.has(f.key)) groups.set(f.key, { key: f.key, label: f.label, parts: new Map() });
+    const parts = groups.get(f.key).parts;
+    if (!parts.has(f.part)) parts.set(f.part, { label: f.partLabel, nodes: [] });
+    parts.get(f.part).nodes.push(n);
+  }
+  return [...groups.values()].map((g) => {
+    const parts = [...g.parts.values()];
+    return { key: g.key, label: g.label, parts, nodes: parts.flatMap((p) => p.nodes) };
+  });
+}
+
+// heads は枠の小見出しの数。小見出しの無い区切りは数えない。
+export function heads(group) {
+  return (group.parts ?? []).filter((p) => p.label !== "").length;
+}
+
+// 枠の寸法。style.css の .group と揃える (カードの幅 240 と高さ 72、余白 12、枠線 1、見出し 16、間 10、
+// 小見出し 16 と下の間 4)。
 export const GROUP_W = 266;
 const GROUP_CHROME = 42;
 const GROUP_STEP = 82;
 const GROUP_GAP = 16;
+const HEAD_STEP = 20;
 
-export function groupHeight(cards) {
-  return GROUP_CHROME + GROUP_STEP * cards;
+export function groupHeight(cards, subheads = 0) {
+  return GROUP_CHROME + GROUP_STEP * cards + HEAD_STEP * subheads;
 }
 
 // placeGroups は枠を left から右へ並べ、右端と左の余白を足して limit を超える枠を次の行へ送る。行の先頭の枠は
@@ -61,7 +82,7 @@ export function placeGroups(groups, left, top, limit) {
     }
     places.push({ x, y });
     right = Math.max(right, x + GROUP_W);
-    rowH = Math.max(rowH, groupHeight(g.nodes.length));
+    rowH = Math.max(rowH, groupHeight(g.nodes.length, heads(g)));
     x += GROUP_W + GROUP_GAP;
   }
   return { places, right, bottom: y + rowH };

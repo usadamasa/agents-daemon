@@ -36,6 +36,24 @@ test("線でつながるカードの副題はセッション名、状態、今�
   assert.deepEqual(cardText(n, "作業中", false), { title: "API を実装する", sub: "alpha · 作業中 · テストを書いている" });
 });
 
+// 副題は 1 行で切れるので、状態の語を先頭に残し、rex の置き場をその後ろに置く。
+test("線でつながるカードの副題は、rex の置き場があれば状態の後ろに session と window を添える (#633)", () => {
+  const n = { title: "API を実装する", session: "alpha", summary: "テストを書いている", rex: { session_id: "S", session_label: "work", window_id: "W", window_label: "alpha-tab" } };
+  assert.deepEqual(cardText(n, "作業中", false), { title: "API を実装する", sub: "作業中 · work › alpha-tab · alpha · テストを書いている" });
+  const detached = { ...n, rex: { session_id: "S", session_label: "work" } };
+  assert.equal(cardText(detached, "作業中", false).sub, "作業中 · work · alpha · テストを書いている");
+});
+
+test("線でつながるカードの副題は、window の label と同じセッション名を繰り返さない", () => {
+  const n = { title: "API を実装する", session: "alpha", summary: "テストを書いている", rex: { session_id: "S", session_label: "work", window_id: "W", window_label: "alpha" } };
+  assert.equal(cardText(n, "作業中", false).sub, "作業中 · work › alpha · テストを書いている");
+});
+
+test("枠の中のカードの副題は、見出しが持つ rex の置き場もセッション名も繰り返さない", () => {
+  const n = { title: "API を実装する", session: "alpha", summary: "テストを書いている", rex: { session_id: "S", session_label: "work", window_id: "W", window_label: "alpha-tab" } };
+  assert.deepEqual(cardText(n, "作業中", true), { title: "API を実装する", sub: "作業中 · テストを書いている" });
+});
+
 test("枠の中のカードの副題は、見出しが持つセッション名を繰り返さない", () => {
   const n = { title: "API を実装する", session: "alpha", summary: "テストを書いている" };
   assert.deepEqual(cardText(n, "作業中", true), { title: "API を実装する", sub: "作業中 · テストを書いている" });

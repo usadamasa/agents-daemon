@@ -70,6 +70,17 @@ type Pane struct {
 	// rex の版が変わって record の形が崩れたときに判定が黙って止まらないよう、daemon はログに、
 	// doctor は pane 一覧に出す。
 	UnknownReason string
+	// Location は pane が居る session と window。backend が引けていなければゼロ値。依存図がセッションをまとめるのに使う。
+	Location Location
+}
+
+// Location は pane の居る session と window の ID と label。window に置かれていない pane では Window が空。
+// 比べられるよう (Pane を == で比べるテストがある) 値で持つ。
+type Location struct {
+	SessionID    string
+	SessionLabel string
+	WindowID     string
+	WindowLabel  string
 }
 
 // RecordLabel は record の自己申告を 1 行にする (`agent_status=blocked kind=permission msg="approve …"`)。

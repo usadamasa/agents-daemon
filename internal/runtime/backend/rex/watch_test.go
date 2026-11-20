@@ -132,8 +132,8 @@ func TestWatch_PaneListFromCache(t *testing.T) {
 	startWatch(t, c)
 	eventually(t, "同期済み", func() bool { return synced(c) })
 	emitLines(api, measured(t, measuredOct27, "events.jsonl"))
-	// stream の block_created と session_created が打つ list_blocks を待ってから数える。
-	eventually(t, "stream の event の list_blocks", func() bool { return len(api.Calls()) >= 7 })
+	// stream の block_created、session_view_changed、session_created が打つ list_blocks と session.view を待ってから数える。
+	eventually(t, "stream の event の list_blocks と session.view", func() bool { return len(api.Calls()) >= 10 })
 	before := len(api.Calls())
 
 	panes, err := c.PaneList(context.Background())
@@ -143,6 +143,7 @@ func TestWatch_PaneListFromCache(t *testing.T) {
 	want := []multiplexer.Pane{{
 		PaneID: blockOwn, CWD: cwdOwn, PID: pidOwn, Agent: "claude", AgentStatus: multiplexer.AgentStatusWorking,
 		AgentMessage: "Close probe block after its program exits", SessionID: sidOwn,
+		Location: multiplexer.Location{SessionID: sessionOwn, SessionLabel: apitest.DefaultSessionLabel},
 	}}
 	if !slices.Equal(panes, want) {
 		t.Errorf("PaneList() =\n%+v\nwant\n%+v", panes, want)
@@ -161,18 +162,53 @@ func TestWatch_Calls(t *testing.T) {
 	startWatch(t, c)
 	eventually(t, "同期済み", func() bool { return synced(c) })
 	emitLines(api, measured(t, measuredOct27, "events.jsonl"))
-	eventually(t, "block_created と session_created の list_blocks", func() bool { return len(api.Calls()) >= 7 })
+	eventually(t, "block_created と session_created の list_blocks と session.view", func() bool { return len(api.Calls()) >= 10 })
 	api.assertCalls(t,
 		"session.list",
 		"session.list_blocks "+sessionOwn,
+		"session.view "+sessionOwn,
 		"program_status "+blockOwn,
 		"process "+blockOwn,
 		// 全列挙の後に購読の接続で打つ同期。応答の seq までの event を当ててから公開する。
 		"server.version",
 		"session.list_blocks "+sessionOwn,
+		// 実測の stream の session_view_changed (revision 17) は全列挙の view (revision 1) より新しいので読み直す。
+		"session.view "+sessionOwn,
 		// 実測の stream の session_created。fake にその session は無いので session_not_found で読み飛ばす。
 		"session.list_blocks session:01a17d51-a67b-7c38-bd8e-3265c5f30a95",
+		"session.view session:01a17d51-a67b-7c38-bd8e-3265c5f30a95",
 	)
+}
+
+// window の改名は session_view_changed で届き、session.view を読み直して PaneList の window の label が変わる。
+// rex-premise: preview.30 api window の改名は window_label_changed の後に session_view_changed を流す (2026-11-20 に実測)
+func TestWatch_ViewChangedRelabels(t *testing.T) {
+	api := ownBlockAPI(t)
+	view := func(revision int, label string) string {
+		return `{"revision":` + strconv.Itoa(revision) + `,"session_id":"` + sessionOwn + `","label":"work","windows":[{"window_id":"` + windowA +
+			`","label":"` + label + `","layers":[{"kind":"tiled","blocks":[{"block_id":"` + blockOwn + `"}]}]}]}`
+	}
+	api.SetView(sessionOwn, view(2, "peer-a"))
+	c := api.client(staticResolver(nil))
+
+	startWatch(t, c)
+	eventually(t, "同期済み", func() bool { return synced(c) })
+	label := func() string {
+		panes, _ := c.watch.Panes(nil)
+		if len(panes) != 1 {
+			return ""
+		}
+		return panes[0].Location.WindowLabel
+	}
+	if got := label(); got != "peer-a" {
+		t.Fatalf("同期の直後の window の label = %q, want peer-a", got)
+	}
+	api.SetView(sessionOwn, view(3, "peer-b"))
+	emitLines(api, strings.Join([]string{
+		`{"type":"session_event","payload":{"session_id":"` + sessionOwn + `","event":{"type":"window_label_changed","payload":{"window_id":"` + windowA + `","label":"peer-b"}}}}`,
+		`{"type":"session_event","payload":{"session_id":"` + sessionOwn + `","event":{"type":"session_view_changed","payload":{"revision":3}}}}`,
+	}, "\n"))
+	eventually(t, "改名した window の label", func() bool { return label() == "peer-b" })
 }
 
 // 全列挙の途中に届いた event は、全列挙の後に順に当て直す。全列挙が読んだ後の変化を落とさない。
@@ -240,8 +276,13 @@ func TestWatch_NewSessionBlocks(t *testing.T) {
 		panes, ok := c.watch.Panes(nil)
 		return ok && len(panes) == 1 && panes[0].AgentStatus == multiplexer.AgentStatusDone
 	})
+	want := multiplexer.Pane{PaneID: blockClaudeDone, CWD: "/b", PID: pidClaudeDone, Agent: "claude", AgentStatus: multiplexer.AgentStatusDone, AgentMessage: "できた",
+		Location: multiplexer.Location{SessionID: sessionB, SessionLabel: apitest.DefaultSessionLabel}}
+	eventually(t, "新しい session の view が cache に入る", func() bool {
+		panes, _ := c.watch.Panes(nil)
+		return len(panes) == 1 && panes[0].Location.SessionID == sessionB
+	})
 	panes, _ := c.watch.Panes(nil)
-	want := multiplexer.Pane{PaneID: blockClaudeDone, CWD: "/b", PID: pidClaudeDone, Agent: "claude", AgentStatus: multiplexer.AgentStatusDone, AgentMessage: "できた"}
 	if panes[0] != want {
 		t.Errorf("panes = %+v, want %+v", panes[0], want)
 	}
@@ -267,7 +308,7 @@ func TestWatch_DisconnectFallsBackToListing(t *testing.T) {
 	if _, err := c.PaneList(context.Background()); err != nil {
 		t.Fatalf("PaneList() error = %v", err)
 	}
-	want := []string{"session.list", "session.list_blocks " + sessionOwn, "program_status " + blockOwn, "process " + blockOwn}
+	want := []string{"session.list", "session.list_blocks " + sessionOwn, "session.view " + sessionOwn, "program_status " + blockOwn, "process " + blockOwn}
 	if got := api.Calls()[before:]; !slices.Equal(got, want) {
 		t.Errorf("全列挙の calls = %v, want %v", got, want)
 	}

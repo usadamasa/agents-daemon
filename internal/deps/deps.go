@@ -91,12 +91,17 @@ func build(in input) Deps {
 		RefPRs:       in.RefPRs,
 	})
 	for i := range d.Graph.Nodes {
-		d.Graph.Nodes[i].Repo, _ = l.row(d.Graph.Nodes[i].CWD)
+		n := &d.Graph.Nodes[i]
+		n.Repo, _ = l.row(n.CWD)
+		if p := panes[n.SessionID]; n.Live && p != nil {
+			n.Rex = p.Rex
+		}
 	}
-	d.Graph.ColumnOrder = columnOrder(d.Graph.Nodes, lastActive(in.Tasks, in.Todos, in.Works), func(cwd string) string {
+	order := columnOrder(d.Graph.Nodes, lastActive(in.Tasks, in.Todos, in.Works), func(cwd string) string {
 		key, _ := l.row(cwd)
 		return key
 	})
+	d.Graph.ColumnOrder = groupByRex(order, d.Graph.Nodes)
 	return d
 }
 

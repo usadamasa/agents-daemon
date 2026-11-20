@@ -438,6 +438,8 @@ export type GraphNode = {
   // ListAgents の名前 (SendMessage の宛先に書く形)。表示名とは別
   session_name?: string
   live: boolean
+  // セッションの pane が居る rex の session と window。生きていて daemon が置き場を引けたノードだけに付く
+  rex?: RexPlacement
   // 段 (前提をたどった最長の深さ)
   depth: number
   // 下流 (このノードが済まないと始められないノード) の数
@@ -454,6 +456,18 @@ export type GraphNode = {
   halted: boolean
   // 止まっているノードか (halted か、完了していない待ちの輪)。mod は状態の語から決めない
   stuck: boolean
+}
+
+// rex の session と window (GraphNode.session_id の Claude のセッションとは別の ID)。window が空なら window に置かれていない (detached の) block
+export type RexPlacement = {
+  // rex の session の ID
+  session_id: string
+  // rex の session の label
+  session_label: string
+  // rex の window の ID
+  window_id?: string
+  // rex の window の label
+  window_label?: string
 }
 
 // タスクが扱うメモ 1 つ

@@ -21,6 +21,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/ledger"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/parking"
+	"github.com/usadamasa/agents-daemon/internal/protocol"
 	"github.com/usadamasa/agents-daemon/internal/refstate"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend"
 	"github.com/usadamasa/agents-daemon/internal/runtime/claudesessions"
@@ -332,6 +333,9 @@ func paneStatus(pane multiplexer.Pane, entry *paneEntry, outcome monitor.Outcome
 	}
 	if observed != nil && observed.Turn.Entry == nil {
 		st.DetectReason = observed.Turn.Reason
+	}
+	if loc := pane.Location; loc.SessionID != "" {
+		st.Rex = &protocol.RexPlacement{SessionID: loc.SessionID, SessionLabel: loc.SessionLabel, WindowID: loc.WindowID, WindowLabel: loc.WindowLabel}
 	}
 	return st
 }

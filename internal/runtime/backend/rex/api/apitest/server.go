@@ -42,6 +42,8 @@ type Server struct {
 	closing map[string]bool
 	// truncated は blob_read が続きを返さない block。
 	truncated map[string]bool
+	// views は session.view の応答。無い session は window の無い view (label は session.list と同じ) を返す。
+	views map[string]string
 }
 
 // New は fake の rex server を起こす。t の終わりに閉じる。
@@ -49,7 +51,7 @@ func New(t testing.TB) *Server {
 	t.Helper()
 	s := &Server{
 		srv: controltest.New(t), blocks: map[string][][2]string{}, results: map[string]string{}, failing: map[string]bool{},
-		labels: map[string]string{}, closing: map[string]bool{}, truncated: map[string]bool{},
+		labels: map[string]string{}, closing: map[string]bool{}, truncated: map[string]bool{}, views: map[string]string{},
 		// 購読の同期も server.version を打つので、既定で応える。
 		version: `{"rex_version":"0.0.0-fake","built_at":"2026-01-01T00:00:00Z","dirty":false,"api_revision":14}`,
 	}
@@ -59,6 +61,7 @@ func New(t testing.TB) *Server {
 	s.srv.Handle("session.describe_block", func(p json.RawMessage) (any, error) { return s.blockMethod("describe_block", p) })
 	s.srv.Handle("session.list", s.listSessions)
 	s.srv.Handle("session.list_blocks", s.listBlocks)
+	s.srv.Handle("session.view", s.sessionView)
 	s.srv.Handle("target.resolve", s.resolve)
 	for _, name := range []string{"program_status", "process", "size", "modes", "format", "blob_read"} {
 		s.srv.Handle(TerminalMethod+name, func(p json.RawMessage) (any, error) { return s.blockMethod(name, p) })
@@ -148,6 +151,16 @@ func (s *Server) ListOnly(session string) {
 	defer s.mu.Unlock()
 	s.sessions = append(s.sessions, session)
 }
+
+// SetView は session の session.view の応答 (JSON) を置く。
+func (s *Server) SetView(session, view string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.views[session] = view
+}
+
+// DefaultSessionLabel は session.list と既定の session.view が返す session の label。
+const DefaultSessionLabel = "shy-alcove"
 
 // Put は block の method (短い名前と describe_block) の応答を置く。format では画面の文字列を置く。
 func (s *Server) Put(method, blockID, result string) {
@@ -263,9 +276,30 @@ func (s *Server) listSessions(json.RawMessage) (any, error) {
 	defer s.mu.Unlock()
 	sessions := make([]map[string]string, 0, len(s.sessions))
 	for _, id := range s.sessions {
-		sessions = append(sessions, map[string]string{"session_id": id, "label": "shy-alcove"})
+		sessions = append(sessions, map[string]string{"session_id": id, "label": DefaultSessionLabel})
 	}
 	return map[string]any{"sessions": sessions}, nil
+}
+
+// sessionView は SetView で置いた応答を返す。置いていなければ window の無い view を返す。状態に無い session は
+// session_not_found、失敗させた session は internal。
+func (s *Server) sessionView(p json.RawMessage) (any, error) {
+	var req struct {
+		SessionID string `json:"session_id"`
+	}
+	_ = json.Unmarshal(p, &req)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.failing[key("session.view", req.SessionID)] {
+		return nil, internalError()
+	}
+	if _, ok := s.blocks[req.SessionID]; !ok {
+		return nil, controltest.SessionNotFound(req.SessionID)
+	}
+	if v, ok := s.views[req.SessionID]; ok {
+		return json.RawMessage(v), nil
+	}
+	return map[string]any{"revision": 1, "session_id": req.SessionID, "label": DefaultSessionLabel, "windows": []any{}}, nil
 }
 
 func (s *Server) listBlocks(p json.RawMessage) (any, error) {

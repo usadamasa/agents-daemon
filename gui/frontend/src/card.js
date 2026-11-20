@@ -77,15 +77,17 @@ export function toneOf(n) {
 }
 
 // cardText はカードの題と副題。grouped は枠の中のカードで、見出しと小見出しが持つ rex の置き場とセッション名を
-// 繰り返さない。線でつながるカードは rex の置き場 (session › window) を先頭に添える (#633)。題がセッション名のまま
-// (作業の記録に題が無い) の枠の中のカードは、今の作業があればそれを題にする。label は状態の語。
+// 繰り返さない。題がセッション名のまま (作業の記録に題が無い) の枠の中のカードは、今の作業があればそれを題にする。
+// label は状態の語。線でつながるカードは rex の置き場 (session › window) を添える (#633)。副題は 1 行で切れるので、
+// 置き場は状態の語の後ろに置き、window の label と同じセッション名は繰り返さない。
 export function cardText(n, label, grouped) {
   const summaryAsTitle = Boolean(grouped && n.title === n.session && n.summary);
-  const place = !grouped && n.rex ? [n.rex.session_label, n.rex.window_label].filter(Boolean).join(" › ") : "";
-  return {
-    title: summaryAsTitle ? n.summary : n.title,
-    sub: [place, !grouped && n.session !== n.title ? n.session : "", label, summaryAsTitle ? "" : n.summary].filter(Boolean).join(" · "),
-  };
+  const sub = (parts) => ({ title: summaryAsTitle ? n.summary : n.title, sub: parts.filter(Boolean).join(" · ") });
+  if (grouped) return sub([label, summaryAsTitle ? "" : n.summary]);
+  const session = n.session !== n.title ? n.session : "";
+  if (!n.rex) return sub([session, label, n.summary]);
+  const place = [n.rex.session_label, n.rex.window_label].filter(Boolean).join(" › ");
+  return sub([label, place, session !== n.rex.window_label ? session : "", n.summary]);
 }
 
 const ACCEPTANCE = /受け入れ条件\s*[:：]\s*/;

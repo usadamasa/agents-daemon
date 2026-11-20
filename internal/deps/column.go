@@ -77,10 +77,13 @@ func groupByRex(order []string, nodes []protocol.GraphNode) []string {
 	return out
 }
 
-// frameOf はノードの枠と区切りの鍵。rex の置き場があれば rex の session と window、rex の外の生きているノードは
-// outsideRex と Claude のセッション、どちらでもなければノード自身。
+// frameOf はノードの枠と区切りの鍵。終わったノード (アプリが右の Ended の列に並べる) はノード自身。rex の置き場が
+// あれば rex の session と window、rex の外の生きているノードは outsideRex と Claude のセッション、どちらでもなければ
+// ノード自身。
 func frameOf(n *protocol.GraphNode) (frame, part string) {
 	switch {
+	case n.State == graph.StateCompleted || n.State == graph.StateExited:
+		return n.Key, ""
 	case n.Rex != nil:
 		return n.Rex.SessionID, n.Rex.WindowID
 	case n.Live && n.Kind != graph.KindRef:

@@ -212,9 +212,9 @@ test("セッションの枠の見出しは 1 行に収め、切れた分は tool
   assert.equal(sub.title, sub.textContent);
 });
 
-test("完了を隠した既定の図: 線のあるカードは副題の先頭に rex の session と window を添える", () => {
+test("完了を隠した既定の図: 線のあるカードは副題の状態の後ろに rex の session と window を添える", () => {
   const sub = q('.node[data-key="task:alpha/2"] small').textContent;
-  assert.ok(sub.startsWith("work › alpha-tab · "), sub);
+  assert.ok(sub.startsWith("Working · work › alpha-tab · "), sub);
   assert.equal(q('.node[data-key="pr:usadamasa/agents-daemon#254"] small').textContent.includes("›"), false);
 });
 

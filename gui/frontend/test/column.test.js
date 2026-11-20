@@ -132,6 +132,23 @@ test("frameTree は辺のあるノードを持つ枠へ、同じ枠の辺の無�
   assert.deepEqual(frames[parents.f2], ["w2", frames[parents.a][1]]);
 });
 
+// バイナリの column_order (deps の groupByRex) は枠の位置に辺のあるノードも数える。辺のあるノードを持つ枠は線のある
+// 図へ引き入れられるので、上の段の辺のあるノードが同じ session の下の段のカードの枠を先へ出すことはない (#663)。
+test("辺のあるノードを持つ枠は下の枠に残らず、下の枠の並びは枠に出るカードだけで決まる", () => {
+  const nodes = [
+    { key: "up", kind: "task", state: "permission", session_id: "su", session: "upstream", rex: rex("S9", "w9") },
+    { key: "top", kind: "task", state: "permission", session_id: "sa", session: "alpha", rex: rex("S1", "w1") },
+    { key: "low", kind: "task", state: "pending", session_id: "sb", session: "beta", rex: rex("S1", "w1") },
+    { key: "mid", kind: "task", state: "working", session_id: "sc", session: "gamma", rex: rex("S2", "w2") },
+  ];
+  const links = [{ before: "up", after: "top" }];
+  // S1 は上の段の top の位置にまとまり、S2 の mid より先に来る。
+  const { connected, free } = partition(nodes, links, ["up", "top", "low", "mid"]);
+  const t = frameTree(connected, free);
+  assert.deepEqual(keys(t.nodes), ["up", "top", "low"]);
+  assert.deepEqual(groupByRex(t.free).map((g) => g.key), ["rex:S2"]);
+});
+
 test("frameTree は小見出しの無い区切り (window に置かれていない block) のノードを session の枠へ直に入れる", () => {
   const t = frameTree([{ key: "d", kind: "task", state: "working", session_id: "s1", session: "x", rex: { session_id: "S1", session_label: "work" } }], []);
   assert.deepEqual(tree(t), { frames: { [t.parentOf.get("d")]: ["work", null] }, parents: { d: t.parentOf.get("d") } });

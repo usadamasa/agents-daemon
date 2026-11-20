@@ -482,12 +482,11 @@ export const definitions = {
     }
   },
   "SpawnRequest": {
-    "description": "spawn の stdin。prompt を最初のターンにした Claude Code のセッションを、repo を cwd にして rex に起こし、SpawnResult を出す。起こす先は session があればその rex の session のタブ、無ければ新しい rex の session",
+    "description": "spawn の stdin。prompt (か prompt_file) を最初のターンにした Claude Code のセッションを、repo を cwd にして rex に起こし、SpawnResult を出す。起こす先は session があればその rex の session のタブ、new_session なら新しい rex の session、どちらも無ければ起こす側の rex の session (REX_SESSION) のタブ。REX_SESSION も無ければ新しい rex の session",
     "type": "object",
     "additionalProperties": false,
     "required": [
-      "repo",
-      "prompt"
+      "repo"
     ],
     "properties": {
       "repo": {
@@ -496,11 +495,31 @@ export const definitions = {
       },
       "prompt": {
         "type": "string",
-        "description": "最初のターンとして入る本文"
+        "description": "最初のターンとして入る本文。prompt_file とどちらか 1 つ"
+      },
+      "prompt_file": {
+        "type": "string",
+        "description": "最初のターンとして入る本文のファイル。相対パスは spawn を打った cwd から引く。prompt とどちらか 1 つ"
       },
       "session": {
         "type": "string",
-        "description": "タブを足す先の rex の session (ID か label)。同じ作業のまとまりの peer を並べるときに指定する。省くと新しい rex の session を作る"
+        "description": "タブを足す先の rex の session (ID か label)。無い session なら起こさずに error にする"
+      },
+      "new_session": {
+        "type": "boolean",
+        "description": "新しい rex の session を作る。session とは併用しない"
+      },
+      "session_id": {
+        "type": "string",
+        "description": "新しいセッションの session ID (UUID)。省くと spawn が作る"
+      },
+      "model": {
+        "type": "string",
+        "description": "新しいセッションのモデル。省くと Claude Code の settings.json の env.CLAUDE_CODE_SUBAGENT_MODEL"
+      },
+      "label": {
+        "type": "string",
+        "description": "rex の session かタブの名前。省くと repo の basename"
       }
     }
   },
@@ -828,14 +847,25 @@ export const definitions = {
     "required": [
       "session_id",
       "pane_id",
+      "rex_session_id",
+      "window_id",
       "foreground"
     ],
     "properties": {
       "session_id": {
-        "type": "string"
+        "type": "string",
+        "description": "起こした Claude Code のセッションの ID"
       },
       "pane_id": {
         "type": "string"
+      },
+      "rex_session_id": {
+        "type": "string",
+        "description": "pane のある rex の session の ID。新しい session なら畳むときに使う"
+      },
+      "window_id": {
+        "type": "string",
+        "description": "pane のある rex の window (タブ) の ID。タブなら畳むときに使う"
       },
       "foreground": {
         "type": "boolean"

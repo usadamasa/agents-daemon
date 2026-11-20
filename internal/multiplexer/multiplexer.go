@@ -40,6 +40,14 @@ const (
 	AgentStatusUnknown AgentStatus = "unknown"
 )
 
+// Placement は作った pane の置き場。session と window は畳むときに pane の ID だけでは引けない (pane が閉じた後にも
+// 指す) ので、作った時点で返す。SessionID は ID で、label で指して作ったときも resolve した ID になる。
+type Placement struct {
+	SessionID string
+	WindowID  string
+	PaneID    string
+}
+
 // Pane は 1 pane 分の情報。agent が乗っていない素の shell pane では Agent と SessionID が空になる。
 type Pane struct {
 	// PaneID は rex の block ID。daemon が pane ごとの状態を持つ key にもなる。

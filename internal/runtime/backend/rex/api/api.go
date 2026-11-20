@@ -320,10 +320,10 @@ func (b Block) layout() map[string]any {
 	return map[string]any{"block": block}
 }
 
-// CreateSession は window 1 つと block 1 つを持つ session を作り、session と block の ID を返す。label が空なら
+// CreateSession は window 1 つと block 1 つを持つ session を作り、session、window、block の ID を返す。label が空なら
 // session と window に名前を付けない (rex の既定の名前になる)。
 // rex-premise: preview.30 api session.create は session_id と initial_windows (window_id、block_ids) を返す
-func (c *Client) CreateSession(ctx context.Context, label string, b Block) (session, blockID string, err error) {
+func (c *Client) CreateSession(ctx context.Context, label string, b Block) (session, windowID, blockID string, err error) {
 	window := map[string]any{"layout": b.layout()}
 	req := map[string]any{"initial_windows": []any{window}}
 	if label != "" {
@@ -333,23 +333,24 @@ func (c *Client) CreateSession(ctx context.Context, label string, b Block) (sess
 	var res struct {
 		SessionID      string `json:"session_id"`
 		InitialWindows []struct {
+			WindowID string   `json:"window_id"`
 			BlockIDs []string `json:"block_ids"`
 		} `json:"initial_windows"`
 	}
 	if err := c.call(ctx, "session.create", req, &res); err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 	if len(res.InitialWindows) == 0 || len(res.InitialWindows[0].BlockIDs) == 0 {
-		return "", "", fmt.Errorf("rex の session.create の応答の block_ids が空で、作った block が分からない (session_id=%q)", res.SessionID)
+		return "", "", "", fmt.Errorf("rex の session.create の応答の block_ids が空で、作った block が分からない (session_id=%q)", res.SessionID)
 	}
 	blockID = res.InitialWindows[0].BlockIDs[0]
 	c.release(ctx, res.SessionID, blockID)
-	return res.SessionID, blockID, nil
+	return res.SessionID, res.InitialWindows[0].WindowID, blockID, nil
 }
 
-// NewWindow は session に window (タブ) を足し、その block の ID を返す。利用者が見ている window は動かさない。
+// NewWindow は session に window (タブ) を足し、その window と block の ID を返す。利用者が見ている window は動かさない。
 // rex-premise: preview.30 api session.new_window は window_id と block_ids を返す
-func (c *Client) NewWindow(ctx context.Context, session, label string, b Block) (string, error) {
+func (c *Client) NewWindow(ctx context.Context, session, label string, b Block) (windowID, blockID string, err error) {
 	req := map[string]any{"session_id": session, "focus": false, "layout": b.layout()}
 	if label != "" {
 		req["window_label"] = label
@@ -359,13 +360,13 @@ func (c *Client) NewWindow(ctx context.Context, session, label string, b Block) 
 		BlockIDs []string `json:"block_ids"`
 	}
 	if err := c.call(ctx, "session.new_window", req, &res); err != nil {
-		return "", err
+		return "", "", err
 	}
 	if len(res.BlockIDs) == 0 || res.BlockIDs[0] == "" {
-		return "", fmt.Errorf("rex の session.new_window の応答の block_ids が空で、作った block が分からない (window_id=%q)", res.WindowID)
+		return "", "", fmt.Errorf("rex の session.new_window の応答の block_ids が空で、作った block が分からない (window_id=%q)", res.WindowID)
 	}
 	c.release(ctx, session, res.BlockIDs[0])
-	return res.BlockIDs[0], nil
+	return res.WindowID, res.BlockIDs[0], nil
 }
 
 // NewSplit は anchor の block の下に block を作り、その ID を返す。ratio は上 (anchor) の取り分。focus は動かさない。

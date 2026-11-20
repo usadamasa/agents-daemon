@@ -178,14 +178,24 @@ export type EdgeTarget = {
   cwd?: string
 }
 
-// spawn の stdin。prompt を最初のターンにした Claude Code のセッションを、repo を cwd にして rex に起こし、SpawnResult を出す。起こす先は session があればその rex の session のタブ、無ければ新しい rex の session
+// spawn の stdin。prompt (か prompt_file) を最初のターンにした Claude Code のセッションを、repo を cwd にして rex に起こし、SpawnResult を出す。起こす先は session があればその rex の session のタブ、new_session なら新しい rex の session、どちらも無ければ起こす側の rex の session (REX_SESSION) のタブ。REX_SESSION も無ければ新しい rex の session
 export type SpawnRequest = {
   // 新しいセッションの cwd (絶対パス)
   repo: string
-  // 最初のターンとして入る本文
-  prompt: string
-  // タブを足す先の rex の session (ID か label)。同じ作業のまとまりの peer を並べるときに指定する。省くと新しい rex の session を作る
+  // 最初のターンとして入る本文。prompt_file とどちらか 1 つ
+  prompt?: string
+  // 最初のターンとして入る本文のファイル。相対パスは spawn を打った cwd から引く。prompt とどちらか 1 つ
+  prompt_file?: string
+  // タブを足す先の rex の session (ID か label)。無い session なら起こさずに error にする
   session?: string
+  // 新しい rex の session を作る。session とは併用しない
+  new_session?: boolean
+  // 新しいセッションの session ID (UUID)。省くと spawn が作る
+  session_id?: string
+  // 新しいセッションのモデル。省くと Claude Code の settings.json の env.CLAUDE_CODE_SUBAGENT_MODEL
+  model?: string
+  // rex の session かタブの名前。省くと repo の basename
+  label?: string
 }
 
 // tell の stdin。to_session のセッションが動いている rex の pane の入力欄に text を打って Enter を送り、TellResult を出す。pane で claude が前景でない、利用者の答えを待つ prompt (permission / question / auth) が開いている、上限の画面、入力欄に打ちかけの文がある、のどれかなら送らずに exit 1 で理由を返す。文面を打った後、Enter の前に claude が前景でなくなるか prompt が開いたら、Enter を送らずに exit 1 で理由を返し、文面は入力欄に残る。ターンの途中の pane には送り、文面は入力欄に溜まって次のターンになる
@@ -295,8 +305,13 @@ export type EdgeRemoved = {
 
 // spawn の出力。foreground が false なら claude が前景になるのを待ち切れず、pane は残り claude が起きているかもしれない。呼び出し側はメモを戻さず detail を人に見せる
 export type SpawnResult = {
+  // 起こした Claude Code のセッションの ID
   session_id: string
   pane_id: string
+  // pane のある rex の session の ID。新しい session なら畳むときに使う
+  rex_session_id: string
+  // pane のある rex の window (タブ) の ID。タブなら畳むときに使う
+  window_id: string
   foreground: boolean
   detail?: string
 }

@@ -178,14 +178,24 @@ type EdgeTarget struct {
 	CWD string `json:"cwd,omitempty"`
 }
 
-// SpawnRequest は spawn の stdin。prompt を最初のターンにした Claude Code のセッションを、repo を cwd にして rex に起こし、SpawnResult を出す。起こす先は session があればその rex の session のタブ、無ければ新しい rex の session。
+// SpawnRequest は spawn の stdin。prompt (か prompt_file) を最初のターンにした Claude Code のセッションを、repo を cwd にして rex に起こし、SpawnResult を出す。起こす先は session があればその rex の session のタブ、new_session なら新しい rex の session、どちらも無ければ起こす側の rex の session (REX_SESSION) のタブ。REX_SESSION も無ければ新しい rex の session。
 type SpawnRequest struct {
 	// 新しいセッションの cwd (絶対パス)。
 	Repo string `json:"repo"`
-	// 最初のターンとして入る本文。
-	Prompt string `json:"prompt"`
-	// タブを足す先の rex の session (ID か label)。同じ作業のまとまりの peer を並べるときに指定する。省くと新しい rex の session を作る。
+	// 最初のターンとして入る本文。prompt_file とどちらか 1 つ。
+	Prompt string `json:"prompt,omitempty"`
+	// 最初のターンとして入る本文のファイル。相対パスは spawn を打った cwd から引く。prompt とどちらか 1 つ。
+	PromptFile string `json:"prompt_file,omitempty"`
+	// タブを足す先の rex の session (ID か label)。無い session なら起こさずに error にする。
 	Session string `json:"session,omitempty"`
+	// 新しい rex の session を作る。session とは併用しない。
+	NewSession bool `json:"new_session,omitempty"`
+	// 新しいセッションの session ID (UUID)。省くと spawn が作る。
+	SessionID string `json:"session_id,omitempty"`
+	// 新しいセッションのモデル。省くと Claude Code の settings.json の env.CLAUDE_CODE_SUBAGENT_MODEL。
+	Model string `json:"model,omitempty"`
+	// rex の session かタブの名前。省くと repo の basename。
+	Label string `json:"label,omitempty"`
 }
 
 // TellRequest は tell の stdin。to_session のセッションが動いている rex の pane の入力欄に text を打って Enter を送り、TellResult を出す。pane で claude が前景でない、利用者の答えを待つ prompt (permission / question / auth) が開いている、上限の画面、入力欄に打ちかけの文がある、のどれかなら送らずに exit 1 で理由を返す。文面を打った後、Enter の前に claude が前景でなくなるか prompt が開いたら、Enter を送らずに exit 1 で理由を返し、文面は入力欄に残る。ターンの途中の pane には送り、文面は入力欄に溜まって次のターンになる。
@@ -295,8 +305,13 @@ type EdgeRemoved struct {
 
 // SpawnResult は spawn の出力。foreground が false なら claude が前景になるのを待ち切れず、pane は残り claude が起きているかもしれない。呼び出し側はメモを戻さず detail を人に見せる。
 type SpawnResult struct {
-	SessionID  string `json:"session_id"`
-	PaneID     string `json:"pane_id"`
+	// 起こした Claude Code のセッションの ID。
+	SessionID string `json:"session_id"`
+	PaneID    string `json:"pane_id"`
+	// pane のある rex の session の ID。新しい session なら畳むときに使う。
+	RexSessionID string `json:"rex_session_id"`
+	// pane のある rex の window (タブ) の ID。タブなら畳むときに使う。
+	WindowID   string `json:"window_id"`
 	Foreground bool   `json:"foreground"`
 	Detail     string `json:"detail,omitempty"`
 }

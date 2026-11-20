@@ -42,10 +42,6 @@ type ParkListRequest struct {
 	Repo string `json:"repo,omitempty"`
 	// status で絞る。
 	Status string `json:"status,omitempty"`
-	// session_id のセッションがこのタスクの途中で置いたメモで絞る。
-	Task string `json:"task,omitempty"`
-	// task で絞るセッションの ID。
-	SessionID string `json:"session_id,omitempty"`
 }
 
 // ParkDiscardRequest は park discard の stdin。最後に置かれてから days 日より経った open のメモを discarded にし、捨てたメモを ParkingItemList で出す。

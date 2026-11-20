@@ -88,46 +88,22 @@ spawn は `--name` を付けずに起こす。付けると Claude Code が AI �
 セッションをまたぐ依存は Task 系ツールの `blockedBy` では張れないので、渡す側が agents-daemon の
 辺として書く。辺は依存図 (アプリ `agent-tasks`) に出る。向きは 2 つあり、当たる方を書く (両方なら 2 本)。
 
-渡した peer が、ほかの作業の後でないと始められない向き:
+| 当たる場面 | before | after |
+| ---- | ---- | ---- |
+| 渡した peer が、ほかの作業 (別の peer の作業、マージ待ちの PR) の後でないと始められない | 待つ相手 (`sid:`、`pr:`、`issue:`) | peer (`sid:<uuid>`) |
+| 自分のタスクが、渡した peer の完了を待つ (peer の成果を受けてから進める) | peer (`sid:<uuid>`) | 自分のタスク (`task` に `TaskList` の id) |
 
-```sh
-printf '%s' '{"before":{"ref":"sid:<待つ相手の uuid>","cwd":"<その session に渡した cwd>"},"after":{"ref":"sid:<uuid>","cwd":"<この session に渡した cwd>"},"note":"<何の後か>"}' \
-  | "${XDG_CACHE_HOME:-$HOME/.cache}/agents-daemon/bin/agents-daemon" edge add
-```
-
-自分のタスクが、渡した peer の完了を待つ向き (peer の成果を受けてから進める):
-
-```sh
-printf '%s' '{"before":{"ref":"sid:<uuid>","cwd":"<この session に渡した cwd>"},"after":{"task":"<自分のタスクの id>"},"note":"<何の後か>"}' \
-  | "${XDG_CACHE_HOME:-$HOME/.cache}/agents-daemon/bin/agents-daemon" edge add
-```
-
-`task` の端点は自分のセッションのタスク (`TaskList` の id) で、参照 `task:<session_id>/<id>` と cwd は
-バイナリが埋める (`CLAUDE_CODE_SESSION_ID` と今の cwd)。`ref` で指す相手側の端点には cwd が要る。
+peer は `sid:<uuid>` で指す。`<uuid>` は手順 2 の spawn の結果の `session_id`。
 
 after に置くのは、peer の成果が無いと始められない自分の作業 (リリース、成果を使う次の段) のタスクにする。
 「報告を受け取る」だけのタスクは辺の after にせず、報告が来たら成果を使う作業のタスクへ辺を向ける。
 
-peer の成果が PR になったら、報告を受けて PR 番号が分かった時点で、上の `session → task` の辺を
-`edge rm` し、PR を待つ辺に書き直す:
+peer の成果が PR になったら、報告を受けて PR 番号が分かった時点で、`sid:<peer> → task` の辺を `edge rm` し、
+before を `pr:<owner>/<repo>#<番号>` にした辺に書き直す。peer から PR への辺は daemon が導くので、手で書くものは無い。
+マージせずに閉じた PR の辺は残るので、代わりの PR へ付け替えるか `edge rm` する。
 
-```sh
-printf '%s' '{"before":{"ref":"pr:<owner>/<repo>#<番号>","cwd":"<この session に渡した cwd>"},"after":{"task":"<自分のタスクの id>"},"note":"PR #<番号> のマージの後"}' \
-  | "${XDG_CACHE_HOME:-$HOME/.cache}/agents-daemon/bin/agents-daemon" edge add
-```
-
-- peer と PR をつなぐ `sid:<peer> → pr:` の辺は daemon が導く。peer が `gh pr create` で出した PR なら、peer が
-  終了していても数秒のうちに書くので、手で書くものは無い。導き方は `agents-daemon:agents-daemon` skill の operations.md
-- note に書く番号は端点の参照の番号 (PR 番号) に揃える。依存図は note の `#N` を、番号の合う端点の参照の repo へリンクする。
-  PR が閉じる issue の番号を書くと、repo をまたぐ辺ではリンクにならない
-- PR がマージされると、`pr:` を before に持つ辺は daemon が消す。導いた `sid → pr` の辺は残るが、peer が終われば
-  図から畳まれ、保持期間 (7 日) で消える。マージせずに閉じた PR の辺は消えないので、付け替えるか `edge rm` する
-
-before の ref は `pr:<owner>/<repo>#<番号>` や `issue:` でもよい。peer は `sid:<uuid>` で指す。`<uuid>` は
-手順 2 の spawn の結果の `session_id`。spawn の指定に `session_id` (`uuidgen` の値を小文字で) を書けば
-起こす前から決まるので、起こす前にも辺を書ける。
-参照の形 (名前で結びつける `session:<名前>` を含む) と、`rm` / `list` は `agents-daemon:agents-daemon` skill の `references/operations.md`
-「セッションをまたぐ辺を書く」。
+辺の JSON の形、参照の書式、note の書き方、`rm` / `list`、daemon が辺を導く・消す規則は、
+`agents-daemon:agents-daemon` skill の `references/operations.md`「セッションをまたぐ辺を書く」にある。
 
 辺を書かずに送ると、`SendMessage` の結果に辺が無いことと書き方が添えられる。依存があれば上の形で書き、
 返事や報告のように依存の無い送信なら書かずに進める。

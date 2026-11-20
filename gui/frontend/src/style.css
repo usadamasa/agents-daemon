@@ -132,7 +132,7 @@ select { font: inherit; color: inherit; }
 .group {
   position: absolute; box-sizing: border-box; padding: 12px;
   display: flex; flex-direction: column; gap: 10px;
-  border: 1px solid var(--line); border-radius: 6px;
+  border: max(1px, calc(1px / var(--zoom, 1))) solid var(--line-strong); border-radius: 6px;
 }
 /* 見出しは 1 行に収める (groupHeight が 1 行で数える)。切れた分は title で読む */
 .group h2 { margin: 0; font-size: 12px; font-weight: 600; line-height: 16px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -140,9 +140,11 @@ select { font: inherit; color: inherit; }
    (groupHeight は 1 つを 20 で数える) */
 .group h3 { margin: 0 0 -6px; font-size: 11px; font-weight: 500; line-height: 16px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .group .node { position: relative; flex: 0 0 auto; }
-/* 線のある図の枠。矩形は dagre が決め、見出しは上の境界とカードの間 (1 段の余白) に置く */
-.frame { position: absolute; box-sizing: border-box; border: 1px solid var(--line); border-radius: 6px; pointer-events: none; }
-.frame.h3 { border-style: dashed; }
+/* 線のある図の枠。矩形は dagre が決め、見出しは上の境界とカードの間 (1 段の余白) に置く。線はカードの縁取りと同じく
+   縮小しても 1px より細くしない。塗りは session と window で濃さを変え、白いカードとも分ける */
+.frame { position: absolute; box-sizing: border-box; border: max(1px, calc(1px / var(--zoom, 1))) solid var(--line-strong); border-radius: 6px; pointer-events: none; }
+.frame.h2 { background: var(--hover); }
+.frame.h3 { background: var(--active); border-style: dashed; }
 .frame > :is(h2, h3) {
   position: absolute; top: 3px; left: 12px; right: 12px; margin: 0; line-height: 16px; color: var(--muted);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: auto;

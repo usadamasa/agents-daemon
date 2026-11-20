@@ -74,7 +74,7 @@ func build(in input) Deps {
 	for i := range cards {
 		cards[i].Session = names[cards[i].SessionID]
 	}
-	l := locator{locate: in.Locate, cache: map[string]gitrepo.Place{}, recorded: recordedRepos(in.Works), gitHubRepo: in.GitHubRepo, gitHubRepos: map[string]string{}}
+	l := locator{locate: in.Locate, cache: map[string]gitrepo.Place{}, recorded: recordedRepos(in.Works, in.Tasks, in.Todos), gitHubRepo: in.GitHubRepo, gitHubRepos: map[string]string{}}
 	d.Repos = arrange(cards, open, panes, names, in.SessionNames, l)
 	d.RecentRepos = recentRepos(in.Sessions)
 	d.Graph = graph.Build(graph.Input{

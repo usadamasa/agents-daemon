@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
+	"github.com/usadamasa/agents-daemon/internal/tasklog/record"
 	"github.com/usadamasa/agents-daemon/internal/worklog"
 )
 
@@ -11,25 +12,35 @@ import (
 type locator struct {
 	locate func(cwd string) gitrepo.Place
 	cache  map[string]gitrepo.Place
-	// recorded は作業の記録の cwd → repo の鍵 (recordedRepos)。git で cwd を引けないときに使う。
+	// recorded は作業の記録とタスクの記録の cwd → repo の鍵 (recordedRepos)。git で cwd を引けないときに使う。
 	recorded    map[string]string
 	gitHubRepo  func(repo string) string
 	gitHubRepos map[string]string
 }
 
-// recordedRepos は作業の記録の cwd → repo の鍵。worktree の消えたセッションの cwd を本来の repo へ戻す
-// (models/prlink の PlacedRepo)。同じ cwd に鍵が複数あれば、cwd と違う鍵 (git で引けたときの鍵) を優先し、
-// その中で辞書順の最小を選ぶ。記録の並びに依らず tick ごとに同じ列になる。
-func recordedRepos(works []worklog.Record) map[string]string {
+// recordedRepos は作業の記録とタスクの記録 (タスク、TodoWrite のリスト) の cwd → repo の鍵。worktree の消えた
+// セッションの cwd を本来の repo へ戻す (models/prlink の PlacedRepo)。タスクの cwd は作業の記録の最後の cwd と
+// 違いうるので、タスクの記録の鍵も載せる (#618)。同じ cwd に鍵が複数あれば、cwd と違う鍵 (git で引けたときの鍵) を
+// 優先し、その中で辞書順の最小を選ぶ。記録の並びに依らず tick ごとに同じ列になる。
+func recordedRepos(works []worklog.Record, tasks []record.Task, todos []record.TodoList) map[string]string {
 	out := map[string]string{}
+	add := func(cwd, repo string) {
+		if cwd == "" || repo == "" {
+			return
+		}
+		if cur, ok := out[cwd]; ok && !betterKey(cwd, repo, cur) {
+			return
+		}
+		out[cwd] = repo
+	}
 	for _, w := range works {
-		if w.CWD == "" || w.Repo == "" {
-			continue
-		}
-		if cur, ok := out[w.CWD]; ok && !betterKey(w.CWD, w.Repo, cur) {
-			continue
-		}
-		out[w.CWD] = w.Repo
+		add(w.CWD, w.Repo)
+	}
+	for _, t := range tasks {
+		add(t.CWD, t.Repo)
+	}
+	for _, l := range todos {
+		add(l.CWD, l.Repo)
 	}
 	return out
 }
@@ -68,7 +79,7 @@ func (l locator) place(cwd string) gitrepo.Place {
 }
 
 // row は cwd の repo の鍵と見出し。鍵はパーキングのメモの repo と同じ規則 (gitrepo.Place.Key) で決め、git で cwd を
-// 引けなければ作業の記録の鍵を使う。
+// 引けなければ作業の記録かタスクの記録の鍵を使う。
 func (l locator) row(cwd string) (key, title string) {
 	p := l.place(cwd)
 	key = p.Key(cwd)

@@ -29,17 +29,24 @@ func (s Store) ListTodos() ([]record.TodoList, error) {
 		if !session.IsDir() {
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join(s.Dir, session.Name(), todosFile)) // #nosec G304 -- tasks/ 配下の固定の名前
-		if err != nil {
-			continue
+		if list := readTodos(filepath.Join(s.Dir, session.Name(), todosFile)); list.SessionID != "" {
+			lists = append(lists, list)
 		}
-		var list record.TodoList
-		if json.Unmarshal(data, &list) != nil || list.SessionID == "" {
-			continue
-		}
-		lists = append(lists, list)
 	}
 	return lists, nil
+}
+
+// readTodos は todos.json を読む。無い、壊れていればゼロ値。
+func readTodos(path string) record.TodoList {
+	data, err := os.ReadFile(path) // #nosec G304 -- tasks/ 配下の固定の名前
+	if err != nil {
+		return record.TodoList{}
+	}
+	var list record.TodoList
+	if json.Unmarshal(data, &list) != nil {
+		return record.TodoList{}
+	}
+	return list
 }
 
 // ActiveTaskID はセッションの進行中のタスクのうち、最後に更新されたものの ID。無ければ空。

@@ -341,7 +341,7 @@ func TestParkAdopt(t *testing.T) {
 	if err := os.MkdirAll(cwd, 0o750); err != nil {
 		t.Fatal(err)
 	}
-	writeTaskRecord(t, root, "dead", `{"id": "4", "subject": "README を直す", "status": "pending", "session_id": "dead", "cwd": "`+cwd+`", "updated_at": "2026-10-18T09:00:00Z"}`)
+	writeTaskRecord(t, root, "dead", `{"id": "4", "subject": "README を直す", "status": "pending", "session_id": "dead", "cwd": "`+cwd+`", "repo": "`+cwd+`", "updated_at": "2026-10-18T09:00:00Z"}`)
 	adopt := func(ref string) (string, string, error) {
 		return runPark(t, "adopt", req(t, map[string]any{"ref": ref, "session_id": "viewer"}))
 	}

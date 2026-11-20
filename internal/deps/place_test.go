@@ -52,6 +52,41 @@ func TestBuild_worktreeが消えた終了セッションを記録のrepoの鍵�
 	}
 }
 
+// worktree でタスクを作り、main へ戻って終了したセッションのタスクは、作業の記録の最後の cwd がタスクの cwd と違う。
+// worktree が消えても、タスクと TodoWrite のノードはタスクの記録の鍵で本来の repo の列へ置く (#618)。
+func TestBuild_worktreeが消えた終了セッションのタスクをタスクの記録のrepoの鍵の列へ置く(t *testing.T) {
+	const main = "/src/home/agents-daemon"
+	const gone = main + "/.claude/worktrees/y"
+	ended := t0.Add(time.Hour)
+	w := work("Y", main, "終わった作業", t0)
+	w.Repo, w.EndedAt = main, &ended
+	tk := task("Y", "1", "worktree のタスク", "pending", gone)
+	tk.Repo = main
+	todos := record.TodoList{SessionID: "T", CWD: gone, Repo: main, Todos: []record.Todo{{Content: "worktree の TODO", Status: "pending"}}, UpdatedAt: t0}
+	tw := work("T", main, "TODO の作業", t0)
+	tw.Repo, tw.EndedAt = main, &ended
+	d := build(input{
+		PID:      42,
+		Snapshot: snapshot(),
+		Tasks:    []record.Task{tk},
+		Todos:    []record.TodoList{todos},
+		Works:    []worklog.Record{w, tw},
+		Locate:   places(map[string]gitrepo.Place{main: {Repo: main, Branch: "main"}}),
+	})
+
+	if len(d.Repos) != 1 || d.Repos[0].Repo != main {
+		t.Errorf("repos = %+v", d.Repos)
+	}
+	for _, n := range d.Graph.Nodes {
+		if n.Repo != main {
+			t.Errorf("%s の repo = %q, want %q", n.Key, n.Repo, main)
+		}
+	}
+	if got := nodes(d.Graph); got["task:Y/1"].Key == "" {
+		t.Errorf("nodes = %v", keys(d.Graph.Nodes))
+	}
+}
+
 // 依存図の repo の鍵はパーキングのメモの repo (gitrepo.RepoKey) と同じになる。git の中、linked worktree、
 // git の外のどれでも一致しないと、パーキングのメモがどの repo にも載らなくなる。
 func TestLocatorRow_matchesRepoKey(t *testing.T) {

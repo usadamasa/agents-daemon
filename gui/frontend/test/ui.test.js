@@ -199,15 +199,36 @@ test("完了を隠した既定の図: 辺でつながるノードを段の浅い
 });
 
 // 見た目は happy-dom では測れないので規則で確かめる。
-test("枠は縮小しても 1px より細くならない濃い線で描き、session の枠と window の小枠を塗りの濃さで分ける", () => {
+test("枠は縮小しても 1px より細くならない線で描き、session の枠と window の小枠を塗りで分ける", () => {
   const rule = (selector) => css.match(new RegExp(`^${selector.replace(/[.()]/g, "\\$&")} \\{([^}]*)\\}`, "m"))?.[1] ?? "";
   for (const selector of [".frame", ".group"]) {
-    assert.match(rule(selector), /border: max\(1px, calc\(1px \/ var\(--zoom, 1\)\)\) solid var\(--line-strong\)/, selector);
+    assert.match(rule(selector), /border: max\(1px, calc\(1px \/ var\(--zoom, 1\)\)\) solid var\(--frame\)/, selector);
   }
   const outer = rule(".frame.h2").match(/background: (var\(--[a-z-]+\))/)?.[1];
   const inner = rule(".frame.h3").match(/background: (var\(--[a-z-]+\))/)?.[1];
   assert.ok(outer && inner && outer !== inner, `${outer} / ${inner}`);
   assert.match(rule(".frame.h3"), /border-style: dashed/);
+});
+
+test("rex の session の枠は session ごとの色で描き、中の window の小枠と下の枠も同じ色にする", async () => {
+  const toneOf = (e) => [...e.classList].find((c) => c.startsWith("tone-"));
+  const work = q('#graph .frame.h2[aria-label="work"]');
+  assert.equal(toneOf(work), "tone-0");
+  for (const f of document.querySelectorAll("#graph .frame.h3")) assert.equal(toneOf(f), "tone-0", f.getAttribute("aria-label"));
+  // rex の外の枠は色を持たない。
+  assert.equal(toneOf(q('#graph .group[aria-label="Outside rex"]')), undefined);
+  // 色ごとに線と塗りと見出しの色を決める。状態の色 (緑、橙、紫、赤、青) は使わない。
+  for (let i = 0; i < 4; i++) {
+    const rule = css.match(new RegExp(`^:is\\(\\.frame, \\.group\\)\\.tone-${i} \\{([^}]*)\\}`, "m"))?.[1] ?? "";
+    assert.match(rule, /--frame: var\(--[a-z]+\)/, `tone-${i}`);
+    assert.doesNotMatch(rule, /--(green|orange|purple|red|blue)\b/, `tone-${i}`);
+  }
+  await loadDeps(JSON.stringify(withoutLinks()));
+  try {
+    assert.equal(toneOf(q('#graph .group[aria-label="work"]')), "tone-0");
+  } finally {
+    await loadDeps(fixtureDeps);
+  }
 });
 
 // 枠の高さは見出しを 1 行として数える (column.js の groupHeight)。折り返すと枠からカードがはみ出す。

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { GROUP_W, fitLimit, frameTree, groupByRex, groupHeight, heads, partition, placeGroups } from "../src/column.js";
+import { GROUP_W, fitLimit, frameTree, groupByRex, groupHeight, heads, partition, placeGroups, rexTones } from "../src/column.js";
 
 const keys = (nodes) => nodes.map((n) => n.key);
 
@@ -142,6 +142,16 @@ test("frameTree は rex の外の辺のある生きているノードを「rex �
   const { frames, parents } = tree(t);
   assert.deepEqual(frames[parents.o], ["outside", frames[parents.o][1]]);
   assert.deepEqual(frames[frames[parents.o][1]], ["Outside rex", null]);
+});
+
+test("rexTones は rex の session の id の順に色の番号を回し、出てくる順に依らない", () => {
+  const n = (session) => ({ key: session, kind: "task", rex: rex(session, "w") });
+  const tones = rexTones([n("S3"), n("S1"), { key: "o", kind: "task" }, n("S2"), n("S1")]);
+  assert.deepEqual([...tones.entries()].sort(), [["S1", 0], ["S2", 1], ["S3", 2]]);
+  assert.deepEqual(rexTones([n("S2"), n("S3"), n("S1")]), tones);
+  // 色の数を超えた session は先頭の色に戻る。
+  const many = rexTones(["a", "b", "c", "d", "e"].map(n));
+  assert.equal(many.get("e"), many.get("a"));
 });
 
 test("groupHeight は枠の中のカードと小見出しの数で決まる", () => {

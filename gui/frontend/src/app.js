@@ -3,7 +3,7 @@
 // オブジェクトはタスク (図の箱) とメモ (下の一覧の行)。選ぶとそのそばにポップアップで単体ビューが開く。
 import * as dagre from "./vendor/dagre.esm.js";
 import { Graph } from "./graph.js";
-import { GROUP_W, fitLimit, groupBySession, partition, placeGroups } from "./column.js";
+import { GROUP_W, fitLimit, groupByRex, partition, placeGroups } from "./column.js";
 import { fitEdges, spreadPorts } from "./ports.js";
 import { findJumps, jumpPath } from "./jumps.js";
 import { PR_STAGE, STATE_LABEL, cardHint, cardText, emphasis, leadStage, markClass, toneOf } from "./card.js";
@@ -418,12 +418,12 @@ function renderLinked(canvas, connected, links, depth, graph, highlight) {
   return { width, height };
 }
 
-// renderGroups は辺の無い動いているノードをセッションの枠にして、線のあるかたまりの下に並べる。折り返しは、図全体を
-// 見える領域 (view) に収める拡大率がいちばん大きくなる列の数で決める (fitLimit)。全体表示がオフでも同じ折り返しにし、
-// 拡大縮小で並びを動かさない。枠が無ければ大きさは 0。
+// renderGroups は辺の無い動いているノードを rex の session の枠にして (中は window の小見出しで区切る)、線のあるかたまりの
+// 下に並べる。折り返しは、図全体を見える領域 (view) に収める拡大率がいちばん大きくなる列の数で決める (fitLimit)。
+// 全体表示がオフでも同じ折り返しにし、拡大縮小で並びを動かさない。枠が無ければ大きさは 0。
 function renderGroups(canvas, free, highlight, graphSize, view) {
   if (free.length === 0) return { width: 0, height: 0 };
-  const groups = groupBySession(free);
+  const groups = groupByRex(free);
   const top = graphSize.height > 0 ? graphSize.height : MARGIN_Y;
   const limit = fitLimit(groups, { left: MARGIN_X, top, bottom: MARGIN_Y, graph: graphSize, view });
   const { places, right, bottom } = placeGroups(groups, MARGIN_X, top, limit);
@@ -437,7 +437,16 @@ function renderGroups(canvas, free, highlight, graphSize, view) {
     const head = document.createElement("h2");
     head.textContent = g.label;
     head.title = g.label;
-    section.append(head, ...g.nodes.map((n) => nodeCard(n, highlight, true)));
+    section.append(head);
+    for (const part of g.parts) {
+      if (part.label !== "") {
+        const sub = document.createElement("h3");
+        sub.textContent = part.label;
+        sub.title = part.label;
+        section.append(sub);
+      }
+      section.append(...part.nodes.map((n) => nodeCard(n, highlight, true)));
+    }
     canvas.append(section);
   });
   return { width: right + MARGIN_X, height: bottom + MARGIN_Y };

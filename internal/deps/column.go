@@ -30,8 +30,65 @@ var columnTier = map[string]int{
 	graph.StateExited:     6,
 }
 
-// groupByRex は未実装 (#633)。
-func groupByRex(order []string, nodes []protocol.GraphNode) []string { return order }
+// outsideRex は rex の外の生きているノードを集める枠の鍵。rex の session の ID と重ならない。
+const outsideRex = "\x00outside-rex"
+
+// groupByRex は order (columnOrder) を、アプリが描く枠 (#633) ごとにまとまる順へ並べ直す。枠は rex の session と、
+// rex の外の生きているノードの 2 種類で、中で一番先に来るノードの位置に並べる。枠の中は区切り (rex の window、rex の
+// 外は Claude のセッション) ごとに、最初に来るノードの順にまとめる。どの枠にも入らないノード (終了したもの、参照) は
+// 自分だけの枠として、互いの順を保つ。アプリは辺の無いノードをこの順に枠へ入れる。
+func groupByRex(order []string, nodes []protocol.GraphNode) []string {
+	byKey := make(map[string]*protocol.GraphNode, len(nodes))
+	for i := range nodes {
+		byKey[nodes[i].Key] = &nodes[i]
+	}
+	frameAt := map[string]int{}
+	partAt := map[[2]string]int{}
+	type entry struct {
+		key         string
+		frame, part int
+		at          int
+	}
+	entries := make([]entry, len(order))
+	for i, key := range order {
+		frame, part := key, ""
+		if n := byKey[key]; n != nil {
+			frame, part = frameOf(n)
+		}
+		if _, ok := frameAt[frame]; !ok {
+			frameAt[frame] = i
+		}
+		if _, ok := partAt[[2]string{frame, part}]; !ok {
+			partAt[[2]string{frame, part}] = i
+		}
+		entries[i] = entry{key: key, frame: frameAt[frame], part: partAt[[2]string{frame, part}], at: i}
+	}
+	sort.SliceStable(entries, func(i, j int) bool {
+		a, b := entries[i], entries[j]
+		if a.frame != b.frame {
+			return a.frame < b.frame
+		}
+		return a.part < b.part
+	})
+	out := make([]string, len(entries))
+	for i, e := range entries {
+		out[i] = e.key
+	}
+	return out
+}
+
+// frameOf はノードの枠と区切りの鍵。rex の置き場があれば rex の session と window、rex の外の生きているノードは
+// outsideRex と Claude のセッション、どちらでもなければノード自身。
+func frameOf(n *protocol.GraphNode) (frame, part string) {
+	switch {
+	case n.Rex != nil:
+		return n.Rex.SessionID, n.Rex.WindowID
+	case n.Live && n.Kind != graph.KindRef:
+		return outsideRex, n.SessionID
+	default:
+		return n.Key, ""
+	}
+}
 
 // lastActive はノードの key → 最後に動いた時刻 (タスクと TodoWrite の記録の更新時刻、作業の記録の更新時刻)。作業の
 // 記録の無いセッションは活動の変わった時刻を daemon が持たないので載らない。

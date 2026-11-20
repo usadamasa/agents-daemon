@@ -59,21 +59,22 @@ func (c *execClient) PaneList(ctx context.Context) ([]multiplexer.Pane, error) {
 	if panes, ok := c.watch.Panes(sessions); ok {
 		return panes, nil
 	}
-	blocks, err := c.snapshot(ctx)
+	cache, err := c.snapshot(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return blockstate.NewCache(blocks).Panes(sessions), nil
+	return cache.Panes(sessions), nil
 }
 
-// snapshot は全 session の shell の block に program_status と process を打つ。
-// 1 回で session.list 1 回、session ごとに list_blocks 1 回、shell の block ごとに 2 回の request になる。
-func (c *execClient) snapshot(ctx context.Context) (map[string]*blockstate.State, error) {
+// snapshot は全 session の shell の block に program_status と process を打ち、session ごとの view を読む。
+// 1 回で session.list 1 回、session ごとに list_blocks と session.view を 1 回ずつ、shell の block ごとに 2 回の request になる。
+func (c *execClient) snapshot(ctx context.Context) (*blockstate.Cache, error) {
 	sessions, err := c.rex.ListSessions(ctx)
 	if err != nil {
 		return nil, err
 	}
 	blocks := map[string]*blockstate.State{}
+	views := map[string]wire.SessionView{}
 	for _, session := range sessions {
 		shells, err := c.shellBlocks(ctx, session)
 		if err != nil {
@@ -83,6 +84,9 @@ func (c *execClient) snapshot(ctx context.Context) (map[string]*blockstate.State
 				continue
 			}
 			return nil, err
+		}
+		if view, ok := c.view(ctx, session); ok {
+			views[session] = view
 		}
 		for _, id := range shells {
 			st, err := c.fetchBlock(ctx, session, id)
@@ -97,7 +101,19 @@ func (c *execClient) snapshot(ctx context.Context) (map[string]*blockstate.State
 			blocks[id] = st
 		}
 	}
-	return blocks, nil
+	cache := blockstate.NewCache(blocks)
+	for session, view := range views {
+		cache.PutView(session, view)
+	}
+	return cache, nil
+}
+
+// view は session の view を読む。読めなければ (閉じた session、失敗) ok が false で、その session の pane は置き場を
+// 持たない。置き場は依存図のまとめ方にしか使わないので、読めないことで PaneList を失敗にしない (daemon が連続失敗に
+// 数えて終了しかねない)。
+func (c *execClient) view(ctx context.Context, session string) (wire.SessionView, bool) {
+	view, err := c.rex.SessionView(ctx, session)
+	return view, err == nil
 }
 
 // shellBlocks は session の shell の block の ID を返す。これ以外の block は program_status を持たない。

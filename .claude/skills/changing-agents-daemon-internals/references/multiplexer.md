@@ -19,7 +19,8 @@ daemon は rex を control API (Unix socket の上の WebSocket) だけで操作
 
 | 操作 | rex の method |
 | ---- | ---- |
-| PaneList | daemon では購読の cache (下の「event の購読」)。購読していない呼び手と未同期の間は全列挙: `session.list`、session ごとに `session.list_blocks`、flavor が `com.superlogical.terminal.shell` の block ごとに `program_status` と `process` |
+| PaneList | daemon では購読の cache (下の「event の購読」)。購読していない呼び手と未同期の間は全列挙: `session.list`、session ごとに `session.list_blocks` と `session.view`、flavor が `com.superlogical.terminal.shell` の block ごとに `program_status` と `process` |
+| Pane の Location (依存図のまとめ方、#633) | `session.view` の `label` と、block を含む window の `window_id`・`label`。window に無い (detached の) block は session だけ。view はどの失敗でも空にして PaneList を失敗にしない |
 | PaneGet、PaneRead、PaneGeometry、SendText、SendKeys | `target.resolve` で block の session を引いてから、block の method (`com.superlogical.terminal.<名前>`) を打つ |
 | PaneRead | `format` (`trim`、`unwrap`、色付きなら `format: vt`) の `content` に、改行で終わっていなければ改行を 1 つ足し、末尾 N 行に絞る。続きがあれば `blob_read` で読み足す |
 | SendText | `write` (Enter は押さない) |
@@ -41,7 +42,7 @@ terminal が描かれるのを避ける)。対象が無い失敗 (`not_found`、
 `not_found`) は `api.IsNotFound` で拾い、`list_blocks` と block の method の間に閉じた block や session は読み飛ばして
 PaneList の失敗に数えない。
 
-全列挙は 1 回に `session.list` 1 回、session ごとに `list_blocks` 1 回、shell の block ごとに 2 回の request になる。
+全列挙は 1 回に `session.list` 1 回、session ごとに `list_blocks` と `session.view` を 1 回ずつ、shell の block ごとに 2 回の request になる。
 block が多い環境ほど時間が伸びるので、daemon は tick ごとには打たず、購読の cache から一覧を取る。
 
 ## event の購読
@@ -67,10 +68,11 @@ daemon は起動時に `multiplexer.Watcher` の `Watch` で購読を 1 本張�
 | `process_changed` | 前景を置き換える。`isForeground` の突き合わせはこの前景で行う |
 | `child_exited` | 前景を空にする。`--keep-open` の block は終了後に `process_changed` が来ず、`idle` の record が残る |
 | `block_created` | payload に flavor が無いので、その session に `list_blocks` を 1 回打ち、shell なら `program_status` と `process` で埋める |
-| `session_created` | 新しい session の最初の block には `block_created` が来ないので、その session に `list_blocks` を 1 回打ち、shell の block を全部埋める |
-| `block_closed` / `session_destroyed` | その block、その session の block を落とす |
+| `session_created` | 新しい session の最初の block には `block_created` が来ないので、その session に `list_blocks` を 1 回打ち、shell の block を全部埋める。`session.view` も 1 回読む |
+| `session_view_changed` | 持っている view より `revision` が大きければ `session.view` を読み直す (event は revision の順に届くとは限らない)。window の作成・削除・改名、session の改名、block の出入りの後に必ず来る |
+| `block_closed` / `session_destroyed` | その block、その session の block と view を落とす |
 
-それ以外の event (client の出入り、window、view の変化、ほかの block の event) は読み捨てる。
+それ以外の event (client の出入り、`window_label_changed` のように view の変化に先立つ個別の event、ほかの block の event) は読み捨てる。
 
 event の queue は 16384 件で、溢れたら close frame (1008) で接続を閉じて張り直す (読み手を待つと応答の受け取りが止まり、捨てると
 欠けた event で cache を進める)。daemon が終わるとき (入れ替わりを含む) は購読の接続を close frame で閉じてから

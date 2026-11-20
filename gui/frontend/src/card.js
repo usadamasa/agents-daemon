@@ -76,13 +76,15 @@ export function toneOf(n) {
   return lead ? lead.tone : STATE_TONE[n.state];
 }
 
-// cardText はカードの題と副題。grouped はセッションの枠の中のカードで、見出しが持つセッション名を繰り返さない。題が
-// セッション名のまま (作業の記録に題が無い) のカードは、今の作業があればそれを題にする。label は状態の語。
+// cardText はカードの題と副題。grouped は枠の中のカードで、見出しと小見出しが持つ rex の置き場とセッション名を
+// 繰り返さない。線でつながるカードは rex の置き場 (session › window) を先頭に添える (#633)。題がセッション名のまま
+// (作業の記録に題が無い) の枠の中のカードは、今の作業があればそれを題にする。label は状態の語。
 export function cardText(n, label, grouped) {
   const summaryAsTitle = Boolean(grouped && n.title === n.session && n.summary);
+  const place = !grouped && n.rex ? [n.rex.session_label, n.rex.window_label].filter(Boolean).join(" › ") : "";
   return {
     title: summaryAsTitle ? n.summary : n.title,
-    sub: [!grouped && n.session !== n.title ? n.session : "", label, summaryAsTitle ? "" : n.summary].filter(Boolean).join(" · "),
+    sub: [place, !grouped && n.session !== n.title ? n.session : "", label, summaryAsTitle ? "" : n.summary].filter(Boolean).join(" · "),
   };
 }
 

@@ -12,6 +12,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/api"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/blockstate"
+	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/wire"
 )
 
 const (
@@ -25,11 +26,13 @@ const (
 
 // Reads は cache を埋める読み取り。
 type Reads struct {
-	// Snapshot は全 session の shell の block の状態を読む。
-	Snapshot func(ctx context.Context) (map[string]*blockstate.State, error)
+	// Snapshot は全 session の shell の block の状態と view を読んだ cache を返す。
+	Snapshot func(ctx context.Context) (*blockstate.Cache, error)
 	// Fill は作られた block (ref.Block が空なら session の全 block) のうち shell のものの状態を読む。
 	// もう無い block と session は入れずに返す。
 	Fill func(ctx context.Context, ref blockstate.Ref) (map[string]*blockstate.State, error)
+	// View は session の view を読む。読めなければ ok が false で、cache の view は変えない。
+	View func(ctx context.Context, session string) (view wire.SessionView, ok bool)
 }
 
 // Watcher は購読と、それで保つ cache。nil の Watcher (購読していない) は常に未同期。
@@ -117,7 +120,7 @@ func (w *Watcher) once(ctx context.Context) error {
 	}
 	defer func() { _ = stream.Close() }()
 
-	blocks, err := w.reads.Snapshot(ctx)
+	cache, err := w.reads.Snapshot(ctx)
 	if err != nil {
 		return fmt.Errorf("購読を始めるときの全列挙に失敗: %w", err)
 	}
@@ -125,7 +128,6 @@ func (w *Watcher) once(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("購読を始めるときの同期に失敗: %w", err)
 	}
-	cache := blockstate.NewCache(blocks)
 	var seen int64
 	for seen < upTo {
 		select {
@@ -163,9 +165,9 @@ func ended(stream *api.Subscription) error {
 	return fmt.Errorf("購読の接続が終わった: %w", stream.Err())
 }
 
-// apply は event 1 件を cache に当て、block_created / session_created なら block を読んで埋める。mu があれば cache に
-// 触る間だけ持つ (rex を読む間は離し、PaneList を待たせない)。この goroutine だけが cache を書くので、離した間に
-// cache は変わらない。
+// apply は event 1 件を cache に当て、block_created / session_created なら block を読んで埋め、session_created と
+// 新しい session_view_changed なら session の view を読み直す。mu があれば cache に触る間だけ持つ (rex を読む間は離し、
+// PaneList を待たせない)。この goroutine だけが cache を書くので、離した間に cache は変わらない。
 func (w *Watcher) apply(ctx context.Context, cache *blockstate.Cache, mu *sync.Mutex, ev []byte) error {
 	lock := func() {}
 	unlock := func() {}
@@ -178,14 +180,23 @@ func (w *Watcher) apply(ctx context.Context, cache *blockstate.Cache, mu *sync.M
 	if err != nil || ref == (blockstate.Ref{}) {
 		return err
 	}
-	created, err := w.reads.Fill(ctx, ref)
-	if err != nil {
-		return fmt.Errorf("作られた block (session %s、block %q) を埋められない: %w", ref.Session, ref.Block, err)
+	if !ref.View {
+		created, err := w.reads.Fill(ctx, ref)
+		if err != nil {
+			return fmt.Errorf("作られた block (session %s、block %q) を埋められない: %w", ref.Session, ref.Block, err)
+		}
+		lock()
+		for id, st := range created {
+			cache.Put(blockstate.Ref{Session: ref.Session, Block: id}, st)
+		}
+		unlock()
 	}
-	lock()
-	for id, st := range created {
-		cache.Put(blockstate.Ref{Session: ref.Session, Block: id}, st)
+	if ref.View || ref.Block == "" {
+		if view, ok := w.reads.View(ctx, ref.Session); ok {
+			lock()
+			cache.PutView(ref.Session, view)
+			unlock()
+		}
 	}
-	unlock()
 	return nil
 }

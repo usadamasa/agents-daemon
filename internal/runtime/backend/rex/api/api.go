@@ -113,6 +113,13 @@ func (c *Client) ListBlocks(ctx context.Context, session string) (wire.BlockList
 	return blocks, err
 }
 
+// SessionView は session の window と、window ごとの block を返す。無い session は session_not_found。
+func (c *Client) SessionView(ctx context.Context, session string) (wire.SessionView, error) {
+	var view wire.SessionView
+	err := c.call(ctx, "session.view", map[string]any{"session_id": session}, &view)
+	return view, err
+}
+
 // ResolveBlock は block の ID からそれを持つ session を引く。block の method は session_id が要る。
 func (c *Client) ResolveBlock(ctx context.Context, blockID string) (string, error) {
 	return c.resolve(ctx, "block", blockID, errBlockNotFound)

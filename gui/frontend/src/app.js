@@ -3,7 +3,7 @@
 // オブジェクトはタスク (図の箱) とメモ (下の一覧の行)。選ぶとそのそばにポップアップで単体ビューが開く。
 import * as dagre from "./vendor/dagre.esm.js";
 import { Graph } from "./graph.js";
-import { GROUP_W, fitLimit, groupByRex, partition, placeGroups } from "./column.js";
+import { GROUP_W, fitLimit, frameTree, groupByRex, partition, placeGroups } from "./column.js";
 import { fitEdges, spreadPorts } from "./ports.js";
 import { findJumps, jumpPath } from "./jumps.js";
 import { PR_STAGE, STATE_LABEL, cardHint, cardText, emphasis, leadStage, markClass, toneOf } from "./card.js";
@@ -222,12 +222,49 @@ function chainEdges(graph) {
 // rankByDepth はバイナリの段 (前提をたどった最長の深さ、根が 0。完了を隠す図では folded で数え直したもの) を
 // そのまま段にする ranker。dagre の組み込みの
 // ranker はどれも前提の無いノードを下流の直前へ寄せる (A→B→C と D→C で D が B の段に来る) ので使わない。
-// layout は辺のラベルの場所を空けるために辺の minlen を 2 倍にし、組み込みの ranker が出す rank は偶数になる。
-// depth も 2 倍にして同じ尺に揃える (@dagrejs/dagre 3.1.3 の内部の前提。奇数の rank を渡すと layout が落ちる)。
+// layout は辺のラベルの場所を空けるために辺の minlen を 2 倍にし、枠の入れ子の分 (nodeRankFactor) を更に掛ける。
+// depth にも同じ倍率を掛けて辺の minlen を満たす (@dagrejs/dagre 3.1.3 の内部の前提。満たさないと layout が落ちる)。
+// 枠の上下の境界と入れ子の根 (dummy のノード) は depth を持たないので、nesting の辺の minlen を満たす段へ詰める。
 function rankByDepth(depth) {
   return (g) => {
-    for (const v of g.nodes()) g.node(v).rank = (depth.get(v) ?? 0) * 2;
+    const scale = 2 * (g.graph().nodeRankFactor ?? 1);
+    const real = (v) => !g.node(v).dummy;
+    for (const v of g.nodes()) g.node(v).rank = real(v) ? (depth.get(v) ?? 0) * scale : undefined;
+    rankBorders(g, real);
   };
+}
+
+// rankBorders は dummy のノードの段を、辺 v→w の rank(w) >= rank(v) + minlen を満たす中で実ノードに最も近い段にする。
+// 下の境界は実ノードから辺をたどって着くもので、入ってくる辺の端より下へ押す。それ以外 (上の境界と根) は
+// 出ていく辺の端より上へ引く。境界どうしの鎖は入れ子の深さだけ続くので、ノードの数だけ回せば収まる。
+function rankBorders(g, real) {
+  const lower = new Set();
+  const stack = g.nodes().filter(real);
+  while (stack.length > 0) {
+    for (const w of g.successors(stack.pop()) ?? []) {
+      if (!real(w) && !lower.has(w)) {
+        lower.add(w);
+        stack.push(w);
+      }
+    }
+  }
+  const edges = g.edges().filter((e) => !real(e.v) || !real(e.w));
+  for (let round = 0, changed = true; changed && round <= g.nodeCount(); round++) {
+    changed = false;
+    for (const e of edges) {
+      const minlen = g.edge(e).minlen ?? 1;
+      const v = g.node(e.v);
+      const w = g.node(e.w);
+      if (!real(e.v) && !lower.has(e.v) && w.rank !== undefined && (v.rank === undefined || v.rank > w.rank - minlen)) {
+        v.rank = w.rank - minlen;
+        changed = true;
+      }
+      if (lower.has(e.w) && v.rank !== undefined && (w.rank === undefined || w.rank < v.rank + minlen)) {
+        w.rank = v.rank + minlen;
+        changed = true;
+      }
+    }
+  }
 }
 
 const MARGIN_X = 64;
@@ -235,16 +272,21 @@ const MARGIN_Y = 24;
 const GAP_X = 48;
 const GAP_Y = 44;
 
-// layout は辺でつながるノード (connected) を dagre で配置する。辺の無いノードは図の下のセッションの枠 (renderGroups) か
-// 右の列 (renderColumn) に並べる。depth は key → 段 (Graph.view の depth)。返すのは key → { x, y } (中心) と、全体の width、height、辺の経路を持つ
-// dagre の graph。
+// layout は線のある図のノード (tree.nodes。辺でつながるノードと、同じ枠に引き入れた辺の無いノード) を dagre で配置し、
+// 枠 (tree.frames) を compound の親にする。辺の無いほかのノードは図の下のセッションの枠 (renderGroups) か
+// 右の列 (renderColumn) に並べる。depth は key → 段 (Graph.view の depth)。返すのは key → { x, y } (中心) と、
+// 枠の key → { x, y, width, height } (中心と大きさ)、全体の width、height、辺の経路を持つ dagre の graph。
 // 待ちの輪の辺は段が下へ進まない (輪の両端をバイナリが同じ段か逆の段に数える)。rankByDepth の段で dagre に渡すと
 // layout が落ちるので、段が下へ進む辺だけを dagre に渡し、残り (back) は箱の中心どうしを結ぶ点列で返す。
-function layout(connected, links, depth) {
-  const g = new dagre.graphlib.Graph();
+function layout(tree, links, depth) {
+  const connected = tree.nodes;
+  const g = new dagre.graphlib.Graph({ compound: true });
   g.setGraph({ rankdir: "TB", ranker: rankByDepth(depth), nodesep: GAP_X, ranksep: GAP_Y, marginx: MARGIN_X, marginy: MARGIN_Y });
   g.setDefaultEdgeLabel(() => ({}));
   for (const n of connected) g.setNode(n.key, { width: NODE_W, height: NODE_H });
+  for (const f of tree.frames) g.setNode(f.key, {});
+  for (const f of tree.frames) if (f.parent) g.setParent(f.key, f.parent);
+  for (const [key, parent] of tree.parentOf) g.setParent(key, parent);
   const rest = [];
   for (const l of links) {
     if (!g.hasNode(l.before) || !g.hasNode(l.after)) continue;
@@ -255,12 +297,13 @@ function layout(connected, links, depth) {
   // renderGraph は connected が空なら layout を呼ばないので、ここでは空を見ない。
   fitEdges(g, MARGIN_X, MARGIN_Y);
   const pos = new Map(connected.map((n) => [n.key, g.node(n.key)]));
+  const boxes = new Map(tree.frames.map((f) => [f.key, g.node(f.key)]));
   const back = rest.map((l) => {
     const a = pos.get(l.before);
     const b = pos.get(l.after);
     return { ...l, points: [{ x: a.x, y: a.y }, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, { x: b.x, y: b.y }] };
   });
-  return { g, pos, back, width: g.graph().width, height: g.graph().height };
+  return { g, pos, boxes, back, width: g.graph().width, height: g.graph().height };
 }
 
 function nodeCard(n, highlight, grouped = false) {
@@ -362,6 +405,7 @@ function renderGraph() {
   const graph = state.data.graph;
   const { nodes, links, depth } = state.graph.view(state.showCompleted);
   const { connected, free, ended } = partition(nodes, links, graph.column_order);
+  const tree = frameTree(connected, free);
   const highlight = highlightKeys();
   renderColumn(ended, highlight);
   const scroll = { left: host.scrollLeft, top: host.scrollTop };
@@ -376,17 +420,19 @@ function renderGraph() {
 
   const canvas = document.createElement("div");
   canvas.className = "canvas";
-  const graphSize = connected.length > 0 ? renderLinked(canvas, connected, links, depth, graph, highlight) : { width: 0, height: 0 };
-  const groups = renderGroups(canvas, free, highlight, graphSize, { width: host.clientWidth, height: host.clientHeight - CONTROLS_BAND });
+  const graphSize = connected.length > 0 ? renderLinked(canvas, tree, links, depth, graph, highlight) : { width: 0, height: 0 };
+  const groups = renderGroups(canvas, tree.free, highlight, graphSize, { width: host.clientWidth, height: host.clientHeight - CONTROLS_BAND });
   canvas.style.width = `${Math.ceil(Math.max(graphSize.width, groups.width))}px`;
   canvas.style.height = `${Math.ceil(Math.max(graphSize.height, groups.height))}px`;
   host.append(canvas);
   host.scrollTo(scroll.left, scroll.top);
 }
 
-// renderLinked は辺でつながるノードを線と箱で canvas に描き、その大きさを返す。
-function renderLinked(canvas, connected, links, depth, graph, highlight) {
-  const { g, pos, back, width, height } = layout(connected, links, depth);
+// renderLinked は線のある図のノードを枠と線と箱で canvas に描き、その大きさを返す。枠は線と箱より奥に置く。
+function renderLinked(canvas, tree, links, depth, graph, highlight) {
+  const connected = tree.nodes;
+  const { g, pos, boxes, back, width, height } = layout(tree, links, depth);
+  renderFrames(canvas, tree.frames, boxes);
 
   const svg = document.createElementNS(SVG, "svg");
   svg.setAttribute("class", "edges");
@@ -410,12 +456,32 @@ function renderLinked(canvas, connected, links, depth, graph, highlight) {
 
   for (const n of connected) {
     const p = pos.get(n.key);
-    const card = nodeCard(n, highlight);
+    const card = nodeCard(n, highlight, tree.parentOf.has(n.key));
     card.style.left = `${Math.round(p.x - NODE_W / 2)}px`;
     card.style.top = `${Math.round(p.y - NODE_H / 2)}px`;
     canvas.append(card);
   }
   return { width, height };
+}
+
+// renderFrames は線のある図の枠 (session は h2、window は h3 の見出し) を dagre の矩形に描く。親の枠を先に描き、
+// 子の枠が上に重なる。
+function renderFrames(canvas, frames, boxes) {
+  for (const f of frames) {
+    const b = boxes.get(f.key);
+    const section = document.createElement("section");
+    section.className = `frame ${f.level}`;
+    section.setAttribute("aria-label", f.label);
+    section.style.left = `${Math.round(b.x - b.width / 2)}px`;
+    section.style.top = `${Math.round(b.y - b.height / 2)}px`;
+    section.style.width = `${Math.round(b.width)}px`;
+    section.style.height = `${Math.round(b.height)}px`;
+    const head = document.createElement(f.level);
+    head.textContent = f.label;
+    head.title = f.label;
+    section.append(head);
+    canvas.append(section);
+  }
 }
 
 // renderGroups は辺の無い動いているノードを rex の session の枠にして (中は window の小見出しで区切る)、線のあるかたまりの

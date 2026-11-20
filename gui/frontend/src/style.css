@@ -140,6 +140,15 @@ select { font: inherit; color: inherit; }
    (groupHeight は 1 つを 20 で数える) */
 .group h3 { margin: 0 0 -6px; font-size: 11px; font-weight: 500; line-height: 16px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .group .node { position: relative; flex: 0 0 auto; }
+/* 線のある図の枠。矩形は dagre が決め、見出しは上の境界とカードの間 (1 段の余白) に置く */
+.frame { position: absolute; box-sizing: border-box; border: 1px solid var(--line); border-radius: 6px; pointer-events: none; }
+.frame.h3 { border-style: dashed; }
+.frame > :is(h2, h3) {
+  position: absolute; top: 3px; left: 12px; right: 12px; margin: 0; line-height: 16px; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: auto;
+}
+.frame > h2 { font-size: 12px; font-weight: 600; }
+.frame > h3 { font-size: 11px; font-weight: 500; }
 .graph .canvas { position: relative; transform-origin: 0 0; }
 /* 拡大縮小した canvas を包む枠。transform はレイアウトの大きさを変えないので、拡大率を掛けた大きさを枠に持たせて
    スクロールの範囲を図に合わせる (WKWebView では CSS の zoom が文字の大きさに効かなかった) */

@@ -1,5 +1,6 @@
 // 図の領域と右の列へのカードの振り分け (#420、#467)。辺でつながるノードは依存図に、辺の無い動いているノードは図の
-// 領域のセッションの枠に、辺の無い終わったノードは右の列に置く。
+// 領域のセッションの枠に、辺の無い終わったノードは右の列に置く。依存図の中も同じ枠で囲み、辺のあるノードを持つ枠は
+// 辺の無いノードも依存図の側へ引き入れる (frameTree)。
 // 並び順はバイナリの column_order が持ち、ここは見えているノードを分けてその順に並べるだけにする。
 
 const ENDED =new Set(["exited", "completed"]);
@@ -47,6 +48,33 @@ export function groupByRex(nodes) {
     const parts = [...g.parts.values()];
     return { key: g.key, label: g.label, parts, nodes: parts.flatMap((p) => p.nodes) };
   });
+}
+
+// frameTree は線のある図 (dagre) で描く枠を決める。辺のある生きているノードを frameOf の枠 (session) と区切り
+// (window) に入れ、その枠に属する辺の無いノード (free) も同じ枠へ引き入れる。参照と終わったノードは枠に入れない。
+// frames は枠の { key, label, level, parent } (level は h2 / h3)、parentOf はノードの key → 直の親の枠の key。
+// 小見出しの無い区切りは枠を作らず、ノードを session の枠へ直に入れる。nodes は図に入るノード (linked の後ろに
+// 引き入れた free を順に足す)、free は下の枠に残るもの。枠の key は "\0" で始め、ノードの key と重ならない。
+export function frameTree(linked, free) {
+  const framable = (n) => n.kind !== "ref" && !ENDED.has(n.state);
+  const used = new Set(linked.filter(framable).map((n) => frameOf(n).key));
+  const pulled = free.filter((n) => used.has(frameOf(n).key));
+  const nodes = [...linked, ...pulled];
+  const frames = new Map();
+  const parentOf = new Map();
+  for (const n of nodes) {
+    if (!framable(n)) continue;
+    const f = frameOf(n);
+    const top = `\0${f.key}`;
+    if (!frames.has(top)) frames.set(top, { key: top, label: f.label, level: "h2" });
+    let parent = top;
+    if (f.partLabel !== "") {
+      parent = `\0${f.key}\0${f.part}`;
+      if (!frames.has(parent)) frames.set(parent, { key: parent, label: f.partLabel, level: "h3", parent: top });
+    }
+    parentOf.set(n.key, parent);
+  }
+  return { nodes, free: free.filter((n) => !used.has(frameOf(n).key)), frames: [...frames.values()], parentOf };
 }
 
 // heads は枠の小見出しの数。小見出しの無い区切りは数えない。

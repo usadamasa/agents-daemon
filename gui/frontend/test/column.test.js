@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { GROUP_W, fitLimit, frameTree, groupByRex, groupHeight, heads, partition, placeGroups } from "../src/column.js";
+import { GROUP_W, TONES, fitLimit, frameTree, groupByRex, groupHeight, heads, partition, placeGroups, rexTones } from "../src/column.js";
 
 const keys = (nodes) => nodes.map((n) => n.key);
 
@@ -94,16 +94,28 @@ test("frameTree は辺のある生きているノードを rex の window の枠
   assert.deepEqual(keys(t.nodes), ["a", "b"]);
 });
 
-test("frameTree は参照と終わったノードを枠に入れない", () => {
+test("frameTree は参照と、rex の置き場の無い終わったノードを枠に入れない", () => {
   const linked = [
     { key: "pr:o/r#1", kind: "ref", state: "waiting" },
-    { key: "x", kind: "task", state: "exited", session_id: "sx", session: "x", rex: rex("S1", "w1") },
-    { key: "y", kind: "task", state: "completed", session_id: "sy", session: "y", rex: rex("S1", "w1") },
+    { key: "x", kind: "session", state: "exited", session_id: "sx", session: "x" },
+    { key: "y", kind: "task", state: "completed", session_id: "sy", session: "y" },
   ];
   const t = frameTree(linked, []);
   assert.deepEqual(t.frames, []);
   assert.equal(t.parentOf.size, 0);
   assert.deepEqual(keys(t.nodes), ["pr:o/r#1", "x", "y"]);
+});
+
+test("frameTree は rex の置き場のある終わったノードを、生きているノードと同じ window の枠に入れる", () => {
+  const linked = [
+    { key: "done", kind: "task", state: "completed", session_id: "sa", session: "alpha", rex: rex("S1", "w1") },
+    { key: "live", kind: "task", state: "pending", session_id: "sa", session: "alpha", rex: rex("S1", "w1") },
+    { key: "gone", kind: "task", state: "exited", session_id: "sb", session: "beta", rex: rex("S1", "w2") },
+  ];
+  const t = frameTree(linked, []);
+  assert.equal(t.parentOf.get("done"), t.parentOf.get("live"));
+  const { frames, parents } = tree(t);
+  assert.deepEqual(frames[parents.gone], ["w2", frames[parents.live][1]]);
 });
 
 test("frameTree は辺のあるノードを持つ枠へ、同じ枠の辺の無いノードも入れ、ほかの枠の辺の無いノードは free に残す", () => {
@@ -130,6 +142,21 @@ test("frameTree は rex の外の辺のある生きているノードを「rex �
   const { frames, parents } = tree(t);
   assert.deepEqual(frames[parents.o], ["outside", frames[parents.o][1]]);
   assert.deepEqual(frames[frames[parents.o][1]], ["Outside rex", null]);
+});
+
+test("rexTones は rex の session の色をその id だけで決め、図に出るほかの session の有無で変えない", () => {
+  const n = (session) => ({ key: session, kind: "task", rex: rex(session, "w") });
+  const ids = Array.from({ length: 12 }, (_, i) => `session:01a1f9${i.toString(16).padStart(2, "0")}-80db-702a-adb9-e82c81bcf47d`);
+  const all = rexTones([...ids.map(n), { key: "o", kind: "task" }]);
+  assert.deepEqual([...all.keys()].sort(), [...ids].sort());
+  for (const id of ids) {
+    // 1 つだけのときも、ほかと並んだときも、並びを逆にしても同じ色。
+    assert.equal(rexTones([n(id)]).get(id), all.get(id), id);
+    assert.equal(rexTones([...ids].reverse().map(n)).get(id), all.get(id), id);
+    assert.ok(Number.isInteger(all.get(id)) && all.get(id) >= 0 && all.get(id) < TONES, id);
+  }
+  // id が違えば色は散らばる (全部が同じ色にならない)。
+  assert.ok(new Set(all.values()).size > 1);
 });
 
 test("groupHeight は枠の中のカードと小見出しの数で決まる", () => {

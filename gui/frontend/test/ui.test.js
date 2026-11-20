@@ -198,6 +198,18 @@ test("完了を隠した既定の図: 辺でつながるノードを段の浅い
   assert.ok(parseFloat(q("#graph .group").style.top) >= lowest + 72);
 });
 
+// 見た目は happy-dom では測れないので規則で確かめる。
+test("枠は縮小しても 1px より細くならない濃い線で描き、session の枠と window の小枠を塗りの濃さで分ける", () => {
+  const rule = (selector) => css.match(new RegExp(`^${selector.replace(/[.()]/g, "\\$&")} \\{([^}]*)\\}`, "m"))?.[1] ?? "";
+  for (const selector of [".frame", ".group"]) {
+    assert.match(rule(selector), /border: max\(1px, calc\(1px \/ var\(--zoom, 1\)\)\) solid var\(--line-strong\)/, selector);
+  }
+  const outer = rule(".frame.h2").match(/background: (var\(--[a-z-]+\))/)?.[1];
+  const inner = rule(".frame.h3").match(/background: (var\(--[a-z-]+\))/)?.[1];
+  assert.ok(outer && inner && outer !== inner, `${outer} / ${inner}`);
+  assert.match(rule(".frame.h3"), /border-style: dashed/);
+});
+
 // 枠の高さは見出しを 1 行として数える (column.js の groupHeight)。折り返すと枠からカードがはみ出す。
 test("セッションの枠の見出しは 1 行に収め、切れた分は tooltip で読める", () => {
   const head = q("#graph .group h2");

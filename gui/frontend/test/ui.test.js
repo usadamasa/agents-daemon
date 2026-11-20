@@ -270,14 +270,14 @@ test("辺のあるノードを持つ rex の枠は、同じ枠の辺の無いノ
   }
 });
 
-test("完了も表示した図: 線の端に残る完了のノードは枠の外に描く", async () => {
+test("完了も表示した図: 線の端に残る完了のノードも、rex の置き場があれば同じ window の小枠に描く", async () => {
   q("#completed-check").click();
   try {
     const graph = cards("#graph");
-    const work = frames().find((x) => x.label === "work");
-    assert.ok(graph.has("task:alpha/1"));
-    assert.ok(!inside(graph.get("task:alpha/1"), work));
-    assert.ok(inside(graph.get("task:alpha/2"), work));
+    const tab = frames().find((x) => x.label === "alpha-tab");
+    for (const key of ["task:alpha/1", "task:alpha/2", "task:alpha/3"]) assert.ok(inside(graph.get(key), tab), key);
+    // rex の置き場の無い終わったセッションは枠の外のまま。
+    for (const f of frames()) if (graph.has("sid:gamma")) assert.ok(!inside(graph.get("sid:gamma"), f), f.label);
     await snapshot("graph-frames-completed");
   } finally {
     q("#completed-check").click();

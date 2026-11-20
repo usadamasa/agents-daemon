@@ -94,16 +94,28 @@ test("frameTree は辺のある生きているノードを rex の window の枠
   assert.deepEqual(keys(t.nodes), ["a", "b"]);
 });
 
-test("frameTree は参照と終わったノードを枠に入れない", () => {
+test("frameTree は参照と、rex の置き場の無い終わったノードを枠に入れない", () => {
   const linked = [
     { key: "pr:o/r#1", kind: "ref", state: "waiting" },
-    { key: "x", kind: "task", state: "exited", session_id: "sx", session: "x", rex: rex("S1", "w1") },
-    { key: "y", kind: "task", state: "completed", session_id: "sy", session: "y", rex: rex("S1", "w1") },
+    { key: "x", kind: "session", state: "exited", session_id: "sx", session: "x" },
+    { key: "y", kind: "task", state: "completed", session_id: "sy", session: "y" },
   ];
   const t = frameTree(linked, []);
   assert.deepEqual(t.frames, []);
   assert.equal(t.parentOf.size, 0);
   assert.deepEqual(keys(t.nodes), ["pr:o/r#1", "x", "y"]);
+});
+
+test("frameTree は rex の置き場のある終わったノードを、生きているノードと同じ window の枠に入れる", () => {
+  const linked = [
+    { key: "done", kind: "task", state: "completed", session_id: "sa", session: "alpha", rex: rex("S1", "w1") },
+    { key: "live", kind: "task", state: "pending", session_id: "sa", session: "alpha", rex: rex("S1", "w1") },
+    { key: "gone", kind: "task", state: "exited", session_id: "sb", session: "beta", rex: rex("S1", "w2") },
+  ];
+  const t = frameTree(linked, []);
+  assert.equal(t.parentOf.get("done"), t.parentOf.get("live"));
+  const { frames, parents } = tree(t);
+  assert.deepEqual(frames[parents.gone], ["w2", frames[parents.live][1]]);
 });
 
 test("frameTree は辺のあるノードを持つ枠へ、同じ枠の辺の無いノードも入れ、ほかの枠の辺の無いノードは free に残す", () => {

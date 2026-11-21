@@ -17,6 +17,9 @@ var (
 	// skillPathRe は skill のディレクトリからの相対パス。直前が語・`/`・`}` のもの
 	// (${CLAUDE_PLUGIN_ROOT}/scripts/... や foo/references/...) は skill のディレクトリから解けないので当てない。
 	skillPathRe = regexp.MustCompile("(?:^|[\\s(\\[`\"'])((?:references|scripts|prompts)/[A-Za-z0-9._/-]+)")
+	// parentLinkRe は Markdown のリンクの指す先のうち `../` で始まるもの (別の skill、repo 直下)。anchor は含めない。
+	// inline code の `../...` は cwd からのパスを打つコマンドと区別できないので当てない。
+	parentLinkRe = regexp.MustCompile(`\]\((\.\./[^)\s#]+)`)
 	// linkTextRe は Markdown のリンクの表示文字列。参照ではないので、括弧の中の指す先だけを残す。
 	linkTextRe = regexp.MustCompile(`\[[^\]]*\]\(`)
 	// relativeDateRe は未来のセッションで解けない日付の語。
@@ -46,8 +49,9 @@ func skillFiles(dirs []string) ([]string, error) {
 	return out, nil
 }
 
-// checkSkillPaths は SKILL.md が参照する references/・scripts/・prompts/ のパスの実在を見る。
-// skill のディレクトリが symlink なら実体から解く。
+// checkSkillPaths は SKILL.md が参照する references/・scripts/・prompts/ のパスと、`../` で上がるリンクの指す先の
+// 実在を見る。起点はどちらも skill のディレクトリで、symlink なら実体から解く。
+// 「X skill の `references/...`」のような前置きは読まない (文章から置き場を推測すると、当て損ねが見逃しになる)。
 func checkSkillPaths(skillMd string) ([]Finding, error) {
 	dir, err := filepath.EvalSymlinks(filepath.Dir(skillMd))
 	if err != nil {
@@ -66,7 +70,16 @@ func checkSkillPaths(skillMd string) ([]Finding, error) {
 			}
 			out = append(out, Finding{
 				Kind: KindMissingPath, Severity: SeverityError, Path: skillMd, Line: l.N, Target: rel,
-				Message: fmt.Sprintf("%s が skill のディレクトリに無い", rel),
+				Message: fmt.Sprintf("%s が skill のディレクトリに無い (別の skill や repo 直下は ../ で上がるリンクで書く)", rel),
+			})
+		}
+		for _, m := range parentLinkRe.FindAllStringSubmatch(l.Text, -1) {
+			if _, err := os.Stat(filepath.Join(dir, m[1])); err == nil {
+				continue
+			}
+			out = append(out, Finding{
+				Kind: KindMissingPath, Severity: SeverityError, Path: skillMd, Line: l.N, Target: m[1],
+				Message: fmt.Sprintf("リンクの指す %s が skill のディレクトリから解けない", m[1]),
 			})
 		}
 	}

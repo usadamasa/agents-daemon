@@ -97,7 +97,7 @@ rg -a -o -N '.{0,160}(<CHANGELOG で見た設定キーや env 名>).{0,200}' "$B
 
 `task typecheck` (CI の `mod typecheck` も) は `ci/mod-types/` に写した型で tsc を回す。
 型は対話セッションが mod を hot-reload したときだけ `.claude-plugin/types/` に書かれ、
-CI と worktree では用意できないため (`scripts/sync-mod-types.sh` の冒頭)。
+CI と worktree では用意できないため ([sync-mod-types.sh](../../../scripts/sync-mod-types.sh) の冒頭)。
 写しの版は `ci/mod-types/claude-code/index.d.ts` の 1 行目にある。今の版より古ければ上げる。
 
 ```sh
@@ -173,7 +173,7 @@ rg -n -o 'cc-premise: [0-9.]+ [a-z0-9-]+.*' --glob '!tmp/**' . | sort -t' ' -k3,
 | `mods` | パーキングロットと通知の mod (`hooks/park.tsx`、`hooks/notice.ts`、`hooks/handoff-notice.ts`): tool.register、tool.call の結果の context、session.compact | mods, plugin modules, tool.register, tool.call, session.compact, --plugin-dir |
 | `tools` | タスクの記録 (`ingest-task`) が拾う Task 系ツールと TodoWrite の有無と入出力 | TaskCreate, TaskUpdate, TaskList, TodoWrite, CLAUDE_CODE_ENABLE_TODO_TOOLS, tasks |
 | `worktrees` | 放置 worktree の回収 (`prune-worktrees`): 本体の sweep の範囲と lock reason の書式 | worktree, worktrees, cleanupPeriodDays, EnterWorktree, --worktree, worktree lock, sweep |
-| `bash-env` | Bash ツールの環境から自分の session_id を引く (`edge add` の task 欄、`scripts/get-session-id.sh`) | CLAUDE_CODE_SESSION_ID, Bash tool, environment variable, env |
+| `bash-env` | Bash ツールの環境から自分の session_id を引く (`edge add` の task 欄、[get-session-id.sh](../../../scripts/get-session-id.sh)) | CLAUDE_CODE_SESSION_ID, Bash tool, environment variable, env |
 | `plugins` | `dream check` が名前空間つきの skill 名を引く `plugins/installed_plugins.json` の形と、plugin の `skills/<name>`・`commands/<name>.md` の置き場 | installed_plugins, installPath, plugin cache, plugin skills, plugin commands |
 | `cli` | `spawn` が組む `claude` の引数 (`--session-id`、`--model`、最初のターンの本文、`--resume` と `--fork-session`) | --session-id, --resume, --fork-session, --model, --name, prompt argument |
 | `remote-control` | セッションの再起動 (restarting-session skill) で Remote Control がどのプロセスに付くか | Remote Control, remote-control, bridge |

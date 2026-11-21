@@ -1,6 +1,7 @@
 // Package wrap は spawn した pane の中で走る sh の包みと、包みが叩く rex のバイナリの場所を持つ。
 // 包みは起こしたコマンドの終わりに後始末 (自分の session を閉じる) をし、そのために pane の中から rex の CLI を叩く。
 // 本文はここだけが持つ。peer-sessions skill も `agents-daemon spawn` で起こし、本文を写さない (#636)。
+// 起こし方ごとの印・閉じる主体・rename の一覧は spawn の package doc が持つ。
 package wrap
 
 // sharedSessionEnv は、タブの包みが起こすコマンドに渡す環境変数。値は 1。plugin の SessionStart hook

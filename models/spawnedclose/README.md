@@ -44,6 +44,9 @@ daemon の reaper、利用者の交錯を TLA+ に写したもの (#596)。
 
 - 起こした session 2 つ、起こしていない session 1 つ。close は 1 回だけ打つ。
 - 各 session の pane は 1 つに縮める。`c()` の「ほかの pane が残っていた」は、閉じずに pane だけ消える非決定の分岐で表す。
+- タブで起こした peer (`rex/wrap` の `tabScript`) は写さない。印を書かず session も閉じないので、印と close の性質を
+  動かさない。印のある session に足したタブは、上の「ほかの pane が残っていた」の分岐に含まれる。pane を 1 つに縮めた
+  ので、ほかの pane が残る間は reaper が閉じないことはこのモデルでは検査できず、reaper の `TestReap` が持つ。
 - rex の server は落ちたら戻らない。落ちた後の問い合わせはどれも接続の失敗。
 - 閉じた session は戻らない。rex は同じ session ID を作り直さない。
 - reaper の数えると閉じるは 1 ステップにまとめる。reaper 自身の競合はこのモデルの対象外。

@@ -61,6 +61,12 @@ export function refUrl(ref) {
   return m === null ? undefined : issueUrl(m.groups.repo, m.groups.number, ref.startsWith("pr:") ? "pr" : "issue");
 }
 
+// mentionUrl は題か note の #番号 の言及の GitHub のページ。daemon が種類を引いていれば ref で、引く前は issue の URL
+// (GitHub が PR の番号なら PR のページへ送る)。
+export function mentionUrl(m) {
+  return refUrl(m.ref ?? "") ?? issueUrl(m.repo, m.number);
+}
+
 // edgeNoteRepo は辺の note の #number を補う owner/repo。repos は deps の repos。決め方の性質は models/noterepo が持つ。
 // 辺の向きでは選ばない (note の番号は before の参照のことも after の参照のこともある)。番号の合う端点の参照があれば
 // その repo。両端が同じ番号で別 repo なら決めない。合わなければ辺が触れる repo が 1 つのときだけそれを使う。

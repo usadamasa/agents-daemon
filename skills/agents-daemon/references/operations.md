@@ -153,6 +153,8 @@ agents-daemon edge list --cwd <dir> [--here | --repo <main worktree>] [--ref <�
   書けば起こす前から決まるので、起こす前にも辺を書ける
 - note に書く番号は端点の参照の番号 (PR 番号) に揃える。依存図は note の `#N` を、番号の合う端点の参照の repo へ
   リンクする。PR が閉じる issue の番号を書くと、repo をまたぐ辺ではリンクにならない
+- 端点に番号の合う参照が無い note は `repo#N` (`agents-daemon#469 の処理の後`) で書く。素の `#N` は辺が触れる repo が
+  1 つのときしか解けず、依存図に issue / PR の題が出ない
 - 同じ参照の組 (向きを含む) は同じ辺になる。登録し直すと note と repo を書き直し、保持期間 (7 日) を数え直す
 - `session:<名前>` の端点は、daemon が tick ごとにセッション台帳 (`sessions/`) を見て 1 回だけ session ID に結びつけ、
   `sid:<session_id>` に書き換える (元の参照は `bound_from` に残る)。辺を書いた時点で動いていた同名のセッションが

@@ -6,12 +6,12 @@ import { Graph } from "./graph.js";
 import { GROUP_W, fitLimit, frameTree, groupByRex, partition, placeGroups, rexTones } from "./column.js";
 import { fitEdges, spreadPorts } from "./ports.js";
 import { findJumps, jumpPath } from "./jumps.js";
-import { PR_STAGE, STATE_LABEL, cardHint, cardText, emphasis, leadStage, markClass, toneOf } from "./card.js";
+import { PR_STAGE, STATE_LABEL, cardHint, cardText, emphasis, leadStage, markClass, mentionLabel, mentionLines, toneOf } from "./card.js";
 import { isStale, kindLabel, lastPlacedAt, stamp } from "./memo.js";
 import { bulkDismissable, canAdopt, canDismiss, canRename, canTell, candidates, isOwnTask, lastSeenAgo, memoDestinations, pathDestination, peerDestinations, spawnDestinations } from "./ops.js";
 import { addBlocker, adopt, askUnlink, discard, discardStale, dismissAll, dismissOne, handOff, handOffTask, instruct, rename, setStatus, start, toParking, unlink } from "./actions.js";
 import { openTarget, pickFolder } from "./daemon.js";
-import { edgeNoteRepo, refUrl, segments, textNoteRepo } from "./links.js";
+import { edgeNoteRepo, mentionUrl, refUrl, segments, textNoteRepo } from "./links.js";
 import { CONTROLS_BAND, MAX_ZOOM, MIN_ZOOM, centerOffset, clampZoom, fitZoom, overflowCenter, percent, scaledFrame, scrollAfterZoom, stepZoom, topOffset, wheelZoomer } from "./zoom.js";
 import { restore, scrollView, watchUpgrade } from "./restore.js";
 
@@ -725,12 +725,32 @@ function nodeRow(n, link, owner) {
     const note = document.createElement("span");
     note.className = "note";
     appendLinked(note, link.edge.note, { githubRepo: (k) => edgeNoteRepo(link.edge, state.data.repos, k), base: link.edge.after.cwd });
+    // note の #番号 は daemon が引いた題を tooltip に出す (#474)。
+    const hint = mentionLines(link.mentions).join("\n");
+    if (hint) note.title = hint;
     row.append(note);
   }
   // `edge add` で書いた辺 (kind edge) は元の記録を消せる。同じセッションの blockedBy はそのセッションの TaskUpdate のもの。
   if (link?.kind === "edge" && link.edge) row.append(iconButton("unlink", "Unlink", () => act(() => unlink(link))));
   // 同じセッションの blockedBy は TaskUpdate のもので外せないので、そのセッションに解消を頼む。
   if (link?.kind === "task" && owner && canTell(owner)) row.append(iconButton("unlink", "Ask the session to unlink", () => act(() => askUnlink(n, owner))));
+  return row;
+}
+
+// mentionRow は題の #番号 の 1 行: repo 名#番号 (押すと issue / PR を開く) と、daemon が引いた題 (引く前は空)。
+function mentionRow(m) {
+  const row = document.createElement("div");
+  row.className = "lk mention";
+  const b = document.createElement("button");
+  b.type = "button";
+  b.textContent = mentionLabel(m);
+  b.title = mentionUrl(m);
+  b.addEventListener("click", () => void openLink(mentionUrl(m)));
+  const t = document.createElement("span");
+  t.className = "mt";
+  t.textContent = m.title ?? "";
+  t.title = m.title ?? "";
+  row.append(b, t);
   return row;
 }
 
@@ -1107,6 +1127,10 @@ function nodePopup(n) {
     appendLinked(p, text, linkContext(text, n.repo, n.cwd));
     parts.push(p);
   }
+
+  // 題に書かれた #番号 は、番号だけでは何か読めないので、daemon が引いた題と並べる (#474)。
+  const mentions = n.mentions ?? [];
+  if (mentions.length > 0) parts.push(group("References", mentions.length, mentions.map(mentionRow)));
 
   // Blocks はこのノードを待っているもの、Blocked by はこのノードが待っているもの。
   const after = g.waiters(n.key).flatMap((l) => (g.node(l.after) ? [[g.node(l.after), l]] : []));

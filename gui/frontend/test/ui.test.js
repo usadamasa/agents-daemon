@@ -774,6 +774,34 @@ test("辺の note: #123 は番号の合う端点の参照の repo で補う", as
   escape();
 });
 
+test("タスクの題の #番号: カードの tooltip と単体ビューの References に repo 名#番号 と引いた題を出し、行を押すと開く (#474)", async () => {
+  assert.equal(q('.node[data-key="task:alpha/5"]').title, "agents-daemon#254 依存図の色を状態ごとに分ける\nworkspace#12 横断の作業の置き場を決める");
+  q('.node[data-key="task:alpha/5"]').click();
+  const pop = q("#pop");
+  assert.ok(heads(pop).includes("References · 2"), heads(pop).join(", "));
+  const rows = [...pop.querySelectorAll(".mention")];
+  assert.deepEqual(
+    rows.map((r) => [r.querySelector("button").textContent, r.querySelector(".mt").textContent]),
+    [
+      ["agents-daemon#254", "依存図の色を状態ごとに分ける"],
+      ["workspace#12", "横断の作業の置き場を決める"],
+    ],
+  );
+  opened.length = 0;
+  for (const r of rows) r.querySelector("button").click();
+  await flush();
+  assert.deepEqual(opened, ["https://github.com/usadamasa/agents-daemon/pull/254", "https://github.com/usadamasa/workspace/issues/12"]);
+  assert.equal(pop.hidden, false);
+  await snapshot("graph-popup-mentions");
+  escape();
+});
+
+test("辺の note の #番号: 関係の行の note の tooltip に引いた題を出す (#474)", async () => {
+  q('.node[data-key="pr:usadamasa/agents-daemon#254"]').click();
+  assert.equal(q("#pop .lk .note").title, "agents-daemon#254 依存図の色を状態ごとに分ける");
+  escape();
+});
+
 test("PR のノードの単体ビュー: 見出しは PR の題で、番号と repo は状態の chip に残す", async () => {
   q('.node[data-key="pr:usadamasa/agents-daemon#254"]').click();
   const pop = q("#pop");

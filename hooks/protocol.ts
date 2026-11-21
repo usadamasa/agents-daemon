@@ -1304,6 +1304,13 @@ export const definitions = {
         },
         "description": "このタスクの description に id が書かれたメモ (書かれた順)。status を問わない"
       },
+      "mentions": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/RefMention"
+        },
+        "description": "kind task のノードの題に書かれた issue / PR の番号 (書かれた順)。owner/repo を解けたものだけ"
+      },
       "blocked_by": {
         "type": "array",
         "items": {
@@ -1403,6 +1410,39 @@ export const definitions = {
       },
       "edge": {
         "$ref": "#/$defs/EdgeRecord"
+      },
+      "mentions": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/RefMention"
+        },
+        "description": "edge の note に書かれた issue / PR の番号 (書かれた順)。owner/repo を解けたものだけ"
+      }
+    }
+  },
+  "RefMention": {
+    "description": "題か note に書かれた issue / PR の番号 1 つ。素の #N と repo#N は owner/repo を補ってある",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "repo",
+      "number"
+    ],
+    "properties": {
+      "repo": {
+        "type": "string",
+        "description": "owner/repo"
+      },
+      "number": {
+        "type": "integer"
+      },
+      "ref": {
+        "type": "string",
+        "description": "daemon が引いた参照 (issue: / pr:)。引く前は無い"
+      },
+      "title": {
+        "type": "string",
+        "description": "daemon が引いた issue / PR の題。引く前は無い"
       }
     }
   },

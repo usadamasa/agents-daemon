@@ -42,6 +42,7 @@ components:
       - "internal/worklog"
       - "internal/parking"
       - "internal/edge"
+      - "internal/mention"
       - "internal/ledger"
       - "internal/spawnedsession"
       - "internal/eventlog"

@@ -716,6 +716,38 @@ test("メモの detail: repo を基準にリンクにする", async () => {
   escape();
 });
 
+test("メモの既定: 本文と同じく repo を基準にリンクにする (#498)", async () => {
+  q('.mrow[data-memo="memo-2"]').click();
+  try {
+    const dd = [...q("#pop").querySelectorAll(".kv dt")].find((d) => d.textContent === "Default").nextElementSibling;
+    assert.equal(dd.textContent, "#7 が閉じるまで gui/main.go:5 は触らない");
+    const as = [...dd.querySelectorAll("a.ref")];
+    assert.deepEqual(as.map((a) => a.textContent), ["#7", "gui/main.go:5"]);
+    opened.length = 0;
+    for (const a of as) a.click();
+    await flush();
+    assert.deepEqual(opened, ["https://github.com/usadamasa/agents-daemon/issues/7", "/repo/agents-daemon/gui/main.go"]);
+  } finally {
+    escape();
+  }
+});
+
+test("メモのファイル: 形を問わず 1 件ずつリンクにし、相対パスは repo を基準にする (#498)", async () => {
+  q('.mrow[data-memo="memo-2"]').click();
+  try {
+    const dd = [...q("#pop").querySelectorAll(".kv dt")].find((d) => d.textContent === "Files").nextElementSibling;
+    assert.equal(dd.textContent, "Makefile, /abs/notes.md, ../other/y.md");
+    const as = [...dd.querySelectorAll("a.ref")];
+    assert.deepEqual(as.map((a) => a.textContent), ["Makefile", "/abs/notes.md", "../other/y.md"]);
+    opened.length = 0;
+    for (const a of as) a.click();
+    await flush();
+    assert.deepEqual(opened, ["/repo/agents-daemon/Makefile", "/abs/notes.md", "/repo/agents-daemon/../other/y.md"]);
+  } finally {
+    escape();
+  }
+});
+
 test("タスクの説明: #123 は同じ文の参照と番号が合えばその repo、合わなければタスクの repo で補う (#562)", async () => {
   q('.node[data-key="task:alpha/4"]').click();
   const as = [...q("#pop").querySelectorAll("p a.ref")];

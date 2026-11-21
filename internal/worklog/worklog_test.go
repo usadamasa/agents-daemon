@@ -239,6 +239,43 @@ func TestIngest_ghprcreateが出したPRを記録に残す(t *testing.T) {
 	}
 }
 
+// stackSubmitFirst と stackSubmitAdded は gh stack (0.2.1) の submit --auto を Bash ツールから打った stdout の写し。
+// first は 2 つの branch の PR を新しく作った回、added は既存の 2 つに branch を 1 つ足して submit し直した回。
+const (
+	stackSubmitFirst = "Checking stack state...\nPushing to origin...\n" +
+		"✓ Created PR #1 (https://github.com/usadamasa/gh-stack-output-probe/pull/1) for layer-a\n" +
+		"✓ Created PR #2 (https://github.com/usadamasa/gh-stack-output-probe/pull/2) for layer-b\n" +
+		"✓ Stack created on GitHub with 2 PRs (stack #3)\n✓ Pushed and synced 2 branches"
+	stackSubmitAdded = "Checking stack state...\nPushing to origin...\n" +
+		"PR #1 (https://github.com/usadamasa/gh-stack-output-probe/pull/1) for layer-a is up to date\n" +
+		"PR #2 (https://github.com/usadamasa/gh-stack-output-probe/pull/2) for layer-b is up to date\n" +
+		"✓ Created PR #4 (https://github.com/usadamasa/gh-stack-output-probe/pull/4) for layer-c\n" +
+		"✓ Stack updated on GitHub with 3 PRs (stack #3)\n✓ Pushed and synced 3 branches"
+)
+
+// gh stack submit が作った PR も、gh pr create と同じく出したセッションの記録に残す (#605)。submit は既存の PR の
+// 行にも URL を出すが、それは別のセッションが出した PR でありうるので、Created の行の PR だけを残す。
+func TestIngest_ghstacksubmitが作ったPRだけを記録に残す(t *testing.T) {
+	s := New(t.TempDir())
+	mustIngest(t, s, hook("UserPromptSubmit", `"prompt": "p"`), now)
+	res := mustIngest(t, s, bash("gh stack submit --auto", stackSubmitFirst), now.Add(time.Minute))
+	if !res.Written {
+		t.Errorf("Result = %+v, want Written", res)
+	}
+	want := []string{"pr:usadamasa/gh-stack-output-probe#1", "pr:usadamasa/gh-stack-output-probe#2"}
+	if got := mustGet(t, s, "s1").Prs; !reflect.DeepEqual(got, want) {
+		t.Errorf("Prs = %v, want %v", got, want)
+	}
+
+	// 既存の PR を submit し直しただけのセッションには、その PR を残さない。前置きのある打ち方も拾う。
+	other := New(t.TempDir())
+	mustIngest(t, other, hook("UserPromptSubmit", `"prompt": "p"`), now)
+	mustIngest(t, other, bash("git push && gh stack submit --auto --open", stackSubmitAdded), now.Add(2*time.Minute))
+	if got, want := mustGet(t, other, "s1").Prs, []string{"pr:usadamasa/gh-stack-output-probe#4"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("submit し直した記録の Prs = %v, want %v", got, want)
+	}
+}
+
 // cwd の repo の鍵を記録に残す (#606)。求めるのは記録を作ったときと cwd が変わったときだけで、同じ cwd の hook では
 // 求め直さない。worktree が消えた後の SessionEnd が、worktree のパスになった鍵で上書きしないため。
 func TestIngest_cwdのrepoの鍵を残しworktreeが消えても上書きしない(t *testing.T) {
@@ -330,6 +367,8 @@ func TestIngest_ghprcreateでなければPRを残さない(t *testing.T) {
 		bash("gh pr list", url),
 		bash("echo gh pr create", url),
 		bash("gh pr create --fill", "a pull request already exists\n"),
+		bash("gh stack view --json", stackSubmitFirst),
+		bash("echo gh stack submit", stackSubmitFirst),
 		hook("PostToolUse", `"tool_name": "Read"`, `"tool_input": {"file_path": "/x"}`, `"tool_response": {}`),
 	}
 	for _, in := range inputs {

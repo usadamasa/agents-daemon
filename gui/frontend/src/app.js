@@ -780,10 +780,19 @@ function actButton(label, icon, tone, onClick) {
   return b;
 }
 
+// actsBar は動詞を 1 行に並べる。危ない動詞 (danger) は呼び手が末尾に置き、その前に間隔を挟んで右端へ離す。
 function actsBar(buttons) {
   const bar = document.createElement("div");
   bar.className = "acts";
-  bar.append(...buttons);
+  const first = buttons.findIndex((b) => b.classList.contains("danger"));
+  if (first >= 0) {
+    const gap = document.createElement("span");
+    gap.className = "gap";
+    gap.setAttribute("aria-hidden", "true");
+    bar.append(...buttons.slice(0, first), gap, ...buttons.slice(first));
+  } else {
+    bar.append(...buttons);
+  }
   return bar;
 }
 

@@ -45,6 +45,9 @@ Replay と Gate が書く `replays/`、`verdicts/`)。90 日より古いファ�
 `agents-daemon dream adopt` は `kind: unhomed` の candidate を拒否する。行き先を決めてから呼ぶ
 ([layer-auto-memory](layer-auto-memory.md))。
 
+Adopt の Edit の後、commit の前に `agents-daemon dream check --project <canonical>` を通す。
+落ちたら直してから commit する (点検の項目は [cli.md](cli.md) の「`dream check`」)。
+
 ## 本環境での実施モデル
 
 Anthropic Dreams API は入力 store を非破壊で扱い、出力を別 store に書いて、opt-in のレビューを経て採用する。

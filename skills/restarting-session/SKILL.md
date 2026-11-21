@@ -66,17 +66,27 @@ fork は会話を写すが、タスク (`TaskList`) は写さない。新しい�
 新しいセッションの最初のターンになる。次の部品をこの順で書く。
 
 1. 再起動であることと、元の session ID
-2. SessionStart の確かめ。自分の transcript (`~/.claude/projects/<cwd の project>/<新しい session ID>.jsonl`) に、
-   hookName が `SessionStart:fork` で command が `shared-rex-session.sh` の記録があること。transcript は出力のある hook しか
-   残さず、この hook はタブに起きたセッションで必ず出力する。無ければ発火を確かめられなかったと報告し、元のタブは閉じない
-3. worktree の中なら、`EnterWorktree` の `path` に元の cwd を渡して入り直す (sandbox の書き込み先と worktree の lock を取り戻す)
-4. 引き継ぐタスク。元の `TaskList` の未完了を subject と状態の行で並べ、`TaskCreate` で作り直すよう書く
-5. 元のタブを閉じる。`rex whoami --json` の `window_id` が元の window と違うことを確かめてから
+2. plugin の hook が新しいプロセスで走ったことの確かめ。`~/.local/state/agents-daemon/logs/events.log` に
+   `ingest-work session=<新しい session ID>` の行 (最初のターンの UserPromptSubmit) があること。無ければ確かめられなかったと
+   報告し、元のタブは閉じない
+3. 引き継ぐタスク。元の `TaskList` の未完了を subject と状態の行で並べ、`TaskCreate` で作り直すよう書く
+4. 元のタブを閉じる。`rex whoami --json` の `window_id` が元の window と違うことを確かめてから
    `rex window close -s <元の rex session> <元の window>` を打つ。同じなら閉じずに止まって利用者へ上げる
-6. 続きの作業。再起動の前に途中だったことと、報告の宛先
+5. 続きの作業。再起動の前に途中だったことと、報告の宛先
 
-新しいセッションは別の session ID になる。元の session ID を `sid:` で指す辺があれば、新しいセッションが付け替える
-(`agents-daemon:agents-daemon` skill の `references/operations.md`「セッションをまたぐ辺を書く」)。
+fork の SessionStart では plugin の hook は今 install されているバージョンのパスで走るが、その出力は transcript にも
+会話の context にも入らない。settings の hook の出力だけが入る。そのため確かめは transcript でなく、plugin の hook が書く
+events.log で行う。SessionStart そのものの発火まで見るなら、`claude --debug-file` を付けて起こした fork の log を読む。
+
+<!-- cc-premise: 2.1.330 hooks fork の SessionStart は plugin の hook を走らせるが、その出力を transcript と context に入れない -->
+
+worktree の中から起こした fork は、cwd がその worktree なので sandbox の書き込み先に worktree の git ディレクトリを持ち、
+そのまま commit できる。`EnterWorktree` は cwd と同じパスを拒むので打たない。worktree の lock は元のプロセスの PID のまま残る。
+
+<!-- cc-premise: 2.1.330 worktrees cwd が worktree の fork は EnterWorktree を拒み、lock は元の PID のまま -->
+
+新しいセッションは別の session ID になる。元の session ID を `sid:` で指す辺のうち手で書いたもの (`derived` の無いもの) は、
+新しいセッションが付け替える (`agents-daemon:agents-daemon` skill の `references/operations.md`「セッションをまたぐ辺を書く」)。
 
 Remote Control は、新しいセッションに新しい Remote Control の会話として付く。元の会話を開いていた端末は、
 元のタブを閉じた時点で切れるので、新しい会話を開き直す。

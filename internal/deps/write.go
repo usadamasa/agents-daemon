@@ -3,6 +3,7 @@ package deps
 import (
 	"encoding/json"
 	"io"
+	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/daemonstate"
@@ -37,7 +38,12 @@ func Write(w io.Writer, p apppath.Paths) error {
 	if err != nil {
 		return err
 	}
-	memos, err := parking.New(p.StateDir()).Find("", "")
+	memoStore := parking.New(p.StateDir())
+	memos, err := memoStore.Find("", "")
+	if err != nil {
+		return err
+	}
+	handed, err := memoStore.Handed(time.Now())
 	if err != nil {
 		return err
 	}
@@ -73,6 +79,7 @@ func Write(w io.Writer, p apppath.Paths) error {
 		Todos:        todos,
 		Works:        works,
 		Parking:      memos,
+		Handed:       handed,
 		Edges:        edges,
 		Locate:       gitrepo.Locate,
 		GitHubRepo:   gitrepo.GitHubRepo,

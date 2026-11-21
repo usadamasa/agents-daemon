@@ -53,6 +53,17 @@ func ToSession(sessionID string) string { return destinationSession + sessionID 
 // 宛先は起こす先の repo のまま書き直さない (取ってから書き直すまでの間に宛先の違うメモが見えるのを避ける)。
 func ToRepo(path string) string { return destinationRepo + path }
 
+// Destination は宛先 (Item.HandedTo) を session ID か repo のパスに分ける。どちらの形でもなければ両方とも空。
+func Destination(to string) (sessionID, repo string) {
+	if id, ok := strings.CutPrefix(to, destinationSession); ok {
+		return id, ""
+	}
+	if path, ok := strings.CutPrefix(to, destinationRepo); ok {
+		return "", path
+	}
+	return "", ""
+}
+
 const (
 	StatusOpen      = "open"
 	StatusHanded    = "handed"
@@ -303,9 +314,34 @@ func (s Store) Find(repo, status string) ([]Item, error) {
 	return Filter(items, repo, status), nil
 }
 
-// Handed は保持期間 (ClosedRetention) の間の handed のメモを id の順に返す。該当なしは空の配列。
+// Handed は保持期間 (ClosedRetention) の間の handed のメモを id の順に返す。該当なしは空の配列。保持期間は
+// Prune と同じく mtime で見るので、daemon が止まって Prune が回らない間も期間を過ぎたメモは返さない。
 func (s Store) Handed(now time.Time) ([]Item, error) {
-	return nil, nil
+	items := []Item{}
+	if s.Dir == "" {
+		return items, nil
+	}
+	entries, err := os.ReadDir(s.Dir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return items, nil
+		}
+		return nil, err
+	}
+	for _, e := range entries {
+		if !isItemFile(e) {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil || now.Sub(info.ModTime()) >= ClosedRetention {
+			continue
+		}
+		if item, ok := readItem(filepath.Join(s.Dir, e.Name())); ok && item.Status == StatusHanded {
+			items = append(items, item)
+		}
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].ID < items[j].ID })
+	return items, nil
 }
 
 // Filter は items のうち repo と status が一致するものを返す。空の条件は絞らない。該当なしは空の配列。

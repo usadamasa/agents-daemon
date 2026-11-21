@@ -292,6 +292,9 @@ select { font: inherit; color: inherit; }
 .park .hd { display: flex; align-items: center; gap: 8px; padding: 8px 16px; min-height: 48px; box-sizing: border-box; border-bottom: 1px solid var(--line); }
 .park .ls { flex: 1 1 auto; overflow-y: auto; padding: 8px; }
 .park .none { padding: 8px; color: var(--muted); }
+/* 渡したメモの節。open の行と線で分け、題は控えめの色にする */
+.park .ls > .gh { margin-top: 8px; padding: 8px 8px 4px; border-top: 1px solid var(--line-muted); }
+.mrow.handed .t { color: var(--muted); }
 .mrow {
   display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 8px; width: 100%; box-sizing: border-box;
   border-radius: 6px; text-align: left; font-size: 14px; white-space: nowrap;

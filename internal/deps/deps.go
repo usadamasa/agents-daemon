@@ -18,6 +18,7 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/daemonstate"
 	"github.com/usadamasa/agents-daemon/internal/deps/graph"
+	"github.com/usadamasa/agents-daemon/internal/deps/handed"
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/ledger"
@@ -73,7 +74,7 @@ func build(in input) Deps {
 	d.RexPlacement = d.UpdatedAt != nil && in.Snapshot.RexPlacement
 	cards := collect(in, panes)
 	open := parking.Filter(in.Parking, "", parking.StatusOpen)
-	names := sessionNames(sessionIDs(cards, open), in.SessionNames)
+	names := sessionNames(sessionIDs(cards, open, in.Handed), in.SessionNames)
 	for i := range cards {
 		cards[i].Session = names[cards[i].SessionID]
 	}
@@ -114,7 +115,20 @@ func build(in input) Deps {
 		return key
 	})
 	d.Graph.ColumnOrder = groupByRex(order, d.Graph.Nodes)
+	d.Handed = handedMemos(in.Handed, cards, d.Graph.Nodes, names, panes, l)
 	return d
+}
+
+// handedMemos は渡したメモに図の中で解いた宛先を添えて並べる (handed)。
+func handedMemos(memos []parking.Item, cards []graph.Card, nodes []protocol.GraphNode, names map[string]string, panes map[string]*daemonstate.PaneStatus, l locator) []protocol.HandedMemo {
+	r := handed.NewResolver(cards, nodes, names, l.row)
+	out := make([]protocol.HandedMemo, 0, len(memos))
+	for _, m := range memos {
+		// メモの repo は置いたときに repo の鍵へ解いてある (arrange と同じ)。
+		out = append(out, protocol.HandedMemo{Memo: parkingCard(m, names, panes), Repo: m.Repo, RepoTitle: filepath.Base(m.Repo), To: r.To(m.HandedTo)})
+	}
+	handed.Sort(out)
+	return out
 }
 
 // peerNames は台帳から session ID → ListAgents の名前を引く。名前の無いセッションは載せない。
@@ -128,15 +142,22 @@ func peerNames(sessions []ledger.Session) map[string]string {
 	return names
 }
 
-// sessionIDs は作業とメモの source に出てくるセッション。
-func sessionIDs(cards []graph.Card, memos []parking.Item) map[string]bool {
+// sessionIDs は作業、open のメモと渡したメモの source、渡したメモの宛先に出てくるセッション。
+func sessionIDs(cards []graph.Card, open, handed []parking.Item) map[string]bool {
 	ids := map[string]bool{}
 	for _, c := range cards {
 		ids[c.SessionID] = true
 	}
-	for _, m := range memos {
-		for _, s := range m.Sources {
-			ids[s.SessionID] = true
+	for _, memos := range [][]parking.Item{open, handed} {
+		for _, m := range memos {
+			for _, s := range m.Sources {
+				ids[s.SessionID] = true
+			}
+		}
+	}
+	for _, m := range handed {
+		if id, _ := parking.Destination(m.HandedTo); id != "" {
+			ids[id] = true
 		}
 	}
 	return ids

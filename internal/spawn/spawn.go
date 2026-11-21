@@ -3,6 +3,7 @@
 // 起こすのは daemon のバイナリ (`agents-daemon spawn`)。mod や hook から多重化ツールを叩かない決めごとに合わせる。
 // 新しいセッションは repo を cwd にし、session ID をこちらで決めて `claude --session-id <id> --model <model> -- <本文>`
 // で起こす。本文は最初のターンとして入るので、peer メッセージの inbox が開くのを待たずに渡せる。
+// cc-premise: 2.1.306 cli claude [prompt] は最初のターンの本文、--session-id <uuid> でセッション ID を固定できる
 //
 // 起こす先は target が決める。足し先 (Request.Session) があればその session のタブ、NewSession なら新しい session、
 // どちらも無ければ起こす側の session (Request.Caller) のタブ、Caller も無ければ (park hand、rex の外のアプリ) 新しい

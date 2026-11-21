@@ -22,8 +22,6 @@ plugin の `agents-daemon:agents-daemon` skill の `references/operations.md` �
 | [architecture.md](references/architecture.md) | 部品の連動と出力されるファイル |
 | [program-status.md](references/program-status.md) | Claude Code の record と画面のモードの実測 |
 | [multiplexer.md](references/multiplexer.md) | 多重化ツールの backend (rex) |
-| [deps.md](references/deps.md) | 依存図 (JSON、アプリ、tell、辺の通知の mod) |
-| [parking.md](references/parking.md) | パーキングロット (メモの手渡し、park tool、通知の mod) |
 | [binary.md](references/binary.md) | バイナリの用意と差し替え |
 | [verification.md](references/verification.md) | 検証用コマンドと実機での検証 |
 | [package-lint.md](references/package-lint.md) | パッケージ構造の lint (analyze-modularity、go-arch-lint) と改名 |
@@ -44,5 +42,8 @@ plugin の `agents-daemon:agents-daemon` skill の `references/operations.md` �
 | `doctor` の pane 一覧が `session_id=(なし)` になる (上限を判定しない) | `sessioncontext` (`context/<sid>.json` の `multiplexer`) と `claudesessions` (登録簿での補い) |
 | `doctor` の pane 一覧に `⚠ transcript を読めない` が出る | `transcript` の package doc (置き場と entry の形) |
 | rex のセッションなのに daemon が起きない | multiplexer.md (`REX_SESSION` の無い起動では起こさない) |
+| 依存図のノードの状態や辺がおかしい | `deps/graph` と `edge` (端点の結びつけ) の package doc、`deps/activity.go`。`agents-daemon deps` の JSON を直に読む |
+| アプリからの送達 (指示、メモを渡す) が拒まれる・届かない | `tell` と `parkhand` の package doc。`logs --events` の `tell` と `park.hand` の行 |
+| mod の通知 (辺の書き方、ファイルのメモ) が出ない、park tool が載らない | `hooks/register.ts` と各 `hooks/*.ts` の冒頭。`logs --events` の mod の出来事 |
 | 検知の挙動を確かめたい、上限を踏んだ後に材料を読みたい | verification.md |
 | `task lint` の analyze-modularity や go-arch-lint が落ちる、パッケージを統合・改名したい | package-lint.md |

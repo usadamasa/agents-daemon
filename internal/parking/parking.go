@@ -464,7 +464,8 @@ func hasSource(sources []Source, src Source) bool {
 
 // newID は置いた時刻と乱数で id を作る。時刻を先に置くので、名前の順が置いた順になる。
 // 時刻は UTC にする。端末の時刻帯に左右されず、ファイル名の並びが時刻の並びと一致する。人に見せるときは
-// id の時刻を出さず、sources の at を JST で出す (parking.md「時刻の書き方」)。
+// id の時刻を出さず、sources の at を JST で出す (gui/frontend/src/memo.js の stamp)。記録に書く時刻は offset 付きの
+// RFC 3339 のまま揃えない。どの offset でも同じ瞬間に戻せるので、揃えるのは表示の側だけで足りる。
 func newID(at time.Time) (string, error) {
 	b := make([]byte, 4)
 	if _, err := rand.Read(b); err != nil {

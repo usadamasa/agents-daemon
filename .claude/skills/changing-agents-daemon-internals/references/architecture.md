@@ -63,9 +63,9 @@ subagent の worktree (`claude agent` の lock) は Claude Code 本体の period
 触らない。daemon の housekeeping にしなかったのは、daemon が rex の外では起きず、対象リポジトリの一覧も cwd も
 持たないため (#97)。
 
-plugin は mod も持ち、依存図は別 module のアプリ (`gui/`) が描く。依存図の JSON、アプリ、セッションへの送達 (`tell`)、
-渡した宛先の辺の通知は [deps.md](deps.md)、パーキングのメモと手渡し (`park hand`)、park tool、ファイルのメモの通知は
-[parking.md](parking.md)。
+plugin は mod も持ち、依存図は別 module のアプリ (`gui/`) が描く。依存図の JSON は `deps`、`deps/graph`、`edge`、
+`ledger`、セッションへの送達は `tell`、パーキングのメモと手渡しは `parking` と `parkhand` の package doc。mod の束ね方と
+各 mod の役目は `hooks/register.ts` と各 `hooks/*.ts` の冒頭、アプリは `gui/` の各ファイルの冒頭が持つ。
 
 バイナリ自体も SessionStart hook が用意し、差し替わったら動いている daemon が自分で入れ替わる。build の条件、
 lock、入れ替わりは [binary.md](binary.md)。

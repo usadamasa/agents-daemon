@@ -125,6 +125,27 @@ test('辺の無い生きているセッションへ渡したら、辺の書き�
   expect(res.result).toEqual({ success: true })
 })
 
+test('同じ宛先へは 1 度だけ伝える ([ref] 付きの宛先も同じ宛先とみなす)。別の宛先には伝える', async ($, on) => {
+  const w = world(on, deps([node('PEER', '1', 'edge-cli'), node('OTHER', '1', 'other')]))
+  await $.session.start(START)
+
+  expect(context(await send($, 'edge-cli'))).toMatch(/edge-cli/)
+  expect(context(await send($, 'edge-cli'))).toBe('')
+  expect(context(await send($, 'edge-cli [ab12]'))).toBe('')
+  expect(context(await send($, 'other'))).toMatch(/other/)
+  // 伝えた回だけ出来事のログに書く。
+  const logged = w.ran.filter(argv => argv[1] === 'event-log' && JSON.stringify(argv).includes('mod.handoff.unlinked'))
+  expect(logged).toHaveLength(2)
+})
+
+test('並べて送った同じ宛先へも 1 度だけ伝える', async ($, on) => {
+  world(on, deps([node('PEER', '1', 'edge-cli')]))
+  await $.session.start(START)
+
+  const results = await Promise.all([send($, 'edge-cli'), send($, 'edge-cli')])
+  expect(results.filter(r => context(r) !== '')).toHaveLength(1)
+})
+
 test("cwd に ' があっても、案内の行を sh が読むと cwd がそのまま渡る", async ($, on) => {
   const cwd = "/src/home/it's"
   world(on, deps([node('PEER', '1', 'edge-cli', { cwd })]))

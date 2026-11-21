@@ -567,6 +567,8 @@ declare module 'claude-code' {
       // told はファイルを触った tool の結果で model に伝えたメモの id (hooks/notice.ts)。同じメモを 2 度伝えない。
       // main の会話が compact されたら空にする。
       told: string[]
+      // nudged は辺の書き方を伝えた SendMessage の宛先の名前 (hooks/handoff-notice.ts)。同じ宛先へ 2 度は伝えない。
+      nudged: string[]
       // logged は出来事のログに slot ごとに最後に書いた中身 (hooks/log.ts)。同じものを書き直さないため。
       logged: Record<string, string>
       // inferDue は main のターンが終わってから companion の timer がまだ見ていない印 (hooks/work-infer.ts)。

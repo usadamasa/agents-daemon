@@ -21,6 +21,32 @@ func touch(t *testing.T, path string, age time.Duration) {
 	}
 }
 
+// TaskEndpoints は before と after のどちらかで task: の端点になっているタスクだけを当てる。sid: の端点は、そのセッションの
+// タスクを端点にしない。辺の無い置き場はどのタスクも当てない。
+func TestTaskEndpoints(t *testing.T) {
+	s := New(t.TempDir())
+	if endpoint, err := s.TaskEndpoints(); err != nil || endpoint("S", "1") {
+		t.Fatalf("辺の無い置き場の TaskEndpoints() = %v, (S, 1) を端点としない", err)
+	}
+	for _, pair := range [][2]string{{"task:U/1", "task:D/3"}, {"sid:S", "pr:o/r#1"}} {
+		if _, err := s.Add(Endpoint{Ref: pair[0], CWD: "/w"}, Endpoint{Ref: pair[1], CWD: "/w"}, "", testNow); err != nil {
+			t.Fatal(err)
+		}
+	}
+	endpoint, err := s.TaskEndpoints()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		session, task string
+		want          bool
+	}{{"U", "1", true}, {"D", "3", true}, {"D", "1", false}, {"S", "1", false}} {
+		if got := endpoint(c.session, c.task); got != c.want {
+			t.Errorf("endpoint(%s, %s) = %v, want %v", c.session, c.task, got, c.want)
+		}
+	}
+}
+
 // Prune は Retention 更新の無い辺と消し損ねた一時ファイルを消し、新しいものとロックは残す。
 func TestPrune(t *testing.T) {
 	s := New(t.TempDir())

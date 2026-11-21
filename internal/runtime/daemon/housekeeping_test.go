@@ -152,6 +152,71 @@ func TestHousekeep_keepsCompletedTasksOfExitedSession(t *testing.T) {
 	}
 }
 
+// 辺の端点 (task:) になっている完了タスクは、CompletedRetention を過ぎても辺の保持期間までは消さない。消すと辺の記録が
+// 残っているのに依存図から辺が消える (#502)。端点でない完了タスクは今までどおり消し、端点でも Retention を過ぎれば消す。
+func TestHousekeep_keepsCompletedTaskOfEdgeEndpoint(t *testing.T) {
+	now := time.Date(2026, 8, 28, 12, 0, 0, 0, time.UTC)
+	client := &multiplexerfake.Client{
+		PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) {
+			return []multiplexer.Pane{claudePaneWithSession("p1", "s-live", multiplexer.AgentStatusIdle)}, nil
+		},
+	}
+	r, statusPath := newTestRuntime(t, client, now)
+	dir := filepath.Dir(statusPath)
+	r.attachStateDir(dir)
+	logPath := filepath.Join(dir, "logs", "daemon.log")
+
+	completed := func(id string) string {
+		path := filepath.Join(r.tasks.Dir, "s-live", id+".json")
+		writeAged(t, path, `{"id":"`+id+`","session_id":"s-live","status":"completed"}`, 25*time.Hour, now)
+		return path
+	}
+	endpointTask, plainTask := completed("1"), completed("2")
+	added, err := r.edges.Add(edge.Endpoint{Ref: "sid:s-up", CWD: "/w"}, edge.Endpoint{Ref: "task:s-live/1", CWD: "/w"}, "", now)
+	if err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	edgePath := filepath.Join(r.edges.Dir, added.Edge.ID+".json")
+	// 同じ回の掃除で保持期間を過ぎて消える辺は、端点の完了タスクを残す理由にならない。
+	goneTask := filepath.Join(r.tasks.Dir, "s-gone", "1.json")
+	writeAged(t, goneTask, `{"id":"1","session_id":"s-gone","status":"completed"}`, 25*time.Hour, now)
+	gone, err := r.edges.Add(edge.Endpoint{Ref: "sid:s-up", CWD: "/w"}, edge.Endpoint{Ref: "task:s-gone/1", CWD: "/w"}, "", now)
+	if err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	goneEdge := filepath.Join(r.edges.Dir, gone.Edge.ID+".json")
+	expiredEdge := now.Add(-edge.Retention - time.Hour)
+	if err := os.Chtimes(goneEdge, expiredEdge, expiredEdge); err != nil {
+		t.Fatalf("Chtimes: %v", err)
+	}
+
+	if _, _, err := r.tick(context.Background(), missingConfigPath(t), now); err != nil {
+		t.Fatalf("tick() error = %v", err)
+	}
+	r.housekeep(logPath, now)
+
+	for _, path := range []string{endpointTask, edgePath} {
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("辺と、その端点の完了タスクは残るべき: %v", err)
+		}
+	}
+	for _, path := range []string{plainTask, goneEdge, goneTask} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("端点でない完了タスクと、同じ回に消える辺の端点は消えるべき: %s (err=%v)", path, err)
+		}
+	}
+
+	// 端点でも、タスクの記録が Retention を過ぎれば消える。
+	old := now.Add(-tasklog.Retention - time.Hour)
+	if err := os.Chtimes(endpointTask, old, old); err != nil {
+		t.Fatalf("Chtimes: %v", err)
+	}
+	r.housekeep(logPath, now)
+	if _, err := os.Stat(endpointTask); !os.IsNotExist(err) {
+		t.Errorf("Retention を過ぎた端点の完了タスクは消えるべき (err=%v)", err)
+	}
+}
+
 // pane が見えているセッションの未完了のタスクと辺は、何週間書かれていなくても housekeeping で消えない。終了したセッションの
 // 分は消える。見えなくなってから Retention が経つと、生きていたセッションの分も消える (#483)。
 func TestHousekeep_keepsTasksAndEdgesOfLiveSession(t *testing.T) {

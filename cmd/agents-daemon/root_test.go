@@ -88,6 +88,7 @@ func TestRootCmd_jsonFlag(t *testing.T) {
 		"agents-daemon deps":                  true,
 		"agents-daemon doctor":                true,
 		"agents-daemon dream adopt":           true,
+		"agents-daemon dream check":           true,
 		"agents-daemon dream forget":          true,
 		"agents-daemon dream harvest":         true,
 		"agents-daemon dream mine":            true,

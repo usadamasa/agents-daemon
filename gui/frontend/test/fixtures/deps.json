@@ -31,7 +31,8 @@
           "origin": "placed",
           "title": "ラベルの文言も揃えるか",
           "detail": "gui/main.go:5 の文言と #7 を見る。issue:usadamasa/workspace#8 の #8 も見る",
-          "default_taken": "やらない",
+          "default_taken": "#7 が閉じるまで gui/main.go:5 は触らない",
+          "files": ["Makefile", "/abs/notes.md", "../other/y.md"],
           "sources": [
             { "session_id": "sid-beta", "task_ref": "task:beta/1", "session": "beta", "live": true, "at": "2026-11-07T02:10:00Z" }
           ]

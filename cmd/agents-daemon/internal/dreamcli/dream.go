@@ -2,6 +2,7 @@
 package dreamcli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/dream"
 	"github.com/usadamasa/agents-daemon/internal/dream/adopt"
+	"github.com/usadamasa/agents-daemon/internal/dream/check"
 	"github.com/usadamasa/agents-daemon/internal/dream/forget"
 	"github.com/usadamasa/agents-daemon/internal/dream/harvest"
 	"github.com/usadamasa/agents-daemon/internal/dream/mine"
@@ -38,9 +40,10 @@ func newDreamCmd() *cobra.Command {
 		Short: "記憶階層 (CLAUDE.md / auto memory / skill) の consolidation を支える 5 phase",
 		Long: "Claude Code の記憶階層と skill 群を Harvest → Mine → Stage → Adopt の順に再編するための\n" +
 			"サブコマンド群。forget は Consolidate で役目を終えた auto memory を消す。\n" +
+			"check は adopt の後の機械の点検で、error の項目があれば exit code 1 で終わる。\n" +
 			"いつ・何のために回すかは agents-daemon:dream skill が持つ。\n" +
 			"--json は各 phase の結果 (harvest・mine・stage は --verbose と同じサマリ、adopt は手順の中身、\n" +
-			"forget は消したパス) を stdout に出す。policy は利用者の規約 (config.json の dream.policy) を JSON で出す。\n" +
+			"forget は消したパスとリンク元、check は点検の項目) を stdout に出す。policy は利用者の規約 (config.json の dream.policy) を JSON で出す。\n" +
 			"state は ${XDG_STATE_HOME:-~/.local/state}/agents-daemon/dream/ に置く。",
 	}
 	cmd.AddCommand(newDreamHarvestCmd())
@@ -48,7 +51,44 @@ func newDreamCmd() *cobra.Command {
 	cmd.AddCommand(newDreamStageCmd())
 	cmd.AddCommand(newDreamAdoptCmd())
 	cmd.AddCommand(newDreamForgetCmd())
+	cmd.AddCommand(newDreamCheckCmd())
 	cmd.AddCommand(newDreamPolicyCmd())
+	return cmd
+}
+
+func newDreamCheckCmd() *cobra.Command {
+	var opts check.Opts
+	cmd := &cobra.Command{
+		Use:   "check",
+		Short: "adopt の後の機械の点検 (read-only)。error の項目があれば exit code 1",
+		Long: "dream の adopt の後に、判断の要らない点検を回す。何も直さない。\n" +
+			"項目を error と warning に分けて 1 行ずつ stdout に出し、error が 1 件でもあれば exit code 1 で終わる。\n" +
+			"--json でも同じ。点検の項目は agents-daemon:dream skill の references/cli.md にある。",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			env, err := resolveDreamEnv()
+			if err != nil {
+				return err
+			}
+			opts.Home = env.home
+			opts.Cwd = env.cwd
+			opts.Stdout = textOut(cmd)
+			res, err := check.Run(opts)
+			if err != nil {
+				return err
+			}
+			if err := writeJSON(cmd, res); err != nil {
+				return err
+			}
+			if res.Failed() {
+				return errors.New("dream check: error の項目がある")
+			}
+			return nil
+		},
+	}
+	f := cmd.Flags()
+	f.StringVar(&opts.Project, "project", "", "対象 project (canonical name または絶対パス、省略時は cwd)")
+	f.StringVar(&opts.MemoryDir, "memory-dir", "", "memory ディレクトリ (省略時は ~/.claude/projects/<project>/memory)")
 	return cmd
 }
 

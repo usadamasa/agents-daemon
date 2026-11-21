@@ -1,3 +1,4 @@
+import { atom, update } from 'claude-code'
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
 
 import { loadDeps } from './deps-data'
@@ -13,8 +14,12 @@ import type { EdgeAddRequest } from '../types'
 // - 送信がエラーになったもの、文面の無いもの (notify_when_idle だけ、shutdown などの要求)、subagent の送信は見ない
 // - mod 自身の送信 ($.session.send) は tool.call を通らないので、ここには来ない
 // - 宛先はノードの session_name (daemon が Claude Code の登録簿から引いた ListAgents の名前) で当てる
+// - 伝えるのは同じ宛先へセッションの中で 1 回 (#502)。返事や報告のような依存の無い送信のたびに添えると、当てはまらない
+//   案内を繰り返す。compact でも空にしない
 // cc-premise: 2.1.316 mods SendMessage の tool.call は e.to (ListAgents の名前、同名なら末尾に ` [ref]`) と e.message を持ち、結果の context は model だけが読む
 // cc-premise: 2.1.310 mods 届かなかった SendMessage は isError の結果になるとみなす (型は result を unknown とし、確かめていない)
+
+const nudged = atom({ plugin: 'agents-daemon', key: 'nudged' } as const, [])
 
 export const registerHandoffNotice: Register = on => {
   on('tool.call', { tool: 'SendMessage' }, async ($, e, next) => {
@@ -47,12 +52,24 @@ async function nudge<R extends ToolCallResult>($: EngineInterface, name: string,
     // unlinked と同じ条件で探すので、unlinked が name を返したなら peer は見つかる。
     const peer = g.nodes.find(n => n.session_name === name && n.live && n.state !== 'completed')
     if (peer?.session_id === undefined) return sent
+    if (!(await claim($, name))) return sent
     await logEvent($, 'mod.handoff.unlinked', { session: peer.session_id })
     return { ...sent, context: [...(sent.context ?? []), describe(name, peer.session_id, peer.cwd, await daemonBin($))] }
   } catch (err) {
     await logChange($, 'handoff', 'mod.handoff.failed', { reason: reason(err, 'handoff') })
     return sent
   }
+}
+
+// claim は name をまだ伝えていなければ nudged に足して true を返す。並べて送った同じ宛先の hook が 2 回添えないよう、
+// 見るのと足すのを 1 回の update で行う。
+async function claim($: EngineInterface, name: string): Promise<boolean> {
+  let fresh = false
+  await update($, nudged, prev => {
+    fresh = !prev.includes(name)
+    return fresh ? [...prev, name] : prev
+  })
+  return fresh
 }
 
 // describe は辺の書き方を両方の向きで示す。peer の端点は依存図のノードの session_id で sid:<id> と指し、cwd もノードから

@@ -936,43 +936,60 @@ function startPicker(n) {
 }
 
 // toggle は picker を開く・閉じる動詞。
-// renameField は単体ビューの題をその場で打ち直す欄 (題の位置に置く)。空欄では直さない。Enter で直し、Escape で戻す。
-function renameField(n) {
-  const wrap = document.createElement("span");
-  wrap.className = "edit";
-  const t = document.createElement("input");
-  t.type = "text";
-  t.setAttribute("aria-label", "Work title");
-  t.value = state.draft === "" ? n.title : state.draft;
-  // 直すのは Enter、戻すのは Escape。枠の中の印は押しても直せる。
-  const save = document.createElement("button");
-  save.type = "button";
-  save.className = "key";
-  save.textContent = "↵";
-  save.setAttribute("aria-label", "Rename");
-  save.title = "Rename (Enter), cancel (Esc)";
-  const submit = () => {
-    const subject = t.value.trim();
-    if (subject === "") return;
-    act(() => rename(n, subject));
-  };
-  save.disabled = state.busy;
-  save.addEventListener("click", submit);
-  t.addEventListener("input", () => {
-    state.draft = t.value;
+// focusTitleOnOpen は題を押して欄にした直後か。次に組む欄だけが focus を取る。
+let focusTitleOnOpen = false;
+
+// editTitle は単体ビューの題の要素そのものを、その場で打ち直せる状態にする。別の入力欄に差し替えないので、
+// 書体・折り返し・幅は表示のときと同じになる。空欄では直さない。Enter で直し、Escape で戻す。
+function editTitle(title, n) {
+  title.classList.add("editing");
+  title.setAttribute("contenteditable", "plaintext-only");
+  title.setAttribute("role", "textbox");
+  title.setAttribute("aria-label", "Work title");
+  title.spellcheck = false;
+  title.textContent = state.draft === "" ? n.title : state.draft;
+  title.addEventListener("input", () => {
+    state.draft = title.textContent;
   });
-  t.addEventListener("keydown", (e) => {
+  title.addEventListener("keydown", (e) => {
     if (e.isComposing) return;
     if (e.key === "Enter") {
       e.preventDefault();
-      submit();
+      // 貼り付けで入った改行も題の中の空白に畳む。
+      const subject = title.textContent.replace(/\s+/g, " ").trim();
+      if (subject === "") return;
+      // focus を外し、読み直しで単体ビューを組み直して題の表示に戻す (render は打っている欄を組み直さない)。
+      title.blur();
+      act(() => rename(n, subject));
     } else if (e.key === "Escape") {
       e.stopPropagation();
+      // 打った字は捨てる。残すと指示の欄 (同じ draft を読む) に持ち越す。
+      state.draft = "";
       toggle("rename")();
     }
   });
-  wrap.append(t, save);
-  return wrap;
+  // 開いたときだけ、単体ビューに置かれてから focus し、題を全部選んで打ち替えられるようにする。組み直すたびに
+  // focus すると、確定した後も打っている欄として組み直しを止め続ける。
+  if (!focusTitleOnOpen) return title;
+  focusTitleOnOpen = false;
+  queueMicrotask(() => {
+    if (!title.isConnected) return;
+    title.focus();
+    const range = document.createRange();
+    range.selectNodeContents(title);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+  });
+  return title;
+}
+
+// renameHint は題を直している間、題の上の行に添える操作の案内。chip の行の位置を動かさない。
+function renameHint() {
+  const hint = document.createElement("span");
+  hint.className = "hint";
+  hint.textContent = "Enter to rename · Esc to cancel";
+  return hint;
 }
 
 // titleOf は単体ビューの題。題を直せるノード (canRename) では題そのものが入口で、押すとその場で欄に変わる (OOUI:
@@ -984,21 +1001,21 @@ function titleOf(n) {
     title.textContent = n.title;
     return title;
   }
-  if (state.picker === "rename") {
-    title.classList.add("editing");
-    title.append(renameField(n));
-    return title;
-  }
+  if (state.picker === "rename") return editTitle(title, n);
   title.classList.add("editable");
   title.textContent = n.title;
   title.title = "Click to rename (a renamed title is not overwritten automatically)";
   title.setAttribute("role", "button");
   title.tabIndex = 0;
-  title.addEventListener("click", toggle("rename"));
+  const open = () => {
+    focusTitleOnOpen = true;
+    toggle("rename")();
+  };
+  title.addEventListener("click", open);
   title.addEventListener("keydown", (e) => {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      toggle("rename")();
+      open();
     }
   });
   return title;
@@ -1040,6 +1057,7 @@ function nodePopup(n) {
   ph.className = "ph";
   ph.textContent = [KIND_LABEL[n.kind] ?? n.kind, n.task_id].filter(Boolean).join(" · ");
   const title = titleOf(n);
+  if (title.classList.contains("editing")) ph.append(renameHint());
   const chips = document.createElement("div");
   chips.className = "chips";
   chips.append(stateChip(n), ...restStageChips(n));
@@ -1322,9 +1340,10 @@ function render() {
   el("legend").hidden = false;
   renderPark();
   renderBulk();
-  // 補足欄を打っている最中はポップアップを組み直さない (focus が外れる)。位置だけ追わせる。
+  // 補足欄や題を打っている最中はポップアップを組み直さない (focus が外れる)。位置だけ追わせる。
   const pop = el("pop");
-  if (pop.contains(document.activeElement) && document.activeElement.tagName === "TEXTAREA") {
+  const typing = document.activeElement?.tagName === "TEXTAREA" || document.activeElement?.hasAttribute("contenteditable");
+  if (pop.contains(document.activeElement) && typing) {
     const anchor = popupAnchor();
     if (anchor) placePopup(pop, anchor, state.selected.type === "node" ? "beside" : "above");
   } else {

@@ -54,7 +54,8 @@ fork は会話を写すが、タスク (`TaskList`) は写さない。新しい�
    ~/.cache/agents-daemon/bin/agents-daemon spawn < ./tmp/restart-spawn.json
    ```
 
-4. 結果の `foreground` が `true` なら、ターンを終えて以後は何もしない。元のタブは新しいセッションが閉じる。
+4. 結果の `foreground` が `true` なら、ターンを終えて以後は作業を進めない。元のタブは新しいセッションが閉じる。
+   閉じるまでに peer のメッセージが届いたら、再起動したことと新しい session ID だけを返す。
    `false` なら新しいタブを `rex capture` で読み、起動の失敗を利用者へ上げる。元のタブは閉じずに残す
 
 `repo` は今の cwd にする。`--resume` は cwd の project から会話を探すので、worktree の中ならその worktree のパスを書く
@@ -66,24 +67,36 @@ fork は会話を写すが、タスク (`TaskList`) は写さない。新しい�
 新しいセッションの最初のターンになる。次の部品をこの順で書く。
 
 1. 再起動であることと、元の session ID
-2. plugin の hook が新しいプロセスで走ったことの確かめ。`~/.local/state/agents-daemon/logs/events.log` に
-   `ingest-work session=<新しい session ID>` の行 (最初のターンの UserPromptSubmit) があること。無ければ確かめられなかったと
-   報告し、元のタブは閉じない
+2. SessionStart の確かめ。`~/.local/state/agents-daemon/logs/events.log` に
+   `ingest-work session=<新しい session ID> event=SessionStart source=fork plugin_version=<v>` の行があり、`<v>` が
+   `jq -r '.plugins["agents-daemon@usadamasa"][0].version' ~/.claude/plugins/installed_plugins.json` と同じこと。
+   行が無いかバージョンが違えば、確かめられなかったと報告し、元のタブは閉じない
 3. 引き継ぐタスク。元の `TaskList` の未完了を subject と状態の行で並べ、`TaskCreate` で作り直すよう書く
 4. 元のタブを閉じる。`rex whoami --json` の `window_id` が元の window と違うことを確かめてから
    `rex window close -s <元の rex session> <元の window>` を打つ。同じなら閉じずに止まって利用者へ上げる
-5. 続きの作業。再起動の前に途中だったことと、報告の宛先
+5. worktree の中なら、lock を自分の PID で付け直す (下の worktree の段落)
+6. 続きの作業。再起動の前に途中だったことと、報告の宛先
 
 fork の SessionStart では plugin の hook は今 install されているバージョンのパスで走るが、その出力は transcript にも
-会話の context にも入らない。settings の hook の出力だけが入る。そのため確かめは transcript でなく、plugin の hook が書く
-events.log で行う。SessionStart そのものの発火まで見るなら、`claude --debug-file` を付けて起こした fork の log を読む。
+会話の context にも入らない。settings の hook の出力だけが入る。そのため確かめは transcript でなく、SessionStart の
+`ingest-work` の hook が自分の plugin のバージョンを添えて書く events.log の行で行う。
 
 <!-- cc-premise: 2.1.330 hooks fork の SessionStart は plugin の hook を走らせるが、その出力を transcript と context に入れない -->
 
 worktree の中から起こした fork は、cwd がその worktree なので sandbox の書き込み先に worktree の git ディレクトリを持ち、
-そのまま commit できる。`EnterWorktree` は cwd と同じパスを拒むので打たない。worktree の lock は元のプロセスの PID のまま残る。
+そのまま commit できる。`EnterWorktree` は cwd と同じパスを拒むので打たない。
+
+worktree の lock は元のプロセスの PID のまま残る。元を閉じるとその PID は不在になり、ほかのセッションの SessionStart の
+`prune-worktrees` が、7 日触られていない作業中の worktree を回収しうる。元のタブを閉じた後に、自分の claude の PID
+(`printenv CLAUDE_PID`) で付け直す。`<PID>` と `<name>` は値を展開して書く (`git` の引数に変数を書かない)。
+
+```sh
+git worktree unlock <worktree の絶対パス>
+git worktree lock --reason "claude session <name> (pid <PID>)" <worktree の絶対パス>
+```
 
 <!-- cc-premise: 2.1.330 worktrees cwd が worktree の fork は EnterWorktree を拒み、lock は元の PID のまま -->
+<!-- cc-premise: 2.1.330 bash-env Bash の環境の CLAUDE_PID は claude のプロセスの PID で、lock の reason の PID と同じ -->
 
 新しいセッションは別の session ID になる。元の session ID を `sid:` で指す辺のうち手で書いたもの (`derived` の無いもの) は、
 新しいセッションが付け替える (`agents-daemon:agents-daemon` skill の `references/operations.md`「セッションをまたぐ辺を書く」)。

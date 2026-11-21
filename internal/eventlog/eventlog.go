@@ -12,7 +12,7 @@
 //
 //	ingest-task               Task 系ツールと TodoWrite を記録した (tool、written、removed)
 //	ingest-task.failed        記録できなかった (tool、reason)
-//	ingest-work               セッションの作業の記録を作った (event、created) か、SessionEnd で ended を書いた (event、ended)。ターンごとの更新は書かない
+//	ingest-work               セッションの作業の記録を作った (event、created) か、SessionEnd で ended を書いた (event、ended)。SessionStart は毎回 (event、source、plugin_version)。ターンごとの更新は書かない
 //	ingest-work.failed        作業を記録できなかった (event、reason)
 //	work.set                  作業の題を書き換えた (origin=human は人が直した、inferred=true は companion の推定)
 //	work.set.failed           書き換えられなかった (origin / inferred、reason)

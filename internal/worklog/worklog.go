@@ -104,6 +104,8 @@ type Change struct {
 type Result struct {
 	Event     string
 	SessionID string
+	// Source は SessionStart の source (startup、resume、fork など)。ほかの event では空。
+	Source string
 	// Created は記録を新しく作ったか、Written は何かを書いたか、Ended は SessionEnd で ended_at を書いたか。
 	Created, Written, Ended bool
 }
@@ -212,7 +214,7 @@ func (s Store) Ingest(input []byte, now time.Time) (Result, error) {
 	if err := json.Unmarshal(input, &in); err != nil {
 		return Result{}, fmt.Errorf("hook の入力のパースに失敗: %w", err)
 	}
-	res := Result{Event: in.HookEventName, SessionID: in.SessionID}
+	res := Result{Event: in.HookEventName, SessionID: in.SessionID, Source: in.Source}
 	switch in.HookEventName {
 	case "SessionStart", "UserPromptSubmit", "Stop", "SessionEnd":
 	case "PostToolUse":

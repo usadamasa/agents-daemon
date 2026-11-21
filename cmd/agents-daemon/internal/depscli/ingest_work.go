@@ -21,22 +21,25 @@ import (
 // 割り込まないため。理由は stderr に 1 行だけ出す。stdout には何も出さない (UserPromptSubmit と SessionStart の stdout は
 // 会話の context に入る) ので --json には対応しない。
 func newIngestWorkCmd() *cobra.Command {
-	return &cobra.Command{
+	var pluginVersion string
+	cmd := &cobra.Command{
 		Use:         "ingest-work",
 		Short:       "SessionStart / UserPromptSubmit / Stop / SessionEnd / PostToolUse hook の stdin から work/ にセッションの作業を記録する",
 		Annotations: jsonflag.Unsupported(),
 		Args:        cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := ingestWork(cmd.InOrStdin(), time.Now()); err != nil {
+			if err := ingestWork(cmd.InOrStdin(), pluginVersion, time.Now()); err != nil {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "ingest-work:", err)
 			}
 			return nil
 		},
 	}
+	cmd.Flags().StringVar(&pluginVersion, "plugin-version", "", "hook を走らせた plugin のバージョン (SessionStart の出来事に添える)")
+	return cmd
 }
 
 // ingestWork は stdin を読み切って記録する。
-func ingestWork(stdin io.Reader, now time.Time) error {
+func ingestWork(stdin io.Reader, pluginVersion string, now time.Time) error {
 	input, err := io.ReadAll(stdin)
 	if err != nil {
 		return fmt.Errorf("stdin の読み込みに失敗: %w", err)
@@ -46,16 +49,20 @@ func ingestWork(stdin io.Reader, now time.Time) error {
 		return err
 	}
 	res, err := worklog.New(p.StateDir()).Ingest(input, now)
-	logIngestWork(p.StateDir(), res, err, now)
+	logIngestWork(p.StateDir(), res, pluginVersion, err, now)
 	return err
 }
 
 // logIngestWork は ingest-work の結果を出来事のログに書く。毎ターン書くと行が伸びるだけなので、記録を作ったとき、
-// SessionEnd で ended を書いたとき、失敗したときだけ書く。
-func logIngestWork(stateDir string, res worklog.Result, err error, now time.Time) {
+// SessionEnd で ended を書いたとき、失敗したときと、SessionStart のときだけ書く。SessionStart の行は、再起動した
+// セッションで新しいバージョンの SessionStart の hook が走ったことを確かめる証拠になる (restarting-session skill)。
+// fork や resume の SessionStart の plugin の hook の出力は transcript に残らないので、ここに残す。
+func logIngestWork(stateDir string, res worklog.Result, pluginVersion string, err error, now time.Time) {
 	switch {
 	case err != nil:
 		_ = eventlog.Record(stateDir, res.SessionID, "ingest-work.failed", []string{kv("event", res.Event), kv("reason", err)}, now)
+	case res.Event == "SessionStart":
+		_ = eventlog.Record(stateDir, res.SessionID, "ingest-work", []string{kv("event", res.Event), kv("source", res.Source), kv("plugin_version", pluginVersion)}, now)
 	case res.Created:
 		_ = eventlog.Record(stateDir, res.SessionID, "ingest-work", []string{kv("event", res.Event), kv("created", true)}, now)
 	case res.Ended:

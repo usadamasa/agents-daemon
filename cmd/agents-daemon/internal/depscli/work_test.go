@@ -68,6 +68,28 @@ func TestIngestWorkCmd(t *testing.T) {
 	}
 }
 
+// SessionStart は記録の有無にかかわらず、source と hook の plugin のバージョンを出来事に 1 行書く。再起動したセッションで
+// 新しいバージョンの SessionStart の hook が走ったことを確かめるのに使う (restarting-session skill)。
+func TestIngestWorkCmd_SessionStartLogsPluginVersion(t *testing.T) {
+	root := testEnv(t)
+	state := filepath.Join(root, "state", "agents-daemon")
+	cmd := newIngestWorkCmd()
+	cmd.SetIn(strings.NewReader(`{"session_id": "s2", "cwd": "/w", "hook_event_name": "SessionStart", "source": "fork"}`))
+	var out, errBuf bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errBuf)
+	cmd.SetArgs([]string{"--plugin-version", "2026.1121.1"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if out.String() != "" || errBuf.String() != "" {
+		t.Errorf("stdout / stderr = %q / %q, want 空", out.String(), errBuf.String())
+	}
+	equalLines(t, eventLines(t, state), []string{
+		"ingest-work session=s2 event=SessionStart source=fork plugin_version=2026.1121.1",
+	})
+}
+
 // work set は題を書いて Work を出し、題そのものはログに書かない。work get は記録を出し、無ければ error。
 func TestWorkCmd(t *testing.T) {
 	root := testEnv(t)

@@ -19,7 +19,7 @@ import (
 type statuslineInput struct {
 	SessionID string `json:"session_id"`
 	// SessionName は --name か /rename で付けた名前、無ければ Claude Code が付けた題。どちらも無ければ来ない。
-	// cc-premise: 2.1.302 statusline session_name は custom title、無ければ AI の題 (ListAgents の名前とは別。衝突で -dc のような接尾辞が付いた名前は来ない)
+	// cc-premise: 2.1.310 statusline session_name は custom title、無ければ AI の題 (ListAgents の名前とは別。衝突で -dc のような接尾辞が付いた名前は来ない)
 	SessionName   string `json:"session_name"`
 	ContextWindow struct {
 		UsedPercentage *float64 `json:"used_percentage"`

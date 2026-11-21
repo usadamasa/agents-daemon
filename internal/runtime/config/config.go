@@ -23,7 +23,9 @@ type Config struct {
 	MaxRetries          int
 	// RetryMessage は resume 時にペインへ送るテキスト。入力行へエコーされるため、
 	// limit / rate / overloaded のような検知語を含めてはいけない。含めると
-	// 監視が自分自身の送信を再検知して無限ループする。
+	// 監視が自分自身の送信を再検知して無限ループする。通知欄の文言 (usage limit has reset、
+	// press enter to continue、continuing automatically) も含めない。上限かどうかは transcript で
+	// 決めるので待機には入らないが、待機明けに送るキーの選択が自分の文面で変わる。
 	RetryMessage string
 	// ReadLines は待機明けに pane の画面を末尾から何行読むか。通知欄の判定は更に末尾 DetectionTailLines 行だけを
 	// 見るので、それ以上あれば判定は変わらない。上限かどうかは画面ではなく transcript で決める (detect)。
@@ -32,10 +34,12 @@ type Config struct {
 	HandleTransient         bool
 	TransientWaitSeconds    int
 	TransientMaxWaitSeconds int
-	DismissMenu             bool
-	MenuDismissDelayMs      int
-	SubmitDelayMs           int
-	IdleShutdownMinutes     int
+	// DismissMenu は再開の前に Escape で /rate-limit-options のメニューを閉じるか。Escape は入力行を
+	// 消さないので、打ちかけの文字があれば RetryMessage が後ろに繋がる。
+	DismissMenu         bool
+	MenuDismissDelayMs  int
+	SubmitDelayMs       int
+	IdleShutdownMinutes int
 	// DeferToNativeAutoContinue が true のとき、Claude Code 自身の auto-continue
 	// (2.1.234 の autoContinueAtUsageLimit) がカウントダウン中の pane には手を出さない。
 	// この状態では Escape が取り消しキーなので、送信するとネイティブの継続を潰す。

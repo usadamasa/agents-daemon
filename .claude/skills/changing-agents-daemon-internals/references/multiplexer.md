@@ -9,8 +9,7 @@ stderr に 1 行出して何もせずに戻る (素の端末の SessionStart で
 持たず、バイナリの build は常に行う。同じバイナリを `statusline` / `ingest-statusline` が使い、
 これらは多重化ツールを要らないため。backend は `status.json` の `backend` に書き、`status` が表示する。
 
-画面の読み取りと送信の作法は [pane-io.md](pane-io.md)、Agent と AgentStatus の決め方は
-[program-status.md](program-status.md) が持つ。
+Claude Code の状況ごとの record と画面のモードの実測は [program-status.md](program-status.md) が持つ。
 
 ## rex の対応表
 
@@ -26,7 +25,7 @@ daemon は rex を control API (Unix socket の上の WebSocket) だけで操作
 | SendText | `write` (Enter は押さない) |
 | SendKeys | key ごとに `block.event` の press と release (`enter` と `esc` だけを知る) |
 | Reachable | `server.status` の `pid` が正 |
-| session_id | `context/<sid>.json` の `multiplexer.block` から逆引き ([statusline-state.md](statusline-state.md)) |
+| session_id | `context/<sid>.json` の `multiplexer.block` から逆引き (`sessioncontext`) |
 | NewSession (`spawn` の Host。Client には無い) | `session.create` の `session_id` と `initial_windows[0]` の `window_id`・`block_ids[0]` (`multiplexer.Placement`)。block の command は `wrap.SessionCommand` (包みの sh。ARGV を起こす前に `spawned-session mark` で印を書き、ARGV が終わったら session の block が自分だけなら rex の CLI で `session kill` する)。argv は login shell の環境で 1 引数ずつ子へ渡る (空白、`$` を変えない。実測) |
 | NewWindow (`spawn` の Host) | `target.resolve` (足し先を ID か label で引く) と `session.new_window` (`focus: false`)。resolve した session の ID と `window_id`・`block_ids[0]` を返す。command は `wrap.TabCommand` |
 | SplitPane / ClosePane (`simulate` の使い捨て pane) | `session.new_split` (ratio 0.6、`shell: none`、`login: false`、`exit.on_completion: false`) と `block.close` |

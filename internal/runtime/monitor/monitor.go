@@ -20,6 +20,12 @@
 //     どれでもなければ esc → retryMessage → enter。通知欄が何も言っていなくても、今の上限の後に本体の
 //     quota_auto_resume_stale の通知が届いていれば Enter だけ (ResolveHint)
 //
+// Enter だけを送るのは、テキストを打つと中断された turn の続きではなく新しい依頼になるため。この Enter も
+// 待機 → 送信 → maxRetries の同じ状態機械に乗せる。専用の経路にすると試行回数から外れ、Enter が効かない pane を
+// 叩き続ける。本体が auto-continue を予約しているかは設定ファイル (autoContinueAtUsageLimit) を読まず画面で決める。
+// 予約するかは設定のほか課金形態・overage・解除までの時間で決まり、解決した結果が出るのは画面だけになる。
+// 上限中に開いて何も打っていないセッションの transcript には上限の entry が無いので、何もしない。
+//
 // 参考実装は https://github.com/mo-arvan/herdr-claude-auto-retry の src/monitor-core.js (processOneTick)。
 // 状態機械の形 (待機 → 送信 → maxRetries で打ち切り、transient の指数バックオフ) はそこから借りている。
 package monitor

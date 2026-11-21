@@ -35,8 +35,8 @@ daemon が pane の transcript を引くには、その pane のセッション�
 (毎回。`REX_BLOCK` から block との対応を書く) と `rate-limits/<session_id>.json`
 (stdin に `rate_limits` があるときだけ) に落とす。上限の判定と解除時刻は transcript の末尾の entry から取るので、
 `rate-limits/` を daemon は読まない (`doctor` が statusline の配線の確認に出すだけ)。statusline の記録が無い pane は
-rex の前景の pid で Claude Code の登録簿 (`~/.claude/sessions/`) から補う。stdin の中身、state file の出し分け、書式は
-[statusline-state.md](statusline-state.md)。
+rex の前景の pid で Claude Code の登録簿 (`~/.claude/sessions/`) から補う。stdin の中身と state file の出し分けは
+`sessionstate`、書式は `ratelimit` と `sessioncontext` の package doc。
 
 ### [2] SessionStart hook がデーモンを起こす
 
@@ -75,7 +75,7 @@ lock、入れ替わりは [binary.md](binary.md)。
 単一プロセスが全 Claude pane を見る。pane ごとの状態は pane ID (rex の block ID) をキーに
 プロセス内で持つ。pane の列挙・読み取り・送信は多重化ツールの backend (rex) 越しに行う。
 backend の判定と rex の呼び方は [multiplexer.md](multiplexer.md)。上限の判定は transcript、画面は待機明けのキー選択だけ
-([rate-limit.md](rate-limit.md))。
+(`monitor` と `detect` の package doc)。
 
 ## CLI の組み立て
 
@@ -101,8 +101,8 @@ cobra を import するのは `cmd/` の下だけで、`internal/` の本体は 
 
 ## 毎 tick の判定
 
-pane ごとに次を上から順に評価する。上限側の詳細 (分類、待つかどうか、起床時刻) は [rate-limit.md](rate-limit.md)、
-画面の読み取りと送信の作法は [pane-io.md](pane-io.md)。
+pane ごとに次を上から順に評価する。上限側の詳細 (分類、待つかどうか、起床時刻) は `detect.ClassifyTurn`、
+`monitor.Decide`、`monitor.ComputeLimitWake`。
 
 | 条件 | 動作 | outcome |
 | ---- | ---- | ---- |

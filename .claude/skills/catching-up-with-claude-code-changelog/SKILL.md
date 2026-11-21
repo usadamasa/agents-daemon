@@ -91,7 +91,7 @@ rg -a -o -N '.{0,160}(<CHANGELOG で見た設定キーや env 名>).{0,200}' "$B
 | ---- | ---- | ---- |
 | `https://code.claude.com/docs/en/hooks.md` (27 万文字。SessionStart は先頭付近) | SessionStart の input と stdout の扱い、hook timeout | `hooks/*.sh`、`architecture.md` [2] |
 | `https://code.claude.com/docs/en/statusline.md` | 「When the status line updates」、JSON の field 表、`rate_limits` の節 | `sessionstate`、`architecture.md` [1] |
-| `https://code.claude.com/docs/en/settings-reference.md`、`env-vars.md` | usage limit、retry の設定キー | `rate-limit.md` |
+| `https://code.claude.com/docs/en/settings-reference.md`、`env-vars.md` | usage limit、retry の設定キー | `monitor`、`detect`、`config` |
 
 ### 5. mod の型の写しを上げる
 

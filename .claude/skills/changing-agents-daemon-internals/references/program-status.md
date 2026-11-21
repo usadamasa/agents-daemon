@@ -1,15 +1,16 @@
-# rex の program_status (OSC 7501)
+# Claude Code が rex に見せる状態の実測
 
-rex では Claude Code 自身が OSC 7501 で状態を報告する。daemon は block の `program_status` の
-`records` から Agent と `agent_status` を決める (`rex/blockstate` の `ToPane`)。protocol の仕様は
-[rex の docs](https://www.superlogical.com/rex/docs/build/program-status)。Claude Code がどの状況でどの値を出すかは
-docs に無く、2.1.302 のバイナリと実測 (2026-10-17、rex preview.15、#69) から読み、2.1.316 のバイナリで読み直したもの。
-版が変われば測り直す。
+Claude Code が OSC 7501 で申告する `program_status` の record と、block の画面のモードを、状況ごとに測った値。
+どちらも Claude Code と rex の docs に無く、バイナリの読みと実測から取った。版が変われば測り直す。
+record から Agent と `agent_status` を決める条件は `rex/blockstate` の `ToPane`、payload の書式は
+`simulate/host.go` が持つ。protocol の仕様は [rex の docs](https://www.superlogical.com/rex/docs/build/program-status)。
+
+## 状況と record の対応
 
 <!-- cc-premise: 2.1.316 osc7501 state / app / kind の値と画面の状況の対応 (バイナリの builder と実測) -->
 <!-- rex-premise: preview.30 program_status rex は process 名から record を補わない。owner.pid が record に付く -->
 
-## 状況と record の対応
+2.1.302 のバイナリと実測 (2026-10-17、rex preview.15) から読み、2.1.316 のバイナリで読み直したもの。
 
 | Claude Code の状況 | `state` | `kind` | `agent_status` |
 | ---- | ---- | ---- | ---- |
@@ -23,18 +24,9 @@ docs に無く、2.1.302 のバイナリと実測 (2026-10-17、rex preview.15�
 | API error でターンが終わった (`msg` は失敗の理由の 1 行目) | `error` | - | `error` |
 | shell だけの block | `records: []` | - | Claude agent ではない |
 
-`done` と `idle` はどちらも入力待ち。`kind` と `msg` は `Pane` の `AgentKind` / `AgentMessage` に写し、
-`status.json` (`agent_kind` / `agent_message`)、`status`、`doctor` の pane 行、`inspect --pane` の `record:` 行、
-daemon.log の検知と送信の行に `agent_status=… kind=… msg="…"` の形で出す。
-依存図は、タスクの記録が無いセッションのノードの見出しと、進行中のタスクが無いセッションの `subject` に `msg` を出す
-(無ければセッション名か cwd の末尾)。
-`unknown` の pane のノードは working に倒さず、`unknown` の状態として idle の節に出す。
+kind の無い `blocked` (dialog 一般) で上限の画面が来るかは測っていないので、daemon はこの形では送信を止めない。
 
-`blocked` のうち kind が `permission` / `question` / `auth` の pane には、待機明けでも再開を送らない
-(esc は prompt を断り、Enter は承認する。`multiplexer.WaitingOnPrompt`)。kind の無い `blocked` (dialog 一般) は
-上限の画面がこの形で来るかを実測していないので送信を止めない。
-
-## 上限で止まった pane の record (#77)
+## 上限で止まった pane の record
 
 <!-- cc-premise: 2.1.316 osc7501 上限で止まった turn の state (バイナリの読み。実測は lower-priority の 1 件だけ) -->
 
@@ -50,31 +42,30 @@ daemon.log の検知と送信の行に `agent_status=… kind=… msg="…"` の
 | session limit の後に lower-priority mode へ入った画面 (2026-10-25、limit-events に 1 件) | `idle` | 実測。バイナリの読みでは説明できていない |
 | 一時エラー (過負荷、5xx) で retry を諦めた | `error` (`msg` は `API Error: …`) | バイナリの読み |
 
-daemon が record から読むのは「`working` なら触らない」だけで、上限かどうかは transcript の末尾の entry で決める
-([rate-limit.md](rate-limit.md))。`error` / `idle` / `done` / `blocked` のどれで来ても判定は同じで、実測の
-`idle` の 1 件も取りこぼさない。上限で止まった pane が `working` のまま申告される (書き込みの遅れか、上の読みが
-外れた) ときは、transcript が上限なのに触らなかった食い違いを `suppressed-working` として limit-events に残す。
+daemon が record から読むのは「`working` なら触らない」だけで、上限かどうかは transcript で決める (`monitor` の
+package doc)。そのため実測の `idle` の 1 件も取りこぼさない。上限で止まった pane が `working` のまま申告される
+食い違いは `suppressed-working` として limit-events に残る。同じ turn の終わりで StopFailure hook も走るが、
+record の `error` は turn の結果を、StopFailure は API error の応答を見るので、条件は同じではない。
+並べて読む手順は [verification.md](verification.md) の「次に上限を踏んだとき」。
 
-同じ turn の終わりで StopFailure hook も走る (上限は `error=rate_limit`、5xx は `server_error`)。record の `error` は
-turn の結果を見て、StopFailure は API error の応答を見るので、条件は同じではない。daemon は StopFailure の記録を
-上限の出来事に `turn_failure` として添え、record と並べて残す (読み方は [verification.md](verification.md)
-「次に上限を踏んだとき」)。
+## 画面のモード
 
-## record を使う条件
+<!-- cc-premise: 2.1.302 limit-screen Claude Code は alternate screen (?1049h) で描く -->
+<!-- cc-premise: 2.1.304 limit-screen 起動直後の trust dialog は primary screen、本体の画面は alternate (?1049)。/exit で primary に戻す -->
 
-- root record (`id` が無いか空) だけ。`id` 付きは subagent のもの。
-- `app` が `claude-code`。Claude Code は固定でこれを出す
-  (preview.13 までの rex が process 名から補っていた `claude` は preview.15 では来ない)。
-- record の `owner.pid` が `foreground` の process の pid と一致する。仕様では `done` と `error` は process の終了と shell prompt
-  を生き延びる。そのため Claude Code が SIGKILL で終わると素の shell に `done` が残る (実測。`/exit` は `state=clear` で消す)。
-  `--keep-open` の block では `idle` の record も `child_exited` の後に残り、前景は空になる (購読の cache は `child_exited` で前景を消す)。
-- 条件を満たす record が無くても、`foreground` の `argv0` (basename) が `claude` なら Claude agent として `unknown`。
-  record があるのに使えなかったときは理由を daemon のログ (`agent_status を判定できません`) と `doctor` の
-  pane 一覧 (`unknown の理由`) に出す。`owner` は rex 独自の欄なので、rex の版が変わって欄が消えると全 pane が
-  `unknown` になる。その状態を黙って通さないための出口。
+Claude Code は alternate screen で描くので、Claude の block の `format` は可視の行数で頭打ちになる
+(24 行の block で 24 行)。block を小さく分割していると、`readLines` を増やしても読める行は増えない。
+待機明けに読む通知欄は画面の下端にあるので、高さの下限は無い。
 
-## payload の書式
+使い捨ての block で Claude Code を起こして測った `modes` の値 (2026-10-20、rex preview.16、Claude Code 2.1.304)。
 
-`key=value` を `:` で繋ぎ、終端は BEL (`state=idle:app=claude-code`。`title` と `msg` は base64)。
-`agents-daemon simulate` ([verification.md](verification.md)) の使い捨て block の script はこれを `printf` で出し、
-`exec cat` で同じ pid のまま foreground に居座って `owner.pid` の条件を満たす。
+| Claude Code の状況 | `screen` | 非既定の mode | `program_status` の record | `process` の foreground |
+| ---- | ---- | ---- | ---- | ---- |
+| 起動直後 (trust dialog) | `primary` | 無し | 無し | claude |
+| 本体の画面 | `alternate` | 1049、2004、mouse 系 | `idle` | claude |
+| `/exit` の直後 | `primary` | 無し (全部戻る) | 無し (`clear` で消える) | null |
+| SIGKILL の直後 | `alternate` のまま | 残ったまま | `idle` が残る | null |
+
+SIGKILL では画面も record も残るので、`screen` で Claude Code の終了は見分けられない。終了は `process` の
+foreground の pid と record の owner の突き合わせで見る (`rex/blockstate`)。`screen` は「`format` が可視の行だけを
+返す前提に乗っているか」を `doctor` の「rex の前提」で点検するためだけに使う。

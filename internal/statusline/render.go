@@ -29,15 +29,13 @@ type spendView struct {
 	Cap   int
 }
 
-// view は描画に要るものを全て解決した形。stdin の値 (input) に、呼び出し側が settings・git・
+// view は描画に要るものを全て解決した形。stdin の値 (input) に、呼び出し側が git・
 // state から引いた値を足す。render はここから先でファイルもコマンドも触らない。
 type view struct {
 	input
 	Mode mode
 	// Home はパス表示で ~ に畳む起点。
 	Home string
-	// Effort は settings.json の effortLevel。無ければ空で項目を出さない。
-	Effort string
 	// Branch は CurrentDir の branch (gitBranch の値)。空なら項目を出さない。
 	Branch string
 	// ProjectBranch は起動元 ProjectDir の branch (projectBranch の値)。CurrentDir が起動元の外にあるときだけ使う。

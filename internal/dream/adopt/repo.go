@@ -9,8 +9,8 @@ import (
 )
 
 // findRepoRoot は path が属する git repo のトップレベルを返す。
-// symlink 実体をたどってから git rev-parse するため、~/.claude/skills → dotfiles repo などの
-// 場合でも正しい実体 repo が返る。
+// symlink 実体をたどってから git rev-parse するため、skill の置き場が別の repo への symlink でも
+// 正しい実体 repo が返る。
 func findRepoRoot(path string) (string, error) {
 	resolved, err := filepath.EvalSymlinks(path)
 	if err != nil {

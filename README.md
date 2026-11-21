@@ -111,7 +111,10 @@ install 後に rex の block の中で Claude Code を起動し、`/agents-daemo
 ### config.json
 
 `${XDG_CONFIG_HOME:-~/.config}/agents-daemon/config.json`。ファイルが無ければ全て既定値で動く。
-daemon の設定キーは `skills/agents-daemon/references/operations.md` の「設定」にある。
+daemon が読むキーは `enabled`、`pollIntervalSeconds`、`marginSeconds`、`maxRetries`、`retryMessage`、`readLines`、
+`detectionTailLines`、`handleTransient`、`transientWaitSeconds`、`transientMaxWaitSeconds`、`dismissMenu`、
+`menuDismissDelayMs`、`submitDelayMs`、`idleShutdownMinutes`、`deferToNativeAutoContinue`。
+既定値と意味は `skills/agents-daemon/references/operations.md` の「設定」にある。
 daemon は毎 tick 読み直すので、編集は数秒で反映される。
 
 dream が読むキーは `dream.policy` だけ。dream の規約のファイルのパスを配列で並べる。
@@ -124,7 +127,7 @@ dream が読むキーは `dream.policy` だけ。dream の規約のファイル�
 - 個人の規約と仕事用の規約のように、別の場所のファイルを並べてよい。各ファイルの配列のフィールド (`pii`、`skillDirs` など) を
   並べた順につなぐ。PII の規則もこの順に当てる。`version` は各ファイルで `1` にする。
 - キーが無ければ、dream は規約なしで動く。PII は組み込みの規則 (email、日本の携帯電話番号) だけを伏せ、
-  skill の走査は `~/.claude/skills` と project の `.claude/skills` だけ、skill 名の接頭辞は外さない。
+  skill の走査は Claude Code の設定ディレクトリの `skills` と project の `.claude/skills` だけ、skill 名の接頭辞は外さない。
 - dream skill は `skillGuides` が空なら進まない (キーが無いときも)。skill を作る・直すときに従う規範を、
   plugin の側では決めないため。dream を使うなら、規約のファイルに `skillGuides` を書く。
 - キーがあるのに config.json か規約のファイルが読めない・壊れている・未知のフィールドがあると、
@@ -154,7 +157,7 @@ JSON。`version` だけが必須で、ほかのフィールドは省いてよい
 | `version` | dream | `1` |
 | `pii` | `dream harvest` | 記録へ残す前に伏せる規則。`pattern` は Go の正規表現、`replacement` は展開せずそのまま置く。組み込みの規則より先に当てる |
 | `skillNamePrefixes` | `dream mine` | memory 名との照合で skill 名から外す先頭の語。`team` なら、memory 名の `notes` が skill の `team-notes` に一致する |
-| `skillDirs` | `dream mine` | `~/.claude/skills` の後、project の `.claude/skills` の前に走査する skill の置き場。相対パスは規約のファイルのディレクトリが起点 |
+| `skillDirs` | `dream mine`、`dream check` | `--skills-dir` の後に走査する skill の置き場 (`dream mine` は続けて project の `.claude/skills` も走査する)。相対パスは規約のファイルのディレクトリが起点 |
 | `delegates` | dream skill | dream の対象外の話題と、それを担う skill |
 | `skillGuides` | dream skill | skill を書くときに従う規範の skill (範囲ごと) |
 | `memoryHomes` | dream skill | memory の行き先の規則。references の既定の表より先に当てる |
@@ -171,12 +174,36 @@ Claude Code の settings の `env` に置く。この plugin は既定値を持�
 
 ほかに読む環境変数を並べる。どれも無ければ既定の置き場を使う。
 
-- `CLAUDE_CONFIG_DIR`: Claude Code の設定ディレクトリ
-- `REX_SERVER`: rex の control API の socket (`unix://` の URL)。rex の pane の中なら rex が渡す
-- `REX_SESSION`: `spawn` サブコマンドの足し先の既定 (起こす側の rex session のタブ)。無ければ新しい rex session に起こす。
-  rex の pane の中なら rex が渡す
+- `CLAUDE_CONFIG_DIR`: Claude Code の設定ディレクトリ。無ければ `~/.claude`
+- `XDG_CONFIG_HOME` / `XDG_STATE_HOME` / `XDG_CACHE_HOME`: 設定・state・バイナリの置き場。`HOME` は既定の起点
 - `REX_BIN_PATH`: spawn した session の包みが叩く rex のバイナリ。無ければ PATH と rex の既定の置き場から探す
-- `XDG_CONFIG_HOME` / `XDG_STATE_HOME` / `XDG_CACHE_HOME`: 設定・state・バイナリの置き場
+- `AGENTS_DAEMON_OPEN_APP`: `0` なら、対話のセッションの開始時に依存図のアプリを開かない (mod が読む)。無ければ開く
+
+次は Claude Code か rex が渡すもので、利用者は置かない。
+
+- `REX_SERVER`: rex の control API の socket (`unix://` の URL)
+- `REX_SESSION` / `REX_BLOCK`: 自分のいる rex の session と pane。`REX_SESSION` は `spawn` の足し先の既定でもあり、
+  無ければ新しい rex session に起こす
+- `CLAUDE_CODE_SESSION_ID`: `deps edge` と `scripts/get-session-id.sh` が自分のセッションを指す
+- `CLAUDE_CODE_MESSAGING_SOCKET` / `CLAUDE_CODE_TMPDIR`: `doctor` が peer messaging の socket を点検する
+- `COLUMNS`: `statusline` の幅
+- `AGENTS_DAEMON_SHARED_REX_SESSION`: 共有の rex session にタブとして起きた印。タブの包みが置き、SessionStart hook が読む
+
+### Claude Code の設定ディレクトリから読むもの
+
+`CLAUDE_CONFIG_DIR` (無ければ `~/.claude`) の配下を、Claude Code が書いた形のまま読む。書き換えはしない
+(`dream forget` が auto memory を消し、`MEMORY.md` の索引の行を除くのだけが例外)。
+
+| パス | 読み手 | 読むもの |
+| ---- | ------ | -------- |
+| `settings.json` | `spawn`、`statusline` | `env.CLAUDE_CODE_SUBAGENT_MODEL` と `effortLevel` だけ |
+| `sessions/` | daemon、`doctor`、`inspect` | セッションの登録簿 (pid と session id) |
+| `projects/` | daemon、`doctor`、`inspect`、`tell`、`dream harvest` (`--projects-dir`) | transcript |
+| `projects/<project>/memory` | `dream mine` / `check` / `forget` (`--memory-dir`) | auto memory |
+| `skills/` | `dream mine` / `check` (`--skills-dir`) | global skill。規約の `skillDirs` も続けて読む |
+| `plugins/installed_plugins.json` | `update`、`dream check` (`--plugins-file`) | plugin の install 先と名前空間 |
+
+括弧の flag を渡すと、dream はその置き場を読む。
 
 ### sandbox
 

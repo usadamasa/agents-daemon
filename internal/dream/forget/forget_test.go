@@ -123,8 +123,8 @@ func TestRunErrorsWhenMemoryFileMissing(t *testing.T) {
 }
 
 func TestRunResolvesMemoryDirFromCwdWhenNotGiven(t *testing.T) {
-	home := t.TempDir()
-	memDir := filepath.Join(home, ".claude", "projects", "-tmp-proj", "memory")
+	claudeDir := t.TempDir()
+	memDir := filepath.Join(claudeDir, "projects", "-tmp-proj", "memory")
 	if err := os.MkdirAll(memDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +132,7 @@ func TestRunResolvesMemoryDirFromCwdWhenNotGiven(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := Run(Opts{Home: home, Cwd: "/tmp/proj", Names: []string{"obsolete"}}); err != nil {
+	if _, err := Run(Opts{ClaudeDir: claudeDir, Cwd: "/tmp/proj", Names: []string{"obsolete"}}); err != nil {
 		t.Fatalf("Run() = %v; want nil", err)
 	}
 

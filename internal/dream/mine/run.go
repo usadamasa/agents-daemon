@@ -24,8 +24,8 @@ type Opts struct {
 	Project    string // "" なら Cwd から canonicalize
 	StateDir   string // dream の state ディレクトリ (dream.Dir)。必須
 	HarvestDir string // 空なら StateDir/harvest
-	MemoryDir  string // 空なら ~/.claude/projects/<project>/memory
-	SkillsDir  string // 空なら ~/.claude/skills
+	MemoryDir  string // 空なら ClaudeDir/projects/<project>/memory
+	SkillsDir  string // 空なら ClaudeDir/skills
 	Date       string // 空なら今日
 	Verbose    bool
 
@@ -34,9 +34,9 @@ type Opts struct {
 	// SkillNamePrefixes は規約の skillNamePrefixes。skill 名から外して memory 名と照合する。
 	SkillNamePrefixes []string
 
-	Home   string
-	Cwd    string
-	Stderr io.Writer
+	ClaudeDir string // Claude Code の設定ディレクトリ (apppath.ClaudeConfigDir)
+	Cwd       string
+	Stderr    io.Writer
 }
 
 // Summary は mine 1 回分の処理の数。--verbose はこれを 1 行で stderr に出し、`--json` はそのまま stdout に出す。
@@ -72,11 +72,11 @@ func Run(opts Opts) (Summary, error) {
 	}
 	resolvedMemory := opts.MemoryDir
 	if resolvedMemory == "" {
-		resolvedMemory = filepath.Join(opts.Home, ".claude", "projects", project, "memory")
+		resolvedMemory = filepath.Join(opts.ClaudeDir, "projects", project, "memory")
 	}
 	resolvedSkills := opts.SkillsDir
 	if resolvedSkills == "" {
-		resolvedSkills = filepath.Join(opts.Home, ".claude", "skills")
+		resolvedSkills = filepath.Join(opts.ClaudeDir, "skills")
 	}
 	resolvedDate := dream.ResolveDate(opts.Date)
 

@@ -44,7 +44,7 @@ const (
 
 // Opts は check サブコマンドの実行パラメータ。
 type Opts struct {
-	MemoryDir string // 空なら ~/.claude/projects/<project>/memory
+	MemoryDir string // 空なら ClaudeDir/projects/<project>/memory
 	Project   string // 空なら Cwd から解決
 	Cwd       string
 	// SkillDirs は SKILL.md を点検する skill の置き場 (<dir>/<name>/SKILL.md)。
@@ -52,8 +52,8 @@ type Opts struct {
 	// PluginsFile は Claude Code の installed_plugins.json。名前空間つきの skill 名を引く。
 	PluginsFile string
 
-	Home   string
-	Stdout io.Writer
+	ClaudeDir string // Claude Code の設定ディレクトリ (apppath.ClaudeConfigDir)
+	Stdout    io.Writer
 }
 
 // Finding は点検に落ちた 1 件。Line と Target は項目によっては 0 と空。
@@ -152,7 +152,7 @@ func resolveMemoryDir(opts Opts) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(opts.Home, ".claude", "projects", project, "memory"), nil
+	return filepath.Join(opts.ClaudeDir, "projects", project, "memory"), nil
 }
 
 // checkIndex は MEMORY.md の行数と相対日付を見る。MEMORY.md の無い memory ディレクトリもあるので、不在は正常。

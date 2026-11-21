@@ -28,7 +28,6 @@ type Opts struct {
 	DryRun         bool
 	StateDir       string // dream の state ディレクトリ (dream.Dir)。CandidatesFile 未指定時に必要
 
-	Home   string
 	Stdout io.Writer
 	Stderr io.Writer
 }

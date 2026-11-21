@@ -173,6 +173,51 @@ func TestDreamCheckCmd_PassesWithoutFindings(t *testing.T) {
 	}
 }
 
+// flag を省いた dream check は、HOME ではなく CLAUDE_CONFIG_DIR の配下の memory を読む。
+func TestDreamCheckCmd_ReadsMemoryUnderClaudeConfigDir(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	claudeDir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", claudeDir)
+	memDir := filepath.Join(claudeDir, "projects", "-x-y", "memory")
+	if err := os.MkdirAll(memDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(memDir, "linker.md"), []byte("---\nname: linker\n---\n\n[[gone]]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	root := testRoot()
+	root.SetOut(&out)
+	root.SetErr(&bytes.Buffer{})
+	root.SetArgs([]string{"dream", "check", "--project", "-x-y"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), filepath.Join(memDir, "linker.md")) {
+		t.Errorf("CLAUDE_CONFIG_DIR の配下の memory を点検していない: %q", out.String())
+	}
+}
+
+// --plugins-file を渡すと、Claude Code の設定ディレクトリの installed_plugins.json ではなくそのファイルを読む。
+func TestDreamCheckCmd_ReadsPluginsFileFlag(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	plugins := filepath.Join(t.TempDir(), "plugins.json")
+	if err := os.WriteFile(plugins, []byte("{"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	root := testRoot()
+	root.SetOut(&bytes.Buffer{})
+	root.SetErr(&bytes.Buffer{})
+	root.SetArgs([]string{"dream", "check", "--memory-dir", t.TempDir(), "--plugins-file", plugins})
+	err := root.Execute()
+	if err == nil || !strings.Contains(err.Error(), plugins) {
+		t.Errorf("err = %v; want --plugins-file のファイルを読めない error", err)
+	}
+}
+
 // setPolicyConfig は XDG_CONFIG_HOME の config.json に dream.policy を書く。
 func setPolicyConfig(t *testing.T, policyPaths ...string) {
 	t.Helper()

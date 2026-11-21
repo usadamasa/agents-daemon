@@ -59,6 +59,28 @@ func TestRun_UsesPolicySkillDirsAndPrefixes(t *testing.T) {
 	}
 }
 
+// --skills-dir と --memory-dir が無ければ、Claude Code の設定ディレクトリの skills と projects/<project>/memory を読む。
+func TestRun_ResolvesSkillsAndMemoryFromClaudeDir(t *testing.T) {
+	stateDir := t.TempDir()
+	if _, err := record.Write(stateDir, []record.Record{
+		{SessionID: "s1", CWDProject: "-tmp-proj", SkillsInvoked: []string{"notes"}, NMessages: 2},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	claudeDir := t.TempDir()
+	writeTestFile(t, filepath.Join(claudeDir, "skills", "notes", "SKILL.md"), "# notes\n\nメモの書き方\n")
+	writeTestFile(t, filepath.Join(claudeDir, "projects", "-tmp-proj", "memory", "feedback_notes.md"),
+		"---\nname: feedback-notes-style\ndescription: notes の書き方\nmetadata:\n  type: feedback\n---\n\n見出しは短くする\n")
+
+	sum, err := Run(Opts{Project: "-tmp-proj", StateDir: stateDir, ClaudeDir: claudeDir, Date: "2026-10-31"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum.Skills != 1 || sum.Memories != 1 {
+		t.Errorf("summary = %+v; want the skill and the memory under the Claude Code config dir", sum)
+	}
+}
+
 func writeTestFile(t *testing.T, path, body string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {

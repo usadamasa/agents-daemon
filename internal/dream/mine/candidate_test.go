@@ -153,6 +153,61 @@ func TestGenerateCandidates_IncludesEvidenceSessions(t *testing.T) {
 	}
 }
 
+func TestGenerateCandidates_SingleEvidenceSessionIsLowConfidence(t *testing.T) {
+	// coverage 0% (単独なら skill_body high) でも、根拠が 1 セッションだけなら low に落とす｡
+	mems := []corpus.Memory{
+		{
+			Name: "feedback-standup-no-pii",
+			Type: "feedback",
+			Body: "**How to apply:** standup では面接候補者名を一次面接に一般化する｡",
+			Path: "/mem/a.md",
+		},
+	}
+	skills := map[string]corpus.Skill{
+		"daily-standup": {Name: "daily-standup", Body: "SKILL body without PII rule"},
+	}
+	sessions := []record.Record{
+		{SessionID: "sess-a", SkillsInvoked: []string{"daily-standup"}, CWDProject: "-p"},
+		{SessionID: "sess-b", SkillsInvoked: []string{"team-obsidian"}, CWDProject: "-p"},
+	}
+	cands := generateCandidates(mems, skills, "-p", sessions, dailyPrefix)
+	if len(cands) != 1 {
+		t.Fatalf("candidates: %d", len(cands))
+	}
+	c := cands[0]
+	if len(c.EvidenceSessions) != 1 {
+		t.Fatalf("EvidenceSessions = %v; want 1 session", c.EvidenceSessions)
+	}
+	if c.Kind != "skill_body" || c.Confidence != "low" {
+		t.Errorf("Kind=%q Confidence=%q; want skill_body low", c.Kind, c.Confidence)
+	}
+}
+
+func TestGenerateCandidates_MultipleEvidenceSessionsKeepCoverageConfidence(t *testing.T) {
+	mems := []corpus.Memory{
+		{
+			Name: "feedback-standup-no-pii",
+			Type: "feedback",
+			Body: "**How to apply:** standup では面接候補者名を一次面接に一般化する｡",
+			Path: "/mem/a.md",
+		},
+	}
+	skills := map[string]corpus.Skill{
+		"daily-standup": {Name: "daily-standup", Body: "SKILL body without PII rule"},
+	}
+	sessions := []record.Record{
+		{SessionID: "sess-a", SkillsInvoked: []string{"daily-standup"}, CWDProject: "-p"},
+		{SessionID: "sess-b", SkillsInvoked: []string{"daily-standup"}, CWDProject: "-p"},
+	}
+	cands := generateCandidates(mems, skills, "-p", sessions, dailyPrefix)
+	if len(cands) != 1 {
+		t.Fatalf("candidates: %d", len(cands))
+	}
+	if c := cands[0]; c.Confidence != "high" {
+		t.Errorf("Confidence=%q; want high", c.Confidence)
+	}
+}
+
 func TestCandidatesWrite_JsonlFormat(t *testing.T) {
 	dir := t.TempDir()
 	outFile := filepath.Join(dir, "candidates.jsonl")

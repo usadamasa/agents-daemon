@@ -24,6 +24,7 @@ daemon が `sid:A → pr:P` の辺を導く手順 (#487) と、A の branch を�
 | `PRLinkSplitDecline.cfg` | `NoRederive` が破れる | 辺を消してからロックの外で記録する形。間の tick が導き直す |
 | `PRLinkNoTouchDecline.cfg` | `NoRederive` が破れる | 記録で導きを飛ばしても保持期間を数え直さない形。導く条件が揃ったまま記録が期限切れになり、導き直す |
 | `PRLinkRecord.cfg` | `PRLink.cfg` の性質がすべて成り立つ | A が P を出した記録で導く形 (#575)。A が終了していても別の branch にいても導くので、掃除の前に導く順序、自分の PR を待つ形、人が外した組の記録とそのまま両立する |
+| | `EventuallyShown` (liveness): P を待つ辺が 1 本も無くても、A が生きている間に人が「導かない」と記録していなければ、いずれ A とつながる | P がどの辺にも無ければ、写しを待たずに生きている A から導く (#610)。自分の P を待つ辺がマージの掃除で消えた後も導き直す |
 
 ## 照合の相手 (PRAuthor)
 
@@ -79,7 +80,7 @@ A の終了後にも辺を導く daemon、終了した A の作業をメモへ�
 | モデルの動作 | 実装 |
 | ---- | ---- |
 | `Tick` | `refpoll` の `Poller.Refresh` (引き直し、`anchor`、`sweep` の順) |
-| `Tick` の `cand` | `Poller.candidates` |
+| `Tick` の `cand` | `Poller.candidates`。`Alone` は `lonePRs` と `Poller.anchorAlone` (`edge` の `Store.AnchorAlone`) |
 | `Tick` の `look` と `reread` (`Locate = "done"`) | `Poller.anchor` が候補ごとに呼ぶ `Poller.place`。写しが済んだ状態 (`refstate.Done`) の候補では `locateTTL` を見ずに引き直す |
 | `Tick` の `CanAnchor` | `edge` の `Store.Anchor` (edges/.lock の中で辺の条件を確かめ直す) |
 | `Tick` の `s2` | `edge` の `Store.Unanchor` |
@@ -105,6 +106,7 @@ A の終了後にも辺を導く daemon、終了した A の作業をメモへ�
 | `PRKept` | `refpoll/refpoll_test.go` の `TestRefresh_マージ済みのPRも掃除の前に導く` と `TestRefresh_branchを切り替えた直後に初めて引いたマージ済みのPRも導く` |
 | `NoDaemonLoop` / `LoopResolved` | `edge/anchor_test.go` の `TestAnchor_自分のPRを待つセッションには導かない` と `TestAnchor_自分のPRを待つ形になったら導いた辺を消す` |
 | `EventuallyAnchored` | `refpoll/refpoll_test.go` の `TestRefresh_PRのbranchのセッションからPRへ辺を導く` |
+| `EventuallyShown` | `refpoll/refpoll_test.go` の `TestRefresh_辺に無いPRも出した生きているセッションから導く` と `TestRefresh_自分の待ちがマージで消えたら記録から1本だけ導き直す`、`edge/anchor_test.go` の `TestAnchorAlone_辺に出ていないPRへ導く` |
 | `IssuerKept` / `NoWrongAnchor` | `refpoll/refpoll_test.go` の `TestRefresh_PRを出した記録のセッションへ導く`、`worklog/worklog_test.go` の `TestIngest_ghprcreateが出したPRを記録に残す` と `TestIngest_ghprcreateでなければPRを残さない` |
 | `AnchoredRepo` | `worklog/worklog_test.go` の `TestIngest_cwdのrepoの鍵を残しworktreeが消えても上書きしない` と `TestIngest_無くなったcwdからはrepoの鍵を求め直さない`、`daemon/refs_test.go` の `TestPRIssuers_worktreeが消えても本来のrepoの鍵で導く`。タスクの記録は `tasklog/repo_test.go` |
 | `MemoRepo` | `parking/work_test.go` の `TestAdoptWork_worktreeが消えても記録のrepoの鍵でメモを置く` と `TestAdoptWork_repoの鍵の無い記録は移さない`、`parking/place_test.go` の `TestAdopt_movesTaskToParking` と `TestAdopt_rejects` |

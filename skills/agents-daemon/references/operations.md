@@ -174,12 +174,14 @@ agents-daemon edge list --cwd <dir> [--here | --repo <main worktree>] [--ref <�
   止めている手当ての要るノードとして出し、辺も残す。代わりの PR へ付け替える (`edge rm` してから `edge add`) か、
   待ちが要らなければ `edge rm` する
 - gh が無い・未認証・失敗した間は前に引けた状態 (無ければ外部) のまま残り、辺も消えない
-- before にある `pr:` を after に持つ辺が無ければ、daemon がその PR を出したセッションから PR への辺
+- `pr:` を after に持つ辺が無ければ、daemon がその PR を出したセッションから PR への辺
   (`sid:<session_id>` → `pr:`、`derived` が true) を導く。出したセッションは、`gh pr create` が出した PR の URL を
-  Bash の PostToolUse hook が残した作業の記録 (`prs`) の持ち主で、終了していても別の branch へ移っていても導く。
-  記録が無い PR (web や `gh stack` で作った PR) は、PR の repo (origin) と head branch で動いている生きている
-  セッションが 1 つだけのときに書く。そのセッションが同じ PR を待つ辺 (`pr:` → 自分のタスクか `sid:`) があれば
-  書かない。後から待つ辺が書かれたら導いた辺を消す。`sid:` → `pr:` の辺を `edge rm` (アプリの Unlink も) で消すと、
+  Bash の PostToolUse hook が残した作業の記録 (`prs`) の持ち主。PR が既に辺の before にあれば、そのセッションが
+  終了していても別の branch へ移っていても導く。PR がどの辺にも無ければ、セッションが生きている間だけ導き、
+  PR を待つ辺が無くても PR のノードが依存図に出る。
+  記録が無い PR (web や `gh stack` で作った PR) は、辺の before にあり、PR の repo (origin) と head branch で
+  動いている生きているセッションが 1 つだけのときに書く。そのセッションが同じ PR を待つ辺 (`pr:` → 自分のタスクか `sid:`) があれば
+  書かない。後から待つ辺が書かれたら導いた辺を消し、その待つ辺がマージで消えたら生きている間は記録から導き直す。`sid:` → `pr:` の辺を `edge rm` (アプリの Unlink も) で消すと、
   その組は導き直さない (記録 `edges/<id>.declined` は導く条件が途切れて 7 日で消える)。同じ参照の組で `edge add`
   すると人の辺になり、記録も消える。PR がマージされても導いた辺 (`pr:` は after) は残り、出したセッションが
   終われば依存図から畳まれ、保持期間 (7 日) で消える

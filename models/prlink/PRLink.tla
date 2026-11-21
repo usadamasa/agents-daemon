@@ -32,7 +32,8 @@
    - 記録は保持期間で消える (ForgetDecline)。TouchDecline が TRUE なら、導きが記録で飛ばした tick に保持期間を
      数え直すので、導く条件が揃っている間は消えない。FALSE の変種はいつでも消える (性質を破る壊れたモデル)。
    - ByRecord が TRUE の変種は、A が P を出した記録で導く (#575)。A の branch も生きているかも問わない。記録の
-     保持期間と、記録の無い PR の照合の相手は PRAuthor が持つ。 *)
+     保持期間と、記録の無い PR の照合の相手は PRAuthor が持つ。加えて、P がどの辺にも無くても、A が生きている間は
+     写しを待たずに導く (#610)。終了した A からは、辺に無い P へ導かない。 *)
 EXTENDS Naturals
 
 CONSTANTS
@@ -121,11 +122,13 @@ Init ==
   /\ rmHeld = FALSE
 
 \* 記録を見ない導く条件。c は引き直した後の写し、t と o はその時点の辺、b は daemon が見る A の branch。
+\* 記録で導くとき、P がどの辺にも無ければ (t も o も無い) A が生きている間だけ導く (Alone)。
+Alone(t, o) == ByRecord /\ live /\ ~t /\ ~o
+
 Derivable(c, t, o, b) ==
-  /\ c # None
-  /\ t \/ o
+  /\ \/ c # None /\ (t \/ o) /\ (ByRecord \/ (live /\ b))
+     \/ Alone(t, o)
   /\ sidPr = None
-  /\ (ByRecord \/ (live /\ b))
   /\ (CheckSelfWait => ~o)
 
 \* 導く条件。「導かない」の記録のある組は飛ばす。
@@ -134,8 +137,9 @@ CanAnchor(c, t, o, b) == Derivable(c, t, o, b) /\ ~declined
 \* daemon の tick。引き直し、導き、導いた辺の除去、掃除。
 Tick ==
   LET c == IF cache \in {None, "open"} THEN remote ELSE cache
-      \* 導く候補か (写しが head branch を持ち、P が辺の before にあり、after に無い)。導く前の辺で決める。
-      cand == c # None /\ (prTask \/ prOwn) /\ sidPr = None
+      \* 導く候補か (写しが head branch を持ち、P が辺の before にあり、after に無い。または記録で導く P が
+      \* どの辺にも無く、A が生きている)。導く前の辺で決める。
+      cand == sidPr = None /\ ((c # None /\ (prTask \/ prOwn)) \/ Alone(prTask, prOwn))
       \* A の cwd を照合するか (候補があり A が生きているときだけ place を呼ぶ)。記録で導くなら A が終了していても導く。
       look == cand /\ (live \/ ByRecord)
       reread == CASE Locate = "tick" -> TRUE
@@ -297,6 +301,12 @@ LoopResolved == (sidPr = "derived" /\ prOwn) ~> ~(sidPr = "derived" /\ prOwn)
 EventuallyAnchored ==
   [](prTask /\ live /\ onBranch /\ ~prOwn /\ remote = "open" /\ sidPr = None /\ ~declined /\ ~pending
      => <>(sidPr # None \/ ~prTask \/ ~live \/ ~onBranch \/ prOwn \/ remote # "open" \/ declined \/ pending))
+
+\* 記録で導くとき、P を待つ辺が 1 本も無くても、A が生きている間に人が「導かない」と記録していなければ、いずれ
+\* A とつながる (#610)。A が自分の P を待つ辺がマージの掃除で消えた後も同じ。
+EventuallyShown ==
+  [](ByRecord /\ live /\ ~prTask /\ ~prOwn /\ sidPr = None /\ ~declined /\ ~pending
+     => <>(sidPr # None \/ ~live \/ prTask \/ prOwn \/ declined \/ pending))
 
 \* 人が sid:A → pr:P を消したら、人が同じ組を書き直すか、導く条件が途切れて記録が期限切れになるまで、daemon は
 \* その組を導き直さない (#576)。CLI の `edge rm` でもアプリの Unlink でも同じ。

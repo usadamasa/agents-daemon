@@ -33,6 +33,7 @@ plugin が持つもの:
 | Notification hook (`quota_auto_resume_*`) | 本体の上限待ちの結末を `ingest-quota-resume` で記録する。stale は待機明けに Enter だけを送る根拠になる (#529) |
 | PostToolUse hook | Task 系ツール (TaskCreate / TaskUpdate / TaskList) と TodoWrite の呼び出しを `ingest-task` に渡し、セッションのタスクを記録する (#121) |
 | Task 系ツールの配置 (mod、`hooks/task-tools.ts`) | TaskCreate と TaskUpdate を ToolSearch の裏から prompt の一覧へ置く (#499) |
+| タブの名前の追従 (mod、`hooks/tab-label.ts`) | 共有の rex session にタブとして起きたセッションで、タブの名前を作業の内容に合わせて `agents-daemon tab-label` で付け直す (#722) |
 | `agents-daemon:agents-daemon` skill | 運用と切り分けの手引き (症状から引く) |
 | `agents-daemon:setup` skill | 前提の確認と statusline の配線、peer messaging の切り分け |
 | `agents-daemon:peer-sessions` skill | 別セッション (peer) へ作業を渡す手順と、rex の block 操作 |
@@ -188,7 +189,7 @@ Claude Code の settings の `env` に置く。この plugin は既定値を持�
 - `CLAUDE_CODE_SESSION_ID`: `deps edge` と `scripts/get-session-id.sh` が自分のセッションを指す
 - `CLAUDE_CODE_MESSAGING_SOCKET` / `CLAUDE_CODE_TMPDIR`: `doctor` が peer messaging の socket を点検する
 - `COLUMNS`: `statusline` の幅
-- `AGENTS_DAEMON_SHARED_REX_SESSION`: 共有の rex session にタブとして起きた印。タブの包みが置き、SessionStart hook が読む
+- `AGENTS_DAEMON_SHARED_REX_SESSION`: 共有の rex session にタブとして起きた印。タブの包みが置き、SessionStart hook とタブの名前を付け直す mod が読む
 
 ### Claude Code の設定ディレクトリから読むもの
 

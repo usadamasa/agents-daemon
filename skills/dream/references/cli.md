@@ -217,18 +217,31 @@ adopt の Edit の後、commit の前に回す機械の点検。read-only で、
 | `MEMORY.md` の行数 | `index_too_long` | error | 200 行以上 (SKILL.md のチェックリストの「200 行未満」) |
 | memory 1 ファイルの行数 | `memory_too_long` | warning | 100 行超 (SKILL.md のトリガー条件。細分化か剪定かを決める) |
 | auto memory の `[[name]]` | `dangling_link` | warning | どの memory の frontmatter の `name` にも当たらない |
+| auto memory (本体と `MEMORY.md`) の相対日付 | `relative_date` | error | 昨日・先週・今月などの語がコードの外にある |
+| SKILL.md の相対パス | `missing_path` | error | `references/`・`scripts/`・`prompts/` で始まるパスが skill のディレクトリに無い |
+| auto memory と SKILL.md の skill 名 | `unknown_skill` | error | inline code の `<plugin>:<name>` が、入っている plugin の `skills/<name>` にも `commands/<name>.md` にも無い |
 
 `[[name]]` はファイル名ではなく frontmatter の `name` で解く。まだ無い memory を指すリンクは Claude Code の
 memory の仕様で「後で書く」の印として許されるので、warning に留める。消す memory を指すリンクが残る事故は
 `dream forget` が消す前に拾う。fence と inline code の中、空白を含む `[[ ... ]]` (shell の test 構文) は
 リンクとして読まない。memory ディレクトリが無ければ 0 件ではなくエラーにする。
 
-CLAUDE.md の行数と文字数は点検しない。dream skill にも references にも上限の数値が無い。
+点検する skill は `--skills-dir` (既定は `~/.claude/skills`) と利用者の規約の `skillDirs` に置かれたもの。
+plugin は Claude Code の `plugins/installed_plugins.json` から引く。
+
+点検しないものと理由:
+
+- CLAUDE.md の行数と文字数: dream skill にも references にも上限の数値が無い
+- skill の相対日付: description のトリガーの言い回し (「今月どこで使った」) として正当に使われる
+- `${CLAUDE_PLUGIN_ROOT}/scripts/...` とリンクの表示文字列の中のパス: skill のディレクトリから解けない、または参照ではない
+- 名前空間の無い skill 名: skill 名かどうかを文字列から判定できない
+- 入っていない plugin の `<plugin>:<name>`: plugin の名前か、別の `a:b` の形の語かを判定できない
 
 | Flag | Default | 説明 |
 | --- | --- | --- |
 | `--project` | cwd から canonical 化 | 対象 project (canonical name または絶対パス) |
 | `--memory-dir` | `~/.claude/projects/<project>/memory` | memory ディレクトリ |
+| `--skills-dir` | `~/.claude/skills` | SKILL.md を点検する skill の置き場 (規約の `skillDirs` も見る) |
 
 ## `dream forget`
 

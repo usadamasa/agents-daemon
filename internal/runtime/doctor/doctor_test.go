@@ -131,6 +131,62 @@ func TestRun(t *testing.T) {
 		}
 	})
 
+	t.Run("seven_day だけの state は seven_day を報告し five_hour を出さない", func(t *testing.T) {
+		// 5 時間ウィンドウの無いプラン (Ultra) の state (#338)
+		home := t.TempDir()
+		p := apppath.New(home, "", "")
+		writeJSONFile(t, mustRateLimitFile(t, p, "sess-1"), map[string]any{
+			"seven_day":   map[string]any{"used_percentage": 47, "resets_at": fixedNow.Add(48 * time.Hour).Unix()},
+			"observed_at": fixedNow.Add(-time.Minute).Unix(),
+			"session_id":  "sess-1",
+		})
+		client := &multiplexerfake.Client{
+			ReachableFunc: func(context.Context) error { return nil },
+			PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) {
+				return []multiplexer.Pane{{
+					Agent:       "claude-code",
+					AgentStatus: multiplexer.AgentStatusIdle,
+					PaneID:      "p1",
+					SessionID:   "sess-1",
+				}}, nil
+			},
+		}
+
+		rep, err := Collect(context.Background(), doctorInput(client, sessioncontext.MultiplexerKindRex, p, fixedNow))
+		if err != nil {
+			t.Fatalf("Collect() error = %v", err)
+		}
+		st := rep.RateLimits.Sessions[0].State
+		if st == nil || st.FiveHourUsed != nil || st.FiveHourResetsAt != nil {
+			t.Fatalf("state = %+v, want five_hour 無し", st)
+		}
+		if st.SevenDayUsed == nil || *st.SevenDayUsed != 47 || st.SevenDayResetsAt == nil {
+			t.Fatalf("state = %+v, want seven_day 47%%", st)
+		}
+		body, err := json.Marshal(st)
+		if err != nil {
+			t.Fatalf("json.Marshal() error = %v", err)
+		}
+		if strings.Contains(string(body), "five_hour") {
+			t.Errorf("JSON に five_hour が出ている: %s", body)
+		}
+
+		var buf bytes.Buffer
+		write(&buf, rep)
+		out := buf.String()
+		resetsAt := time.Unix(fixedNow.Add(48*time.Hour).Unix(), 0).Format(time.RFC3339)
+		for _, want := range []string{"seven_day.used_percentage: 47.0%", "seven_day.resets_at: " + resetsAt} {
+			if !strings.Contains(out, want) {
+				t.Errorf("出力に %q が無い: %s", want, out)
+			}
+		}
+		for _, absent := range []string{"five_hour", "0001-01-01"} {
+			if strings.Contains(out, absent) {
+				t.Errorf("出力に %q が出ている: %s", absent, out)
+			}
+		}
+	})
+
 	t.Run("daemon が起動していれば pid と status snapshot を報告する", func(t *testing.T) {
 		home := t.TempDir()
 		p := apppath.New(home, "", "")
@@ -324,7 +380,7 @@ func TestCollectDoctor_JSON(t *testing.T) {
 			t.Errorf("premises = %+v, want finding 1 件", rep.Premises)
 		}
 		st := rep.RateLimits.Sessions[0].State
-		if st == nil || st.AgeSeconds != 90 || st.FiveHourUsed != 95 {
+		if st == nil || st.AgeSeconds != 90 || st.FiveHourUsed == nil || *st.FiveHourUsed != 95 {
 			t.Errorf("rate_limits の state = %+v, want 90 秒前で 95%%", st)
 		}
 		if rep.Config.Exists || rep.Daemon.Running {

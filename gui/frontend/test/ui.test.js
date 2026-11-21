@@ -873,14 +873,80 @@ test("作業のノード: 題そのものを押すとその場で直せ、自動
   const title = pop.querySelector(".title");
   assert.equal(title.getAttribute("role"), "button");
   title.click();
-  const input = pop.querySelector('.title input[type="text"]');
-  assert.equal(input.value, "zeta");
-  // 直すのは Enter、戻すのは Escape。横長の「直す」「やめる」は置かず、枠の中の印だけを出す。
-  assert.deepEqual([...pop.querySelectorAll(".title button")].map((b) => b.textContent), ["↵"]);
   await snapshot("graph-popup-work");
-  input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  // 押した題そのものが欄になる。別の入力欄やボタンを重ねず、書体・折り返し・幅は題の表示のまま。
+  const field = pop.querySelector(".title");
+  assert.equal(field.getAttribute("contenteditable"), "plaintext-only");
+  assert.equal(field.getAttribute("role"), "textbox");
+  assert.equal(field.getAttribute("aria-label"), "Work title");
+  assert.equal(field.textContent, "zeta");
+  assert.equal(pop.querySelectorAll(".title input, .title button").length, 0);
+  assert.equal(document.activeElement, field);
+  // 直すのは Enter、戻すのは Escape。案内は題の上の行に小さく添え、chip の行を押し下げない。
+  assert.match(pop.querySelector(".head .ph .hint")?.textContent ?? "", /Enter.*Esc/);
+  assert.equal(field.nextElementSibling, pop.querySelector(".head .chips"));
+  // 編集中も表示のときと同じ太さの下線だけで示し、枠や余白を足して高さを変えない。
+  const rule = (selector) => css.match(new RegExp(`^${selector.replace(/[.()]/g, "\\$&")} \\{([^}]*)\\}`, "m"))?.[1] ?? "";
+  assert.match(rule(".pop .title.editable"), /border-bottom: 1px dashed/);
+  assert.match(rule(".pop .title.editing"), /border-bottom: 1px solid/);
+  assert.doesNotMatch(rule(".pop .title.editing"), /padding|border:/);
+  // 打っている途中の読み直しでは組み直さない (focus と打った字を保つ)。
+  field.textContent = "zeta 2";
+  field.dispatchEvent(new Event("input", { bubbles: true }));
+  await loadDeps(fixtureDeps);
+  assert.equal(pop.querySelector(".title"), field);
+  assert.equal(field.textContent, "zeta 2");
+  field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   assert.equal(pop.querySelector(".title").textContent, "zeta");
+  assert.equal(pop.querySelector(".title").getAttribute("contenteditable"), null);
+
+  // Enter で直したら、読み直した題の表示に戻る (欄に focus が残っていても組み直す)。
+  pop.querySelector(".title").click();
+  const editing = pop.querySelector(".title");
+  editing.textContent = "zeta\nrenamed";
+  editing.dispatchEvent(new Event("input", { bubbles: true }));
+  const renamed = JSON.parse(fixtureDeps);
+  renamed.graph.nodes.find((n) => n.key === "sid:zeta").title = "zeta renamed";
+  const ran = [];
+  answers["main.Daemon.Deps"] = JSON.stringify(renamed);
+  answers["main.Daemon.Run"] = "";
+  const byName = window.wails.Call.ByName;
+  window.wails.Call.ByName = async (name, ...args) => {
+    if (name === "main.Daemon.Run") ran.push(JSON.parse(args[1]));
+    return byName(name, ...args);
+  };
+  try {
+    editing.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    // 貼り付けで入った改行は空白に畳んで渡す。
+    assert.deepEqual(ran.map((r) => r.subject), ["zeta renamed"]);
+    const shown = pop.querySelector(".title");
+    assert.equal(shown.getAttribute("contenteditable"), null);
+    assert.equal(shown.getAttribute("role"), "button");
+    assert.equal(shown.textContent, "zeta renamed");
+    assert.equal(pop.querySelector(".head .ph .hint"), null);
+  } finally {
+    window.wails.Call.ByName = byName;
+    delete answers["main.Daemon.Run"];
+    await loadDeps(fixtureDeps);
+  }
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+
+  // 折り返す長い題も、欄になったとき 1 行に潰さない (同じ要素のまま折り返す)。
+  const data = JSON.parse(fixtureDeps);
+  data.graph.nodes.find((n) => n.key === "sid:zeta").title = "依存図の単体ビューで作業の題をその場で直す欄の見た目を題の表示に揃え、chip の行を動かさない";
+  await loadDeps(JSON.stringify(data));
+  try {
+    q('.node[data-key="sid:zeta"]').click();
+    pop.querySelector(".title").click();
+    await snapshot("graph-popup-work-long");
+    assert.equal(pop.querySelector(".title").getAttribute("contenteditable"), "plaintext-only");
+    pop.querySelector(".title").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+  } finally {
+    await loadDeps(fixtureDeps);
+  }
 
   q('.node[data-key="sid:gamma"]').click();
   verbs = [...pop.querySelectorAll(".acts .act")].map((b) => b.textContent);

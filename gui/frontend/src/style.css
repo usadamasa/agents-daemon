@@ -329,17 +329,18 @@ select { font: inherit; color: inherit; }
 .pop .head { display: flex; flex-direction: column; gap: 4px; padding-right: 28px; }
 .pop .title { font-size: 16px; font-weight: 600; line-height: 1.5; }
 /* 直せる題は題そのものが入口 (押すとその場で欄に変わる)。縁の破線で直せることを示す */
+/* 下線は題の字の幅だけに引く。消して空にしても 1 行の高さを保ち、chip の行を動かさない */
+.pop .title:is(.editable, .editing) { align-self: flex-start; max-width: 100%; min-height: 1.5em; overflow-wrap: anywhere; }
 .pop .title.editable { cursor: text; border-bottom: 1px dashed var(--line); }
 .pop .title.editable:hover, .pop .title.editable:focus-visible { border-bottom-color: var(--ink-soft); outline: none; }
-/* 枠の中に入力と、押しても確定できるキーの印 (.key) を並べる欄。題を直す欄と、指示・補足の欄 (.composer) が使う */
-:is(.pop .title .edit, .composer) { border: 1px solid var(--line); border-radius: 6px; }
-:is(.pop .title .edit, .composer):focus-within { outline: 2px solid var(--blue); outline-offset: -1px; }
-.pop .title .edit { display: flex; align-items: center; }
-.pop .title .edit input { flex: 1 1 auto; min-width: 0; font: inherit; color: inherit; padding: 2px 8px; border: 0; background: none; outline: none; }
-.pop .title .edit .key { margin-right: 4px; }
+/* 直している題は同じ要素のまま、下線の太さを変えずに実線の青にする。枠や余白を足すと chip の行が動く */
+.pop .title.editing { cursor: text; border-bottom: 1px solid var(--blue); outline: none; }
+.pop .ph .hint { margin-left: 8px; color: var(--muted); font-size: 11px; }
 .key { flex: 0 0 auto; height: 24px; padding: 0 8px; border-radius: 6px; color: var(--muted); font-size: 12px; font-weight: 400; line-height: 1; }
 .key:hover:not(:disabled) { background: var(--row-hover); }
-.composer { display: flex; flex-direction: column; }
+/* 枠の中に入力と、押しても確定できるキーの印 (.key) を並べる指示・補足の欄 */
+.composer { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 6px; }
+.composer:focus-within { outline: 2px solid var(--blue); outline-offset: -1px; }
 .composer textarea { width: 100%; box-sizing: border-box; font: inherit; color: inherit; padding: 6px 12px; border: 0; background: none; resize: none; outline: none; }
 .composer .keys { display: flex; justify-content: flex-end; padding: 0 4px 4px; }
 .pop .chips { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; margin-top: 4px; }

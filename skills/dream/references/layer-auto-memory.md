@@ -6,8 +6,8 @@
 
 ## 行き先を決める
 
-全 memory に対して行き先を 1 つ決める。「そのまま残す」を選べるのは、下記「手順」の 5 の条件
-(その知見が必要になる場面を skill の description に書けない) を満たすときだけ。
+全 memory に対して行き先を 1 つ決める。「そのまま残す」を選べるのは、evidence が 1 セッションしか無いときと、
+下記「手順」の 5 の条件 (その知見が必要になる場面を skill の description に書けない) を満たすときだけ。
 
 利用者の規約の `memoryHomes` に当てはまる規則があれば、下の表より先にそれを当てる
 (規約の読み方は [SKILL.md の「利用者の規約」](../SKILL.md#利用者の規約))。
@@ -15,6 +15,7 @@
 | memory の性質 | 行き先 |
 |---|---|
 | 一回限りのメモ・進行状態・ephemeral な記録 | 削除 (下記「削除する対象」) |
+| evidence が 1 セッションしか無い (`evidence_sessions` が 1 件) | 昇格させず memory に留める |
 | domain overlap する既存 skill がある | その skill の body へ統合 |
 | 反復する domain だが該当 skill が無い | skill を新規作成 (下記「スコープの選び方」) |
 | 普遍的な作業規範で 1〜2 行に圧縮できる | グローバル CLAUDE.md の原本へ昇格 ([layer-claude-md](layer-claude-md.md)) |

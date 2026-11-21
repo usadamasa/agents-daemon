@@ -57,6 +57,12 @@ func generateCandidates(mems []corpus.Memory, skills map[string]corpus.Skill, pr
 		cov := computeCoverage(phrases, loaded.Body)
 		cls := classifyCoverage(cov)
 
+		// 1 セッションだけの根拠は noise と区別できないので、coverage の判定によらず low に落とす。
+		evidence := sessionsBySkill[skillName]
+		if len(evidence) == 1 {
+			cls.Confidence = candidates.ConfidenceLow
+		}
+
 		perSkillIdx[skillName]++
 		cand := candidates.Candidate{
 			ID:               buildCandidateID(skillName, perSkillIdx[skillName]),
@@ -66,7 +72,7 @@ func generateCandidates(mems []corpus.Memory, skills map[string]corpus.Skill, pr
 			SkillPath:        filepath.Join(loaded.RealPath, "SKILL.md"),
 			ScopedToProject:  project,
 			Diagnosis:        buildDiagnosis(cls, m, cov),
-			EvidenceSessions: sessionsBySkill[skillName],
+			EvidenceSessions: evidence,
 			Confidence:       cls.Confidence,
 			CoverageRatio:    cov.ratio(),
 		}

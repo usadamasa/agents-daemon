@@ -141,6 +141,53 @@ func TestRunResolvesMemoryDirFromCwdWhenNotGiven(t *testing.T) {
 	}
 }
 
+// 消す memory を [[name]] で指している memory を、消す前に列挙する。止めはしない (指す側を直すかは人が決める)。
+// [[name]] は消す memory の frontmatter の name で照らす。
+func TestRunListsMemoriesLinkingToTheTarget(t *testing.T) {
+	dir := newMemoryDir(t, "", map[string]string{
+		"obsolete.md": "---\nname: obsolete-slug\n---\n\nbody\n",
+		"linker.md":   "---\nname: linker\n---\n\n関連は [[obsolete-slug]]。\n`[[obsolete-slug]]` は例示。\n",
+		"other.md":    "---\nname: other\n---\n\n[[linker]]\n",
+	})
+
+	var stdout strings.Builder
+	res, err := Run(Opts{MemoryDir: dir, Names: []string{"obsolete"}, DryRun: true, Stdout: &stdout})
+	if err != nil {
+		t.Fatalf("Run() = %v; want nil", err)
+	}
+	linker := filepath.Join(dir, "linker.md")
+	if len(res.LinkedFrom) != 1 || res.LinkedFrom[0].Path != linker || res.LinkedFrom[0].Line != 5 ||
+		res.LinkedFrom[0].Target != "obsolete-slug" {
+		t.Errorf("linked_from = %+v; want linker.md:5 の 1 件", res.LinkedFrom)
+	}
+	if !strings.Contains(stdout.String(), linker+":5:") {
+		t.Errorf("stdout にリンク元が無い: %q", stdout.String())
+	}
+
+	// 消すのは止めない。
+	if _, err := Run(Opts{MemoryDir: dir, Names: []string{"obsolete"}}); err != nil {
+		t.Fatalf("Run() = %v; want nil", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "obsolete.md")); !os.IsNotExist(err) {
+		t.Errorf("obsolete.md still exists (stat err = %v); want removed", err)
+	}
+}
+
+// 消す memory 同士のリンクは、どちらも消えるので列挙しない。
+func TestRunIgnoresLinksAmongTargets(t *testing.T) {
+	dir := newMemoryDir(t, "", map[string]string{
+		"a.md": "---\nname: a\n---\n\n[[b]]\n",
+		"b.md": "---\nname: b\n---\n\n[[a]]\n",
+	})
+	res, err := Run(Opts{MemoryDir: dir, Names: []string{"a", "b"}, DryRun: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.LinkedFrom) != 0 {
+		t.Errorf("linked_from = %+v; want 0 件", res.LinkedFrom)
+	}
+}
+
 func TestRunDryRunLeavesEverythingIntact(t *testing.T) {
 	index := "- [obsolete.md](obsolete.md) — 消える知見\n"
 	dir := newMemoryDir(t, index, map[string]string{"obsolete.md": "body"})

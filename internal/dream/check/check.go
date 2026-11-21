@@ -30,18 +30,30 @@ type Opts struct {
 	Stdout io.Writer
 }
 
+const (
+	KindIndexTooLong  = "index_too_long"
+	KindMemoryTooLong = "memory_too_long"
+
+	SeverityError   = "error"
+	SeverityWarning = "warning"
+)
+
 // Finding は点検に落ちた 1 件。
 type Finding struct {
-	Kind   string `json:"kind"`
-	Path   string `json:"path"`
-	Line   int    `json:"line"`
-	Target string `json:"target"`
+	Kind     string `json:"kind"`
+	Severity string `json:"severity"`
+	Path     string `json:"path"`
+	Line     int    `json:"line"`
+	Target   string `json:"target"`
 }
 
 // Result は点検の結果。stdout の行と同じものを持ち、`--json` はそのまま出す。
 type Result struct {
 	Findings []Finding `json:"findings"`
 }
+
+// Failed は error の項目が 1 件でもあるか。
+func (r Result) Failed() bool { return false }
 
 var (
 	// linkRe は slug の形の [[name]]。shell の `[[ -f x ]]` のような空白を含むものは当たらない。

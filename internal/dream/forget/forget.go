@@ -33,8 +33,16 @@ type Opts struct {
 // Result は forget が消した (DryRun なら消すはずだった) memory のパス。stdout の行と同じものを持ち、`--json` は
 // そのまま出す。
 type Result struct {
-	DryRun bool     `json:"dry_run"`
-	Paths  []string `json:"paths"`
+	DryRun     bool     `json:"dry_run"`
+	Paths      []string `json:"paths"`
+	LinkedFrom []Link   `json:"linked_from"`
+}
+
+// Link は消す memory を [[name]] で指している箇所。
+type Link struct {
+	Path   string `json:"path"`
+	Line   int    `json:"line"`
+	Target string `json:"target"`
 }
 
 // Run は指定された memory を削除し、MEMORY.md の索引からも除去する。途中で削除に失敗したときは、そこまでに

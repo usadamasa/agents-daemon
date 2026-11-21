@@ -3,6 +3,7 @@
 //
 // 依存図は 2 つを持つ。graph はタスクの依存の DAG (deps/graph)。repos は repo ごとの生きているセッションと
 // open のメモで、アプリがメモの一覧を描き、メモを渡す宛先を選ぶのに使う。worktree の作業は main worktree の repo に入る。
+// handed は保持期間の間の渡したメモで、宛先を図のノードか repo に解いて添える (deps/handed、#292)。
 // ほかに、セッション台帳 (ledger) から最近動いた repo (recent_repos) を添え、アプリは新しいセッションを起こす repo の
 // 候補にする (#309)。
 //
@@ -79,7 +80,7 @@ func build(in input) Deps {
 		cards[i].Session = names[cards[i].SessionID]
 	}
 	l := locator{locate: in.Locate, cache: map[string]gitrepo.Place{}, recorded: recordedRepos(in.Works, in.Tasks, in.Todos), gitHubRepo: in.GitHubRepo, gitHubRepos: map[string]string{}}
-	d.Repos = arrange(cards, open, panes, names, in.SessionNames, l)
+	d.Repos = arrange(cards, open, handed.Repos(in.Handed), panes, names, in.SessionNames, l)
 	d.RecentRepos = recentRepos(in.Sessions)
 	d.Graph = graph.Build(graph.Input{
 		Cards:        cards,
@@ -287,8 +288,9 @@ func sessionName(p *daemonstate.PaneStatus, name string) string {
 }
 
 // arrange は生きているセッションとメモを repo へ分けて並べる。セッションは作業の cwd の repo に入る (タスクの無い
-// セッションは pane の cwd)。names はセッションの表示名、sessions は session ID → セッション名。
-func arrange(cards []graph.Card, memos []parking.Item, panes map[string]*daemonstate.PaneStatus, names, sessions map[string]string, l locator) []protocol.DepsRepo {
+// セッションは pane の cwd)。destinations は渡したメモの宛先の repo のパスで、セッションもメモも無くても repo に
+// する。names はセッションの表示名、sessions は session ID → セッション名。
+func arrange(cards []graph.Card, memos []parking.Item, destinations []string, panes map[string]*daemonstate.PaneStatus, names, sessions map[string]string, l locator) []protocol.DepsRepo {
 	type entry struct {
 		repo *protocol.DepsRepo
 		// subjects はこの repo のセッションごとの見出しの候補。
@@ -318,6 +320,9 @@ func arrange(cards []graph.Card, memos []parking.Item, panes map[string]*daemons
 	for _, m := range memos {
 		e := repoOf(m.Repo, filepath.Base(m.Repo))
 		e.repo.Memos = append(e.repo.Memos, parkingCard(m, names, panes))
+	}
+	for _, path := range destinations {
+		repoOf(l.row(path))
 	}
 	out := make([]protocol.DepsRepo, 0, len(byRepo))
 	for _, e := range byRepo {

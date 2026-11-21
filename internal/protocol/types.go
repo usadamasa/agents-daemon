@@ -365,7 +365,7 @@ type DepsSession struct {
 	Live    bool   `json:"live"`
 }
 
-// ParkingCard は repo の open のメモ 1 つ。
+// ParkingCard はメモ 1 つ。DepsRepo.memos では open のメモ、HandedMemo.memo では渡したメモ。
 type ParkingCard struct {
 	ID           string   `json:"id"`
 	Kind         string   `json:"kind"`

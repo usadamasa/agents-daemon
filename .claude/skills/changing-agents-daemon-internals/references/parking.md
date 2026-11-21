@@ -68,8 +68,9 @@ schema の `Park*Request` が持つ。
   先に置く (`parkhand` の `handOn`)。引けなければメモの repo のセッションへの文面で送る。issue は repo を名指しするので、
   新しく起こすセッションは利用者が repo を選んだので、どちらも引き継がせない。どちらも先にメモの前提が今のコードと計画で成り立つかを確かめさせ、
   成り立たなければ理由を 1 行で返して終えさせる (`parkhand` の `premiseCheck`)。メモは置いた時点の前提で書かれ、渡すまでに
-  レビューや別の変更で前提が消えることがある。受け手はメモの status を触らない。渡したメモは handed で一覧に
-  出ず、タスクが無ければどこにも出ないまま 7 日で消える。補足を書いたセッションの名前は statusline の記録から引く
+  レビューや別の変更で前提が消えることがある。受け手はメモの status を触らない。渡したメモは handed で open の一覧に
+  出ず、7 日で消えるまで `deps` の handed に宛先と並ぶ (`deps/handed` が宛先をノードか repo に解く。解けなければ
+  どこにも出ない)。補足を書いたセッションの名前は statusline の記録から引く
 - 送る: 生きているセッションへは `tell` で入力欄に打つ ([deps.md](deps.md))。新しく起こすセッションへは `spawn` で
   `claude --session-id <uuid> --model <CLAUDE_CODE_SUBAGENT_MODEL> -- <本文>` を repo を cwd にした新しい rex の session に起こし
   (終了後も pane を残す)、claude が前景になってから `SpawnResult` を返す。本文は起こした経緯の

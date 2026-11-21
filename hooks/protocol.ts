@@ -1019,7 +1019,7 @@ export const definitions = {
     }
   },
   "ParkingCard": {
-    "description": "repo の open のメモ 1 つ",
+    "description": "メモ 1 つ。DepsRepo.memos では open のメモ、HandedMemo.memo では渡したメモ",
     "type": "object",
     "additionalProperties": false,
     "required": [

@@ -365,7 +365,7 @@ export type DepsSession = {
   live: boolean
 }
 
-// repo の open のメモ 1 つ
+// メモ 1 つ。DepsRepo.memos では open のメモ、HandedMemo.memo では渡したメモ
 export type ParkingCard = {
   id: string
   kind: 'aside' | 'scope' | 'preference'

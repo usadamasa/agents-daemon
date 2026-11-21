@@ -45,8 +45,8 @@ func (r Resolver) To(to string) protocol.HandedTo {
 }
 
 // node はセッションへ渡したメモを出すノード。セッションのノードが図にあればそれ、無ければそのセッションのタスクと
-// TodoWrite の項目のノードから、進行中のものを先に、同じなら Key の順 (graph.KeyLess) で最初のもの。どれも図に
-// 無ければ空。
+// TodoWrite の項目のノードから、進行中、未着手、完了の順に、同じなら Key の順 (graph.KeyLess) で最初のもの。
+// どれも図に無ければ空。
 func (r Resolver) node(sessionID string) string {
 	if key := ref.SessionID(sessionID); r.drawn[key] {
 		return key
@@ -57,12 +57,34 @@ func (r Resolver) node(sessionID string) string {
 		if c.SessionID != sessionID || c.Kind == graph.KindSession || !r.drawn[c.Key] {
 			continue
 		}
-		active, bestActive := c.Status == "in_progress", best.Status == "in_progress"
-		if !found || (active && !bestActive) || (active == bestActive && graph.KeyLess(c.Key, best.Key)) {
+		if !found || rank(c) < rank(best) || (rank(c) == rank(best) && graph.KeyLess(c.Key, best.Key)) {
 			best, found = c, true
 		}
 	}
 	return best.Key
+}
+
+// rank はタスクのノードを選ぶ順。進行中、未着手、完了の順。
+func rank(c graph.Card) int {
+	switch c.Status {
+	case "in_progress":
+		return 0
+	case "completed":
+		return 2
+	default:
+		return 1
+	}
+}
+
+// Repos は repo: の宛先のパス。宛先の repo を依存図の repos に載せ、アプリが絞り込めるようにする。
+func Repos(memos []parking.Item) []string {
+	var out []string
+	for _, m := range memos {
+		if _, repo := parking.Destination(m.HandedTo); repo != "" {
+			out = append(out, repo)
+		}
+	}
+	return out
 }
 
 // Sort は渡したメモを最後に置いた時刻の新しい順、同じなら id の順に並べる。メモの sources は新しい順に並んでいる前提。

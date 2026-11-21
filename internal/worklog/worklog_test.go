@@ -239,8 +239,9 @@ func TestIngest_ghprcreateが出したPRを記録に残す(t *testing.T) {
 	}
 }
 
-// stackSubmitFirst と stackSubmitAdded は gh stack (0.2.1) の submit --auto を Bash ツールから打った stdout の写し。
-// first は 2 つの branch の PR を新しく作った回、added は既存の 2 つに branch を 1 つ足して submit し直した回。
+// stackSubmit* は gh stack (0.2.1) の submit --auto を Bash ツールから打った stdout の写し。first は 2 つの branch の
+// PR を新しく作った回、added は既存の 2 つに branch を 1 つ足して submit し直した回、opened はさらに 1 つ足して
+// --open を付けた回。
 const (
 	stackSubmitFirst = "Checking stack state...\nPushing to origin...\n" +
 		"✓ Created PR #1 (https://github.com/usadamasa/gh-stack-output-probe/pull/1) for layer-a\n" +
@@ -251,6 +252,15 @@ const (
 		"PR #2 (https://github.com/usadamasa/gh-stack-output-probe/pull/2) for layer-b is up to date\n" +
 		"✓ Created PR #4 (https://github.com/usadamasa/gh-stack-output-probe/pull/4) for layer-c\n" +
 		"✓ Stack updated on GitHub with 3 PRs (stack #3)\n✓ Pushed and synced 3 branches"
+	stackSubmitOpened = "Checking stack state...\nPushing to origin...\n" +
+		"PR #1 (https://github.com/usadamasa/gh-stack-output-probe/pull/1) for layer-a is up to date\n" +
+		"✓ Marked PR #1 (https://github.com/usadamasa/gh-stack-output-probe/pull/1) as ready for review\n" +
+		"PR #2 (https://github.com/usadamasa/gh-stack-output-probe/pull/2) for layer-b is up to date\n" +
+		"✓ Marked PR #2 (https://github.com/usadamasa/gh-stack-output-probe/pull/2) as ready for review\n" +
+		"PR #4 (https://github.com/usadamasa/gh-stack-output-probe/pull/4) for layer-c is up to date\n" +
+		"✓ Marked PR #4 (https://github.com/usadamasa/gh-stack-output-probe/pull/4) as ready for review\n" +
+		"✓ Created PR #5 (https://github.com/usadamasa/gh-stack-output-probe/pull/5) for layer-d\n" +
+		"✓ Stack updated on GitHub with 4 PRs (stack #3)\n✓ Pushed and synced 4 branches"
 )
 
 // gh stack submit が作った PR も、gh pr create と同じく出したセッションの記録に残す (#605)。submit は既存の PR の
@@ -270,9 +280,17 @@ func TestIngest_ghstacksubmitが作ったPRだけを記録に残す(t *testing.T
 	// 既存の PR を submit し直しただけのセッションには、その PR を残さない。前置きのある打ち方も拾う。
 	other := New(t.TempDir())
 	mustIngest(t, other, hook("UserPromptSubmit", `"prompt": "p"`), now)
-	mustIngest(t, other, bash("git push && gh stack submit --auto --open", stackSubmitAdded), now.Add(2*time.Minute))
+	mustIngest(t, other, bash("git push && gh stack submit --auto", stackSubmitAdded), now.Add(2*time.Minute))
 	if got, want := mustGet(t, other, "s1").Prs, []string{"pr:usadamasa/gh-stack-output-probe#4"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("submit し直した記録の Prs = %v, want %v", got, want)
+	}
+
+	// --open で ready にした既存の PR の行 (Marked) も拾わない。
+	opened := New(t.TempDir())
+	mustIngest(t, opened, hook("UserPromptSubmit", `"prompt": "p"`), now)
+	mustIngest(t, opened, bash("gh stack submit --auto --open", stackSubmitOpened), now.Add(2*time.Minute))
+	if got, want := mustGet(t, opened, "s1").Prs, []string{"pr:usadamasa/gh-stack-output-probe#5"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("--open の記録の Prs = %v, want %v", got, want)
 	}
 }
 

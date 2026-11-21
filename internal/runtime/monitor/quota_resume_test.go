@@ -62,9 +62,9 @@ func TestTick_今の上限に当たらない通知では通常の再開を送る
 	turn := limitedTurn(uuidLimit, now.Add(-time.Minute))
 	tests := map[string]*quotaresume.Record{
 		"entry より前の stale": {NotificationType: quotaresume.TypeStale, ObservedAt: turn.Entry.Timestamp.Add(-time.Second)},
-		"fired":             {NotificationType: quotaresume.TypeFired, ObservedAt: now},
-		"disabled":          {NotificationType: quotaresume.TypeDisabled, ObservedAt: now},
-		"通知が無い":             nil,
+		"fired":            {NotificationType: quotaresume.TypeFired, ObservedAt: now},
+		"disabled":         {NotificationType: quotaresume.TypeDisabled, ObservedAt: now},
+		"通知が無い":            nil,
 	}
 	for name, notice := range tests {
 		t.Run(name, func(t *testing.T) {

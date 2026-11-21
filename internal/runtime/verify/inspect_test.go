@@ -12,6 +12,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
+	"github.com/usadamasa/agents-daemon/internal/quotaresume"
 	"github.com/usadamasa/agents-daemon/internal/runtime/config"
 )
 
@@ -225,6 +226,30 @@ func TestRunInspect_判定はtranscriptで決まる(t *testing.T) {
 			t.Fatalf("RunInspect() error = %v", err)
 		}
 		if out := buf.String(); !strings.Contains(out, "通知欄の判定: resume-ready") || !strings.Contains(out, "Enter だけを送ります") {
+			t.Errorf("出力:\n%s", out)
+		}
+	})
+
+	t.Run("通知欄が何も言っていなくても上限の後の stale の通知があれば Enter だけを送ると出す", func(t *testing.T) {
+		env := newInspectEnv(t)
+		file := writeInspectFixture(t, env.home, "normal.txt", inspectSampleNormalScreen)
+		env.transcript(t, inspectTestSessionID, inspectLimitedEntry)
+		staleAt := time.Date(2026, 10, 4, 12, 40, 0, 0, time.UTC)
+		input := `{"session_id": "` + inspectTestSessionID + `", "hook_event_name": "Notification", "notification_type": "quota_auto_resume_stale"}`
+		if err := quotaresume.New(env.paths.StateDir()).Ingest([]byte(input), staleAt); err != nil {
+			t.Fatal(err)
+		}
+
+		rep, err := CollectInspect(context.Background(), env.input(nil, "", file, inspectTestSessionID, fixedNow))
+		if err != nil {
+			t.Fatalf("CollectInspect() error = %v", err)
+		}
+		if rep.Hint != "none" || rep.ResumeNotice == nil || !rep.ResumeNotice.Applies || rep.ResumeNotice.NotificationType != quotaresume.TypeStale {
+			t.Errorf("report = hint %s resume_notice %+v, want none / 使う stale", rep.Hint, rep.ResumeNotice)
+		}
+		var buf bytes.Buffer
+		writeInspect(&buf, rep)
+		if out := buf.String(); !strings.Contains(out, "quota_auto_resume_stale") || !strings.Contains(out, "Enter だけを送ります") {
 			t.Errorf("出力:\n%s", out)
 		}
 	})

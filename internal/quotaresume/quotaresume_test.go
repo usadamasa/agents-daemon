@@ -62,8 +62,8 @@ func TestIngest_lastNoticeWins(t *testing.T) {
 func TestIngest_rejects(t *testing.T) {
 	tests := map[string][]byte{
 		"壊れた JSON":           []byte(`{"session_id": `),
-		"Notification 以外":     []byte(`{"session_id": "s1", "hook_event_name": "Stop"}`),
-		"quota 以外の通知":         notification("s1", "permission_prompt"),
+		"Notification 以外":    []byte(`{"session_id": "s1", "hook_event_name": "Stop"}`),
+		"quota 以外の通知":        notification("s1", "permission_prompt"),
 		"知らない quota の通知":     notification("s1", "quota_auto_resume_unknown"),
 		"ファイル名に使えない session": notification("../x", TypeStale),
 	}

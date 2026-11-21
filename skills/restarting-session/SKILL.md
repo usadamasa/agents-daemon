@@ -99,7 +99,8 @@ git worktree lock --reason "claude session <name> (pid <PID>)" <worktree の絶�
 <!-- cc-premise: 2.1.330 bash-env Bash の環境の CLAUDE_PID は claude のプロセスの PID で、lock の reason の PID と同じ -->
 
 新しいセッションは別の session ID になる。元の session ID を `sid:` で指す辺のうち手で書いたもの (`derived` の無いもの) は、
-新しいセッションが付け替える (`agents-daemon:agents-daemon` skill の [operations.md](../agents-daemon/references/operations.md)「セッションをまたぐ辺を書く」)。
+新しいセッションが付け替える (`agents-daemon:agents-daemon` skill の
+[operations.md](../agents-daemon/references/operations.md)「セッションをまたぐ辺を書く」)。
 
 Remote Control は、新しいセッションに新しい Remote Control の会話として付く。元の会話を開いていた端末は、
 元のタブを閉じた時点で切れるので、新しい会話を開き直す。

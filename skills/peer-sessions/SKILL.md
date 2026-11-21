@@ -104,8 +104,8 @@ peer の成果が PR になったら、報告を受けて PR 番号が分かっ�
 before を `pr:<owner>/<repo>#<番号>` にした辺に書き直す。peer から PR への辺は daemon が導くので、手で書くものは無い。
 マージせずに閉じた PR の辺は残るので、代わりの PR へ付け替えるか `edge rm` する。
 
-辺の JSON の形、参照の書式、note の書き方、`rm` / `list`、daemon が辺を導く・消す規則は、
-`agents-daemon:agents-daemon` skill の [operations.md](../agents-daemon/references/operations.md)「セッションをまたぐ辺を書く」にある。
+辺の JSON の形、参照の書式、note の書き方、`rm` / `list`、daemon が辺を導く・消す規則は、`agents-daemon:agents-daemon` skill の
+[operations.md](../agents-daemon/references/operations.md)「セッションをまたぐ辺を書く」にある。
 
 辺を書かずに送ると、`SendMessage` の結果に辺が無いことと書き方が添えられる (同じ宛先へは 1 度だけ)。
 依存があれば上の形で書き、返事や報告のように依存の無い送信なら書かずに進める。

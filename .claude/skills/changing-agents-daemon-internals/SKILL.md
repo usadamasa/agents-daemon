@@ -19,10 +19,9 @@ plugin の `agents-daemon:agents-daemon` skill の `references/operations.md` �
 
 | ファイル | 中身 |
 | ---- | ---- |
-| [architecture.md](references/architecture.md) | 部品の連動と出力されるファイル |
+| [architecture.md](references/architecture.md) | 部品の連動と実体のパッケージ、出力されるファイルの索引 |
 | [program-status.md](references/program-status.md) | Claude Code の record と画面のモードの実測 |
 | [multiplexer.md](references/multiplexer.md) | 多重化ツールの backend (rex) |
-| [binary.md](references/binary.md) | バイナリの用意と差し替え |
 | [verification.md](references/verification.md) | 検証用コマンドと実機での検証 |
 | [package-lint.md](references/package-lint.md) | パッケージ構造の lint (analyze-modularity、go-arch-lint) と改名 |
 
@@ -36,8 +35,8 @@ plugin の `agents-daemon:agents-daemon` skill の `references/operations.md` �
 | 何日も前に止まった pane に再開の文面が送られた、送られない | `monitor` の `maxTurnAge` (`stale-turn`) |
 | ネイティブの auto-continue と取り合う、解除後に Enter だけ送られる | `detect.ClassifyScreen` と `detect` のパターンのテスト、`monitor.ResolveHint`、`config` の `DeferToNativeAutoContinue` |
 | `doctor` の pane 一覧が全部 `agent_status=unknown` (rex を上げた直後) | `rex/blockstate` の `ToPane`。状況ごとの record は program-status.md |
-| daemon が起きない・バイナリがビルドされない | binary.md の「build」 |
-| 直したコードが動いていない | binary.md の「動いている daemon の入れ替え」 |
+| daemon が起きない・バイナリがビルドされない | `hooks/ensure-daemon.sh` と `hooks/build-daemon.sh` の冒頭。`$STATE/logs/build.log` と `$STATE/build.failed` |
+| 直したコードが動いていない | `daemon/selfupdate.go` (動いている daemon の入れ替え)。verification.md の「建てたバイナリは共有の置き場を差し替える」 |
 | 送信が block に届かない | multiplexer.md の対応表 (SendText、SendKeys)。送る順と間隔は `monitor` の再開の送信と `config` |
 | `doctor` の pane 一覧が `session_id=(なし)` になる (上限を判定しない) | `sessioncontext` (`context/<sid>.json` の `multiplexer`) と `claudesessions` (登録簿での補い) |
 | `doctor` の pane 一覧に `⚠ transcript を読めない` が出る | `transcript` の package doc (置き場と entry の形) |

@@ -13,6 +13,7 @@ func TestParseInput(t *testing.T) {
 			"cwd": "/elsewhere",
 			"output_style": {"name": "mikawa"},
 			"version": "2.1.296",
+			"effort": {"level": "xhigh"},
 			"cost": {"total_cost_usd": 0.4242},
 			"context_window": {"total_input_tokens": 126543, "used_percentage": 63},
 			"session_id": "sess-1",
@@ -31,6 +32,7 @@ func TestParseInput(t *testing.T) {
 			Worktree:       "wt-feature",
 			OutputStyle:    "mikawa",
 			Version:        "2.1.296",
+			Effort:         "xhigh",
 			Cost:           0.4242,
 			ContextTokens:  126543,
 			ContextPercent: 63,
@@ -60,7 +62,7 @@ func TestParseInput(t *testing.T) {
 		if in.Model != "?" {
 			t.Errorf("Model = %q, want ?", in.Model)
 		}
-		if in.CurrentDir != "" || in.Cost != 0 || in.ContextTokens != 0 || in.ContextPercent != 0 {
+		if in.CurrentDir != "" || in.Effort != "" || in.Cost != 0 || in.ContextTokens != 0 || in.ContextPercent != 0 {
 			t.Errorf("既定が違う: %+v", in)
 		}
 		if in.FiveHourPercent != nil || in.FiveHourResetsAt != nil || in.SevenDayPercent != nil {

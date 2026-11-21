@@ -1,10 +1,7 @@
 package statusline
 
 import (
-	"encoding/json"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 )
 
@@ -42,20 +39,4 @@ func outsideProject(cur, project string) bool {
 		return false
 	}
 	return !strings.HasPrefix(cur, project+"/")
-}
-
-// readEffort は Claude Code の設定ディレクトリの settings.json から effortLevel を返す。
-// statusline の stdin には含まれず、/effort コマンドがここへ書く。無ければ空。
-func readEffort(configDir string) string {
-	data, err := os.ReadFile(filepath.Join(configDir, "settings.json")) // #nosec G304 -- Claude Code の設定ディレクトリの固定のファイル名
-	if err != nil {
-		return ""
-	}
-	var settings struct {
-		EffortLevel string `json:"effortLevel"`
-	}
-	if err := json.Unmarshal(data, &settings); err != nil {
-		return ""
-	}
-	return settings.EffortLevel
 }

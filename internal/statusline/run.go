@@ -55,7 +55,7 @@ func Run(stdin io.Reader, p apppath.Paths, getenv func(string) string, now time.
 	return v.render(now), errors.Join(errs...)
 }
 
-// buildView は settings・git・state から描画に要る値を引く。合算は full でだけ読む
+// buildView は git・state から描画に要る値を引く。合算は full でだけ読む
 // (compact では出さないので、台帳の走査を省く)。
 // state が読めなくても描画は返し、理由をエラーに添える。
 func buildView(ledger spend.Ledger, in input, layout mode, spendCap int, home string, now time.Time) (view, error) {
@@ -68,11 +68,6 @@ func buildView(ledger spend.Ledger, in input, layout mode, spendCap int, home st
 	if outsideProject(in.CurrentDir, in.ProjectDir) {
 		v.ProjectBranch = projectBranch(in.ProjectDir)
 	}
-	configDir, err := apppath.ClaudeConfigDir()
-	if err != nil {
-		return v, err
-	}
-	v.Effort = readEffort(configDir)
 	if layout != ModeFull {
 		return v, nil
 	}

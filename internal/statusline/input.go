@@ -1,6 +1,6 @@
 // Package statusline は Claude Code の statusline コマンドの描画を持つ。
 // stdin の JSON の取り出し (input)、幅モード (mode)、描画 (view.render) に
-// 分かれる。state の書き込み (sessionstate)、cost の台帳 (spend)、git / settings の参照 (resolve.go) を
+// 分かれる。state の書き込み (sessionstate)、cost の台帳 (spend)、git の参照 (resolve.go) を
 // 組み立てて view に渡すのは Run (run.go) で、cmd は環境とパスを渡すだけにする。
 package statusline
 
@@ -20,6 +20,9 @@ type input struct {
 	Worktree    string
 	OutputStyle string
 	Version     string
+	// Effort はセッションの effort level。model が effort に対応しなければ空で、項目を出さない。
+	// cc-premise: 2.1.330 statusline effort.level はセッションの値 (subagent・skill の値ではない)。--effort と CLAUDE_CODE_EFFORT_LEVEL も反映する
+	Effort string
 	// Cost はセッションの累計 (USD)。
 	Cost float64
 	// ContextTokens と ContextPercent は Claude Code がモデルごとの実効上限を踏まえて
@@ -48,7 +51,10 @@ type rawInput struct {
 		Name string `json:"name"`
 	} `json:"output_style"`
 	Version string `json:"version"`
-	Cost    struct {
+	Effort  struct {
+		Level string `json:"level"`
+	} `json:"effort"`
+	Cost struct {
 		TotalCostUSD float64 `json:"total_cost_usd"`
 	} `json:"cost"`
 	ContextWindow struct {
@@ -81,6 +87,7 @@ func parseInput(data []byte) (input, error) {
 		Worktree:       raw.Workspace.GitWorktree,
 		OutputStyle:    raw.OutputStyle.Name,
 		Version:        raw.Version,
+		Effort:         raw.Effort.Level,
 		Cost:           raw.Cost.TotalCostUSD,
 		ContextTokens:  int64(raw.ContextWindow.TotalInputTokens),
 		ContextPercent: roundPercent(raw.ContextWindow.UsedPercentage),

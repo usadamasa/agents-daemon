@@ -22,6 +22,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/protocol"
+	"github.com/usadamasa/agents-daemon/internal/quotaresume"
 	"github.com/usadamasa/agents-daemon/internal/refstate"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend"
 	"github.com/usadamasa/agents-daemon/internal/runtime/claudesessions"
@@ -111,6 +112,9 @@ type daemonRuntime struct {
 	// turnFailures は hook が書く turn の失敗の記録 (turnfailure)。daemon は上限の出来事に添えて読み、
 	// housekeeping で消す。ゼロ値は「無い」を返し、何も消さない。
 	turnFailures turnfailure.Store
+	// resumeNotices は hook が書く本体の上限待ちの結末の記録 (quotaresume)。daemon は待機明けに送るキーを選ぶときに
+	// 読み、housekeeping で消す。ゼロ値は「無い」を返し、何も消さない。
+	resumeNotices quotaresume.Store
 	// refs は辺の端点の issue / PR の状態の写し (refstate)。refPoll が tick ごとに引いて書き、housekeeping で消す。
 	// ゼロ値 (refPoll が nil) は引かない。
 	refs    refstate.Store
@@ -196,7 +200,7 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 	r.consecutiveFailures = 0
 	r.resolveSessionIDs(panes)
 
-	deps := monitor.Deps{Client: r.client, Config: cfg, Sleep: r.sleep, Turns: r.transcripts.Tail}
+	deps := monitor.Deps{Client: r.client, Config: cfg, Sleep: r.sleep, Turns: r.transcripts.Tail, ResumeNotices: r.loadResumeNotice}
 
 	seen := make(map[string]bool, len(panes))
 	claudeCount := 0
@@ -260,6 +264,16 @@ func (r *daemonRuntime) tickPane(ctx context.Context, deps monitor.Deps, pane mu
 		r.recordLimitEvent(ctx, pane, entry, outcome, *observed, failure, cfg, now)
 	}
 	return paneStatus(pane, entry, outcome, observed, now)
+}
+
+// loadResumeNotice はセッションの最後の quota_auto_resume_* の通知を読む。読めなければログに残して無しとして扱い、
+// 送るキーは画面だけで選ぶ。
+func (r *daemonRuntime) loadResumeNotice(sessionID string) *quotaresume.Record {
+	rec, err := r.resumeNotices.Load(sessionID)
+	if err != nil {
+		r.log.Logf("session %s: quota_auto_resume の通知の記録の読み込みに失敗、無しとして扱います: %v", sessionID, err)
+	}
+	return rec
 }
 
 // resolveSessionIDs は statusline の記録 (context/) から session の引けなかった Claude の pane の SessionID を、

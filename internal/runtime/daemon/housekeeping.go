@@ -11,6 +11,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/eventlog"
 	"github.com/usadamasa/agents-daemon/internal/ledger"
 	"github.com/usadamasa/agents-daemon/internal/parking"
+	"github.com/usadamasa/agents-daemon/internal/quotaresume"
 	"github.com/usadamasa/agents-daemon/internal/refstate"
 	"github.com/usadamasa/agents-daemon/internal/runtime/daemon/limitlog"
 	"github.com/usadamasa/agents-daemon/internal/spawnedsession"
@@ -20,7 +21,7 @@ import (
 )
 
 // ランタイム状態は揮発物として扱い、daemon 自身が古いものを消す。sidecar file の
-// 保持期間は書式のパッケージ (ratelimit、sessioncontext、tasklog、parking、edge、ledger、limitlog、turnfailure) が持つ (どれだけ古い state が
+// 保持期間は書式のパッケージ (ratelimit、sessioncontext、tasklog、parking、edge、ledger、limitlog、turnfailure、quotaresume) が持つ (どれだけ古い state が
 // 判定に効くかは、その state を読む側の知識のため)。ここに残すのはログの保持期間と、掃除の間隔だけ。
 const (
 	// logRetention は rotate 済みログ (daemon.log.YYYY-MM-DD と events.log.YYYY-MM-DD) を残す期間。
@@ -31,8 +32,9 @@ const (
 )
 
 // attachStateDir は housekeeping が消す対象 (tasks / work / parking / edges / sessions / events log / limit-events /
-// turn-failures) の置き場を stateDir から配線する。sessions と limit-events は daemon が書く先、edges は daemon が
-// 端点を結びつける先、turn-failures は上限の出来事に添えて読む先でもある。
+// turn-failures / quota-resume) の置き場を stateDir から配線する。sessions と limit-events は daemon が書く先、edges は
+// daemon が端点を結びつける先、turn-failures は上限の出来事に添えて読む先、quota-resume は待機明けに送るキーを選ぶときに
+// 読む先でもある。
 func (r *daemonRuntime) attachStateDir(stateDir string) {
 	r.tasks = tasklog.New(stateDir)
 	r.works = worklog.New(stateDir)
@@ -42,6 +44,7 @@ func (r *daemonRuntime) attachStateDir(stateDir string) {
 	r.eventLog = eventlog.Path(stateDir)
 	r.limits = limitlog.New(stateDir)
 	r.turnFailures = turnfailure.New(stateDir)
+	r.resumeNotices = quotaresume.New(stateDir)
 	r.refs = refstate.New(stateDir)
 	r.spawned = spawnedsession.New(stateDir)
 }
@@ -69,6 +72,7 @@ func (r *daemonRuntime) sidecars() []sidecar {
 		{"上限の出来事", r.limits.Prune},
 		{"セッション台帳", r.sessions.Prune},
 		{"turn の失敗", r.turnFailures.Prune},
+		{"上限待ちの通知", r.resumeNotices.Prune},
 		{"外部の参照", r.refs.Prune},
 	}
 }

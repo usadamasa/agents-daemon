@@ -17,6 +17,7 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
+	"github.com/usadamasa/agents-daemon/internal/quotaresume"
 	"github.com/usadamasa/agents-daemon/internal/runtime/claudesessions"
 	"github.com/usadamasa/agents-daemon/internal/runtime/config"
 	"github.com/usadamasa/agents-daemon/internal/runtime/detect"
@@ -76,10 +77,20 @@ type InspectReport struct {
 	Hint               string   `json:"hint"`
 	// DeferToNativeAutoContinue は hint が native-armed のときだけ、その扱いを決める設定。
 	DeferToNativeAutoContinue *bool `json:"defer_to_native_auto_continue,omitempty"`
+	// ResumeNotice はセッションの最後の quota_auto_resume_* の通知。無ければ欄ごと出さない。
+	ResumeNotice *ResumeNoticeReport `json:"resume_notice,omitempty"`
 
 	kind detect.Kind
 	plan monitor.Plan
 	hint detect.Hint
+}
+
+// ResumeNoticeReport は quota_auto_resume_* の通知と、それを Enter の根拠に使うか。
+type ResumeNoticeReport struct {
+	NotificationType string    `json:"notification_type"`
+	ObservedAt       time.Time `json:"observed_at"`
+	// Applies は通知欄の判定を Enter 待ちへ上げるか (今の上限の後の stale で、通知欄が何も言っていない)。
+	Applies bool `json:"applies"`
 }
 
 // TranscriptReport は transcript の末尾の読み取り。読めなければ Reason に理由。
@@ -173,6 +184,7 @@ func CollectInspect(ctx context.Context, in InspectInput) (InspectReport, error)
 	rep.Kind = rep.kind.String()
 	rep.plan = monitor.Decide(rep.kind, tail.Entry, in.Now)
 	rep.Plan = rep.plan.ID()
+	collectResumeNotice(in, tail.Entry, &rep)
 
 	switch {
 	case rep.kind.Windowed():
@@ -182,6 +194,19 @@ func CollectInspect(ctx context.Context, in InspectInput) (InspectReport, error)
 		rep.HandleTransient = &cfg.HandleTransient
 	}
 	return rep, nil
+}
+
+// collectResumeNotice はセッションの quota_auto_resume_* の通知を読み、daemon と同じ判定 (monitor.ResolveHint) で
+// 送るキーを決める。通知が読めなければ無しとして扱う (daemon と同じ)。
+func collectResumeNotice(in InspectInput, entry *transcript.Entry, rep *InspectReport) {
+	notice, err := quotaresume.New(in.Paths.StateDir()).Load(rep.SessionID)
+	if err != nil || notice == nil {
+		return
+	}
+	rep.ResumeNotice = &ResumeNoticeReport{
+		NotificationType: notice.NotificationType, ObservedAt: notice.ObservedAt,
+		Applies: monitor.ResolveHint(rep.hint, notice, entry) != rep.hint,
+	}
 }
 
 // collectPaneSession は --pane の record と、どのセッションの transcript を引くかを同じ応答から取る。
@@ -281,6 +306,13 @@ func writeInspect(w io.Writer, rep InspectReport) {
 		_, _ = fmt.Fprintf(w, "  %s\n", l)
 	}
 	_, _ = fmt.Fprintf(w, "通知欄の判定: %s\n", rep.Hint)
+	if n := rep.ResumeNotice; n != nil {
+		_, _ = fmt.Fprintf(w, "本体の上限待ちの通知: %s at %s\n", n.NotificationType, n.ObservedAt.Format(time.RFC3339))
+		if n.Applies {
+			_, _ = fmt.Fprintln(w, "  → 通知欄は何も言っていませんが、今の上限の後に stale の通知が届いているので Enter だけを送ります (テキストは打ちません)")
+			return
+		}
+	}
 	switch rep.hint {
 	case detect.HintNone:
 		_, _ = fmt.Fprintln(w, "  → 待機明けには esc → 文面 → enter を送ります")

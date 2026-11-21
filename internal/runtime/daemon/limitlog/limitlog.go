@@ -60,6 +60,9 @@ type Event struct {
 	// 検知の tick では読まないので無い。
 	Screen string `json:"screen,omitempty"`
 	Hint   string `json:"hint,omitempty"`
+	// ResumeNotice は Hint を Enter 待ちへ上げた quota_auto_resume_stale の通知 (quotaresume.Record の写し)。
+	// 通知欄で決まったときと、通知を使わなかったときは無い。
+	ResumeNotice *ResumeNotice `json:"resume_notice,omitempty"`
 	// Geometry は出来事の瞬間に打った size と modes。取れなければ GeometryError に理由。
 	Geometry      *multiplexer.Geometry `json:"geometry,omitempty"`
 	GeometryError string                `json:"geometry_error,omitempty"`
@@ -109,6 +112,13 @@ type TurnFailure struct {
 	ErrorDetails string    `json:"error_details,omitempty"`
 	Message      string    `json:"last_assistant_message,omitempty"`
 	ObservedAt   time.Time `json:"observed_at"`
+}
+
+// ResumeNotice は Notification hook が受けた quota_auto_resume_* の通知。欄の名前は hook の入力に揃える。
+type ResumeNotice struct {
+	NotificationType string    `json:"notification_type"`
+	Message          string    `json:"message,omitempty"`
+	ObservedAt       time.Time `json:"observed_at"`
 }
 
 // Settings は判定に効いた config の値。

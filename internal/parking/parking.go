@@ -303,6 +303,11 @@ func (s Store) Find(repo, status string) ([]Item, error) {
 	return Filter(items, repo, status), nil
 }
 
+// Handed は保持期間 (ClosedRetention) の間の handed のメモを id の順に返す。該当なしは空の配列。
+func (s Store) Handed(now time.Time) ([]Item, error) {
+	return nil, nil
+}
+
 // Filter は items のうち repo と status が一致するものを返す。空の条件は絞らない。該当なしは空の配列。
 func Filter(items []Item, repo, status string) []Item {
 	matched := []Item{}

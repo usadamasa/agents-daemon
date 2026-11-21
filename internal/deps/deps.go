@@ -44,6 +44,8 @@ type input struct {
 	Works []worklog.Record
 	// Parking はメモ (status を問わない)。repo の memos には open のものだけを出し、タスクとの照合には全部を使う。
 	Parking []parking.Item
+	// Handed は保持期間の間の handed のメモ (parking.Store.Handed)。宛先を図の中で解いて Deps.Handed に出す。
+	Handed []parking.Item
 	// Edges はセッションをまたぐ辺 (edge)。
 	Edges []edge.Edge
 	// Locate は cwd の repo を決める。同じ cwd では 1 回だけ呼ぶ。

@@ -1,6 +1,10 @@
 package parking
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+	"time"
+)
 
 // 取る (handed にする) ときは宛先を同じ Set で書き、戻す・捨てるときは空にする。handed には宛先が要り、
 // handed 以外には宛先を書かない (models/handoff の HandedHasDestination / OnlyHandedHasDestination)。
@@ -50,6 +54,34 @@ func TestSet_rejectsDestination(t *testing.T) {
 	}
 	if list, _ := s.list(); list[0].Status != StatusOpen || list[0].HandedTo != "" {
 		t.Errorf("失敗した Set が書き換えた: %+v", list[0])
+	}
+}
+
+// Handed は保持期間の間の handed のメモだけを返す。daemon が止まって Prune が回らなくても、7 日を過ぎた handed は
+// 依存図に出さない。
+func TestHanded(t *testing.T) {
+	s := New(t.TempDir())
+	mustAdd(t, s, testRepo, aside("open"), source("s1", ""))
+	fresh := mustAdd(t, s, testRepo, aside("fresh"), source("s1", ""))
+	old := mustAdd(t, s, testRepo, aside("old"), source("s1", ""))
+	discarded := mustAdd(t, s, testRepo, aside("discarded"), source("s1", ""))
+	for id, to := range map[string]string{fresh.ID: ToSession("S2"), old.ID: ToRepo("/w/dotfile")} {
+		if _, _, err := s.Set(id, StatusHanded, StatusOpen, to); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, _, err := s.Set(discarded.ID, StatusDiscarded, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	setMtime(t, filepath.Join(s.Dir, old.ID+".json"), now.Add(-ClosedRetention-time.Hour))
+
+	got, err := s.Handed(now)
+	if err != nil || len(got) != 1 || got[0].ID != fresh.ID {
+		t.Fatalf("Handed() = %+v, %v, want fresh だけ", got, err)
+	}
+	if none, err := (Store{}).Handed(now); err != nil || none == nil || len(none) != 0 {
+		t.Errorf("置き場所が無ければ空の配列: %+v, %v", none, err)
 	}
 }
 

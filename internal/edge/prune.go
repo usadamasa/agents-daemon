@@ -22,6 +22,18 @@ func (s Store) TouchBefore(refs map[string]bool, now time.Time) error {
 	return s.touch(func(e Edge) bool { return refs[e.Before.Ref] }, now)
 }
 
+// TaskEndpoints は、今ある辺の端点 (task:) になっているタスクかを返す述語を作る。tasklog の掃除が、端点の完了タスクを
+// 辺より先に消して辺を図から抜かないために使う。
+func (s Store) TaskEndpoints() (func(sessionID, taskID string) bool, error) {
+	edges, err := s.Find("", "")
+	endpoints := map[string]bool{}
+	for _, e := range edges {
+		endpoints[e.Before.Ref] = true
+		endpoints[e.After.Ref] = true
+	}
+	return func(sessionID, taskID string) bool { return endpoints[ref.Task(sessionID, taskID)] }, err
+}
+
 // onSession は端点の参照が sessionIDs のセッションのものか。
 func onSession(r string, sessionIDs []string) bool {
 	id, ok := ref.ParseSessionID(r)

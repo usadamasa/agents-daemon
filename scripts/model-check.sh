@@ -90,6 +90,8 @@ run models/card Card CardNoTouchTask.cfg violated
 run models/card Card CardNoTouchEdge.cfg violated
 # 同じく、open の PR の辺が 7 日で消える (OpenRefEdgeKept の反例)。
 run models/card Card CardNoTouchRef.cfg violated
+# 辺の端点の完了タスクも 24 時間で消すと、辺が残っているのに端点の記録が消える (EndpointTaskKept の反例、#502)。
+run models/card Card CardNoKeepEndpoint.cfg violated
 # 辺の note の #N を、番号の合う端点の参照の repo で補う形 (#551)。合わなければ辺が触れる repo が 1 つのときだけ補う。
 # 参照の repo は ref の文字列から取り、状態を引けたかに依らない。
 run models/noterepo NoteRepo NoteRepo.cfg holds

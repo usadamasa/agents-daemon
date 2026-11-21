@@ -61,6 +61,22 @@ func TestRun_SkillRelativePaths(t *testing.T) {
 	}
 }
 
+// Markdown のリンクの表示文字列は参照ではないので、中のパスは見ない (指す先は括弧の中)。
+func TestRun_SkillPathInLinkTextIsIgnored(t *testing.T) {
+	skills := t.TempDir()
+	writeFile(t, filepath.Join(skills, "other", "references", "rules.md"), "x\n")
+	writeFile(t, filepath.Join(skills, "demo", "SKILL.md"),
+		"[other の references/rules.md](../other/references/rules.md) を見る。\n")
+
+	res, err := Run(Opts{MemoryDir: t.TempDir(), SkillDirs: []string{skills}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := findingsOf(res, KindMissingPath); len(got) != 0 {
+		t.Errorf("findings = %+v; want 0 件", got)
+	}
+}
+
 // skill のディレクトリが無いのは、global skill を置いていない環境なので点検を飛ばす。
 func TestRun_MissingSkillDirIsSkipped(t *testing.T) {
 	res, err := Run(Opts{MemoryDir: t.TempDir(), SkillDirs: []string{filepath.Join(t.TempDir(), "nope")}})

@@ -397,6 +397,47 @@ func TestGraph_exitedPlaceholderFolded(t *testing.T) {
 	}
 }
 
+// 待つ辺が無く、出したセッションから導いた辺 (sid → pr) だけで載る PR は、セッションと同じ寿命で図に出る (#610)。
+// 生きているセッションの PR はマージしても完了を隠した図に残り、open の PR は段を出す。終了したセッションのノードは
+// 作業の記録が消えるまで残り、その間は open の PR も残る。マージした PR は終了とともに隠れる。
+func TestGraph_導いた辺だけのPR(t *testing.T) {
+	const cwd = "/w/a"
+	e := func(before, after string) edge.Edge {
+		return edge.Edge{ID: before + after, Before: edge.Endpoint{Ref: before, CWD: cwd}, After: edge.Endpoint{Ref: after, CWD: cwd}, Derived: true}
+	}
+	b := build(input{
+		PID:      42,
+		Snapshot: snapshot(daemonstate.PaneStatus{PaneID: "p1", SessionID: "A", CWD: cwd, AgentStatus: "working"}),
+		Works:    []worklog.Record{{SessionID: "A", CWD: cwd, Subject: "生きている"}, {SessionID: "X", CWD: cwd, Subject: "終わった"}},
+		Edges: []edge.Edge{
+			e("sid:A", "pr:o/r#1"), e("sid:A", "pr:o/r#2"),
+			e("sid:X", "pr:o/r#3"), e("sid:X", "pr:o/r#4"),
+		},
+		RefStates: map[string]string{"pr:o/r#1": "merged", "pr:o/r#2": "open", "pr:o/r#3": "open", "pr:o/r#4": "merged"},
+		RefPRs:    map[string]refstate.PR{"pr:o/r#2": {CI: refstate.CIRunning}},
+	})
+	all := nodes(b.Graph)
+	for key, want := range map[string]string{
+		"pr:o/r#1": graph.StateCompleted, "pr:o/r#2": graph.StateWaiting, "pr:o/r#3": graph.StateWaiting, "pr:o/r#4": graph.StateCompleted,
+	} {
+		if n, ok := all[key]; !ok || n.State != want {
+			t.Errorf("全部の図の %s = %+v, want %s", key, n, want)
+		}
+	}
+	if got := all["pr:o/r#2"].PrStages; !reflect.DeepEqual(got, []string{"ci_running"}) {
+		t.Errorf("pr:o/r#2 の段 = %v", got)
+	}
+	folded := map[string]bool{}
+	for _, n := range b.Graph.Folded.Nodes {
+		folded[n.Key] = true
+	}
+	for key, want := range map[string]bool{"sid:A": true, "pr:o/r#1": true, "pr:o/r#2": true, "sid:X": true, "pr:o/r#3": true, "pr:o/r#4": false} {
+		if folded[key] != want {
+			t.Errorf("完了を隠した図の %s = %v, want %v", key, folded[key], want)
+		}
+	}
+}
+
 // daemon が引いた外部の参照の状態 (refstate) が merged / closed なら、issue / PR の置き場は完了 (completed) になり、
 // open の PR の段は、次に手を動かすものを先頭にして並べる (#481)。ノードの状態は waiting のままで、止まっている扱いに
 // しない。段の無い写し (欄ができる前の写し) と open でない参照には何も出さない。

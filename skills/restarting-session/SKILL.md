@@ -44,7 +44,7 @@ fork は会話を写すが、タスク (`TaskList`) は写さない。新しい�
    今の cwd の絶対パス (`pwd`)
 2. 引き継ぎ文を `./tmp/restart-brief.md` に Write で書く。形は下の「引き継ぎ文」
 3. 起こす指定を `./tmp/restart-spawn.json` に Write で書き、spawn を打つ (欄の意味は agents-daemon:peer-sessions skill の
-   `references/rex.md`「peer の Claude セッションを立てる」)
+   [rex.md](../peer-sessions/references/rex.md)「peer の Claude セッションを立てる」)
 
    ```json
    {"repo": "<今の cwd>", "fork_from": "<自分の session ID>", "prompt_file": "./tmp/restart-brief.md", "label": "<今のタブの名前>", "model": "<今のモデル ID>"}
@@ -99,7 +99,7 @@ git worktree lock --reason "claude session <name> (pid <PID>)" <worktree の絶�
 <!-- cc-premise: 2.1.330 bash-env Bash の環境の CLAUDE_PID は claude のプロセスの PID で、lock の reason の PID と同じ -->
 
 新しいセッションは別の session ID になる。元の session ID を `sid:` で指す辺のうち手で書いたもの (`derived` の無いもの) は、
-新しいセッションが付け替える (`agents-daemon:agents-daemon` skill の `references/operations.md`「セッションをまたぐ辺を書く」)。
+新しいセッションが付け替える (`agents-daemon:agents-daemon` skill の [operations.md](../agents-daemon/references/operations.md)「セッションをまたぐ辺を書く」)。
 
 Remote Control は、新しいセッションに新しい Remote Control の会話として付く。元の会話を開いていた端末は、
 元のタブを閉じた時点で切れるので、新しい会話を開き直す。

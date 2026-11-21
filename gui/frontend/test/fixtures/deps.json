@@ -96,7 +96,7 @@
       {
         "key": "task:alpha/1", "kind": "task", "state": "completed", "title": "スキーマを決める",
         "endpoint": true, "cwd": "/repo/agents-daemon", "task_id": "1", "description": "deps の JSON の形を決める",
-        "session_id": "sid-alpha", "session": "alpha", "session_name": "alpha", "live": true,
+        "session_id": "sid-alpha", "session": "alpha", "session_name": "alpha", "session_node": "task:alpha/2", "live": true,
         "rex": { "session_id": "session:work", "session_label": "work", "window_id": "window:alpha", "window_label": "alpha-tab" },
         "depth": 0, "downstream": 6, "parked": 0, "memos": [], "blocked_by": [], "deadlock": false, "halted": false, "stuck": false
       },
@@ -124,7 +124,7 @@
       {
         "key": "task:alpha/3", "kind": "task", "state": "completed", "title": "テストを直す",
         "endpoint": true, "cwd": "/repo/agents-daemon", "task_id": "3",
-        "session_id": "sid-alpha", "session": "alpha", "session_name": "alpha", "live": true,
+        "session_id": "sid-alpha", "session": "alpha", "session_name": "alpha", "session_node": "task:alpha/2", "live": true,
         "rex": { "session_id": "session:work", "session_label": "work", "window_id": "window:alpha", "window_label": "alpha-tab" },
         "depth": 2, "downstream": 1, "parked": 0, "memos": [], "blocked_by": [], "deadlock": false, "halted": false, "stuck": false
       },
@@ -132,7 +132,7 @@
         "key": "task:beta/2", "kind": "task", "state": "pending", "title": "スクリーンショットを撮る",
         "endpoint": true, "cwd": "/repo/agents-daemon", "repo": "/repo/agents-daemon", "task_id": "2",
         "description": "https://example.com/a と #12 と gui/main.go:5 を見る",
-        "session_id": "sid-beta", "session": "beta", "session_name": "beta", "live": true,
+        "session_id": "sid-beta", "session": "beta", "session_name": "beta", "session_node": "task:beta/1", "live": true,
         "rex": { "session_id": "session:work", "session_label": "work", "window_id": "window:beta", "window_label": "beta-tab" },
         "depth": 3, "downstream": 1, "parked": 0, "memos": [], "blocked_by": ["task:beta/1"], "deadlock": false, "halted": false, "stuck": false
       },
@@ -150,7 +150,7 @@
         "key": "task:alpha/4", "kind": "task", "state": "pending", "title": "docs を書く",
         "endpoint": true, "cwd": "/repo/agents-daemon", "repo": "/repo/agents-daemon", "task_id": "4",
         "description": "pr:usadamasa/workspace#3 を待ってから #3 と #9 を見る",
-        "session_id": "sid-alpha", "session": "alpha", "session_name": "alpha", "live": true,
+        "session_id": "sid-alpha", "session": "alpha", "session_name": "alpha", "session_node": "task:alpha/2", "live": true,
         "rex": { "session_id": "session:work", "session_label": "work", "window_id": "window:alpha", "window_label": "alpha-tab" },
         "depth": 3, "downstream": 0, "parked": 0, "memos": [], "blocked_by": [], "deadlock": false, "halted": false, "stuck": false
       },
@@ -161,14 +161,14 @@
           { "repo": "usadamasa/agents-daemon", "number": 254, "ref": "pr:usadamasa/agents-daemon#254", "title": "依存図の色を状態ごとに分ける" },
           { "repo": "usadamasa/workspace", "number": 12, "ref": "issue:usadamasa/workspace#12", "title": "横断の作業の置き場を決める" }
         ],
-        "session_id": "sid-alpha", "session": "alpha", "session_name": "alpha", "live": true,
+        "session_id": "sid-alpha", "session": "alpha", "session_name": "alpha", "session_node": "task:alpha/2", "live": true,
         "rex": { "session_id": "session:work", "session_label": "work", "window_id": "window:alpha", "window_label": "alpha-tab" },
         "depth": 1, "downstream": 0, "parked": 0, "memos": [], "blocked_by": ["pr:usadamasa/agents-daemon#254"], "deadlock": false, "halted": false, "stuck": false
       },
       {
         "key": "task:beta/3", "kind": "task", "state": "pending", "title": "PR を作る",
         "endpoint": true, "cwd": "/repo/agents-daemon", "task_id": "3",
-        "session_id": "sid-beta", "session": "beta", "session_name": "beta", "live": true,
+        "session_id": "sid-beta", "session": "beta", "session_name": "beta", "session_node": "task:beta/1", "live": true,
         "rex": { "session_id": "session:work", "session_label": "work", "window_id": "window:beta", "window_label": "beta-tab" },
         "depth": 4, "downstream": 0, "parked": 0, "memos": [], "blocked_by": ["task:beta/2", "task:beta/1"], "deadlock": false, "halted": false, "stuck": false
       }

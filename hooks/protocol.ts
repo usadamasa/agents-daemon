@@ -1339,6 +1339,10 @@ export const definitions = {
         "type": "string",
         "description": "ListAgents の名前 (SendMessage の宛先に書く形)。表示名とは別"
       },
+      "session_node": {
+        "type": "string",
+        "description": "単体ビューのセッション名から移るノードの key。渡したメモの宛先 (HandedTo.node) と同じ規則で解き、このノード自身か図に無ければ付かない"
+      },
       "live": {
         "type": "boolean"
       },

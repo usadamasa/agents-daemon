@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -314,6 +315,84 @@ func TestWatch_NewSessionBlocks(t *testing.T) {
 	panes, _ := c.watch.Panes(nil)
 	if panes[0] != want {
 		t.Errorf("panes = %+v, want %+v", panes[0], want)
+	}
+}
+
+// session_created の後の Fill が読んだ変化の event が Fill の応答より後に届いても、埋めた block を公開する前に当てる。
+// Fill の途中に working → done と変わり、Fill は done を読み、done の event だけ遅れて届く。埋めた後の PaneList は
+// 一度も working (Fill より古い状態) を返さない。
+func TestWatch_FillCoversEventsItSaw(t *testing.T) {
+	api := newFakeAPI(t)
+	api.AddSession(sessionA)
+	api.AddUnlisted(sessionB, [2]string{blockClaudeDone, wire.ShellFlavor})
+	api.Put("program_status", blockClaudeDone, `{"records":[{"state":"done","app":"claude-code","msg":"できた","owner":{"pid":`+strconv.Itoa(pidClaudeDone)+`}}]}`)
+	api.Protocol().Handle(apitest.TerminalMethod+"process", func(json.RawMessage) (any, error) {
+		emitLines(api, psChangedLine(sessionB, blockClaudeDone, "working", "作業中", pidClaudeDone))
+		api.Protocol().EmitDelayed(json.RawMessage(psChangedLine(sessionB, blockClaudeDone, "done", "できた", pidClaudeDone)), 300*time.Millisecond)
+		return json.RawMessage(processJSON(pidClaudeDone, "claude", "/b")), nil
+	})
+	c := api.client(staticResolver(nil))
+
+	startWatch(t, c)
+	eventually(t, "同期済み", func() bool { return synced(c) })
+	emitLines(api, `{"type":"session_created","payload":{"session":{"session_id":"`+sessionB+`","label":"new"}}}`)
+	eventually(t, "新しい session の block が cache に入る", func() bool {
+		panes, _ := c.watch.Panes(nil)
+		return len(panes) == 1
+	})
+	deadline := time.Now().Add(600 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		panes, _ := c.watch.Panes(nil)
+		if len(panes) != 1 || panes[0].AgentStatus != multiplexer.AgentStatusDone {
+			t.Fatalf("Fill の後に Fill より古い状態を返した: %+v", panes)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// Fill の後に当てる event の中の block_created も、埋めてから同期の seq まで当てて公開する。session_created の Fill の
+// 途中に 2 つ目の block ができ、その Fill の途中に working → done と変わって done の event だけ遅れて届く。2 つ目の
+// block も一度も working を返さず、同期は全列挙と 2 回の Fill の 3 回打つ。
+func TestWatch_FillCoversEventsItSawWhenNested(t *testing.T) {
+	api := newFakeAPI(t)
+	api.AddSession(sessionA)
+	api.AddUnlisted(sessionB, [2]string{blockClaudeDone, wire.ShellFlavor})
+	done := func(pid int) string {
+		return `{"records":[{"state":"done","app":"claude-code","msg":"できた","owner":{"pid":` + strconv.Itoa(pid) + `}}]}`
+	}
+	api.Put("program_status", blockClaudeDone, done(pidClaudeDone))
+	api.Put("program_status", blockOwn, done(pidOwn))
+	var calls atomic.Int32
+	api.Protocol().Handle(apitest.TerminalMethod+"process", func(json.RawMessage) (any, error) {
+		// 1 回目は session_created の Fill、2 回目は入れ子の block_created の Fill。
+		if calls.Add(1) == 1 {
+			api.SetBlocks(sessionB, [2]string{blockClaudeDone, wire.ShellFlavor}, [2]string{blockOwn, wire.ShellFlavor})
+			emitLines(api, `{"type":"session_event","payload":{"session_id":"`+sessionB+`","event":{"type":"block_created","payload":{"block_id":"`+blockOwn+`"}}}}`)
+			return json.RawMessage(processJSON(pidClaudeDone, "claude", "/b")), nil
+		}
+		emitLines(api, psChangedLine(sessionB, blockOwn, "working", "作業中", pidOwn))
+		api.Protocol().EmitDelayed(json.RawMessage(psChangedLine(sessionB, blockOwn, "done", "できた", pidOwn)), 300*time.Millisecond)
+		return json.RawMessage(processJSON(pidOwn, "claude", cwdOwn)), nil
+	})
+	c := api.client(staticResolver(nil))
+
+	startWatch(t, c)
+	eventually(t, "同期済み", func() bool { return synced(c) })
+	emitLines(api, `{"type":"session_created","payload":{"session":{"session_id":"`+sessionB+`","label":"new"}}}`)
+	eventually(t, "2 つの block が cache に入る", func() bool {
+		panes, _ := c.watch.Panes(nil)
+		return len(panes) == 2
+	})
+	deadline := time.Now().Add(600 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		panes, _ := c.watch.Panes(nil)
+		if len(panes) != 2 || panes[0].AgentStatus != multiplexer.AgentStatusDone || panes[1].AgentStatus != multiplexer.AgentStatusDone {
+			t.Fatalf("入れ子の Fill の後に Fill より古い状態を返した: %+v", panes)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if n := len(api.RequestsOf("server.version")); n != 3 {
+		t.Errorf("server.version = %d 回, want 全列挙と 2 回の Fill の後の 3 回", n)
 	}
 }
 

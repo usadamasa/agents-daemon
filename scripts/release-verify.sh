@@ -74,6 +74,7 @@ resolve() {
     "LANG=${LANG:-en_US.UTF-8}" "TMPDIR=$ROOT/tmp")
   cli_env=("${common_env[@]}" "CLAUDE_CONFIG_DIR=$R_CLAUDE" "REX_SERVER=unix://$ROOT/rex-dead.sock")
   # REX_SERVER は URL なので空白を percent-encode する。REX_SESSION は起動の条件で、ループは値を読まない。
+  # rex-premise: preview.30 api REX_SERVER は unix:// の URL。既定の socket は ~/Library/Application Support/rex/server.sock
   daemon_env=("${common_env[@]}" "CLAUDE_CONFIG_DIR=$SRC_CLAUDE" "REX_SERVER=unix://${REX_SOCKET// /%20}"
     "REX_SESSION=session:release-verify")
 }
@@ -229,7 +230,7 @@ check_no_crash() {
 }
 
 check_cli() {
-  local project code=0
+  local project code=0 dir name
   # dream の project は cwd ではなく、worktree の親の checkout から決める (memory はそこに紐づく)。
   project="${VERIFY_PROJECT:-$(dirname "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir)")}"
 
@@ -246,6 +247,24 @@ check_cli() {
   run_cli "$R_BIN" dream-check '' dream check --json --project "$project" || code=$?
   check_no_crash dream-check "$code"
 
+  # リリースする tree の skill は、利用者の skill の置き場に無いので上の点検に入らない。置き場を名指しして掛け、
+  # 指摘があれば落とす (skill の誤りか、点検の誤検知のどちらかで、どちらもリリースの前に直す)。
+  mkdir -p "$ROOT/tmp/empty-memory"
+  for dir in "$ROOT/src/skills" "$ROOT/src/.claude/skills"; do
+    [ -d "$dir" ] || continue
+    case "$dir" in
+      */.claude/skills) name=dream-check-skills-repo ;;
+      *) name=dream-check-skills-plugin ;;
+    esac
+    code=0
+    run_cli "$R_BIN" "$name" '' dream check --json --memory-dir "$ROOT/tmp/empty-memory" --skills-dir "$dir" || code=$?
+    if [ "$code" -eq 0 ]; then
+      record "$name" pass "$dir"
+    else
+      record "$name" fail "exit ${code}。$R_REPORT/$name.out"
+    fi
+  done
+
   # 常用のバイナリを同じ複製に当てた出力との差分。挙動が変わった箇所を人が読む材料で、合否には入れない。
   if [ -x "$BASELINE_BIN" ]; then
     run_cli "$BASELINE_BIN" baseline-deps '{}' deps || true
@@ -258,19 +277,37 @@ check_cli() {
   fi
 }
 
+# ディレクトリの下への書き込みを拒む sandbox-exec の profile を出す。
+deny_write_profile() {
+  printf '(version 1)(allow default)(deny file-write* (subpath "%s"))' "$(physical "$1")"
+}
+
 # daemon を起こし、数 tick の後に止める。起動から停止までをこの呼び出しに閉じる (sandbox の中では、後の
 # コマンドから前のコマンドの process に signal を送れない)。
 check_daemon() {
-  local pid code=0 guard=() log="$R_STATE/logs/daemon.log"
+  local pid code=0 profile guard=() log="$R_STATE/logs/daemon.log"
   if [ ! -e "$REX_SOCKET" ]; then
     record daemon fail "rex の socket が無い: $REX_SOCKET"
     return 0
   fi
   case "$WRITE_GUARD" in
     sandbox-exec)
-      guard=(sandbox-exec -p "(version 1)(allow default)(deny file-write* (subpath \"$(physical "$SRC_CLAUDE")\"))")
+      # 同じ形の profile が書き込みを拒むことを、環境の下のディレクトリで先に確かめる。拒めない環境 (sandbox の
+      # 入れ子など) では daemon を起こさない。
+      # profile の外へ書けること (sandbox-exec 自体は動く) と、中へ書けないことの両方を見る。
+      mkdir -p "$ROOT/tmp/guard-probe"
+      profile=$(deny_write_profile "$ROOT/tmp/guard-probe")
+      if ! sandbox-exec -p "$profile" /usr/bin/touch "$ROOT/tmp/guard-ok" 2>"$R_REPORT/write-guard.err" ||
+        sandbox-exec -p "$profile" /usr/bin/touch "$ROOT/tmp/guard-probe/x" 2>>"$R_REPORT/write-guard.err" ||
+        [ -e "$ROOT/tmp/guard-probe/x" ]; then
+        record write-guard fail "sandbox-exec が書き込みを拒まない。$R_REPORT/write-guard.err"
+        record daemon fail "書き込みを拒めないので起こさない (task 経由で、Claude Code の sandbox の外から打つ)"
+        return 0
+      fi
+      record write-guard pass "sandbox-exec が書き込みを拒む"
+      guard=(sandbox-exec -p "$(deny_write_profile "$SRC_CLAUDE")")
       ;;
-    none) ;;
+    none) record write-guard info "VERIFY_WRITE_GUARD=none" ;;
     *) die "VERIFY_WRITE_GUARD は sandbox-exec か none: $WRITE_GUARD" ;;
   esac
   ${guard[@]+"${guard[@]}"} "${daemon_env[@]}" "$R_BIN" daemon --foreground --dry-run >"$R_REPORT/daemon.out" 2>&1 &
@@ -324,7 +361,8 @@ cmd_check() {
   note=$(jq -cn --arg commit "$COMMIT" --arg tree "$TREE" --arg at "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
     --rawfile checks "$R_REPORT/checks.tsv" \
     '{schema: 1, tree: $tree, commit: $commit, machine: {result: "pass", at: $at, checks: ($checks | split("\n") | map(select(. != "") | split("\t") | {name: .[0], result: .[1]}))}, human: null}')
-  git -C "$REPO" notes --ref="$NOTES_REF" add -f -m "$note" "$TREE"
+  # run は check を条件として呼ぶので、ここでは errexit が効かない。書けなかったことを自分で落とす。
+  git -C "$REPO" notes --ref="$NOTES_REF" add -f -m "$note" "$TREE" || die "記録を書けない"
   info "機械の点検が通った。記録を tree ${TREE:0:12} に書いた"
 }
 
@@ -342,7 +380,7 @@ cmd_approve() {
     die "機械の点検が通った記録が無い (先に check を通す)"
   fi
   note=$(jq -c --arg at "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" '.human = {approved_at: $at}' <<<"$note")
-  git -C "$REPO" notes --ref="$NOTES_REF" add -f -m "$note" "$TREE"
+  git -C "$REPO" notes --ref="$NOTES_REF" add -f -m "$note" "$TREE" || die "記録を書けない"
   info "人の確認を tree ${TREE:0:12} に書いた"
 }
 

@@ -318,7 +318,7 @@ type TellResult struct {
 	PaneID string `json:"pane_id"`
 }
 
-// DepsData は deps の出力。依存の DAG と、repo ごとの生きているセッションと open のメモ。
+// DepsData は deps の出力。依存の DAG と、repo ごとの生きているセッションと open のメモ、渡したメモの宛先。
 type DepsData struct {
 	DaemonRunning bool `json:"daemon_running"`
 	// 動いている daemon が pane の rex の置き場を status.json に書くか。false なら置き場の無いノードは daemon が古いか止まっている。
@@ -328,6 +328,8 @@ type DepsData struct {
 	// open のメモを「古い」とみなす日数。アプリはこれより前に最後に置かれたメモをまとめて捨てるボタンを出す。
 	StaleMemoDays int        `json:"stale_memo_days"`
 	Repos         []DepsRepo `json:"repos"`
+	// 保持期間 (handed は 7 日) の間の渡したメモ。最後に置かれた時刻の新しい順。
+	Handed []HandedMemo `json:"handed"`
 	// セッション台帳に載った repo。最後に見た時刻の新しい順 (新しいセッションを起こす repo の候補)。
 	RecentRepos []RecentRepo `json:"recent_repos"`
 	Graph       DepsGraph    `json:"graph"`
@@ -363,7 +365,7 @@ type DepsSession struct {
 	Live    bool   `json:"live"`
 }
 
-// ParkingCard は repo の open のメモ 1 つ。
+// ParkingCard はメモ 1 つ。DepsRepo.memos では open のメモ、HandedMemo.memo では渡したメモ。
 type ParkingCard struct {
 	ID           string   `json:"id"`
 	Kind         string   `json:"kind"`
@@ -374,6 +376,27 @@ type ParkingCard struct {
 	DefaultTaken string   `json:"default_taken,omitempty"`
 	// 置いたセッションの新しい順。
 	Sources []ParkingSource `json:"sources"`
+}
+
+// HandedMemo は渡したメモ 1 つと、その宛先。
+type HandedMemo struct {
+	Memo ParkingCard `json:"memo"`
+	// メモを置いた repo の鍵 (DepsRepo.repo と同じ規則)。
+	Repo      string   `json:"repo"`
+	RepoTitle string   `json:"repo_title"`
+	To        HandedTo `json:"to"`
+}
+
+// HandedTo は渡したメモの宛先。node と repo は daemon が解いたもので、どちらも無ければ図の中に宛先が無い。
+type HandedTo struct {
+	// メモの handed_to (sid:<session_id> / repo:<path>)。mod は切り出さずに不透明な文字列として扱う。
+	Ref string `json:"ref"`
+	// sid: の宛先のノードの key。セッションのノード、無ければそのセッションのタスクのノード (進行中を先に、key の順で 1 つ)。
+	Node string `json:"node,omitempty"`
+	// repo: の宛先の repo の鍵 (DepsRepo.repo と同じ規則)。
+	Repo string `json:"repo,omitempty"`
+	// 宛先の表示名 (セッションの表示名か repo の title)。
+	Label string `json:"label"`
 }
 
 // ParkingSource はメモを置いたセッション 1 つ。

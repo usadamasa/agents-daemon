@@ -556,7 +556,7 @@ test("完了を隠した既定の図: 止まったノードに下流の数を、
 });
 
 test("完了を隠した既定の図: メモの一覧と凡例と footer を出す", async () => {
-  assert.equal(count("#park-list .mrow"), 2);
+  assert.equal(count("#park-list .mrow:not(.handed)"), 2);
   // メモの一覧は見出しを持たず、件数は repo の絞り込みの選択肢に出る。
   assert.equal(count("#park-title"), 0);
   assert.deepEqual([...q("#repo-filter").options].map((o) => o.textContent), ["All repos", "agents-daemon (2)", "other (0)"]);
@@ -1332,6 +1332,74 @@ test("メモの単体ビュー: 見出しは repo と種類だけで、置いた
     await snapshot("graph-popup-memo");
   } finally {
     escape();
+  }
+});
+
+// popGroups は単体ビューのグループを見出し → 行の字の並びで返す。
+function popGroups() {
+  return new Map([...document.querySelectorAll("#pop .grp")].map((g) => [g.querySelector(".gh .ph").textContent, [...g.querySelectorAll(".lk button")].map((b) => b.textContent)]));
+}
+
+test("渡したメモ (sid:): 宛先のノードの単体ビューに Memos received で出し、押すとメモを開き、To の chip で宛先へ移る (#292)", async () => {
+  q('.node[data-key="task:beta/1"]').click();
+  try {
+    assert.deepEqual(popGroups().get("Memos received"), ["beta に渡した脇のバグ"]);
+    // 宛先のノードでないノードには出さない。
+    q('.node[data-key="task:alpha/2"]').click();
+    assert.equal(popGroups().has("Memos received"), false);
+    q('.node[data-key="task:beta/1"]').click();
+    [...q("#pop").querySelectorAll(".grp .lk button")].find((b) => b.textContent === "beta に渡した脇のバグ").click();
+
+    const pop = q("#pop");
+    assert.equal(pop.hidden, false);
+    assert.equal(pop.querySelector(".title").textContent, "beta に渡した脇のバグ");
+    assert.equal(pop.querySelector(".head .ph").textContent, "agents-daemon · aside");
+    assert.deepEqual([...pop.querySelectorAll(".head .chips .chip")].map((c) => c.textContent), ["handed"]);
+    // 渡した後のメモに Task / Issue / Discard の動詞は出さない。
+    assert.equal(pop.querySelectorAll(".acts .act").length, 0);
+    assert.deepEqual([...pop.querySelectorAll(".kv dt")].map((d) => d.textContent), ["To", "From"]);
+    const to = pop.querySelector(".kv dd .chip.link");
+    assert.equal(to.textContent, "beta");
+    assert.equal(to.getAttribute("role"), "button");
+    await snapshot("graph-popup-memo-handed");
+    to.click();
+    assert.equal(q("#pop .title").textContent, "画面を描く");
+  } finally {
+    escape();
+  }
+});
+
+test("渡したメモ (repo:): パーキングロットの宛先の repo の節に Handed で出し、To の chip で宛先の repo に絞る (#292)", async () => {
+  const filter = q("#repo-filter");
+  const choose = (repo) => {
+    filter.value = repo;
+    filter.dispatchEvent(new Event("change"));
+  };
+  try {
+    // open のメモの一覧はそのまま。宛先が repo のメモだけを下の Handed の節に並べる。
+    assert.deepEqual([...q("#park-list").querySelectorAll(".mrow:not(.handed)")].map((r) => r.dataset.memo), ["memo-2", "memo-1"]);
+    assert.equal(q("#park-list .ph").textContent, "Handed");
+    assert.deepEqual([...q("#park-list").querySelectorAll(".mrow.handed")].map((r) => r.dataset.memo), ["handed-repo"]);
+    // 宛先の repo で絞ると open の無い repo でも Handed の節は残り、置いた repo で絞ると出ない。
+    choose("/repo/agents-daemon");
+    assert.equal(count("#park-list .mrow.handed"), 0);
+    choose("/repo/other");
+    assert.equal(q("#park-list .none").textContent, "No open memos in this repo");
+    assert.deepEqual([...q("#park-list").querySelectorAll(".mrow.handed")].map((r) => r.dataset.memo), ["handed-repo"]);
+
+    choose("");
+    q('.mrow[data-memo="handed-repo"]').click();
+    const pop = q("#pop");
+    assert.equal(pop.querySelector(".title").textContent, "other の README を直す");
+    const to = pop.querySelector(".kv dd .chip.link");
+    assert.equal(to.textContent, "other");
+    to.click();
+    assert.equal(filter.value, "/repo/other");
+    assert.equal(q("#pop .title").textContent, "other の README を直す");
+    await snapshot("park-handed");
+  } finally {
+    escape();
+    choose("");
   }
 });
 

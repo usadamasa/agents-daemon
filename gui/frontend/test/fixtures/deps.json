@@ -48,6 +48,45 @@
       "memos": []
     }
   ],
+  "handed": [
+    {
+      "memo": {
+        "id": "handed-repo",
+        "kind": "scope",
+        "origin": "placed",
+        "title": "other の README を直す",
+        "sources": [{ "session_id": "sid-alpha", "task_ref": "task:alpha/2", "session": "alpha", "live": true, "at": "2026-11-07T02:20:00Z" }]
+      },
+      "repo": "/repo/agents-daemon",
+      "repo_title": "agents-daemon",
+      "to": { "ref": "repo:/repo/other/.claude/worktrees/x", "repo": "/repo/other", "label": "other" }
+    },
+    {
+      "memo": {
+        "id": "handed-session",
+        "kind": "aside",
+        "origin": "placed",
+        "title": "beta に渡した脇のバグ",
+        "detail": "gui/main.go:5 を見る",
+        "sources": [{ "session_id": "sid-alpha", "task_ref": "task:alpha/2", "session": "alpha", "live": true, "at": "2026-11-07T02:00:00Z" }]
+      },
+      "repo": "/repo/agents-daemon",
+      "repo_title": "agents-daemon",
+      "to": { "ref": "sid:sid-beta", "node": "task:beta/1", "label": "beta" }
+    },
+    {
+      "memo": {
+        "id": "handed-gone",
+        "kind": "aside",
+        "origin": "placed",
+        "title": "終わったセッションに渡したメモ",
+        "sources": [{ "session_id": "sid-alpha", "session": "alpha", "live": true, "at": "2026-11-07T01:00:00Z" }]
+      },
+      "repo": "/repo/agents-daemon",
+      "repo_title": "agents-daemon",
+      "to": { "ref": "sid:sid-gone", "label": "sid-gone" }
+    }
+  ],
   "recent_repos": [
     { "repo": "/repo/agents-daemon", "title": "agents-daemon", "last_seen": "2026-11-07T02:58:00Z" },
     { "repo": "/repo/other", "title": "other", "last_seen": "2026-11-07T02:40:00Z" }

@@ -197,7 +197,9 @@ printf '%s' '{"id":"<id>","status":"open"}' | agents-daemon park set            
 - メモは種類 `kind` (aside / scope / preference) と出自 `origin` を持つ。`placed` は model が park tool で置いたメモ、
   `adopted` は終了したセッションの未完了のタスクをアプリの `Memo` (`park adopt`) で
   移したメモ (種類は scope)
-- handed のメモは宛先 `handed_to` (`sid:<session_id>` か、新しく起こしたセッションの `repo:<path>`) を持つ
+- handed のメモは宛先 `handed_to` (`sid:<session_id>` か、新しく起こしたセッションの `repo:<path>`) を持つ。
+  アプリは保持期間 (7 日) の間、`sid:` の宛先をそのセッションのノード (無ければそのセッションのタスクのノード) の
+  `Memos received` に、`repo:` の宛先をパーキングロットのその repo の `Handed` の節に出す
 - メモを渡すのはアプリの `Task` と `Issue` (`park hand`)。取る (handed)、送る (生きているセッションの
   入力欄に `tell` で打つか、`spawn` で新しいセッションを起こす)、届かなければ戻す (open) を 1 回で行う
 

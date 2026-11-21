@@ -18,7 +18,8 @@ func writeMemory(t *testing.T, dir, file, name, body string) string {
 	return path
 }
 
-// 指す先の memory が無い [[name]] は、ファイルと行を添えて 1 件ずつ出る。
+// 指す先の memory が無い [[name]] は、ファイルと行を添えて 1 件ずつ出る。Claude Code の memory の仕様では
+// 「後で書く」の印として許されるので、警告に留める。
 func TestRun_ReportsDanglingLink(t *testing.T) {
 	dir := t.TempDir()
 	writeMemory(t, dir, "alive.md", "alive", "本文\n")
@@ -33,8 +34,70 @@ func TestRun_ReportsDanglingLink(t *testing.T) {
 	}
 	f := res.Findings[0]
 	// frontmatter の 7 行と空行の後、本文の 2 行目。
-	if f.Kind != KindDanglingLink || f.Path != src || f.Line != 9 || f.Target != "gone" {
+	if f.Kind != KindDanglingLink || f.Severity != SeverityWarning || f.Path != src || f.Line != 9 || f.Target != "gone" {
 		t.Errorf("finding = %+v", f)
+	}
+	if res.Failed() {
+		t.Error("警告だけなのに Failed() が真")
+	}
+}
+
+// writeLines は n 行のファイルを書く。
+func writeLines(t *testing.T, path string, n int) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(strings.Repeat("- x\n", n)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// MEMORY.md は 200 行未満に保つ (dream skill のチェックリスト)。200 行以上は落ちる。
+func TestRun_IndexLineLimit(t *testing.T) {
+	for _, tc := range []struct {
+		lines int
+		fail  bool
+	}{{199, false}, {200, true}} {
+		dir := t.TempDir()
+		index := filepath.Join(dir, "MEMORY.md")
+		writeLines(t, index, tc.lines)
+
+		res, err := Run(Opts{MemoryDir: dir})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.Failed() != tc.fail {
+			t.Errorf("%d 行: Failed() = %v; want %v (%+v)", tc.lines, res.Failed(), tc.fail, res.Findings)
+		}
+		if tc.fail {
+			if len(res.Findings) != 1 || res.Findings[0].Kind != KindIndexTooLong || res.Findings[0].Path != index ||
+				res.Findings[0].Severity != SeverityError {
+				t.Errorf("findings = %+v", res.Findings)
+			}
+		}
+	}
+}
+
+// memory 1 ファイルが 100 行を超えたら、細分化か剪定を判断する合図 (dream skill のトリガー条件)。判断が要るので警告。
+func TestRun_MemoryLineLimit(t *testing.T) {
+	for _, tc := range []struct {
+		lines int
+		warn  bool
+	}{{100, false}, {101, true}} {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "big.md")
+		writeLines(t, path, tc.lines)
+
+		res, err := Run(Opts{MemoryDir: dir})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.Failed() {
+			t.Errorf("%d 行: 警告のはずが Failed() が真", tc.lines)
+		}
+		got := len(res.Findings) == 1 && res.Findings[0].Kind == KindMemoryTooLong &&
+			res.Findings[0].Path == path && res.Findings[0].Severity == SeverityWarning
+		if got != tc.warn {
+			t.Errorf("%d 行: findings = %+v; want 警告 %v", tc.lines, res.Findings, tc.warn)
+		}
 	}
 }
 
@@ -50,6 +113,9 @@ func TestRun_ResolvesByFrontmatterName(t *testing.T) {
 	}
 	if len(res.Findings) != 1 || res.Findings[0].Target != "file-base" {
 		t.Errorf("findings = %+v; want file-base だけ", res.Findings)
+	}
+	if res.Failed() {
+		t.Error("リンク切れは警告なのに Failed() が真")
 	}
 }
 

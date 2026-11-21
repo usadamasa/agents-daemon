@@ -17,7 +17,7 @@
 | `dream stage` | 6 Stage | candidates → Markdown 承認レポート |
 | `dream adopt` | 7 Adopt | candidate → git branch 作成 + LLM 向け手順書 |
 | `dream forget` | 4 Consolidate | auto memory 削除 + MEMORY.md 索引の同期 |
-| `dream check` | 7 Adopt の後 | 判断の要らない点検 (read-only)。落ちたら exit code 1 |
+| `dream check` | 7 Adopt の後 | 判断の要らない点検 (read-only)。error があれば exit code 1 |
 | `dream policy` | (全 phase) | 利用者の規約のファイルを連結して JSON で出す |
 
 ## state の置き場
@@ -208,16 +208,22 @@ user が明示的に指示するまで push しない (「入力非破壊」原�
 
 ## `dream check`
 
-adopt の Edit の後、commit の前に回す機械の点検。read-only で、何も直さない。落ちた項目を
-`<path>:<line>: ...` の形で 1 行ずつ stdout に出し、1 件でもあれば exit code 1 で終わる。`--json` は
-`{"findings": [...]}` を出し、exit code は同じ。
+adopt の Edit の後、commit の前に回す機械の点検。read-only で、何も直さない。項目を
+`<path>:<line>: <severity>: ...` の形で 1 行ずつ stdout に出し、`error` が 1 件でもあれば exit code 1 で終わる。
+`warning` は人が判断する合図で、exit code には効かない。`--json` は `{"findings": [...]}` を出し、exit code は同じ。
 
-| 点検 | kind | 落ちる条件 |
-| --- | --- | --- |
-| auto memory の `[[name]]` | `dangling_link` | どの memory の frontmatter の `name` にも当たらない |
+| 点検 | kind | severity | 落ちる条件 |
+| --- | --- | --- | --- |
+| `MEMORY.md` の行数 | `index_too_long` | error | 200 行以上 (SKILL.md のチェックリストの「200 行未満」) |
+| memory 1 ファイルの行数 | `memory_too_long` | warning | 100 行超 (SKILL.md のトリガー条件。細分化か剪定かを決める) |
+| auto memory の `[[name]]` | `dangling_link` | warning | どの memory の frontmatter の `name` にも当たらない |
 
-`[[name]]` はファイル名ではなく frontmatter の `name` で解く。fence と inline code の中、空白を含む
-`[[ ... ]]` (shell の test 構文) はリンクとして読まない。memory ディレクトリが無ければ 0 件ではなくエラーにする。
+`[[name]]` はファイル名ではなく frontmatter の `name` で解く。まだ無い memory を指すリンクは Claude Code の
+memory の仕様で「後で書く」の印として許されるので、warning に留める。消す memory を指すリンクが残る事故は
+`dream forget` が消す前に拾う。fence と inline code の中、空白を含む `[[ ... ]]` (shell の test 構文) は
+リンクとして読まない。memory ディレクトリが無ければ 0 件ではなくエラーにする。
+
+CLAUDE.md の行数と文字数は点検しない。dream skill にも references にも上限の数値が無い。
 
 | Flag | Default | 説明 |
 | --- | --- | --- |
@@ -247,6 +253,8 @@ CLI 内部に持たせている。登録する行は `agents-daemon:setup` skill
 - 削除できるのは memory ディレクトリ直下の `.md` のみ。`../` を含む名前は拒否する
 - `MEMORY.md` 自体は削除できない
 - 1 件でも解決できない名前があれば何も削除しない (索引と実体の乖離を避ける)
+- 消す memory を `[[name]]` で指している memory (消す memory 同士は除く) を `<path>:<line>:` の形で先に出す
+  (`--json` は `linked_from`)。削除は止めないので、指す側を直すか残すかは出力を見て決める
 
 ### Flags
 

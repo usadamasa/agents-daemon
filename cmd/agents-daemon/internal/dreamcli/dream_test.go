@@ -111,39 +111,52 @@ func TestDreamCmd_JSON(t *testing.T) {
 	}
 }
 
-// dream check は点検に落ちた項目を出し、1 件でもあれば error (exit code 1) で返す。--json でも同じ。
-func TestDreamCheckCmd_FailsOnFindings(t *testing.T) {
+// dream check は点検に落ちた項目を出し、error が 1 件でもあれば error (exit code 1) で返す。--json でも同じ。
+// 警告 (リンク切れ) は出すが exit code には効かない。
+func TestDreamCheckCmd_FailsOnErrors(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	memDir := t.TempDir()
 	body := "---\nname: linker\n---\n\n[[gone]]\n"
 	if err := os.WriteFile(filepath.Join(memDir, "linker.md"), []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
-
-	var out bytes.Buffer
-	root := testRoot()
-	root.SetOut(&out)
-	root.SetErr(&bytes.Buffer{})
-	root.SetArgs([]string{"dream", "check", "--memory-dir", memDir})
-	if err := root.Execute(); err == nil {
-		t.Fatal("リンク切れがあるのに成功した")
-	}
-	if !strings.Contains(out.String(), "linker.md:5:") || !strings.Contains(out.String(), "[[gone]]") {
-		t.Errorf("stdout にファイルと行とリンクが無い: %q", out.String())
+	execCheck := func(args ...string) (string, error) {
+		var out bytes.Buffer
+		root := testRoot()
+		jsonflag.Add(root)
+		root.SetOut(&out)
+		root.SetErr(&bytes.Buffer{})
+		root.SetArgs(append(args, "dream", "check", "--memory-dir", memDir))
+		err := root.Execute()
+		return out.String(), err
 	}
 
-	var jsonOut bytes.Buffer
-	root = testRoot()
-	jsonflag.Add(root)
-	root.SetOut(&jsonOut)
-	root.SetErr(&bytes.Buffer{})
-	root.SetArgs([]string{"--json", "dream", "check", "--memory-dir", memDir})
-	if err := root.Execute(); err == nil {
-		t.Fatal("--json でリンク切れがあるのに成功した")
+	out, err := execCheck()
+	if err != nil {
+		t.Fatalf("警告だけなのに失敗した: %v", err)
+	}
+	if !strings.Contains(out, "linker.md:5:") || !strings.Contains(out, "[[gone]]") || !strings.Contains(out, "warning") {
+		t.Errorf("stdout にファイルと行とリンクと警告の印が無い: %q", out)
+	}
+
+	if err := os.WriteFile(filepath.Join(memDir, "MEMORY.md"), []byte(strings.Repeat("- x\n", 200)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, err = execCheck()
+	if err == nil {
+		t.Fatal("MEMORY.md が 200 行あるのに成功した")
+	}
+	if !strings.Contains(out, "MEMORY.md") || !strings.Contains(out, "error") {
+		t.Errorf("stdout に MEMORY.md と error の印が無い: %q", out)
+	}
+
+	out, err = execCheck("--json")
+	if err == nil {
+		t.Fatal("--json で MEMORY.md が 200 行あるのに成功した")
 	}
 	var res check.Result
-	if err := json.Unmarshal(jsonOut.Bytes(), &res); err != nil || len(res.Findings) != 1 {
-		t.Errorf("check --json = %q (%v)", jsonOut.String(), err)
+	if err := json.Unmarshal([]byte(out), &res); err != nil || len(res.Findings) != 2 {
+		t.Errorf("check --json = %q (%v)", out, err)
 	}
 }
 

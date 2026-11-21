@@ -39,14 +39,11 @@
       "type": "object",
       "additionalProperties": false,
       "not": { "required": ["here", "repo"] },
-      "dependentRequired": { "task": ["session_id"] },
       "properties": {
         "cwd": { "type": "string", "description": "here で使う cwd (無ければ今の cwd)" },
         "here": { "type": "boolean", "description": "cwd の repo で絞る" },
         "repo": { "type": "string", "description": "repo (main worktree のパス) で絞る" },
-        "status": { "type": "string", "enum": ["open", "handed", "discarded"], "description": "status で絞る" },
-        "task": { "type": "string", "description": "session_id のセッションがこのタスクの途中で置いたメモで絞る" },
-        "session_id": { "type": "string", "description": "task で絞るセッションの ID" }
+        "status": { "type": "string", "enum": ["open", "handed", "discarded"], "description": "status で絞る" }
       }
     },
     "ParkDiscardRequest": {

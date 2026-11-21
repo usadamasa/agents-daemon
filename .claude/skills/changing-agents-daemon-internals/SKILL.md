@@ -27,6 +27,7 @@ plugin の `agents-daemon:agents-daemon` skill の `references/operations.md` �
 | [parking.md](references/parking.md) | パーキングロット (メモの手渡し、park tool、通知の mod) |
 | [binary.md](references/binary.md) | バイナリの用意と差し替え |
 | [verification.md](references/verification.md) | 検証用コマンドと実機での検証 |
+| [package-lint.md](references/package-lint.md) | パッケージ構造の lint (analyze-modularity、go-arch-lint) と改名 |
 
 ## 症状から引くところ
 
@@ -45,3 +46,4 @@ plugin の `agents-daemon:agents-daemon` skill の `references/operations.md` �
 | `doctor` の pane 一覧に `⚠ transcript を読めない` が出る | rate-limit.md の「上限かどうかは transcript で決める」(置き場と entry の形) |
 | rex のセッションなのに daemon が起きない | multiplexer.md (`REX_SESSION` の無い起動では起こさない) |
 | 検知の挙動を確かめたい、上限を踏んだ後に材料を読みたい | verification.md |
+| `task lint` の analyze-modularity や go-arch-lint が落ちる、パッケージを統合・改名したい | package-lint.md |

@@ -140,6 +140,56 @@ func TestAnchor_不正な参照(t *testing.T) {
 	}
 }
 
+// AnchorAlone は辺に出ていない PR にも、出したセッションから PR への辺を導いた印付きで書く (#610)。PR の端点の
+// cwd と repo は写す元の辺が無いので、セッションのものにする。2 回目は書かない。
+func TestAnchorAlone_辺に出ていないPRへ導く(t *testing.T) {
+	s := New(t.TempDir())
+	e, ok, err := s.AnchorAlone("A", "/a/.claude/worktrees/x", "/a", "pr:o/r#7", testNow)
+	if err != nil || !ok {
+		t.Fatalf("AnchorAlone() = %v, %v", ok, err)
+	}
+	if e.Before.Ref != "sid:A" || e.Before.Repo != "/a" || e.After.Ref != "pr:o/r#7" || e.After.CWD != "/a/.claude/worktrees/x" || e.After.Repo != "/a" || !e.Derived || e.Note != "PR #7" {
+		t.Errorf("導いた辺 = %+v", e)
+	}
+	if _, ok, err := s.AnchorAlone("A", "/a", "/a", "pr:o/r#7", testNow); ok || err != nil {
+		t.Errorf("2 回目に書いた: %v, %v", ok, err)
+	}
+	if got := len(refsOf(t, s)); got != 1 {
+		t.Errorf("辺の数 = %d, want 1", got)
+	}
+}
+
+// AnchorAlone も、自分の PR を待つ辺があるセッションと、人が外した組には導かない (NoDaemonLoop、NoRederive)。
+func TestAnchorAlone_自分の待ちと外した組には導かない(t *testing.T) {
+	s := New(t.TempDir())
+	mustAdd(t, s, Endpoint{Ref: "pr:o/r#1", CWD: "/a"}, Endpoint{Ref: "task:A/2", CWD: "/a"}, "", testNow)
+	if _, ok, err := s.AnchorAlone("A", "/a", "", "pr:o/r#1", testNow); ok || err != nil {
+		t.Errorf("自分の PR を待つ A に導いた: %v, %v", ok, err)
+	}
+
+	mustAdd(t, s, Endpoint{Ref: "sid:A", CWD: "/a"}, Endpoint{Ref: "pr:o/r#2", CWD: "/a"}, "", testNow)
+	mustRemove(t, s, Endpoint{Ref: "sid:A", CWD: "/a"}, Endpoint{Ref: "pr:o/r#2", CWD: "/a"})
+	if _, ok, err := s.AnchorAlone("A", "/a", "", "pr:o/r#2", testNow); ok || err != nil {
+		t.Errorf("人が外した組を導き直した: %v, %v", ok, err)
+	}
+}
+
+// 導いた辺の PR を、別の綴り (owner/repo の大文字小文字違い) の辺が待っても、同じ PR として上流ありと見て導き直さない。
+// GitHub の owner/repo は大文字小文字を区別しない。
+func TestAnchor_綴りの違う同じPRには導き直さない(t *testing.T) {
+	s := New(t.TempDir())
+	if _, ok, err := s.AnchorAlone("A", "/a", "", "pr:o/r#1", testNow); !ok || err != nil {
+		t.Fatalf("AnchorAlone() = %v, %v", ok, err)
+	}
+	mustAdd(t, s, Endpoint{Ref: "pr:O/R#1", CWD: "/h"}, Endpoint{Ref: "task:H/1", CWD: "/h"}, "", testNow)
+	if _, ok := mustAnchor(t, s, "A", "/a", "pr:O/R#1"); ok {
+		t.Error("綴りの違う同じ PR に導いた")
+	}
+	if _, ok, err := s.AnchorAlone("B", "/b", "", "pr:O/r#1", testNow); ok || err != nil {
+		t.Errorf("綴りの違う同じ PR に AnchorAlone で導いた: %v, %v", ok, err)
+	}
+}
+
 // 記録の repo の鍵を渡されたら before の repo はそれにする。worktree が消えた cwd から求め直すと、鍵が worktree の
 // パスになる (#606)。
 func TestAnchor_渡したrepoの鍵をbeforeに使う(t *testing.T) {

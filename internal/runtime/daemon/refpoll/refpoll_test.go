@@ -489,6 +489,96 @@ func TestRefresh_PRを出した記録はrepoの大文字小文字を区別しな
 	}
 }
 
+// PR を待つ辺が 1 本も無くても、生きているセッションが PR を出した記録を持てば、そのセッションから PR への辺を導き、
+// PR のノードを図に載せる (#610)。終了したセッションの記録の PR は、辺に無ければ導かない (セッションと同じ寿命)。
+// 記録が 2 つのセッションにある PR も導かない。導いた PR は辺の端点なので、次の tick から状態を引く。
+func TestRefresh_辺に無いPRも出した生きているセッションから導く(t *testing.T) {
+	remote := &fakeRemote{states: map[string]string{"pr:o/r#1": "open"}, heads: map[string]string{"pr:o/r#1": "f1"}}
+	f, _ := newFixture(t, remote)
+	f.sessions.live = []Session{{ID: "A", CWD: "/a"}, {ID: "B", CWD: "/b"}}
+	f.sessions.issued = map[string][]Session{
+		"pr:o/r#1": {{ID: "A", CWD: "/a", Repo: "/a"}},
+		"pr:o/r#2": {{ID: "E", CWD: "/e"}},
+		"pr:o/r#3": {{ID: "A", CWD: "/a"}, {ID: "B", CWD: "/b"}},
+	}
+
+	f.p.Refresh(context.Background(), t0)
+	if got, want := edgeKeys(t, f.dir), []string{"sid:A>pr:o/r#1"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("辺 = %v, want %v", got, want)
+	}
+	if log := f.readLog(t); !strings.Contains(log, "sid:A → pr:o/r#1") {
+		t.Errorf("導いたことのログが無い: %q", log)
+	}
+	f.p.Refresh(context.Background(), t0.Add(time.Second))
+	if want := []string{"pr:o/r#1"}; !reflect.DeepEqual(remote.calls, want) {
+		t.Errorf("calls = %v, want %v", remote.calls, want)
+	}
+}
+
+// 記録から導いた後に自分の PR を待つ辺を書くと導いた辺を消し、マージでその辺が消えたら記録から導き直す。
+// 導き直しても辺は 1 本で、PR のノードはセッションの下流に残る (#610)。
+func TestRefresh_自分の待ちがマージで消えたら記録から1本だけ導き直す(t *testing.T) {
+	remote := &fakeRemote{states: map[string]string{"pr:o/r#1": "open"}, heads: map[string]string{"pr:o/r#1": "f1"}}
+	f, add := newFixture(t, remote)
+	f.sessions.live = []Session{{ID: "A", CWD: "/a"}}
+	f.sessions.places["/a"] = [2]string{"o/r", "f1"}
+	f.sessions.issued = map[string][]Session{"pr:o/r#1": {{ID: "A", CWD: "/a"}}}
+
+	f.p.Refresh(context.Background(), t0)
+	add("pr:o/r#1", "task:A/2")
+	f.p.Refresh(context.Background(), t0.Add(time.Second))
+	if got, want := edgeKeys(t, f.dir), []string{"pr:o/r#1>task:A/2"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("自分の待ちを書いた後の辺 = %v, want %v", got, want)
+	}
+
+	remote.states["pr:o/r#1"] = "merged"
+	for i := range 3 {
+		f.p.Refresh(context.Background(), t0.Add(refstate.RefreshInterval+time.Duration(i)*time.Second))
+	}
+	if got, want := edgeKeys(t, f.dir), []string{"sid:A>pr:o/r#1"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("マージの後の辺 = %v, want %v", got, want)
+	}
+}
+
+// 記録から導いた辺を人が `edge rm` で外したら、記録が残っていても導き直さない (#599)。
+func TestRefresh_記録から導いた辺を人が外したら導き直さない(t *testing.T) {
+	remote := &fakeRemote{states: map[string]string{"pr:o/r#1": "open"}}
+	f, _ := newFixture(t, remote)
+	f.sessions.live = []Session{{ID: "A", CWD: "/a"}}
+	f.sessions.issued = map[string][]Session{"pr:o/r#1": {{ID: "A", CWD: "/a"}}}
+
+	f.p.Refresh(context.Background(), t0)
+	if _, err := f.edges.Remove(edge.Endpoint{Ref: "sid:A", CWD: "/a"}, edge.Endpoint{Ref: "pr:o/r#1", CWD: "/a"}); err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i <= 3; i++ {
+		f.p.Refresh(context.Background(), t0.Add(time.Duration(i)*time.Second))
+	}
+	if got := edgeKeys(t, f.dir); len(got) != 0 {
+		t.Errorf("辺 = %v, want なし", got)
+	}
+}
+
+// 記録から導いた PR を、別の綴りの PR の参照で渡す側が待っても、同じ PR の 2 本目の辺を導かない。
+func TestRefresh_記録から導いたPRを綴り違いで待っても導き直さない(t *testing.T) {
+	remote := &fakeRemote{
+		states: map[string]string{"pr:o/r#1": "open", "pr:O/R#1": "open"},
+		heads:  map[string]string{"pr:o/r#1": "f1", "pr:O/R#1": "f1"},
+	}
+	f, add := newFixture(t, remote)
+	f.sessions.live = []Session{{ID: "A", CWD: "/a"}}
+	f.sessions.issued = map[string][]Session{"pr:o/r#1": {{ID: "A", CWD: "/a"}}}
+
+	f.p.Refresh(context.Background(), t0)
+	add("pr:O/R#1", "task:H/1")
+	for i := 1; i <= 3; i++ {
+		f.p.Refresh(context.Background(), t0.Add(time.Duration(i)*time.Second))
+	}
+	if got, want := edgeKeys(t, f.dir), []string{"pr:O/R#1>task:H/1", "sid:A>pr:o/r#1"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("辺 = %v, want %v", got, want)
+	}
+}
+
 // 記録の repo の鍵 (hook が cwd を書いたときに求めたもの) を導いた辺の before に使う。終了後に worktree が消えた
 // cwd から求め直さない (#606)。
 func TestRefresh_PRを出した記録のrepoの鍵を辺に使う(t *testing.T) {

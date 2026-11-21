@@ -509,6 +509,7 @@
         "session_id": { "type": "string" },
         "session": { "type": "string", "description": "表示名 (同名のセッションがあれば session ID の先頭が付く)" },
         "session_name": { "type": "string", "description": "ListAgents の名前 (SendMessage の宛先に書く形)。表示名とは別" },
+        "session_node": { "type": "string", "description": "単体ビューのセッション名から移るノードの key。渡したメモの宛先 (HandedTo.node) と同じ規則で解き、このノード自身か図に無ければ付かない" },
         "live": { "type": "boolean" },
         "rex": { "$ref": "#/$defs/RexPlacement", "description": "セッションの pane が居る rex の session と window。生きていて daemon が置き場を引けたノードだけに付く" },
         "depth": { "type": "integer", "description": "段 (前提をたどった最長の深さ)" },

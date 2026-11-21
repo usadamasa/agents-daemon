@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/daemonstate"
+	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/protocol"
@@ -282,6 +283,46 @@ func TestBuild_handed(t *testing.T) {
 	}
 	if empty := build(input{Locate: places(nil)}); empty.Handed == nil {
 		t.Errorf("渡したメモが無ければ空の配列")
+	}
+}
+
+// 単体ビューのセッション名から移るノード (session_node) は、渡したメモの宛先と同じ規則で解く (#506)。
+// セッションのノードがあればそれ、無ければ進行中、未着手、完了の順のタスクのノード。このノード自身と、
+// セッションを持たない参照のノードには付かない。
+func TestBuild_sessionNode(t *testing.T) {
+	const main = "/src/home/agents-daemon"
+	d := build(input{
+		PID: 42,
+		Snapshot: snapshot(
+			daemonstate.PaneStatus{PaneID: "p1", SessionID: "A", CWD: main, AgentStatus: "working"},
+			daemonstate.PaneStatus{PaneID: "p2", SessionID: "E", CWD: main, AgentStatus: "done"},
+			daemonstate.PaneStatus{PaneID: "p3", SessionID: "B", CWD: main, AgentStatus: "done"},
+		),
+		Tasks: []record.Task{
+			task("A", "1", "後の作業 #12", "pending", main), task("A", "2", "進めている", "in_progress", main),
+			task("B", "1", "済んだ", "completed", main), task("B", "2", "次の作業", "pending", main),
+		},
+		Edges: []edge.Edge{{
+			ID: "e1", Before: edge.Endpoint{Ref: "issue:o/r#9", CWD: main}, After: edge.Endpoint{Ref: "task:A/1", CWD: main},
+		}},
+		Locate:       places(map[string]gitrepo.Place{main: {Repo: main, Branch: "main"}}),
+		SessionNames: map[string]string{"A": "alpha", "B": "bravo", "E": "echo"},
+	})
+
+	want := map[string]string{
+		"task:A/1":    "task:A/2",
+		"task:A/2":    "",
+		"task:B/1":    "task:B/2",
+		"task:B/2":    "",
+		"sid:E":       "",
+		"issue:o/r#9": "",
+	}
+	got := map[string]string{}
+	for _, n := range d.Graph.Nodes {
+		got[n.Key] = n.SessionNode
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("session_node = %v, want %v", got, want)
 	}
 }
 

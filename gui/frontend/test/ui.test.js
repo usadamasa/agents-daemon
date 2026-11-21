@@ -1369,6 +1369,36 @@ test("渡したメモ (sid:): 宛先のノードの単体ビューに Memos rece
   }
 });
 
+test("単体ビューのセッション名: session_node があれば押すとそのノードへ移り、無ければ押せない chip で出す (#506)", async () => {
+  // sessionChip は見出しの chip のうちセッション名のもの。
+  const sessionChip = (name) => [...q("#pop").querySelectorAll(".head .chips .chip")].find((c) => c.textContent === name);
+  try {
+    q('.node[data-key="task:alpha/4"]').click();
+    const link = sessionChip("alpha");
+    assert.equal(link.getAttribute("class"), "chip link");
+    assert.equal(link.getAttribute("role"), "button");
+    await snapshot("graph-popup-session-link");
+    link.click();
+    assert.equal(q("#pop .title").textContent, "API を実装する");
+
+    // 移り先がこのノード自身なら押せない chip で出す。
+    const self = sessionChip("alpha");
+    assert.equal(self.getAttribute("class"), "chip");
+    assert.equal(self.getAttribute("role"), null);
+
+    // キーボードでも移れる。
+    q('.node[data-key="task:beta/2"]').click();
+    sessionChip("beta").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    assert.equal(q("#pop .title").textContent, "画面を描く");
+
+    // セッションのノードは移り先を持たない。
+    q('.node[data-key="sid:zeta"]').click();
+    assert.equal(sessionChip("zeta").getAttribute("class"), "chip");
+  } finally {
+    escape();
+  }
+});
+
 test("渡したメモ (repo:): パーキングロットの宛先の repo の節に Handed で出し、To の chip で宛先の repo に絞る (#292)", async () => {
   const filter = q("#repo-filter");
   const choose = (repo) => {

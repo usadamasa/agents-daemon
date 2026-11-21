@@ -458,6 +458,8 @@ type GraphNode struct {
 	Session string `json:"session,omitempty"`
 	// ListAgents の名前 (SendMessage の宛先に書く形)。表示名とは別。
 	SessionName string `json:"session_name,omitempty"`
+	// 単体ビューのセッション名から移るノードの key。渡したメモの宛先 (HandedTo.node) と同じ規則で解き、このノード自身か図に無ければ付かない。
+	SessionNode string `json:"session_node,omitempty"`
 	Live        bool   `json:"live"`
 	// セッションの pane が居る rex の session と window。生きていて daemon が置き場を引けたノードだけに付く。
 	Rex *RexPlacement `json:"rex,omitempty"`

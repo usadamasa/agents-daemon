@@ -596,6 +596,10 @@ declare module 'claude-code' {
       inferDue: boolean
       // inferAttempts はこのセッションで companion が推定を起こした回数。上限で止まる。
       inferAttempts: number
+      // tabPending は前にタブの名前を問うてから数えた main の answer (hooks/tab-label.ts)。
+      tabPending: number
+      // tabChecked はこのセッションでタブの名前を 1 回でも問うたか。
+      tabChecked: boolean
     }
   }
 }

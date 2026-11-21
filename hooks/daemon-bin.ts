@@ -1,6 +1,6 @@
 import type { EngineInterface } from 'claude-code'
 
-import type { DepsRequest, EventLogRequest, ParkAddRequest, ParkListRequest, ParkWithdrawRequest, WorkGetRequest, WorkSetRequest } from '../types'
+import type { DepsRequest, EventLogRequest, ParkAddRequest, ParkListRequest, ParkWithdrawRequest, TabLabelRequest, WorkGetRequest, WorkSetRequest } from '../types'
 
 // daemonBin は hooks/lib/daemon-bin.sh と同じ規則でバイナリの置き場を返す。
 export async function daemonBin($: EngineInterface): Promise<string> {
@@ -16,6 +16,7 @@ export type Requests = {
   'park add': ParkAddRequest
   'park list': ParkListRequest
   'park withdraw': ParkWithdrawRequest
+  'tab-label': TabLabelRequest
   'work get': WorkGetRequest
   'work set': WorkSetRequest
   'event-log': EventLogRequest

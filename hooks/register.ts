@@ -11,6 +11,7 @@ import { registerWorkInfer, startWorkInfer } from './work-infer'
 // 置けない。mod ごとの hook をここで束ね、session.start はここで持つ。依存図の描画と操作はアプリ (gui/) が持ち、
 // mod にはセッションの中でしかできないこと (model が呼ぶ tool の登録、tool の結果に添える通知、$.model.fork、
 // tool.describe、slash command) が残る。
+// cc-premise: 2.1.302 hooks modules は 1 つ、matcher の無い hook は event ごとに 1 つ
 export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     await startPark($)

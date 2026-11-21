@@ -23,6 +23,11 @@
 //	version   建てた元の plugin の version の表示 (--version も同じ)
 //
 // グローバルオプション --json は出力を JSON にする。hook 用のコマンドと update は対応しない (jsonflag)。
+//
+// このパッケージは main と root の登録だけを持つ。コマンドの組み立て (flag、説明文、環境を internal/ の本体へ渡す配線) は
+// 機能ごとの internal/<family>cli が持ち、公開するのは root に載せる Commands() の 1 つだけにする。判定や組み立ての規則は
+// internal/ の本体に置き、cli パッケージは引数を読んで呼ぶだけにする。コマンドを足すときは、呼ぶ本体に合う family に
+// 置き、合うものが無ければ family を足して root に 1 行登録する。
 package main
 
 import (

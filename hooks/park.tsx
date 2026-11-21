@@ -9,6 +9,8 @@ import type { Memo, ParkAdded } from '../types'
 // `agents-daemon park add` に JSON を stdin で渡す。tool の入力の schema は protocol の Memo。repo はバイナリが cwd から決める。
 // 置いたセッションが前提の消えたメモを取り下げる unpark の tool も持つ (`park withdraw`)。
 // cc-premise: 2.1.302 mods tool.register / tool.call の API で書いた
+// tool.register は local の port を開くので、sandbox の中の `claude -p` では登録が落ちる。
+// cc-premise: 2.1.302 hooks tool.register は local の port を開く (sandbox の中の claude -p では落ちる)
 
 const TOOL = 'park'
 

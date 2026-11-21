@@ -22,41 +22,14 @@ agents-daemon daemon --foreground --dry-run  # このプロセスで回し、送
 自前の statusline から呼ぶ `ingest-statusline` は state file を書くだけで stdout には何も出さない。
 どちらも失敗しても exit 0 で終わる (理由は stderr)。
 
-`inspect` は判定結果だけでなく、読んだ transcript の末尾の entry (`transcript`)、分類 (`kind`)、daemon の扱い
-(`plan`: `wait` / `weekly-far` / `stale-turn` / `hard-cap` / `none`)、起床時刻の出所 (`wake`)、画面の走査した行と
-通知欄の判定 (`hint`) を出す。検知がおかしいと疑ったときに、結論ではなく判断過程を見るためのもの。判断は daemon と
-同じ関数 (`detect.ClassifyTurn`、`monitor.Decide`、`monitor.ComputeLimitWake`、`detect.ClassifyScreen`) を呼ぶ。
+`inspect` は結論ではなく判断過程 (読んだ entry、分類、`plan`、起床時刻の出所、通知欄の判定) を、daemon と同じ関数で
+出す。`--file` にはセッションが無いので `--session` で明示する。`inspect --pane` の pane ID は block ID。
+`simulate` は自分の block を割った使い捨ての block だけを触り、`REX_SESSION` と `REX_BLOCK` が要る。
+中身は `verify` と `simulate` の package doc。
 
-transcript を引くには「どのセッションか」が要る。`--pane` は pane から daemon と同じ順 (statusline の記録、無ければ
-前景の pid で登録簿) で解決する。`--file` にはセッションが無いため `--session` で明示する。指定が無ければ
-対象セッションが決まらない旨を出し、画面の通知欄の判定だけを報告する。
-
-`simulate` は自分の block を分割して使い捨ての block を作り、Claude agent に見せかけ、limit 風の画面を書き込み、
-内蔵の上限の entry (`--turn-file` で差し替え) を transcript の末尾として monitor に読ませて、デーモンと同じ判定を通す。
-使い捨ての pane には本物の transcript が無いため。既定では送信しない。自分が作った block 以外には
-決して触らない。`REX_SESSION` と `REX_BLOCK` が要る。`~/.claude` には書かない。
-
-使い捨て block の前景は `/bin/sh <script> <screen>`。script は limit 風の画面を cat したあと
-`exec cat -v` で居座り、daemon が送る esc・文字列・enter を解釈せずそのまま画面に書く (ESC は `^[`)。
-shell を受け手にすると ESC の直後の文字を Meta として食う (zsh の `KEYTIMEOUT` 0.4 秒) など shell の解釈が混ざり、
-`--send` で何が届いたかを画面で読めない。
-
-| 自分の block | script の起動 | Claude agent に見せる手段 | 後始末 |
-| ---- | ---- | ---- | ---- |
-| `REX_BLOCK` の block | `rex split --shell=none -- /bin/sh …` で shell を挟まず直接 | script の先頭で Claude Code と同じ OSC 7501 (`state=idle:app=claude-code`) を `printf` し、`program_status` の record に載せる | `rex block close` |
-
-登録が rex に載ったことを daemon と同じ経路 (`PaneGet` → `IsClaudeAgent`) で待ってから画面を読む。
-rex の `format` は可視領域しか返さないので、使い捨て block は自分の block の 40% の高さで割る。
-OSC 7501 の書式と判定の条件は [program-status.md](program-status.md)。
-
-`doctor` は rex の server への到達性、Claude pane の一覧 (`session_id` とその出どころ (statusline / registry)、
-transcript の末尾の entry と分類と daemon の扱い、読めなければ ⚠ と理由、block の高さと screen) を出す。
-rex の外 (`REX_SESSION` なし) では exit 1 で止まる。「rex の前提」は自分の block (`REX_BLOCK`) に固定の
-呼び出しを打ち、コードが読む欄と error の code が rex の版で変わっていないかを `⚠` で名指しする (rex を上げた直後に
-全 pane が unknown になったときの最初の手がかり)。末尾の「peer messaging」は
-`CLAUDE_CODE_MESSAGING_SOCKET` と socket の有無で、Claude Code のセッション内 (Bash ツール) から呼んだときだけ
-意味を持つ (切り分けは `agents-daemon:setup` skill の `references/peer-messaging.md`)。
-`inspect --pane` の pane ID は block ID。
+`doctor` の「rex の前提」の節は、rex を上げた直後に全 pane が `unknown` になったときの最初の手がかりになる
+(`rex/premise`)。末尾の「peer messaging」は Claude Code のセッション内 (Bash ツール) から呼んだときだけ意味を持つ
+(切り分けは `agents-daemon:setup` skill の `references/peer-messaging.md`)。
 
 ## 次に上限を踏んだとき
 
@@ -96,6 +69,23 @@ agents-daemon inspect --file ./tmp/limit-screen.txt --session <session_id>  # �
    `resetsAt` 由来であること。手元に無ければ `simulate --turn-file` に `transcript/testdata` の entry を渡す
 5. `daemon --foreground --dry-run` — 実 pane 相手に流し、誰にも送信せず誤爆もしないこと
 6. `simulate` — 検知から送信までを end-to-end で通す
+
+## 建てたバイナリは共有の置き場を差し替える
+
+`task install` と `hooks/build-daemon.sh` は、hook と全セッションの mod と daemon が使う同じ置き場
+(`${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/`) へ建てる。差し替わると、動いている daemon は自分で入れ替わる
+(`daemon/selfupdate.go`)。
+
+- `task install` の stamp には clone の plugin.json の version が書かれる。install 済みの plugin と version が同じなら
+  次の SessionStart でも建て直されず、clone のバイナリが動き続ける
+- worktree を `claude --plugin-dir <worktree>` で読んだセッションも同じ置き場を使い、stamp が古ければ worktree の
+  コードで建て直す。CLI の受け方を変えたバイナリは install 済みの mod とかみ合わなくなる。state も共有なので、
+  検証で置いたメモや辺は実際の依存図に入る
+- 検証の後は、置いたメモと辺を捨て、install 済みのバージョンへ建て直す。sandbox が `~/.cache/agents-daemon` への
+  書き込みを止めるので、利用者が `! ~/.cache/agents-daemon/bin/agents-daemon update` と打つ (update は version を
+  比べずに建て直す)
+
+共有の置き場を差し替えたくなければ、`go run ./cmd/agents-daemon …` か次の節の手順で試す。
 
 ## 動いている daemon とかち合わずに試す
 

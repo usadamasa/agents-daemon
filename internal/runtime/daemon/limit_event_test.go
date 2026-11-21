@@ -203,6 +203,51 @@ func TestDaemonRuntimeTick_LimitEventAttachesTurnFailure(t *testing.T) {
 	}
 }
 
+// 待機明けに通知欄が何も言っていなくても、上限の後に quota_auto_resume_stale が届いたセッションへは Enter だけを送り、
+// 根拠にした通知を出来事に resume_notice として残す (#529)。
+func TestDaemonRuntimeTick_StaleNoticeSendsEnterOnly(t *testing.T) {
+	now := time.Date(2026, 10, 4, 9, 0, 0, 0, time.UTC)
+	pane := claudePaneWithSession("p1", "sid-1", multiplexer.AgentStatusError)
+	const screen = "⏺ You've hit your session limit · resets 9:30pm (Asia/Tokyo)\n❯ \n"
+	client := &multiplexerfake.Client{
+		PaneListFunc: func(context.Context) ([]multiplexer.Pane, error) { return []multiplexer.Pane{pane}, nil },
+		PaneReadFunc: func(context.Context, string, multiplexer.PaneReadOptions) (string, error) { return screen, nil },
+	}
+	r, _ := newTestRuntime(t, client, now)
+	writeTranscript(t, r, "sid-1", transcriptIdle, transcriptLimited)
+	if _, _, err := r.tick(context.Background(), missingConfigPath(t), now); err != nil {
+		t.Fatalf("tick() error = %v", err)
+	}
+
+	staleAt := transcriptResetsAt.Add(time.Minute)
+	input := `{"session_id": "sid-1", "hook_event_name": "Notification", "message": "m", "notification_type": "quota_auto_resume_stale"}`
+	if err := r.resumeNotices.Ingest([]byte(input), staleAt); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := r.tick(context.Background(), missingConfigPath(t), staleAt.Add(time.Minute)); err != nil {
+		t.Fatalf("tick() 2 回目 error = %v", err)
+	}
+
+	calls := strings.Join(client.Calls, " ")
+	if strings.Contains(calls, "SendText:p1") || !strings.Contains(calls, "SendKeys:p1") {
+		t.Errorf("Calls = %v, want Enter だけ (文面を打たない)", client.Calls)
+	}
+	events := readLimitEvents(t, r)
+	if len(events) != 2 {
+		t.Fatalf("events = %d 件, want 2", len(events))
+	}
+	sent := events[1]
+	if sent.Outcome != "resume-enter" || sent.Hint != "resume-ready" {
+		t.Errorf("送った出来事 = outcome %s hint %s, want resume-enter / resume-ready", sent.Outcome, sent.Hint)
+	}
+	if got := sent.ResumeNotice; got == nil || got.NotificationType != "quota_auto_resume_stale" || !got.ObservedAt.Equal(staleAt) {
+		t.Errorf("resume_notice = %+v, want stale at %v", got, staleAt)
+	}
+	if events[0].ResumeNotice != nil {
+		t.Errorf("検知の tick の resume_notice = %+v, want 無し", events[0].ResumeNotice)
+	}
+}
+
 // geometry が取れなくても出来事は残し、理由を geometry_error に書く。普通に終わった turn では何も書かない。
 func TestDaemonRuntimeTick_LimitEventWithoutGeometry(t *testing.T) {
 	now := time.Date(2026, 10, 4, 9, 0, 0, 0, time.UTC)

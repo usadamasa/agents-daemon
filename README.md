@@ -30,6 +30,7 @@ plugin が持つもの:
 | Stop hook | `dream harvest` を起こす。turn の失敗の記録を `ingest-turn-failure` で消す。最後の応答の 1 行目を作業の記録の要約として `ingest-work` で書く |
 | StopFailure / UserPromptSubmit hook | turn を終わらせた API error を `ingest-turn-failure` で記録し、次の turn で消す (#77)。UserPromptSubmit は最初の prompt を作業の記録の題として `ingest-work` で書く |
 | SessionEnd hook | 作業の記録に終了の時刻と理由を `ingest-work` で書く |
+| Notification hook (`quota_auto_resume_*`) | 本体の上限待ちの結末を `ingest-quota-resume` で記録する。stale は待機明けに Enter だけを送る根拠になる (#529) |
 | PostToolUse hook | Task 系ツール (TaskCreate / TaskUpdate / TaskList) と TodoWrite の呼び出しを `ingest-task` に渡し、セッションのタスクを記録する (#121) |
 | Task 系ツールの配置 (mod、`hooks/task-tools.ts`) | TaskCreate と TaskUpdate を ToolSearch の裏から prompt の一覧へ置く (#499) |
 | `agents-daemon:agents-daemon` skill | 運用と切り分けの手引き (症状から引く) |
@@ -50,6 +51,7 @@ plugin が持つもの:
 | `agents-daemon ingest-work` | SessionStart / UserPromptSubmit / Stop / SessionEnd hook の stdin からセッションの作業 (最初の prompt の題、最後の応答の要約、turns、始まりと終わり) を `work/<session_id>.json` に記録する (#368) |
 | `agents-daemon work set\|get` | 作業の題を書き換える (人が直した題、companion の推定の題)・記録を読む |
 | `agents-daemon ingest-turn-failure` | hook の stdin から turn の失敗を `turn-failures/<session_id>.json` に記録し、消す |
+| `agents-daemon ingest-quota-resume` | Notification hook の stdin から本体の上限待ちの結末を `quota-resume/<session_id>.json` に記録する |
 | `agents-daemon park add\|set\|list\|discard\|withdraw\|adopt` | パーキングロット (タスクの途中で見つけた脇のメモ) を `parking/` に置く・status を書き換える・一覧する・古い open のメモをまとめて捨てる・置いたセッションが取り下げる・終了したセッションのタスクをメモへ移す。同じメモは 1 つにまとめる (#121) |
 | `agents-daemon edge add\|rm\|list` | 作業を渡す側が、セッションをまたぐ作業の依存 (辺) を `edges/` に書く・消す・一覧する (#134。使い方は `skills/agents-daemon/references/operations.md`) |
 | `park` tool (mod、`hooks/park.tsx`) | model が聞かずに脇のことをメモとしてパーキングロットへ置く tool (#121) |

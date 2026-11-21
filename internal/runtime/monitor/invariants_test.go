@@ -15,6 +15,7 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
+	"github.com/usadamasa/agents-daemon/internal/quotaresume"
 	"github.com/usadamasa/agents-daemon/internal/runtime/config"
 	"github.com/usadamasa/agents-daemon/internal/runtime/detect"
 )
@@ -62,9 +63,25 @@ func randomTurn(r *rand.Rand, now time.Time) Turn {
 	}
 }
 
+// randomNotice は最後の quota_auto_resume_* の通知。無い、entry の前後の stale、fired、disabled を含む。
+func randomNotice(r *rand.Rand, turn Turn, now time.Time) *quotaresume.Record {
+	at := now.Add(-time.Duration(r.IntN(36*3600)) * time.Second)
+	if turn.Entry != nil && !turn.Entry.Timestamp.IsZero() && r.IntN(2) == 0 {
+		at = turn.Entry.Timestamp.Add(time.Duration(r.IntN(3)-1) * time.Second)
+	}
+	types := []string{quotaresume.TypeStale, quotaresume.TypeStale, quotaresume.TypeFired, quotaresume.TypeDisabled}
+	switch r.IntN(4) {
+	case 0:
+		return nil
+	default:
+		return &quotaresume.Record{SessionID: "sid-1", NotificationType: types[r.IntN(len(types))], ObservedAt: at}
+	}
+}
+
 // step は 1 tick の入力。
 type step struct {
 	turn    Turn
+	notice  *quotaresume.Record
 	screen  string
 	readErr error
 	sendErr error
@@ -86,6 +103,7 @@ func randomStep(r *rand.Rand, prev time.Time) step {
 		pane:   randomPane(r),
 		now:    now,
 	}
+	st.notice = randomNotice(r, st.turn, now)
 	if st.turn.Reason == noSessionTurn.Reason {
 		st.pane.SessionID = ""
 	}
@@ -173,8 +191,9 @@ func TestTick_不変条件を乱択のtick列で破らない(t *testing.T) {
 		}
 		deps := Deps{
 			Client: client, Config: cfg, Sleep: func(time.Duration) {},
-			Turns:   func(string) Turn { tr.turns++; return cur.turn },
-			Observe: func(_ multiplexer.Pane, ev Evidence) { tr.observed, tr.seen = ev, true },
+			Turns:         func(string) Turn { tr.turns++; return cur.turn },
+			ResumeNotices: func(string) *quotaresume.Record { return cur.notice },
+			Observe:       func(_ multiplexer.Pane, ev Evidence) { tr.observed, tr.seen = ev, true },
 		}
 		ps := &PaneState{}
 		now := time.Date(2026, 8, 28, 7, 35, 0, 0, time.UTC)
@@ -253,6 +272,10 @@ func checkSend(cfg config.Config, st step, tr tickResult) string {
 		return "auto-continue の予約中に送った"
 	case tr.observed.Hint == detect.HintResumeReady && tr.sentText():
 		return "Enter 待ちの画面へテキストを送った (新しい依頼になる)"
+	case st.notice.StaleFor(st.turn.Entry) && detect.ClassifyScreen(st.screen, cfg.DetectionTailLines) == detect.HintNone && tr.sentText():
+		return "今の上限の後に stale の通知が届いた pane へテキストを送った (本体は Enter を待っている)"
+	case tr.observed.Notice != nil && !tr.observed.Notice.StaleFor(st.turn.Entry):
+		return "今の上限に当たらない通知を根拠に使った"
 	case tr.observed.Kind.Windowed() && tr.pre.TurnUUID != st.turn.Entry.UUID && st.turn.Entry.Quota.ResetsAt.After(st.now):
 		return "新しい上限の entry の解除時刻が未来なのに送った"
 	case tr.observed.Kind == detect.KindWeeklyLimit && weeklyFar(st.turn.Entry, st.now):

@@ -43,6 +43,9 @@ func Build(in Input) Event {
 	if in.Evidence.ScreenRead {
 		ev.Screen, ev.Hint = in.Evidence.Screen, in.Evidence.Hint.String()
 	}
+	if n := in.Evidence.Notice; n != nil {
+		ev.ResumeNotice = &ResumeNotice{NotificationType: n.NotificationType, Message: n.Message, ObservedAt: n.ObservedAt}
+	}
 	return ev
 }
 

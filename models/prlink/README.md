@@ -90,11 +90,11 @@ A の終了後にも辺を導く daemon、終了した A の作業をメモへ�
 | `RemoveSidPr("cli")` / `RemoveSidPr("app")` | `edge rm` (`Store.Remove`)。アプリの Unlink も同じ `edge rm` を呼ぶ。`sid:` → `pr:` の辺を消したら同じロックの中で `edges/<id>.declined` を書く |
 | `AddManual` | `edge add` (`Store.Add`)。書いた組の `edges/<id>.declined` を消す |
 | `ForgetDecline` | housekeeping の `Store.Prune` が `Retention` (7 日) を過ぎた記録を mtime で消す |
-| `ByRecord` / PRAuthor の `rec` | `worklog` の `Store.Ingest` が Bash の PostToolUse で `gh pr create` の stdout の PR の URL を `prs` に足す。daemon の `prIssuers` が作業の記録から PR ごとに引く |
+| `ByRecord` / PRAuthor の `rec` | `worklog` の `Store.Ingest` が Bash の PostToolUse で `gh pr create` の stdout の PR の URL を `prs` に足す。`refpoll` の `WorkSessions.Issuers` が作業の記録から PR ごとに引く |
 | PRAuthor の `Targets` (`Match = "record"`) | `Poller.issuer`。記録のあるセッションがちょうど 1 つならそれ、無ければ branch の合う生きているセッションがちょうど 1 つのときだけ |
 | PRAuthor の `Forget` | housekeeping の `worklog` の `Store.Prune` が終了から `worklog.Retention` (7 日) を過ぎた作業の記録を消す |
 | PRRepoKey の `WriteCWD` (`Mode = "oncwdexists"`) | `worklog` の `Store.setCWD`。hook の cwd を記録に書き、鍵を `repo` に残す。タスクの記録は `tasklog` の `writer.setCWD` が同じ規則で書く |
-| PRRepoKey の `Anchor` | daemon の `prIssuers` が記録の `repo` を `refpoll.Session` に載せ、`edge` の `Store.Anchor` が before の repo に使う |
+| PRRepoKey の `Anchor` | `refpoll` の `WorkSessions.Issuers` が記録の `repo` を `refpoll.Session` に載せ、`edge` の `Store.Anchor` が before の repo に使う |
 | PRRepoKey の `Adopt` (`AdoptKey = "record"`) | `parking` の `Store.AdoptWork` と `Store.Adopt` (タスク)。記録の `repo` をメモの repo にし、メモを書いてから記録を消す |
 | PRRepoKey の `Placed` (`PlaceKey = "record"`) | `deps` の `locator.row`。cwd を git で引けなければ、作業の記録とタスクの記録の cwd → `repo` の表から引く |
 

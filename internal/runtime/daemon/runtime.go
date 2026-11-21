@@ -22,6 +22,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/parking"
 	"github.com/usadamasa/agents-daemon/internal/protocol"
+	"github.com/usadamasa/agents-daemon/internal/quotaresume"
 	"github.com/usadamasa/agents-daemon/internal/refstate"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend"
 	"github.com/usadamasa/agents-daemon/internal/runtime/claudesessions"
@@ -111,6 +112,9 @@ type daemonRuntime struct {
 	// turnFailures は hook が書く turn の失敗の記録 (turnfailure)。daemon は上限の出来事に添えて読み、
 	// housekeeping で消す。ゼロ値は「無い」を返し、何も消さない。
 	turnFailures turnfailure.Store
+	// resumeNotices は hook が書く本体の上限待ちの結末の記録 (quotaresume)。daemon は待機明けに送るキーを選ぶときに
+	// 読み、housekeeping で消す。ゼロ値は「無い」を返し、何も消さない。
+	resumeNotices quotaresume.Store
 	// refs は辺の端点の issue / PR の状態の写し (refstate)。refPoll が tick ごとに引いて書き、housekeeping で消す。
 	// ゼロ値 (refPoll が nil) は引かない。
 	refs    refstate.Store
@@ -131,35 +135,9 @@ type daemonRuntime struct {
 	livePlaces []refpoll.Session
 }
 
-// liveRefSessions は最後の tick で pane が見えたセッションとその今の cwd。pane の cwd は起動したディレクトリのままで、
-// セッションの途中で入った worktree を映さないので、作業の記録の cwd (hook が渡す今の cwd) があればそちらを使う。
-// cc-premise: 2.1.323 hooks EnterWorktree の後の hook の入力の cwd は worktree (rex の pane の cwd は起動したディレクトリのまま)
-func (r *daemonRuntime) liveRefSessions() []refpoll.Session {
-	sessions := make([]refpoll.Session, 0, len(r.livePlaces))
-	for _, s := range r.livePlaces {
-		if rec, ok := r.works.Get(s.ID); ok && rec.CWD != "" {
-			s.CWD, s.Repo = rec.CWD, rec.Repo
-		}
-		sessions = append(sessions, s)
-	}
-	return sessions
-}
-
-// prIssuers は PR の参照ごとに、作業の記録 (prs) にその PR を出したと残したセッションと記録の cwd と repo の鍵を返す。
-// 終了したセッションの記録も含む (記録は終了から worklog.Retention のあいだ残る)。
-func (r *daemonRuntime) prIssuers() map[string][]refpoll.Session {
-	recs, err := r.works.List()
-	if err != nil {
-		r.log.Logf("作業の記録を読めないので、PR を出した記録で辺を導きません: %v", err)
-		return nil
-	}
-	issued := map[string][]refpoll.Session{}
-	for _, rec := range recs {
-		for _, pr := range rec.Prs {
-			issued[pr] = append(issued[pr], refpoll.Session{ID: rec.SessionID, CWD: rec.CWD, Repo: rec.Repo})
-		}
-	}
-	return issued
+// workSessions は refPoll が PR を出したセッションを引く元 (作業の記録と、最後の tick で見えたセッション)。
+func (r *daemonRuntime) workSessions() refpoll.WorkSessions {
+	return refpoll.WorkSessions{Works: r.works, Places: func() []refpoll.Session { return r.livePlaces }, Log: r.log}
 }
 
 func newDaemonRuntime(client multiplexerClient, log *applog.Logger, statusPath string, store sessionstate.Store, sleep func(time.Duration), startedAt time.Time) *daemonRuntime {
@@ -196,7 +174,7 @@ func (r *daemonRuntime) tick(ctx context.Context, cfgPath string, now time.Time)
 	r.consecutiveFailures = 0
 	r.resolveSessionIDs(panes)
 
-	deps := monitor.Deps{Client: r.client, Config: cfg, Sleep: r.sleep, Turns: r.transcripts.Tail}
+	deps := monitor.Deps{Client: r.client, Config: cfg, Sleep: r.sleep, Turns: r.transcripts.Tail, ResumeNotices: r.loadResumeNotice}
 
 	seen := make(map[string]bool, len(panes))
 	claudeCount := 0
@@ -260,6 +238,16 @@ func (r *daemonRuntime) tickPane(ctx context.Context, deps monitor.Deps, pane mu
 		r.recordLimitEvent(ctx, pane, entry, outcome, *observed, failure, cfg, now)
 	}
 	return paneStatus(pane, entry, outcome, observed, now)
+}
+
+// loadResumeNotice はセッションの最後の quota_auto_resume_* の通知を読む。読めなければログに残して無しとして扱い、
+// 送るキーは画面だけで選ぶ。
+func (r *daemonRuntime) loadResumeNotice(sessionID string) *quotaresume.Record {
+	rec, err := r.resumeNotices.Load(sessionID)
+	if err != nil {
+		r.log.Logf("session %s: quota_auto_resume の通知の記録の読み込みに失敗、無しとして扱います: %v", sessionID, err)
+	}
+	return rec
 }
 
 // resolveSessionIDs は statusline の記録 (context/) から session の引けなかった Claude の pane の SessionID を、
@@ -609,7 +597,8 @@ func assembleRuntime(raw multiplexerClient, kind string, p apppath.Paths, store 
 	runtime := newDaemonRuntime(client, log, p.StatusFile(), store, time.Sleep, now)
 	runtime.backend = kind
 	runtime.attachStateDir(p.StateDir())
-	runtime.refPoll = refpoll.New(runtime.edges, runtime.refs, refpoll.GH, runtime.liveRefSessions, runtime.prIssuers, log)
+	ws := runtime.workSessions()
+	runtime.refPoll = refpoll.New(runtime.edges, runtime.refs, refpoll.GH, ws.Live, ws.Issuers, log)
 	if c, ok := raw.(reaper.Client); ok {
 		runtime.reaper = reaper.New(runtime.spawned, c, log, dryRun)
 	}

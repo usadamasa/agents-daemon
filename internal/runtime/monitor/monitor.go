@@ -17,7 +17,8 @@
 //     記録だけ残す。解除 (解除時刻の無い一時エラーは entry) から 24 時間より経ったものも待たない (Decide)
 //  4. 待機明けに transcript がまだ同じ上限なら、画面を 1 回だけ読んで送るキーを選ぶ (detect.ClassifyScreen)。
 //     本体がリトライ中・auto-continue の予約中・lower-priority で作業中なら手を引き、解除済みで Enter 待ちなら Enter だけ、
-//     どれでもなければ esc → retryMessage → enter
+//     どれでもなければ esc → retryMessage → enter。通知欄が何も言っていなくても、今の上限の後に本体の
+//     quota_auto_resume_stale の通知が届いていれば Enter だけ (ResolveHint)
 //
 // 参考実装は https://github.com/mo-arvan/herdr-claude-auto-retry の src/monitor-core.js (processOneTick)。
 // 状態機械の形 (待機 → 送信 → maxRetries で打ち切り、transient の指数バックオフ) はそこから借りている。
@@ -30,6 +31,7 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
+	"github.com/usadamasa/agents-daemon/internal/quotaresume"
 	"github.com/usadamasa/agents-daemon/internal/runtime/config"
 	"github.com/usadamasa/agents-daemon/internal/runtime/detect"
 	"github.com/usadamasa/agents-daemon/internal/transcript"
@@ -273,6 +275,8 @@ type Evidence struct {
 	ScreenRead bool
 	Screen     string
 	Hint       detect.Hint
+	// Notice は Hint を Enter 待ちへ上げた quota_auto_resume_stale の通知 (ResolveHint)。使わなかったら nil。
+	Notice *quotaresume.Record
 }
 
 // Deps は状態遷移に必要な依存をまとめたもの。テストでは Client に
@@ -285,6 +289,9 @@ type Deps struct {
 	Sleep func(time.Duration)
 	// Turns は session の transcript の末尾を読む。daemon は transcript.Store.Tail を渡す。
 	Turns func(sessionID string) Turn
+	// ResumeNotices は session の最後の quota_auto_resume_* の通知を返す (無ければ nil)。nil なら通知を読まない。
+	// daemon は quotaresume.Store.Load を渡す。
+	ResumeNotices func(sessionID string) *quotaresume.Record
 	// Observe は判定の根拠を受け取る (nil なら呼ばない)。起床前の tick では呼ばない。
 	Observe func(pane multiplexer.Pane, ev Evidence)
 }
@@ -442,7 +449,15 @@ func sendAtWake(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *PaneS
 		return OutcomeReadError, nil
 	}
 	ev.ScreenRead, ev.Screen = true, screen
-	ev.Hint = detect.ClassifyScreen(screen, deps.Config.DetectionTailLines)
+	var notice *quotaresume.Record
+	if deps.ResumeNotices != nil {
+		notice = deps.ResumeNotices(pane.SessionID)
+	}
+	screenHint := detect.ClassifyScreen(screen, deps.Config.DetectionTailLines)
+	ev.Hint = ResolveHint(screenHint, notice, ev.Turn.Entry)
+	if ev.Hint != screenHint {
+		ev.Notice = notice
+	}
 	ps.TurnUUID = ev.Turn.Entry.UUID
 
 	switch ev.Hint {
@@ -491,6 +506,17 @@ func sendAtWake(ctx context.Context, deps Deps, pane multiplexer.Pane, ps *PaneS
 		return OutcomeSendError, fmt.Errorf("pane %s への再開送信に失敗: %w", pane.PaneID, err)
 	}
 	return OutcomeRetried, nil
+}
+
+// ResolveHint は画面の通知欄の判定 (screen) に、本体の上限待ちの通知 (notice) を足して送るキーを決める。通知欄が
+// 何も言っていない (HintNone) ときだけ、今の上限の entry の後に届いた stale の通知で Enter 待ち (HintResumeReady) へ
+// 上げる。本体が待っている画面 (リトライ中、予約中、lower-priority) は通知より新しい様子なので、そちらを採る。
+// inspect も同じ判定を見せるため、ここに 1 箇所だけ置く。
+func ResolveHint(screen detect.Hint, notice *quotaresume.Record, entry *transcript.Entry) detect.Hint {
+	if screen == detect.HintNone && notice.StaleFor(entry) {
+		return detect.HintResumeReady
+	}
+	return screen
 }
 
 // ComputeLimitWake は上限検知時の起床時刻を計算する。transcript の entry の quotaLimits.resetsAt が未来ならその時刻 + margin、

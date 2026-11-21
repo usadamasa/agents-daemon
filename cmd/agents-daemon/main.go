@@ -16,6 +16,7 @@
 //	ingest-statusline  statusline の stdin から context/ と rate-limits/ の state file を書く (自前の statusline から呼ぶ)
 //	ingest-task  PostToolUse hook の stdin からタスクを tasks/ に記録する
 //	ingest-turn-failure  StopFailure hook の stdin から turn を終わらせた API error を turn-failures/ に記録する (Stop と UserPromptSubmit で消す)
+//	ingest-quota-resume  Notification hook の stdin から本体の上限待ちの結末 (quota_auto_resume_*) を quota-resume/ に記録する
 //	park      パーキングロットのメモを parking/ に置く・書き換える・一覧する (add / set / list)
 //	dream     記憶階層の consolidation の実行系 (harvest / mine / stage / adopt / forget)。手順は agents-daemon:dream skill
 //	prune-worktrees  誰も使っていない Claude Code の worktree の回収 (SessionStart hook が --hook 付きで呼ぶ)

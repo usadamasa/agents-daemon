@@ -227,7 +227,7 @@ printf '%s' '{"session_id":"<session_id>","subject":"直した題"}' | agents-da
 
 root のグローバルオプション。付けると、人が読む形の代わりに JSON を 1 つ stdout に出す。
 元から JSON を出す `deps`、`park`、`edge`、`task`、`work`、`spawn` は付けても変わらない。
-stdout を Claude Code や mod が読む hook 用のコマンド (`statusline`、`ingest-statusline`、`ingest-task`、`ingest-work`、`ingest-turn-failure`、`event-log`) と、
+stdout を Claude Code や mod が読む hook 用のコマンド (`statusline`、`ingest-statusline`、`ingest-task`、`ingest-work`、`ingest-turn-failure`、`ingest-quota-resume`、`event-log`) と、
 子プロセスの出力を流すだけの `update` は対応しない。付けると、文字の出力を JSON と思い込んで読む事故を避けるため
 error で止まる。flag の組み合わせで JSON にできないもの (`daemon --foreground`、`prune-worktrees --hook`、
 `dream harvest --detach`) も同じ。

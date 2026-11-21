@@ -72,6 +72,18 @@
         ]
       }
     ],
+    "Notification": [
+      {
+        "matcher": "quota_auto_resume_fired|quota_auto_resume_stale|quota_auto_resume_disabled",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/ingest-quota-resume.sh\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "UserPromptSubmit": [
       {
         "hooks": [

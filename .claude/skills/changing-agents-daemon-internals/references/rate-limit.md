@@ -63,7 +63,8 @@ transcript が上限と読めなければ、transcript の形が変わった疑�
 
 hook を主にしないのは、hook が走らないセッション (plugin を有効にしていない、`-p` の非対話) があることと、
 hook は「最後の turn がどう終わったか」しか知らず解除時刻を持たないため。Notification hook の
-`quota_auto_resume_*` を Enter の根拠に足す案は #529。
+`quota_auto_resume_*` (`hooks/ingest-quota-resume.sh` → `quotaresume`) は送るキーの選択に足す (下の「待機明けに
+画面を読んでキーを選ぶ」)。
 
 ## 待つかどうか (`monitor.Decide`)
 
@@ -138,6 +139,11 @@ lower-priority mode の作業中はどれも `working` で申告される。tran
 | 解除済みで Enter 待ち | `resume-ready` | **Enter だけ** |
 | lower-priority mode で作業中 | `lower-priority` | 手を引く (#251) |
 | どれでもない | `none` | esc → `retryMessage` → enter |
+
+`none` のときだけ、本体の `quota_auto_resume_stale` の通知を足す (`monitor.ResolveHint`、#529)。通知の観測時刻が
+今の上限の entry の timestamp 以降なら `resume-ready` へ上げて Enter だけを送る。前の上限の待機で届いた stale は使わない。
+本体が待っている画面 (上の 3 つ) は通知より優先し、画面を読めない tick は通知があっても送らない。
+<!-- cc-premise: 2.1.330 hooks Notification の quota_auto_resume_stale はスリープ中に解除が過ぎたとき Enter 待ちになる (docs の matcher の表) -->
 
 上限かどうかの判定には画面を使わないので、引用された文で待機に入ることは無い。通知欄の判定が引用で誤ると送るキーが変わる
 だけで、それも `Hint` の表の中でしか動かない。固定した本物の文言は `detect` のテスト (`native_continue_test.go`、

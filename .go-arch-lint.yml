@@ -34,6 +34,7 @@ components:
       - "internal/sessioncontext"
       - "internal/ratelimit"
       - "internal/turnfailure"
+      - "internal/quotaresume"
       - "internal/transcript"
       - "internal/sessionstate"
       - "internal/tasklog"

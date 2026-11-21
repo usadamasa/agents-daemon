@@ -15,6 +15,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/daemonstate"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
+	"github.com/usadamasa/agents-daemon/internal/quotaresume"
 	"github.com/usadamasa/agents-daemon/internal/runtime/daemon/limitlog"
 	"github.com/usadamasa/agents-daemon/internal/runtime/monitor"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
@@ -35,6 +36,7 @@ func newTestRuntime(t *testing.T, client multiplexerClient, startedAt time.Time)
 	r := newDaemonRuntime(client, log, statusPath, sessionstate.New(dir), func(time.Duration) {}, startedAt)
 	r.limits = limitlog.New(dir)
 	r.turnFailures = turnfailure.New(dir)
+	r.resumeNotices = quotaresume.New(dir)
 	// Claude Code の設定ディレクトリ (登録簿と transcript) も一時ディレクトリの下に置く。
 	r.attachClaudeConfigDir(filepath.Join(dir, "claude"))
 	return r, statusPath

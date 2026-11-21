@@ -1,5 +1,6 @@
 // Package handed は渡したメモ (parking の handed) の宛先を依存図の中で解く (#292)。アプリは宛先の文字列を
-// 切り出さず、ここが解いたノードの key と repo の鍵だけを見る。
+// 切り出さず、ここが解いたノードの key と repo の鍵だけを見る。単体ビューのセッション名から移るノード (#506) も
+// 同じ規則 (Resolver.Node) で解く。
 package handed
 
 import (
@@ -36,7 +37,7 @@ func (r Resolver) To(to string) protocol.HandedTo {
 	out := protocol.HandedTo{Ref: to}
 	switch sessionID, repo := parking.Destination(to); {
 	case sessionID != "":
-		out.Node = r.node(sessionID)
+		out.Node = r.Node(sessionID)
 		out.Label = r.names[sessionID]
 	case repo != "":
 		out.Repo, out.Label = r.row(repo)
@@ -44,10 +45,10 @@ func (r Resolver) To(to string) protocol.HandedTo {
 	return out
 }
 
-// node はセッションへ渡したメモを出すノード。セッションのノードが図にあればそれ、無ければそのセッションのタスクと
+// Node はセッションを代表するノード。セッションのノードが図にあればそれ、無ければそのセッションのタスクと
 // TodoWrite の項目のノードから、進行中、未着手、完了の順に、同じなら Key の順 (graph.KeyLess) で最初のもの。
 // どれも図に無ければ空。
-func (r Resolver) node(sessionID string) string {
+func (r Resolver) Node(sessionID string) string {
 	if key := ref.SessionID(sessionID); r.drawn[key] {
 		return key
 	}

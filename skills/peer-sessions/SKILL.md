@@ -77,6 +77,8 @@ spawn は `--name` を付けずに起こす。付けると Claude Code が AI �
 | 利用者が「新しいセッションで」「別の rex session で」のように session そのものの分離を明示した | `new_session: true` |
 | 上のどれにも当たらない (自分の作業の一部、dispatcher からの新しい依頼を含む) | 足し先の欄を書かない |
 
+自分自身を起こし直して元のタブを閉じる (再起動) なら、`agents-daemon:restarting-session` skill の手順に従う。
+
 「引き継いで」「フレッシュな頭で」は peer を起こす依頼ではあっても、session を分けろという指示ではない。
 既定 (タブ) のまま進める。渡す先の cwd が自分と違うリポジトリでも、`repo` は session と別に指定できるので、
 別リポジトリだから新しい session にする理由にはならない。

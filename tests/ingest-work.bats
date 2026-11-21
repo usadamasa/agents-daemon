@@ -53,14 +53,14 @@ write_current_stamp() {
   [ ! -f "$TEST_TMPDIR/daemon.calls" ]
 }
 
-@test "バイナリと stamp がそろっていれば ingest-work を exec する" {
+@test "バイナリと stamp がそろっていれば、hook の plugin の version を添えて ingest-work を exec する" {
   make_fake_daemon "$TEST_TMPDIR/daemon.calls" "$BIN"
   write_current_stamp
 
   PATH="$FIXTURE_PATH" run_hook --separate-stderr "$HOOK" <<<'{"hook_event_name": "UserPromptSubmit"}'
   [ "$status" -eq 0 ]
   [ -z "$output" ]
-  [ "$(<"$TEST_TMPDIR/daemon.calls")" = "ingest-work" ]
+  [ "$(<"$TEST_TMPDIR/daemon.calls")" = "ingest-work --plugin-version $PLUGIN_VERSION" ]
 }
 
 @test "stdin の hook 入力をバイナリにそのまま渡す" {

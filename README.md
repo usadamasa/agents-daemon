@@ -26,7 +26,7 @@ plugin が持つもの:
 
 | 部品 | 役目 |
 | ---- | ---- |
-| SessionStart hook | daemon のバイナリを用意し、`daemon --ensure` で起こす。続けて `prune-worktrees --hook` で放置 worktree を回収する。resume なら作業の記録の終了を `ingest-work` で消す |
+| SessionStart hook | daemon のバイナリを用意し、`daemon --ensure` で起こす。続けて `prune-worktrees --hook` で放置 worktree を回収する。resume なら作業の記録の終了を `ingest-work` で消す。`ingest-work` は source と hook の plugin のバージョンを出来事のログに書く |
 | Stop hook | `dream harvest` を起こす。turn の失敗の記録を `ingest-turn-failure` で消す。最後の応答の 1 行目を作業の記録の要約として `ingest-work` で書く |
 | StopFailure / UserPromptSubmit hook | turn を終わらせた API error を `ingest-turn-failure` で記録し、次の turn で消す (#77)。UserPromptSubmit は最初の prompt を作業の記録の題として `ingest-work` で書く |
 | SessionEnd hook | 作業の記録に終了の時刻と理由を `ingest-work` で書く |
@@ -36,6 +36,7 @@ plugin が持つもの:
 | `agents-daemon:agents-daemon` skill | 運用と切り分けの手引き (症状から引く) |
 | `agents-daemon:setup` skill | 前提の確認と statusline の配線、peer messaging の切り分け |
 | `agents-daemon:peer-sessions` skill | 別セッション (peer) へ作業を渡す手順と、rex の block 操作 |
+| `agents-daemon:restarting-session` skill | 自分を rex の新しいタブへ起こし直し、元のタブを閉じる手順 |
 | `agents-daemon:dream` skill | 記憶階層の consolidation の手引き |
 | `agents-daemon statusline` | `statusLine.command` に向ける statusline。描画と、daemon が読む state file の書き込みを同じプロセスで行う |
 | `agents-daemon ingest-statusline` | 自前の statusline から stdin を渡して state file だけを書かせるサブコマンド |

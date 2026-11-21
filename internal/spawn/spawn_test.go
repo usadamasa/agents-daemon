@@ -209,6 +209,24 @@ func TestRunner_Run_PromptFile(t *testing.T) {
 	}
 }
 
+// fork_from は元の会話を写した新しいセッションとして起こす。session_id は fork 先の ID になり、元の ID は使わない。
+func TestRunner_Run_ForkFrom(t *testing.T) {
+	host := &fakeHost{}
+	req := request()
+	req.ForkFrom = givenSID
+	got, err := runner(host).Run(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if got.SessionID != newSID {
+		t.Errorf("SessionID = %q, want fork 先の %q", got.SessionID, newSID)
+	}
+	want := []string{"claude", "--resume", givenSID, "--fork-session", "--session-id", newSID, "--model", settingsModel, "--", req.Prompt}
+	if !sameArgv(host.runs[0].argv, want) {
+		t.Errorf("argv = %q, want %q", host.runs[0].argv, want)
+	}
+}
+
 // 起動直後は block が見えない (not found) ことがあるので、待っている間の PaneGet の失敗は数えない。
 func TestRunner_Run_WaitsThroughEarlyFailures(t *testing.T) {
 	calls := 0
@@ -247,6 +265,8 @@ func TestRunner_Run_Errors(t *testing.T) {
 		{name: "prompt_file が読めない", req: func(r Request) Request { r.Prompt = ""; r.PromptFile = "/src/home/missing.md"; return r }, wantErr: "missing.md"},
 		{name: "モデルが無ければ起こさない", req: func(r Request) Request { return r }, defaultModel: noModel, wantErr: "CLAUDE_CODE_SUBAGENT_MODEL"},
 		{name: "session_id は UUID", req: func(r Request) Request { r.SessionID = "not-a-uuid"; return r }, wantErr: "UUID"},
+		{name: "fork_from は UUID", req: func(r Request) Request { r.ForkFrom = "not-a-uuid"; return r }, wantErr: "fork_from"},
+		{name: "fork_from と session_id が同じなら起こさない", req: func(r Request) Request { r.ForkFrom = givenSID; r.SessionID = givenSID; return r }, wantErr: "fork_from"},
 		{name: "session と new_session の両方は受けない", req: func(r Request) Request { r.Session = keptRexSID; r.NewSession = true; return r }, wantErr: "new_session"},
 		{
 			name:    "session を作れなかった",

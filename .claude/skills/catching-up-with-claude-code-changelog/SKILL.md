@@ -175,6 +175,8 @@ rg -n -o 'cc-premise: [0-9.]+ [a-z0-9-]+.*' --glob '!tmp/**' . | sort -t' ' -k3,
 | `worktrees` | 放置 worktree の回収 (`prune-worktrees`): 本体の sweep の範囲と lock reason の書式 | worktree, worktrees, cleanupPeriodDays, EnterWorktree, --worktree, worktree lock, sweep |
 | `bash-env` | Bash ツールの環境から自分の session_id を引く (`edge add` の task 欄、`scripts/get-session-id.sh`) | CLAUDE_CODE_SESSION_ID, Bash tool, environment variable, env |
 | `plugins` | `dream check` が名前空間つきの skill 名を引く `plugins/installed_plugins.json` の形と、plugin の `skills/<name>`・`commands/<name>.md` の置き場 | installed_plugins, installPath, plugin cache, plugin skills, plugin commands |
+| `cli` | `spawn` が組む `claude` の引数 (`--session-id`、`--model`、最初のターンの本文、`--resume` と `--fork-session`) | --session-id, --resume, --fork-session, --model, --name, prompt argument |
+| `remote-control` | セッションの再起動 (restarting-session skill) で Remote Control がどのプロセスに付くか | Remote Control, remote-control, bridge |
 | `input-line` | `tell` が送る前に読む入力欄 (`❯` の行、空なら NBSP、複数行は bracketed paste、次の prompt の提案は薄字で打つと消える) | prompt input, input box, placeholder, paste, bracketed paste, multiline, suggestion, suggested prompt, ghost text, dim |
 
 ## やらないこと

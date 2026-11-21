@@ -202,6 +202,7 @@
         "session": { "type": "string", "description": "タブを足す先の rex の session (ID か label)。無い session なら起こさずに error にする" },
         "new_session": { "type": "boolean", "description": "新しい rex の session を作る。session とは併用しない" },
         "session_id": { "type": "string", "description": "新しいセッションの session ID (UUID)。省くと spawn が作る" },
+        "fork_from": { "type": "string", "description": "会話を写す元のセッションの session ID (UUID)。あれば claude --resume <fork_from> --fork-session で、元の会話を持った新しいセッションとして起こす。repo は元のセッションの cwd にする" },
         "model": { "type": "string", "description": "新しいセッションのモデル。省くと Claude Code の settings.json の env.CLAUDE_CODE_SUBAGENT_MODEL" },
         "label": { "type": "string", "description": "rex の session かタブの名前。省くと repo の basename" }
       }

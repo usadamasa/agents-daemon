@@ -11,6 +11,7 @@
     "./skills/agents-daemon",
     "./skills/setup",
     "./skills/peer-sessions",
+    "./skills/restarting-session",
     "./skills/dream"
   ],
   "types": "./types/index.d.ts"

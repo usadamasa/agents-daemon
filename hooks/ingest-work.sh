@@ -32,4 +32,5 @@ if ! version=$(plugin_version); then
 fi
 daemon_bin_serves "$(<"$DAEMON_STAMP")" "$version" || exit 0
 
-exec "$DAEMON_BIN" ingest-work
+# SessionStart の出来事に、この hook を走らせた plugin のバージョンを添える (再起動の確かめ、restarting-session skill)。
+exec "$DAEMON_BIN" ingest-work --plugin-version "$version"

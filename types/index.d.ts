@@ -458,6 +458,8 @@ export type GraphNode = {
   session?: string
   // ListAgents の名前 (SendMessage の宛先に書く形)。表示名とは別
   session_name?: string
+  // 単体ビューのセッション名から移るノードの key。渡したメモの宛先 (HandedTo.node) と同じ規則で解き、このノード自身か図に無ければ付かない
+  session_node?: string
   live: boolean
   // セッションの pane が居る rex の session と window。生きていて daemon が置き場を引けたノードだけに付く
   rex?: RexPlacement

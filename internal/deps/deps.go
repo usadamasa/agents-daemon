@@ -116,13 +116,28 @@ func build(in input) Deps {
 		return key
 	})
 	d.Graph.ColumnOrder = groupByRex(order, d.Graph.Nodes)
-	d.Handed = handedMemos(in.Handed, cards, d.Graph.Nodes, names, panes, l)
+	r := handed.NewResolver(cards, d.Graph.Nodes, names, l.row)
+	setSessionNodes(d.Graph.Nodes, r)
+	d.Handed = handedMemos(in.Handed, names, panes, r)
 	return d
 }
 
+// setSessionNodes は単体ビューのセッション名から移るノードを渡したメモの宛先と同じ規則で付ける (#506)。
+// 移り先がそのノード自身なら付けない (押しても移らない chip になる)。
+func setSessionNodes(nodes []protocol.GraphNode, r handed.Resolver) {
+	for i := range nodes {
+		n := &nodes[i]
+		if n.SessionID == "" {
+			continue
+		}
+		if key := r.Node(n.SessionID); key != n.Key {
+			n.SessionNode = key
+		}
+	}
+}
+
 // handedMemos は渡したメモに図の中で解いた宛先を添えて並べる (handed)。
-func handedMemos(memos []parking.Item, cards []graph.Card, nodes []protocol.GraphNode, names map[string]string, panes map[string]*daemonstate.PaneStatus, l locator) []protocol.HandedMemo {
-	r := handed.NewResolver(cards, nodes, names, l.row)
+func handedMemos(memos []parking.Item, names map[string]string, panes map[string]*daemonstate.PaneStatus, r handed.Resolver) []protocol.HandedMemo {
 	out := make([]protocol.HandedMemo, 0, len(memos))
 	for _, m := range memos {
 		// メモの repo は置いたときに repo の鍵へ解いてある (arrange と同じ)。

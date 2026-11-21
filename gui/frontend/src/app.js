@@ -1139,7 +1139,7 @@ function nodePopup(n) {
   chips.append(stateChip(n), ...restStageChips(n));
   // 会話から自動で付けた題は、状態の色と被らない破線の chip (guess) で出どころを示す。直すのは題を押す。
   if (n.origin === "inferred") chips.append(chip(INFERRED_CHIP, "guess"));
-  if (n.session) chips.append(chip(n.session));
+  if (n.session) chips.append(sessionChip(n));
   head.append(ph, title, chips);
   parts.push(head);
 
@@ -1199,6 +1199,14 @@ function nodePopup(n) {
     parts.push(group("Memos received", received.length, received.map((h) => memoRowInPopup(h.memo.id, h.memo.title, "handed", true))));
   }
   return parts;
+}
+
+// sessionChip は単体ビューのセッション名。daemon が移り先 (session_node) を決めてあれば押すとそのノードを選び、
+// 無ければ名前だけを出す。
+function sessionChip(n) {
+  const to = n.session_node;
+  if (to === undefined) return chip(n.session);
+  return linkChip(n.session, () => select({ type: "node", key: to }));
 }
 
 // memoRowInPopup はタスクの単体ビューに並ぶメモの 1 行。open のメモは押すとそのメモを選ぶ。

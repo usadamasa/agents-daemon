@@ -34,7 +34,9 @@ daemon は rex を control API (Unix socket の上の WebSocket) だけで操作
 
 待機中のラベルは出さない。rex で表示に使える block の label は利用者が付けた label を潰すため。
 
-接続は Client ごとに 1 本で、最初の呼び出しで張り、切れていれば次の呼び出しで張り直す。張ったら
+接続は Client ごとに 1 本で、最初の呼び出しで張り、切れていれば次の呼び出しで張り直す。切断を検知する前の接続へ
+request を送れなかったとき (`control.ErrNotSent`) は、server に届いていないので同じ呼び出しの中で 1 回だけ張り直して打ち直す。
+送った後に切れた request は打ち直さない。張ったら
 `session.attach_all` (`event_scope: session`) を打つ (attach しない接続から session を名指すと `conflict`)。
 request 1 回の制限時間は 10 秒。短命のサブコマンドは終わるときに `backend.Close` で close frame を送って閉じる。
 作った block は `session.attach` の後に `session.disown_block` で手放す (作った接続が owner になり、owner の大きさで

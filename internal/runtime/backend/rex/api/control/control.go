@@ -30,6 +30,10 @@ const minMessageBytes = 64 * 1024
 // errClosed は Close の後の呼び出しの失敗。
 var errClosed = errors.New("rex の control 接続は閉じている")
 
+// ErrNotSent は request を server へ送れなかったこと (送る前に接続が終わっていた、書き込みに失敗した)。server は
+// request を受けていないので、冪等でない method でも別の接続で打ち直せる。送れた後に応答を待てなかった失敗は含まない。
+var ErrNotSent = errors.New("request を送れない")
+
 // errEventOverflow は event の queue が溢れて接続を閉じたこと。読み手が追いつかないまま event を捨てると、
 // 欠けた event で状態を進めることになる。
 var errEventOverflow = errors.New("rex の event の queue が溢れた")
@@ -219,7 +223,7 @@ func (c *Conn) CallSeq(ctx context.Context, method string, payload, out any) (in
 	if c.err != nil {
 		err := c.err
 		c.mu.Unlock()
-		return 0, fmt.Errorf("rex %s: %w", method, err)
+		return 0, fmt.Errorf("rex %s: %w: %w", method, ErrNotSent, err)
 	}
 	c.pending[id] = ch
 	c.mu.Unlock()
@@ -240,7 +244,7 @@ func (c *Conn) CallSeq(ctx context.Context, method string, payload, out any) (in
 	// Write の ctx が途中で終わると接続ごと閉じる (ライブラリの仕様)。書き込みは数 ms で済み、
 	// 書けないなら接続が壊れているので、呼び手の ctx をそのまま渡す。
 	if err := c.ws.Write(ctx, websocket.MessageText, b); err != nil {
-		return 0, fmt.Errorf("rex %s: request を送れない: %w", method, err)
+		return 0, fmt.Errorf("rex %s: %w: %w", method, ErrNotSent, err)
 	}
 	select {
 	case r := <-ch:

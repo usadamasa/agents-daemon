@@ -491,7 +491,27 @@ func (c *Client) call(ctx context.Context, method string, payload, out any) erro
 	if err != nil {
 		return err
 	}
+	err = conn.Call(ctx, method, payload, out)
+	// server が切った接続を、読む側が切断を検知する前に使い回すと送れない。送れなかった request は server に
+	// 届いていないので、その接続を捨てて 1 回だけ張り直す。
+	if !errors.Is(err, control.ErrNotSent) || ctx.Err() != nil {
+		return err
+	}
+	c.discard(conn)
+	if conn, err = c.connect(ctx); err != nil {
+		return err
+	}
 	return conn.Call(ctx, method, payload, out)
+}
+
+// discard は送れなかった接続を閉じ、まだ使い回す接続ならそれを外す。ほかの呼び出しが張り直した後なら外さない。
+func (c *Client) discard(conn *control.Conn) {
+	c.mu.Lock()
+	if c.conn == conn {
+		c.conn = nil
+	}
+	c.mu.Unlock()
+	_ = conn.Close()
 }
 
 // blockCall は terminal の block の method を呼ぶ。args が nil なら送らない。

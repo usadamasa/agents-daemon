@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { edgeNoteRepo, segments, textNoteRepo } from "../src/links.js";
+import { edgeNoteRepo, refUrl, segments, textNoteRepo } from "../src/links.js";
 
 const ctx = { githubRepo: () => "o/r", base: "/repo/x" };
 const links = (text, c = ctx) => segments(text, c).filter((s) => s.target !== undefined);
@@ -29,6 +29,13 @@ test("segments: owner/repo#123 は GitHub のページ。pr: は pull、issue: �
   const pr = links("pr:a/b#12 を待つ")[0];
   assert.equal(pr.text, "pr:a/b#12");
   assert.equal(pr.target, "https://github.com/a/b/pull/12");
+});
+
+test("refUrl: 参照のノードの鍵は GitHub のページ。pr: は pull、issue: は issues、参照でない鍵は undefined", () => {
+  assert.equal(refUrl("pr:a/b.c#12"), "https://github.com/a/b.c/pull/12");
+  assert.equal(refUrl("issue:a/b#3"), "https://github.com/a/b/issues/3");
+  assert.equal(refUrl("task:beta/2"), undefined);
+  assert.equal(refUrl("pr:a/b#12 x"), undefined);
 });
 
 test("segments: #123 は repo の owner/repo を補う。日本語に挟まれても拾う", () => {

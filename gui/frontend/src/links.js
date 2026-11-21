@@ -55,6 +55,12 @@ const REF = /^(?:pr|issue):(?<repo>[\w-]+\/[\w.-]+)#(?<number>[1-9]\d*)$/;
 // refRepo は pr: / issue: の参照の owner/repo。daemon が状態を引けたかに依らず参照の文字列から取る。
 const refRepo = (ref) => REF.exec(ref)?.groups.repo;
 
+// refUrl は参照のノードの鍵 (pr: / issue:) の GitHub のページ。参照でない鍵は undefined。
+export function refUrl(ref) {
+  const m = REF.exec(ref);
+  return m === null ? undefined : issueUrl(m.groups.repo, m.groups.number, ref.startsWith("pr:") ? "pr" : "issue");
+}
+
 // edgeNoteRepo は辺の note の #number を補う owner/repo。repos は deps の repos。決め方の性質は models/noterepo が持つ。
 // 辺の向きでは選ばない (note の番号は before の参照のことも after の参照のこともある)。番号の合う端点の参照があれば
 // その repo。両端が同じ番号で別 repo なら決めない。合わなければ辺が触れる repo が 1 つのときだけそれを使う。

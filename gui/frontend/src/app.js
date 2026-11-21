@@ -11,7 +11,7 @@ import { isStale, kindLabel, lastPlacedAt, stamp } from "./memo.js";
 import { bulkDismissable, canAdopt, canDismiss, canRename, canTell, candidates, isOwnTask, lastSeenAgo, memoDestinations, pathDestination, peerDestinations, spawnDestinations } from "./ops.js";
 import { addBlocker, adopt, askUnlink, discard, discardStale, dismissAll, dismissOne, handOff, handOffTask, instruct, rename, setStatus, start, toParking, unlink } from "./actions.js";
 import { openTarget, pickFolder } from "./daemon.js";
-import { edgeNoteRepo, segments, textNoteRepo } from "./links.js";
+import { edgeNoteRepo, refUrl, segments, textNoteRepo } from "./links.js";
 import { CONTROLS_BAND, MAX_ZOOM, MIN_ZOOM, centerOffset, clampZoom, fitZoom, overflowCenter, percent, scaledFrame, scrollAfterZoom, stepZoom, topOffset, wheelZoomer } from "./zoom.js";
 import { restore, scrollView, watchUpgrade } from "./restore.js";
 
@@ -750,6 +750,7 @@ const ICONS = {
   send: '<path d="M.989 8 .064 2.68a1.342 1.342 0 0 1 1.85-1.462l13.402 5.744a1.13 1.13 0 0 1 0 2.076L1.913 14.782a1.343 1.343 0 0 1-1.85-1.463L.99 8Zm.603-5.288L2.38 7.25h4.87a.75.75 0 0 1 0 1.5H2.38l-.788 4.538L13.929 8Z"/>', // paper-airplane
   link: '<path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"/>', // link
   unlink: '<path d="M12.914 5.914a2 2 0 0 0-2.828-2.828l-.837.837a.75.75 0 1 1-1.06-1.061l.836-.837a3.5 3.5 0 1 1 4.95 4.95l-.195.194a.75.75 0 0 1-1.06-1.06l.194-.195Zm-1.87 3.482a.759.759 0 0 1-.07.079c-.63.63-1.468 1.108-2.343 1.263-.89.159-1.86-.017-2.606-.763a.75.75 0 1 1 1.06-1.06c.329.327.767.438 1.284.347.493-.088 1.018-.36 1.445-.752l-1.247-.897a.709.709 0 0 1-.01-.008l-.295-.212c-.94-.597-1.984-.499-2.676.193l-2.5 2.5a2 2 0 1 0 2.828 2.828l.837-.836a.75.75 0 0 1 1.06 1.06l-.836.837a3.5 3.5 0 0 1-4.95-4.95l2.5-2.5a3.472 3.472 0 0 1 1.354-.848L2.312 3.109a.75.75 0 0 1 .876-1.218l5.93 4.27c.115.074.226.155.335.24l6.235 4.49a.75.75 0 0 1-.876 1.218l-3.768-2.713Z"/>', // unlink
+  external: '<path d="M3.75 2h3.5a.75.75 0 0 1 0 1.5h-3.5a.25.25 0 0 0-.25.25v8.5c0 .138.112.25.25.25h8.5a.25.25 0 0 0 .25-.25v-3.5a.75.75 0 0 1 1.5 0v3.5A1.75 1.75 0 0 1 12.25 14h-8.5A1.75 1.75 0 0 1 2 12.25v-8.5C2 2.784 2.784 2 3.75 2Zm6.854-1h4.146a.25.25 0 0 1 .25.25v4.146a.25.25 0 0 1-.427.177L13.03 4.03 9.28 7.78a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042l3.75-3.75-1.543-1.543A.25.25 0 0 1 10.604 1Z"/>', // link-external
   hand: '<path d="M8.22 2.97a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042l2.97-2.97H3.75a.75.75 0 0 1 0-1.5h7.44L8.22 4.03a.75.75 0 0 1 0-1.06Z"/>', // arrow-right
   play: '<path d="m6.427 4.427 3.396 3.396a.25.25 0 0 1 0 .354l-3.396 3.396A.25.25 0 0 1 6 11.396V4.604a.25.25 0 0 1 .427-.177Z"/>', // triangle-right
   check: '<path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/>', // check
@@ -1050,7 +1051,10 @@ function nodePopup(n) {
 
   // 動詞。送達を伴うもの (指示、渡す、着手、完了、削除、メモにする) は生きているセッションのタスクに、バイナリだけで済む
   // もの (メモにする = adopt、一覧から外す) は終了したセッションのタスクと作業に出る。題を直すのは題そのもの (titleOf)。
+  // 参照 (pr: / issue:) の Open は本文のリンクと同じ openLink で開き、選択と打ちかけの文面に触らない。
   const verbs = [];
+  const url = refUrl(n.key);
+  if (url !== undefined) verbs.push(actButton("Open", "external", "", () => void openLink(url)));
   if (canTell(n)) verbs.push(actButton("Tell", "send", on("instruct"), toggle("instruct")));
   if (n.endpoint && n.cwd !== undefined) verbs.push(actButton("Link", "link", on("blocker"), toggle("blocker")));
   if (isOwnTask(n)) {

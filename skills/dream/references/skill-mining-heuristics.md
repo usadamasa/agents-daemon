@@ -46,6 +46,9 @@ substring/token/shingle の match で coverage ratio を求め、その値で分
 | ≤ 40% | `skill_body` | medium (部分的に inline、要判断) |
 | その他 (40-80%) | `skill_body` | low (人間判断) |
 
+**根拠の数** (`generateCandidates` in `candidate.go`): `evidence_sessions` が 1 つだけの候補は、
+上の表で high / medium でも `confidence: low` に落とす。1 セッションの根拠は noise と区別できない。
+
 **Coverage 計算の 3 段判定** (`computeCoverage`):
 
 1. phrase 全体の substring match (完全一致)

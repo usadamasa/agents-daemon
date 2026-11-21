@@ -9,7 +9,8 @@
 <!-- cc-premise: 2.1.310 statusline stdin の rate_limits はモデル単位の週次ウィンドウを含まない -->
 
 Claude Code は statusline コマンドの stdin に JSON を渡す。その中に
-`rate_limits.five_hour.{used_percentage, resets_at}` と `rate_limits.seven_day.{...}` が入る (`resets_at` は Unix epoch 秒)。
+`rate_limits.five_hour.{used_percentage, resets_at}` と `rate_limits.seven_day.{...}` が入る
+(`resets_at` は Unix epoch 秒)。
 ウィンドウは個別に省かれ、5 時間ウィンドウの無いプラン (認証済みの Ultra) では `seven_day` だけが届く。
 <!-- cc-premise: 2.1.316 statusline rate_limits は five_hour と seven_day を個別に省く -->
 
@@ -33,8 +34,8 @@ statusline はイベントで再実行される (新しい assistant message、`
 - 無いときは何も書かない。既存ファイルも消さない (まだ届いていないセッションが、他のセッションの
   書いた state を壊さないため)。
 - **5 時間ウィンドウが切り替わる瞬間は `five_hour` が来ない**。docs は `resets_at` を過ぎた window を
-  落とすと書き、実機では `xx:10:01` のような境界時刻に null で観測した。どちらも書かず、最後に持っていた
-  有効な state を残す。無い値で上書きすると Go 側は 0 に読むため、`doctor` の表示が「0% で解除時刻 epoch 0」になる。
+  落とすと書き、実機では `xx:10:01` のような境界時刻に null で観測した。null の値で来たときは書かず、
+  最後に持っていた有効な state を残す (キーごと落ちる形は次の項目)。無い値で上書きすると Go 側は 0 に読むため、`doctor` の表示が「0% で解除時刻 epoch 0」になる。
   読む側も `resets_at` が 0 の state は「値が無い」として扱う (`ratelimit.State.HasFiveHour`)。
   観測されたのは両方 null の形で、`used_percentage` だけが null の描画は見ていない。
 - `five_hour` のキーごと無く `seven_day` に `resets_at` があれば、`seven_day` だけで書く (#338)。`five_hour` が

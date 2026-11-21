@@ -18,7 +18,7 @@ func TestRootCmd_registersAllCommands(t *testing.T) {
 	}
 	want := []string{
 		"daemon", "deps", "doctor", "dream", "edge", "event-log", "ingest-quota-resume", "ingest-statusline", "ingest-task", "ingest-turn-failure", "ingest-work",
-		"inspect", "logs", "park", "prune-worktrees", "simulate", "spawn", "spawned-session", "status", "statusline", "stop", "task", "tell", "update",
+		"inspect", "logs", "park", "prune-worktrees", "simulate", "spawn", "spawned-session", "status", "statusline", "stop", "tab-label", "task", "tell", "update",
 		"version", "work",
 	}
 	slices.Sort(names)
@@ -113,6 +113,7 @@ func TestRootCmd_jsonFlag(t *testing.T) {
 		"agents-daemon spawned-session mark":  true,
 		"agents-daemon status":                true,
 		"agents-daemon stop":                  true,
+		"agents-daemon tab-label":             true,
 		"agents-daemon task dismiss":          true,
 		"agents-daemon tell":                  true,
 		"agents-daemon version":               true,

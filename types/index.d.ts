@@ -196,6 +196,25 @@ export type SpawnRequest = {
   label?: string
 }
 
+// tab-label の stdin。rex_block の居る rex の window (タブ) の名前を読み、label があれば付け直して TabLabelResult を出す。session の名前には触れない
+export type TabLabelRequest = {
+  // タブのある rex の session の ID (呼び手の REX_SESSION)
+  rex_session: string
+  // 呼び手の pane の rex の block の ID (REX_BLOCK)
+  rex_block: string
+  // 付け直す名前。1 行で 64 文字まで、前後の空白と制御文字を付けない。省くと読むだけ
+  label?: string
+}
+
+// tab-label の出力
+export type TabLabelResult = {
+  window_id: string
+  // 処理の後のタブの名前
+  label: string
+  // current は読んだだけ、renamed は付け直した、unchanged は付ける名前が今と同じ
+  status: 'current' | 'renamed' | 'unchanged'
+}
+
 // tell の stdin。to_session のセッションが動いている rex の pane の入力欄に text を打って Enter を送り、TellResult を出す。pane で claude が前景でない、利用者の答えを待つ prompt (permission / question / auth) が開いている、上限の画面、入力欄に打ちかけの文がある、のどれかなら送らずに exit 1 で理由を返す。文面を打った後、Enter の前に claude が前景でなくなるか prompt が開いたら、Enter を送らずに exit 1 で理由を返し、文面は入力欄に残る。ターンの途中の pane には送り、文面は入力欄に溜まって次のターンになる
 export type TellRequest = {
   // 宛先のセッションの ID

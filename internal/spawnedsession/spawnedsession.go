@@ -1,4 +1,4 @@
-// Package spawnedsession は spawn と peer-sessions skill が起こした多重化ツールの session の印を XDG state 配下に
+// Package spawnedsession は spawn が新しく起こした多重化ツールの session の印を XDG state 配下に
 // 置く (#557)。書くのは起こした session の中の包みの sh (`agents-daemon spawned-session mark`) で、daemon の reaper が
 // 印を回り、block が無くなった session を閉じて印を消す。起こした側も `agents-daemon spawned-session close` で印の
 // ある session を閉じて印を消せる (#585)。多重化ツール (rex) の session には印を付ける欄が無く、手で作った空の

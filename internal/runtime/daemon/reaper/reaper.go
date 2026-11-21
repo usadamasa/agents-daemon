@@ -1,7 +1,8 @@
-// Package reaper は spawn と peer-sessions skill が起こした多重化ツールの session のうち、pane が無くなったものを
+// Package reaper は spawn が新しく起こした多重化ツールの session のうち、pane が無くなったものを
 // daemon が閉じる (#557)。起こした claude の包みは、ほかの pane が残っていると自分では session を閉じないので、その
 // pane を閉じた後に残る空の session をここで閉じる。起こした session は包みが書いた印 (spawnedsession) で見分け、
 // 手で作った空の session は閉じない。daemon の tick ごとに Reap を 1 回呼ぶ。
+// 起こし方ごとに誰が何を閉じるかの一覧は spawn の package doc が持つ。
 package reaper
 
 import (

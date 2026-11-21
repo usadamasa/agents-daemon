@@ -1,6 +1,6 @@
 // Package forget は dream Phase 4 Prune のうち、auto memory ファイルの削除を提供する。
 //
-// memory ディレクトリ (~/.claude/projects/<project>/memory) は Claude Code 組み込みの
+// memory ディレクトリ (<Claude Code の設定ディレクトリ>/projects/<project>/memory) は Claude Code 組み込みの
 // sandbox 保護により bash の rm では消せない。`agents-daemon dream forget` を sandbox.excludedCommands に
 // 登録して呼ぶことで (agents-daemon:setup skill)、削除対象を「memory ディレクトリ直下の .md」に限定した
 // うえで削除する。MEMORY.md の索引行も同時に除去して索引と実体の乖離を防ぐ。
@@ -21,14 +21,14 @@ import (
 // Opts は forget サブコマンドの実行パラメータ。
 type Opts struct {
 	Names     []string // memory 名 (拡張子なし)
-	MemoryDir string   // 空なら ~/.claude/projects/<project>/memory
+	MemoryDir string   // 空なら ClaudeDir/projects/<project>/memory
 	Project   string   // 空なら Cwd から解決
 	Cwd       string
 	DryRun    bool
 
-	Home   string
-	Stdout io.Writer
-	Stderr io.Writer
+	ClaudeDir string // Claude Code の設定ディレクトリ (apppath.ClaudeConfigDir)
+	Stdout    io.Writer
+	Stderr    io.Writer
 }
 
 // Result は forget が消した (DryRun なら消すはずだった) memory のパス。stdout の行と同じものを持ち、`--json` は
@@ -150,7 +150,7 @@ func resolveMemoryDir(opts Opts) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(opts.Home, ".claude", "projects", project, "memory"), nil
+	return filepath.Join(opts.ClaudeDir, "projects", project, "memory"), nil
 }
 
 // resolveTarget は memory 名を実ファイルパスへ解決する。

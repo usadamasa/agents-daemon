@@ -20,13 +20,13 @@ import (
 
 // Opts は harvest サブコマンドの実行パラメータ。値は呼び出し側 (cobra) で解決済み。
 type Opts struct {
-	ProjectsDir string // 空なら ~/.claude/projects
+	ProjectsDir string // 空なら ClaudeDir/projects
 	StateDir    string // dream の state ディレクトリ (dream.Dir)。必須
 	Days        int    // 走査する直近日数 (mtime ベース)
 	ProjectGlob string // canonical name substring 一致
 	Incremental bool   // 前回 harvest 以降のみ
 	Verbose     bool   // 処理サマリを Stderr へ
-	Home        string // os.UserHomeDir 相当 (呼び出し側で解決)
+	ClaudeDir   string // Claude Code の設定ディレクトリ (apppath.ClaudeConfigDir)
 	// PII は規約のファイルから受けた伏せ字化の規則。組み込みの規則 (email、電話番号) に足して当てる。
 	PII    []policy.PIIRule
 	Stderr io.Writer
@@ -61,7 +61,7 @@ func Run(opts Opts) (Summary, error) {
 
 	resolvedProjects := opts.ProjectsDir
 	if resolvedProjects == "" {
-		resolvedProjects = filepath.Join(opts.Home, ".claude", "projects")
+		resolvedProjects = filepath.Join(opts.ClaudeDir, "projects")
 	}
 
 	state, err := loadState(opts.StateDir)

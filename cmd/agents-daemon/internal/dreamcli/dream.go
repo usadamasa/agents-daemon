@@ -58,7 +58,7 @@ func newDreamCmd() *cobra.Command {
 
 func newDreamCheckCmd() *cobra.Command {
 	var opts check.Opts
-	var skillsDir string
+	var skillsDir, pluginsFile string
 	cmd := &cobra.Command{
 		Use:   "check",
 		Short: "adopt の後の機械の点検 (read-only)。error の項目があれば exit code 1",
@@ -75,16 +75,15 @@ func newDreamCheckCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			claudeDir, err := apppath.ClaudeConfigDir()
-			if err != nil {
-				return err
-			}
 			if skillsDir == "" {
-				skillsDir = filepath.Join(claudeDir, "skills")
+				skillsDir = filepath.Join(env.claudeDir, "skills")
+			}
+			if pluginsFile == "" {
+				pluginsFile = filepath.Join(env.claudeDir, "plugins", "installed_plugins.json")
 			}
 			opts.SkillDirs = append([]string{skillsDir}, pol.SkillDirs...)
-			opts.PluginsFile = filepath.Join(claudeDir, "plugins", "installed_plugins.json")
-			opts.Home = env.home
+			opts.PluginsFile = pluginsFile
+			opts.ClaudeDir = env.claudeDir
 			opts.Cwd = env.cwd
 			opts.Stdout = textOut(cmd)
 			res, err := check.Run(opts)
@@ -102,8 +101,9 @@ func newDreamCheckCmd() *cobra.Command {
 	}
 	f := cmd.Flags()
 	f.StringVar(&opts.Project, "project", "", "対象 project (canonical name または絶対パス、省略時は cwd)")
-	f.StringVar(&opts.MemoryDir, "memory-dir", "", "memory ディレクトリ (省略時は ~/.claude/projects/<project>/memory)")
-	f.StringVar(&skillsDir, "skills-dir", "", "SKILL.md を点検する skill の置き場 (省略時は ~/.claude/skills。規約の skillDirs も見る)")
+	f.StringVar(&opts.MemoryDir, "memory-dir", "", "memory ディレクトリ (省略時は <Claude Code の設定ディレクトリ>/projects/<project>/memory)")
+	f.StringVar(&skillsDir, "skills-dir", "", "SKILL.md を点検する skill の置き場 (省略時は <Claude Code の設定ディレクトリ>/skills。規約の skillDirs も見る)")
+	f.StringVar(&pluginsFile, "plugins-file", "", "名前空間つきの skill 名を引く Claude Code の installed_plugins.json (省略時は <Claude Code の設定ディレクトリ>/plugins/installed_plugins.json)")
 	return cmd
 }
 
@@ -138,6 +138,7 @@ type dreamEnv struct {
 	stateDir   string
 	logDir     string
 	configFile string
+	claudeDir  string // Claude Code の設定ディレクトリ ($CLAUDE_CONFIG_DIR か ~/.claude)
 }
 
 // PolicySources は doctor が dream の規約を点検する口。読めた規約のパスを返し、読めなければ理由を返す。
@@ -169,10 +170,14 @@ func resolveDreamEnv() (dreamEnv, error) {
 	if err != nil {
 		return dreamEnv{}, err
 	}
+	claudeDir, err := apppath.ClaudeConfigDir()
+	if err != nil {
+		return dreamEnv{}, err
+	}
 	cwd, _ := os.Getwd()
 	return dreamEnv{
 		home: home, cwd: cwd, stateDir: dream.Dir(p.StateDir()), logDir: filepath.Dir(p.LogFile()),
-		configFile: p.ConfigFile(),
+		configFile: p.ConfigFile(), claudeDir: claudeDir,
 	}, nil
 }
 
@@ -203,7 +208,7 @@ func newDreamHarvestCmd() *cobra.Command {
 		},
 	}
 	f := cmd.Flags()
-	f.StringVar(&opts.ProjectsDir, "projects-dir", "", "Claude Code プロジェクトディレクトリ (デフォルト: ~/.claude/projects)")
+	f.StringVar(&opts.ProjectsDir, "projects-dir", "", "Claude Code プロジェクトディレクトリ (省略時は <Claude Code の設定ディレクトリ>/projects)")
 	f.IntVar(&opts.Days, "days", 14, "走査する直近日数 (mtime ベース)")
 	f.StringVar(&opts.ProjectGlob, "project-glob", "", "特定プロジェクトに絞る (canonical name の substring 一致)")
 	f.BoolVar(&opts.Incremental, "incremental", false, "前回 harvest 以降に更新されたセッションのみ処理")
@@ -226,7 +231,7 @@ func runDreamHarvest(opts harvest.Opts, detach bool) (harvest.Summary, error) {
 		return harvest.Summary{}, err
 	}
 	opts.PII = pol.PII
-	opts.Home = env.home
+	opts.ClaudeDir = env.claudeDir
 	opts.StateDir = env.stateDir
 	opts.Stderr = os.Stderr
 	return harvest.Run(opts)
@@ -268,7 +273,7 @@ func newDreamMineCmd() *cobra.Command {
 			}
 			opts.ExtraSkillDirs = pol.SkillDirs
 			opts.SkillNamePrefixes = pol.SkillNamePrefixes
-			opts.Home = env.home
+			opts.ClaudeDir = env.claudeDir
 			opts.Cwd = env.cwd
 			opts.StateDir = env.stateDir
 			opts.Stderr = cmd.ErrOrStderr()
@@ -282,8 +287,8 @@ func newDreamMineCmd() *cobra.Command {
 	f := cmd.Flags()
 	f.StringVar(&opts.Project, "project", "", "対象 project (canonical name または絶対パス、省略時は cwd)")
 	f.StringVar(&opts.HarvestDir, "harvest-dir", "", "harvest ログのディレクトリ (省略時は state の dream/harvest)")
-	f.StringVar(&opts.MemoryDir, "memory-dir", "", "feedback memory のディレクトリ (省略時は ~/.claude/projects/<project>/memory)")
-	f.StringVar(&opts.SkillsDir, "skills-dir", "", "skill 本体のディレクトリ (省略時は ~/.claude/skills)")
+	f.StringVar(&opts.MemoryDir, "memory-dir", "", "feedback memory のディレクトリ (省略時は <Claude Code の設定ディレクトリ>/projects/<project>/memory)")
+	f.StringVar(&opts.SkillsDir, "skills-dir", "", "skill 本体のディレクトリ (省略時は <Claude Code の設定ディレクトリ>/skills)")
 	f.StringVar(&opts.Date, "date", "", "candidates 出力ファイルの日付 (YYYY-MM-DD, 省略時は今日)")
 	f.BoolVarP(&opts.Verbose, "verbose", "v", false, "処理サマリを stderr に出力")
 	return cmd
@@ -335,7 +340,6 @@ func newDreamAdoptCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			opts.Home = env.home
 			opts.StateDir = env.stateDir
 			opts.Stdout = textOut(cmd)
 			opts.Stderr = cmd.ErrOrStderr()
@@ -372,7 +376,7 @@ func newDreamForgetCmd() *cobra.Command {
 				return err
 			}
 			opts.Names = args
-			opts.Home = env.home
+			opts.ClaudeDir = env.claudeDir
 			opts.Cwd = env.cwd
 			opts.Stdout = textOut(cmd)
 			opts.Stderr = cmd.ErrOrStderr()
@@ -385,7 +389,7 @@ func newDreamForgetCmd() *cobra.Command {
 	}
 	f := cmd.Flags()
 	f.StringVar(&opts.Project, "project", "", "対象 project (canonical name または絶対パス、省略時は cwd)")
-	f.StringVar(&opts.MemoryDir, "memory-dir", "", "memory ディレクトリ (省略時は ~/.claude/projects/<project>/memory)")
+	f.StringVar(&opts.MemoryDir, "memory-dir", "", "memory ディレクトリ (省略時は <Claude Code の設定ディレクトリ>/projects/<project>/memory)")
 	f.BoolVar(&opts.DryRun, "dry-run", false, "削除せず対象だけ表示する")
 	return cmd
 }

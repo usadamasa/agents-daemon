@@ -31,7 +31,6 @@ func TestRun_RejectsUnhomedCandidate(t *testing.T) {
 		CandidateID:    cands[0].ID,
 		CandidatesFile: candFile,
 		DryRun:         true,
-		Home:           dir,
 	})
 	if err == nil {
 		t.Fatal("unhomed 候補が受理された; 拒否されるべき")

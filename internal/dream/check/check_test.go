@@ -164,16 +164,16 @@ func TestRun_MissingMemoryDir(t *testing.T) {
 	}
 }
 
-// --memory-dir が無ければ ~/.claude/projects/<project>/memory を読む。
+// --memory-dir が無ければ Claude Code の設定ディレクトリの projects/<project>/memory を読む。
 func TestRun_ResolvesMemoryDirFromProject(t *testing.T) {
-	home := t.TempDir()
-	dir := filepath.Join(home, ".claude", "projects", "-x-y", "memory")
+	claudeDir := t.TempDir()
+	dir := filepath.Join(claudeDir, "projects", "-x-y", "memory")
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		t.Fatal(err)
 	}
 	writeMemory(t, dir, "a.md", "a", "[[missing]]\n")
 
-	res, err := Run(Opts{Project: "-x-y", Home: home})
+	res, err := Run(Opts{Project: "-x-y", ClaudeDir: claudeDir})
 	if err != nil {
 		t.Fatal(err)
 	}

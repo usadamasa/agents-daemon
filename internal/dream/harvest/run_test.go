@@ -25,7 +25,7 @@ func TestRun_PrunesExpiredStateBeforeWriting(t *testing.T) {
 	}
 
 	// projects が空でも Run は成功し、掃除と state の保存だけが起きる。
-	sum, err := Run(Opts{ProjectsDir: t.TempDir(), StateDir: stateDir, Days: 14, Home: t.TempDir()})
+	sum, err := Run(Opts{ProjectsDir: t.TempDir(), StateDir: stateDir, Days: 14})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestRun_PrunesExpiredStateBeforeWriting(t *testing.T) {
 func TestRun_RejectsBadPIIRule(t *testing.T) {
 	stateDir := t.TempDir()
 	_, err := Run(Opts{
-		ProjectsDir: t.TempDir(), StateDir: stateDir, Days: 14, Home: t.TempDir(),
+		ProjectsDir: t.TempDir(), StateDir: stateDir, Days: 14,
 		PII: []policy.PIIRule{{Name: "x", Pattern: "(", Replacement: "[X]"}},
 	})
 	if err == nil {
@@ -57,7 +57,27 @@ func TestRun_RejectsBadPIIRule(t *testing.T) {
 }
 
 func TestRun_RequiresStateDir(t *testing.T) {
-	if _, err := Run(Opts{ProjectsDir: t.TempDir(), Home: t.TempDir()}); err == nil {
+	if _, err := Run(Opts{ProjectsDir: t.TempDir()}); err == nil {
 		t.Fatal("StateDir 未指定で Run が成功した; 呼び出し側の解決漏れを拾うべき")
+	}
+}
+
+// --projects-dir が無ければ Claude Code の設定ディレクトリの projects を走査する。
+func TestRun_ResolvesProjectsDirFromClaudeDir(t *testing.T) {
+	claudeDir := t.TempDir()
+	projDir := filepath.Join(claudeDir, "projects", "-Users-x-workspace")
+	if err := os.MkdirAll(projDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	writeJSONLTest(t, projDir, "sess1.jsonl", []string{
+		normalUserLine("sess1", "2026-07-19T10:00:00+09:00", "スタンドアップやって"),
+	})
+
+	sum, err := Run(Opts{ClaudeDir: claudeDir, StateDir: t.TempDir(), Days: 14})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if sum.Harvested != 1 {
+		t.Errorf("summary = %+v; want harvested=1", sum)
 	}
 }

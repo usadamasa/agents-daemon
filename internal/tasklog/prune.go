@@ -13,8 +13,9 @@ import (
 // Prune は保持期間を過ぎた記録を mtime で消し、空になったセッションのディレクトリも消す。消した
 // ファイルの数を返す。完了したタスクは CompletedRetention、それ以外のタスクと TodoWrite のリスト、
 // 消し損ねた一時ファイルは Retention で消す。keepCompleted が true を返すセッションの完了タスクは消さない。
-// nil はどのセッションも残さない。
-func (s Store) Prune(now time.Time, keepCompleted func(sessionID string) bool) (int, error) {
+// endpoint が true を返す完了タスク (依存の辺の端点) は CompletedRetention では消さず、Retention で消す。
+// どちらも nil は何も残さない。
+func (s Store) Prune(now time.Time, keepCompleted func(sessionID string) bool, endpoint func(sessionID, taskID string) bool) (int, error) {
 	if s.Dir == "" {
 		return 0, nil
 	}
@@ -31,8 +32,10 @@ func (s Store) Prune(now time.Time, keepCompleted func(sessionID string) bool) (
 		if !session.IsDir() {
 			continue
 		}
-		keep := keepCompleted != nil && keepCompleted(session.Name())
-		n, err := pruneSession(filepath.Join(s.Dir, session.Name()), now, keep)
+		sessionID := session.Name()
+		keep := keepCompleted != nil && keepCompleted(sessionID)
+		isEndpoint := func(taskID string) bool { return endpoint != nil && endpoint(sessionID, taskID) }
+		n, err := pruneSession(filepath.Join(s.Dir, sessionID), now, keep, isEndpoint)
 		removed += n
 		if err != nil {
 			errs = append(errs, err)
@@ -70,7 +73,7 @@ func (s Store) Touch(sessionIDs []string, now time.Time) error {
 }
 
 // pruneSession はセッション 1 つぶんのディレクトリを掃除する。
-func pruneSession(dir string, now time.Time, keepCompleted bool) (int, error) {
+func pruneSession(dir string, now time.Time, keepCompleted bool, endpoint func(taskID string) bool) (int, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return 0, err
@@ -86,7 +89,7 @@ func pruneSession(dir string, now time.Time, keepCompleted bool) (int, error) {
 		if err != nil {
 			continue
 		}
-		if !expired(path, e.Name(), now.Sub(info.ModTime()), keepCompleted) {
+		if !expired(path, e.Name(), now.Sub(info.ModTime()), keepCompleted, endpoint) {
 			continue
 		}
 		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -100,12 +103,27 @@ func pruneSession(dir string, now time.Time, keepCompleted bool) (int, error) {
 	return removed, errors.Join(errs...)
 }
 
-// expired は age 経ったファイルが保持期間を過ぎたかを返す。
-func expired(path, name string, age time.Duration, keepCompleted bool) bool {
-	if name != todosFile && filepath.Ext(name) == ".json" && name[0] != '.' {
-		if t, ok := readTask(path); ok && t.Status == "completed" {
-			return !keepCompleted && age >= CompletedRetention
-		}
+// expired は age 経ったファイルが保持期間を過ぎたかを返す。辺の端点の完了タスクは、未完了のタスクと同じ Retention で消す
+// (上限を置かないと、生きている相手が辺の mtime を進め続ける間、作業の記録より長く残る。models/card の LivePlace)。
+func expired(path, name string, age time.Duration, keepCompleted bool, endpoint func(taskID string) bool) bool {
+	id, completed := completedTask(path, name)
+	switch {
+	case !completed:
+		return age >= Retention
+	case keepCompleted:
+		return false
+	case endpoint(id):
+		return age >= Retention
+	default:
+		return age >= CompletedRetention
 	}
-	return age >= Retention
+}
+
+// completedTask は name が完了したタスクの記録なら、その ID を返す。
+func completedTask(path, name string) (string, bool) {
+	if name == todosFile || filepath.Ext(name) != ".json" || name[0] == '.' {
+		return "", false
+	}
+	t, ok := readTask(path)
+	return t.ID, ok && t.Status == "completed"
 }

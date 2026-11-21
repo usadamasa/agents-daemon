@@ -200,13 +200,29 @@ function memos() {
   return out.sort((a, b) => lastPlacedAt(b.memo).localeCompare(lastPlacedAt(a.memo)));
 }
 
+// handedMemos は保持期間の間の渡したメモ。handed を出す前のバイナリの deps には欄が無い。
+function handedMemos() {
+  return state.data.handed ?? [];
+}
+
+// selectedMemo は選んでいるメモ。渡したメモは handed に宛先 (HandedTo) を添え、repo は置いた repo にする。
 function selectedMemo() {
   if (state.selected?.type !== "memo") return undefined;
   for (const r of state.data.repos) {
     const m = r.memos.find((x) => x.id === state.selected.id);
     if (m) return { memo: m, repo: r };
   }
-  return undefined;
+  const h = handedMemos().find((x) => x.memo.id === state.selected.id);
+  if (h === undefined) return undefined;
+  const repo = state.data.repos.find((r) => r.repo === h.repo) ?? { repo: h.repo, title: h.repo_title };
+  return { memo: h.memo, repo, handed: h.to };
+}
+
+// memoAnchor は単体ビューを添える行。一覧に行の無い渡したメモ (宛先がセッション) は宛先のノードの箱に添える。
+function memoAnchor({ memo, handed }) {
+  const row = document.querySelector(`.mrow[data-memo="${CSS.escape(memo.id)}"]`);
+  if (row !== null || handed?.node === undefined) return row;
+  return document.querySelector(`.node[data-key="${CSS.escape(handed.node)}"]`);
 }
 
 // ---- 図 ----
@@ -621,9 +637,26 @@ function renderPark() {
     none.className = "none";
     none.textContent = total === 0 ? "No open memos" : "No open memos in this repo";
     list.append(none);
-    return;
   }
   for (const row of rows) list.append(memoRow(row));
+
+  // 新しいセッションを起こして渡したメモは、宛先の repo の節 (絞り込み) に残す。セッションへ渡したメモは宛先の
+  // ノードの単体ビューに出る。
+  const handed = handedMemos().filter((h) => h.to.repo !== undefined && (state.repoFilter === "" || h.to.repo === state.repoFilter));
+  if (handed.length === 0) return;
+  const gh = document.createElement("div");
+  gh.className = "gh";
+  gh.append(heading("Handed"), counter(handed.length));
+  list.append(gh, ...handed.map(handedRow));
+}
+
+// handedRow はパーキングロットの渡したメモの 1 行。置いたセッションの欄に宛先を出す。
+function handedRow(h) {
+  const repo = state.data.repos.find((r) => r.repo === h.repo) ?? { repo: h.repo, title: h.repo_title };
+  const b = memoRow({ memo: h.memo, repo });
+  b.classList.add("handed");
+  b.querySelector(".s").textContent = `→ ${h.to.label}`;
+  return b;
 }
 
 // ---- 単体ビュー (ポップアップ) ----
@@ -635,6 +668,20 @@ function chip(text, tone) {
   const t = document.createElement("span");
   t.textContent = text;
   c.append(t);
+  return c;
+}
+
+// linkChip は押すと移る chip。
+function linkChip(text, onClick) {
+  const c = chip(text, "link");
+  c.setAttribute("role", "button");
+  c.tabIndex = 0;
+  c.addEventListener("click", onClick);
+  c.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    e.preventDefault();
+    onClick(e);
+  });
   return c;
 }
 
@@ -1092,7 +1139,7 @@ function nodePopup(n) {
   chips.append(stateChip(n), ...restStageChips(n));
   // 会話から自動で付けた題は、状態の色と被らない破線の chip (guess) で出どころを示す。直すのは題を押す。
   if (n.origin === "inferred") chips.append(chip(INFERRED_CHIP, "guess"));
-  if (n.session) chips.append(chip(n.session));
+  if (n.session) chips.append(sessionChip(n));
   head.append(ph, title, chips);
   parts.push(head);
 
@@ -1146,7 +1193,20 @@ function nodePopup(n) {
   if (parked.length > 0) {
     parts.push(group("Memos placed", parked.length, parked.map(({ memo }) => memoRowInPopup(memo.id, memo.title, memo.kind, true))));
   }
+  // このノードのセッションへ渡したメモ。宛先のノードは daemon が 1 つに決めてある。
+  const received = handedMemos().filter((h) => h.to.node === n.key);
+  if (received.length > 0) {
+    parts.push(group("Memos received", received.length, received.map((h) => memoRowInPopup(h.memo.id, h.memo.title, "handed", true))));
+  }
   return parts;
+}
+
+// sessionChip は単体ビューのセッション名。daemon が移り先 (session_node) を決めてあれば押すとそのノードを選び、
+// 無ければ名前だけを出す。
+function sessionChip(n) {
+  const to = n.session_node;
+  if (to === undefined) return chip(n.session);
+  return linkChip(n.session, () => select({ type: "node", key: to }));
 }
 
 // memoRowInPopup はタスクの単体ビューに並ぶメモの 1 行。open のメモは押すとそのメモを選ぶ。
@@ -1163,7 +1223,7 @@ function memoRowInPopup(id, title, mark, selectable) {
   return row;
 }
 
-function memoPopup({ memo, repo }) {
+function memoPopup({ memo, repo, handed }) {
   const g = state.graph;
   const parts = [];
   const head = document.createElement("div");
@@ -1177,20 +1237,22 @@ function memoPopup({ memo, repo }) {
   title.textContent = memo.title;
   const chips = document.createElement("div");
   chips.className = "chips";
-  chips.append(chip("open", "ok"));
+  chips.append(handed ? chip("handed", "guess") : chip("open", "ok"));
   head.append(ph, title, chips);
   parts.push(head);
 
-  // 動詞。渡す先は生きているセッションか、新しく起こすセッション。
-  parts.push(
-    actsBar([
-      actButton("Task", "task", `pri ${on("task")}`.trim(), toggle("task")),
-      actButton("Issue", "issue", on("issue"), toggle("issue")),
-      actButton("Discard", "trash", "danger", () => act(() => discard(memo))),
-    ]),
-  );
-  if (state.picker === "task" || state.picker === "issue") parts.push(memoHandPicker(memo, repo, state.picker));
-  else if (state.refusal !== "") parts.push(refusalLine());
+  // 動詞。渡す先は生きているセッションか、新しく起こすセッション。渡した後のメモは動詞を持たない。
+  if (!handed) {
+    parts.push(
+      actsBar([
+        actButton("Task", "task", `pri ${on("task")}`.trim(), toggle("task")),
+        actButton("Issue", "issue", on("issue"), toggle("issue")),
+        actButton("Discard", "trash", "danger", () => act(() => discard(memo))),
+      ]),
+    );
+    if (state.picker === "task" || state.picker === "issue") parts.push(memoHandPicker(memo, repo, state.picker));
+    else if (state.refusal !== "") parts.push(refusalLine());
+  }
 
   if (memo.detail) {
     const p = document.createElement("p");
@@ -1208,6 +1270,7 @@ function memoPopup({ memo, repo }) {
     dd.append(...v);
     dl.append(dt, dd);
   };
+  if (handed) add("To", destinationCell(handed));
   if (memo.default_taken) {
     const span = document.createElement("span");
     appendLinked(span, memo.default_taken, linkContext(memo.default_taken, repo.repo, repo.repo));
@@ -1234,6 +1297,19 @@ function memoPopup({ memo, repo }) {
   });
   parts.push(dl);
   return parts;
+}
+
+// destinationCell は渡したメモの宛先。図に宛先のノードがあれば押すとそのノードを選び、repo なら一覧をその repo に
+// 絞る (単体ビューは開いたまま)。どちらも無ければ名前だけを出す。
+function destinationCell(to) {
+  if (to.node !== undefined) return linkChip(to.label, () => select({ type: "node", key: to.node }));
+  if (to.repo !== undefined) {
+    return linkChip(to.label, () => {
+      state.repoFilter = to.repo;
+      render();
+    });
+  }
+  return chip(to.label);
 }
 
 // placePopup はポップアップを anchor (選んだ箱か行) のそばに置く。箱なら右 (入らなければ左)、行なら上 (入らなければ下)。
@@ -1272,7 +1348,7 @@ function renderPopup() {
     parts = nodePopup(n);
     pop.setAttribute("aria-label", "Task details");
   } else if (m) {
-    anchor = document.querySelector(`.mrow[data-memo="${CSS.escape(m.memo.id)}"]`);
+    anchor = memoAnchor(m);
     parts = memoPopup(m);
     side = "above";
     pop.setAttribute("aria-label", "Memo details");
@@ -1512,8 +1588,8 @@ el("graph").addEventListener("gesturechange", (e) => {
 
 function popupAnchor() {
   if (state.selected?.type === "node") return document.querySelector(`.node[data-key="${CSS.escape(state.selected.key)}"]`);
-  if (state.selected?.type === "memo") return document.querySelector(`.mrow[data-memo="${CSS.escape(state.selected.id)}"]`);
-  return null;
+  const m = selectedMemo();
+  return m ? memoAnchor(m) : null;
 }
 
 el("completed-check").addEventListener("change", (e) => {

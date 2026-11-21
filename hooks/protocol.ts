@@ -877,7 +877,7 @@ export const definitions = {
     }
   },
   "DepsData": {
-    "description": "deps の出力。依存の DAG と、repo ごとの生きているセッションと open のメモ",
+    "description": "deps の出力。依存の DAG と、repo ごとの生きているセッションと open のメモ、渡したメモの宛先",
     "type": "object",
     "additionalProperties": false,
     "required": [
@@ -885,6 +885,7 @@ export const definitions = {
       "rex_placement",
       "stale_memo_days",
       "repos",
+      "handed",
       "recent_repos",
       "graph"
     ],
@@ -910,6 +911,13 @@ export const definitions = {
         "items": {
           "$ref": "#/$defs/DepsRepo"
         }
+      },
+      "handed": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/HandedMemo"
+        },
+        "description": "保持期間 (handed は 7 日) の間の渡したメモ。最後に置かれた時刻の新しい順"
       },
       "recent_repos": {
         "type": "array",
@@ -1011,7 +1019,7 @@ export const definitions = {
     }
   },
   "ParkingCard": {
-    "description": "repo の open のメモ 1 つ",
+    "description": "メモ 1 つ。DepsRepo.memos では open のメモ、HandedMemo.memo では渡したメモ",
     "type": "object",
     "additionalProperties": false,
     "required": [
@@ -1061,6 +1069,59 @@ export const definitions = {
           "$ref": "#/$defs/ParkingSource"
         },
         "description": "置いたセッションの新しい順"
+      }
+    }
+  },
+  "HandedMemo": {
+    "description": "渡したメモ 1 つと、その宛先",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "memo",
+      "repo",
+      "repo_title",
+      "to"
+    ],
+    "properties": {
+      "memo": {
+        "$ref": "#/$defs/ParkingCard"
+      },
+      "repo": {
+        "type": "string",
+        "description": "メモを置いた repo の鍵 (DepsRepo.repo と同じ規則)"
+      },
+      "repo_title": {
+        "type": "string"
+      },
+      "to": {
+        "$ref": "#/$defs/HandedTo"
+      }
+    }
+  },
+  "HandedTo": {
+    "description": "渡したメモの宛先。node と repo は daemon が解いたもので、どちらも無ければ図の中に宛先が無い",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "ref",
+      "label"
+    ],
+    "properties": {
+      "ref": {
+        "type": "string",
+        "description": "メモの handed_to (sid:<session_id> / repo:<path>)。mod は切り出さずに不透明な文字列として扱う"
+      },
+      "node": {
+        "type": "string",
+        "description": "sid: の宛先のノードの key。セッションのノード、無ければそのセッションのタスクのノード (進行中を先に、key の順で 1 つ)"
+      },
+      "repo": {
+        "type": "string",
+        "description": "repo: の宛先の repo の鍵 (DepsRepo.repo と同じ規則)"
+      },
+      "label": {
+        "type": "string",
+        "description": "宛先の表示名 (セッションの表示名か repo の title)"
       }
     }
   },
@@ -1277,6 +1338,10 @@ export const definitions = {
       "session_name": {
         "type": "string",
         "description": "ListAgents の名前 (SendMessage の宛先に書く形)。表示名とは別"
+      },
+      "session_node": {
+        "type": "string",
+        "description": "単体ビューのセッション名から移るノードの key。渡したメモの宛先 (HandedTo.node) と同じ規則で解き、このノード自身か図に無ければ付かない"
       },
       "live": {
         "type": "boolean"

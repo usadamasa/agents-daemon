@@ -34,6 +34,7 @@ const (
 	// CompletedRetention は完了したタスクを残す期間。依存図の Show completed で今日の進み具合が
 	// 見えれば足りる。終了したセッションの分は、作業の記録が消えるまで残す (Prune の keepCompleted)。
 	// 先に消すと、依存図がタスクの無いセッションと読み、全部終えたセッションを終了のカードで戻す (models/card)。
+	// 依存の辺の端点になっている完了タスクも Retention まで残す (Prune の endpoint)。先に消すと辺が図から抜ける。
 	CompletedRetention = 24 * time.Hour
 	// Retention は未完了のタスクと TodoWrite のリストを残す期間。daemon が pane の見えているセッションの
 	// mtime を tick ごとに進める (Touch) ので、mtime からの経過は pane が見えなくなってからの経過になる。

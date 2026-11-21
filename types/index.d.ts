@@ -318,7 +318,7 @@ export type TellResult = {
   pane_id: string
 }
 
-// deps の出力。依存の DAG と、repo ごとの生きているセッションと open のメモ
+// deps の出力。依存の DAG と、repo ごとの生きているセッションと open のメモ、渡したメモの宛先
 export type DepsData = {
   daemon_running: boolean
   // 動いている daemon が pane の rex の置き場を status.json に書くか。false なら置き場の無いノードは daemon が古いか止まっている
@@ -328,6 +328,8 @@ export type DepsData = {
   // open のメモを「古い」とみなす日数。アプリはこれより前に最後に置かれたメモをまとめて捨てるボタンを出す
   stale_memo_days: number
   repos: DepsRepo[]
+  // 保持期間 (handed は 7 日) の間の渡したメモ。最後に置かれた時刻の新しい順
+  handed: HandedMemo[]
   // セッション台帳に載った repo。最後に見た時刻の新しい順 (新しいセッションを起こす repo の候補)
   recent_repos: RecentRepo[]
   graph: DepsGraph
@@ -363,7 +365,7 @@ export type DepsSession = {
   live: boolean
 }
 
-// repo の open のメモ 1 つ
+// メモ 1 つ。DepsRepo.memos では open のメモ、HandedMemo.memo では渡したメモ
 export type ParkingCard = {
   id: string
   kind: 'aside' | 'scope' | 'preference'
@@ -374,6 +376,27 @@ export type ParkingCard = {
   default_taken?: string
   // 置いたセッションの新しい順
   sources: ParkingSource[]
+}
+
+// 渡したメモ 1 つと、その宛先
+export type HandedMemo = {
+  memo: ParkingCard
+  // メモを置いた repo の鍵 (DepsRepo.repo と同じ規則)
+  repo: string
+  repo_title: string
+  to: HandedTo
+}
+
+// 渡したメモの宛先。node と repo は daemon が解いたもので、どちらも無ければ図の中に宛先が無い
+export type HandedTo = {
+  // メモの handed_to (sid:<session_id> / repo:<path>)。mod は切り出さずに不透明な文字列として扱う
+  ref: string
+  // sid: の宛先のノードの key。セッションのノード、無ければそのセッションのタスクのノード (進行中を先に、key の順で 1 つ)
+  node?: string
+  // repo: の宛先の repo の鍵 (DepsRepo.repo と同じ規則)
+  repo?: string
+  // 宛先の表示名 (セッションの表示名か repo の title)
+  label: string
 }
 
 // メモを置いたセッション 1 つ
@@ -435,6 +458,8 @@ export type GraphNode = {
   session?: string
   // ListAgents の名前 (SendMessage の宛先に書く形)。表示名とは別
   session_name?: string
+  // 単体ビューのセッション名から移るノードの key。渡したメモの宛先 (HandedTo.node) と同じ規則で解き、このノード自身か図に無ければ付かない
+  session_node?: string
   live: boolean
   // セッションの pane が居る rex の session と window。生きていて daemon が置き場を引けたノードだけに付く
   rex?: RexPlacement
@@ -542,6 +567,8 @@ declare module 'claude-code' {
       // told はファイルを触った tool の結果で model に伝えたメモの id (hooks/notice.ts)。同じメモを 2 度伝えない。
       // main の会話が compact されたら空にする。
       told: string[]
+      // nudged は辺の書き方を伝えた SendMessage の宛先の名前 (hooks/handoff-notice.ts)。同じ宛先へ 2 度は伝えない。
+      nudged: string[]
       // logged は出来事のログに slot ごとに最後に書いた中身 (hooks/log.ts)。同じものを書き直さないため。
       logged: Record<string, string>
       // inferDue は main のターンが終わってから companion の timer がまだ見ていない印 (hooks/work-infer.ts)。

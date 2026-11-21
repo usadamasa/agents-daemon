@@ -115,7 +115,7 @@ XDG_STATE_HOME=~/tmp/state-<topic> ~/tmp/ad-<topic> daemon --foreground
 ## 実機で通すこと
 
 送信の経路と画面の読み取り元は、fake ではなく実機で 1 度は通す。多重化ツールの応答の解釈違いや
-読み取り元の範囲 ([pane-io.md](pane-io.md) の「読み取り元」) は、`--dry-run` や `simulate` だけでは踏めない。
+読み取り元の範囲 ([program-status.md](program-status.md) の「画面のモード」) は、`--dry-run` や `simulate` だけでは踏めない。
 rex の送信が未測定なのは、まだ果たしていない箇所 (operations.md の「既知の制約」)。
 上限の entry の形は実機の transcript から写したものを `transcript/testdata` に固定してあり (2.1.239 の seven_day、
 2.1.251 の Fable、2.1.283 の Request rejected 429、2.1.289 の five_hour、2.1.309 の server_error)、

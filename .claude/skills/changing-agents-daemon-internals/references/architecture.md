@@ -35,8 +35,8 @@ daemon が pane の transcript を引くには、その pane のセッション�
 (毎回。`REX_BLOCK` から block との対応を書く) と `rate-limits/<session_id>.json`
 (stdin に `rate_limits` があるときだけ) に落とす。上限の判定と解除時刻は transcript の末尾の entry から取るので、
 `rate-limits/` を daemon は読まない (`doctor` が statusline の配線の確認に出すだけ)。statusline の記録が無い pane は
-rex の前景の pid で Claude Code の登録簿 (`~/.claude/sessions/`) から補う。stdin の中身、state file の出し分け、書式は
-[statusline-state.md](statusline-state.md)。
+rex の前景の pid で Claude Code の登録簿 (`~/.claude/sessions/`) から補う。stdin の中身と state file の出し分けは
+`sessionstate`、書式は `ratelimit` と `sessioncontext` の package doc。
 
 ### [2] SessionStart hook がデーモンを起こす
 
@@ -75,7 +75,7 @@ lock、入れ替わりは [binary.md](binary.md)。
 単一プロセスが全 Claude pane を見る。pane ごとの状態は pane ID (rex の block ID) をキーに
 プロセス内で持つ。pane の列挙・読み取り・送信は多重化ツールの backend (rex) 越しに行う。
 backend の判定と rex の呼び方は [multiplexer.md](multiplexer.md)。上限の判定は transcript、画面は待機明けのキー選択だけ
-([rate-limit.md](rate-limit.md))。
+(`monitor` と `detect` の package doc)。
 
 ## CLI の組み立て
 
@@ -101,8 +101,8 @@ cobra を import するのは `cmd/` の下だけで、`internal/` の本体は 
 
 ## 毎 tick の判定
 
-pane ごとに次を上から順に評価する。上限側の詳細 (分類、待つかどうか、起床時刻) は [rate-limit.md](rate-limit.md)、
-画面の読み取りと送信の作法は [pane-io.md](pane-io.md)。
+pane ごとに次を上から順に評価する。上限側の詳細 (分類、待つかどうか、起床時刻) は `detect.ClassifyTurn`、
+`monitor.Decide`、`monitor.ComputeLimitWake`。
 
 | 条件 | 動作 | outcome |
 | ---- | ---- | ---- |
@@ -147,7 +147,7 @@ prompt の開いた pane に送らない、Enter 待ちにテキストを送ら�
 | `$STATE/rate-limits/<session_id>.json` | `agents-daemon statusline` または `ingest-statusline` (利用者の statusline が呼ぶ) | statusline の描画ごと (`resets_at` のあるウィンドウがあるときだけ) | そのセッションの 5 時間 / 7 日ウィンドウの使用率と reset 時刻、観測時刻、session_id。daemon は読まず、`doctor` が statusline の配線の確認に出す | daemon が 24 時間で消す |
 | `$STATE/context/<session_id>.json` | `agents-daemon statusline` または `ingest-statusline` (利用者の statusline が呼ぶ) | statusline の描画ごと | そのセッションの context 使用率、観測時刻、session_id、セッション名、多重化ツールの場所 | daemon が 7 日で消す |
 | `$STATE/cost/<YYYY-MM-DD>/<session_id>.json` | `agents-daemon statusline` (`CLAUDE_STATUSLINE_SPEND_CAP` があるとき) | statusline の描画ごと (累計が変わったときだけ書き直す) | そのセッションの累計 cost と前日までの繰り越し (`statusline/spend`)。daemon は読まない | `statusline` がその日の最初の書き込みで 45 日より古い日を消す |
-| `$STATE/tasks/<session_id>/<task_id>.json` と `…/todos.json` | `agents-daemon ingest-task` (PostToolUse hook `hooks/ingest-task.sh` が呼ぶ) | TaskCreate / TaskUpdate / TaskList / TodoWrite の呼び出しごと | タスク 1 つ (subject、status、blockedBy、session_id、cwd とその repo の鍵 repo) と TodoWrite のリスト全体 (`tasklog`、#618)。repo は作業の記録と同じ規則で残す。読み手は依存図 (`deps`、`deps` パッケージ。git で cwd を引けなければ記録の repo の列に置く) と `park adopt` (`task:`。メモの repo は記録の repo) | daemon が完了したタスクを 1 日、それ以外を 7 日 (更新が無ければ) で消す。pane が見えている間は daemon が tick ごとに未完了のタスクと `todos.json` の mtime を進める。終了したセッションの完了タスクは作業の記録が消えるまで残す。`park adopt` (pane の「パーキングへ移す」) がメモへ移したタスクを、`task dismiss` (pane の `Dismiss`) が終了したセッションのタスクを消す |
+| `$STATE/tasks/<session_id>/<task_id>.json` と `…/todos.json` | `agents-daemon ingest-task` (PostToolUse hook `hooks/ingest-task.sh` が呼ぶ) | TaskCreate / TaskUpdate / TaskList / TodoWrite の呼び出しごと | タスク 1 つ (subject、status、blockedBy、session_id、cwd とその repo の鍵 repo) と TodoWrite のリスト全体 (`tasklog`、#618)。repo は作業の記録と同じ規則で残す。読み手は依存図 (`deps`、`deps` パッケージ。git で cwd を引けなければ記録の repo の列に置く) と `park adopt` (`task:`。メモの repo は記録の repo) | daemon が完了したタスクを 1 日、それ以外を 7 日 (更新が無ければ) で消す。pane が見えている間は daemon が tick ごとに未完了のタスクと `todos.json` の mtime を進める。終了したセッションの完了タスクは作業の記録が消えるまで残す。辺の端点 (`task:`) の完了タスクは 7 日で消す (#502)。`park adopt` (pane の「パーキングへ移す」) がメモへ移したタスクを、`task dismiss` (pane の `Dismiss`) が終了したセッションのタスクを消す |
 | `$STATE/work/<session_id>.json` と `…/.lock` | `agents-daemon ingest-work` (SessionStart / UserPromptSubmit / Stop / SessionEnd と Bash の PostToolUse hook `hooks/ingest-work.sh` が呼ぶ)、`work set` (アプリの「題を直す」、companion の mod `hooks/work-infer.ts`) | UserPromptSubmit と Stop で作り、SessionStart (resume) と SessionEnd は記録があるときだけ書き換える。PostToolUse は記録があり `gh pr create` が新しい PR を出したときだけ書く。`work set` は題を書き換えたとき | セッション 1 つの作業 (最初の prompt の 1 行目の subject と出どころ origin (prompt / human)、companion の推定の題 inferred、最後の応答の 1 行目 summary、turns、started_at、ended_at と end_reason、cwd とその repo の鍵 repo、`gh pr create` で出した PR の参照 prs) (`worklog`、#368、#575、#606)。読み手は依存図 (タスクの無いセッションのノード。git で cwd を引けなければ記録の repo の列に置く)、`park adopt` (`sid:`。メモの repo は記録の repo)、prs から PR を出したセッションへの辺を導く daemon (`refpoll`。辺の before の repo は記録の repo で、worktree が消えた後も本来のリポジトリになる)。書き込みは `.lock` (flock) の中で読んでから自分の欄だけを書く (models/work)。`.lock` は書き込みを直列にするロック | daemon が 7 日 (更新が無ければ) で消す。pane が見えている間は daemon が tick ごとに mtime を進めるので、消えるのは終了してからの経過。`park adopt` (`sid:`) がメモへ移した作業を、`task dismiss` (`sid:`) が終了したセッションの作業を消す。`.lock` は消さない |
 | `$STATE/parking/<id>.json` | `agents-daemon park add` / `park set` / `park discard` / `park withdraw` / `park adopt` | メモを置いたとき、status を書き換えたとき (まとめて捨てたときを含む)、終了したセッションのタスクをメモへ移したとき (origin `adopted`) | パーキングのメモ 1 つ (kind (aside / scope / preference)、origin (placed / adopted)、title、detail、files、default_taken、repo、sources (session_id、置いたときの進行中の task_id、cwd、まとめたときに後から置いた側の detail、時刻)、status、handed のときの宛先 handed_to (`sid:<session_id>` / `repo:<path>`)) (`parking`)。repo は依存図の repo と同じ main worktree のパス。repo と正規化した title が同じ open のメモには sources を足す。`.lock` は書き込みを直列にするロック | daemon が open を 90 日、handed / discarded を 7 日 (更新が無ければ) で消す。同じメモが置き直されると数え直す。`.lock` は消さない |
 | `$STATE/edges/<id>.json` と `…/.lock` | `agents-daemon edge add` / `edge rm` (作業を渡す側が `agents-daemon:peer-sessions` skill の手順で呼ぶ。pane の `Add blocker` / `Unlink` も)。daemon が `session:<名前>` の端点を結びつけて書き直す。daemon (`refpoll`) が PR を出したセッションから PR への辺を導く | 辺を書いたとき、消したとき、daemon が端点を結びつけたとき・辺を導いたとき (tick ごと) | セッションをまたぐ辺 1 本 (before と after の端点 (参照、cwd、repo、結びつけた元の参照 `bound_from`)、note、daemon が導いた印 `derived`、created_at) (`edge` パッケージ)。辺は「before が済まないと after を始められない」。id は書いたときの両端の参照から決まり、結びつけても変わらない。同じ辺の登録し直しは同じファイルを書き直す。`.lock` は書き込みを直列にするロック。読み手は `edge list` と依存図の DAG (`deps` の `graph`) | daemon が 7 日 (更新が無ければ) で消す。登録し直すと数え直す。daemon が tick ごとに、生きているセッションを端点に持つ辺と、写しが open の参照を before に持つ辺の mtime を進める。`edge rm` が消す。daemon が tick ごとに、before の issue / PR の写し (`refs/`) が merged / closed の辺を消す (`refpoll`、dropped の辺は残す)。`task dismiss` (`sid:`) が終了したセッションを端点に持つ辺を消す。`.lock` は消さない |

@@ -48,6 +48,45 @@
       "memos": []
     }
   ],
+  "handed": [
+    {
+      "memo": {
+        "id": "handed-repo",
+        "kind": "scope",
+        "origin": "placed",
+        "title": "other の README を直す",
+        "sources": [{ "session_id": "sid-alpha", "task_ref": "task:alpha/2", "session": "alpha", "live": true, "at": "2026-11-07T02:20:00Z" }]
+      },
+      "repo": "/repo/agents-daemon",
+      "repo_title": "agents-daemon",
+      "to": { "ref": "repo:/repo/other/.claude/worktrees/x", "repo": "/repo/other", "label": "other" }
+    },
+    {
+      "memo": {
+        "id": "handed-session",
+        "kind": "aside",
+        "origin": "placed",
+        "title": "beta に渡した脇のバグ",
+        "detail": "gui/main.go:5 を見る",
+        "sources": [{ "session_id": "sid-alpha", "task_ref": "task:alpha/2", "session": "alpha", "live": true, "at": "2026-11-07T02:00:00Z" }]
+      },
+      "repo": "/repo/agents-daemon",
+      "repo_title": "agents-daemon",
+      "to": { "ref": "sid:sid-beta", "node": "task:beta/1", "label": "beta" }
+    },
+    {
+      "memo": {
+        "id": "handed-gone",
+        "kind": "aside",
+        "origin": "placed",
+        "title": "終わったセッションに渡したメモ",
+        "sources": [{ "session_id": "sid-alpha", "session": "alpha", "live": true, "at": "2026-11-07T01:00:00Z" }]
+      },
+      "repo": "/repo/agents-daemon",
+      "repo_title": "agents-daemon",
+      "to": { "ref": "sid:sid-gone", "label": "sid-gone" }
+    }
+  ],
   "recent_repos": [
     { "repo": "/repo/agents-daemon", "title": "agents-daemon", "last_seen": "2026-11-07T02:58:00Z" },
     { "repo": "/repo/other", "title": "other", "last_seen": "2026-11-07T02:40:00Z" }
@@ -57,7 +96,7 @@
       {
         "key": "task:alpha/1", "kind": "task", "state": "completed", "title": "スキーマを決める",
         "endpoint": true, "cwd": "/repo/agents-daemon", "task_id": "1", "description": "deps の JSON の形を決める",
-        "session_id": "sid-alpha", "session": "alpha", "session_name": "alpha", "live": true,
+        "session_id": "sid-alpha", "session": "alpha", "session_name": "alpha", "session_node": "task:alpha/2", "live": true,
         "rex": { "session_id": "session:work", "session_label": "work", "window_id": "window:alpha", "window_label": "alpha-tab" },
         "depth": 0, "downstream": 6, "parked": 0, "memos": [], "blocked_by": [], "deadlock": false, "halted": false, "stuck": false
       },
@@ -85,7 +124,7 @@
       {
         "key": "task:alpha/3", "kind": "task", "state": "completed", "title": "テストを直す",
         "endpoint": true, "cwd": "/repo/agents-daemon", "task_id": "3",
-        "session_id": "sid-alpha", "session": "alpha", "session_name": "alpha", "live": true,
+        "session_id": "sid-alpha", "session": "alpha", "session_name": "alpha", "session_node": "task:alpha/2", "live": true,
         "rex": { "session_id": "session:work", "session_label": "work", "window_id": "window:alpha", "window_label": "alpha-tab" },
         "depth": 2, "downstream": 1, "parked": 0, "memos": [], "blocked_by": [], "deadlock": false, "halted": false, "stuck": false
       },
@@ -93,7 +132,7 @@
         "key": "task:beta/2", "kind": "task", "state": "pending", "title": "スクリーンショットを撮る",
         "endpoint": true, "cwd": "/repo/agents-daemon", "repo": "/repo/agents-daemon", "task_id": "2",
         "description": "https://example.com/a と #12 と gui/main.go:5 を見る",
-        "session_id": "sid-beta", "session": "beta", "session_name": "beta", "live": true,
+        "session_id": "sid-beta", "session": "beta", "session_name": "beta", "session_node": "task:beta/1", "live": true,
         "rex": { "session_id": "session:work", "session_label": "work", "window_id": "window:beta", "window_label": "beta-tab" },
         "depth": 3, "downstream": 1, "parked": 0, "memos": [], "blocked_by": ["task:beta/1"], "deadlock": false, "halted": false, "stuck": false
       },
@@ -111,7 +150,7 @@
         "key": "task:alpha/4", "kind": "task", "state": "pending", "title": "docs を書く",
         "endpoint": true, "cwd": "/repo/agents-daemon", "repo": "/repo/agents-daemon", "task_id": "4",
         "description": "pr:usadamasa/workspace#3 を待ってから #3 と #9 を見る",
-        "session_id": "sid-alpha", "session": "alpha", "session_name": "alpha", "live": true,
+        "session_id": "sid-alpha", "session": "alpha", "session_name": "alpha", "session_node": "task:alpha/2", "live": true,
         "rex": { "session_id": "session:work", "session_label": "work", "window_id": "window:alpha", "window_label": "alpha-tab" },
         "depth": 3, "downstream": 0, "parked": 0, "memos": [], "blocked_by": [], "deadlock": false, "halted": false, "stuck": false
       },
@@ -122,14 +161,14 @@
           { "repo": "usadamasa/agents-daemon", "number": 254, "ref": "pr:usadamasa/agents-daemon#254", "title": "依存図の色を状態ごとに分ける" },
           { "repo": "usadamasa/workspace", "number": 12, "ref": "issue:usadamasa/workspace#12", "title": "横断の作業の置き場を決める" }
         ],
-        "session_id": "sid-alpha", "session": "alpha", "session_name": "alpha", "live": true,
+        "session_id": "sid-alpha", "session": "alpha", "session_name": "alpha", "session_node": "task:alpha/2", "live": true,
         "rex": { "session_id": "session:work", "session_label": "work", "window_id": "window:alpha", "window_label": "alpha-tab" },
         "depth": 1, "downstream": 0, "parked": 0, "memos": [], "blocked_by": ["pr:usadamasa/agents-daemon#254"], "deadlock": false, "halted": false, "stuck": false
       },
       {
         "key": "task:beta/3", "kind": "task", "state": "pending", "title": "PR を作る",
         "endpoint": true, "cwd": "/repo/agents-daemon", "task_id": "3",
-        "session_id": "sid-beta", "session": "beta", "session_name": "beta", "live": true,
+        "session_id": "sid-beta", "session": "beta", "session_name": "beta", "session_node": "task:beta/1", "live": true,
         "rex": { "session_id": "session:work", "session_label": "work", "window_id": "window:beta", "window_label": "beta-tab" },
         "depth": 4, "downstream": 0, "parked": 0, "memos": [], "blocked_by": ["task:beta/2", "task:beta/1"], "deadlock": false, "halted": false, "stuck": false
       }

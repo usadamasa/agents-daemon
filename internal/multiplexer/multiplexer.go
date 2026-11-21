@@ -136,8 +136,7 @@ type PaneReadOptions struct {
 }
 
 // Geometry は pane の端末の大きさと、alternate screen (全画面のプログラムが切り替える、scrollback の無い画面) に
-// いるか。alternate screen では PaneRead が返せるのは Rows 行までで、上限の文言が画面から押し出されると
-// 検知は効かない (pane-io.md「読み取り元」)。
+// いるか。alternate screen では PaneRead が返せるのは Rows 行まで (program-status.md「画面のモード」)。
 type Geometry struct {
 	Rows            int  `json:"rows"`
 	Columns         int  `json:"columns"`

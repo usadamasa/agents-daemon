@@ -349,12 +349,16 @@ func TestServerDisconnectFailsPendingAndLaterCalls(t *testing.T) {
 		if err == nil || errors.Is(err, context.DeadlineExceeded) {
 			t.Fatalf("切れた接続の Call の error = %v、切断の error のはず", err)
 		}
+		// 送れた request は server が走らせたかもしれないので、打ち直せる失敗と見分ける。
+		if errors.Is(err, control.ErrNotSent) {
+			t.Errorf("送った後に切れた Call の error = %v、ErrNotSent ではないはず", err)
+		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("切れても待ちの Call が戻らない")
 	}
 	<-c.Done()
-	if err := c.Call(callCtx(t), "server.status", nil, nil); err == nil {
-		t.Error("切れた接続への Call が成功した")
+	if err := c.Call(callCtx(t), "server.status", nil, nil); !errors.Is(err, control.ErrNotSent) {
+		t.Errorf("切れた接続への Call の error = %v、ErrNotSent のはず", err)
 	}
 }
 

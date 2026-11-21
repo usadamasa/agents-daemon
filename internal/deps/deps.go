@@ -3,6 +3,7 @@
 //
 // 依存図は 2 つを持つ。graph はタスクの依存の DAG (deps/graph)。repos は repo ごとの生きているセッションと
 // open のメモで、アプリがメモの一覧を描き、メモを渡す宛先を選ぶのに使う。worktree の作業は main worktree の repo に入る。
+// handed は保持期間の間の渡したメモで、宛先を図のノードか repo に解いて添える (deps/handed、#292)。
 // ほかに、セッション台帳 (ledger) から最近動いた repo (recent_repos) を添え、アプリは新しいセッションを起こす repo の
 // 候補にする (#309)。
 //
@@ -18,6 +19,7 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/daemonstate"
 	"github.com/usadamasa/agents-daemon/internal/deps/graph"
+	"github.com/usadamasa/agents-daemon/internal/deps/handed"
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
 	"github.com/usadamasa/agents-daemon/internal/ledger"
@@ -44,6 +46,8 @@ type input struct {
 	Works []worklog.Record
 	// Parking はメモ (status を問わない)。repo の memos には open のものだけを出し、タスクとの照合には全部を使う。
 	Parking []parking.Item
+	// Handed は保持期間の間の handed のメモ (parking.Store.Handed)。宛先を図の中で解いて Deps.Handed に出す。
+	Handed []parking.Item
 	// Edges はセッションをまたぐ辺 (edge)。
 	Edges []edge.Edge
 	// Locate は cwd の repo を決める。同じ cwd では 1 回だけ呼ぶ。
@@ -71,12 +75,12 @@ func build(in input) Deps {
 	d.RexPlacement = d.UpdatedAt != nil && in.Snapshot.RexPlacement
 	cards := collect(in, panes)
 	open := parking.Filter(in.Parking, "", parking.StatusOpen)
-	names := sessionNames(sessionIDs(cards, open), in.SessionNames)
+	names := sessionNames(sessionIDs(cards, open, in.Handed), in.SessionNames)
 	for i := range cards {
 		cards[i].Session = names[cards[i].SessionID]
 	}
 	l := locator{locate: in.Locate, cache: map[string]gitrepo.Place{}, recorded: recordedRepos(in.Works, in.Tasks, in.Todos), gitHubRepo: in.GitHubRepo, gitHubRepos: map[string]string{}}
-	d.Repos = arrange(cards, open, panes, names, in.SessionNames, l)
+	d.Repos = arrange(cards, open, handed.Repos(in.Handed), panes, names, in.SessionNames, l)
 	d.RecentRepos = recentRepos(in.Sessions)
 	d.Graph = graph.Build(graph.Input{
 		Cards:        cards,
@@ -112,7 +116,35 @@ func build(in input) Deps {
 		return key
 	})
 	d.Graph.ColumnOrder = groupByRex(order, d.Graph.Nodes)
+	r := handed.NewResolver(cards, d.Graph.Nodes, names, l.row)
+	setSessionNodes(d.Graph.Nodes, r)
+	d.Handed = handedMemos(in.Handed, names, panes, r)
 	return d
+}
+
+// setSessionNodes は単体ビューのセッション名から移るノードを渡したメモの宛先と同じ規則で付ける (#506)。
+// 移り先がそのノード自身なら付けない (押しても移らない chip になる)。
+func setSessionNodes(nodes []protocol.GraphNode, r handed.Resolver) {
+	for i := range nodes {
+		n := &nodes[i]
+		if n.SessionID == "" {
+			continue
+		}
+		if key := r.Node(n.SessionID); key != n.Key {
+			n.SessionNode = key
+		}
+	}
+}
+
+// handedMemos は渡したメモに図の中で解いた宛先を添えて並べる (handed)。
+func handedMemos(memos []parking.Item, names map[string]string, panes map[string]*daemonstate.PaneStatus, r handed.Resolver) []protocol.HandedMemo {
+	out := make([]protocol.HandedMemo, 0, len(memos))
+	for _, m := range memos {
+		// メモの repo は置いたときに repo の鍵へ解いてある (arrange と同じ)。
+		out = append(out, protocol.HandedMemo{Memo: parkingCard(m, names, panes), Repo: m.Repo, RepoTitle: filepath.Base(m.Repo), To: r.To(m.HandedTo)})
+	}
+	handed.Sort(out)
+	return out
 }
 
 // peerNames は台帳から session ID → ListAgents の名前を引く。名前の無いセッションは載せない。
@@ -126,15 +158,22 @@ func peerNames(sessions []ledger.Session) map[string]string {
 	return names
 }
 
-// sessionIDs は作業とメモの source に出てくるセッション。
-func sessionIDs(cards []graph.Card, memos []parking.Item) map[string]bool {
+// sessionIDs は作業、open のメモと渡したメモの source、渡したメモの宛先に出てくるセッション。
+func sessionIDs(cards []graph.Card, open, handed []parking.Item) map[string]bool {
 	ids := map[string]bool{}
 	for _, c := range cards {
 		ids[c.SessionID] = true
 	}
-	for _, m := range memos {
-		for _, s := range m.Sources {
-			ids[s.SessionID] = true
+	for _, memos := range [][]parking.Item{open, handed} {
+		for _, m := range memos {
+			for _, s := range m.Sources {
+				ids[s.SessionID] = true
+			}
+		}
+	}
+	for _, m := range handed {
+		if id, _ := parking.Destination(m.HandedTo); id != "" {
+			ids[id] = true
 		}
 	}
 	return ids
@@ -264,8 +303,9 @@ func sessionName(p *daemonstate.PaneStatus, name string) string {
 }
 
 // arrange は生きているセッションとメモを repo へ分けて並べる。セッションは作業の cwd の repo に入る (タスクの無い
-// セッションは pane の cwd)。names はセッションの表示名、sessions は session ID → セッション名。
-func arrange(cards []graph.Card, memos []parking.Item, panes map[string]*daemonstate.PaneStatus, names, sessions map[string]string, l locator) []protocol.DepsRepo {
+// セッションは pane の cwd)。destinations は渡したメモの宛先の repo のパスで、セッションもメモも無くても repo に
+// する。names はセッションの表示名、sessions は session ID → セッション名。
+func arrange(cards []graph.Card, memos []parking.Item, destinations []string, panes map[string]*daemonstate.PaneStatus, names, sessions map[string]string, l locator) []protocol.DepsRepo {
 	type entry struct {
 		repo *protocol.DepsRepo
 		// subjects はこの repo のセッションごとの見出しの候補。
@@ -295,6 +335,9 @@ func arrange(cards []graph.Card, memos []parking.Item, panes map[string]*daemons
 	for _, m := range memos {
 		e := repoOf(m.Repo, filepath.Base(m.Repo))
 		e.repo.Memos = append(e.repo.Memos, parkingCard(m, names, panes))
+	}
+	for _, path := range destinations {
+		repoOf(l.row(path))
 	}
 	out := make([]protocol.DepsRepo, 0, len(byRepo))
 	for _, e := range byRepo {

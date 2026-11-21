@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -146,14 +147,19 @@ func (p *Poller) Refresh(ctx context.Context, now time.Time) {
 // 待つ形になった導いた辺を消す。出したセッションは、PR を出した記録 (gh pr create の出力) があればその持ち主で、
 // 終了していても別の branch へ移っていても導く (#575)。記録が無ければ、PR の repo と head branch で動いている
 // 生きているセッションで、合うものが 2 つ以上なら導かない。照合の相手の性質は models/prlink の PRAuthor が持つ。
-// 辺の条件は edge の Anchor が edges/.lock の中で確かめ直す。
+// 辺の条件は edge の Anchor が edges/.lock の中で確かめ直す。どの辺にも無い PR は、出した記録の持ち主が生きている
+// 間だけ導く (#610、alone)。
 func (p *Poller) anchor(edges []edge.Edge, cached map[string]refstate.Record, now time.Time) {
 	candidates := p.candidates(edges, cached)
+	records := p.issuers()
+	issued := foldRefs(records)
+	alone := lonePRs(edges, records)
 	var live []Session
-	var issued map[string][]Session
-	if len(candidates) > 0 {
+	if len(candidates) > 0 || len(alone) > 0 {
 		live = p.sessions()
-		issued = foldRefs(p.issuers())
+	}
+	for _, pr := range alone {
+		p.anchorAlone(pr, issued[strings.ToLower(pr)], live, now)
 	}
 	for _, pr := range candidates {
 		s, why, ok := p.issuer(pr, cached[pr], issued[strings.ToLower(pr)], live, now)
@@ -175,6 +181,49 @@ func (p *Poller) anchor(edges []edge.Edge, cached map[string]refstate.Record, no
 	}
 	for _, e := range removed {
 		p.log.Logf("辺 %s を消しました: %s → %s (%s が %s を待つ辺と輪になるため)", e.ID, e.Before.Ref, e.After.Ref, e.Before.Ref, e.After.Ref)
+	}
+}
+
+// lonePRs は PR を出した記録にある PR のうち、どの辺の端点にも無いもの。綴りは記録のもので、大文字小文字だけが
+// 違う参照は 1 つにまとめる。
+func lonePRs(edges []edge.Edge, records map[string][]Session) []string {
+	seen := map[string]bool{}
+	for _, e := range edges {
+		seen[strings.ToLower(e.Before.Ref)] = true
+		seen[strings.ToLower(e.After.Ref)] = true
+	}
+	prs := make([]string, 0, len(records))
+	for pr := range records {
+		prs = append(prs, pr)
+	}
+	sort.Strings(prs)
+	var alone []string
+	for _, pr := range prs {
+		key := strings.ToLower(pr)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		alone = append(alone, pr)
+	}
+	return alone
+}
+
+// anchorAlone はどの辺にも無い PR に、出した記録の持ち主 (ちょうど 1 つで、生きているもの) から PR への辺を導く。
+// 終了したセッションからは導かない。導いた辺はセッションの辺として tick ごとに保持期間を数え直され、セッションの
+// 終了から保持期間で消える。終了後に導くと、作業の記録より長く残る辺になる。
+func (p *Poller) anchorAlone(pr string, issued, live []Session, now time.Time) {
+	if len(issued) != 1 || !slices.ContainsFunc(live, func(s Session) bool { return s.ID == issued[0].ID }) {
+		return
+	}
+	s := issued[0]
+	e, ok, err := p.edges.AnchorAlone(s.ID, s.CWD, s.Repo, pr, now)
+	if err != nil {
+		p.log.Logf("PR を出したセッションの辺を導けません: %s: %v", pr, err)
+		return
+	}
+	if ok {
+		p.log.Logf("辺 %s を導きました: %s → %s (PR を出した記録、待つ辺は無し)", e.ID, e.Before.Ref, e.After.Ref)
 	}
 }
 
@@ -216,13 +265,13 @@ func (p *Poller) issuer(pr string, rec refstate.Record, issued, live []Session, 
 func (p *Poller) candidates(edges []edge.Edge, cached map[string]refstate.Record) []string {
 	upstream := map[string]bool{}
 	for _, e := range edges {
-		upstream[e.After.Ref] = true
+		upstream[strings.ToLower(e.After.Ref)] = true
 	}
 	seen := map[string]bool{}
 	var prs []string
 	for _, e := range edges {
 		pr := e.Before.Ref
-		if seen[pr] || upstream[pr] || cached[pr].HeadBranch == "" {
+		if seen[pr] || upstream[strings.ToLower(pr)] || cached[pr].HeadBranch == "" {
 			continue
 		}
 		if it, ok := ref.ParseItem(pr); ok && it.Kind == "pr" {

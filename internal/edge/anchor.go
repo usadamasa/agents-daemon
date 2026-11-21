@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
@@ -20,6 +21,18 @@ import (
 // repo はセッションの repo の鍵 (作業の記録が持つもの)。空なら cwd から求める。終了後に worktree が消えたセッションは
 // cwd から鍵を引けないので、呼び手が記録の鍵を渡す (#606)。
 func (s Store) Anchor(sessionID, cwd, repo, pr string, now time.Time) (Edge, bool, error) {
+	return s.anchor(sessionID, cwd, repo, pr, false, now)
+}
+
+// AnchorAlone は Anchor と同じ辺を、pr がどの辺の端点にも無くても書く (#610)。呼び手は PR を出した記録の持ち主で
+// 生きているセッションを渡す。pr の端点の cwd と repo は、写す元の辺が無ければセッションのものにする。
+func (s Store) AnchorAlone(sessionID, cwd, repo, pr string, now time.Time) (Edge, bool, error) {
+	return s.anchor(sessionID, cwd, repo, pr, true, now)
+}
+
+// anchor は Anchor と AnchorAlone の本体。alone なら pr が辺に出ていなくても書く。参照は owner/repo の大文字小文字を
+// 区別せずに比べる (GitHub が区別しない。記録は gh の URL の綴り、辺は人の書いた綴り)。
+func (s Store) anchor(sessionID, cwd, repo, pr string, alone bool, now time.Time) (Edge, bool, error) {
 	before := Endpoint{Ref: ref.SessionID(sessionID), CWD: cwd}
 	it, isItem := ref.ParseItem(pr)
 	switch {
@@ -38,13 +51,13 @@ func (s Store) Anchor(sessionID, cwd, repo, pr string, now time.Time) (Edge, boo
 		after, found := Endpoint{}, false
 		for _, e := range readAll(dir) {
 			switch {
-			case e.After.Ref == pr, e.Before.Ref == pr && ownedBy(e.After.Ref, sessionID):
+			case strings.EqualFold(e.After.Ref, pr), strings.EqualFold(e.Before.Ref, pr) && ownedBy(e.After.Ref, sessionID):
 				return nil
-			case !found && e.Before.Ref == pr:
+			case !found && strings.EqualFold(e.Before.Ref, pr):
 				after, found = e.Before, true
 			}
 		}
-		if !found {
+		if !found && !alone {
 			return nil
 		}
 		if skip, err := declined(dir, before.Ref, pr, now); skip || err != nil {
@@ -53,6 +66,9 @@ func (s Store) Anchor(sessionID, cwd, repo, pr string, now time.Time) (Edge, boo
 		before.Repo = repo
 		if repo == "" {
 			before.Repo = gitrepo.RepoKey(cwd)
+		}
+		if !found {
+			after = Endpoint{CWD: cwd, Repo: before.Repo}
 		}
 		anchored = Edge{
 			ID:        edgeID(before.Ref, pr),
@@ -85,12 +101,12 @@ func (s Store) Unanchor() ([]Edge, error) {
 		edges := readAll(dir)
 		waits := map[[2]string]bool{}
 		for _, e := range edges {
-			waits[[2]string{e.Before.Ref, owner(e.After.Ref)}] = true
+			waits[[2]string{strings.ToLower(e.Before.Ref), owner(e.After.Ref)}] = true
 		}
 		var errs []error
 		for _, e := range edges {
 			sessionID, isSID := ref.ParseSessionID(e.Before.Ref)
-			if !e.Derived || !isSID || !waits[[2]string{e.After.Ref, sessionID}] {
+			if !e.Derived || !isSID || !waits[[2]string{strings.ToLower(e.After.Ref), sessionID}] {
 				continue
 			}
 			if err := os.Remove(filepath.Join(dir, e.ID+".json")); err != nil {

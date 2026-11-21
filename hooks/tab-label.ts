@@ -14,7 +14,7 @@ import type { TabLabelResult } from '../types'
 // - rex を叩くのはバイナリ (tab-label)。mod と hook から多重化ツールを叩かない
 // - fork の SessionStart では plugin の hook の出力が context に入らないが、mod は fork の後も新しいバージョンで動く
 // - 待つと応答の表示が止まるので、turn.complete は数えるだけにし、session.start で始めた timer が拾う (work-infer と同じ)
-// cc-premise: 2.1.330 mods turn.complete (reason、agentId) と $.model.fork (isAnswered、text) と $.env.get の API で書いた
+// cc-premise: 2.1.330 mods $.model.fork (isAnswered、text) と $.env.get の API で書いた (turn.complete は hooks/register.ts)
 
 // CHECK_EVERY は 2 回目以降に問う間隔 (main の answer の数)。作業の切り替わりに数ターンで追い、fork を毎ターンは起こさない。
 const CHECK_EVERY = 4

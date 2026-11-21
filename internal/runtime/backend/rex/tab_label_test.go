@@ -58,7 +58,7 @@ func TestExecClient_WindowOf_BlockMissing(t *testing.T) {
 }
 
 // TestExecClient_SetWindowLabel は session.set_window_label に session、window、label をそのまま渡す。
-// rex-premise: preview.30 api session.set_window_label は session_id、window_id、label を取る
+// rex-premise: preview.33 api session.set_window_label は session_id、window_id、label を取る
 func TestExecClient_SetWindowLabel(t *testing.T) {
 	f := tabAPI(t)
 	if err := f.client(staticResolver(nil)).SetWindowLabel(context.Background(), tabSession, tabWindowB, "tab-label-sync"); err != nil {

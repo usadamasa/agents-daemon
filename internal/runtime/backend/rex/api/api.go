@@ -121,7 +121,7 @@ func (c *Client) SessionView(ctx context.Context, session string) (wire.SessionV
 }
 
 // SetWindowLabel は window の名前を付ける。同じ名前なら rex は何もしない。無い window は not_found。
-// rex-premise: preview.30 api session.set_window_label は session_id、window_id、label を取り、label は 128 文字まで
+// rex-premise: preview.33 api session.set_window_label は session_id、window_id、label を取り、label は 128 文字まで
 func (c *Client) SetWindowLabel(ctx context.Context, session, windowID, label string) error {
 	return c.call(ctx, "session.set_window_label", map[string]any{"session_id": session, "window_id": windowID, "label": label}, nil)
 }

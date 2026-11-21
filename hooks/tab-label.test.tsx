@@ -107,14 +107,20 @@ test('2 回目からは 4 ターンごとに問い、そのたびに今の名前
   expect(sets(w.state.tabs)).toEqual(['Go のソートの違い'])
 })
 
-test('共有のタブの印か rex の置き場が無ければ何もしない', async ($, on) => {
-  const w = world(on, { HOME: '/home/u', REX_SESSION, REX_BLOCK })
-  await $.session.start(START)
-  await answered($)
-  await w.clock.advance(POLL)
-  expect(w.state.tabs).toEqual([])
-  expect(w.state.prompts).toEqual([])
-})
+for (const [name, env] of [
+  ['共有のタブの印', { HOME: '/home/u', REX_SESSION, REX_BLOCK }],
+  ['REX_SESSION', { HOME: '/home/u', AGENTS_DAEMON_SHARED_REX_SESSION: '1', REX_BLOCK }],
+  ['REX_BLOCK', { HOME: '/home/u', AGENTS_DAEMON_SHARED_REX_SESSION: '1', REX_SESSION }],
+] as const) {
+  test(`${name} が無ければ何もしない`, async ($, on) => {
+    const w = world(on, env)
+    await $.session.start(START)
+    await answered($)
+    await w.clock.advance(POLL)
+    expect(w.state.tabs).toEqual([])
+    expect(w.state.prompts).toEqual([])
+  })
+}
 
 test('subagent のターンと answer でない終わり方は数えない', async ($, on) => {
   const w = world(on)

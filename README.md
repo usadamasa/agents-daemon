@@ -48,6 +48,7 @@ plugin が持つもの:
 | `agents-daemon tell` | 生きているセッションの pane の入力欄に文面を打って Enter を送る。アプリの送達の経路 |
 | `agents-daemon park hand` | パーキングのメモを取って生きているセッション (`tell`) か新しく起こすセッション (`spawn`) へ渡し、届かなければ戻す |
 | `agents-daemon spawned-session mark` | `spawn` が新しく起こした rex session の中で、claude を起こす前に印を `spawned-sessions/` に書く。daemon が印を回り、pane が無くなった session を閉じる (#557) |
+| `agents-daemon tab-label` | stdin の `TabLabelRequest` の block が居る rex のタブの名前を読み、`label` があれば付け直す。タブの名前を追う mod が呼ぶ (#722) |
 | `agents-daemon spawned-session close <session_id>` | peer を起こした側が、控えた session_id で peer の rex session を閉じて印を消す。rex にもう無い session は印の有無にかかわらず成功、印の無い生きた session は拒否する (#585、#596) |
 | `agents-daemon ingest-task` | PostToolUse hook の stdin からタスクを `tasks/<session_id>/` に記録する |
 | `agents-daemon ingest-work` | SessionStart / UserPromptSubmit / Stop / SessionEnd hook の stdin からセッションの作業 (最初の prompt の題、最後の応答の要約、turns、始まりと終わり) を `work/<session_id>.json` に記録する (#368) |

@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026.1121.1](https://github.com/usadamasa/agents-daemon/compare/2026.1121.0...2026.1121.1) - 2026-11-21
+
+### Features
+- セッションを rex の新しいタブへ起こし直す restarting-session skill を足す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/719
+
 ## [2026.1121.0](https://github.com/usadamasa/agents-daemon/compare/2026.1120.2...2026.1121.0) - 2026-11-21
 
 ### Features

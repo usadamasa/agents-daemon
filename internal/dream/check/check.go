@@ -27,6 +27,10 @@ const (
 	// KindMemoryTooLong は memory 1 ファイルが memoryMaxLines 行を超えること。
 	KindMemoryTooLong = "memory_too_long"
 
+	KindMissingPath  = "missing_path"
+	KindRelativeDate = "relative_date"
+	KindUnknownSkill = "unknown_skill"
+
 	SeverityError   = "error"
 	SeverityWarning = "warning"
 )
@@ -43,6 +47,10 @@ type Opts struct {
 	MemoryDir string // 空なら ~/.claude/projects/<project>/memory
 	Project   string // 空なら Cwd から解決
 	Cwd       string
+	// SkillDirs は SKILL.md を点検する skill の置き場 (<dir>/<name>/SKILL.md)。
+	SkillDirs []string
+	// PluginsFile は Claude Code の installed_plugins.json。名前空間つきの skill 名を引く。
+	PluginsFile string
 
 	Home   string
 	Stdout io.Writer

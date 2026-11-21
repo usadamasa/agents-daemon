@@ -5,6 +5,9 @@
 // で起こす。本文は最初のターンとして入るので、peer メッセージの inbox が開くのを待たずに渡せる。
 // cc-premise: 2.1.306 cli claude [prompt] は最初のターンの本文、--session-id <uuid> でセッション ID を固定できる
 //
+// Request.ForkFrom があれば、元のセッションの会話を写した新しいセッションとして起こす (セッションの再起動、#718)。
+// 起こす先と包みは ForkFrom の無いときと同じ。
+//
 // 起こす先は target が決める。足し先 (Request.Session) があればその session のタブ、NewSession なら新しい session、
 // どちらも無ければ起こす側の session (Request.Caller) のタブ、Caller も無ければ (park hand、rex の外のアプリ) 新しい
 // session。peer-sessions skill の「足し先の既定は起こす側の session のタブ」をここで決める (#636)。指した session に
@@ -93,6 +96,11 @@ type Request struct {
 	Caller string
 	// SessionID は新しいセッションの ID (UUID)。空なら Runner.NewSessionID。起こす前に依存の辺を書くのに使う。
 	SessionID string
+	// ForkFrom は会話を写す元のセッションの ID (UUID)。あれば元の会話を持った別の ID のセッションとして起こす
+	// (セッションの再起動)。同じ ID で resume しないのは、元のプロセスが閉じるまで transcript を 2 つのプロセスが
+	// 書き合い、Remote Control も元に残るため。
+	// cc-premise: 2.1.330 cli --resume <id> --fork-session --session-id <uuid> は元の会話を写した <uuid> のセッションになり、SessionStart の source は fork
+	ForkFrom string
 	// Label は session かタブの名前。空なら repo の basename。
 	Label string
 }
@@ -124,8 +132,12 @@ func (r Runner) Run(ctx context.Context, req Request) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
+	argv := []string{"claude"}
+	if req.ForkFrom != "" {
+		argv = append(argv, "--resume", req.ForkFrom, "--fork-session")
+	}
 	// `--` は本文が `-` で始まっても flag と読まれないため。
-	argv := []string{"claude", "--session-id", launch.sessionID, "--model", launch.model, "--", launch.prompt}
+	argv = append(argv, "--session-id", launch.sessionID, "--model", launch.model, "--", launch.prompt)
 	placed, err := r.place(ctx, req, launch.label, argv)
 	if err != nil {
 		return Result{}, err
@@ -204,6 +216,9 @@ func (r Runner) resolve(req Request) (launch, error) {
 	id, err := r.sessionID(req)
 	if err != nil {
 		return launch{}, err
+	}
+	if req.ForkFrom != "" && (!isUUID(req.ForkFrom) || req.ForkFrom == id) {
+		return launch{}, fmt.Errorf("fork_from は新しいセッションと別の UUID で指定する: %q", req.ForkFrom)
 	}
 	label := req.Label
 	if label == "" {

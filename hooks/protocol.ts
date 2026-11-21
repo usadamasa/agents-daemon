@@ -500,6 +500,10 @@ export const definitions = {
         "type": "string",
         "description": "新しいセッションの session ID (UUID)。省くと spawn が作る"
       },
+      "fork_from": {
+        "type": "string",
+        "description": "会話を写す元のセッションの session ID (UUID)。あれば claude --resume <fork_from> --fork-session で、元の会話を持った新しいセッションとして起こす。repo は元のセッションの cwd にする"
+      },
       "model": {
         "type": "string",
         "description": "新しいセッションのモデル。省くと Claude Code の settings.json の env.CLAUDE_CODE_SUBAGENT_MODEL"

@@ -188,6 +188,8 @@ export type SpawnRequest = {
   new_session?: boolean
   // 新しいセッションの session ID (UUID)。省くと spawn が作る
   session_id?: string
+  // 会話を写す元のセッションの session ID (UUID)。あれば claude --resume <fork_from> --fork-session で、元の会話を持った新しいセッションとして起こす。repo は元のセッションの cwd にする
+  fork_from?: string
   // 新しいセッションのモデル。省くと Claude Code の settings.json の env.CLAUDE_CODE_SUBAGENT_MODEL
   model?: string
   // rex の session かタブの名前。省くと repo の basename

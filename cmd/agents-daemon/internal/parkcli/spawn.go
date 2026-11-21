@@ -24,6 +24,7 @@ func newSpawnCmd() *cobra.Command {
 		Long: "peer-sessions skill が peer を起こすとき、依存図のアプリがメモを生きているセッションの無い repo へ渡すときに呼ぶ。\n" +
 			"新しいセッションは `claude --session-id <uuid> --model <model> -- <本文>` で起きる。<model> は model の欄、\n" +
 			"無ければ Claude Code の settings.json の env." + spawn.SubagentModelKey + " から読む。\n" +
+			"fork_from があれば `--resume <fork_from> --fork-session` を足し、元の会話を写した新しいセッションとして起こす。\n" +
 			"起こす先は session の欄があればその rex の session のタブ、new_session なら新しい rex の session、\n" +
 			"どちらも無ければ REX_SESSION (起こす側の session) のタブ、REX_SESSION も無ければ新しい rex の session。\n" +
 			"claude が前景になってから SpawnResult を JSON で出す。待ち切れたときは session を残したまま\n" +
@@ -42,7 +43,7 @@ func newSpawnCmd() *cobra.Command {
 func spawnCommandRequest(req protocol.SpawnRequest) spawn.Request {
 	return spawn.Request{
 		Repo: req.Repo, Prompt: req.Prompt, PromptFile: req.PromptFile, Session: req.Session, NewSession: req.NewSession,
-		SessionID: req.SessionID, Model: req.Model, Label: req.Label, Caller: os.Getenv("REX_SESSION"),
+		SessionID: req.SessionID, ForkFrom: req.ForkFrom, Model: req.Model, Label: req.Label, Caller: os.Getenv("REX_SESSION"),
 	}
 }
 

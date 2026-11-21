@@ -17,7 +17,7 @@ func TestRootCmd_registersAllCommands(t *testing.T) {
 		names = append(names, c.Name())
 	}
 	want := []string{
-		"daemon", "deps", "doctor", "dream", "edge", "event-log", "ingest-statusline", "ingest-task", "ingest-turn-failure", "ingest-work",
+		"daemon", "deps", "doctor", "dream", "edge", "event-log", "ingest-quota-resume", "ingest-statusline", "ingest-task", "ingest-turn-failure", "ingest-work",
 		"inspect", "logs", "park", "prune-worktrees", "simulate", "spawn", "spawned-session", "status", "statusline", "stop", "task", "tell", "update",
 		"version", "work",
 	}
@@ -75,6 +75,7 @@ func TestRootCmd_doesNotPrintErrorsItself(t *testing.T) {
 func TestRootCmd_jsonFlag(t *testing.T) {
 	unsupported := map[string]bool{
 		"agents-daemon event-log":           true,
+		"agents-daemon ingest-quota-resume": true,
 		"agents-daemon ingest-statusline":   true,
 		"agents-daemon ingest-task":         true,
 		"agents-daemon ingest-turn-failure": true,

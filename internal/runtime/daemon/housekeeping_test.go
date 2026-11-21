@@ -15,6 +15,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
 	"github.com/usadamasa/agents-daemon/internal/parking"
+	"github.com/usadamasa/agents-daemon/internal/quotaresume"
 	"github.com/usadamasa/agents-daemon/internal/refstate"
 	"github.com/usadamasa/agents-daemon/internal/runtime/daemon/limitlog"
 	"github.com/usadamasa/agents-daemon/internal/sessionstate"
@@ -260,6 +261,10 @@ func TestHousekeep(t *testing.T) {
 		r.turnFailures = turnfailure.New(dir)
 		turnFailureFile := filepath.Join(r.turnFailures.Dir, "s-old.json")
 		touchAged(t, turnFailureFile, 25*time.Hour, now)
+		// quota_auto_resume の通知の記録は 24 時間で消す (quotaresume のテスト)。
+		r.resumeNotices = quotaresume.New(dir)
+		resumeNoticeFile := filepath.Join(r.resumeNotices.Dir, "s-old.json")
+		touchAged(t, resumeNoticeFile, 25*time.Hour, now)
 		// 外部の参照の状態の写しは 1 週間引き直さなければ消える (refstate のテスト)。
 		r.refs = refstate.New(dir)
 		refFile := filepath.Join(r.refs.Dir, "r-old.json")
@@ -281,6 +286,9 @@ func TestHousekeep(t *testing.T) {
 
 		if _, err := os.Stat(turnFailureFile); !os.IsNotExist(err) {
 			t.Errorf("25 時間前の turn の失敗の記録は消えるべき (err=%v)", err)
+		}
+		if _, err := os.Stat(resumeNoticeFile); !os.IsNotExist(err) {
+			t.Errorf("25 時間前の quota_auto_resume の通知の記録は消えるべき (err=%v)", err)
 		}
 
 		if _, err := os.Stat(sessionFile); !os.IsNotExist(err) {

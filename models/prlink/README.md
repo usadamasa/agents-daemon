@@ -39,7 +39,7 @@ A は P を出したセッション、B はほかのセッション。どちら�
 | | `EventuallyIssuer` (liveness): 記録があり P が open の間に、いずれ A とつながる | 同上を tick ごとに行う |
 | `PRAuthorExpire.cfg` | `IssuerKept` と `EventuallyIssuer` が成り立つ | 記録が保持期間で消えても、消えるまでに掃除される P は A につながっている |
 | `PRAuthorExpireWrong.cfg` | `NoWrongAnchor` が破れる (受け入れた限界) | A の終了から保持期間が過ぎて記録が消えた後に初めて候補になった P は、branch の照合で B へ導きうる |
-| `PRAuthorUnrecorded.cfg` | `NoWrongAnchor` が破れる (受け入れた限界) | 記録の無い P (web や `gh stack` で作った PR) は #575 の修正前と同じ branch の照合になり、A が移った後に同じ branch にいる B へ導きうる |
+| `PRAuthorUnrecorded.cfg` | `NoWrongAnchor` が破れる (受け入れた限界) | 記録の無い P (web や GitHub の MCP で作った PR) は #575 の修正前と同じ branch の照合になり、A が移った後に同じ branch にいる B へ導きうる |
 | `PRAuthorLiveAlone.cfg` | `IssuerKept` が破れる | #575 の修正前の形 (生きているセッションの branch だけで照合)。A が終了するか別の branch へ移った後に P がマージされると、導けないまま辺が掃除される |
 | `PRAuthorLiveShared.cfg` | `NoWrongAnchor` が破れる | #575 の修正前の形。A が移った後、P の branch にいるだけの B へ導く。A と B が同じ branch にいる間は曖昧で導かない |
 | `PRAuthorHistory.cfg` | `IssuerKept` が破れる | 終了したセッションも最後の hook のときの branch で照合する形 (issue の候補 1)。A が移った後は生きているので今の branch で照合され、外れる |
@@ -91,7 +91,7 @@ A の終了後にも辺を導く daemon、終了した A の作業をメモへ�
 | `RemoveSidPr("cli")` / `RemoveSidPr("app")` | `edge rm` (`Store.Remove`)。アプリの Unlink も同じ `edge rm` を呼ぶ。`sid:` → `pr:` の辺を消したら同じロックの中で `edges/<id>.declined` を書く |
 | `AddManual` | `edge add` (`Store.Add`)。書いた組の `edges/<id>.declined` を消す |
 | `ForgetDecline` | housekeeping の `Store.Prune` が `Retention` (7 日) を過ぎた記録を mtime で消す |
-| `ByRecord` / PRAuthor の `rec` | `worklog` の `Store.Ingest` が Bash の PostToolUse で `gh pr create` の stdout の PR の URL を `prs` に足す。`refpoll` の `WorkSessions.Issuers` が作業の記録から PR ごとに引く |
+| `ByRecord` / PRAuthor の `rec` | `worklog` の `Store.Ingest` が Bash の PostToolUse で `gh pr create` の stdout の PR の URL と、`gh stack submit` の stdout の `Created PR` の行の URL を `prs` に足す。`refpoll` の `WorkSessions.Issuers` が作業の記録から PR ごとに引く |
 | PRAuthor の `Targets` (`Match = "record"`) | `Poller.issuer`。記録のあるセッションがちょうど 1 つならそれ、無ければ branch の合う生きているセッションがちょうど 1 つのときだけ |
 | PRAuthor の `Forget` | housekeeping の `worklog` の `Store.Prune` が終了から `worklog.Retention` (7 日) を過ぎた作業の記録を消す |
 | PRRepoKey の `WriteCWD` (`Mode = "oncwdexists"`) | `worklog` の `Store.setCWD`。hook の cwd を記録に書き、鍵を `repo` に残す。タスクの記録は `tasklog` の `writer.setCWD` が同じ規則で書く |
@@ -107,7 +107,7 @@ A の終了後にも辺を導く daemon、終了した A の作業をメモへ�
 | `NoDaemonLoop` / `LoopResolved` | `edge/anchor_test.go` の `TestAnchor_自分のPRを待つセッションには導かない` と `TestAnchor_自分のPRを待つ形になったら導いた辺を消す` |
 | `EventuallyAnchored` | `refpoll/refpoll_test.go` の `TestRefresh_PRのbranchのセッションからPRへ辺を導く` |
 | `EventuallyShown` | `refpoll/refpoll_test.go` の `TestRefresh_辺に無いPRも出した生きているセッションから導く` と `TestRefresh_自分の待ちがマージで消えたら記録から1本だけ導き直す`、`edge/anchor_test.go` の `TestAnchorAlone_辺に出ていないPRへ導く` |
-| `IssuerKept` / `NoWrongAnchor` | `refpoll/refpoll_test.go` の `TestRefresh_PRを出した記録のセッションへ導く`、`worklog/worklog_test.go` の `TestIngest_ghprcreateが出したPRを記録に残す` と `TestIngest_ghprcreateでなければPRを残さない` |
+| `IssuerKept` / `NoWrongAnchor` | `refpoll/refpoll_test.go` の `TestRefresh_PRを出した記録のセッションへ導く`、`worklog/worklog_test.go` の `TestIngest_ghprcreateが出したPRを記録に残す`、`TestIngest_ghstacksubmitが作ったPRだけを記録に残す`、`TestIngest_ghprcreateでなければPRを残さない` |
 | `AnchoredRepo` | `worklog/worklog_test.go` の `TestIngest_cwdのrepoの鍵を残しworktreeが消えても上書きしない` と `TestIngest_無くなったcwdからはrepoの鍵を求め直さない`、`daemon/refs_test.go` の `TestPRIssuers_worktreeが消えても本来のrepoの鍵で導く`。タスクの記録は `tasklog/repo_test.go` |
 | `MemoRepo` | `parking/work_test.go` の `TestAdoptWork_worktreeが消えても記録のrepoの鍵でメモを置く` と `TestAdoptWork_repoの鍵の無い記録は移さない`、`parking/place_test.go` の `TestAdopt_movesTaskToParking` と `TestAdopt_rejects` |
 | `PlacedRepo` | `deps/place_test.go` の `TestBuild_worktreeが消えた終了セッションを記録のrepoの鍵の列へ置く` と `TestBuild_worktreeが消えた終了セッションのタスクをタスクの記録のrepoの鍵の列へ置く` |
@@ -118,8 +118,10 @@ A の終了後にも辺を導く daemon、終了した A の作業をメモへ�
 - gh はいつも成功し、写しは保持期間で消えない (`models/refstate` が持つ)。
 - 生きているセッションのうち repo と branch の合うものが 2 つ以上なら導かない。PRLink は合うセッションを A の 1 つに
   絞り、複数のセッションは PRAuthor が持つ。
-- PR を出した記録は P の作成と同時にある (PostToolUse は `gh pr create` の直後に来て、渡す側が P を知るより前)。
-  hook の失敗と、`gh pr create` 以外の作り方 (web、`gh stack`、GitHub の MCP) は「記録の無い PR」にまとめる。
+- PR を出した記録は P の作成と同時にある (PostToolUse は `gh pr create` か `gh stack submit` の直後に来て、渡す側が
+  P を知るより前)。`gh stack submit` は新しく作った PR だけを記録し、既存の PR を submit し直したセッションには
+  記録しない。hook の失敗 (PR を作った後に submit が非 0 で終わる形を含む) と、記録しない作り方 (web、GitHub の MCP、
+  `gh stack` の alias) は「記録の無い PR」にまとめる。
   同じ PR を 2 つのセッションが記録していたら記録で決めず、branch で照合する。
 - subagent の中で打った `gh pr create` の hook の `session_id` が親のセッションになるかは docs に書かれておらず、
   確かめていない。
@@ -131,7 +133,7 @@ A の終了後にも辺を導く daemon、終了した A の作業をメモへ�
   条件が揃い直せば導く。モデルは条件が揃っている間に消えないことだけを見る。
 - 使い回しの期限は時刻ではなく、いつ起きてもよい `Expire` で表す。期限の内の tick の数は限らない。
 - P が open の間に A が P の branch へ切り替え、期限が切れる前に別の branch へ戻ってからマージされると、記録の無い P
-  は導かない。daemon が A を P の branch で見たことが無いため。A が `gh pr create` で出した P は記録で導く。
+  は導かない。daemon が A を P の branch で見たことが無いため。A が `gh pr create` か `gh stack submit` で出した P は記録で導く。
 - A の cwd は作業の記録の cwd (hook が渡す今の cwd)。記録が無ければ pane の cwd (起動したディレクトリ) を使う。
 - PRRepoKey のセッションは 1 つで、同じ cwd に別のセッションの記録が別の鍵を持つときの決め方 (cwd と違う鍵を優先) は
   `deps/place_test.go` だけが持つ。`RemoveInside` の限界は、メモとノードの鍵にも同じく及ぶ。

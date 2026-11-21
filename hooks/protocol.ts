@@ -298,7 +298,7 @@ export const definitions = {
         "items": {
           "type": "string"
         },
-        "description": "このセッションが gh pr create で出した PR の参照 (pr:<owner>/<repo>#<番号>)。daemon が PR からこのセッションへの辺を導くのに使う"
+        "description": "このセッションが gh pr create か gh stack submit で出した PR の参照 (pr:<owner>/<repo>#<番号>)。daemon が PR からこのセッションへの辺を導くのに使う"
       }
     }
   },

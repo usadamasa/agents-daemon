@@ -15,10 +15,12 @@ func TestSpawnCommandRequest(t *testing.T) {
 	in := protocol.SpawnRequest{
 		Repo: "/r/a", PromptFile: "./tmp/brief.md", Session: "session:kept", NewSession: true,
 		SessionID: "0f2e9c4d-5a6b-4c7d-8e9f-a0b1c2d3e4f5", Model: "sonnet", Label: "fix-x",
+		ForkFrom: "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
 	}
 	want := spawn.Request{
 		Repo: "/r/a", PromptFile: "./tmp/brief.md", Session: "session:kept", NewSession: true,
 		SessionID: "0f2e9c4d-5a6b-4c7d-8e9f-a0b1c2d3e4f5", Model: "sonnet", Label: "fix-x", Caller: callerRexSession,
+		ForkFrom: "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
 	}
 	if got := spawnCommandRequest(in); got != want {
 		t.Errorf("spawnCommandRequest() = %+v, want %+v", got, want)

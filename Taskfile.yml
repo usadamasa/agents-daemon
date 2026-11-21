@@ -73,6 +73,52 @@ tasks:
     cmds:
       - hooks/build-gui.sh
 
+  release-verify:
+    desc: リリースの前の検証。REF (既定 HEAD) の commit から建てたバイナリを、隔離した環境で実データの複製に当てる。KEEP=1 で環境を残す
+    # 環境の作り方と、常用の環境に触れないための条件は scripts/release-verify.sh の冒頭。手順は
+    # changing-agents-daemon-internals skill の references/release-verify.md。
+    env: &release-verify-env
+      REF: '{{.REF | default "HEAD"}}'
+      KEEP: '{{.KEEP | default "0"}}'
+    cmds:
+      - scripts/release-verify.sh run
+
+  release-verify:up:
+    desc: 検証の環境を作って残す (check と open の前段)
+    env: *release-verify-env
+    cmds:
+      - scripts/release-verify.sh up
+
+  release-verify:check:
+    desc: 残した環境で機械の点検を回し、通れば記録を書く
+    env: *release-verify-env
+    cmds:
+      - scripts/release-verify.sh check
+
+  release-verify:open:
+    desc: 残した環境で依存図のアプリを起こす。人が画面と IME を確かめる入口
+    env: *release-verify-env
+    cmds:
+      - scripts/release-verify.sh open
+
+  release-verify:approve:
+    desc: 人の確認を記録に書く。画面を確かめた利用者が打つ
+    env: *release-verify-env
+    cmds:
+      - scripts/release-verify.sh approve
+
+  release-verify:status:
+    desc: REF の tree に検証の通った記録があれば exit 0。commit が増えて tree が変わると未検証に戻る
+    env: *release-verify-env
+    cmds:
+      - scripts/release-verify.sh status
+
+  release-verify:down:
+    desc: 検証の環境を消す
+    env: *release-verify-env
+    cmds:
+      - scripts/release-verify.sh down
+
   test:
     desc: Go テストと bats テストを実行
     cmds:

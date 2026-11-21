@@ -22,6 +22,7 @@ description: >-
 | [architecture.md](references/architecture.md) | 部品の連動と実体のパッケージ、出力されるファイルの索引 |
 | [program-status.md](references/program-status.md) | Claude Code の record と画面のモードの実測 |
 | [verification.md](references/verification.md) | 検証用コマンドと実機での検証 |
+| [release-verify.md](references/release-verify.md) | リリースの前に、隔離した環境で実データの複製に当てる検証 |
 | [package-lint.md](references/package-lint.md) | パッケージ構造の lint (analyze-modularity、go-arch-lint) と改名 |
 
 ## 症状から引くところ

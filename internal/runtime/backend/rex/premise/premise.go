@@ -235,7 +235,7 @@ func (c checker) checkDescribe(ctx context.Context, session, blockID string) {
 }
 
 // checkModes は自分の block (doctor を Bash ツールから呼んだ Claude Code の block) が alternate screen にいることを見る。
-// format が可視の行しか返さず、block の高さで検知が頭打ちになる前提 (pane-io.md) は、この screen で描いて
+// format が可視の行しか返さず、block の高さで読める行が頭打ちになる前提 (program-status.md「画面のモード」) は、この screen で描いて
 // いることに乗っている。primary なら Claude Code の画面でない (起動直後の dialog、/exit の後の shell)。
 func (c checker) checkModes(ctx context.Context, session, blockID string) {
 	m, err := c.rex.RawBlock(ctx, session, blockID, "modes")

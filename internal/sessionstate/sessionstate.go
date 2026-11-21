@@ -10,6 +10,14 @@
 // 直接使い、このパッケージには依存しない。書式ごとにパッケージを分けたのは、読み手ごとに
 // 要る書式が 1 つだけだったため。この形から外れるもの (statusline の cost の台帳は
 // 日付で入れ子になり、日付の名前で消す) は別パッケージ (statusline/spend) に置く。
+//
+// rate_limits は statusline の stdin にしか来ないので、statusline を経由するのは避けられない。statusline は
+// 出来事 (新しい assistant message、/compact の完了、permission mode の変更、refreshInterval) で再実行され、
+// idle のセッションでは走らない。モデル単位の週次ウィンドウ (/usage の Current week (Fable)) は stdin に来ないので
+// 書けない (#116)。
+//
+// cc-premise: 2.1.310 statusline stdin の rate_limits.five_hour / context_window と再実行の契機
+// cc-premise: 2.1.310 statusline stdin の rate_limits はモデル単位の週次ウィンドウを含まない
 package sessionstate
 
 import (

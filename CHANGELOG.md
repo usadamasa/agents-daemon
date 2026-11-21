@@ -1,5 +1,47 @@
 # Changelog
 
+## [2026.1121.0](https://github.com/usadamasa/agents-daemon/compare/2026.1120.2...2026.1121.0) - 2026-11-21
+
+### Features
+- 依存図で終わったノードも rex の枠に入れ、枠を session ごとの色で描く by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/667
+- rex の置き場を読めない理由をログに出し、置き場の分からない枠を「Outside rex」と呼ばない by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/671
+- 依存図の枠の並びに辺のあるノードを数えてよい理由を書く by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/672
+- 依存図: PR / issue のノードの単体ビューから Open で直接開く by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/675
+- 根拠が 1 セッションだけの dream の候補の confidence を low に落とす by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/676
+- 依存図: メモの単体ビューの既定とファイルをリンクにする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/677
+- dream check を足し、auto memory の [[name]] のリンク切れを拾う by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/679
+- dream check に警告と行数の上限を足し、forget がリンク元を列挙する by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/680
+- 依存図: 作業の題をその場で直す欄を題の表示のまま編集する形にする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/681
+- dream check に相対パス・相対日付・skill 名の点検を足す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/683
+- 依存図: 単体ビューの危ない動詞を右端に離し、動詞が 1 行に収まることをテストで守る by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/684
+- rate-limits の state と doctor を seven_day だけのプラン (Ultra) に対応させる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/686
+- dream の文章の規範へ回す指摘の行き先を、他の plugin を名指しせずに決める by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/685
+- dream の既定の置き場を CLAUDE_CONFIG_DIR から導き、読む env と置き場を README で宣言する by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/687
+- statusline の effort を stdin の effort.level から出す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/688
+- 依存図でタスクの題と辺の note の #番号 を解き、issue / PR の題を出す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/690
+- 依存図: セッションが出した PR を、待つ辺が無くても図に出す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/692
+- 依存図の pane に渡したメモの宛先を出す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/693
+- 依存図: 単体ビューのセッション名を押してそのセッションへ移れるようにする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/695
+- gh stack submit が作った PR も出したセッションの作業の記録に残す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/698
+### Bug Fixes
+- タスクの記録に repo の鍵を残し、依存図と Adopt で使う by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/670
+- rex の購読で Fill の後に古い状態が見える窓を閉じる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/678
+- rex の切断直後に送れなかった request を張り直した接続で打ち直す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/694
+- 依存図の辺の端点の完了タスクを残し、辺の書き方の案内を宛先ごとに 1 度にする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/696
+### Refactoring
+- park list からタスクで絞るキーを外す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/674
+- rex に peer を起こす経路ごとの挙動の一覧を spawn の package doc に寄せる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/691
+### Documentation
+- 依存の辺の形の説明を operations.md へ寄せる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/669
+- パッケージ構造の lint と改名の手順を保守用 skill へ移す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/673
+- dream の CLI リファレンスの既定の置き場を Claude Code の設定ディレクトリの下に揃える by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/689
+- 上限まわりの内部 skill の references をコードの置き場へ移す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/697
+- 依存図とパーキングロットの内部 skill の references を消す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/699
+- 全体構成の内部 skill の reference を索引に縮める by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/700
+- 多重化ツールの内部 skill の reference を rex の package doc へ移す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/701
+### Other
+- Notification hook の quota_auto_resume_stale を Enter だけを送る根拠に足す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/682
+
 ## [2026.1120.2](https://github.com/usadamasa/agents-daemon/compare/2026.1120.1...2026.1120.2) - 2026-11-20
 
 ### Features

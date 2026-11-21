@@ -27,6 +27,10 @@ const (
 	// KindMemoryTooLong は memory 1 ファイルが memoryMaxLines 行を超えること。
 	KindMemoryTooLong = "memory_too_long"
 
+	KindMissingPath  = "missing_path"
+	KindRelativeDate = "relative_date"
+	KindUnknownSkill = "unknown_skill"
+
 	SeverityError   = "error"
 	SeverityWarning = "warning"
 )
@@ -43,6 +47,10 @@ type Opts struct {
 	MemoryDir string // 空なら ~/.claude/projects/<project>/memory
 	Project   string // 空なら Cwd から解決
 	Cwd       string
+	// SkillDirs は SKILL.md を点検する skill の置き場 (<dir>/<name>/SKILL.md)。
+	SkillDirs []string
+	// PluginsFile は Claude Code の installed_plugins.json。名前空間つきの skill 名を引く。
+	PluginsFile string
 
 	Home   string
 	Stdout io.Writer
@@ -100,12 +108,33 @@ func Run(opts Opts) (Result, error) {
 			names[m.Name] = true
 		}
 	}
+	pl, err := loadPlugins(opts.PluginsFile)
+	if err != nil {
+		return res, err
+	}
 	for _, m := range mems {
-		found, err := checkMemory(m.Path, names)
+		found, err := checkMemory(m.Path, names, pl)
 		if err != nil {
 			return res, err
 		}
 		res.Findings = append(res.Findings, found...)
+	}
+
+	skills, err := skillFiles(opts.SkillDirs)
+	if err != nil {
+		return res, err
+	}
+	for _, s := range skills {
+		paths, err := checkSkillPaths(s)
+		if err != nil {
+			return res, err
+		}
+		refs, err := checkSkillRefs(s, pl)
+		if err != nil {
+			return res, err
+		}
+		res.Findings = append(res.Findings, paths...)
+		res.Findings = append(res.Findings, refs...)
 	}
 
 	for _, f := range res.Findings {
@@ -126,7 +155,7 @@ func resolveMemoryDir(opts Opts) (string, error) {
 	return filepath.Join(opts.Home, ".claude", "projects", project, "memory"), nil
 }
 
-// checkIndex は MEMORY.md の行数を見る。MEMORY.md の無い memory ディレクトリもあるので、不在は正常。
+// checkIndex は MEMORY.md の行数と相対日付を見る。MEMORY.md の無い memory ディレクトリもあるので、不在は正常。
 func checkIndex(path string) ([]Finding, error) {
 	n, err := countLines(path)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -135,18 +164,30 @@ func checkIndex(path string) ([]Finding, error) {
 	if err != nil {
 		return nil, err
 	}
-	if n < indexMaxLines {
-		return nil, nil
+	out, err := checkRelativeDates(path)
+	if err != nil {
+		return nil, err
 	}
-	return []Finding{{
+	if n < indexMaxLines {
+		return out, nil
+	}
+	return append(out, Finding{
 		Kind: KindIndexTooLong, Severity: SeverityError, Path: path,
 		Message: fmt.Sprintf("MEMORY.md が %d 行ある (%d 行未満に保つ)", n, indexMaxLines),
-	}}, nil
+	}), nil
 }
 
-// checkMemory は memory 1 ファイルの行数と、names に無い [[name]] を見る。
-func checkMemory(path string, names map[string]bool) ([]Finding, error) {
-	var out []Finding
+// checkMemory は memory 1 ファイルの行数、names に無い [[name]]、相対日付、入っている plugin に無い skill 名を見る。
+func checkMemory(path string, names map[string]bool, pl plugins) ([]Finding, error) {
+	out, err := checkRelativeDates(path)
+	if err != nil {
+		return nil, err
+	}
+	refs, err := checkSkillRefs(path, pl)
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, refs...)
 	n, err := countLines(path)
 	if err != nil {
 		return nil, err

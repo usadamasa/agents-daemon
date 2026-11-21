@@ -1150,6 +1150,57 @@ test("タスクの動詞: アイコンの下に短い語を置き、横長のボ
   }
 });
 
+// cssPx は style.css で selector の規則 (行頭から書いたもの) が持つ property の値の px の数を順に返す。
+function cssPx(selector, property) {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const m = new RegExp(`^${escaped} \\{[^}]*?(?:^|[\\s;{])${property}: ([^;]+);`, "m").exec(css);
+  assert.ok(m, `${selector} の ${property}`);
+  return [...m[1].matchAll(/(-?\d+(?:\.\d+)?)px/g)].map((x) => Number(x[1]));
+}
+
+// actsLayout は開いている単体ビューの動詞の並びを、ボタンと間隔 (.gap) の class の列で返す。
+const actsLayout = () => [...q("#pop .acts").children].map((e) => (e.classList.contains("gap") ? "|" : e.textContent));
+
+test("危ない動詞は右端に寄せ、ほかの動詞との間に間隔を置く", () => {
+  q('.node[data-key="task:beta/1"]').click();
+  try {
+    assert.deepEqual(actsLayout(), ["Tell", "Link", "Hand", "Start", "Done", "Memo", "|", "Delete"]);
+  } finally {
+    escape();
+  }
+  q('.mrow[data-memo="memo-1"]').click();
+  try {
+    assert.deepEqual(actsLayout(), ["Task", "Issue", "|", "Discard"]);
+  } finally {
+    escape();
+  }
+  // 間隔は最小の幅を持ち、空きがあれば伸びて危ない動詞を右端へ押す。
+  assert.match(css, /^\.acts \.gap \{[^}]*flex: 1 0 \d+px/m);
+});
+
+test("最も動詞の多いタスクの単体ビューでも、動詞は最小の幅と間隔を足して 1 行に収まる", () => {
+  q('.node[data-key="task:beta/1"]').click();
+  let count;
+  try {
+    count = q("#pop .acts").querySelectorAll(".act").length;
+  } finally {
+    escape();
+  }
+  // タスクの動詞は Tell・Link・Hand・Start・Done・Memo・Delete の 7 つが上限 (Open は参照、Remove は終了したもの)。
+  assert.equal(count, 7);
+  const [popWidth] = cssPx(".pop", "width");
+  const [padding] = cssPx(".pop", "padding");
+  const [border] = cssPx(".pop", "border");
+  // margin は「0 -4px」の形で、px を持つのは左右の値だけ。
+  const [side] = cssPx(".acts", "margin");
+  const [minWidth] = cssPx(".act", "min-width");
+  const [gap] = cssPx(".acts .gap", "flex");
+  // .acts の左右の負の margin の分だけ、並べられる幅は中身の幅より広い。
+  const row = popWidth - 2 * padding - 2 * border - 2 * side;
+  assert.ok(gap >= 8, `間隔 ${gap}px`);
+  assert.ok(count * minWidth + gap <= row, `${count} × ${minWidth}px + ${gap}px > ${row}px`);
+});
+
 test("指示の欄: 見出しも横長の送るボタンも置かず、枠の中の ⌘↵ で送る", async () => {
   q('.node[data-key="task:beta/1"]').click();
   try {

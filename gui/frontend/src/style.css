@@ -364,6 +364,9 @@ select { font: inherit; color: inherit; }
 .act.danger { color: var(--red-ink); }
 :is(.act.pri, .act.danger) svg { fill: currentColor; }
 .act.on, .act.on:hover:not(:disabled) { background: var(--active); }
+/* 危ない動詞の前の間隔。最小の幅で押し間違いを防ぎ、空きがあれば伸びて危ない動詞を右端へ寄せる。
+   最も多い 7 つの動詞の min-width と足して、.pop の中の幅 (.acts の負の margin 込みで 294px) に収める */
+.acts .gap { flex: 1 0 12px; }
 /* 送達が拒まれた理由。文面の下に出し、文面は残す */
 .pop .refusal { color: var(--red-ink); font-size: 12px; line-height: 1.5; white-space: pre-wrap; }
 

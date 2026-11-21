@@ -196,7 +196,7 @@ Claude Code の settings の `env` に置く。この plugin は既定値を持�
 
 | パス | 読み手 | 読むもの |
 | ---- | ------ | -------- |
-| `settings.json` | `spawn`、`statusline` | `env.CLAUDE_CODE_SUBAGENT_MODEL` と `effortLevel` だけ |
+| `settings.json` | `spawn` | `env.CLAUDE_CODE_SUBAGENT_MODEL` だけ |
 | `sessions/` | daemon、`doctor`、`inspect` | セッションの登録簿 (pid と session id) |
 | `projects/` | daemon、`doctor`、`inspect`、`tell`、`dream harvest` (`--projects-dir`) | transcript |
 | `projects/<project>/memory` | `dream mine` / `check` / `forget` (`--memory-dir`) | auto memory |

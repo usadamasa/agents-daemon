@@ -8,6 +8,9 @@
 本ファイルはどう動くかの実装リファレンス。いつ・何のために実行するかは skill 本体が持ち、
 呼び方 (絶対パス、sandbox の除外) は [pipeline.md](pipeline.md) にある。
 
+以下の `$CLAUDE` は Claude Code の設定ディレクトリ (`CLAUDE_CONFIG_DIR`、無ければ `~/.claude`) を指す。
+flag を省いたときの既定の置き場は、どれもこの下にある。
+
 ## Overview
 
 | Subcommand | Phase | 役割 |
@@ -47,7 +50,7 @@ Claude Code の session JSONL を走査し、PII を除去して `$DREAM/harvest
 
 | Flag | Default | 説明 |
 | --- | --- | --- |
-| `--projects-dir` | `~/.claude/projects` | Claude Code プロジェクトディレクトリ |
+| `--projects-dir` | `$CLAUDE/projects` | Claude Code プロジェクトディレクトリ |
 | `--days` | `14` | 走査する直近日数 (mtime ベース) |
 | `--project-glob` | `""` | 特定プロジェクトに絞る (canonical name substring 一致) |
 | `--incremental` | `false` | 前回 harvest 以降に更新されたセッションのみ処理 |
@@ -68,7 +71,7 @@ harvest は他の plugin の skill が索引として読みうるので、次を
 
 - 置き場 `$DREAM/harvest/YYYY-MM-DD.jsonl` と、1 行 1 セッションの JSON Lines であること
 - フィールド `session_id`、`cwd_project`、`skills_invoked`、`feedback_signals` (`{quote, kind}`) の名前と形。
-  `cwd_project` は transcript の置き場 (`~/.claude/projects/<cwd_project>/`) の名前で、cwd を読めなかった
+  `cwd_project` は transcript の置き場 (`$CLAUDE/projects/<cwd_project>/`) の名前で、cwd を読めなかった
   セッションでは欠ける
 - 90 日の保持 (`dream` パッケージの `retention`)
 
@@ -92,7 +95,7 @@ plugin の `hooks/dream-harvest.sh` (Stop) が `dream harvest --incremental --de
 
 hook は transcript を読まない。読むのは起こしたバイナリで、次の前提で設計している。
 
-- 走査は `~/.claude/projects` 配下の JSONL を mtime で絞り、session_id ごとに last-wins で書き直す
+- 走査は `--projects-dir` 配下の JSONL を mtime で絞り、session_id ごとに last-wins で書き直す
 - Stop の時点でまだ書き切れていないセッションは、次の harvest (どのセッションの Stop でもよい) で読み直される
 - harvest が拾うのは user prompt と Skill の tool_use で、ターンの最後の assistant 応答は使わない
 
@@ -104,8 +107,8 @@ hook は transcript を読まない。読むのは起こしたバイナリで、
 ### 入力
 
 - harvest jsonl (対象 project セッション)
-- `~/.claude/projects/<canonical>/memory/*.md` (feedback memory)
-- `~/.claude/skills/<name>/SKILL.md` (global skill 本体)
+- `$CLAUDE/projects/<canonical>/memory/*.md` (feedback memory)
+- `$CLAUDE/skills/<name>/SKILL.md` (global skill 本体)
 - `<dir>/<name>/SKILL.md` (利用者の規約の `skillDirs`。global skill の後に探す)
 - `<project_root>/.claude/skills/<name>/SKILL.md` (fallback、project-local skill)
 
@@ -141,8 +144,8 @@ association 先がある memory は coverage ratio で `skill_body` / `memory_de
 | --- | --- | --- |
 | `--project` | cwd から canonical 化 | 対象 project (canonical name または絶対パス) |
 | `--harvest-dir` | `$DREAM/harvest` | harvest ログのディレクトリ |
-| `--memory-dir` | `~/.claude/projects/<project>/memory` | feedback memory のディレクトリ |
-| `--skills-dir` | `~/.claude/skills` | skill 本体のディレクトリ |
+| `--memory-dir` | `$CLAUDE/projects/<project>/memory` | feedback memory のディレクトリ |
+| `--skills-dir` | `$CLAUDE/skills` | skill 本体のディレクトリ |
 | `--date` | 今日 | candidates 出力ファイルの日付 |
 | `-v`, `--verbose` | `false` | 処理サマリを stderr に出力 |
 
@@ -195,7 +198,7 @@ candidate の `skill_path` (memory_dedup は `memory_path`) の symlink 実体�
 正しい repo root を得る。
 
 git 管理外の path は明示エラーにして手動対応を促す。
-auto memory の `~/.claude/projects/<canonical>/memory/*.md` がこれに当たる。
+auto memory の `$CLAUDE/projects/<canonical>/memory/*.md` がこれに当たる。
 
 ### 出力
 
@@ -240,8 +243,8 @@ memory の仕様で「後で書く」の印として許されるので、warning
 `dream forget` が消す前に拾う。fence と inline code の中、空白を含む `[[ ... ]]` (shell の test 構文) は
 リンクとして読まない。memory ディレクトリが無ければ 0 件ではなくエラーにする。
 
-点検する skill は `--skills-dir` (既定は `~/.claude/skills`) と利用者の規約の `skillDirs` に置かれたもの。
-plugin は Claude Code の `plugins/installed_plugins.json` から引く。
+点検する skill は `--skills-dir` と利用者の規約の `skillDirs` に置かれたもの。
+plugin は `--plugins-file` (Claude Code の `installed_plugins.json`) から引く。
 
 点検しないものと理由:
 
@@ -254,8 +257,9 @@ plugin は Claude Code の `plugins/installed_plugins.json` から引く。
 | Flag | Default | 説明 |
 | --- | --- | --- |
 | `--project` | cwd から canonical 化 | 対象 project (canonical name または絶対パス) |
-| `--memory-dir` | `~/.claude/projects/<project>/memory` | memory ディレクトリ |
-| `--skills-dir` | `~/.claude/skills` | SKILL.md を点検する skill の置き場 (規約の `skillDirs` も見る) |
+| `--memory-dir` | `$CLAUDE/projects/<project>/memory` | memory ディレクトリ |
+| `--skills-dir` | `$CLAUDE/skills` | SKILL.md を点検する skill の置き場 (規約の `skillDirs` も見る) |
+| `--plugins-file` | `$CLAUDE/plugins/installed_plugins.json` | 名前空間つきの skill 名を引く plugin の一覧 |
 
 ## `dream forget`
 
@@ -288,7 +292,7 @@ CLI 内部に持たせている。登録する行は `agents-daemon:setup` skill
 | Flag | Default | 説明 |
 | --- | --- | --- |
 | `--project` | cwd | canonical name または絶対パス |
-| `--memory-dir` | `~/.claude/projects/<project>/memory` | memory ディレクトリ |
+| `--memory-dir` | `$CLAUDE/projects/<project>/memory` | memory ディレクトリ |
 | `--dry-run` | `false` | 削除せず対象だけ表示 |
 
 ## `dream policy`

@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface } from 'claude-code'
 
 import { runDaemon } from './daemon-bin'
 import { logEvent } from './log'
@@ -47,11 +47,9 @@ export function startWorkInfer($: EngineInterface) {
   })
 }
 
-export const registerWorkInfer: Register = on => {
-  on('turn.complete', async ($, e, next) => {
-    if (e.agentId === undefined && e.reason === 'answer') await update($, due, () => true)
-    return next(e)
-  })
+// markWorkInfer は main のターンが answer で終わったときに印を置く (turn.complete の hook は hooks/register.ts が持つ)。
+export async function markWorkInfer($: EngineInterface) {
+  await update($, due, () => true)
 }
 
 // tick は印があれば記録を読み、条件がそろえば推定して書く。失敗はログに残すだけでセッションを止めない。

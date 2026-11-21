@@ -1,5 +1,5 @@
 // Package parkcli はパーキングロットのコマンド (メモを置く・書き換える・一覧する park と、メモを渡す先の
-// セッションを起こす spawn、セッションの入力欄に文面を打つ tell) の組み立てを持つ。
+// セッションを起こす spawn、セッションの入力欄に文面を打つ tell、起きたタブの名前を付け直す tab-label) の組み立てを持つ。
 package parkcli
 
 import (
@@ -26,7 +26,7 @@ import (
 
 // Commands は root に登録するコマンド。
 func Commands() []*cobra.Command {
-	return []*cobra.Command{newParkCmd(), newSpawnCmd(), newSpawnedSessionCmd(), newTellCmd()}
+	return []*cobra.Command{newParkCmd(), newSpawnCmd(), newSpawnedSessionCmd(), newTellCmd(), newTabLabelCmd()}
 }
 
 // newParkCmd は `agents-daemon park add|set|list|discard|withdraw|adopt|hand` を組み立てる (parking、parkhand)。

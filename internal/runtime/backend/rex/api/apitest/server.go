@@ -70,7 +70,7 @@ func New(t testing.TB) *Server {
 	// テストが Protocol().Reply で決める。
 	for method, needBlock := range map[string]bool{
 		TerminalMethod + "write": true, "block.event": true, "block.close": true,
-		"session.destroy": false, "session.attach": false, "session.disown_block": false,
+		"session.destroy": false, "session.attach": false, "session.disown_block": false, "session.set_window_label": false,
 	} {
 		s.srv.Handle(method, func(p json.RawMessage) (any, error) {
 			if err := s.exists(p, needBlock); err != nil {

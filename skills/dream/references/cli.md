@@ -62,6 +62,20 @@ Claude Code の session JSONL を走査し、PII を除去して `$DREAM/harvest
 - `feedback_signals`: 「そうじゃなくて」「stop doing X」等の user correction (`{quote, kind}`)
 - `failed_invocations`: skill invoked 直後に user が訂正したケース (`{invoked_skill, user_reaction}`)
 
+### 他の plugin との契約
+
+harvest は他の plugin の skill が索引として読みうるので、次を互換を保つ対象にする。dream の側は読み手を知らない。
+
+- 置き場 `$DREAM/harvest/YYYY-MM-DD.jsonl` と、1 行 1 セッションの JSON Lines であること
+- フィールド `session_id`、`cwd_project`、`skills_invoked`、`feedback_signals` (`{quote, kind}`) の名前と形。
+  `cwd_project` は transcript の置き場 (`~/.claude/projects/<cwd_project>/`) の名前で、cwd を読めなかった
+  セッションでは欠ける
+- 90 日の保持 (`dream` パッケージの `retention`)
+
+変える PR は、タイトルに harvest の形が変わることを書く。tagpr がタイトルを CHANGELOG へ写す。
+harvest が無い環境 (agents-daemon が入っていない、まだ 1 度も harvest していない) でも動くことは、読む側が保証する。
+`user_prompts` は切り詰めてあるので、読む側は索引にだけ使い、中身は `session_id` から transcript を引いて読む。
+
 ### PII 伏せ字化ルール
 
 利用者の規約の `pii` の規則を先に、組み込みの規則 (email アドレス → `[EMAIL]`、日本の携帯電話番号 → `[PHONE]`) を

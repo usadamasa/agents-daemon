@@ -94,7 +94,7 @@ jobs:
           devshell: base
 
       - name: Run shellcheck
-        run: shellcheck hooks/*.sh hooks/lib/*.sh scripts/*.sh tests/lib/*.bash tests/fixtures/fake-go .envrc
+        run: shellcheck hooks/*.sh hooks/lib/*.sh scripts/*.sh tests/lib/*.bash tests/fixtures/fake-* .envrc
 
   plugin-validate:
     name: plugin validate

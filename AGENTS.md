@@ -52,7 +52,8 @@ task lint                                   # Go の全静的解析。devShell �
 task vulncheck                              # govulncheck の symbol モード (task lint が呼ぶ)
 task typecheck                              # mod の型検査 (tsc)
 task protocol:generate                      # schema を変えたら Go の型と mod の型を作り直す
-shellcheck hooks/*.sh hooks/lib/*.sh scripts/*.sh tests/lib/*.bash tests/fixtures/fake-go .envrc
+task release-verify                         # リリースの前に、隔離した環境で実データの複製に当てる (手元だけ)
+shellcheck hooks/*.sh hooks/lib/*.sh scripts/*.sh tests/lib/*.bash tests/fixtures/fake-* .envrc
 claude plugin validate --strict .           # plugin manifest と hooks.json
 claude plugin validate --strict skills      # skill の frontmatter
 claude plugin validate --strict .claude/skills  # 保守用 skill の frontmatter
@@ -144,6 +145,11 @@ mod が呼ぶコマンドは入力を stdin の JSON で受け、出力を JSON 
 
 tagpr (`.tagpr`、`.github/workflows/tagpr.yaml`) がリリース PR を作る。`version` は手で上げない。
 tag に **`v` を付けない。** `v2026.0926.0` は Go module が major 2026 の semver と解釈して拒否する。
+
+リリース PR は、head を隔離した環境で検証してからマージする。マージを承認する前に
+`task release-verify:status REF=<リリース PR の head>` が exit 0 になることを確かめる。main に commit が入ると
+tagpr が head を作り直すので、検証はやり直しになる。手順は `changing-agents-daemon-internals` skill の
+`references/release-verify.md`。
 
 リリース PR の merge 後の plugin 更新と動いている daemon の入れ替えは、`update` サブコマンドが 1 回で行う。
 sandbox が `~/.claude/plugins` と `~/.cache/agents-daemon` への書き込みを止めるので、利用者が `!` で打つ。

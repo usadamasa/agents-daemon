@@ -1,0 +1,24 @@
+#!/bin/bash
+# release-verify.bats 用の go の代役。`go build ... -o <path> ...` だけを模す。
+# 引数を $TEST_TMPDIR/go.calls へ記録し、<path> に fake-verify-daemon を呼ぶ包みを置く。
+# 包みは env -i の下で呼ばれるので、TEST_TMPDIR と fixture の場所 (FAKE_VERIFY_DAEMON) を中に書き込む。
+set -euo pipefail
+
+printf '%s\n' "$*" >>"$TEST_TMPDIR/go.calls"
+
+out=""
+while [ $# -gt 0 ]; do
+  if [ "$1" = "-o" ]; then
+    out="$2"
+    shift
+  fi
+  shift
+done
+if [ -z "$out" ]; then
+  printf 'fake-verify-go: -o not given\n' >&2
+  exit 2
+fi
+
+fixture="${FAKE_VERIFY_DAEMON:?}"
+printf '#!/bin/bash\nTEST_TMPDIR=%q exec /bin/bash %q "$@"\n' "$TEST_TMPDIR" "$fixture" >"$out"
+chmod +x "$out"

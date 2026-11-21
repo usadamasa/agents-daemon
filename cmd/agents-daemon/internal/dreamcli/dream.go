@@ -58,6 +58,7 @@ func newDreamCmd() *cobra.Command {
 
 func newDreamCheckCmd() *cobra.Command {
 	var opts check.Opts
+	var skillsDir string
 	cmd := &cobra.Command{
 		Use:   "check",
 		Short: "adopt の後の機械の点検 (read-only)。error の項目があれば exit code 1",
@@ -70,6 +71,19 @@ func newDreamCheckCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			pol, err := env.policy()
+			if err != nil {
+				return err
+			}
+			claudeDir, err := apppath.ClaudeConfigDir()
+			if err != nil {
+				return err
+			}
+			if skillsDir == "" {
+				skillsDir = filepath.Join(claudeDir, "skills")
+			}
+			opts.SkillDirs = append([]string{skillsDir}, pol.SkillDirs...)
+			opts.PluginsFile = filepath.Join(claudeDir, "plugins", "installed_plugins.json")
 			opts.Home = env.home
 			opts.Cwd = env.cwd
 			opts.Stdout = textOut(cmd)
@@ -89,6 +103,7 @@ func newDreamCheckCmd() *cobra.Command {
 	f := cmd.Flags()
 	f.StringVar(&opts.Project, "project", "", "対象 project (canonical name または絶対パス、省略時は cwd)")
 	f.StringVar(&opts.MemoryDir, "memory-dir", "", "memory ディレクトリ (省略時は ~/.claude/projects/<project>/memory)")
+	f.StringVar(&skillsDir, "skills-dir", "", "SKILL.md を点検する skill の置き場 (省略時は ~/.claude/skills。規約の skillDirs も見る)")
 	return cmd
 }
 

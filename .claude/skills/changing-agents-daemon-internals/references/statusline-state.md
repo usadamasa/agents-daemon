@@ -9,7 +9,10 @@
 <!-- cc-premise: 2.1.310 statusline stdin の rate_limits はモデル単位の週次ウィンドウを含まない -->
 
 Claude Code は statusline コマンドの stdin に JSON を渡す。その中に
-`rate_limits.five_hour.{used_percentage, resets_at}` が入る (`resets_at` は Unix epoch 秒)。
+`rate_limits.five_hour.{used_percentage, resets_at}` と `rate_limits.seven_day.{...}` が入る (`resets_at` は Unix epoch 秒)。
+ウィンドウは個別に省かれ、5 時間ウィンドウの無いプラン (認証済みの Ultra) では `seven_day` だけが届く。
+<!-- cc-premise: 2.1.316 statusline rate_limits は five_hour と seven_day を個別に省く -->
+
 この値は statusline の stdin にしか来ないので、statusline を経由するのは避けられない。
 モデル単位の週次ウィンドウ (`/usage` の `Current week (Fable)` の行) は stdin に来ないので、
 statusline には出せない (#116)。
@@ -34,6 +37,9 @@ statusline はイベントで再実行される (新しい assistant message、`
   有効な state を残す。無い値で上書きすると Go 側は 0 に読むため、`doctor` の表示が「0% で解除時刻 epoch 0」になる。
   読む側も `resets_at` が 0 の state は「値が無い」として扱う (`ratelimit.State.HasFiveHour`)。
   観測されたのは両方 null の形で、`used_percentage` だけが null の描画は見ていない。
+- `five_hour` のキーごと無く `seven_day` に `resets_at` があれば、`seven_day` だけで書く (#338)。`five_hour` が
+  null の値で来る描画は切り替わりとして書かない。キーごと消える切り替わり (docs の形) では `seven_day` だけの state で
+  上書きするが、daemon は読まないので `doctor` の表示が次の描画まで `seven_day` だけになるに留まる。
 - **セッションごとに別ファイルへ書く**。`resets_at` はアカウント全体で共通だが、
   使用率は観測した時点の値で、セッションによって観測時刻が違う。`doctor` は pane ごとにそのセッションの state を出す。
 - 書き込みは同一ディレクトリの一時ファイル経由の rename で原子的に行う (`statefile`)。
@@ -60,7 +66,7 @@ daemon が使うのは `multiplexer` (block から session_id への対応。上
 書式はここに転記した参考で、実体は `rate-limits/` が `ratelimit`、`context/` が
 `sessioncontext` にある。
 
-`$STATE/rate-limits/<session_id>.json` (`rate_limits.five_hour.resets_at` があるときだけ):
+`$STATE/rate-limits/<session_id>.json` (`resets_at` のあるウィンドウがあるときだけ):
 
 ```json
 {
@@ -71,7 +77,7 @@ daemon が使うのは `multiplexer` (block から session_id への対応。上
 }
 ```
 
-`seven_day` は入力にあるときだけ付ける。`used_percentage` は整数に丸める。
+`five_hour` と `seven_day` はどちらも入力に `resets_at` があるときだけ付ける。`used_percentage` は整数に丸める。
 
 `$STATE/context/<session_id>.json` (毎描画):
 

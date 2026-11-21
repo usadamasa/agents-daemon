@@ -1,7 +1,7 @@
 # agents-daemon dream (CLI の実装リファレンス)
 
 `dream` skill が使う Go の実行系。agents-daemon のバイナリの `dream` サブコマンドとして、
-`harvest` / `mine` / `stage` / `adopt` / `forget` / `policy` の 6 つを提供する。
+`harvest` / `mine` / `stage` / `adopt` / `forget` / `check` / `policy` の 7 つを提供する。
 利用者の規約 (config.json の `dream.policy`) の形は
 [README の「利用者の設定」](../../../README.md#利用者の設定) にある。
 
@@ -17,6 +17,7 @@
 | `dream stage` | 6 Stage | candidates → Markdown 承認レポート |
 | `dream adopt` | 7 Adopt | candidate → git branch 作成 + LLM 向け手順書 |
 | `dream forget` | 4 Consolidate | auto memory 削除 + MEMORY.md 索引の同期 |
+| `dream check` | 7 Adopt の後 | 判断の要らない点検 (read-only)。落ちたら exit code 1 |
 | `dream policy` | (全 phase) | 利用者の規約のファイルを連結して JSON で出す |
 
 ## state の置き場
@@ -188,7 +189,7 @@ stdout へ LLM 向けの手順書を出す。手順書には次の項目が入�
 - kind / confidence / associated_skill
 - target file / repo root / 作業ブランチ
 - Diagnosis (mine が生成)
-- 次に user または LLM がすべき手順 (Edit, diff レビュー, commit)
+- 次に user または LLM がすべき手順 (Edit, `dream check`, diff レビュー, commit)
 - memory 側の参考文言 (memory_path 中身を Edit の材料に)
 
 ### push は自動しない
@@ -204,6 +205,24 @@ user が明示的に指示するまで push しない (「入力非破壊」原�
 | `--project` | — | canonical name (candidates auto-resolve に必要) |
 | `--date` | 今日 | candidates 対象日 |
 | `--dry-run` | `false` | branch 作成を skip し手順だけ表示 |
+
+## `dream check`
+
+adopt の Edit の後、commit の前に回す機械の点検。read-only で、何も直さない。落ちた項目を
+`<path>:<line>: ...` の形で 1 行ずつ stdout に出し、1 件でもあれば exit code 1 で終わる。`--json` は
+`{"findings": [...]}` を出し、exit code は同じ。
+
+| 点検 | kind | 落ちる条件 |
+| --- | --- | --- |
+| auto memory の `[[name]]` | `dangling_link` | どの memory の frontmatter の `name` にも当たらない |
+
+`[[name]]` はファイル名ではなく frontmatter の `name` で解く。fence と inline code の中、空白を含む
+`[[ ... ]]` (shell の test 構文) はリンクとして読まない。memory ディレクトリが無ければ 0 件ではなくエラーにする。
+
+| Flag | Default | 説明 |
+| --- | --- | --- |
+| `--project` | cwd から canonical 化 | 対象 project (canonical name または絶対パス) |
+| `--memory-dir` | `~/.claude/projects/<project>/memory` | memory ディレクトリ |
 
 ## `dream forget`
 

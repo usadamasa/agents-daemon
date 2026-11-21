@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/jsonflag"
+	"github.com/usadamasa/agents-daemon/internal/dream/check"
 	"github.com/usadamasa/agents-daemon/internal/dream/forget"
 	"github.com/usadamasa/agents-daemon/internal/dream/harvest"
 	"github.com/usadamasa/agents-daemon/internal/dream/policy"
@@ -32,7 +33,7 @@ func TestDreamCmd_Subcommands(t *testing.T) {
 		names = append(names, sub.Name())
 	}
 	slices.Sort(names)
-	want := []string{"adopt", "forget", "harvest", "mine", "policy", "stage"}
+	want := []string{"adopt", "check", "forget", "harvest", "mine", "policy", "stage"}
 	if !slices.Equal(names, want) {
 		t.Errorf("subcommands = %v; want %v", names, want)
 	}
@@ -107,6 +108,55 @@ func TestDreamCmd_JSON(t *testing.T) {
 
 	if _, err := execJSON("harvest", "--detach"); err == nil || !strings.Contains(err.Error(), "--json") {
 		t.Errorf("harvest --detach: error = %v, want --json に対応していない error", err)
+	}
+}
+
+// dream check は点検に落ちた項目を出し、1 件でもあれば error (exit code 1) で返す。--json でも同じ。
+func TestDreamCheckCmd_FailsOnFindings(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	memDir := t.TempDir()
+	body := "---\nname: linker\n---\n\n[[gone]]\n"
+	if err := os.WriteFile(filepath.Join(memDir, "linker.md"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	root := testRoot()
+	root.SetOut(&out)
+	root.SetErr(&bytes.Buffer{})
+	root.SetArgs([]string{"dream", "check", "--memory-dir", memDir})
+	if err := root.Execute(); err == nil {
+		t.Fatal("リンク切れがあるのに成功した")
+	}
+	if !strings.Contains(out.String(), "linker.md:5:") || !strings.Contains(out.String(), "[[gone]]") {
+		t.Errorf("stdout にファイルと行とリンクが無い: %q", out.String())
+	}
+
+	var jsonOut bytes.Buffer
+	root = testRoot()
+	jsonflag.Add(root)
+	root.SetOut(&jsonOut)
+	root.SetErr(&bytes.Buffer{})
+	root.SetArgs([]string{"--json", "dream", "check", "--memory-dir", memDir})
+	if err := root.Execute(); err == nil {
+		t.Fatal("--json でリンク切れがあるのに成功した")
+	}
+	var res check.Result
+	if err := json.Unmarshal(jsonOut.Bytes(), &res); err != nil || len(res.Findings) != 1 {
+		t.Errorf("check --json = %q (%v)", jsonOut.String(), err)
+	}
+}
+
+// 落ちる項目が無ければ成功する。
+func TestDreamCheckCmd_PassesWithoutFindings(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	memDir := t.TempDir()
+	root := testRoot()
+	root.SetOut(&bytes.Buffer{})
+	root.SetErr(&bytes.Buffer{})
+	root.SetArgs([]string{"dream", "check", "--memory-dir", memDir})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
 	}
 }
 

@@ -78,4 +78,8 @@ func TestRun_ReturnsPlan(t *testing.T) {
 	if !strings.Contains(stdout.String(), plan.Branch) {
 		t.Errorf("stdout に branch が無い: %q", stdout.String())
 	}
+	// 手順の最後に、commit の前に機械の点検を通す step がある。
+	if !strings.Contains(stdout.String(), "agents-daemon dream check") {
+		t.Errorf("stdout に dream check の step が無い: %q", stdout.String())
+	}
 }

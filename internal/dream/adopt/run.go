@@ -149,8 +149,9 @@ func printAdoptPlan(w io.Writer, plan Plan) {
 	default:
 		pf("2. 候補の kind に応じて `%s` を編集\n", plan.Target)
 	}
-	pf("3. diff レビュー後、`git -C %s add ...` → `git -C %s commit` で確定\n", plan.RepoRoot, plan.RepoRoot)
-	pf("4. push は user 明示指示まで保留 (`git push` は自動しない)\n\n")
+	pf("3. `agents-daemon dream check --project <canonical>` を通す (落ちたら直してから進む)\n")
+	pf("4. diff レビュー後、`git -C %s add ...` → `git -C %s commit` で確定\n", plan.RepoRoot, plan.RepoRoot)
+	pf("5. push は user 明示指示まで保留 (`git push` は自動しない)\n\n")
 
 	pf("### memory 側の参考文言\n\n(memory_path=%s の中身を Edit の材料にする)\n", plan.MemoryPath)
 }

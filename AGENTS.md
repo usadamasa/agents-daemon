@@ -125,7 +125,7 @@ mod が呼ぶコマンドは入力を stdin の JSON で受け、出力を JSON 
 
 - ランタイム状態は `~/.claude/` に置かず XDG (`internal/apppath`) に置く。環境から埋める入口は `apppath.FromEnv` だけ。
   読むだけの Claude Code の設定ディレクトリは `apppath.ClaudeConfigDir` で決める。
-- 書くファイルを足すときは、同じ PR で消す仕組みと `changing-agents-daemon-internals` skill の architecture.md「出力されるファイル」の行 (書く主体・消す主体) を足す。
+- 書くファイルを足すときは、同じ PR で消す仕組みと `changing-agents-daemon-internals` skill の architecture.md「出力されるファイル」の行 (書く主体・消す主体と保持期間・実体のパッケージを 1 句ずつ) を足す。中身と書く時機は実体のパッケージの doc に書く。
 - 削除は daemon 自身が mtime で行う (`internal/runtime/daemon/housekeeping.go`)。保持期間は定数にし、根拠をコメントに書く。
 - 旧バージョンが書いた state と消した設定キーへの後方互換は取らない。利用者は作者だけで、残り物は手で消せる。
   機能を消すときは、読み書き・掃除 (prune)・設定キーから名前ごと消し、残り物の消し方を PR 本文に 1 行書く。

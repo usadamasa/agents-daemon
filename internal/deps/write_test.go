@@ -107,3 +107,19 @@ func TestWrite_edges(t *testing.T) {
 		t.Errorf("graph = %+v", home.Graph)
 	}
 }
+
+// 完了したタスクを端点に持つ辺も、タスクの記録が残っている間は描く (#502)。housekeeping は端点の完了タスクを
+// 辺の保持期間まで残すので、セッションをまたぐ辺は端点のタスクが済んだ後も図に残る。
+func TestWrite_edgeToCompletedTask(t *testing.T) {
+	p := paths(t)
+	tasks := filepath.Join(p.StateDir(), "tasks")
+	writeFile(t, filepath.Join(tasks, "U", "1.json"), `{"id":"1","subject":"上流","status":"completed","session_id":"U","cwd":"/src/home/a"}`)
+	writeFile(t, filepath.Join(tasks, "D", "3.json"), `{"id":"3","subject":"下流","status":"completed","session_id":"D","cwd":"/src/home/b"}`)
+	ep := func(ref, cwd string) string { return `{"ref":"` + ref + `","cwd":"` + cwd + `","repo":"` + cwd + `"}` }
+	writeFile(t, filepath.Join(p.StateDir(), "edges", "e1.json"), `{"id":"e1","before":`+ep("task:U/1", "/src/home/a")+`,"after":`+ep("task:D/3", "/src/home/b")+`,"created_at":"2026-10-18T09:00:00Z"}`)
+
+	home := writeDeps(t, p)
+	if len(home.Graph.Links) != 1 || home.Graph.Links[0].Before != "task:U/1" || home.Graph.Links[0].After != "task:D/3" {
+		t.Errorf("links = %+v", home.Graph.Links)
+	}
+}

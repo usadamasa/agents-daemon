@@ -3,6 +3,7 @@ package tasklog
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 )
@@ -23,7 +24,7 @@ func TestPrune(t *testing.T) {
 	// alpha (完了) は 1 日を過ぎ、beta (未完了) は 1 日を過ぎたが 1 週間は経っていない。
 	setMtime(t, filepath.Join(dir, "1.json"), now.Add(-25*time.Hour))
 	setMtime(t, filepath.Join(dir, "2.json"), now.Add(-25*time.Hour))
-	removed, err := s.Prune(now, nil)
+	removed, err := s.Prune(now, nil, nil)
 	if err != nil || removed != 1 {
 		t.Fatalf("Prune() = %d, %v, want 1 件 (完了したタスクだけ)", removed, err)
 	}
@@ -33,7 +34,7 @@ func TestPrune(t *testing.T) {
 
 	// 1 週間更新されなかった未完了のタスクも消え、空になったセッションのディレクトリも消える。
 	setMtime(t, filepath.Join(dir, "2.json"), now.Add(-8*24*time.Hour))
-	if removed, err := s.Prune(now, nil); err != nil || removed != 1 {
+	if removed, err := s.Prune(now, nil, nil); err != nil || removed != 1 {
 		t.Fatalf("Prune() = %d, %v, want 1 件", removed, err)
 	}
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {
@@ -55,7 +56,7 @@ func TestPrune_keepCompleted(t *testing.T) {
 		asked = append(asked, sessionID)
 		return true
 	}
-	if removed, err := s.Prune(now, keep); err != nil || removed != 1 {
+	if removed, err := s.Prune(now, keep, nil); err != nil || removed != 1 {
 		t.Fatalf("Prune() = %d, %v, want 1 件 (未完了のタスクだけ)", removed, err)
 	}
 	if got := byID(t, s); len(got) != 1 || got["1"].Status != "completed" {
@@ -66,8 +67,44 @@ func TestPrune_keepCompleted(t *testing.T) {
 	}
 
 	// 残す理由が無くなれば、次の掃除で消える。
-	if removed, err := s.Prune(now, func(string) bool { return false }); err != nil || removed != 1 {
+	if removed, err := s.Prune(now, func(string) bool { return false }, nil); err != nil || removed != 1 {
 		t.Fatalf("Prune() = %d, %v, want 1 件", removed, err)
+	}
+}
+
+// endpoint が true を返す完了タスク (辺の端点) は CompletedRetention では消さず、Retention で消す (#502)。
+// 端点でない完了タスクは今までどおり CompletedRetention で消す。
+func TestPrune_edgeEndpoint(t *testing.T) {
+	s := New(t.TempDir())
+	ingest(t, s, "task-create-alpha", "task-create-beta", "task-update-in-progress", "task-update-completed")
+	dir := filepath.Join(s.Dir, fixtureSession)
+	// 2 (beta) も完了にして、端点の 1 と端点でない 2 を並べる。
+	if err := os.WriteFile(filepath.Join(dir, "2.json"), []byte(`{"id":"2","session_id":"`+fixtureSession+`","status":"completed"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	setMtime(t, filepath.Join(dir, "1.json"), now.Add(-25*time.Hour))
+	setMtime(t, filepath.Join(dir, "2.json"), now.Add(-25*time.Hour))
+
+	var asked [][2]string
+	endpoint := func(sessionID, taskID string) bool {
+		asked = append(asked, [2]string{sessionID, taskID})
+		return taskID == "1"
+	}
+	if removed, err := s.Prune(now, nil, endpoint); err != nil || removed != 1 {
+		t.Fatalf("Prune() = %d, %v, want 1 件 (端点でない 2 だけ)", removed, err)
+	}
+	if got := byID(t, s); len(got) != 1 || got["1"].Status != "completed" {
+		t.Errorf("残ったタスク = %+v, want 端点の 1 だけ", got)
+	}
+	if !slices.Contains(asked, [2]string{fixtureSession, "1"}) {
+		t.Errorf("endpoint に渡した組 = %v, want (%s, 1) を含む", asked, fixtureSession)
+	}
+
+	// 端点でも Retention を過ぎれば消える。
+	setMtime(t, filepath.Join(dir, "1.json"), now.Add(-Retention-time.Hour))
+	if removed, err := s.Prune(now, nil, endpoint); err != nil || removed != 1 {
+		t.Fatalf("Prune() = %d, %v, want 1 件 (Retention を過ぎた端点)", removed, err)
 	}
 }
 
@@ -119,7 +156,7 @@ func TestTouch_invalidSessionID(t *testing.T) {
 }
 
 func TestPrune_nothingYet(t *testing.T) {
-	if removed, err := New(t.TempDir()).Prune(time.Now(), nil); err != nil || removed != 0 {
+	if removed, err := New(t.TempDir()).Prune(time.Now(), nil, nil); err != nil || removed != 0 {
 		t.Errorf("Prune() = %d, %v, want 0, nil", removed, err)
 	}
 }

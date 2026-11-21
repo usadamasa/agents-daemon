@@ -155,12 +155,15 @@ type SessionRateLimitReport struct {
 	State     *RateLimitStateReport `json:"state"`
 }
 
-// RateLimitStateReport は state ファイルの中身。
+// RateLimitStateReport は state ファイルの中身。ウィンドウはどちらも state にあるときだけ埋まる
+// (5 時間ウィンドウの無いプランでは seven_day だけ)。
 type RateLimitStateReport struct {
-	ObservedAt       time.Time `json:"observed_at"`
-	AgeSeconds       int64     `json:"age_seconds"`
-	FiveHourUsed     float64   `json:"five_hour_used_percentage"`
-	FiveHourResetsAt time.Time `json:"five_hour_resets_at"`
+	ObservedAt       time.Time  `json:"observed_at"`
+	AgeSeconds       int64      `json:"age_seconds"`
+	FiveHourUsed     *float64   `json:"five_hour_used_percentage,omitempty"`
+	FiveHourResetsAt *time.Time `json:"five_hour_resets_at,omitempty"`
+	SevenDayUsed     *float64   `json:"seven_day_used_percentage,omitempty"`
+	SevenDayResetsAt *time.Time `json:"seven_day_resets_at,omitempty"`
 	// SessionIDMismatch はファイル名と中身の session_id が食い違うときの中身の値。
 	SessionIDMismatch string `json:"session_id_mismatch,omitempty"`
 }
@@ -376,10 +379,14 @@ func collectSessionRateLimitState(p apppath.Paths, pane PaneReport, now time.Tim
 		return rep
 	}
 	rep.State = &RateLimitStateReport{
-		ObservedAt:       state.ObservedAt,
-		AgeSeconds:       roundSeconds(now.Sub(state.ObservedAt)),
-		FiveHourUsed:     state.FiveHourUsed,
-		FiveHourResetsAt: state.FiveHourResetsAt,
+		ObservedAt: state.ObservedAt,
+		AgeSeconds: roundSeconds(now.Sub(state.ObservedAt)),
+	}
+	if state.HasFiveHour() {
+		rep.State.FiveHourUsed, rep.State.FiveHourResetsAt = new(state.FiveHourUsed), new(state.FiveHourResetsAt)
+	}
+	if state.HasSevenDay() {
+		rep.State.SevenDayUsed, rep.State.SevenDayResetsAt = new(state.SevenDayUsed), new(state.SevenDayResetsAt)
 	}
 	// ファイル名と中身の session_id は必ず一致するはずなので、一致しているときは
 	// 出さない。食い違っていたら state の対応付けが壊れているということなので、

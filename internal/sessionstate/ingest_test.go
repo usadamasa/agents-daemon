@@ -176,6 +176,34 @@ func TestIngestStatusline_rateLimits(t *testing.T) {
 		}
 	})
 
+	t.Run("five_hour が無く seven_day だけなら seven_day だけで書く", func(t *testing.T) {
+		// 5 時間ウィンドウの無いプラン (Ultra) では five_hour のキーごと来ない (#338)
+		s := New(t.TempDir())
+		input := `{"session_id": "sess-1", "rate_limits": {
+			"seven_day": {"used_percentage": 46.6, "resets_at": 1788235200}}}`
+		if err := s.IngestStatusline([]byte(input), ingestNow); err != nil {
+			t.Fatalf("IngestStatusline() error = %v", err)
+		}
+		raw := readFileString(t, mustPath(t, s, "sess-1"))
+		want := `{"seven_day":{"used_percentage":47,"resets_at":1788235200},` +
+			`"observed_at":` + itoa(ingestNow.Unix()) + `,"session_id":"sess-1"}` + "\n"
+		if raw != want {
+			t.Errorf("rate-limits file = %q, want %q", raw, want)
+		}
+	})
+
+	t.Run("five_hour が無く seven_day の resets_at が null なら書かない", func(t *testing.T) {
+		s := New(t.TempDir())
+		input := `{"session_id": "sess-1", "rate_limits": {
+			"seven_day": {"used_percentage": null, "resets_at": null}}}`
+		if err := s.IngestStatusline([]byte(input), ingestNow); err != nil {
+			t.Fatalf("IngestStatusline() error = %v", err)
+		}
+		if _, err := os.Stat(mustPath(t, s, "sess-1")); !os.IsNotExist(err) {
+			t.Errorf("rate-limits file が書かれている (有効なウィンドウが無いのに): %v", err)
+		}
+	})
+
 	t.Run("seven_day の resets_at が null なら seven_day を付けない", func(t *testing.T) {
 		s := New(t.TempDir())
 		input := `{"session_id": "sess-1", "rate_limits": {

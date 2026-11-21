@@ -23,7 +23,7 @@ func TestWrite(t *testing.T) {
 	t.Run("seven_day があれば付け、ファイルの並びは five_hour、seven_day、observed_at、session_id", func(t *testing.T) {
 		s := New(t.TempDir())
 		err := s.Write("sess-1", observedAt,
-			Window{UsedPercentage: 15, ResetsAt: time.Unix(1786851000, 0)},
+			&Window{UsedPercentage: 15, ResetsAt: time.Unix(1786851000, 0)},
 			&Window{UsedPercentage: 10, ResetsAt: time.Unix(1787025600, 0)})
 		if err != nil {
 			t.Fatalf("Write() error = %v", err)
@@ -38,7 +38,7 @@ func TestWrite(t *testing.T) {
 
 	t.Run("seven_day が nil なら付けない", func(t *testing.T) {
 		s := New(t.TempDir())
-		if err := s.Write("sess-1", observedAt, Window{ResetsAt: time.Unix(1786851000, 0)}, nil); err != nil {
+		if err := s.Write("sess-1", observedAt, &Window{ResetsAt: time.Unix(1786851000, 0)}, nil); err != nil {
 			t.Fatalf("Write() error = %v", err)
 		}
 		want := `{"five_hour":{"used_percentage":0,"resets_at":1786851000},` +
@@ -48,11 +48,34 @@ func TestWrite(t *testing.T) {
 		}
 	})
 
+	t.Run("five_hour が nil なら付けず、seven_day だけで書ける", func(t *testing.T) {
+		// 5 時間ウィンドウの無いプラン (Ultra) では seven_day だけが届く (#338)
+		s := New(t.TempDir())
+		if err := s.Write("sess-1", observedAt, nil, &Window{UsedPercentage: 47, ResetsAt: time.Unix(1788235200, 0)}); err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
+		want := `{"seven_day":{"used_percentage":47,"resets_at":1788235200},` +
+			`"observed_at":` + itoa(observedAt.Unix()) + `,"session_id":"sess-1"}` + "\n"
+		if got := readFileString(t, mustPath(t, s, "sess-1")); got != want {
+			t.Errorf("rate-limits file = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("ウィンドウが 1 つも無ければエラーで何も書かない", func(t *testing.T) {
+		s := New(t.TempDir())
+		if err := s.Write("sess-1", observedAt, nil, nil); err == nil {
+			t.Error("Write(nil, nil) がエラーを返さなかった")
+		}
+		if _, err := os.Stat(s.Dir); !os.IsNotExist(err) {
+			t.Errorf("rate-limits/ が作られている: %v", err)
+		}
+	})
+
 	t.Run("session ID が空か不正ならエラーで何も書かない", func(t *testing.T) {
 		root := t.TempDir()
 		s := New(root)
 		for _, id := range []string{"", "../../etc/passwd"} {
-			if err := s.Write(id, observedAt, Window{ResetsAt: time.Unix(1786851000, 0)}, nil); err == nil {
+			if err := s.Write(id, observedAt, &Window{ResetsAt: time.Unix(1786851000, 0)}, nil); err == nil {
 				t.Errorf("Write(%q) がエラーを返さなかった", id)
 			}
 		}
@@ -90,6 +113,41 @@ func TestLoad(t *testing.T) {
 		}
 		if got, want := state.SessionID, "sess-1"; got != want {
 			t.Errorf("SessionID = %q, want %q", got, want)
+		}
+		if !state.HasSevenDay() {
+			t.Fatal("HasSevenDay() = false")
+		}
+		if got, want := state.SevenDayUsed, 10.0; got != want {
+			t.Errorf("SevenDayUsed = %v, want %v", got, want)
+		}
+		if got, want := state.SevenDayResetsAt, time.Unix(1787025600, 0); !got.Equal(want) {
+			t.Errorf("SevenDayResetsAt = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("seven_day だけの JSON は HasFiveHour() が false で seven_day を読む", func(t *testing.T) {
+		s := New(t.TempDir())
+		writeFile(t, mustPath(t, s, "sess-1"), `{
+			"seven_day": {"used_percentage": 47, "resets_at": 1788235200},
+			"observed_at": 1787818203,
+			"session_id": "sess-1"
+		}`)
+
+		state, err := s.Load("sess-1")
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+		if state.HasFiveHour() {
+			t.Error("HasFiveHour() = true, want false (five_hour が無い)")
+		}
+		if !state.HasSevenDay() {
+			t.Fatal("HasSevenDay() = false")
+		}
+		if got, want := state.SevenDayUsed, 47.0; got != want {
+			t.Errorf("SevenDayUsed = %v, want %v", got, want)
+		}
+		if got, want := state.SevenDayResetsAt, time.Unix(1788235200, 0); !got.Equal(want) {
+			t.Errorf("SevenDayResetsAt = %v, want %v", got, want)
 		}
 	})
 
@@ -171,6 +229,9 @@ func TestHasFiveHour_nil(t *testing.T) {
 	var r *State
 	if r.HasFiveHour() {
 		t.Error("nil の State が true を返した")
+	}
+	if r.HasSevenDay() {
+		t.Error("nil の State の HasSevenDay が true を返した")
 	}
 }
 

@@ -19,10 +19,9 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
 
-// Retention は利用上限 state を残す期間。resets_at は観測から高々 5 時間先で、
-// LatestWindow は未来の resets_at しか使わないため、24 時間より古い state が判定に
-// 効くことは無い。「この state がいつまで意味を持つか」は書式の知識なので、消す側
-// (sessionstate.Prune) ではなくここに置く。
+// Retention は利用上限 state を残す期間。daemon は判定に読まず、doctor が statusline の配線の確認に
+// 出すだけなので、24 時間更新の無い state は配線の確認にも役立たない。「この state がいつまで意味を持つか」は
+// 書式の知識なので、消す側 (sessionstate.Prune) ではなくここに置く。
 const Retention = 24 * time.Hour
 
 // Store は rate-limits/ の置き場所を持つ。ゼロ値の Store は Dir が空文字列で、
@@ -44,11 +43,11 @@ type windowFile struct {
 }
 
 // rateLimitFile は rate-limits/<session_id>.json の生の形。読み (readState) と
-// 書き (Write) の両方がこの 1 つを使う。seven_day は daemon に読み手が
-// 無いが、書き手が入力にあるときだけ付けるので pointer + omitempty で持つ。
+// 書き (Write) の両方がこの 1 つを使う。ウィンドウはどちらも入力にあるときだけ付けるので
+// pointer + omitempty で持つ (5 時間ウィンドウの無いプランでは seven_day だけになる)。
 // フィールドの順がそのままファイルの並びになる。
 type rateLimitFile struct {
-	FiveHour   windowFile  `json:"five_hour"`
+	FiveHour   *windowFile `json:"five_hour,omitempty"`
 	SevenDay   *windowFile `json:"seven_day,omitempty"`
 	ObservedAt int64       `json:"observed_at"`
 	SessionID  string      `json:"session_id"`
@@ -60,7 +59,7 @@ type rateLimitFile struct {
 // five_hour: {used_percentage: null, resets_at: null} を渡す (実機で観測)。
 // encoding/json は null をゼロ値に読むため、そのままでは「使用率 0% / resets_at が
 // epoch 0」と区別が付かない。resets_at が 0 のウィンドウは実在しないので、
-// その場合は FiveHourResetsAt をゼロ値のままにして HasFiveHour で区別する。
+// その場合はリセット時刻をゼロ値のままにして HasFiveHour / HasSevenDay で区別する。
 type State struct {
 	// SessionID はファイルの中身が名乗るセッション ID。
 	SessionID string
@@ -70,11 +69,20 @@ type State struct {
 	FiveHourUsed float64
 	// FiveHourResetsAt は 5 時間ウィンドウのリセット時刻。値が無ければゼロ値。
 	FiveHourResetsAt time.Time
+	// SevenDayUsed は 7 日ウィンドウの使用率 (0..100)。
+	SevenDayUsed float64
+	// SevenDayResetsAt は 7 日ウィンドウのリセット時刻。値が無ければゼロ値。
+	SevenDayResetsAt time.Time
 }
 
 // HasFiveHour は 5 時間ウィンドウの有効な値を持つかを返す。
 func (r *State) HasFiveHour() bool {
 	return r != nil && !r.FiveHourResetsAt.IsZero()
+}
+
+// HasSevenDay は 7 日ウィンドウの有効な値を持つかを返す。
+func (r *State) HasSevenDay() bool {
+	return r != nil && !r.SevenDayResetsAt.IsZero()
 }
 
 // file は sessionID に対応する利用上限 state のパスを返す。
@@ -89,13 +97,18 @@ type Window struct {
 	ResetsAt       time.Time
 }
 
-func (w Window) file() windowFile {
-	return windowFile{UsedPercentage: w.UsedPercentage, ResetsAt: w.ResetsAt.Unix()}
+// file は w を書き出す形へ写す。w が nil なら nil。
+func (w *Window) file() *windowFile {
+	if w == nil {
+		return nil
+	}
+	return &windowFile{UsedPercentage: w.UsedPercentage, ResetsAt: w.ResetsAt.Unix()}
 }
 
-// Write は sessionID の利用上限 state を書く。sevenDay は観測に無ければ nil。
+// Write は sessionID の利用上限 state を書く。fiveHour と sevenDay は観測に無ければ nil で、
+// 少なくとも片方が要る (どちらも無い state は statusline の配線の確認にも使えない)。
 // 書き込みは同一ディレクトリの一時ファイル経由の rename で原子的に行う (statefile)。
-func (s Store) Write(sessionID string, observedAt time.Time, fiveHour Window, sevenDay *Window) error {
+func (s Store) Write(sessionID string, observedAt time.Time, fiveHour, sevenDay *Window) error {
 	path, err := s.file(sessionID)
 	if err != nil {
 		return err
@@ -103,14 +116,14 @@ func (s Store) Write(sessionID string, observedAt time.Time, fiveHour Window, se
 	if path == "" {
 		return errors.New("rate-limits の書き込みに session ID が無い")
 	}
+	if fiveHour == nil && sevenDay == nil {
+		return errors.New("rate-limits の書き込みに利用上限のウィンドウが 1 つも無い")
+	}
 	out := rateLimitFile{
 		FiveHour:   fiveHour.file(),
+		SevenDay:   sevenDay.file(),
 		ObservedAt: observedAt.Unix(),
 		SessionID:  sessionID,
-	}
-	if sevenDay != nil {
-		w := sevenDay.file()
-		out.SevenDay = &w
 	}
 	return statefile.WriteJSONAtomic(path, ".rate-limits.*", out)
 }
@@ -145,12 +158,21 @@ func readState(path string) (*State, error) {
 		return nil, fmt.Errorf("rate-limits.json のパースに失敗: %w", err)
 	}
 	state := &State{
-		SessionID:    raw.SessionID,
-		ObservedAt:   time.Unix(raw.ObservedAt, 0),
-		FiveHourUsed: raw.FiveHour.UsedPercentage,
+		SessionID:  raw.SessionID,
+		ObservedAt: time.Unix(raw.ObservedAt, 0),
 	}
-	if raw.FiveHour.ResetsAt != 0 {
-		state.FiveHourResetsAt = time.Unix(raw.FiveHour.ResetsAt, 0)
-	}
+	state.FiveHourUsed, state.FiveHourResetsAt = raw.FiveHour.read()
+	state.SevenDayUsed, state.SevenDayResetsAt = raw.SevenDay.read()
 	return state, nil
+}
+
+// read はウィンドウの使用率とリセット時刻を返す。w が nil か resets_at が 0 (null) ならリセット時刻はゼロ値。
+func (w *windowFile) read() (used float64, resetsAt time.Time) {
+	if w == nil {
+		return 0, time.Time{}
+	}
+	if w.ResetsAt != 0 {
+		resetsAt = time.Unix(w.ResetsAt, 0)
+	}
+	return w.UsedPercentage, resetsAt
 }

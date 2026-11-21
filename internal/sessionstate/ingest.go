@@ -45,8 +45,8 @@ type statuslineWindow struct {
 //   - session_id が空なら何も書かない (判断材料が無い)
 //   - context/<session_id>.json は毎回書く。block と session の対応は最新の記録を採るので、
 //     書かない描画があると対応が古くなる
-//   - rate-limits/<session_id>.json は rate_limits.five_hour.resets_at が非 null の
-//     ときだけ書く。無い (初回 API レスポンス前、rate_limits が届かない契約、ウィンドウの
+//   - rate-limits/<session_id>.json は resets_at が非 null のウィンドウがあるときだけ書く
+//     (rateLimitWindows)。無い (初回 API レスポンス前、rate_limits が届かない契約、5 時間ウィンドウの
 //     切り替わり) ときは既存ファイルを残す
 //
 // 端末多重化ツールの場所はプロセスの環境変数から読む (ingestStatuslineWithEnv)。
@@ -91,25 +91,31 @@ func (s Store) ingestStatuslineWithEnv(input []byte, getenv func(string) string,
 	return s.RateLimits.Write(in.SessionID, now, fiveHour, sevenDay)
 }
 
-// rateLimitWindows は stdin の rate_limits を書き出すウィンドウへ写す。five_hour.resets_at が
-// 無ければ (false) で、呼び出し元は書かない。seven_day も resets_at があるときだけ付ける。
-func (in *statuslineInput) rateLimitWindows() (fiveHour ratelimit.Window, sevenDay *ratelimit.Window, ok bool) {
-	if in.RateLimits == nil || in.RateLimits.FiveHour == nil || in.RateLimits.FiveHour.ResetsAt == nil {
-		return ratelimit.Window{}, nil, false
+// rateLimitWindows は stdin の rate_limits を書き出すウィンドウへ写す。resets_at のあるウィンドウだけを返し、
+// 1 つも無ければ (false) で、呼び出し元は書かない。five_hour が値を null で持つ描画 (ウィンドウの切り替わり) も
+// (false) にして、直前の five_hour を seven_day だけの state で上書きしない。five_hour のキーごと無い入力は
+// 5 時間ウィンドウの無いプラン (認証済みの Ultra) で、seven_day だけで書く (#338)。
+// cc-premise: 2.1.316 statusline rate_limits は five_hour と seven_day を個別に省く
+func (in *statuslineInput) rateLimitWindows() (fiveHour, sevenDay *ratelimit.Window, ok bool) {
+	if in.RateLimits == nil {
+		return nil, nil, false
+	}
+	if fh := in.RateLimits.FiveHour; fh != nil && fh.ResetsAt == nil {
+		return nil, nil, false
 	}
 	fiveHour = in.RateLimits.FiveHour.window()
-	if sd := in.RateLimits.SevenDay; sd != nil && sd.ResetsAt != nil {
-		w := sd.window()
-		sevenDay = &w
-	}
-	return fiveHour, sevenDay, true
+	sevenDay = in.RateLimits.SevenDay.window()
+	return fiveHour, sevenDay, fiveHour != nil || sevenDay != nil
 }
 
-// window は stdin 側のウィンドウを書き出す形へ写す。呼び出し元が ResetsAt の非 nil を
-// 保証する。used_percentage だけが null の描画は実機で見ていないが、読み手 (ratelimit.Store.Load)
+// window は stdin 側のウィンドウを書き出す形へ写す。w が nil か resets_at が null なら nil。
+// used_percentage だけが null の描画は実機で見ていないが、読み手 (ratelimit.Store.Load)
 // は null も 0 に読むので 0 で書く。
-func (w *statuslineWindow) window() ratelimit.Window {
-	return ratelimit.Window{
+func (w *statuslineWindow) window() *ratelimit.Window {
+	if w == nil || w.ResetsAt == nil {
+		return nil
+	}
+	return &ratelimit.Window{
 		UsedPercentage: roundPercent(w.UsedPercentage),
 		ResetsAt:       time.Unix(int64(*w.ResetsAt), 0),
 	}

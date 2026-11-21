@@ -63,7 +63,7 @@ stdin の JSON が `$input` に入っている前提。
 ```
 
 - バイナリが無いときは `|| :` で黙る。次の描画から書かれ始める。
-- `context/` は描画のたびに書き直され、`rate-limits/` は `rate_limits.five_hour.resets_at` が来たときだけ書かれる。
+- `context/` は描画のたびに書き直され、`rate-limits/` は `rate_limits` に `resets_at` のあるウィンドウが来たときだけ書かれる。
   この出し分けはバイナリの側にあり、statusline は何も判断しない。
 - 1 回の実行は数 ms。描画ごとに呼んでも表示は遅れない。
 

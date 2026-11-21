@@ -95,7 +95,8 @@ jq -c . "$state/rate-limits/$sid.json"
 | `rate-limits/<sid>.json` がある | OK |
 | `rate-limits/<sid>.json` が無い | 情報 (下を参照) |
 
-`rate-limits/` は stdin に `rate_limits.five_hour.resets_at` が来たときだけ書かれる (出し分けはバイナリの側)。
+`rate-limits/` は stdin の `rate_limits` に `resets_at` のあるウィンドウ (`five_hour` か `seven_day`) が
+来たときだけ書かれる (出し分けはバイナリの側)。5 時間ウィンドウの無いプラン (Ultra) では `seven_day` だけになる。
 初回の API レスポンス前には来ないし、`rate_limits` が届かない契約 (Enterprise の seat など) ではずっと来ない。
 上限からの自動再開は transcript で判定するので `rate-limits/` の有無で変わらない。無いときは「statusline の使用率の
 表示に `rate_limits` が来ていない」と伝えるに留める。

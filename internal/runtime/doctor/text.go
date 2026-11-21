@@ -162,11 +162,23 @@ func writeSessionRateLimitState(w io.Writer, rep SessionRateLimitReport) {
 		return
 	}
 	_, _ = fmt.Fprintf(w, "  observed_at: %s (%s 前)\n", st.ObservedAt.Format(time.RFC3339), time.Duration(st.AgeSeconds)*time.Second)
-	_, _ = fmt.Fprintf(w, "  five_hour.used_percentage: %.1f%%\n", st.FiveHourUsed)
-	_, _ = fmt.Fprintf(w, "  five_hour.resets_at: %s (daemon は読まない。statusline の配線の確認用)\n", st.FiveHourResetsAt.Format(time.RFC3339))
+	writeRateLimitWindow(w, "five_hour", st.FiveHourUsed, st.FiveHourResetsAt)
+	writeRateLimitWindow(w, "seven_day", st.SevenDayUsed, st.SevenDayResetsAt)
+	if st.FiveHourResetsAt == nil && st.SevenDayResetsAt == nil {
+		_, _ = fmt.Fprintln(w, "  有効なウィンドウがありません (resets_at が null)")
+	}
 	if st.SessionIDMismatch != "" {
 		_, _ = fmt.Fprintf(w, "  ⚠ ファイル名と中身の session_id が食い違っています (中身: %s)\n", st.SessionIDMismatch)
 	}
+}
+
+// writeRateLimitWindow は 1 ウィンドウぶんの使用率と解除時刻を書く。state に無いウィンドウは書かない。
+func writeRateLimitWindow(w io.Writer, name string, used *float64, resetsAt *time.Time) {
+	if used == nil || resetsAt == nil {
+		return
+	}
+	_, _ = fmt.Fprintf(w, "  %s.used_percentage: %.1f%%\n", name, *used)
+	_, _ = fmt.Fprintf(w, "  %s.resets_at: %s (daemon は読まない。statusline の配線の確認用)\n", name, resetsAt.Format(time.RFC3339))
 }
 
 func writeConfigState(w io.Writer, rep ConfigReport) {

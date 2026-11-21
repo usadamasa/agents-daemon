@@ -27,7 +27,7 @@ func newIngestStatuslineCmd() *cobra.Command {
 		Annotations: jsonflag.Unsupported(),
 		Long: "Claude Code が statusline コマンドへ渡す JSON を stdin で受け取り、daemon が読む\n" +
 			"context/<session_id>.json (毎回) と rate-limits/<session_id>.json\n" +
-			"(rate_limits.five_hour.resets_at があるときだけ) を書く。\n" +
+			"(rate_limits に resets_at のあるウィンドウがあるときだけ) を書く。\n" +
 			"statusline script からは次の 1 行で呼ぶ:\n\n" +
 			"  \"${XDG_CACHE_HOME:-$HOME/.cache}/agents-daemon/bin/agents-daemon\" ingest-statusline <<<\"$input\" 2>/dev/null || :\n\n" +
 			"stdout には何も出さず、失敗しても exit 0 で終わる (理由は stderr)。",

@@ -116,6 +116,8 @@ association 先がある memory は coverage ratio で `skill_body` / `memory_de
 - `≤40%` → skill_body medium
 - それ以外 → skill_body low
 
+`evidence_sessions` が 1 つだけの候補は、coverage が high / medium でも `low` に落とす。
+
 閾値の spec は [skill-mining-heuristics.md](skill-mining-heuristics.md) を single source of truth とする。
 閾値を変えるときは、この spec と `mine/coverage.go` の定数を両方更新する。
 

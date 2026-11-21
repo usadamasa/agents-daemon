@@ -129,79 +129,128 @@ func (w *Watcher) once(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("購読を始めるときの同期に失敗: %w", err)
 	}
-	var seen int64
-	for seen < upTo {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case ev, ok := <-stream.Events():
-			if !ok {
-				return ended(stream)
-			}
-			seen = ev.Seq
-			if err := w.apply(ctx, cache, nil, ev.Payload); err != nil {
-				return err
-			}
-		}
+	// 公開前の cache は誰も読まないので、held にして lock を取らずに当てる。
+	r := &run{w: w, stream: stream, cache: cache, held: true}
+	if err := r.drain(ctx, upTo); err != nil {
+		return err
 	}
 	w.set(cache)
+	r.held = false
 
 	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case ev, ok := <-stream.Events():
-			if !ok {
-				return ended(stream)
-			}
-			if err := w.apply(ctx, cache, &w.mu, ev.Payload); err != nil {
-				return err
-			}
+		ev, err := r.next(ctx)
+		if err != nil {
+			return err
+		}
+		if err := r.apply(ctx, ev.Payload); err != nil {
+			return err
 		}
 	}
 }
 
-// ended は購読の接続が終わった理由。
-func ended(stream *api.Subscription) error {
-	return fmt.Errorf("購読の接続が終わった: %w", stream.Err())
+// run は購読 1 本の間の cache の当て方。購読の goroutine だけが使う。
+type run struct {
+	w      *Watcher
+	stream *api.Subscription
+	cache  *blockstate.Cache
+	// seen は当てた最後の event の seq。
+	seen int64
+	// held なら w.mu を既に持っているか cache が未公開で、cache に触るときに lock を取らない。
+	held bool
+}
+
+// hold は w.mu を持ち (held なら取らない)、held にする。返す関数で元に戻す。
+func (r *run) hold() func() {
+	if r.held {
+		return func() {}
+	}
+	r.w.mu.Lock()
+	r.held = true
+	return func() {
+		r.held = false
+		r.w.mu.Unlock()
+	}
+}
+
+// next は購読の次の event を待つ。
+func (r *run) next(ctx context.Context) (api.Event, error) {
+	select {
+	case <-ctx.Done():
+		return api.Event{}, ctx.Err()
+	case ev, ok := <-r.stream.Events():
+		if !ok {
+			return api.Event{}, fmt.Errorf("購読の接続が終わった: %w", r.stream.Err())
+		}
+		r.seen = ev.Seq
+		return ev, nil
+	}
+}
+
+// drain は seq が upTo の event まで当てる。
+func (r *run) drain(ctx context.Context, upTo int64) error {
+	for r.seen < upTo {
+		ev, err := r.next(ctx)
+		if err != nil {
+			return err
+		}
+		if err := r.apply(ctx, ev.Payload); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // apply は event 1 件を cache に当て、block_created / session_created なら block を読んで埋め、session_created と
-// 新しい session_view_changed なら session の view を読み直す。mu があれば cache に触る間だけ持つ (rex を読む間は離し、
-// PaneList を待たせない)。この goroutine だけが cache を書くので、離した間に cache は変わらない。
-func (w *Watcher) apply(ctx context.Context, cache *blockstate.Cache, mu *sync.Mutex, ev []byte) error {
-	lock := func() {}
-	unlock := func() {}
-	if mu != nil {
-		lock, unlock = mu.Lock, mu.Unlock
-	}
-	lock()
-	ref, err := cache.Apply(ev)
-	unlock()
+// 新しい session_view_changed なら session の view を読み直す。w.mu は cache に触る間だけ持つ (rex を読む間は離し、
+// PaneList を待たせない。Fill の後の drain の中では持ったまま読む)。この goroutine だけが cache を書くので、離した間に
+// cache は変わらない。
+//
+// Fill が読んだ変化の event は Fill の応答より後に届くことがあり、埋めた状態にそれより古い event が当たると、後の
+// event が届くまで Fill より古い状態が見える。全列挙と同じく、Fill の後に Sync を打ち、埋めてからその seq までの
+// event を w.mu を持ったまま当てて公開する。
+func (r *run) apply(ctx context.Context, ev []byte) error {
+	release := r.hold()
+	ref, err := r.cache.Apply(ev)
+	release()
 	if err != nil || ref == (blockstate.Ref{}) {
 		return err
 	}
 	if !ref.View {
-		created, err := w.reads.Fill(ctx, ref)
-		if err != nil {
-			return fmt.Errorf("作られた block (session %s、block %q) を埋められない: %w", ref.Session, ref.Block, err)
+		if err := r.fill(ctx, ref); err != nil {
+			return err
 		}
-		lock()
-		for id, st := range created {
-			cache.Put(blockstate.Ref{Session: ref.Session, Block: id}, st)
-		}
-		unlock()
 	}
 	if ref.View || ref.Block == "" {
-		view, ok, failure := w.reads.View(ctx, ref.Session)
-		lock()
+		view, ok, failure := r.w.reads.View(ctx, ref.Session)
+		release := r.hold()
 		if ok {
-			cache.PutView(ref.Session, view)
+			r.cache.PutView(ref.Session, view)
 		}
 		if failure != nil {
-			cache.PutViewFailure(ref.Session, failure)
+			r.cache.PutViewFailure(ref.Session, failure)
 		}
-		unlock()
+		release()
 	}
 	return nil
+}
+
+// fill は作られた block を読んで埋め、Fill が読んだ変化の event を当て終えてから w.mu を離す。
+func (r *run) fill(ctx context.Context, ref blockstate.Ref) error {
+	created, err := r.w.reads.Fill(ctx, ref)
+	if err != nil {
+		return fmt.Errorf("作られた block (session %s、block %q) を埋められない: %w", ref.Session, ref.Block, err)
+	}
+	if len(created) == 0 {
+		return nil
+	}
+	upTo, err := r.stream.Sync(ctx)
+	if err != nil {
+		return fmt.Errorf("作られた block (session %s、block %q) を埋めた後の同期に失敗: %w", ref.Session, ref.Block, err)
+	}
+	release := r.hold()
+	defer release()
+	for id, st := range created {
+		r.cache.Put(blockstate.Ref{Session: ref.Session, Block: id}, st)
+	}
+	return r.drain(ctx, upTo)
 }

@@ -108,22 +108,26 @@ function linkContext(text, repo, base) {
 
 // appendLinked は text の URL、issue / PR の参照、ファイルパスをリンクにして parent に足す。
 function appendLinked(parent, text, ctx) {
-  for (const s of segments(text, ctx)) {
-    if (s.target === undefined) {
-      parent.append(s.text);
-      continue;
-    }
-    const a = document.createElement("a");
-    a.className = "ref";
-    a.href = "#";
-    a.title = s.target;
-    a.textContent = s.text;
-    a.addEventListener("click", (e) => {
-      e.preventDefault();
-      void openLink(s.target);
-    });
-    parent.append(a);
-  }
+  for (const s of segments(text, ctx)) parent.append(s.target === undefined ? s.text : linkTo(s.text, s.target));
+}
+
+// linkTo は押すと target を開くリンク。
+function linkTo(text, target) {
+  const a = document.createElement("a");
+  a.className = "ref";
+  a.href = "#";
+  a.title = target;
+  a.textContent = text;
+  a.addEventListener("click", (e) => {
+    e.preventDefault();
+    void openLink(target);
+  });
+  return a;
+}
+
+// fileLinks は構造化されたパスの並びを、形で選ばず 1 件ずつリンクにする。相対パスは base を基準にする。
+function fileLinks(files, base) {
+  return files.flatMap((f, i) => [...(i > 0 ? [", "] : []), linkTo(f, f.startsWith("/") ? f : `${base}/${f}`)]);
 }
 
 function stateLabel(n) {
@@ -1153,8 +1157,12 @@ function memoPopup({ memo, repo }) {
     dd.append(...v);
     dl.append(dt, dd);
   };
-  if (memo.default_taken) add("Default", memo.default_taken);
-  if (memo.files?.length) add("Files", memo.files.join(", "));
+  if (memo.default_taken) {
+    const span = document.createElement("span");
+    appendLinked(span, memo.default_taken, linkContext(memo.default_taken, repo.repo, repo.repo));
+    add("Default", span);
+  }
+  if (memo.files?.length) add("Files", ...fileLinks(memo.files, repo.repo));
   memo.sources.forEach((s, i) => {
     const task = s.task_ref ? g.node(s.task_ref) : undefined;
     const cells = [s.session + (s.live ? "" : " (ended)")];

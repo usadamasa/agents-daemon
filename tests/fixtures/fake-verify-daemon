@@ -3,6 +3,7 @@
 # $TEST_TMPDIR/daemon.calls へ 1 行で記録する。TEST_TMPDIR は包み (fake-verify-go が書く) が渡す。
 #
 # - deps: stdin を読み捨てて JSON を出す。$TEST_TMPDIR/fail-deps があれば exit 3
+# - dream check ... --skills-dir ...: 空の JSON を出す。$TEST_TMPDIR/fail-own-skills があれば exit 1 (指摘あり)
 # - daemon --foreground --dry-run: SIGTERM を受けるまで終わらない。受けたら exit 0
 # - ほか: 空の JSON を出す
 set -euo pipefail
@@ -24,6 +25,12 @@ case "$*" in
     while :; do
       sleep 0.1
     done
+    ;;
+  "dream check"*"--skills-dir"*)
+    printf '{}\n'
+    if [ -e "$TEST_TMPDIR/fail-own-skills" ]; then
+      exit 1
+    fi
     ;;
   *)
     printf '{}\n'

@@ -123,7 +123,8 @@ commit_cmd_change() {
 @test "up: 複製元が環境の置き場の下にあれば拒む" {
   export VERIFY_BASE="$TEST_TMPDIR/src"
   run "$SCRIPT" up
-  [ "$status" -ne 0 ]
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"複製元が環境の置き場の下にある"* ]]
   [ ! -e "$(env_root)" ]
 }
 
@@ -154,6 +155,23 @@ commit_cmd_change() {
   [[ "$line" != *"session:caller"* ]]
 }
 
+@test "check: リリースする tree の skill を dream check に掛け、指摘があれば落ちる" {
+  mkdir -p "$VERIFY_REPO/skills/s1"
+  printf 'skill\n' >"$VERIFY_REPO/skills/s1/SKILL.md"
+  git -C "$VERIFY_REPO" add skills
+  git -C "$VERIFY_REPO" commit -q -m skill
+  "$SCRIPT" up
+  root=$(env_root)
+  run "$SCRIPT" check
+  [ "$status" -eq 0 ]
+  grep -qF -- "--skills-dir $root/src/skills|" "$TEST_TMPDIR/daemon.calls"
+
+  printf '' >"$TEST_TMPDIR/fail-own-skills"
+  run "$SCRIPT" check
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"[fail] dream-check-skills"* ]]
+}
+
 @test "check: rex の socket が無ければ落ちる" {
   rm "$VERIFY_REX_SOCKET"
   "$SCRIPT" up
@@ -176,7 +194,8 @@ commit_cmd_change() {
   commit_cmd_change b
   printf '' >"$TEST_TMPDIR/fail-deps"
   run "$SCRIPT" run
-  [ "$status" -ne 0 ]
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"[fail] deps"* ]]
   [ -d "$(env_root)" ]
   run "$SCRIPT" status
   [ "$status" -eq 1 ]
@@ -249,7 +268,8 @@ commit_cmd_change() {
   mkdir -p "$root"
   printf 'keep\n' >"$root/precious"
   run "$SCRIPT" down
-  [ "$status" -ne 0 ]
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"印 (.agents-daemon-verify) が無い"* ]]
   [ -f "$root/precious" ]
 }
 
@@ -259,6 +279,7 @@ commit_cmd_change() {
   printf '{}\n' >"$TEST_TMPDIR/elsewhere/.agents-daemon-verify"
   ln -s "$TEST_TMPDIR/elsewhere" "$root"
   run "$SCRIPT" down
-  [ "$status" -ne 0 ]
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"symlink"* ]]
   [ -f "$TEST_TMPDIR/elsewhere/.agents-daemon-verify" ]
 }

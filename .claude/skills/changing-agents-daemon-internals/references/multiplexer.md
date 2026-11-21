@@ -59,7 +59,9 @@ daemon は起動時に `multiplexer.Watcher` の `Watch` で購読を 1 本張�
    cache は最新に追いつく。全列挙の後に購読の接続で `server.version` を 1 本打ち、その応答の seq までの event を
    当て終えてから公開する (応答は event を追い越しうるので、全列挙が読んだ変化の event が届く前に公開すると、
    その間だけ全列挙より古い状態が見える)
-3. 以降は event を当て続け、`PaneList` は rex を叩かずに cache を `ToPane` へ渡す (`rex/blockstate`)
+3. 以降は event を当て続け、`PaneList` は rex を叩かずに cache を `ToPane` へ渡す (`rex/blockstate`)。
+   `block_created` / `session_created` で block を埋めたときも 2. と同じく `server.version` を 1 本打ち、
+   その応答の seq までの event を lock を持ったまま当ててから公開する
 
 | event | cache への当て方 |
 | ---- | ---- |

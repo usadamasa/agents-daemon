@@ -14,8 +14,8 @@
                      どれを選ぶかは非決定にする。
        "record":     P を出したときに書いた記録 (rec) があればその持ち主、無ければ "live" (issue の候補 2)。
        "recordonly": 記録があるときだけ、その持ち主。
-   - 記録は、A の PostToolUse の hook が `gh pr create` の出力の URL を A の作業の記録へ書いたもの。Recorded が FALSE の
-     変種は、記録の無い PR (web で作った、記録を書く前のバージョンの plugin で作った)。Expire が TRUE なら、記録は
+   - 記録は、A の PostToolUse の hook が `gh pr create` か `gh stack submit` の出力の URL を A の作業の記録へ書いたもの。
+     Recorded が FALSE の変種は、記録の無い PR (web や GitHub の MCP で作った、hook が失敗した)。Expire が TRUE なら、記録は
      A の終了後の保持期間で消える (Forget)。
    - Shared が FALSE の変種は、B が P の branch に入らない (A だけの終了と移動を見る)。
    - last はセッションの最後の hook のときの branch が P の branch だったか。hook はいつ起きてもよい (Hook)。 *)

@@ -7,7 +7,7 @@
    - worktree は消えうる (ExitWorktree の remove、終了時の後片付け、別のセッションの git worktree remove)。
      RemoveInside が FALSE なら、A が生きていてその worktree にいる間は消えない。
    - 鍵 (gitrepo.RepoKey) は main と生きている worktree では R、消えた worktree ではそのパス W になる (git が引けない)。
-   - hook は生きている間の UserPromptSubmit / Stop (記録を作る)、gh pr create の PostToolUse (記録があれば P を残す)、
+   - hook は生きている間の UserPromptSubmit / Stop (記録を作る)、gh pr create か gh stack submit の PostToolUse (記録があれば P を残す)、
      終了の途中の SessionEnd (記録があれば書き換える)。どれも hook の cwd を記録に書く。Stop は割り込みで来ないことがあり、
      hook はどれも起きなくてよい。
    - 記録の鍵を読むのは 3 か所。
@@ -113,7 +113,7 @@ Turn ==
   /\ WriteCWD
   /\ UNCHANGED <<phase, cwd, wt, pr, anchored, memo>>
 
-\* gh pr create の PostToolUse: 記録があれば P を足す。
+\* gh pr create か gh stack submit の PostToolUse: 記録があれば P を足す。
 CreatePR ==
   /\ phase = "live" /\ rec /\ ~pr
   /\ pr' = TRUE

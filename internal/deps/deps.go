@@ -91,11 +91,20 @@ func build(in input) Deps {
 		RefTitles:    in.RefTitles,
 		RefPRs:       in.RefPRs,
 	})
+	found := mentions(in, l)
 	for i := range d.Graph.Nodes {
 		n := &d.Graph.Nodes[i]
 		n.Repo, _ = l.row(n.CWD)
 		if p := panes[n.SessionID]; n.Live && p != nil {
 			n.Rex = p.Rex
+		}
+		if n.Kind == graph.KindTask {
+			n.Mentions = found.node(n.Key)
+		}
+	}
+	for i := range d.Graph.Links {
+		if e := d.Graph.Links[i].Edge; e != nil {
+			d.Graph.Links[i].Mentions = found.edge(e.ID)
 		}
 	}
 	order := columnOrder(d.Graph.Nodes, lastActive(in.Tasks, in.Todos, in.Works), func(cwd string) string {

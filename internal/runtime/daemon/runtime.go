@@ -599,6 +599,7 @@ func assembleRuntime(raw multiplexerClient, kind string, p apppath.Paths, store 
 	runtime.attachStateDir(p.StateDir())
 	ws := runtime.workSessions()
 	runtime.refPoll = refpoll.New(runtime.edges, runtime.refs, refpoll.GH, ws.Live, ws.Issuers, log)
+	runtime.refPoll.Mentions(runtime.tasks.List, runtime.works.List, refpoll.GHKind)
 	if c, ok := raw.(reaper.Client); ok {
 		runtime.reaper = reaper.New(runtime.spawned, c, log, dryRun)
 	}

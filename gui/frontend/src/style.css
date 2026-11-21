@@ -400,6 +400,9 @@ select { font: inherit; color: inherit; }
   order: 1; flex: 1 0 100%; min-width: 0; box-sizing: border-box; padding: 0 0 4px 24px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 12px;
 }
+/* 題の #番号 の行: repo 名#番号 は縮めず、引いた題を残りの幅で切る。 */
+.lk.mention > button:first-of-type { flex: 0 0 auto; color: var(--muted); font-size: 12px; }
+.lk .mt { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .kv { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 4px 8px; font-size: 12px; margin: 0; padding-top: 12px; border-top: 1px solid var(--line-muted); }
 .kv dt { color: var(--muted); margin: 0; }
 .kv dd { margin: 0; line-height: 1.5; overflow-wrap: anywhere; }

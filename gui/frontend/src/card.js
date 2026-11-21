@@ -105,9 +105,19 @@ export function acceptanceLine(n) {
   return `${line} ${lines[at + 1].replace(BULLET, "")}`;
 }
 
-// cardHint はカードの tooltip。今の作業と、タスクの受け入れ条件を行に分ける。
+// mentionLabel は題か note の #番号 の言及を「repo 名#番号」にする。owner は省く (題の中の書き方に近い形)。
+export function mentionLabel(m) {
+  return `${m.repo.split("/").pop()}#${m.number}`;
+}
+
+// mentionLines は言及のうち daemon が題を引いたものを「repo 名#番号 題」の行にする (#474)。
+export function mentionLines(mentions) {
+  return (mentions ?? []).filter((m) => m.title).map((m) => `${mentionLabel(m)} ${m.title}`);
+}
+
+// cardHint はカードの tooltip。今の作業と、タスクの受け入れ条件、題の #番号 の題を行に分ける。
 export function cardHint(n) {
-  return [n.summary, acceptanceLine(n)].filter(Boolean).join("\n");
+  return [n.summary, acceptanceLine(n), ...mentionLines(n.mentions)].filter(Boolean).join("\n");
 }
 
 // 人の手当てが要る状態。作業中より目立たせる。取りやめの参照は、待っていた下流を人が付け替えるまで止める。

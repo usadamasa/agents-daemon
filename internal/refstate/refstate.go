@@ -1,6 +1,6 @@
-// Package refstate は辺の端点の外部の参照 (issue / PR) の状態の写しを XDG state 配下に置く (#416)。書くのは daemon
-// だけで、gh で引いた状態を書く。読むのは依存図 (deps) で、merged / closed の参照を完了にし、dropped の参照を
-// 取りやめにし、引いた題を参照のノードの題にする。
+// Package refstate は辺の端点と、タスクの題と辺の note に書かれた番号 (#474) の外部の参照 (issue / PR) の状態の写しを
+// XDG state 配下に置く (#416)。書くのは daemon だけで、gh で引いた状態を書く。読むのは依存図 (deps) で、merged /
+// closed の参照を完了にし、dropped の参照を取りやめにし、引いた題を参照のノードと言及の題にする。
 //
 //	refs/<id>.json   参照 1 つ (参照、状態、題、open の PR の段、PR の head branch、引いた時刻)
 //

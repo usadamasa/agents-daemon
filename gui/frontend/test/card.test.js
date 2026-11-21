@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PR_STAGE, STATE_LABEL, STATE_TONE, acceptanceLine, cardHint, cardText, emphasis, leadStage, toneOf } from "../src/card.js";
+import { PR_STAGE, STATE_LABEL, STATE_TONE, acceptanceLine, cardHint, cardText, emphasis, leadStage, mentionLines, toneOf } from "../src/card.js";
 
 test("acceptanceLine は受け入れ条件の行を選び、行の途中の印からを返す", () => {
   const task = (description) => ({ kind: "task", description });
@@ -29,6 +29,20 @@ test("cardHint は今の作業と受け入れ条件を行に分け、どちら�
   assert.equal(cardHint({ kind: "task", description: "PR を確かめる" }), "PR を確かめる");
   assert.equal(cardHint({ kind: "session", summary: "読んでいる" }), "読んでいる");
   assert.equal(cardHint({ kind: "ref" }), "");
+});
+
+test("mentionLines は題の #番号 を repo 名#番号 と引いた題の行にし、題を引いていない番号は出さない (#474)", () => {
+  const mentions = [
+    { repo: "usadamasa/agents-daemon", number: 469, ref: "issue:usadamasa/agents-daemon#469", title: "依存図の題を読めるようにする" },
+    { repo: "usadamasa/workspace", number: 12 },
+  ];
+  assert.deepEqual(mentionLines(mentions), ["agents-daemon#469 依存図の題を読めるようにする"]);
+  assert.deepEqual(mentionLines(undefined), []);
+});
+
+test("cardHint は今の作業の後に、題の #番号 の題を行で添える (#474)", () => {
+  const n = { kind: "task", summary: "読んでいる", mentions: [{ repo: "usadamasa/agents-daemon", number: 469, title: "依存図の題を読めるようにする" }] };
+  assert.equal(cardHint(n), "読んでいる\nagents-daemon#469 依存図の題を読めるようにする");
 });
 
 test("線でつながるカードの副題はセッション名、状態、今の作業の順", () => {

@@ -1,5 +1,6 @@
 // Package refpoll は daemon が辺の端点の外部の参照 (issue / PR) の状態を gh で引き直して写し (refstate) へ書き
-// (#416)、済んだ参照を before に持つ辺を消す (#422)。daemon の tick ごとに Refresh を 1 回呼ぶ。手順の性質
+// (#416)、済んだ参照を before に持つ辺を消す (#422)。タスクの題と辺の note に書かれた番号の題も、端点の後に引く
+// (#474)。daemon の tick ごとに Refresh を 1 回呼ぶ。手順の性質
 // (gh の失敗で完了に倒さない、open の参照の辺を消さない、済んだ参照はいずれ完了になり、その辺はいずれ消える) は
 // models/refstate が持つ。
 package refpoll
@@ -19,8 +20,11 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/applog"
 	"github.com/usadamasa/agents-daemon/internal/edge"
 	"github.com/usadamasa/agents-daemon/internal/gitrepo"
+	"github.com/usadamasa/agents-daemon/internal/mention"
 	"github.com/usadamasa/agents-daemon/internal/ref"
 	"github.com/usadamasa/agents-daemon/internal/refstate"
+	"github.com/usadamasa/agents-daemon/internal/tasklog/record"
+	"github.com/usadamasa/agents-daemon/internal/worklog"
 )
 
 // fetchTimeout は gh の呼び出し 1 回を待つ上限。tick の中で呼ぶので、network が詰まっても pane の監視を
@@ -73,10 +77,19 @@ type Poller struct {
 	sessions func() []Session
 	issuers  func() map[string][]Session
 	// locate は cwd の GitHub の repo (owner/repo) と branch を引く (テストが git を起こさずに差し替える継ぎ目)。
-	locate   func(cwd string) (repo, branch string)
-	log      *applog.Logger
+	locate func(cwd string) (repo, branch string)
+	log    *applog.Logger
+	// failures は gh が失敗した参照 (辺の端点は参照、言及は mention.Key) ごとの次に引ける時刻。
 	failures map[string]failure
 	places   map[string]located
+	// tasks、works、kind は題と note の言及を引く材料 (Mentions)。どれかが nil なら言及は引かない。
+	tasks func() ([]record.Task, error)
+	works func() ([]worklog.Record, error)
+	kind  KindFetcher
+	// gitHub は repo の鍵 (main worktree のパス) の owner/repo を引く (テストが git を起こさずに差し替える継ぎ目)。
+	// repos はその結果。
+	gitHub func(repo string) string
+	repos  map[string]string
 }
 
 // New は edges の端点の参照を fetch で引き、refs へ書く Poller を作る。sessions は生きているセッションを返す。
@@ -84,7 +97,7 @@ type Poller struct {
 func New(edges edge.Store, refs refstate.Store, fetch Fetcher, sessions func() []Session, issuers func() map[string][]Session, log *applog.Logger) *Poller {
 	return &Poller{
 		edges: edges, refs: refs, fetch: fetch, sessions: sessions, issuers: issuers, locate: gitLocate, log: log,
-		failures: map[string]failure{}, places: map[string]located{},
+		failures: map[string]failure{}, places: map[string]located{}, gitHub: gitrepo.GitHubRepo, repos: map[string]string{},
 	}
 }
 
@@ -95,7 +108,7 @@ func gitLocate(cwd string) (string, string) {
 }
 
 // Refresh は辺の端点の issue / PR のうち引き直す時期のもの (refstate.Due) を 1 つ選んで引き、写しへ書く。
-// 1 回に 1 つにして、tick (既定 5 秒) の間隔で gh の呼び出しをばらす。選ぶ順は、まだ引いていないもの、前に引いた
+// 引く端点が無ければ、写しの無い言及を 1 つ引く (dueMention)。1 回に 1 つにして、tick (既定 5 秒) の間隔で gh の呼び出しをばらす。選ぶ順は、まだ引いていないもの、前に引いた
 // 時刻の古いもの、参照の順。gh が失敗したら写しを書かず (済んでいない参照を完了と見せない)、その参照は
 // RefreshInterval のあいだ引かない。失敗の理由は参照ごとに、変わったときだけログに書く (gh が無いような全部に
 // 効く理由は参照の数だけ 1 回ずつ)。引いた後に、PR を出したセッションから PR への辺を導き (anchor)、済んだ参照を
@@ -114,8 +127,13 @@ func (p *Poller) Refresh(ctx context.Context, now time.Time) {
 		p.log.Logf("外部の参照の写しの読み込みに失敗、引きません: %v", err)
 		return
 	}
-	if due := p.due(edges, cached, now); len(due) > 0 {
-		if rec, ok := p.refresh(ctx, due[0], cached[due[0]], now); ok {
+	mentions := p.listMentions(edges, cached, now)
+	if due := p.due(edges, mentions, cached, now); len(due) > 0 {
+		if rec, ok := p.refresh(ctx, due[0], cached[due[0]], true, now); ok {
+			cached[rec.Ref] = rec
+		}
+	} else if m, ok := p.dueMention(mentions, cached, now); ok {
+		if rec, ok := p.refreshMention(ctx, m, now); ok {
 			cached[rec.Ref] = rec
 		}
 	}
@@ -237,9 +255,13 @@ func (p *Poller) keepOpen(cached map[string]refstate.Record, now time.Time) {
 	}
 }
 
-// due は辺の端点の issue / PR のうち、引き直す時期のものを引く順に返す。辺から消えた参照の失敗の記録は捨てる。
-func (p *Poller) due(edges []edge.Edge, cached map[string]refstate.Record, now time.Time) []string {
+// due は辺の端点の issue / PR のうち、引き直す時期のものを引く順に返す。辺からも言及からも消えた参照の失敗の記録は
+// 捨てる。
+func (p *Poller) due(edges []edge.Edge, mentions []mention.Mention, cached map[string]refstate.Record, now time.Time) []string {
 	referenced := map[string]bool{}
+	for _, m := range mentions {
+		referenced[m.Key()] = true
+	}
 	var due []string
 	for _, e := range edges {
 		for _, ep := range []string{e.Before.Ref, e.After.Ref} {
@@ -289,8 +311,9 @@ func (p *Poller) sweep(edges []edge.Edge, cached map[string]refstate.Record) {
 	}
 }
 
-// refresh は参照 1 つを引いて写しへ書き、書いた写しを返す。書かなかったら ok が false。
-func (p *Poller) refresh(ctx context.Context, key string, prev refstate.Record, now time.Time) (refstate.Record, bool) {
+// refresh は参照 1 つを引いて写しへ書き、書いた写しを返す。書かなかったら ok が false。endpoint は辺の端点か
+// (言及だけの参照なら false で、状態の変化をログに書かない)。
+func (p *Poller) refresh(ctx context.Context, key string, prev refstate.Record, endpoint bool, now time.Time) (refstate.Record, bool) {
 	it, _ := ref.ParseItem(key)
 	fetchCtx, cancel := context.WithTimeout(ctx, fetchTimeout)
 	defer cancel()
@@ -314,7 +337,8 @@ func (p *Poller) refresh(ctx context.Context, key string, prev refstate.Record, 
 		return refstate.Record{}, false
 	}
 	switch {
-	case prev.State == state:
+	case prev.State == state || !endpoint:
+		// 言及だけの参照 (refreshMention) は辺の端点でなく、依存図の完了や取りやめの扱いを書かない。
 	case refstate.Done(state):
 		p.log.Logf("%s は %s (依存図で完了にします)", key, state)
 	case state == refstate.StateDropped:

@@ -446,6 +446,8 @@ export type GraphNode = {
   parked: number
   // このタスクの description に id が書かれたメモ (書かれた順)。status を問わない
   memos: MemoRef[]
+  // kind task のノードの題に書かれた issue / PR の番号 (書かれた順)。owner/repo を解けたものだけ
+  mentions?: RefMention[]
   // 上流をたどった原因の鎖 (近い順)
   blocked_by: string[]
   // 待ちが輪になっていて、たどると自分へ戻ってくるか
@@ -481,6 +483,19 @@ export type GraphLink = {
   after: string
   kind: 'task' | 'edge'
   edge?: EdgeRecord
+  // edge の note に書かれた issue / PR の番号 (書かれた順)。owner/repo を解けたものだけ
+  mentions?: RefMention[]
+}
+
+// 題か note に書かれた issue / PR の番号 1 つ。素の #N と repo#N は owner/repo を補ってある
+export type RefMention = {
+  // owner/repo
+  repo: string
+  number: number
+  // daemon が引いた参照 (issue: / pr:)。引く前は無い
+  ref?: string
+  // daemon が引いた issue / PR の題。引く前は無い
+  title?: string
 }
 
 // 完了したノードを隠したときの図。隠したノードを通り抜けていた辺は畳んで残す

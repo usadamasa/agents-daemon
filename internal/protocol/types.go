@@ -446,6 +446,8 @@ type GraphNode struct {
 	Parked int `json:"parked"`
 	// このタスクの description に id が書かれたメモ (書かれた順)。status を問わない。
 	Memos []MemoRef `json:"memos"`
+	// kind task のノードの題に書かれた issue / PR の番号 (書かれた順)。owner/repo を解けたものだけ。
+	Mentions []RefMention `json:"mentions,omitempty"`
 	// 上流をたどった原因の鎖 (近い順)。
 	BlockedBy []string `json:"blocked_by"`
 	// 待ちが輪になっていて、たどると自分へ戻ってくるか。
@@ -481,6 +483,19 @@ type GraphLink struct {
 	After  string      `json:"after"`
 	Kind   string      `json:"kind"`
 	Edge   *EdgeRecord `json:"edge,omitempty"`
+	// edge の note に書かれた issue / PR の番号 (書かれた順)。owner/repo を解けたものだけ。
+	Mentions []RefMention `json:"mentions,omitempty"`
+}
+
+// RefMention は題か note に書かれた issue / PR の番号 1 つ。素の #N と repo#N は owner/repo を補ってある。
+type RefMention struct {
+	// owner/repo。
+	Repo   string `json:"repo"`
+	Number int    `json:"number"`
+	// daemon が引いた参照 (issue: / pr:)。引く前は無い。
+	Ref string `json:"ref,omitempty"`
+	// daemon が引いた issue / PR の題。引く前は無い。
+	Title string `json:"title,omitempty"`
 }
 
 // FoldedGraph は完了したノードを隠したときの図。隠したノードを通り抜けていた辺は畳んで残す。

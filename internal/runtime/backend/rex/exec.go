@@ -2,6 +2,20 @@
 // Geometry) へ写す。rex は control API (api) だけで操作し、rex の CLI は起こさない。購読の cache は watch、doctor の
 // 前提点検は premise、spawn した pane の中で走る包み (包みだけが CLI を叩く) は wrap、応答と event の形は wire、
 // block の状態から Pane への写像は blockstate にある。
+//
+// daemon の操作と rex の method の対応:
+//
+//	PaneList                  購読していれば watch の cache。していない呼び手と未同期の間は全列挙 (session.list、session ごとに
+//	                          list_blocks と session.view、shell の block ごとに program_status と process)
+//	PaneGet / PaneRead /      target.resolve で block の session を引いてから block の method を打つ。PaneRead は format
+//	PaneGeometry / Send*      (続きは blob_read)、SendText は write (Enter は押さない)、SendKeys は block.event の press と release
+//	Reachable                 server.status
+//	NewSession / NewWindow    session.create / session.new_window。block の command は wrap の包み
+//	SplitPane / ClosePane     session.new_split / block.close (simulate の使い捨て block)
+//	SessionBlocks / Kill      list_blocks を flavor を問わず数える / session.destroy (daemon の reaper)
+//
+// 全列挙は session と block の数に比例して request が増えるので、daemon は tick ごとには打たず購読の cache を読む。
+// 待機中の印を block の label に出さない。rex で表示に使える label は利用者が付けた label を潰すため。
 package rex
 
 import (

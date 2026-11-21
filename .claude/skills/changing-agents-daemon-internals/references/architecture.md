@@ -22,7 +22,7 @@ statusline・hook・daemon が別々のタイミングで動き、ファイル�
                                               │
 [3]                                           └─ 上限解除の時刻まで待つ
                                                  ├─ PaneRead ──────────> 待機明けに画面の通知欄を読んでキーを選ぶ
-                                                 └─ SendText / SendKeys で再開 (backend は rex。multiplexer.md)
+                                                 └─ SendText / SendKeys で再開 (backend は rex)
 ```
 
 | 段 | 実体 |
@@ -30,6 +30,7 @@ statusline・hook・daemon が別々のタイミングで動き、ファイル�
 | [1] statusline が block と session の対応を渡す | `sessionstate`、`sessioncontext`、`ratelimit`。記録の無い pane は `claudesessions` が登録簿で補う |
 | [2] SessionStart hook が daemon を起こす | `hooks/ensure-daemon.sh`、`daemonstate` (起動の排他)。バイナリの用意は `hooks/build-daemon.sh`、動いている daemon の入れ替わりは `daemon/selfupdate.go`、`update` は `selfupdate` |
 | [3] daemon が監視して再開する | `monitor`、`detect`、`transcript`。毎 tick の判定の順は `monitor` の package doc、不変条件は `monitor/invariants_test.go` |
+| pane の列挙・読み取り・送信 | `multiplexer` (呼び手ごとの interface)、`backend` (rex の外では起こさない)、`rex` (操作と method の対応)、`rex/watch` と `rex/blockstate` (購読の cache)。daemon は rex を control API だけで操作し、CLI を叩くのは spawn の包み (`rex/wrap`) だけ |
 | 依存図とパーキングロット | `deps`、`deps/graph`、`edge`、`ledger`、`tell`、`parking`、`parkhand`。mod は `hooks/register.ts` と各 `hooks/*.ts`、アプリは `gui/` の冒頭 |
 | CLI の組み立て | `cmd/agents-daemon/internal/*cli` の package doc。cobra は `cmd/` の下だけ (`.go-arch-lint.yml`) |
 
@@ -71,9 +72,9 @@ daemon が担わないもの:
 | `$STATE/limit-events/<YYYY-MM-DD>.jsonl` | daemon | daemon (30 日) | `daemon/limitlog` |
 | `$STATE/turn-failures/<session_id>.json` | `ingest-turn-failure` (hook) | 次の turn の hook、daemon (24 時間) | `turnfailure` |
 | `$STATE/quota-resume/<session_id>.json` | `ingest-quota-resume` (hook) | daemon (24 時間) | `quotaresume` |
-| `$STATE/logs/build.log` | `hooks/build-daemon.sh`、`hooks/build-gui.sh` | 消さない | `hooks/lib/go-build.sh` |
+| `$STATE/logs/build.log` | `hooks/build-daemon.sh`、`hooks/build-gui.sh` | 消さない | `hooks/lib/daemon-bin.sh` |
 | `$STATE/build.failed`、`$STATE/build-gui.failed` | 同上 | 同じ script が建てられたとき | `hooks/lib/go-build.sh` |
-| `$STATE/logs/dream-harvest.log` | `dream harvest` (Stop hook) | 消さない | `hooks/dream-harvest.sh` |
+| `$STATE/logs/dream-harvest.log` | `dream harvest` (Stop hook) | 消さない | `dream/harvest` |
 | `$STATE/dream/harvest/<YYYY-MM-DD>.jsonl`、`…/candidates/`、`…/replays/`、`…/verdicts/` | `dream harvest`、`dream mine`、`agents-daemon:dream` skill | `dream harvest` (90 日) | `dream` |
 | `$STATE/dream/harvest-state.json` | `dream harvest` | 上書き | `dream` |
 | `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon`、`….version` | `hooks/build-daemon.sh`、`task install` | 消さない | `hooks/lib/daemon-bin.sh` |

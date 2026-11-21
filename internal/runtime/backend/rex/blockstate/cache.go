@@ -170,6 +170,7 @@ func (c *Cache) applyBlockEvent(raw json.RawMessage, line []byte) error {
 		}
 	case "process_changed":
 		// 前景の置き換え。stream は順序を保つので generation は見ない。
+		// rex-premise: preview.30 api process_changed は前景の入れ替わりの瞬間に push され、process の問い合わせでは起きない
 		err = json.Unmarshal(ev.Payload, &st.Process)
 	case "child_exited":
 		// --keep-open の block は終了後に shell が前景へ戻らず process_changed が来ない。前景を空にして、

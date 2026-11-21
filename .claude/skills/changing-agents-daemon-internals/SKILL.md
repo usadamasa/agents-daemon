@@ -10,8 +10,8 @@ description: >-
 
 コードから復元できないもの (パッケージをまたぐ境界とその理由、実測した Claude Code と rex の前提、実機の検証手順) と、
 症状から見る場所の置き場。パッケージの中で閉じる仕組みは package doc と `hooks/*.ts` の冒頭が持ち、ここには写さない。
-利用者が打つコマンド・設定キー・既知の制約は
-plugin の `agents-daemon:agents-daemon` skill の `references/operations.md` が持ち、ここには写さない。
+利用者が打つコマンド・設定キー・既知の制約は plugin の `agents-daemon:agents-daemon` skill の
+`references/operations.md` が持つ。
 
 ## references
 
@@ -21,7 +21,6 @@ plugin の `agents-daemon:agents-daemon` skill の `references/operations.md` �
 | ---- | ---- |
 | [architecture.md](references/architecture.md) | 部品の連動と実体のパッケージ、出力されるファイルの索引 |
 | [program-status.md](references/program-status.md) | Claude Code の record と画面のモードの実測 |
-| [multiplexer.md](references/multiplexer.md) | 多重化ツールの backend (rex) |
 | [verification.md](references/verification.md) | 検証用コマンドと実機での検証 |
 | [package-lint.md](references/package-lint.md) | パッケージ構造の lint (analyze-modularity、go-arch-lint) と改名 |
 
@@ -37,10 +36,12 @@ plugin の `agents-daemon:agents-daemon` skill の `references/operations.md` �
 | `doctor` の pane 一覧が全部 `agent_status=unknown` (rex を上げた直後) | `rex/blockstate` の `ToPane`。状況ごとの record は program-status.md |
 | daemon が起きない・バイナリがビルドされない | `hooks/ensure-daemon.sh` と `hooks/build-daemon.sh` の冒頭。`$STATE/logs/build.log` と `$STATE/build.failed` |
 | 直したコードが動いていない | `daemon/selfupdate.go` (動いている daemon の入れ替え)。verification.md の「建てたバイナリは共有の置き場を差し替える」 |
-| 送信が block に届かない | multiplexer.md の対応表 (SendText、SendKeys)。送る順と間隔は `monitor` の再開の送信と `config` |
+| 送信が block に届かない | `rex` の package doc の対応表 (SendText、SendKeys) と `rex/api`。送る順と間隔は `monitor` の再開の送信と `config` |
+| rex を上げてから pane の一覧や送信がおかしい | `doctor` の「rex の前提」(`rex/premise`)。点検の手順は catching-up-with-rex-changelog skill |
+| pane の状態の変化が daemon に遅れて届く、届かない | `rex/watch` と `rex/blockstate` (購読の cache と張り直し)。切れた理由は daemon.log |
 | `doctor` の pane 一覧が `session_id=(なし)` になる (上限を判定しない) | `sessioncontext` (`context/<sid>.json` の `multiplexer`) と `claudesessions` (登録簿での補い) |
 | `doctor` の pane 一覧に `⚠ transcript を読めない` が出る | `transcript` の package doc (置き場と entry の形) |
-| rex のセッションなのに daemon が起きない | multiplexer.md (`REX_SESSION` の無い起動では起こさない) |
+| rex のセッションなのに daemon が起きない | `backend` の `ErrNoRexSession` (`REX_SESSION` の無い起動では起こさない) |
 | 依存図のノードの状態や辺がおかしい | `deps/graph` と `edge` (端点の結びつけ) の package doc、`deps/activity.go`。`agents-daemon deps` の JSON を直に読む |
 | アプリからの送達 (指示、メモを渡す) が拒まれる・届かない | `tell` と `parkhand` の package doc。`logs --events` の `tell` と `park.hand` の行 |
 | mod の通知 (辺の書き方、ファイルのメモ) が出ない、park tool が載らない | `hooks/register.ts` と各 `hooks/*.ts` の冒頭。`logs --events` の mod の出来事 |

@@ -12,6 +12,8 @@ import (
 
 // ErrNoRexSession は rex の外で起動され、監視する block が無いことを表す。
 // daemon --ensure はこれを受けて何もせずに終わる (素の端末の SessionStart で毎回 daemon を起こさない)。
+// hook はこの判定を持たず、バイナリの build は常に行う。同じバイナリの statusline / ingest-statusline は
+// 多重化ツールを要らないため。
 var ErrNoRexSession = errors.New("REX_SESSION が無いため rex の block を監視できません (rex の外で起動されました)")
 
 // Detect は使う backend の種類を返す。REX_SESSION があれば rex、無ければ ErrNoRexSession。

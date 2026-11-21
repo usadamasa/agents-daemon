@@ -11,7 +11,7 @@
   昇格させるときだけ。
 - プロジェクト CLAUDE.md は、グローバルと重複していたら自分側を削る。
 - skill 本体と重複していたら、CLAUDE.md 側を「skill 名で参照」に置き換える
-  (例: 「PR 作成は `commit-commands:commit-push-pr` スキルに従う」)。
+  (例: 「PR 作成は `<plugin>:<skill>` スキルに従う」)。
 
 ## 昇格の条件
 

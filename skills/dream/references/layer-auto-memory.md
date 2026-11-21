@@ -6,8 +6,9 @@
 
 ## 行き先を決める
 
-全 memory に対して行き先を 1 つ決める。「そのまま残す」を選べるのは、evidence が 1 セッションしか無いときと、
-下記「手順」の 5 の条件 (その知見が必要になる場面を skill の description に書けない) を満たすときだけ。
+全 memory に対して行き先を 1 つ決める。「そのまま残す」を選べるのは、evidence が 1 セッションしか無いとき、
+文章の規範を持つ skill が無いときの文章の規範、下記「手順」の 5 の条件 (その知見が必要になる場面を skill の
+description に書けない) を満たすときだけ。
 
 利用者の規約の `memoryHomes` に当てはまる規則があれば、下の表より先にそれを当てる
 (規約の読み方は [SKILL.md の「利用者の規約」](../SKILL.md#利用者の規約))。
@@ -16,17 +17,27 @@
 |---|---|
 | 一回限りのメモ・進行状態・ephemeral な記録 | 削除 (下記「削除する対象」) |
 | evidence が 1 セッションしか無い (`evidence_sessions` が 1 件) | 昇格させず memory に留める |
+| 機械で拾える表記・手順の規範 | hook (利用者の規約の `delegates` へ渡す) か、表記のルールを持つ skill (description で引く) |
+| 機械で拾えない文章の規範 (構成・論証・文脈への指摘) | 文章の規範を持つ skill (description で引く)。無ければ memory に残す |
 | domain overlap する既存 skill がある | その skill の body へ統合 |
 | 反復する domain だが該当 skill が無い | skill を新規作成 (下記「スコープの選び方」) |
 | 普遍的な作業規範で 1〜2 行に圧縮できる | グローバル CLAUDE.md の原本へ昇格 ([layer-claude-md](layer-claude-md.md)) |
 | 特定リポジトリでしか成立しない | そのリポジトリの CLAUDE.md / AGENTS.md |
-| 機械で拾える表記・手順の規範 | hook か prh ルール (`japanese-writer:writing-feedback` skill が先例) |
 | 設定値の意図 | 設定の原本のコメント |
 | 上のどれでもない (手順 5 の条件を満たす) | memory に残し、本文へ失効条件を書く |
 
 新規 skill を作ると判定したら、SKILL.md の作成そのものは skill を書く規範の skill
 (利用者の規約の `skillGuides`) へ渡す。dream は
 「skill 化すべき」と判定するところまでを担当する。
+
+## 記憶階層の外へ渡す memory
+
+表記・手順の規範と文章の規範の行に当たった memory は、dream が統合しない。行き先の skill は名前ではなく
+description で探し、統合はその skill の手順に任せる。stage レポートを読んで判断した結果をユーザーへ示すときに、
+行き先表とは別の一覧に分け、memory ごとに統合先の候補の skill (description が合ったもの) を並べる。
+候補が無い memory は、表の行どおり hook の担当へ渡すか memory に残す。
+stage の行き先表が `skill_body` で「skill 本体へ統合」と埋めていても、この 2 行に当たればこちらを優先し、
+その candidate に `agents-daemon dream adopt` を呼ばない。
 
 ## スコープの選び方
 
@@ -38,7 +49,8 @@
 
 ## 手順
 
-1. 各 memory の内容 domain を 1 文で要約する。
+1. 各 memory の内容 domain を 1 文で要約する。表記・手順の規範か文章の規範に当たる memory は、2〜4 を飛ばして
+   「記憶階層の外へ渡す memory」に従う。
 2. 利用可能な skill を走査し、**topic keyword** (例: sandbox, permission, shell, git) で domain overlap
    する skill をピックアップする。skill の一覧は `~/.claude/skills/*/SKILL.md` の description か `/skills`
    で得る。memory 名との substring 一致に頼らない。

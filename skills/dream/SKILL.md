@@ -107,6 +107,8 @@ ephemeral な作業ファイル。作業ファイルの例は、旧バージョ�
 全 memory に対して行き先を 1 つ決める。判定は
 [layer-auto-memory](references/layer-auto-memory.md) の行き先テーブルに従う。
 `agents-daemon dream stage` が出す行き先表の空欄を、この Step で埋める。
+表記・手順の規範と文章の規範に当たる memory は dream が統合せず、統合先の候補の skill と並べて別の一覧で示す
+([layer-auto-memory の「記憶階層の外へ渡す memory」](references/layer-auto-memory.md#記憶階層の外へ渡す-memory))。
 
 昇格先が CLAUDE.md なら、同じ dream の中で
 [layer-claude-md](references/layer-claude-md.md) の剪定まで行う。統合先が skill 本体なら、
@@ -160,7 +162,8 @@ dream を実施したセッションで以下を確認する。終わったら�
 - [ ] CLAUDE.md へ昇格させた分の剪定を同じ dream の中で行った (追記だけで終わっていない)
 - [ ] スキルと CLAUDE.md の重複が解消されている (CLAUDE.md が「スキルに従う」と参照する形)
 - [ ] stage レポートの全 memory 行に行き先が入っている (`unhomed` を空欄のまま残していない)
-- [ ] memory に残したものは、その知見が必要になる場面を skill の description に書けないことを確認し、本文へ失効条件を書いた
+- [ ] 表記・手順の規範と文章の規範に当たる memory を、統合先の候補の skill と並べて別の一覧でユーザーへ示した (統合はその skill に任せた)
+- [ ] memory に残したもの (行き先の skill が無い文章の規範を除く) は、その知見が必要になる場面を skill の description に書けないことを確認し、本文へ失効条件を書いた
 - [ ] 変更を論理単位ごとに commit し、ユーザーが diff レビュー可能 (push は保留)
 - [ ] 採用前に diff レビューを依頼した (dream 出力は hallucination 混入の懸念があるため鵜呑み禁止)
 

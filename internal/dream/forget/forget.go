@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/usadamasa/agents-daemon/internal/dream"
+	"github.com/usadamasa/agents-daemon/internal/dream/mine/corpus"
 )
 
 // Opts は forget サブコマンドの実行パラメータ。
@@ -54,7 +55,7 @@ func Run(opts Opts) (Result, error) {
 	if opts.Stderr == nil {
 		opts.Stderr = io.Discard
 	}
-	res := Result{DryRun: opts.DryRun, Paths: []string{}}
+	res := Result{DryRun: opts.DryRun, Paths: []string{}, LinkedFrom: []Link{}}
 	if len(opts.Names) == 0 {
 		return res, errors.New("削除する memory 名を 1 つ以上指定する")
 	}
@@ -79,6 +80,15 @@ func Run(opts Opts) (Result, error) {
 		bases = append(bases, base)
 	}
 
+	// 消した後に残るリンク切れを、消す前に見せる。直すかどうかは人が決めるので止めない。
+	res.LinkedFrom, err = linksTo(memDir, targets)
+	if err != nil {
+		return res, err
+	}
+	for _, l := range res.LinkedFrom {
+		_, _ = fmt.Fprintf(opts.Stdout, "%s:%d: [[%s]] が消す memory を指している\n", l.Path, l.Line, l.Target)
+	}
+
 	if opts.DryRun {
 		for _, path := range targets {
 			res.Paths = append(res.Paths, path)
@@ -95,6 +105,40 @@ func Run(opts Opts) (Result, error) {
 		_, _ = fmt.Fprintf(opts.Stdout, "removed %s\n", path)
 	}
 	return res, pruneIndex(filepath.Join(memDir, "MEMORY.md"), bases)
+}
+
+// linksTo は targets 以外の memory から、targets を [[name]] (frontmatter の name) で指す箇所を拾う。
+func linksTo(memDir string, targets []string) ([]Link, error) {
+	mems, err := corpus.LoadMemories(memDir)
+	if err != nil {
+		return nil, err
+	}
+	isTarget := make(map[string]bool, len(targets))
+	for _, t := range targets {
+		isTarget[t] = true
+	}
+	names := map[string]bool{}
+	for _, m := range mems {
+		if isTarget[m.Path] && m.Name != "" {
+			names[m.Name] = true
+		}
+	}
+	out := []Link{}
+	for _, m := range mems {
+		if isTarget[m.Path] {
+			continue
+		}
+		links, err := corpus.WikiLinks(m.Path)
+		if err != nil {
+			return nil, err
+		}
+		for _, l := range links {
+			if names[l.Target] {
+				out = append(out, Link{Path: m.Path, Line: l.Line, Target: l.Target})
+			}
+		}
+	}
+	return out, nil
 }
 
 // resolveMemoryDir は削除対象の memory ディレクトリを決める。

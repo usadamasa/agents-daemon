@@ -108,10 +108,8 @@ pane は残っていて claude が起き切っていない。`detail` を読み�
 
 spawn は control API で block を作って手放すので、block は owner を持たない。CLI の `rex session new` で作った
 block のように、終わった CLI の client が owner のまま残って size が 80x24 で止まることはない。
-タブで起きた claude には包みが `AGENTS_DAEMON_SHARED_REX_SESSION` を渡し、plugin の SessionStart hook が
-`rex session rename` を打たず自分のタブにだけ名前を付ける案内を出す。新しい session の包みは印
-(`spawned-session mark`) を書き、claude が終わって残る block が自分だけなら session を閉じる。どちらも異常終了では
-Enter まで失敗の画面を残す。包みの本文は agents-daemon の `rex/wrap` パッケージだけが持つ。
+起こし方 (タブか新しい session) ごとの印・閉じる主体・rename の案内は、agents-daemon の `spawn` パッケージの doc が
+一覧で持つ。
 
 <!-- rex-premise: preview.30 api 作った client が block の owner になる。disown_block は session.attach の後だけ通る -->
 
@@ -140,8 +138,6 @@ rex window close -s <rex_session_id> <window_id>
 ```
 
 共有の session には `spawned-session close` も `session kill` も打たない。ほかのタブを確認なしで巻き込む。
-足し先が `new_session` で起こした session (印のある session) なら、最後のタブが閉じて空になった後で daemon が閉じる。
-利用者が開いた session は、空になっても残る。
 
 利用者が明示して新しい session に立てた peer が `/exit` で終われば session は閉じる。異常終了で画面が残っているときは、その pane で Enter を押すと閉じる。
 peer の session に pane を足していると、claude の pane だけが閉じて session は残る。残りの pane を閉じて空に

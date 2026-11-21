@@ -8,11 +8,35 @@
 // どちらも無ければ起こす側の session (Request.Caller) のタブ、Caller も無ければ (park hand、rex の外のアプリ) 新しい
 // session。peer-sessions skill の「足し先の既定は起こす側の session のタブ」をここで決める (#636)。指した session に
 // 足せなければ、ほかへ倒さず error にする (控えた ID が古いことを黙って隠さない)。
-// 起きた claude は rex の SessionStart の案内に従って REX_SESSION を rename するので、タブで起きたときは包みが渡す
-// 環境変数を plugin の hook が見て、rename を止める案内を足す (#376)。
 //
 // session を起こす口 (Host) は multiplexer.Client に足さず、ここに閉じる。Client は daemon / monitor / doctor / verify が
 // pane を見て送るための全部入りで、session の作成はこのコマンドだけが使う (simulate の simulateHost と同じ考え)。
+//
+// # 起こし方ごとの挙動
+//
+// 起こし方は 2 通りで、印・閉じる主体・rename の扱いが違う。この一覧の実体はここだけに置き、peer-sessions skill の
+// references/rex.md、wrap、reaper、spawnedsession はここを指す (#634)。
+//
+// 新しい session (Host.NewSession。NewSession の指定か、Session も Caller も無いとき):
+//   - 包み: wrap.SessionCommand。claude を起こす前に印 (spawnedsession) を書く。
+//   - claude が終わったとき: session の block が包みの 1 つだけなら、包みが session を閉じる。後から開いた pane や
+//     タブがあれば自分の pane だけ閉じる。
+//   - 空になった後: daemon の reaper が印を見て session を閉じ、印を消す。
+//   - 起こした側が畳む口: `spawned-session close <rex_session_id>`。印の無い session は拒否する。
+//   - rename: Rex の SessionStart の hook が session の rename を案内し、plugin は止めない (session は peer だけが使う)。
+//
+// 既存の session のタブ (Host.NewWindow。Session の指定か、無ければ Caller):
+//   - 包み: wrap.TabCommand。印を書かず、session を閉じない。
+//   - claude が終わったとき: pane が閉じ、最後の pane を失った window を rex が閉じる。session とほかのタブは残る。
+//   - 空になった後: 足し先に印があれば (NewSession で起こした session) reaper が閉じる。印が無ければ
+//     (利用者が開いた session) 残る。
+//   - 起こした側が畳む口: `rex window close -s <rex_session_id> <window_id>`。共有の session なので
+//     `spawned-session close` も `session kill` も打たない。
+//   - rename: Rex の hook の案内に、plugin の SessionStart hook (shared-rex-session.sh) が「session は rename せず、
+//     変えるなら自分の window だけ」の案内を重ねる (#376)。包みが渡す環境変数で、タブで起きたことを知る。
+//
+// 0 以外で終わったときは、どちらの包みも Enter まで失敗の画面を残す。rename の案内はどちらも claude への依頼で、
+// 従うかは claude が決める。起こした側は session を label でなく rex_session_id で指すので、rename されても畳める。
 package spawn
 
 import (

@@ -367,16 +367,17 @@
       }
     },
     "DepsData": {
-      "description": "deps の出力。依存の DAG と、repo ごとの生きているセッションと open のメモ",
+      "description": "deps の出力。依存の DAG と、repo ごとの生きているセッションと open のメモ、渡したメモの宛先",
       "type": "object",
       "additionalProperties": false,
-      "required": ["daemon_running", "rex_placement", "stale_memo_days", "repos", "recent_repos", "graph"],
+      "required": ["daemon_running", "rex_placement", "stale_memo_days", "repos", "handed", "recent_repos", "graph"],
       "properties": {
         "daemon_running": { "type": "boolean" },
         "rex_placement": { "type": "boolean", "description": "動いている daemon が pane の rex の置き場を status.json に書くか。false なら置き場の無いノードは daemon が古いか止まっている" },
         "updated_at": { "type": "string", "format": "date-time", "description": "status.json の更新時刻。daemon が動いていないか、まだ書いていなければ無い" },
         "stale_memo_days": { "type": "integer", "description": "open のメモを「古い」とみなす日数。アプリはこれより前に最後に置かれたメモをまとめて捨てるボタンを出す" },
         "repos": { "type": "array", "items": { "$ref": "#/$defs/DepsRepo" } },
+        "handed": { "type": "array", "items": { "$ref": "#/$defs/HandedMemo" }, "description": "保持期間 (handed は 7 日) の間の渡したメモ。最後に置かれた時刻の新しい順" },
         "recent_repos": { "type": "array", "items": { "$ref": "#/$defs/RecentRepo" }, "description": "セッション台帳に載った repo。最後に見た時刻の新しい順 (新しいセッションを起こす repo の候補)" },
         "graph": { "$ref": "#/$defs/DepsGraph" }
       }
@@ -418,7 +419,7 @@
       }
     },
     "ParkingCard": {
-      "description": "repo の open のメモ 1 つ",
+      "description": "メモ 1 つ。DepsRepo.memos では open のメモ、HandedMemo.memo では渡したメモ",
       "type": "object",
       "additionalProperties": false,
       "required": ["id", "kind", "origin", "title", "sources"],
@@ -431,6 +432,30 @@
         "files": { "type": "array", "items": { "type": "string" } },
         "default_taken": { "type": "string" },
         "sources": { "type": "array", "items": { "$ref": "#/$defs/ParkingSource" }, "description": "置いたセッションの新しい順" }
+      }
+    },
+    "HandedMemo": {
+      "description": "渡したメモ 1 つと、その宛先",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["memo", "repo", "repo_title", "to"],
+      "properties": {
+        "memo": { "$ref": "#/$defs/ParkingCard" },
+        "repo": { "type": "string", "description": "メモを置いた repo の鍵 (DepsRepo.repo と同じ規則)" },
+        "repo_title": { "type": "string" },
+        "to": { "$ref": "#/$defs/HandedTo" }
+      }
+    },
+    "HandedTo": {
+      "description": "渡したメモの宛先。node と repo は daemon が解いたもので、どちらも無ければ図の中に宛先が無い",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref", "label"],
+      "properties": {
+        "ref": { "type": "string", "description": "メモの handed_to (sid:<session_id> / repo:<path>)。mod は切り出さずに不透明な文字列として扱う" },
+        "node": { "type": "string", "description": "sid: の宛先のノードの key。セッションのノード、無ければそのセッションのタスクのノード (進行中を先に、key の順で 1 つ)" },
+        "repo": { "type": "string", "description": "repo: の宛先の repo の鍵 (DepsRepo.repo と同じ規則)" },
+        "label": { "type": "string", "description": "宛先の表示名 (セッションの表示名か repo の title)" }
       }
     },
     "ParkingSource": {

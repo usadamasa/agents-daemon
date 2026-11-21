@@ -212,6 +212,79 @@ func TestBuild_memos(t *testing.T) {
 	}
 }
 
+// 渡したメモは handed に並び、宛先を図の中で解く。sid: はセッションのノード、無ければそのセッションのタスクのノード
+// (進行中を先に)、どちらも無ければ node を持たない。repo: は worktree のパスでも main worktree の repo の鍵に解く。
+// 並びは最後に置いた時刻の新しい順で、repo の memos (open だけ) には入らない。
+func TestBuild_handed(t *testing.T) {
+	const main, other, otherWT, fresh = "/src/home/agents-daemon", "/src/home/dotfile", "/src/home/dotfile/.claude/worktrees/y", "/src/home/fresh"
+	handed := func(id, to string, at time.Time) parking.Item {
+		return parking.Item{
+			ID: id, Repo: main, Status: parking.StatusHanded, HandedTo: to, Kind: parking.KindAside, Title: "メモ " + id, Origin: parking.OriginPlaced,
+			Sources: []parking.Source{{SessionID: "P", CWD: main, At: at}},
+		}
+	}
+	toTask := handed("h-task", parking.ToSession("A"), t0)
+	toSession := handed("h-session", parking.ToSession("E"), t0.Add(time.Hour))
+	toGone := handed("h-gone", parking.ToSession("Z"), t0.Add(2*time.Hour))
+	toRepo := handed("h-repo", parking.ToRepo(otherWT), t0.Add(3*time.Hour))
+	// 進行中のタスクが無ければ、完了していないタスクを完了したタスクより先に選ぶ。
+	toPending := handed("h-pending", parking.ToSession("B"), t0.Add(4*time.Hour))
+	// セッションもメモも無い repo へ起こしたときも、宛先の repo を repos に載せる (アプリが絞り込める)。
+	toNew := handed("h-new", parking.ToRepo(fresh), t0.Add(5*time.Hour))
+	d := build(input{
+		PID: 42,
+		Snapshot: snapshot(
+			daemonstate.PaneStatus{PaneID: "p1", SessionID: "A", CWD: main, AgentStatus: "working"},
+			daemonstate.PaneStatus{PaneID: "p2", SessionID: "E", CWD: other, AgentStatus: "done"},
+			daemonstate.PaneStatus{PaneID: "p3", SessionID: "B", CWD: main, AgentStatus: "done"},
+		),
+		Tasks: []record.Task{
+			task("A", "1", "後の作業", "pending", main), task("A", "2", "進めている", "in_progress", main),
+			task("B", "1", "済んだ", "completed", main), task("B", "2", "次の作業", "pending", main),
+		},
+		Parking: []parking.Item{toTask, toSession, toGone, toRepo, toPending, toNew},
+		Handed:  []parking.Item{toTask, toSession, toGone, toRepo, toPending, toNew},
+		Locate: places(map[string]gitrepo.Place{
+			main:    {Repo: main, Branch: "main"},
+			other:   {Repo: other, Branch: "main"},
+			otherWT: {Repo: other, Branch: "y"},
+			fresh:   {Repo: fresh, Branch: "main"},
+		}),
+		SessionNames: map[string]string{"A": "alpha", "B": "bravo", "E": "echo", "P": "placer"},
+	})
+
+	want := []protocol.HandedTo{
+		{Ref: "repo:" + fresh, Repo: fresh, Label: "fresh"},
+		{Ref: "sid:B", Node: "task:B/2", Label: "bravo"},
+		{Ref: "repo:" + otherWT, Repo: other, Label: "dotfile"},
+		{Ref: "sid:Z", Label: "Z"},
+		{Ref: "sid:E", Node: "sid:E", Label: "echo"},
+		{Ref: "sid:A", Node: "task:A/2", Label: "alpha"},
+	}
+	got := make([]protocol.HandedTo, 0, len(d.Handed))
+	for _, h := range d.Handed {
+		got = append(got, h.To)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("handed の宛先 = %+v, want %+v", got, want)
+	}
+	if r, ok := repos(d)["fresh"]; !ok || r.Repo != fresh || len(r.Sessions) != 0 || len(r.Memos) != 0 {
+		t.Errorf("宛先だけの repo = %+v, %v (repos = %v)", r, ok, titles(d))
+	}
+	h := d.Handed[2]
+	if h.Memo.ID != "h-repo" || h.Repo != main || h.RepoTitle != "agents-daemon" || len(h.Memo.Sources) != 1 || h.Memo.Sources[0].Session != "placer" {
+		t.Errorf("handed[0] = %+v", h)
+	}
+	for _, r := range d.Repos {
+		if len(r.Memos) != 0 {
+			t.Errorf("%s の memos に handed が入った: %+v", r.Title, r.Memos)
+		}
+	}
+	if empty := build(input{Locate: places(nil)}); empty.Handed == nil {
+		t.Errorf("渡したメモが無ければ空の配列")
+	}
+}
+
 // daemon が動いていなくてもタスクの記録は描く。前の daemon の status.json は使わない。
 func TestBuild_daemonState(t *testing.T) {
 	tasks := []record.Task{task("A", "1", "書く", "in_progress", "/w/a")}

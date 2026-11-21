@@ -64,8 +64,10 @@ var transientErrors = []string{"overloaded", "server_error"}
 
 // hardCapPatterns は待っても解除されない上限の文言 (entry の本文)。2.1.251 の Fable の上限は quotaLimits が無く、
 // 本文が `You've reached your Fable 5 limit. Run /usage-credits to continue …` の形 (実物)。spend limit と usage credit は
-// 2.1.239 の画面の文言 (native_continue_test.go)。
+// 2.1.239 の画面の文言 (native_continue_test.go)。Fable の上限の後に出るダイアログは別モデルか使用クレジットで続けるかを
+// 聞き、Enter が選ぶ既定はクレジットで続ける側にある。モデルの切り替えは本体と利用者の判断なので、待たずに手を引く。
 // cc-premise: 2.1.319 limit-screen spend limit / usage credit / Fable の上限の文言
+// cc-premise: 2.1.316 limit-screen Fable の上限の後のダイアログと Enter の既定 (バイナリのテンプレート、実機未確認)
 var hardCapPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)\bspend limit\b`),
 	regexp.MustCompile(`(?i)usage credit limit`),

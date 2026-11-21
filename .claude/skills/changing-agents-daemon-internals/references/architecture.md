@@ -72,9 +72,9 @@ daemon が担わないもの:
 | `$STATE/limit-events/<YYYY-MM-DD>.jsonl` | daemon | daemon (30 日) | `daemon/limitlog` |
 | `$STATE/turn-failures/<session_id>.json` | `ingest-turn-failure` (hook) | 次の turn の hook、daemon (24 時間) | `turnfailure` |
 | `$STATE/quota-resume/<session_id>.json` | `ingest-quota-resume` (hook) | daemon (24 時間) | `quotaresume` |
-| `$STATE/logs/build.log` | `hooks/build-daemon.sh`、`hooks/build-gui.sh` | 消さない | `hooks/lib/go-build.sh` |
+| `$STATE/logs/build.log` | `hooks/build-daemon.sh`、`hooks/build-gui.sh` | 消さない | `hooks/lib/daemon-bin.sh` |
 | `$STATE/build.failed`、`$STATE/build-gui.failed` | 同上 | 同じ script が建てられたとき | `hooks/lib/go-build.sh` |
-| `$STATE/logs/dream-harvest.log` | `dream harvest` (Stop hook) | 消さない | `hooks/dream-harvest.sh` |
+| `$STATE/logs/dream-harvest.log` | `dream harvest` (Stop hook) | 消さない | `dream/harvest` |
 | `$STATE/dream/harvest/<YYYY-MM-DD>.jsonl`、`…/candidates/`、`…/replays/`、`…/verdicts/` | `dream harvest`、`dream mine`、`agents-daemon:dream` skill | `dream harvest` (90 日) | `dream` |
 | `$STATE/dream/harvest-state.json` | `dream harvest` | 上書き | `dream` |
 | `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon`、`….version` | `hooks/build-daemon.sh`、`task install` | 消さない | `hooks/lib/daemon-bin.sh` |

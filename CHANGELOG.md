@@ -1,5 +1,13 @@
 # Changelog
 
+## [2026.1122.0](https://github.com/usadamasa/agents-daemon/compare/2026.1121.1...2026.1122.0) - 2026-11-22
+
+### Features
+- 共有 rex session のタブの名前を作業の内容に合わせて付け直す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/723
+- リリースの前に、隔離した環境で実データの複製に当てる検証を足す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/724
+### Bug Fixes
+- dream check の missing_path が落とす別 skill と repo 直下への参照を ../ のリンクへ直し、指す先を点検する by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/725
+
 ## [2026.1121.1](https://github.com/usadamasa/agents-daemon/compare/2026.1121.0...2026.1121.1) - 2026-11-21
 
 ### Features

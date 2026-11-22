@@ -77,6 +77,62 @@ func TestRun_SkillPathInLinkTextIsIgnored(t *testing.T) {
 	}
 }
 
+// 別の skill や repo 直下のファイルは、skill のディレクトリから `../` で上がるリンクで指す。
+// 指す先は skill のディレクトリから解き、anchor は落として実在を見る。
+func TestRun_SkillParentRelativeLinks(t *testing.T) {
+	repo := t.TempDir()
+	skills := filepath.Join(repo, ".claude", "skills")
+	skillMd := filepath.Join(skills, "demo", "SKILL.md")
+	writeFile(t, filepath.Join(skills, "other", "references", "ops.md"), "x\n")
+	writeFile(t, filepath.Join(repo, "scripts", "run.sh"), "x\n")
+	writeFile(t, skillMd, "---\nname: demo\n---\n\n"+
+		"[ops](../other/references/ops.md) と [節](../other/references/ops.md#節) は在る。\n"+
+		"[gone](../other/references/gone.md) は無い。\n"+
+		"[節](../other/references/lost.md#節) も無い。\n"+
+		"repo 直下の [run.sh](../../../scripts/run.sh) は在り、[gone.sh](../../../scripts/gone.sh) は無い。\n"+
+		"[README](../../../GONE.md) も無い。\n")
+
+	res, err := Run(Opts{MemoryDir: t.TempDir(), SkillDirs: []string{skills}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := findingsOf(res, KindMissingPath)
+	want := []struct {
+		line   int
+		target string
+	}{
+		{6, "../other/references/gone.md"},
+		{7, "../other/references/lost.md"},
+		{8, "../../../scripts/gone.sh"},
+		{9, "../../../GONE.md"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("findings = %+v; want %d 件", res.Findings, len(want))
+	}
+	for i, w := range want {
+		if got[i].Path != skillMd || got[i].Line != w.line || got[i].Target != w.target || got[i].Severity != SeverityError {
+			t.Errorf("finding[%d] = %+v; want line %d target %s", i, got[i], w.line, w.target)
+		}
+	}
+}
+
+// この repo が配る skill と保守用の skill は、参照するパスがどれも実在する。
+func TestRun_RepoSkillsHaveNoMissingPath(t *testing.T) {
+	root := filepath.Join("..", "..", "..")
+	for _, dir := range []string{filepath.Join(root, "skills"), filepath.Join(root, ".claude", "skills")} {
+		if _, err := os.Stat(dir); err != nil {
+			t.Fatal(err)
+		}
+		res, err := Run(Opts{MemoryDir: t.TempDir(), SkillDirs: []string{dir}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, f := range findingsOf(res, KindMissingPath) {
+			t.Errorf("%s:%d: %s", f.Path, f.Line, f.Message)
+		}
+	}
+}
+
 // skill のディレクトリが無いのは、global skill を置いていない環境なので点検を飛ばす。
 func TestRun_MissingSkillDirIsSkipped(t *testing.T) {
 	res, err := Run(Opts{MemoryDir: t.TempDir(), SkillDirs: []string{filepath.Join(t.TempDir(), "nope")}})

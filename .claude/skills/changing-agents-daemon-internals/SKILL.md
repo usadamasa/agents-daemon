@@ -11,7 +11,7 @@ description: >-
 コードから復元できないもの (パッケージをまたぐ境界とその理由、実測した Claude Code と rex の前提、実機の検証手順) と、
 症状から見る場所の置き場。パッケージの中で閉じる仕組みは package doc と `hooks/*.ts` の冒頭が持ち、ここには写さない。
 利用者が打つコマンド・設定キー・既知の制約は plugin の `agents-daemon:agents-daemon` skill の
-`references/operations.md` が持つ。
+[operations.md](../../../skills/agents-daemon/references/operations.md) が持つ。
 
 ## references
 

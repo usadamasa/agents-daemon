@@ -34,6 +34,8 @@
 //	mod.handoff.unlinked      SendMessage の宛先に依存の辺が無いことを model に伝えた (session)
 //	mod.handoff.failed        SendMessage の宛先の辺を確かめる依存図を読めなかった (reason)
 //	mod.open-app.failed       session.start で agent-tasks を開けなかった (reason)
+//	mod.tab.renamed           共有の rex session のタブの名前を作業に合わせて付け直した
+//	mod.tab.failed            タブの名前を問えなかったか付け直せなかった (reason)
 //
 // mod の出来事は同じ理由が続く間は書き直さない (hooks/log.ts)。
 package eventlog

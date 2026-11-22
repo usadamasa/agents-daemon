@@ -38,6 +38,7 @@
 //     `spawned-session close` も `session kill` も打たない。
 //   - rename: Rex の hook の案内に、plugin の SessionStart hook (shared-rex-session.sh) が「session は rename せず、
 //     変えるなら自分の window だけ」の案内を重ねる (#376)。包みが渡す環境変数で、タブで起きたことを知る。
+//     window の名前は mod (hooks/tab-label.ts) が作業の内容に合わせて付け直す (tablabel、#722)。
 //
 // 0 以外で終わったときは、どちらの包みも Enter まで失敗の画面を残す。rename の案内はどちらも claude への依頼で、
 // 従うかは claude が決める。起こした側は session を label でなく rex_session_id で指すので、rename されても畳める。

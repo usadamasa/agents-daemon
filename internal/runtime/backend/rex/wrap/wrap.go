@@ -6,6 +6,7 @@ package wrap
 
 // sharedSessionEnv は、タブの包みが起こすコマンドに渡す環境変数。値は 1。plugin の SessionStart hook
 // (hooks/shared-rex-session.sh) がこれを見て、起きた claude に session を rename させない案内を出す。
+// mod (hooks/tab-label.ts) もこれを見て、タブの名前を作業に合わせて付け直す。
 const sharedSessionEnv = "AGENTS_DAEMON_SHARED_REX_SESSION"
 
 // argv0 は包みの sh の $0。プロセス一覧で包みと分かる名前。

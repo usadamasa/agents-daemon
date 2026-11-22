@@ -53,6 +53,7 @@ components:
     in:
       - "internal/deps/**"
       - "internal/spawn"
+      - "internal/tablabel"
       - "internal/tell"
       - "internal/parkhand"
   runtime:

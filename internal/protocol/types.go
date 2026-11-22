@@ -196,6 +196,25 @@ type SpawnRequest struct {
 	Label string `json:"label,omitempty"`
 }
 
+// TabLabelRequest は tab-label の stdin。rex_block の居る rex の window (タブ) の名前を読み、label があれば付け直して TabLabelResult を出す。session の名前には触れない。
+type TabLabelRequest struct {
+	// タブのある rex の session の ID (呼び手の REX_SESSION)。
+	RexSession string `json:"rex_session"`
+	// 呼び手の pane の rex の block の ID (REX_BLOCK)。
+	RexBlock string `json:"rex_block"`
+	// 付け直す名前。1 行で 64 文字まで、前後の空白と制御文字を付けない。省くと読むだけ。
+	Label string `json:"label,omitempty"`
+}
+
+// TabLabelResult は tab-label の出力。
+type TabLabelResult struct {
+	WindowID string `json:"window_id"`
+	// 処理の後のタブの名前。
+	Label string `json:"label"`
+	// current は読んだだけ、renamed は付け直した、unchanged は付ける名前が今と同じ。
+	Status string `json:"status"`
+}
+
 // TellRequest は tell の stdin。to_session のセッションが動いている rex の pane の入力欄に text を打って Enter を送り、TellResult を出す。pane で claude が前景でない、利用者の答えを待つ prompt (permission / question / auth) が開いている、上限の画面、入力欄に打ちかけの文がある、のどれかなら送らずに exit 1 で理由を返す。文面を打った後、Enter の前に claude が前景でなくなるか prompt が開いたら、Enter を送らずに exit 1 で理由を返し、文面は入力欄に残る。ターンの途中の pane には送り、文面は入力欄に溜まって次のターンになる。
 type TellRequest struct {
 	// 宛先のセッションの ID。

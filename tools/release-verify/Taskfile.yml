@@ -1,0 +1,44 @@
+version: '3'
+
+# root の Taskfile.yml が release-verify の名前空間で読み、cwd は repo の root のまま。
+# 手順は verifying-release-in-isolation skill。
+
+env:
+  REF: '{{.REF | default "HEAD"}}'
+  KEEP: '{{.KEEP | default "0"}}'
+
+tasks:
+  default:
+    desc: REF (既定 HEAD) の commit から建てたバイナリを、隔離した環境で実データの複製に当てる。KEEP=1 で環境を残す
+    cmds:
+      - go run ./tools/release-verify run
+
+  up:
+    desc: 検証の環境を作って残す (check と open の前段)
+    cmds:
+      - go run ./tools/release-verify up
+
+  check:
+    desc: 残した環境で機械の点検を回し、通れば記録を書く
+    cmds:
+      - go run ./tools/release-verify check
+
+  open:
+    desc: 残した環境で依存図のアプリを起こす。人が画面と IME を確かめる入口
+    cmds:
+      - go run ./tools/release-verify open
+
+  approve:
+    desc: 人の確認を記録に書く。画面を確かめた利用者が打つ
+    cmds:
+      - go run ./tools/release-verify approve
+
+  status:
+    desc: REF の tree に検証の通った記録があれば exit 0。commit が増えて tree が変わると未検証に戻る
+    cmds:
+      - go run ./tools/release-verify status
+
+  down:
+    desc: 検証の環境を消す
+    cmds:
+      - go run ./tools/release-verify down

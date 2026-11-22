@@ -1,0 +1,67 @@
+// agents-daemon の代役。テストが fixture の repo に cmd/agents-daemon/main.go として commit し、本物の go build で建てる。
+// 呼ばれた引数と env の全量を、自分の実行ファイルの隣の calls に 1 行の JSON で足す。
+// 失敗の切り替えは、隣のファイルの有無で行う (空の env で起こされるので、env では切り替えられない)。
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"sort"
+	"strings"
+	"syscall"
+)
+
+// builtFrom は、テストが未 commit の書き換えで変える。commit から建ったかを出力で見分ける。
+const builtFrom = "committed"
+
+func main() {
+	exe, err := os.Executable()
+	if err != nil {
+		panic(err)
+	}
+	dir := filepath.Dir(exe)
+	env := os.Environ()
+	sort.Strings(env)
+	line, _ := json.Marshal(map[string]any{"args": os.Args[1:], "env": env})
+	f, err := os.OpenFile(filepath.Join(dir, "calls"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Fprintf(f, "%s\n", line)
+	f.Close()
+
+	has := func(name string) bool {
+		_, err := os.Stat(filepath.Join(dir, name))
+		return err == nil
+	}
+	args := strings.Join(os.Args[1:], " ")
+	switch {
+	case args == "deps":
+		io.Copy(io.Discard, os.Stdin)
+		if has("fail-deps") {
+			os.Exit(3)
+		}
+		fmt.Printf("{\"nodes\":[],\"built_from\":%q}\n", builtFrom)
+	case args == "daemon --foreground --dry-run":
+		if has("daemon-exit-early") {
+			return
+		}
+		if has("daemon-panic") {
+			fmt.Fprintln(os.Stderr, "panic: fixture")
+		}
+		ch := make(chan os.Signal, 1)
+		signal.Notify(ch, syscall.SIGTERM)
+		<-ch
+	case strings.HasPrefix(args, "dream check") && strings.Contains(args, "--skills-dir"):
+		fmt.Println("{}")
+		if has("fail-own-skills") {
+			os.Exit(1)
+		}
+	default:
+		fmt.Println("{}")
+	}
+}

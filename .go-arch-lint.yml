@@ -64,6 +64,9 @@ components:
     in: "internal/statusline/**"
   worktree:
     in: "internal/worktree"
+  # 保守用の道具 (リリースの前の検証)。daemon のバイナリには入らない。
+  tools:
+    in: "tools/**"
 
 vendors:
   cobra:
@@ -114,3 +117,7 @@ deps:
     mayDependOn:
       - shared
       - statusline
+  tools:
+    mayDependOn:
+      - tools
+      - shared

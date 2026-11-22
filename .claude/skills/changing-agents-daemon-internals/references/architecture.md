@@ -81,6 +81,8 @@ daemon が担わないもの:
 | `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agent-tasks`、`….version` | `hooks/build-gui.sh` | 消さない | `hooks/build-gui.sh` |
 | `~/Applications/agent-tasks.app` | `hooks/build-gui.sh` | 消さない | `hooks/build-gui.sh`、`gui/upgrade.go` |
 | `$STATE/gui/restore.json` | agent-tasks (入れ替わる直前) | 次に起きた agent-tasks (読んで消す) | `gui/upgrade.go` |
+| `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/release-verify/<tree>/` | `task release-verify` | `task release-verify:down` (検証が通れば自動) | `tools/release-verify` の `releaseverify` |
+| `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/release-verify/records/<tree>.json` | `task release-verify` と `:approve` | 次に記録を書くとき (90 日) | `tools/release-verify` の `releaseverify/record` |
 
 `$STATE` はデーモンが必要に応じて作る。消しても壊れない (次回の起動と次回の statusline 描画で再生成される)。
 

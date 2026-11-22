@@ -1,5 +1,11 @@
 version: '3'
 
+includes:
+  # リリースの前の検証 (release-verify、release-verify:up …)。dir を root にして、task の cwd を変えない。
+  release-verify:
+    taskfile: ./tools/release-verify/Taskfile.yml
+    dir: .
+
 tasks:
   build:
     desc: cmd/ の全 Go バイナリを bin/ にビルド

@@ -24,7 +24,7 @@ plugin root の `README.md` の「役割」が持つ。コマンド、設定キ�
 | daemon が起きない・バイナリがビルドされない | `$STATE/logs/build.log`。operations.md の「build の失敗から建て直す」と「既知の制約」(go が PATH に無い、rex の外) |
 | plugin を更新したのに古い daemon が動いている | operations.md の「plugin の更新後に daemon を入れ替える」 |
 | 送信が block に届かない | operations.md の「既知の制約」(block 内 tmux) |
-| `doctor` の pane 一覧が `session_id=(なし)` になる | statusline の配線 (`agents-daemon:setup` skill の `references/statusline.md`) |
+| `doctor` の pane 一覧が `session_id=(なし)` になる | statusline の配線 (`agents-daemon:setup` skill の [statusline.md](../setup/references/statusline.md)) |
 | rex のセッションなのに daemon が起きない | `doctor` の daemon の節。`REX_SESSION` の無い起動では起こさない |
 | `stop` が `operation not permitted` で弾かれる | operations.md の「既知の制約」 |
 | 放置した worktree が回収されない、今すぐ回収したい、`prune-worktrees` が `operation not permitted` で落ちる | operations.md の「放置された worktree を回収する」 |

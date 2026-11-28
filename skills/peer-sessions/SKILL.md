@@ -34,7 +34,7 @@ description: >-
 まず、自分が rex の中に居るかを確かめる。
 
 ```sh
-printenv REX_SESSION
+printenv REX_BLOCK
 ```
 
 | 結果 | 次にすること |
@@ -67,7 +67,7 @@ spawn は `--name` を付けずに起こす。付けると Claude Code が AI �
 ### 足し先の session を決める
 
 **既定は、起こす側の session にタブとして足す。** `agents-daemon spawn` は足し先の欄が無ければ、起こす側の
-`REX_SESSION` のタブに起こす。新しい依頼を渡すときも、渡す先が別リポジトリのときも、既定はタブ。rex の session を
+`REX_BLOCK` の居る session のタブに起こす。新しい依頼を渡すときも、渡す先が別リポジトリのときも、既定はタブ。rex の session を
 またいで新しく作るのは、利用者が別の session を明示したときだけにする。
 
 | 状況 | spawn の指定 |

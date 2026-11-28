@@ -23,7 +23,7 @@ func newInspectCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "inspect",
 		Short: "transcript の末尾の分類と待機時刻の算出根拠、画面の通知欄の判定を表示する (送信はしない)",
-		Long: "--pane <id> は rex 越しに生きた block を読み (REX_SESSION が要る)、--file <path> は保存済みの\n" +
+		Long: "--pane <id> は rex 越しに生きた block を読み (REX_BLOCK が要る)、--file <path> は保存済みの\n" +
 			"画面テキストファイルを読む。どちらか一方を必ず指定する。\n" +
 			"daemon (monitor パッケージ) と同じ経路で、pane の session_id (statusline の記録、無ければ前景の pid で\n" +
 			"Claude Code の登録簿) を引き、その transcript の末尾の entry を分類し、上限なら起床時刻とその根拠を表示する。\n" +

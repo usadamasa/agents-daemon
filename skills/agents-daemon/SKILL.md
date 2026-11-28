@@ -25,7 +25,7 @@ plugin root の `README.md` の「役割」が持つ。コマンド、設定キ�
 | plugin を更新したのに古い daemon が動いている | operations.md の「plugin の更新後に daemon を入れ替える」 |
 | 送信が block に届かない | operations.md の「既知の制約」(block 内 tmux) |
 | `doctor` の pane 一覧が `session_id=(なし)` になる | statusline の配線 (`agents-daemon:setup` skill の [statusline.md](../setup/references/statusline.md)) |
-| rex のセッションなのに daemon が起きない | `doctor` の daemon の節。`REX_SESSION` の無い起動では起こさない |
+| rex のセッションなのに daemon が起きない | `doctor` の daemon の節。`REX_BLOCK` の無い起動では起こさない |
 | `stop` が `operation not permitted` で弾かれる | operations.md の「既知の制約」 |
 | 放置した worktree が回収されない、今すぐ回収したい、`prune-worktrees` が `operation not permitted` で落ちる | operations.md の「放置された worktree を回収する」 |
 | hook が 10 秒の timeout に当たっている疑い (prompt の送信が遅い、hook の効果が出ない) | `claude --debug` で起動し、`Hooks: SessionStart [...] finished with status 0 (31ms)` の行 (Claude Code 2.1.296+) で hook ごとの所要時間を見る。`timed out after <N>ms` なら当たっている |

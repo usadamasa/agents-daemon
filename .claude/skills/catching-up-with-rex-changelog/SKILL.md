@@ -22,7 +22,7 @@ preview が出るので、上げたら changelog と実機の応答をこの rep
 | rex docs | OSC 7501 の仕様 (何が仕様で何が rex 独自か) | [program-status](https://www.superlogical.com/rex/docs/build/program-status) |
 
 前提: superlogical MCP (`list_changelog` / `read_changelog`) が繋がっていること、rex の block の中で動いていること
-(`REX_SESSION` と `REX_BLOCK` がある)。
+(`REX_BLOCK` がある)。
 
 着地は「ずれを issue にし、確かめ直した marker の `<version>` を上げる」。挙動が変わる対処をその場で実装しない
 (既存の挙動を変える変更は利用者の判断)。
@@ -94,8 +94,9 @@ changelog 側の点検は無しで、手順 4 へ進む (実機の点検は版�
 
 changelog に該当が無くても行う。欄の追加や名前の変更は changelog に載らないことがある。
 
-worktree 隔離セッション (EnterWorktree の後) では、`$REX_BLOCK` と `$REX_SESSION` の展開を含む Bash コマンドを
-guard が拒否する。先に `printenv REX_BLOCK REX_SESSION` で値を取り、下のコマンドの変数をその値に置き換えて打つ。
+worktree 隔離セッション (EnterWorktree の後) では、`$REX_BLOCK` の展開を含む Bash コマンドを
+guard が拒否する。先に `printenv REX_BLOCK` で値を取り、下のコマンドの変数をその値に置き換えて打つ。
+Mac の版は app の `Info.plist` の `RexVersion` (`plutil -p /Applications/Rex.app/Contents/Info.plist`) で読む。
 
 手順 1 で回した `doctor` の出力を 2 つの節で読む。
 

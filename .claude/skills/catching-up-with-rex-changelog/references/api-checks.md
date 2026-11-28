@@ -22,7 +22,7 @@
 | `session.describe_block` | `api.methods` に `program_status` / `process` / `size` / `modes`、`api.events` に `program_status_changed` / `program_status_removed` / `process_changed` / `child_exited` (購読が読む block の event) | `premise` の `describeMethods` と `wire` の `BlockEvents`。一覧に新しい method や event が増えていないかは人が見る (下) |
 | `com.superlogical.terminal.modes` | `screen` が `alternate` (Claude Code の画面で呼んだとき) | `wire` の `Modes`、`testdata/2026-10-20_…/modes.json`。pane 一覧の `rows` / `screen` は `size` (`testdata/2026-10-20_…/size.json`) と合わせて `PaneGeometry` が打つ |
 
-`REX_SESSION` が無い呼び出しでは、自分の session を `target.resolve` で引いてから打つ。
+自分の session は、自分の block から `target.resolve` で引いてから打つ。
 `doctor` の exit code は変わらない (rex に到達できないときだけ 1)。
 
 ## 人が見る行

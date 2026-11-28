@@ -37,7 +37,7 @@ func TestMultiplexerRefFromEnv(t *testing.T) {
 		},
 		{
 			name: "REX_BLOCK が無ければ無し",
-			env:  map[string]string{"REX_SESSION": "session:01a1"},
+			env:  map[string]string{},
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

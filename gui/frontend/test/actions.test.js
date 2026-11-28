@@ -71,10 +71,10 @@ test("showPane はノードのセッションを focus に渡し、失敗の理�
   assert.equal(await showPane(task, io), "Could not show deps-app in Rex: 操作を Rex.app が断った");
 });
 
-test("instruct はタスクの題を添えて tell に渡し、拒まれたら理由を返す", async () => {
+test("instruct は出どころとタスクを前置きして tell に渡し、拒まれたら理由を返す", async () => {
   const io = fakeIO({ run: [toldOK, { failure: "入力欄に打ちかけの文がある" }] });
   const res = await instruct(task, "先にテストを書いて", io);
-  assert.deepEqual(io.calls[0], ["tell", { to_session: "s1", text: "タスク「lint を直す」について: 先にテストを書いて", session_id: "app" }]);
+  assert.deepEqual(io.calls[0], ["tell", { to_session: "s1", text: "依存図のアプリ (agent-tasks) から利用者が送った指示です。\n対象: タスク #3「lint を直す」\n指示: 先にテストを書いて", session_id: "app" }]);
   assert.deepEqual(res, { ok: true, message: "deps-app: typed into the input" });
   const refused = await instruct(task, "もう一度", io);
   assert.deepEqual(refused, { ok: false, message: "Could not send to deps-app: 入力欄に打ちかけの文がある" });

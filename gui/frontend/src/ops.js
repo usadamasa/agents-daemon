@@ -180,9 +180,12 @@ function ref(node) {
   return `タスク #${node.task_id ?? ""}「${node.title}」`;
 }
 
-// instruction は指示の文面。タスクのノードなら、どのタスクについての指示かを title で添える。
+// instruction は指示の文面。受け手は入力欄に来た文しか見ないので、依存図のアプリからの指示であることと、どのタスク
+// (番号と題) か作業 (題) についてかを前置きする。/ で始まる文はコマンドとして走るよう、前置きせずにそのまま送る。
 export function instruction(node, text) {
-  return node.kind === "task" ? `タスク「${node.title}」について: ${text}` : text;
+  if (text.startsWith("/")) return text;
+  const target = node.kind === "task" ? ref(node) : `このセッションの作業「${node.title}」`;
+  return `依存図のアプリ (agent-tasks) から利用者が送った指示です。\n対象: ${target}\n指示: ${text}`;
 }
 
 // unlinkText は同じセッションの blockedBy の解消を頼む文面。TaskUpdate に blockedBy を外す引数が無いので、

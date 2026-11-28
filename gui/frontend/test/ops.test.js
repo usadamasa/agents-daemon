@@ -1,9 +1,30 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Graph } from "../src/graph.js";
-import { bulkDismissable, canAdopt, canDismiss, canRename, candidates, canTell, destinationLabel, isOwnTask, memoDestinations, paneOwner, pathDestination, peerDestinations, spawnDestinations, spawnLabel } from "../src/ops.js";
+import { bulkDismissable, canAdopt, canDismiss, canRename, candidates, canTell, destinationLabel, instruction, isOwnTask, memoDestinations, paneOwner, pathDestination, peerDestinations, spawnDestinations, spawnLabel } from "../src/ops.js";
 
 const node = (key, extra = {}) => ({ key, kind: "task", state: "pending", title: key, live: true, depth: 0, downstream: 0, parked: 0, memos: [], blocked_by: [], deadlock: false, halted: false, stuck: false, endpoint: true, session_id: "s1", ...extra });
+
+test("instruction はタスクのノードへの指示に出どころとタスクの番号と題を前置きする", () => {
+  const task = node("task:s1/3", { task_id: "3", title: "lint を直す" });
+  assert.equal(
+    instruction(task, "先にテストを書いて"),
+    "依存図のアプリ (agent-tasks) から利用者が送った指示です。\n対象: タスク #3「lint を直す」\n指示: 先にテストを書いて",
+  );
+});
+
+test("instruction はセッションのノードへの指示に出どころと作業の題を前置きする", () => {
+  const work = node("sid:gamma", { kind: "session", title: "ログインの redirect を直す" });
+  assert.equal(
+    instruction(work, "PR を出して"),
+    "依存図のアプリ (agent-tasks) から利用者が送った指示です。\n対象: このセッションの作業「ログインの redirect を直す」\n指示: PR を出して",
+  );
+});
+
+test("instruction は / で始まる文面をコマンドとして走るよう前置きせずに返す", () => {
+  assert.equal(instruction(node("sid:gamma", { kind: "session" }), "/compact"), "/compact");
+  assert.equal(instruction(node("task:s1/3", { task_id: "3" }), "/clear"), "/clear");
+});
 
 test("candidates は端点にできるノードから自分、上流、下流、完了、終了を除く", () => {
   // A→B→C と D、E (完了)、F (端点にできない)、G (終了)。

@@ -47,7 +47,7 @@ fixture の図を HTML で見るだけなら、ブラウザ無しで `task gui:s
 
 ## 3. 見てもらう
 
-利用者に画面を撮って貼ってもらう (自分で撮るなら cleanshot-capture skill)。次を見る。
+利用者に画面を撮って貼ってもらう (自分で撮るなら visuals:cleanshot-capture skill)。次を見る。
 
 - 枠に入るべきカードが、その rex session の枠と window の小枠の中にある
 - 線が、要らないところで枠の境界を長く横切っていない

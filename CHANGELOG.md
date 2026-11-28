@@ -1,5 +1,11 @@
 # Changelog
 
+## [2026.1128.7](https://github.com/usadamasa/agents-daemon/compare/2026.1128.6...2026.1128.7) - 2026-11-28
+
+### Documentation
+- verifying-agent-tasks-gui の cleanshot-capture を plugin の名前で指す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/768
+- PR の作り方の写しを AGENTS.md と peer-sessions から消す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/770
+
 ## [2026.1128.6](https://github.com/usadamasa/agents-daemon/compare/2026.1128.5...2026.1128.6) - 2026-11-28
 
 ### Features

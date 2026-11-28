@@ -1008,12 +1008,14 @@ test("作業のノード: 題の欄で打った字は、Esc 以外で閉じて�
     field.textContent = "打ちかけの題";
     field.dispatchEvent(new Event("input", { bubbles: true }));
   };
-  // reopenedTitle は zeta の題の欄を開き直したときの中身。zeta を選んでいなければ選び直す。確かめた後は Esc で閉じる。
+  // reopenedTitle は zeta の題の欄を開き直したときの中身。zeta を選んでいなければ選び直す。確かめた後は題の欄を Esc で、
+  // 単体ビューを × で閉じる。
   const reopenedTitle = ({ select = true } = {}) => {
     if (select) q('.node[data-key="sid:zeta"]').click();
     q("#pop .title").click();
     const text = q("#pop .title").textContent;
     q("#pop .title").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    q("#pop .x").click();
     return text;
   };
   try {
@@ -1023,7 +1025,6 @@ test("作業のノード: 題の欄で打った字は、Esc 以外で閉じて�
     assert.equal(instruction(), "");
     tell();
     assert.equal(reopenedTitle({ select: false }), "zeta");
-    q("#pop .x").click();
 
     // 題を打ったまま単体ビューを × で閉じる。
     typeTitle();
@@ -1034,7 +1035,7 @@ test("作業のノード: 題の欄で打った字は、Esc 以外で閉じて�
     q('.node[data-key="sid:zeta"]').click();
     tell();
     assert.equal(instruction(), "");
-    tell();
+    q("#pop .x").click();
 
     // 題を打ったまま別のノードを選ぶ。
     typeTitle();

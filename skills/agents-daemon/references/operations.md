@@ -29,11 +29,12 @@ agents-daemon park list|set                    # パーキングのメモを一�
 agents-daemon park hand < request.json         # メモを取って渡し、届かなければ戻す (アプリが呼ぶ)
 agents-daemon spawn < request.json             # 本文を最初のターンにした Claude Code を repo を cwd にして rex に起こす (アプリと peer-sessions skill が呼ぶ)。足し先の既定は起こす側の block の居る session のタブ、rex の block の外なら新しい session
 agents-daemon tell < request.json              # 生きているセッションの入力欄に文面を打つ (アプリが呼ぶ)
+agents-daemon focus < request.json             # 生きているセッションの pane の居る window を Rex.app に表示させる (アプリが呼ぶ。Rex.app の Remote Control が要る)
 agents-daemon desktop list|resume              # Desktop で始めたセッションを rex で続ける (下の「Desktop のセッションを rex で続ける」)
 ```
 
 アプリと mod が呼ぶコマンドは、入力を stdin の JSON で受ける。対象は `deps`、`park`、`edge add` / `rm`、
-`task dismiss`、`work set` / `get`、`spawn`、`tell`、`event-log` になる。
+`task dismiss`、`work set` / `get`、`spawn`、`tell`、`focus`、`event-log` になる。
 形は `internal/protocol/protocol.schema.json` が持つ。
 
 ### `--dry-run`
@@ -142,7 +143,7 @@ Desktop と rex の 2 つで開くと transcript に両方の発言が混ざる�
 渡す操作から両端を自動で決めることはせず、辺の無い生きているセッションへ `SendMessage` で送ると、
 その tool の結果で送った model に辺の書き方を伝える (#172)。
 
-アプリと mod が呼ぶコマンド (`deps`、`park`、`edge add` / `rm`、`task dismiss`、`work set` / `get`、`spawn`、`tell`、`event-log`) は入力を
+アプリと mod が呼ぶコマンド (`deps`、`park`、`edge add` / `rm`、`task dismiss`、`work set` / `get`、`spawn`、`tell`、`focus`、`event-log`) は入力を
 stdin の JSON だけで受ける。
 形と欄の意味はバイナリに埋め込んだ JSON Schema (`protocol/protocol.schema.json`) の `$defs` が持ち、
 外れた入力は schema の検証の文言で弾く。人が打つときも同じ JSON を渡す。

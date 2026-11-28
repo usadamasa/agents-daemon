@@ -23,6 +23,8 @@ type Daemon struct {
 	bin string
 	// open は検査を通った target を既定のアプリで開く。
 	open func(target string) error
+	// raise は Rex.app を手前に出す。
+	raise func() error
 	// 以下は開いたまま新しいバージョンへ切り替えるためのもの (upgrade.go)。window は main が窓を作った後に入れる。
 	upgrader *upgrader
 	window   *application.WebviewWindow
@@ -30,7 +32,22 @@ type Daemon struct {
 }
 
 func newDaemon() *Daemon {
-	return &Daemon{bin: daemonBin(), open: openWithSystem}
+	return &Daemon{bin: daemonBin(), open: openWithSystem, raise: raiseRex}
+}
+
+// rexBundleID は Rex.app の bundle identifier。
+const rexBundleID = "com.superlogical.rex"
+
+// raiseRex は Rex.app を手前に出す。focus は Rex.app の中の表示を切り替えるだけで、押した利用者の手前には
+// agent-tasks が居るので、アプリの切り替えはこちらで行う。
+func raiseRex() error {
+	ctx, cancel := context.WithTimeout(context.Background(), runTimeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "/usr/bin/open", "-b", rexBundleID).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("手前に出せない: Rex.app: %s", strings.TrimSpace(string(out)))
+	}
+	return nil
 }
 
 // Open は単体ビューの本文のリンク (http / https の URL か、在る絶対パス) を既定のアプリで開く。
@@ -131,6 +148,7 @@ var commands = map[string]time.Duration{
 	"work set":     runTimeout,
 	"spawn":        spawnTimeout,
 	"tell":         tellTimeout,
+	"focus":        runTimeout,
 }
 
 // Deps は `agents-daemon deps` の stdout (DepsData の JSON) を返す。
@@ -138,13 +156,17 @@ func (d *Daemon) Deps() (string, error) {
 	return d.run(runTimeout, "{}", "deps")
 }
 
-// Run は command (commands の鍵) を stdin の JSON で走らせ、stdout を返す。
+// Run は command (commands の鍵) を stdin の JSON で走らせ、stdout を返す。focus が通ったら Rex.app を手前に出す。
 func (d *Daemon) Run(command, stdin string) (string, error) {
 	timeout, ok := commands[command]
 	if !ok {
 		return "", fmt.Errorf("agent-tasks から呼べないコマンド: %q", command)
 	}
-	return d.run(timeout, stdin, strings.Fields(command)...)
+	out, err := d.run(timeout, stdin, strings.Fields(command)...)
+	if err != nil || command != "focus" {
+		return out, err
+	}
+	return out, d.raise()
 }
 
 // PickFolder は macOS のフォルダ選択の dialog を開き、選んだ絶対パスを返す (選ばなければ空)。

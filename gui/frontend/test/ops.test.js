@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Graph } from "../src/graph.js";
-import { bulkDismissable, canAdopt, canDismiss, canRename, candidates, canTell, destinationLabel, isOwnTask, memoDestinations, pathDestination, peerDestinations, spawnDestinations, spawnLabel } from "../src/ops.js";
+import { bulkDismissable, canAdopt, canDismiss, canRename, candidates, canTell, destinationLabel, isOwnTask, memoDestinations, paneOwner, pathDestination, peerDestinations, spawnDestinations, spawnLabel } from "../src/ops.js";
 
 const node = (key, extra = {}) => ({ key, kind: "task", state: "pending", title: key, live: true, depth: 0, downstream: 0, parked: 0, memos: [], blocked_by: [], deadlock: false, halted: false, stuck: false, endpoint: true, session_id: "s1", ...extra });
 
@@ -121,6 +121,34 @@ test("spawnLabel は最後に見た時刻からの経過を添える", () => {
   assert.equal(spawnLabel({ route: "spawn", repo: "/r/a", title: "a", last_seen: "2026-11-06T11:30:00Z" }, now), "a (<1h ago)");
   assert.equal(spawnLabel({ route: "spawn", repo: "/r/a", title: "a", last_seen: "2026-11-06T09:00:00Z" }, now), "a (3h ago)");
   assert.equal(spawnLabel({ route: "spawn", repo: "/r/a", title: "a", last_seen: "2026-11-01T09:00:00Z" }, now), "a (5d ago)");
+});
+
+// fakeGraph は nodes (key → ノード) と、key を止めている辺の一覧 (blockers) を持つ依存図。
+function fakeGraph(nodes, blockers) {
+  return { node: (key) => nodes[key], blockers: (key) => blockers[key] ?? [] };
+}
+
+test("paneOwner はセッションのノードなら自分、参照なら sid: から出た辺の先頭の生きているセッションのノード (#375)", () => {
+  const maker = { key: "task:s1/1", kind: "task", live: true, session_id: "s1" };
+  const ended = { key: "sid:s2", kind: "session", live: false, session_id: "s2" };
+  const waiter = { key: "task:s3/1", kind: "task", live: true, session_id: "s3" };
+  const pr = { key: "pr:o/r#1", kind: "ref", live: false };
+  const from = (before, ref) => ({ before, after: pr.key, edge: { before: { ref }, after: { ref: pr.key } } });
+  const nodes = { [maker.key]: maker, [ended.key]: ended, [waiter.key]: waiter };
+
+  // 生きているセッションのノードは自分の pane。
+  assert.equal(paneOwner(maker, fakeGraph(nodes, {})), maker);
+  // PR を作ったセッションの辺は端点の記録が sid: で、before はそのセッションのタスクへ集められていることがある。
+  assert.equal(paneOwner(pr, fakeGraph(nodes, { [pr.key]: [from(maker.key, "sid:s1")] })), maker);
+  // 作ったセッションが終わっていれば、生きている次の sid: の辺を使う。無ければ開く先が無い。
+  assert.equal(paneOwner(pr, fakeGraph(nodes, { [pr.key]: [from(ended.key, "sid:s2"), from(maker.key, "sid:s1")] })), maker);
+  assert.equal(paneOwner(pr, fakeGraph(nodes, { [pr.key]: [from(ended.key, "sid:s2")] })), undefined);
+  // タスクを端点に書いた辺 (この参照を先に済ませるタスク) は、作ったセッションの印にならない。
+  assert.equal(paneOwner(pr, fakeGraph(nodes, { [pr.key]: [from(waiter.key, "task:s3/1")] })), undefined);
+  // 辺の無い参照、図に無い before、終了したセッションのノードは開く先が無い。
+  assert.equal(paneOwner(pr, fakeGraph(nodes, {})), undefined);
+  assert.equal(paneOwner(pr, fakeGraph({}, { [pr.key]: [from("sid:gone", "sid:gone")] })), undefined);
+  assert.equal(paneOwner(ended, fakeGraph(nodes, {})), undefined);
 });
 
 test("canTell と isOwnTask は生きているセッションのノードだけ", () => {

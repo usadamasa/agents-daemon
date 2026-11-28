@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { adopt, askUnlink, discardStale, dismissAll, dismissOne, handOff, handOffTask, instruct, rename, setStatus, start, toParking } from "../src/actions.js";
+import { adopt, askUnlink, discardStale, dismissAll, dismissOne, handOff, handOffTask, instruct, rename, setStatus, showPane, start, toParking } from "../src/actions.js";
 
 const memo = { id: "m1", kind: "aside", origin: "placed", title: "T", sources: [] };
 const spawnTo = { route: "spawn", repo: "/r/a", title: "a" };
@@ -62,6 +62,13 @@ test("handOff は取れなかった (exit 1) ときに理由を返す", async ()
   const res = await handOff(memo, peerTo, "task", "", io);
   assert.equal(res.ok, false);
   assert.ok(res.message.startsWith("Could not hand off the memo: メモを取れない"));
+});
+
+test("showPane はノードのセッションを focus に渡し、失敗の理由を返す (成功なら空)", async () => {
+  const io = fakeIO({ run: [json({ pane_id: "p1", rex_session_id: "session:s", window_id: "window:w" }), { failure: "操作を Rex.app が断った" }] });
+  assert.equal(await showPane(task, io), "");
+  assert.deepEqual(io.calls[0], ["focus", { to_session: "s1", session_id: "app" }]);
+  assert.equal(await showPane(task, io), "Could not show deps-app in Rex: 操作を Rex.app が断った");
 });
 
 test("instruct はタスクの題を添えて tell に渡し、拒まれたら理由を返す", async () => {

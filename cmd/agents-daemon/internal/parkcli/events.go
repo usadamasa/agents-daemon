@@ -136,6 +136,21 @@ func tellSent(stateDir, session, to, pane string, err error, now time.Time) {
 	_ = eventlog.Record(stateDir, session, "tell", fields, now)
 }
 
+// focusShown は focus の結果を書く (focus)。session は操作した主体、to は表示させたセッション、pane は表示させた pane
+// (表示させなかったときは空)。
+func focusShown(stateDir, session, to, pane string, err error, now time.Time) {
+	fields := []string{kv("to", to)}
+	if pane != "" {
+		fields = append(fields, kv("pane", pane))
+	}
+	if err != nil {
+		fields = append(fields, kv("shown", false), kv("reason", err))
+	} else {
+		fields = append(fields, kv("shown", true))
+	}
+	_ = eventlog.Record(stateDir, session, "focus", fields, now)
+}
+
 // parkFailed は park の操作の失敗を書く。op を先頭に、session、extra、reason の順に並べる。
 func parkFailed(stateDir string, now time.Time, op, session string, err error, extra ...string) {
 	fields := []string{kv("op", op)}

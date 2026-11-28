@@ -221,6 +221,14 @@ type TellRequest struct {
 	SessionID string `json:"session_id,omitempty"`
 }
 
+// FocusRequest は focus の stdin。to_session のセッションが動いている rex の pane の居る window を、この機械の Rex.app に表示させ、FocusResult を出す。pane が見つからない、Rex.app が繋がっていない、Rex.app が断った (Remote Control が無効) のどれかなら exit 1 で理由を返す。claude が前景かは問わない。
+type FocusRequest struct {
+	// 表示させるセッションの ID。
+	ToSession string `json:"to_session"`
+	// 操作した主体 (セッションの ID かアプリの固定の名前。ログに添える)。
+	SessionID string `json:"session_id,omitempty"`
+}
+
 // EventLogRequest は event-log の stdin。mod の出来事を出来事のログに 1 行書く。出来事の名前と欄は eventlog の package doc が持つ。
 type EventLogRequest struct {
 	// 出来事の起きたセッションの ID。
@@ -333,6 +341,16 @@ type SpawnResult struct {
 type TellResult struct {
 	// 打った pane の ID。
 	PaneID string `json:"pane_id"`
+}
+
+// FocusResult は focus の出力。表示させたときだけ出る (させなかったときは exit 1)。
+type FocusResult struct {
+	// 表示させた pane の ID。
+	PaneID string `json:"pane_id"`
+	// pane の居る rex の session の ID。
+	RexSessionID string `json:"rex_session_id"`
+	// pane の居る window の ID。
+	WindowID string `json:"window_id"`
 }
 
 // DepsData は deps の出力。依存の DAG と、repo ごとの生きているセッションと open のメモ、渡したメモの宛先。

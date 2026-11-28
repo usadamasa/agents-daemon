@@ -66,6 +66,13 @@ func IsConflict(err error) bool {
 	return errors.As(err, &e) && e.code == "conflict"
 }
 
+// IsRefused は err が、頼んだ相手の client が断ったことによる失敗かを返す。
+// rex-premise: preview.37 api client.perform は、頼まれた client が断ると refused で失敗する (api-list.json の記述。実機では出していない)
+func IsRefused(err error) bool {
+	var e *apiError
+	return errors.As(err, &e) && e.code == "refused"
+}
+
 // Options は Dial の設定。
 type Options struct {
 	// ClientName と ClientVersion は hello の client に載せる (rex の client 一覧に出る)。

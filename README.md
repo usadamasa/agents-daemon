@@ -46,6 +46,7 @@ plugin が持つもの:
 | `agent-tasks` (macOS のアプリ、`gui/`) | 依存図 (#134): セッションをまたぐタスクの依存を、セッションの外の窓に箱と線で描く操作盤。生きているセッションとタスクをすべて描き、パーキングロットの一覧を下に出す。タスクやメモを選ぶとその場に単体ビューが開き、依存の付け外し、そのタスクのセッションへの指示、渡す・着手・完了・削除の依頼、メモを生きているセッションか新しいセッションへ渡す、捨てる、終了したセッションのタスクと作業を外す・メモにする、作業の題を直す、を行う (#364) |
 | `agents-daemon deps` | アプリと mod が読む依存図の JSON (タスクの記録、作業の記録、status.json、辺、メモを組み直したもの) を出す。タスクの無いセッションは作業の記録から作業のノードになり、終了しても残る (#368) |
 | `agents-daemon tell` | 生きているセッションの pane の入力欄に文面を打って Enter を送る。アプリの送達の経路 |
+| `agents-daemon focus` | 生きているセッションの pane の居る window を Rex.app に表示させる。アプリが pane へ移る経路 |
 | `agents-daemon park hand` | パーキングのメモを取って生きているセッション (`tell`) か新しく起こすセッション (`spawn`) へ渡し、届かなければ戻す |
 | `agents-daemon spawned-session mark` | `spawn` が新しく起こした rex session の中で、claude を起こす前に印を `spawned-sessions/` に書く。daemon が印を回り、pane が無くなった session を閉じる (#557) |
 | `agents-daemon tab-label` | stdin の `TabLabelRequest` の block が居る rex のタブの名前を読み、`label` があれば付け直す。タブの名前を追う mod が呼ぶ (#722) |
@@ -245,12 +246,15 @@ task gui:vendor   # 配置の library (dagre) を npm から gui/frontend/src/ve
 
 アプリは daemon のバイナリ (`${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon`) のサブコマンドを呼ぶだけで、
 状態はバイナリが持つ。数秒おきに `deps` を読み直し、操作は `park` / `edge` / `task dismiss` / `work set` / `spawn` / `tell` /
-`park hand` に stdin の JSON で渡す。ログに添える操作主体は `app`。
+`focus` / `park hand` に stdin の JSON で渡す。ログに添える操作主体は `app`。
 
 セッションへ届ける操作 (指示、タスクの着手・完了・削除・渡す依頼、メモの手渡し) は `tell` が rex の pane の入力欄に
 文面を打って Enter を送る形で届く。利用者の答えを待つ prompt が開いている、上限の画面、入力欄に打ちかけの文がある
 pane には送らず、理由を文面の下に出す。アプリは rex の外で起きるので、新しいセッションを起こす rex の session は
 利用者が最後に使っていた session (statusline の記録) になる。
+
+単体ビューの題の上の行 (Task、Session) の端末のアイコンのボタンは、`focus` で Rex.app の表示をそのセッションの pane の居る window へ切り替え、
+Rex.app を手前に出す。PR のノードでは、その PR を作ったセッションが生きていればその pane を開く。Rex.app の Settings で Remote Control を有効にしておく (無効だと Rex.app が断る)。
 
 ## 開発
 

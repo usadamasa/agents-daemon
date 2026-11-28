@@ -576,6 +576,24 @@ export const definitions = {
       }
     }
   },
+  "FocusRequest": {
+    "description": "focus の stdin。to_session のセッションが動いている rex の pane の居る window を、この機械の Rex.app に表示させ、FocusResult を出す。pane が見つからない、Rex.app が繋がっていない、Rex.app が断った (Remote Control が無効) のどれかなら exit 1 で理由を返す。claude が前景かは問わない",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "to_session"
+    ],
+    "properties": {
+      "to_session": {
+        "type": "string",
+        "description": "表示させるセッションの ID"
+      },
+      "session_id": {
+        "type": "string",
+        "description": "操作した主体 (セッションの ID かアプリの固定の名前。ログに添える)"
+      }
+    }
+  },
   "EventLogRequest": {
     "description": "event-log の stdin。mod の出来事を出来事のログに 1 行書く。出来事の名前と欄は eventlog の package doc が持つ",
     "type": "object",
@@ -916,6 +934,30 @@ export const definitions = {
       "pane_id": {
         "type": "string",
         "description": "打った pane の ID"
+      }
+    }
+  },
+  "FocusResult": {
+    "description": "focus の出力。表示させたときだけ出る (させなかったときは exit 1)",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "pane_id",
+      "rex_session_id",
+      "window_id"
+    ],
+    "properties": {
+      "pane_id": {
+        "type": "string",
+        "description": "表示させた pane の ID"
+      },
+      "rex_session_id": {
+        "type": "string",
+        "description": "pane の居る rex の session の ID"
+      },
+      "window_id": {
+        "type": "string",
+        "description": "pane の居る window の ID"
       }
     }
   },

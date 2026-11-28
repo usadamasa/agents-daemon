@@ -1,26 +1,35 @@
 // 辺の端をノードの辺に散らす。dagre は辺をノードの中心へ向けるので、同じノードに入る (出る) 辺の端が境界の 1 点に
-// 集まり、矢じりが重なって本数が読めない。入ってくる辺の終点は上辺へ、出ていく辺の始点は下辺へ、相手のノードの x の
-// 順に等間隔で置く (rankdir TB の前提)。
+// 集まり、矢じりが重なって本数が読めない。入ってくる辺の終点は上辺へ、出ていく辺の始点は下辺へ等間隔で置く
+// (rankdir TB の前提)。
+//
+// port は端の隣の点 (端に最も近い中の点) の x の順に割り当て、その点を port の真上・真下へ寄せる。別の枠から入る辺の
+// 中の点は、dagre が行き先の近くに edgesep の間隔で詰めて置くので、相手のノードの x の順に割り当てると最後の区間が
+// 行き先を越えて折り返し、矢じりが 1 か所に寄る (#707)。
 
 // spreadPorts は edges ({ before, after, points }) の points の端を置き直した写しを返す。pos は key → ノードの中心。
-// 中の点は変えない。
+// 端の隣の点は、両端の間に中の点が 2 つ以上あるときだけ動かす。中の点が 1 つの辺 (隣りの段どうし、待ちの輪の辺) は
+// その点を両端が共有するので動かさない。
 export function spreadPorts(edges, pos, width, height) {
   const out = edges.map((e) => ({ ...e, points: e.points.map((p) => ({ ...p })) }));
-  const place = (sideOf, otherOf, pointIndex, dy) => {
+  const place = (sideOf, otherOf, endIndex, nextIndex, dy) => {
     const groups = new Map();
     out.forEach((e) => groups.set(sideOf(e), [...(groups.get(sideOf(e)) ?? []), e]));
     for (const [key, group] of groups) {
       const c = pos.get(key);
       if (c === undefined) continue;
-      group.sort((a, b) => pos.get(otherOf(a)).x - pos.get(otherOf(b)).x || otherOf(a).localeCompare(otherOf(b)));
+      const nextX = (e) => e.points[nextIndex(e.points)].x;
+      group.sort(
+        (a, b) => nextX(a) - nextX(b) || pos.get(otherOf(a)).x - pos.get(otherOf(b)).x || otherOf(a).localeCompare(otherOf(b)),
+      );
       group.forEach((e, i) => {
-        const at = pointIndex(e.points);
-        e.points[at] = { x: c.x - width / 2 + (width * (i + 1)) / (group.length + 1), y: c.y + dy };
+        const x = c.x - width / 2 + (width * (i + 1)) / (group.length + 1);
+        e.points[endIndex(e.points)] = { x, y: c.y + dy };
+        if (e.points.length >= 4) e.points[nextIndex(e.points)].x = x;
       });
     }
   };
-  place((e) => e.after, (e) => e.before, (pts) => pts.length - 1, -height / 2);
-  place((e) => e.before, (e) => e.after, () => 0, height / 2);
+  place((e) => e.after, (e) => e.before, (pts) => pts.length - 1, (pts) => pts.length - 2, -height / 2);
+  place((e) => e.before, (e) => e.after, () => 0, () => 1, height / 2);
   return out;
 }
 

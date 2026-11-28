@@ -196,7 +196,7 @@ agents-daemon edge list --cwd <dir> [--here | --repo <main worktree>] [--ref <�
   待ちが要らなければ `edge rm` する
 - gh が無い・未認証・失敗した間は前に引けた状態 (無ければ外部) のまま残り、辺も消えない
 - `pr:` を after に持つ辺が無ければ、daemon がその PR を出したセッションから PR への辺
-  (`sid:<session_id>` → `pr:`、`derived` が true) を導く。出したセッションは、`gh pr create` か `gh stack submit` が作った PR の URL を
+  (`sid:<session_id>` → `pr:`、`derived` が true) を導く。出したセッションは、`gh pr create` か `gh stack submit` / `gh stack link` が作った PR の URL を
   Bash の PostToolUse hook が残した作業の記録 (`prs`) の持ち主。PR が既に辺の before にあれば、そのセッションが
   終了していても別の branch へ移っていても導く。PR がどの辺にも無ければ、セッションが生きている間だけ導き、
   PR を待つ辺が無くても PR のノードが依存図に出る。

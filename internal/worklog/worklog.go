@@ -7,7 +7,7 @@
 //	work/.lock               hook、`work set`、prune を直列にするロック
 //
 // 書くのは hook (SessionStart / UserPromptSubmit / Stop / SessionEnd と、Bash の PostToolUse が `agents-daemon ingest-work` に
-// 渡す。PostToolUse は gh pr create と gh stack submit が作った PR を prs に残し、daemon がその PR からセッションへの辺を導く)、人とアプリと
+// 渡す。PostToolUse は gh pr create と gh stack submit / link が作った PR を prs に残し、daemon がその PR からセッションへの辺を導く)、人とアプリと
 // companion の `work set`、daemon の housekeeping (Prune)。どれも lock の中で読んでから自分の欄だけを書き換える。
 // lock が無いと、ターンの途中に入った peer の delivery の UserPromptSubmit と Stop が同じ写しを書いて turns を失い、遅れた
 // hook が人の直した subject や SessionEnd の ended_at を戻す (models/work の WorkRace*.cfg の反例)。
@@ -134,17 +134,19 @@ type hookInput struct {
 // (echo の引数は拾わない)。gh pr view や gh pr list の出力の URL は出した事実ではないので拾わない。
 var prCreatePattern = regexp.MustCompile(`(?m)(?:^|[;&|(])\s*gh\s+pr\s+create(?:\s|$)`)
 
-// stackSubmitPattern は gh stack submit。頭の置き方は prCreatePattern と同じ。
-var stackSubmitPattern = regexp.MustCompile(`(?m)(?:^|[;&|(])\s*gh\s+stack\s+submit(?:\s|$)`)
+// stackPRPattern は gh stack submit と gh stack link。どちらも PR の無い branch に PR を作る。頭の置き方は
+// prCreatePattern と同じ。
+var stackPRPattern = regexp.MustCompile(`(?m)(?:^|[;&|(])\s*gh\s+stack\s+(?:submit|link)(?:\s|$)`)
 
 // prURLPattern は gh pr create が stdout に出す PR の URL。
 var prURLPattern = regexp.MustCompile(`https://github\.com/([\w.-]+/[\w.-]+)/pull/([0-9]+)`)
 
-// stackCreatedPattern は gh stack submit が新しく作った PR の行 (`✓ Created PR #N (URL) for <branch>`)。
-// 既存の PR の行 (`PR #N (URL) for <branch> is up to date`) は別のセッションが出した PR でありうるので拾わない。
+// stackCreatedPattern は gh stack submit と link が新しく作った PR の行 (`✓ Created PR #N (URL) for <branch>`)。
+// 既存の PR の行 (submit の `PR #N (URL) for <branch> is up to date`、link の `Found PR #N (URL) for branch <branch>`、
+// --open の `Marked PR #N (URL) ...`) は別のセッションが出した PR でありうるので拾わない。
 var stackCreatedPattern = regexp.MustCompile(`Created PR #[0-9]+ \(https://github\.com/([\w.-]+/[\w.-]+)/pull/([0-9]+)\)`)
 
-// createdPRs は PostToolUse の Bash の入力から、gh pr create か gh stack submit が作った PR の参照を返す。無ければ空。
+// createdPRs は PostToolUse の Bash の入力から、gh pr create か gh stack submit / link が作った PR の参照を返す。無ければ空。
 func createdPRs(in hookInput) []string {
 	if in.ToolName != "Bash" {
 		return nil
@@ -153,7 +155,7 @@ func createdPRs(in hookInput) []string {
 	switch {
 	case prCreatePattern.MatchString(in.ToolInput.Command):
 		urls = prURLPattern
-	case stackSubmitPattern.MatchString(in.ToolInput.Command):
+	case stackPRPattern.MatchString(in.ToolInput.Command):
 		urls = stackCreatedPattern
 	default:
 		return nil
@@ -260,7 +262,7 @@ func (s Store) Ingest(input []byte, now time.Time) (Result, error) {
 	return res, err
 }
 
-// recordPRs は PostToolUse の入力から gh pr create と gh stack submit が作った PR を記録に足す。Bash の呼び出しごとに来るので、PR を
+// recordPRs は PostToolUse の入力から gh pr create と gh stack submit / link が作った PR を記録に足す。Bash の呼び出しごとに来るので、PR を
 // 作っていなければ lock も取らずに返す。記録は prompt を打ったセッションにだけ作る (SessionStart と SessionEnd と同じ)。
 func (s Store) recordPRs(in hookInput, res Result, now time.Time) (Result, error) {
 	prs := createdPRs(in)

@@ -144,7 +144,7 @@ func (p *Poller) Refresh(ctx context.Context, now time.Time) {
 }
 
 // anchor は渡す側が上流を書いていない PR に、その PR を出したセッションから PR への辺を導き (#487)、自分の PR を
-// 待つ形になった導いた辺を消す。出したセッションは、PR を出した記録 (gh pr create か gh stack submit の出力) があればその持ち主で、
+// 待つ形になった導いた辺を消す。出したセッションは、PR を出した記録 (gh pr create か gh stack submit / link の出力) があればその持ち主で、
 // 終了していても別の branch へ移っていても導く (#575)。記録が無ければ、PR の repo と head branch で動いている
 // 生きているセッションで、合うものが 2 つ以上なら導かない。照合の相手の性質は models/prlink の PRAuthor が持つ。
 // 辺の条件は edge の Anchor が edges/.lock の中で確かめ直す。どの辺にも無い PR は、出した記録の持ち主が生きている

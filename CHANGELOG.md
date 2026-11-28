@@ -1,5 +1,16 @@
 # Changelog
 
+## [2026.1128.1](https://github.com/usadamasa/agents-daemon/compare/2026.1128.0...2026.1128.1) - 2026-11-28
+
+### Features
+- Desktop で始めたセッションを rex で続ける desktop コマンドを足す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/619
+- gh stack link が作った PR も作業の記録に残す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/745
+- 依存図の参照を関係するセッションの window の枠に置き、孤立した参照を示す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/746
+### Refactoring
+- rex の場所の読み方を rexplace の 1 箇所に集める by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/744
+### Documentation
+- docs: README の導入手順から agents-marketplace へのリンクを消す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/742
+
 ## [2026.1128.0](https://github.com/usadamasa/agents-daemon/compare/2026.1122.0...2026.1128.0) - 2026-11-28
 
 ### Bug Fixes

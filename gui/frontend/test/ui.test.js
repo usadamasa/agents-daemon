@@ -997,6 +997,59 @@ test("作業のノード: 日本語の変換を確定する Enter では題を�
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
 });
 
+test("作業のノード: 題の欄で打った字は、Esc 以外で閉じても指示の欄と次の題の欄に残らない (#714)", () => {
+  const tell = () => [...q("#pop").querySelectorAll(".acts .act")].find((b) => b.textContent === "Tell").click();
+  const instruction = () => q("#pop textarea")?.value;
+  // typeTitle は zeta の単体ビューを開き、題の欄に字を打つ。
+  const typeTitle = () => {
+    q('.node[data-key="sid:zeta"]').click();
+    q("#pop .title").click();
+    const field = q("#pop .title");
+    field.textContent = "打ちかけの題";
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+  // reopenedTitle は zeta の題の欄を開き直したときの中身。zeta を選んでいなければ選び直す。確かめた後は題の欄を Esc で、
+  // 単体ビューを × で閉じる。
+  const reopenedTitle = ({ select = true } = {}) => {
+    if (select) q('.node[data-key="sid:zeta"]').click();
+    q("#pop .title").click();
+    const text = q("#pop .title").textContent;
+    q("#pop .title").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    q("#pop .x").click();
+    return text;
+  };
+  try {
+    // 題を打ったまま Tell を開く。
+    typeTitle();
+    tell();
+    assert.equal(instruction(), "");
+    tell();
+    assert.equal(reopenedTitle({ select: false }), "zeta");
+
+    // 題を打ったまま単体ビューを × で閉じる。
+    typeTitle();
+    q("#pop .x").click();
+    assert.equal(reopenedTitle(), "zeta");
+    typeTitle();
+    q("#pop .x").click();
+    q('.node[data-key="sid:zeta"]').click();
+    tell();
+    assert.equal(instruction(), "");
+    q("#pop .x").click();
+
+    // 題を打ったまま別のノードを選ぶ。
+    typeTitle();
+    q('.node[data-key="task:beta/1"]').click();
+    assert.equal(reopenedTitle(), "zeta");
+    typeTitle();
+    q('.node[data-key="task:beta/1"]').click();
+    tell();
+    assert.equal(instruction(), "");
+  } finally {
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+  }
+});
+
 test("作業のノード: 題そのものを押すとその場で直せ、自動で付けた題は chip で分かり、終了したものは一覧から外せる", async () => {
   // 箱の副題には出どころを出さない (そこでは何もできない)。
   assert.doesNotMatch(q('.node[data-key="sid:zeta"] small').textContent, /題/);

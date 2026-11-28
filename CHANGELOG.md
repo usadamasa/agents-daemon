@@ -1,5 +1,17 @@
 # Changelog
 
+## [2026.1128.2](https://github.com/usadamasa/agents-daemon/compare/2026.1128.1...2026.1128.2) - 2026-11-28
+
+### Bug Fixes
+- 「導かない」の記録を PR の参照の大文字小文字で区別しない by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/747
+- dream stage と adopt の --project で絶対パスを受ける by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/749
+- 依存図: 辺の note の #N を端点の参照の種類でリンクする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/750
+- 依存図: 辺の端点だけのセッションのノードの種類を Session と出す by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/751
+- 依存図: タスクの説明とメモの本文の #N を同じ文の参照の種類でリンクする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/752
+- 依存図: 題の欄で日本語の変換を確定する Enter を題の確定にしない by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/753
+- 依存図の題の欄に指示の欄と別の下書きを持たせ、閉じたら捨てる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/754
+- 依存図の辺の port を交差しない順に割り当て、端の区間を真っすぐにする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/755
+
 ## [2026.1128.1](https://github.com/usadamasa/agents-daemon/compare/2026.1128.0...2026.1128.1) - 2026-11-28
 
 ### Features

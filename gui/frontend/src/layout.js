@@ -57,6 +57,52 @@ function rankBorders(g, real) {
   }
 }
 
+// transposeOrder は dagre の並べ替え (barycenter の sweep) の後に、同じ段で隣り合う 2 つを、入れ替えると上下の段との
+// 辺の交差が減るあいだ入れ替える (Gansner らの transpose)。dagre は sweep の局所解に留まり、同じ枠の 2 つの箱へ
+// 左右の別の枠から入る辺がたすき掛けのまま残ることがある。
+// 入れ替えるのは親が同じで、どちらも枠の境界 (dummy が "border") でないものだけにする。枠の中身が左右の境界の間に
+// 続いて並ぶ前提を崩さないため。交差が厳密に減るときだけ入れ替えるので、交差の無い図は動かない。
+// dagre の customOrder の引数、order 後の node の rank / order / dummy、辺が隣の段どうしだけを結ぶことは
+// @dagrejs/dagre 3.1.3 の内部の前提。
+function transposeOrder(g, order) {
+  order(g);
+  const layers = [];
+  for (const v of g.nodes()) {
+    const n = g.node(v);
+    if (typeof n.rank !== "number" || (g.children(v) ?? []).length > 0) continue;
+    (layers[n.rank] ??= []).push(v);
+  }
+  for (const row of layers) row?.sort((a, b) => g.node(a).order - g.node(b).order);
+  const movable = (v) => g.node(v).dummy !== "border";
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const row of layers) {
+      for (let i = 0; row && i + 1 < row.length; i++) {
+        const [v, w] = [row[i], row[i + 1]];
+        if (g.parent(v) !== g.parent(w) || !movable(v) || !movable(w)) continue;
+        if (pairCrossings(g, w, v) >= pairCrossings(g, v, w)) continue;
+        [row[i], row[i + 1]] = [w, v];
+        [g.node(v).order, g.node(w).order] = [g.node(w).order, g.node(v).order];
+        changed = true;
+      }
+    }
+  }
+}
+
+// pairCrossings は left を right のすぐ左に置いたときの、left の辺と right の辺どうしの交差の数 (辺の weight の積)。
+function pairCrossings(g, left, right) {
+  const count = (ends, end) => {
+    let n = 0;
+    for (const a of ends(left) ?? []) {
+      for (const b of ends(right) ?? []) {
+        if (g.node(end(a)).order > g.node(end(b)).order) n += (g.edge(a).weight ?? 1) * (g.edge(b).weight ?? 1);
+      }
+    }
+    return n;
+  };
+  return count((v) => g.inEdges(v), (e) => e.v) + count((v) => g.outEdges(v), (e) => e.w);
+}
+
 // layout は線のある図のノード (tree.nodes。辺でつながるノードと、同じ枠に引き入れた辺の無いノード) を dagre で配置し、
 // 枠 (tree.frames) を compound の親にする。辺の無いほかのノードは図の下のセッションの枠 (renderGroups) か
 // 右の列 (renderColumn) に並べる。depth は key → 段 (Graph.view の depth)。返すのは key → { x, y } (中心) と、
@@ -78,7 +124,7 @@ export function layout(tree, links, depth) {
     if ((depth.get(l.after) ?? 0) > (depth.get(l.before) ?? 0)) g.setEdge(l.before, l.after);
     else rest.push(l);
   }
-  dagre.layout(g);
+  dagre.layout(g, { customOrder: transposeOrder });
   // renderGraph は connected が空なら layout を呼ばないので、ここでは空を見ない。
   fitEdges(g, MARGIN_X, MARGIN_Y);
   const pos = new Map(connected.map((n) => [n.key, g.node(n.key)]));

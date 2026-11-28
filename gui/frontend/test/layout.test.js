@@ -53,3 +53,75 @@ for (const lone of [false, true]) {
     assert.ok(pos.get("lane3").x < pos.get("lane1").x, `lane3=${pos.get("lane3").x} lane1=${pos.get("lane1").x}`);
   });
 }
+
+// session の枠 1 つに window の区切りを 4 つ並べた図。区切りとノードと辺の並び、段は実データの写し。gh の a から
+// 隣の段の uc の u へ辺が出る。dagre の並べ替えは交差の数だけを見るので、交差の数が同じなら uc を gh から最も遠い
+// 端へ置き、a→u の線が間の 2 つの区切りの上を横切る。
+function farTree() {
+  const top = "\0s";
+  const windows = ["gh", "uc", "dry", "har"];
+  const frames = [{ key: top, label: "session", level: "h2" }, ...windows.map((w) => ({ key: `${top}\0${w}`, label: w, level: "h3", parent: top }))];
+  const members = [
+    ["a", 0, "gh"],
+    ["u", 1, "uc"],
+    ["t5", 2, "dry"],
+    ["s2", 3, "dry"],
+    ["p688", 4, "dry"],
+    ["p54", 1, "gh"],
+    ["p55", 2, "uc"],
+    ["t6", 4, "har"],
+    ["t7", 2, "har"],
+    ["h", 0, "har"],
+  ];
+  const links = [
+    ["s2", "p688"],
+    ["s2", "t6"],
+    ["a", "p54"],
+    ["a", "u"],
+    ["a", "t6"],
+    ["u", "p55"],
+    ["u", "t5"],
+    ["u", "t7"],
+    ["t5", "s2"],
+    ["u", "s2"],
+  ].map(([before, after]) => ({ before, after, kind: "edge" }));
+  return {
+    tree: { nodes: members.map(([key]) => ({ key })), frames, parentOf: new Map(members.map(([key, , w]) => [key, `${top}\0${w}`])) },
+    links,
+    depth: new Map(members.map(([key, d]) => [key, d])),
+    frameOf: (key) => `${top}\0${members.find(([k]) => k === key)[2]}`,
+    windows: windows.map((w) => `${top}\0${w}`),
+  };
+}
+
+test("layout は辺でつながる隣の段の区切りどうしの間に、ほかの区切りを挟まない", () => {
+  const { tree, links, depth, frameOf, windows } = farTree();
+  const { boxes } = layout(tree, links, depth);
+  const span = (key) => {
+    const b = boxes.get(key);
+    return { left: b.x - b.width / 2, right: b.x + b.width / 2 };
+  };
+  const [from, to] = [span(frameOf("a")), span(frameOf("u"))].sort((p, q) => p.left - q.left);
+  const between = windows.filter((w) => {
+    const s = span(w);
+    return s.left >= from.right && s.right <= to.left;
+  });
+  assert.deepEqual(between, [], `gh=${JSON.stringify(span(frameOf("a")))} uc=${JSON.stringify(span(frameOf("u")))}`);
+});
+
+// 区切りを寄せると、段を共有しない区切りどうしが同じ横の範囲で上下に積まれる。積んだ区切りの矩形が重ならないことを確かめる。
+test("layout は区切りを寄せても、兄弟の区切りの矩形を重ねない", () => {
+  const { tree, links, depth, windows } = farTree();
+  const { boxes } = layout(tree, links, depth);
+  const rect = (key) => {
+    const b = boxes.get(key);
+    return { key, left: b.x - b.width / 2, right: b.x + b.width / 2, top: b.y - b.height / 2, bottom: b.y + b.height / 2 };
+  };
+  const rects = windows.map(rect);
+  for (const [i, p] of rects.entries()) {
+    for (const q of rects.slice(i + 1)) {
+      const overlap = p.left < q.right && q.left < p.right && p.top < q.bottom && q.top < p.bottom;
+      assert.ok(!overlap, `${JSON.stringify(p)} ${JSON.stringify(q)}`);
+    }
+  }
+});

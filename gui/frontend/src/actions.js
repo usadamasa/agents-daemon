@@ -82,6 +82,13 @@ export async function discardStale(days, io = defaultIO) {
   return `Discarded ${count} memos older than ${days} days (restore with ${reopenHint("<id>")}; ids are in logs --events)`;
 }
 
+// showPane はノードのセッションの pane の居る window を Rex.app に表示させ (`agents-daemon focus`)、失敗の理由を返す
+// (成功なら空)。表示させられない理由 (pane が無い、Rex.app が繋がっていない、Remote Control が無効) はバイナリが返す。
+export async function showPane(node, io = defaultIO) {
+  const ran = await io.run("focus", { to_session: node.session_id, session_id: daemon.SESSION });
+  return "failure" in ran ? `Could not show ${sessionName(node)} in Rex: ${ran.failure}` : "";
+}
+
 // ---- 送達を伴う操作。結果は { ok, message } で、ok が false なら文面を残して理由を見せる ----
 
 // tell はセッションの入力欄に text を打つ (`agents-daemon tell`)。送らなかった理由 (prompt が開いている、打ちかけの文がある、

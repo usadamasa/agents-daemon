@@ -354,7 +354,10 @@ select { font: inherit; color: inherit; }
 .pop a.ref:hover { text-decoration: underline; }
 .pop .x { position: absolute; right: 8px; top: 8px; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; color: var(--muted); }
 .pop .x:hover { background: var(--row-hover); }
-:is(.pop .x, .lk button.icon) svg { width: 16px; height: 16px; fill: currentColor; }
+:is(.pop .x, .lk button.icon, .pop .ph button.icon) svg { width: 16px; height: 16px; fill: currentColor; }
+/* 種類の行 (Task · 1、Session) の語の直後のアイコンのボタン */
+.pop .ph button.icon { width: 20px; height: 20px; margin-left: 4px; display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; border-radius: 6px; color: var(--muted); }
+.pop .ph button.icon:hover:not(:disabled) { background: var(--row-hover); }
 
 /* 動詞。アイコンの下に短い語を置き、幅を等分して横長にしない。開いている動詞は押し込んだ灰で、もう一度押すと閉じる */
 .acts { display: flex; flex-wrap: wrap; margin: 0 -4px; }

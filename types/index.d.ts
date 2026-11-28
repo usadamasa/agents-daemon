@@ -221,6 +221,14 @@ export type TellRequest = {
   session_id?: string
 }
 
+// focus の stdin。to_session のセッションが動いている rex の pane の居る window を、この機械の Rex.app に表示させ、FocusResult を出す。pane が見つからない、Rex.app が繋がっていない、Rex.app が断った (Remote Control が無効) のどれかなら exit 1 で理由を返す。claude が前景かは問わない
+export type FocusRequest = {
+  // 表示させるセッションの ID
+  to_session: string
+  // 操作した主体 (セッションの ID かアプリの固定の名前。ログに添える)
+  session_id?: string
+}
+
 // event-log の stdin。mod の出来事を出来事のログに 1 行書く。出来事の名前と欄は eventlog の package doc が持つ
 export type EventLogRequest = {
   // 出来事の起きたセッションの ID
@@ -333,6 +341,16 @@ export type SpawnResult = {
 export type TellResult = {
   // 打った pane の ID
   pane_id: string
+}
+
+// focus の出力。表示させたときだけ出る (させなかったときは exit 1)
+export type FocusResult = {
+  // 表示させた pane の ID
+  pane_id: string
+  // pane の居る rex の session の ID
+  rex_session_id: string
+  // pane の居る window の ID
+  window_id: string
 }
 
 // deps の出力。依存の DAG と、repo ごとの生きているセッションと open のメモ、渡したメモの宛先

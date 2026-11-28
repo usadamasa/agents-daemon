@@ -8,8 +8,8 @@ import { fitEdges, spreadPorts } from "./ports.js";
 import { findJumps, jumpPath } from "./jumps.js";
 import { PR_STAGE, STATE_LABEL, cardHint, cardText, emphasis, kindWord, leadStage, markClass, mentionLabel, mentionLines, toneOf } from "./card.js";
 import { isStale, kindLabel, lastPlacedAt, stamp } from "./memo.js";
-import { bulkDismissable, canAdopt, canDismiss, canRename, canTell, candidates, isOwnTask, lastSeenAgo, memoDestinations, pathDestination, peerDestinations, spawnDestinations } from "./ops.js";
-import { addBlocker, adopt, askUnlink, discard, discardStale, dismissAll, dismissOne, handOff, handOffTask, instruct, rename, setStatus, start, toParking, unlink } from "./actions.js";
+import { bulkDismissable, canAdopt, canDismiss, canRename, canTell, candidates, isOwnTask, lastSeenAgo, memoDestinations, paneOwner, pathDestination, peerDestinations, spawnDestinations } from "./ops.js";
+import { addBlocker, adopt, askUnlink, discard, discardStale, dismissAll, dismissOne, handOff, handOffTask, instruct, rename, setStatus, showPane, start, toParking, unlink } from "./actions.js";
 import { openTarget, pickFolder } from "./daemon.js";
 import { edgeNoteKind, edgeNoteRepo, mentionUrl, refUrl, segments, textNoteKind, textNoteRepo } from "./links.js";
 import { CONTROLS_BAND, MAX_ZOOM, MIN_ZOOM, centerOffset, clampZoom, fitZoom, overflowCenter, percent, scaledFrame, scrollAfterZoom, stepZoom, topOffset, wheelZoomer } from "./zoom.js";
@@ -96,6 +96,17 @@ const el = (id) => document.getElementById(id);
 // openLink は本文のリンクを開く。単体ビューの選択と打ちかけの文面に触らないよう act を通さず、失敗だけを footer に出す。
 async function openLink(target) {
   const failure = await openTarget(target);
+  if (failure === "") return;
+  state.notice = failure;
+  state.noticeUntil = Date.now() + NOTICE_MS;
+  renderFoot();
+  setTimeout(renderFoot, NOTICE_MS + 100);
+}
+
+// showInRex はノードのセッションの pane を Rex で開く。送達が拒まれた pane を片付けに行く手段なので、openLink と同じく
+// act を通さず、開いている動詞と打ちかけの文面を残す。
+async function showInRex(n) {
+  const failure = await showPane(n);
   if (failure === "") return;
   state.notice = failure;
   state.noticeUntil = Date.now() + NOTICE_MS;
@@ -840,6 +851,7 @@ const ICONS = {
   remove: '<path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM3.965 13.096a6.5 6.5 0 0 0 9.131-9.131ZM1.5 8a6.474 6.474 0 0 0 1.404 4.035l9.131-9.131A6.499 6.499 0 0 0 1.5 8Z"/>', // circle-slash
   task: '<path d="M2 2h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1Zm4.655 8.595a.75.75 0 0 1 0 1.06L4.03 14.28a.75.75 0 0 1-1.06 0l-1.5-1.5a.749.749 0 0 1 .326-1.275.749.749 0 0 1 .734.215l.97.97 2.095-2.095a.75.75 0 0 1 1.06 0ZM9.75 2.5h5.5a.75.75 0 0 1 0 1.5h-5.5a.75.75 0 0 1 0-1.5Zm0 5h5.5a.75.75 0 0 1 0 1.5h-5.5a.75.75 0 0 1 0-1.5Zm0 5h5.5a.75.75 0 0 1 0 1.5h-5.5a.75.75 0 0 1 0-1.5Zm-7.25-9v3h3v-3Z"/>', // tasklist
   issue: '<path d="M8 9.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"/><path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Z"/>', // issue-opened
+  terminal: '<path d="M0 2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75v10.5A1.75 1.75 0 0 1 14.25 15H1.75A1.75 1.75 0 0 1 0 13.25Zm1.75-.25a.25.25 0 0 0-.25.25v10.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25V2.75a.25.25 0 0 0-.25-.25ZM7.25 8a.749.749 0 0 1-.22.53l-2.25 2.25a.749.749 0 0 1-1.275-.326.749.749 0 0 1 .215-.734L5.44 8 3.72 6.28a.749.749 0 0 1 .326-1.275.749.749 0 0 1 .734.215l2.25 2.25c.141.14.22.331.22.53Zm1.5 1.5h3a.75.75 0 0 1 0 1.5h-3a.75.75 0 0 1 0-1.5Z"/>', // terminal
   close: '<path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"/>', // x
 };
 
@@ -1159,6 +1171,10 @@ function nodePopup(n) {
   const ph = document.createElement("span");
   ph.className = "ph";
   ph.textContent = [kindWord(n), n.task_id].filter(Boolean).join(" · ");
+  // pane を Rex で開くボタン。chip の行は折り返す位置が題と chip の数で変わるので、位置の動かない種類の行に置く。
+  // pane の状態 (prompt が開いている、claude が前景でない) は問わない。人の手が要る pane へ行く手段なので。
+  const owner = paneOwner(n, g);
+  if (owner !== undefined) ph.append(iconButton("terminal", "Show pane in Rex", () => void showInRex(owner)));
   const title = titleOf(n);
   if (title.classList.contains("editing")) ph.append(renameHint());
   const chips = document.createElement("div");

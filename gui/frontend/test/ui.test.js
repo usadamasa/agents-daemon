@@ -1568,6 +1568,69 @@ test("単体ビューのセッション名: session_node があれば押すと�
   }
 });
 
+test("単体ビューの種類の行: 生きているセッションの pane を Rex で開くボタンを置く (#375)", async () => {
+  // chip の行は題と chip の数で折り返す位置が変わるので、題の上の種類の行 (Task · 1、Session) の語の直後に置く。
+  const paneButton = () => q('#pop .head .ph button.icon[aria-label="Show pane in Rex"]');
+  const ran = [];
+  let failure = "";
+  const byName = window.wails.Call.ByName;
+  window.wails.Call.ByName = async (name, ...args) => {
+    if (name !== "main.Daemon.Run") return byName(name, ...args);
+    ran.push([args[0], JSON.parse(args[1])]);
+    if (failure !== "") throw new Error(failure);
+    return "{}";
+  };
+  try {
+    // 打ちかけの指示と開いている動詞を残したまま、pane へ行ける。
+    q('.node[data-key="task:beta/1"]').click();
+    verb("Tell").click();
+    const draft = q("#pop textarea");
+    draft.value = "打ちかけの指示";
+    draft.dispatchEvent(new Event("input", { bubbles: true }));
+    assert.equal(paneButton().querySelectorAll('svg[viewBox="0 0 16 16"]').length, 1);
+    assert.equal(q("#pop .head .ph").firstChild.textContent, "Task · 1");
+    assert.equal(q("#pop .head .ph").children[0], paneButton());
+    assert.equal(count("#pop .head .chips button.icon"), 0);
+    await snapshot("graph-popup-show-pane");
+    paneButton().click();
+    await flush();
+    assert.deepEqual(ran, [["focus", { to_session: "sid-beta", session_id: "app" }]]);
+    assert.equal(q("#pop textarea").value, "打ちかけの指示");
+    assert.equal(verb("Tell").getAttribute("aria-pressed"), "true");
+
+    // 表示させられなかった理由は footer に出す。
+    failure = "操作を Rex.app が断った (Rex.app の Settings で Remote Control を有効にする)";
+    paneButton().click();
+    await flush();
+    assert.ok(q("#foot-text").textContent.includes(failure), q("#foot-text").textContent);
+    assert.equal(q("#pop textarea").value, "打ちかけの指示");
+
+    // 終了したセッションと、作ったセッションの辺が無い参照のノードには開く pane が無いので置かない。
+    for (const key of ["sid:gamma", "pr:usadamasa/agents-daemon#254"]) {
+      q(`.node[data-key="${key}"]`).click();
+      assert.equal(paneButton(), null, key);
+    }
+
+    // PR を作ったセッション (sid: から出た辺の before) が生きていれば、参照のノードからそのセッションの pane を開く。
+    escape();
+    const made = JSON.parse(fixtureDeps);
+    const pr = "pr:usadamasa/agents-daemon#254";
+    const link = { before: "task:beta/1", after: pr, kind: "edge", edge: { id: "edge-made", before: { ref: "sid:sid-beta", cwd: "/repo/agents-daemon", repo: "/repo/agents-daemon" }, after: { ref: pr, cwd: "/repo/agents-daemon", repo: "/repo/agents-daemon" }, note: "PR #254" } };
+    made.graph.links.push(link);
+    await loadDeps(JSON.stringify(made));
+    q(`.node[data-key="${pr}"]`).click();
+    ran.length = 0;
+    failure = "";
+    paneButton().click();
+    await flush();
+    assert.deepEqual(ran, [["focus", { to_session: "sid-beta", session_id: "app" }]]);
+  } finally {
+    await loadDeps(fixtureDeps);
+    window.wails.Call.ByName = byName;
+    escape();
+  }
+});
+
 test("渡したメモ (repo:): パーキングロットの宛先の repo の節に Handed で出し、To の chip で宛先の repo に絞る (#292)", async () => {
   const filter = q("#repo-filter");
   const choose = (repo) => {

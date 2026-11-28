@@ -119,6 +119,20 @@ export function canTell(node) {
   return node.live && typeof node.session_id === "string" && node.session_id !== "";
 }
 
+// paneOwner は node から Rex で開く pane を持つノード。生きているセッションのノードは自分。参照 (PR、issue) は、sid: を
+// 端点に書いた辺 (PR を作ったセッションから daemon が導く辺) の before のうち、最初の生きているセッションのノード。
+// 無ければ undefined。graph は node(key) と blockers(key) を持つ依存図。
+export function paneOwner(node, graph) {
+  if (canTell(node)) return node;
+  if (node.kind !== "ref") return undefined;
+  for (const l of graph.blockers(node.key)) {
+    if (!l.edge?.before?.ref?.startsWith("sid:")) continue;
+    const before = graph.node(l.before);
+    if (before !== undefined && canTell(before)) return before;
+  }
+  return undefined;
+}
+
 // isOwnTask はセッションが動かせる (未完了の) タスクか。着手・完了・削除・メモにする、の対象。
 export function isOwnTask(node) {
   return node.kind === "task" && canTell(node) && node.state !== "completed";

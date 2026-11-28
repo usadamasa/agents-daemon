@@ -44,6 +44,7 @@ description: >-
 | rex のセッションなのに daemon が起きない | `backend` の `ErrNoRexSession` (rex の block の外の起動では起こさない。場所の読み方は `rexplace`) |
 | 依存図のノードの状態や辺がおかしい | `deps/graph` と `edge` (端点の結びつけ) の package doc、`deps/activity.go`。`agents-daemon deps` の JSON を直に読む |
 | アプリからの送達 (指示、メモを渡す) が拒まれる・届かない | `tell` と `parkhand` の package doc。`logs --events` の `tell` と `park.hand` の行 |
+| アプリのボタンで pane が Rex.app に出ない | `focus` の package doc と `rex` の `ShowWindow`。`logs --events` の `focus` の行 |
 | mod の通知 (辺の書き方、ファイルのメモ) が出ない、park tool が載らない | `hooks/register.ts` と各 `hooks/*.ts` の冒頭。`logs --events` の mod の出来事 |
 | 検知の挙動を確かめたい、上限を踏んだ後に材料を読みたい | verification.md |
 | `task lint` の analyze-modularity や go-arch-lint が落ちる、パッケージを統合・改名したい | package-lint.md |

@@ -429,6 +429,48 @@ func (c *Client) DestroySession(ctx context.Context, session string) error {
 	return c.call(ctx, "session.destroy", map[string]any{"session_id": session}, nil)
 }
 
+// IsRefused は頼んだ相手の client が断ったことによる失敗かを返す。
+func IsRefused(err error) bool { return control.IsRefused(err) }
+
+// ConnectedClient は client.list の 1 行のうち使う部分。Kind は client が名乗った種類 (app、cli、agent)。名乗っていない
+// 接続では空。Transport は接続の経路で、同じ機械の socket からなら unix。
+type ConnectedClient struct {
+	ClientID  string
+	Kind      string
+	Transport string
+}
+
+// ListClients は server に繋がっている client を返す。
+// rex-premise: preview.37 api client.list は clients[].client_id / info.kind / principal.transport を返し、info の無い接続が混じる
+func (c *Client) ListClients(ctx context.Context) ([]ConnectedClient, error) {
+	var res struct {
+		Clients []struct {
+			ClientID string `json:"client_id"`
+			Info     struct {
+				Kind string `json:"kind"`
+			} `json:"info"`
+			Principal struct {
+				Transport string `json:"transport"`
+			} `json:"principal"`
+		} `json:"clients"`
+	}
+	if err := c.call(ctx, "client.list", nil, &res); err != nil {
+		return nil, err
+	}
+	clients := make([]ConnectedClient, 0, len(res.Clients))
+	for _, cl := range res.Clients {
+		clients = append(clients, ConnectedClient{ClientID: cl.ClientID, Kind: cl.Info.Kind, Transport: cl.Principal.Transport})
+	}
+	return clients, nil
+}
+
+// Perform は別の client に、その client の action を頼み、返事を wait まで待つ。client が断れば IsRefused の失敗になる。
+// rex-premise: preview.37 api client.perform は client_id、action、args、timeout_ms を取り、返事が無ければ timeout で失敗する
+func (c *Client) Perform(ctx context.Context, clientID, action string, args map[string]any, wait time.Duration) error {
+	req := map[string]any{"client_id": clientID, "action": action, "args": args, "timeout_ms": wait.Milliseconds()}
+	return c.call(ctx, "client.perform", req, nil)
+}
+
 // Revision は daemon が hello で名乗る API revision。server の対応する幅に入っていないと接続できない。
 const Revision = control.APIRevision
 

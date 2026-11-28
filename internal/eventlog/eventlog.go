@@ -28,6 +28,7 @@
 //	task.dismiss              終了したセッションのタスクの記録を消した (from_session、task)
 //	task.dismiss.failed       タスクの記録を消さなかった (ref、reason)
 //	tell                      セッションの入力欄に文面を打った (to、pane、delivered、reason)
+//	focus                     セッションの pane の居る window を Rex.app に表示させた (to、pane、shown、reason)
 //	mod.tool-register.failed  session.start で park の tool を登録できなかった (reason)
 //	mod.notice                ファイルを触った tool の結果で model にメモを伝えた (tool、memos)
 //	mod.notice.failed         伝えるメモを選べなかった (reason)

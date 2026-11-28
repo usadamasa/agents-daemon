@@ -12,6 +12,7 @@
 //	Reachable                 server.status
 //	NewSession / NewWindow    session.create / session.new_window。block の command は wrap の包み
 //	SplitPane / ClosePane     session.new_split / block.close (simulate の使い捨て block)
+//	ShowWindow                client.list でこの機械の app の client を選び、client.perform で app の session.select を頼む
 //	SessionBlocks / Kill      list_blocks を flavor を問わず数える / session.destroy (daemon の reaper)
 //
 // 全列挙は session と block の数に比例して request が増えるので、daemon は tick ごとには打たず購読の cache を読む。

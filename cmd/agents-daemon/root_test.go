@@ -17,7 +17,7 @@ func TestRootCmd_registersAllCommands(t *testing.T) {
 		names = append(names, c.Name())
 	}
 	want := []string{
-		"daemon", "deps", "desktop", "doctor", "dream", "edge", "event-log", "ingest-quota-resume", "ingest-statusline", "ingest-task", "ingest-turn-failure", "ingest-work",
+		"daemon", "deps", "desktop", "doctor", "dream", "edge", "event-log", "focus", "ingest-quota-resume", "ingest-statusline", "ingest-task", "ingest-turn-failure", "ingest-work",
 		"inspect", "logs", "park", "prune-worktrees", "simulate", "spawn", "spawned-session", "status", "statusline", "stop", "tab-label", "task", "tell", "update",
 		"version", "work",
 	}
@@ -99,6 +99,7 @@ func TestRootCmd_jsonFlag(t *testing.T) {
 		"agents-daemon desktop resume":        true,
 		"agents-daemon edge list":             true,
 		"agents-daemon edge rm":               true,
+		"agents-daemon focus":                 true,
 		"agents-daemon inspect":               true,
 		"agents-daemon logs":                  true,
 		"agents-daemon park add":              true,

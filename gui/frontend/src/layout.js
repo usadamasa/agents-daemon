@@ -87,6 +87,116 @@ function transposeOrder(g, order) {
       }
     }
   }
+  swapBlocks(g, layers);
+}
+
+// swapBlocks は同じ親の隣り合う 2 つの子 (枠ならその中身と境界ごと) を全部の段で入れ替え、辺の交差の数を増やさずに
+// 辺の横の長さ (段どうしの order の差の和) が減るあいだ続ける。dagre の並べ替えは交差の数だけを見るので、交差の数が
+// 同じ並びのうち、辺でつながる枠を互いに遠い端へ置いたものに留まることがある。
+// 子の左右の順がどの段でも同じ親だけを扱う。その順で隣り合う 2 つは、両方が載る段で続いて並ぶので、段ごとに 2 つの
+// 区間を入れ替えれば枠の中身が左右の境界の間に続いて並ぶ前提を崩さない。
+function swapBlocks(g, layers) {
+  const parents = [undefined, ...g.nodes().filter((v) => (g.children(v) ?? []).length > 0)];
+  let score = scoreOrder(g, layers);
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const p of parents) {
+      const owner = ownerMap(g, layers, p);
+      const seq = siblingOrder(layers, owner);
+      for (let i = 0; seq && i + 1 < seq.length; i++) {
+        const undo = swapPair(g, layers, owner, seq[i], seq[i + 1]);
+        const next = scoreOrder(g, layers);
+        if (next.crossings < score.crossings || (next.crossings === score.crossings && next.length < score.length)) {
+          score = next;
+          [seq[i], seq[i + 1]] = [seq[i + 1], seq[i]];
+          changed = true;
+        } else {
+          undo();
+        }
+      }
+    }
+  }
+}
+
+// ownerMap は段のノードのうち p の子孫 (p の枠の境界を除く) を、それを含む p の子へ写す。
+function ownerMap(g, layers, p) {
+  const owner = new Map();
+  for (const row of layers) {
+    for (const v of row ?? []) {
+      let c = v;
+      while (c !== undefined && g.parent(c) !== p) c = g.parent(c);
+      if (c !== undefined && g.node(c).dummy !== "border") owner.set(v, c);
+    }
+  }
+  return owner;
+}
+
+// siblingOrder は子の左右の順を返す。段によって順が食い違うなら null。
+function siblingOrder(layers, owner) {
+  const left = new Set();
+  const rest = [];
+  for (const row of layers) {
+    const runs = [];
+    for (const v of row ?? []) {
+      const c = owner.get(v);
+      if (c !== undefined && runs.at(-1) !== c) runs.push(c);
+    }
+    for (let i = 0; i < runs.length; i++) {
+      for (let j = i + 1; j < runs.length; j++) {
+        if (runs[i] === runs[j] || left.has(`${runs[j]}\0${runs[i]}`)) return null;
+        left.add(`${runs[i]}\0${runs[j]}`);
+      }
+    }
+    for (const c of runs) if (!rest.includes(c)) rest.push(c);
+  }
+  // 段ごとの左右の関係を 1 本の順に並べる。どれも左に何かを要するなら関係が輪になっている。
+  const seq = [];
+  while (rest.length > 0) {
+    const i = rest.findIndex((c) => !rest.some((d) => left.has(`${d}\0${c}`)));
+    if (i < 0) return null;
+    seq.push(...rest.splice(i, 1));
+  }
+  return seq;
+}
+
+// swapPair は段ごとに x の区間と、すぐ右に続く y の区間を入れ替え、元へ戻す関数を返す。
+function swapPair(g, layers, owner, x, y) {
+  const saved = [];
+  for (const row of layers) {
+    if (!row) continue;
+    const xs = row.filter((v) => owner.get(v) === x);
+    const ys = row.filter((v) => owner.get(v) === y);
+    if (xs.length === 0 || ys.length === 0) continue;
+    saved.push([row, row.slice()]);
+    row.splice(row.indexOf(xs[0]), xs.length + ys.length, ...ys, ...xs);
+    row.forEach((v, i) => (g.node(v).order = i));
+  }
+  return () => {
+    for (const [row, old] of saved) {
+      row.splice(0, row.length, ...old);
+      row.forEach((v, i) => (g.node(v).order = i));
+    }
+  };
+}
+
+// scoreOrder は隣の段どうしの辺の交差の数 (辺の weight の積) と、辺の両端の order の差の和を数える。
+function scoreOrder(g, layers) {
+  let crossings = 0;
+  let length = 0;
+  for (const row of layers) {
+    const edges = (row ?? []).flatMap((v) => g.outEdges(v) ?? []);
+    for (let i = 0; i < edges.length; i++) {
+      const a = edges[i];
+      length += Math.abs(g.node(a.v).order - g.node(a.w).order);
+      for (let j = i + 1; j < edges.length; j++) {
+        const b = edges[j];
+        const dv = g.node(a.v).order - g.node(b.v).order;
+        const dw = g.node(a.w).order - g.node(b.w).order;
+        if (dv * dw < 0) crossings += (g.edge(a).weight ?? 1) * (g.edge(b).weight ?? 1);
+      }
+    }
+  }
+  return { crossings, length };
 }
 
 // pairCrossings は left を right のすぐ左に置いたときの、left の辺と right の辺どうしの交差の数 (辺の weight の積)。

@@ -15,30 +15,29 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/spawnedsession"
 )
 
-// newSpawnedSessionCmd は `agents-daemon spawned-session mark|close <session_id>` を組み立てる (spawnedsession)。
-// mark は spawn と peer-sessions skill の手順が起こした rex session の中で、包みの sh がコマンドを起こす前に呼ぶ。
+// newSpawnedSessionCmd は `agents-daemon spawned-session mark|close` を組み立てる (spawnedsession)。
+// mark は spawn が起こした rex session の中で、包みの sh がコマンドを起こす前に自分の block で呼ぶ。
 // close は起こした側が、控えた session_id で peer の session を畳むときに呼ぶ。
 func newSpawnedSessionCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "spawned-session", Short: "起こした rex session の印を扱う (pane が空になったら daemon が閉じる。印のある session は close で閉じられる)"}
 	cmd.AddCommand(&cobra.Command{
-		Use:   "mark <session_id>",
-		Short: "rex session の印を書き、書いた印を JSON で出す",
+		Use:   "mark <block_id|session_id>",
+		Short: "rex session の印を書き、書いた印を JSON で出す。block の ID はその block の居る session を指す",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return statecmd.Run(cmd, func(p apppath.Paths, _ io.Reader) (any, error) {
-				id := args[0]
-				if id == "" {
-					return nil, errors.New("session ID が空")
+				if args[0] == "" {
+					return nil, errors.New("block か session の ID が空")
 				}
-				store := spawnedsession.New(p.StateDir())
-				if err := store.Put(id); err != nil {
-					return nil, err
-				}
-				rec, ok := store.Get(id)
+				client := backend.ConnectRex(sessioncontext.New(p.StateDir()))
+				defer backend.Close(client)
+				resolver, ok := client.(interface {
+					ResolveSession(ctx context.Context, name string) (string, error)
+				})
 				if !ok {
-					return nil, fmt.Errorf("書いた印 %s を読めない", id)
+					return nil, errors.New("この backend は session を引けない")
 				}
-				return rec, nil
+				return markSpawnedSession(cmd.Context(), spawnedsession.New(p.StateDir()), resolver.ResolveSession, args[0])
 			})
 		},
 	})
@@ -67,6 +66,24 @@ func newSpawnedSessionCmd() *cobra.Command {
 		},
 	})
 	return cmd
+}
+
+// markSpawnedSession は name (block か session の ID) を resolve で session の ID に引いてから印を書き、書いた印を返す。
+// spawn の包みは自分の REX_BLOCK を渡す (rex は新しい端末に REX_SESSION を入れない)。reaper と close は session の ID で
+// 印を引くので、引けなければ印を書かない。
+func markSpawnedSession(ctx context.Context, store spawnedsession.Store, resolve func(context.Context, string) (string, error), name string) (spawnedsession.Record, error) {
+	id, err := resolve(ctx, name)
+	if err != nil {
+		return spawnedsession.Record{}, fmt.Errorf("%s の居る session を引けない: %w", name, err)
+	}
+	if err := store.Put(id); err != nil {
+		return spawnedsession.Record{}, err
+	}
+	rec, ok := store.Get(id)
+	if !ok {
+		return spawnedsession.Record{}, fmt.Errorf("書いた印 %s を読めない", id)
+	}
+	return rec, nil
 }
 
 // sessionCloser は close が使う多重化ツールの操作。rex の backend が満たす。

@@ -166,12 +166,12 @@ func (e *environment) cliEnv() []string {
 }
 
 // daemonEnv は daemon の env。本物の rex と Claude の設定ディレクトリを指す。
-// REX_SERVER は URL なので空白を percent-encode する。REX_SESSION は起動の条件で、ループは値を読まない。
+// REX_SERVER は URL なので空白を percent-encode する。REX_BLOCK は起動の条件で、ループは値を読まない。
 // rex-premise: preview.37 api REX_SERVER は unix:// の URL。既定の socket は ~/Library/Application Support/rex/server.sock
 func (e *environment) daemonEnv() []string {
 	return append(e.commonEnv(),
 		"CLAUDE_CONFIG_DIR="+e.cfg.SourceClaude,
 		"REX_SERVER=unix://"+strings.ReplaceAll(e.cfg.RexSocket, " ", "%20"),
-		"REX_SESSION=session:release-verify",
+		"REX_BLOCK=block:release-verify",
 	)
 }

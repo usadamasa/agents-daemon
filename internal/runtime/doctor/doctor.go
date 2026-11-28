@@ -47,7 +47,7 @@ type Input struct {
 	// 空なら pane の session を補えず、transcript も読めない。
 	ClaudeConfigDir string
 	Now             time.Time
-	Getenv          func(string) string // peer messaging と rex の前提 (REX_BLOCK / REX_SESSION) に使う環境 (通常は os.Getenv)
+	Getenv          func(string) string // peer messaging と rex の前提 (REX_BLOCK) に使う環境 (通常は os.Getenv)
 	// Premises は rex の前提の点検。Client がその口を持たなければ nil。
 	Premises multiplexer.PremiseChecker
 	// DreamPolicy は dream の規約 (config.json の dream.policy) を読み、読めた規約のパスを返す。
@@ -353,7 +353,7 @@ func collectPremises(ctx context.Context, checker multiplexer.PremiseChecker, ge
 		rep.Skipped = "REX_BLOCK が無いため点検しません (rex の block の中の Bash ツールから呼ぶと自分の block で点検します)"
 		return rep
 	}
-	rep.Findings = append(rep.Findings, checker.CheckPremises(ctx, blockID, getenv("REX_SESSION"))...)
+	rep.Findings = append(rep.Findings, checker.CheckPremises(ctx, blockID)...)
 	return rep
 }
 

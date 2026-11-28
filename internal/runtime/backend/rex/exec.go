@@ -246,8 +246,14 @@ func tailLines(s string, n int) string {
 }
 
 // CheckPremises は doctor の前提点検 (multiplexer.PremiseChecker)。点検の中身は premise が持つ。
-func (c *execClient) CheckPremises(ctx context.Context, blockID, sessionID string) []multiplexer.PremiseFinding {
-	return premise.Check(ctx, c.rex, rexBinary, blockID, sessionID)
+func (c *execClient) CheckPremises(ctx context.Context, blockID string) []multiplexer.PremiseFinding {
+	return premise.Check(ctx, c.rex, rexBinary, blockID)
+}
+
+// ResolveSession は session の ID か label、block の ID から session の ID を引く (tablabel.Host と spawned-session mark)。
+// block の ID はその block の居る session を指す。
+func (c *execClient) ResolveSession(ctx context.Context, name string) (string, error) {
+	return c.rex.ResolveSession(ctx, name)
 }
 
 // Reachable は server.status で rex server の生死を確かめる。

@@ -13,15 +13,17 @@ import (
 	"unicode/utf8"
 )
 
-// Host は block の居る window を引き、名前を付ける口。rex の backend が持つ。
+// Host は block の居る session と window を引き、名前を付ける口。rex の backend が持つ。
 type Host interface {
+	ResolveSession(ctx context.Context, name string) (string, error)
 	WindowOf(ctx context.Context, session, block string) (windowID, label string, err error)
 	SetWindowLabel(ctx context.Context, session, windowID, label string) error
 }
 
-// Request は読む・付ける対象と付ける名前。Label が空なら今の名前を読むだけ。
+// Request は読む・付ける対象 (自分の block) と付ける名前。Label が空なら今の名前を読むだけ。
+// session は block から引く (rex は新しい端末に REX_SESSION を入れない)。
 type Request struct {
-	RexSession, RexBlock, Label string
+	RexBlock, Label string
 }
 
 // Status は Run がしたこと。
@@ -62,13 +64,17 @@ type Runner struct {
 
 // Run は block の居る window の名前を読み、Label があれば付け直す。
 func (r Runner) Run(ctx context.Context, req Request) (Result, error) {
-	if req.RexSession == "" || req.RexBlock == "" {
-		return Result{}, errors.New("rex の session と block の両方が要る")
+	if req.RexBlock == "" {
+		return Result{}, errors.New("rex の block が要る")
 	}
 	if req.Label != "" && !validLabel(req.Label) {
 		return Result{}, fmt.Errorf("タブの名前 %q は 1 行で %d 文字まで、前後の空白と制御文字を付けない", req.Label, labelLimit)
 	}
-	window, current, err := r.Host.WindowOf(ctx, req.RexSession, req.RexBlock)
+	session, err := r.Host.ResolveSession(ctx, req.RexBlock)
+	if err != nil {
+		return Result{}, fmt.Errorf("rex の block %s の居る session を引けない: %w", req.RexBlock, err)
+	}
+	window, current, err := r.Host.WindowOf(ctx, session, req.RexBlock)
 	if err != nil {
 		return Result{}, err
 	}
@@ -78,7 +84,7 @@ func (r Runner) Run(ctx context.Context, req Request) (Result, error) {
 	case current:
 		return Result{WindowID: window, Label: current, Status: StatusUnchanged}, nil
 	}
-	if err := r.Host.SetWindowLabel(ctx, req.RexSession, window, req.Label); err != nil {
+	if err := r.Host.SetWindowLabel(ctx, session, window, req.Label); err != nil {
 		return Result{}, err
 	}
 	return Result{WindowID: window, Label: req.Label, Status: StatusRenamed}, nil

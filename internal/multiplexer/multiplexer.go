@@ -153,9 +153,9 @@ type PremiseFinding struct {
 // コマンドを打って点検する口。doctor だけが使い、daemon の判定には関わらない。Client とは別にしてあるのは、
 // 判定の経路 (daemon / monitor) とそのテスト (multiplexerfake) に点検の口を見せないため。実装は rex。
 type PremiseChecker interface {
-	// CheckPremises は paneID (自分の pane) と sessionID (その pane の session) を使って点検し、
+	// CheckPremises は paneID (自分の pane) と、そこから引いた session を使って点検し、
 	// 1 点検 1 件で返す。点検の失敗は error でなく OK=false の finding にする。
-	CheckPremises(ctx context.Context, paneID, sessionID string) []PremiseFinding
+	CheckPremises(ctx context.Context, paneID string) []PremiseFinding
 }
 
 // Watcher は多重化ツールの出来事を背後で購読し、PaneList を毎回の全列挙から購読の cache へ切り替える口。

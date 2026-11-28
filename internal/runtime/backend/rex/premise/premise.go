@@ -35,23 +35,21 @@ type checker struct {
 }
 
 // Check は自分の block に固定の method を打ち、応答の形が rex の読む形のままかを点検する。点検の失敗は error でなく
-// OK=false の finding にする。locate は spawn の包みが叩く rex を引く (fork しない)。sessionID が空なら blockID から引く。
+// OK=false の finding にする。locate は spawn の包みが叩く rex を引く (fork しない)。自分の session は blockID から引く。
 // 打つ method の一覧は .claude/skills/catching-up-with-rex-changelog/references/api-checks.md が持つ (method を足す・
 // 変えるときはそちらも同じ PR で変える)。
-func Check(ctx context.Context, rex *api.Client, locate func() (string, error), blockID, sessionID string) []multiplexer.PremiseFinding {
+func Check(ctx context.Context, rex *api.Client, locate func() (string, error), blockID string) []multiplexer.PremiseFinding {
 	var out []multiplexer.PremiseFinding
 	c := checker{rex: rex, add: func(ok bool, format string, a ...any) {
 		out = append(out, multiplexer.PremiseFinding{OK: ok, Text: fmt.Sprintf(format, a...)})
 	}}
 	c.checkVersion(ctx)
 	c.checkWrapRex(locate)
-	if sessionID == "" {
-		var err error
-		if sessionID, err = rex.ResolveBlock(ctx, blockID); err != nil {
-			c.add(false, "自分の block (%s) の session を引けないため、block の点検を飛ばした: %v", blockID, err)
-			c.checkMissingTarget(ctx, "")
-			return out
-		}
+	sessionID, err := rex.ResolveBlock(ctx, blockID)
+	if err != nil {
+		c.add(false, "自分の block (%s) の session を引けないため、block の点検を飛ばした: %v", blockID, err)
+		c.checkMissingTarget(ctx, "")
+		return out
 	}
 	c.checkMissingTarget(ctx, sessionID)
 	c.checkProgramStatus(ctx, sessionID, blockID)

@@ -23,14 +23,16 @@ const argv0 = "agents-daemon-spawn"
 //   - 後から開いた pane やタブがあると session kill が確認なしで巻き込むので、そのときは閉じない (自分の pane だけ閉じる)。
 //   - block ls か jq が失敗したときも閉じない側へ倒す。
 //
-// REX_SESSION は ID なので、起きた claude が session を rename しても当たる。
+// 自分の session は REX_BLOCK で名指す (rex は新しい端末に REX_SESSION を入れない)。block ID なので、起きた claude が
+// session を rename しても当たる。印は agents-daemon が block の居る session の ID に引いて書く。
+// rex-premise: preview.37 cli -s と session kill は block ID を受け、その block の居る session を指す (2026-11-28 実測)
 // rex-premise: preview.30 cli block ls -s は session の全 window の block を返す。中のコマンドの終了で session は閉じない
 // rex-premise: preview.28 program_status サイドバーは端末の題の持ち主 (block call title の owner) が前景のプロセスのときだけ題を出す
 // macOS の /bin/sh (bash 3.2) は INT の trap の後も read を続けるので、閉じる処理 (c) を trap から直に呼んで抜ける。
-const sessionScript = `set -m; rex="$1"; ad="$2"; shift 2; "$ad" spawned-session mark "$REX_SESSION" >/dev/null; "$@"; s=$?; ` +
-	`c() { if "$rex" --autostart=false block ls -s "$REX_SESSION" --json | ` +
+const sessionScript = `set -m; rex="$1"; ad="$2"; shift 2; "$ad" spawned-session mark "$REX_BLOCK" >/dev/null; "$@"; s=$?; ` +
+	`c() { if "$rex" --autostart=false block ls -s "$REX_BLOCK" --json | ` +
 	`jq -e --arg b "$REX_BLOCK" ".blocks | length == 1 and .[0].block_id == \$b" >/dev/null; ` +
-	`then "$rex" --autostart=false session kill "$REX_SESSION"; fi; exit "$s"; }; ` +
+	`then "$rex" --autostart=false session kill "$REX_BLOCK"; fi; exit "$s"; }; ` +
 	`if [ "$s" -ne 0 ]; then trap c INT; printf "\n%s が exit %s で終わった。Enter で閉じる。\n" "$1" "$s"; read -r _; fi; c`
 
 // tabScript は既存の session に足したタブでコマンドを走らせる sh の本文。$1 以降が起こす argv。

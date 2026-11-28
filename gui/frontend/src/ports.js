@@ -8,12 +8,18 @@
 // port は、各辺がノードへ近づいてくる線の並びで割り当てる。線は寄せる点の 1 つ手前の点 (anchor) からノードの中心の
 // x へ向かう線分で、群れの中でノードに最も近い anchor の高さでの x の順に並べる。相手のノードの x の順や端の隣の点の
 // x の順では、遠くから浅く入る辺と、すぐ上から入る辺がノードの手前で交わる。
+//
+// 寄せる点の 1 つ手前の点 (kink) がどちらの端の隣でもない辺では、dagre が群れの kink を行き先と逆の順に置くことがあり、
+// kink の順に port を割り当てても kink を通る区間がノードの下で交わる (#756)。そこで anchor を kink のさらに 1 つ
+// 手前の点にとって port を割り当て、port の順に kink の x が並ばない群れは kink を両隣の点を結ぶ線の上へ戻す。
 
 // spreadPorts は edges ({ before, after, points }) の points の端を置き直した写しを返す。pos は key → ノードの中心。
 // 端の隣の点は、両端の間に中の点が 2 つ以上あるときだけ動かす。中の点が 1 つの辺 (隣りの段どうし、待ちの輪の辺) は
 // その点を両端が共有するので動かさない。
 export function spreadPorts(edges, pos, width, height) {
   const out = edges.map((e) => ({ ...e, points: e.points.map((p) => ({ ...p })) }));
+  // straighten は両隣の点を結ぶ線の上へ戻す [辺, 点の添字]。
+  const straighten = [];
   // side は入る側 (in: 上辺) か出る側 (out: 下辺) の決めごと。
   const sides = [
     {
@@ -33,12 +39,15 @@ export function spreadPorts(edges, pos, width, height) {
       const c = pos.get(key);
       if (c === undefined) continue;
       // approach は辺がノードへ近づいてくる線分 (anchor から、寄せる点の高さか port の高さのノードの中心へ)。
+      // kink は戻せる kink の添字 (点が 5 つ以上の辺だけ。ほかは -1)。
       const approach = (e) => {
         const pts = e.points;
-        const bends = pts.length >= 4;
         const next = side.next(pts);
-        const anchor = pts[bends ? next + (next - side.end(pts)) : next];
-        return { anchor, aimY: bends ? pts[next].y : c.y + side.dy };
+        if (pts.length < 4) return { anchor: pts[next], aimY: c.y + side.dy };
+        const step = next - side.end(pts);
+        const kink = next + step;
+        const free = pts.length >= 5;
+        return { anchor: pts[free ? kink + step : kink], aimY: pts[next].y, kink: free ? kink : -1 };
       };
       const lines = new Map(group.map((e) => [e, approach(e)]));
       const refY = side.nearest(...[...lines.values()].map((l) => l.anchor.y));
@@ -55,7 +64,16 @@ export function spreadPorts(edges, pos, width, height) {
         e.points[side.end(e.points)] = { x, y: c.y + side.dy };
         if (e.points.length >= 4) e.points[side.next(e.points)].x = x;
       });
+      const kinks = group.map((e) => e.points[lines.get(e).kink ?? -1]?.x);
+      if (kinks.some((x, i) => i > 0 && x !== undefined && kinks.slice(0, i).some((y) => y !== undefined && y > x))) {
+        for (const e of group) if (lines.get(e).kink >= 0) straighten.push([e, lines.get(e).kink]);
+      }
     }
+  }
+  // 両隣の点は 2 つの側の port を寄せた後に決まるので、戻すのは最後に行う。
+  for (const [e, i] of straighten) {
+    const [a, p, b] = e.points.slice(i - 1, i + 2);
+    if (a.y !== b.y) p.x = a.x + ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y);
   }
   return out;
 }

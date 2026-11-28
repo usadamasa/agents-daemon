@@ -15,8 +15,9 @@
 
 // spreadPorts は edges ({ before, after, points }) の points の端を置き直した写しを返す。pos は key → ノードの中心。
 // 端の隣の点は、両端の間に中の点が 2 つ以上あるときだけ動かす。中の点が 1 つの辺 (隣りの段どうし、待ちの輪の辺) は
-// その点を両端が共有するので動かさない。
-export function spreadPorts(edges, pos, width, height) {
+// その点を両端が共有するので動かさない。frames は枠の矩形 ({ x, y, width, height }、中心と大きさ) で、pad は
+// 枠をまたぐ辺を枠の線から真っすぐ伸ばす長さ (clearFrames)。
+export function spreadPorts(edges, pos, width, height, { frames = [], pad = 0 } = {}) {
   const out = edges.map((e) => ({ ...e, points: e.points.map((p) => ({ ...p })) }));
   // straighten は両隣の点を結ぶ線の上へ戻す [辺, 点の添字]。
   const straighten = [];
@@ -70,12 +71,45 @@ export function spreadPorts(edges, pos, width, height) {
       }
     }
   }
+  clearFrames(out, straighten, frames, pad);
   // 両隣の点は 2 つの側の port を寄せた後に決まるので、戻すのは最後に行う。
   for (const [e, i] of straighten) {
     const [a, p, b] = e.points.slice(i - 1, i + 2);
     if (a.y !== b.y) p.x = a.x + ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y);
   }
   return out;
+}
+
+// clearFrames は枠の下辺に乗る端の次の点を下へ、上辺に乗る端の手前の点を上へ pad だけ動かす。dagre は枠の境界を
+// 段に置くので、枠をまたぐ辺の端の隣の点は枠の線に乗り、port からの真っすぐの区間が枠の線の直後で曲がって見える。
+// 動かす幅は、外側の隣の点 (後で戻す kink は飛ばす) までの斜線が元の 4 割より短くならないよう、その点までの 6 割
+// (その点も動かすなら 3 割ずつ) に抑える。
+function clearFrames(edges, straighten, frames, pad) {
+  if (pad <= 0 || frames.length === 0) return;
+  const kinks = new Map();
+  for (const [e, i] of straighten) kinks.set(e, new Set([...(kinks.get(e) ?? []), i]));
+  const near = (a, b) => Math.abs(a - b) < 0.5;
+  for (const e of edges) {
+    const pts = e.points;
+    if (pts.length < 4) continue;
+    const onBorder = (i, dir) => {
+      const p = pts[i];
+      return frames.some((f) => Math.abs(p.x - f.x) <= f.width / 2 && near(p.y, f.y + (dir * f.height) / 2));
+    };
+    const ends = [
+      { i: 1, dir: 1 },
+      { i: pts.length - 2, dir: -1 },
+    ].filter((c) => onBorder(c.i, c.dir));
+    const shifts = ends.map(({ i, dir }) => {
+      let j = i + dir;
+      while (kinks.get(e)?.has(j)) j += dir;
+      const share = ends.some((c) => c.i === j) ? 0.3 : 0.6;
+      return Math.min(pad, Math.abs(pts[j].y - pts[i].y) * share);
+    });
+    ends.forEach(({ i, dir }, k) => {
+      pts[i].y += dir * shifts[k];
+    });
+  }
 }
 
 // fitEdges は dagre で配置した graph g の大きさを辺の点列まで含めて広げる。dagre の width / height はノードとラベル

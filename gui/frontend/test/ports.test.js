@@ -166,6 +166,71 @@ test("spreadPorts は 1 段下の中の点が行き先と逆の順に並ぶ辺�
   }
 });
 
+// bends は点列の中の点のうち、前後の区間の向きが変わる点を返す。
+function bends(points) {
+  return points.slice(1, -1).filter((p, i) => {
+    const [a, b] = [points[i], points[i + 2]];
+    const cross = (p.x - a.x) * (b.y - p.y) - (p.y - a.y) * (b.x - p.x);
+    return Math.abs(cross) > 1e-6 * Math.hypot(p.x - a.x, p.y - a.y) * Math.hypot(b.x - p.x, b.y - p.y);
+  });
+}
+
+test("spreadPorts は枠をまたぐ辺を、枠の下辺・上辺から pad だけ離れるまで真っすぐ伸ばしてから曲げる", () => {
+  // layout.js の dagre で、window の枠 A・B の s1・s2 から、下の枠 C・D・E の pr・task・pr42 へ引いた点列。
+  // 端の隣の点 (y=162、y=206) は枠の下辺・上辺に乗り、task へ入る 2 本は #756 の戻しで両者の間を 1 本の斜線で結ぶ。
+  const frames = [
+    { x: 566, y: 184, width: 1004, height: 320 },
+    { x: 338.5, y: 104, width: 415, height: 116 },
+    { x: 778.5, y: 104, width: 425, height: 116 },
+    { x: 238, y: 264, width: 308, height: 116 },
+    { x: 566, y: 264, width: 308, height: 116 },
+    { x: 894, y: 264, width: 308, height: 116 },
+  ];
+  const pos = new Map([
+    ["s1", { x: 285, y: 104 }],
+    ["s2", { x: 837, y: 104 }],
+    ["pr", { x: 238, y: 264 }],
+    ["task", { x: 566, y: 264 }],
+    ["pr42", { x: 894, y: 264 }],
+  ]);
+  const path = (...xs) => xs.map((x, i) => ({ x, y: 140 + 22 * i }));
+  const edges = [
+    { before: "s1", after: "pr", points: path(256, 238, 238, 238, 238) },
+    { before: "s1", after: "task", points: path(399, 469, 576, 576, 572) },
+    { before: "s2", after: "task", points: path(735, 673, 556, 556, 560) },
+    { before: "s2", after: "pr42", points: path(872, 894, 894, 894, 894) },
+  ];
+  const pad = 13;
+  const got = spreadPorts(edges, pos, W, H, { frames, pad });
+  for (const e of got) {
+    for (const p of bends(e.points)) {
+      for (const f of frames) {
+        const inside = p.x > f.x - f.width / 2 && p.x < f.x + f.width / 2;
+        for (const border of [f.y - f.height / 2, f.y + f.height / 2]) {
+          assert.ok(!inside || Math.abs(p.y - border) >= pad, `${e.before}>${e.after}: (${p.x}, ${p.y}) は枠の線 y=${border} に近い`);
+        }
+      }
+    }
+    // port から出る区間と port へ入る区間は真っすぐのまま枠の外まで伸びる。
+    assert.equal(e.points[1].x, e.points[0].x, `${e.before}>${e.after}`);
+    assert.equal(e.points.at(-2).x, e.points.at(-1).x, `${e.before}>${e.after}`);
+  }
+  assert.deepEqual(polylineCrossings(got), []);
+});
+
+test("spreadPorts は中の点が 2 つの辺も、枠の下辺から pad だけ真っすぐ伸ばしてから曲げる", () => {
+  // 実アプリで、枠 A の S から別の枠の T へ、枠の下辺 (y=162) の点と T の真上の点の 2 つを経て引かれた辺。
+  const frames = [{ x: 300, y: 104, width: 300, height: 116 }];
+  const pos = new Map([
+    ["S", { x: 300, y: 104 }],
+    ["T", { x: 900, y: 242 }],
+  ]);
+  const edges = [{ before: "S", after: "T", points: [{ x: 300, y: 140 }, { x: 300, y: 162 }, { x: 900, y: 184 }, { x: 900, y: 206 }] }];
+  const got = spreadPorts(edges, pos, W, H, { frames, pad: 13 });
+  assert.deepEqual(got[0].points[1], { x: 300, y: 175 });
+  assert.deepEqual(got[0].points.slice(2), edges[0].points.slice(2));
+});
+
 test("spreadPorts は 1 本だけの端を上辺・下辺の中央に置き、元の辺の points を書き換えない", () => {
   const pos = new Map([
     ["S", { x: 100, y: 0 }],

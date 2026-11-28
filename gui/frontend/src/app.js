@@ -3,7 +3,7 @@
 // オブジェクトはタスク (図の箱) とメモ (下の一覧の行)。選ぶとそのそばにポップアップで単体ビューが開く。
 import { Graph } from "./graph.js";
 import { GROUP_W, fitLimit, frameTree, groupByRex, partition, placeGroups, placeRefs, rexTones } from "./column.js";
-import { MARGIN_X, MARGIN_Y, NODE_H, NODE_W, layout } from "./layout.js";
+import { FRAME_PAD, MARGIN_X, MARGIN_Y, NODE_H, NODE_W, layout } from "./layout.js";
 import { spreadPorts } from "./ports.js";
 import { findJumps, jumpPath } from "./jumps.js";
 import { PR_STAGE, STATE_LABEL, cardHint, cardText, emphasis, kindWord, leadStage, markClass, mentionLabel, mentionLines, toneOf } from "./card.js";
@@ -397,7 +397,7 @@ function renderLinked(canvas, tree, tones, links, depth, graph, highlight) {
 
   const chain = chainEdges(graph);
   const drawn = [...links.filter((l) => g.hasEdge(l.before, l.after)).map((l) => ({ ...l, points: g.edge(l.before, l.after).points })), ...back];
-  const spread = spreadPorts(drawn, pos, NODE_W, NODE_H);
+  const spread = spreadPorts(drawn, pos, NODE_W, NODE_H, { frames: [...boxes.values()], pad: FRAME_PAD });
   const jumps = findJumps(spread.map((l) => l.points), { radius: JUMP_R, margin: JUMP_MARGIN });
   spread.forEach((l, i) => {
     const onChain = chain.has(`${l.before}\u0000${l.after}`);

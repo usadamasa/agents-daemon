@@ -8,6 +8,9 @@ export const MARGIN_X = 64;
 export const MARGIN_Y = 24;
 const GAP_X = 48;
 const GAP_Y = 44;
+// FRAME_PAD は枠をまたぐ辺を枠の線から真っすぐ伸ばす長さ。実アプリで、段の間 (辺のラベル用に倍にした段の 1 つ分、
+// GAP_Y / 2) の半分では曲がり点が枠の線に近く見えたので、それより 2px 長くする。
+export const FRAME_PAD = GAP_Y / 4 + 2;
 
 // rankByDepth はバイナリの段 (前提をたどった最長の深さ、根が 0。完了を隠す図では folded で数え直したもの) を
 // そのまま段にする ranker。dagre の組み込みの

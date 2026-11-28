@@ -949,6 +949,54 @@ test("緑は working の鍵で描く: daemon が動いている footer の丸と
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
 });
 
+test("作業のノード: 日本語の変換を確定する Enter では題を確定せず、変換が終わった後の Enter で確定する (#706)", async () => {
+  q('.node[data-key="sid:zeta"]').click();
+  q("#pop .title").click();
+  const field = q("#pop .title");
+  field.textContent = "題を直す";
+  field.dispatchEvent(new Event("input", { bubbles: true }));
+  const ran = [];
+  answers["main.Daemon.Run"] = "";
+  const byName = window.wails.Call.ByName;
+  window.wails.Call.ByName = async (name, ...args) => {
+    if (name === "main.Daemon.Run") ran.push(JSON.parse(args[1]).subject);
+    return byName(name, ...args);
+  };
+  const key = (type, init = {}) => field.dispatchEvent(new KeyboardEvent(type, { key: "Enter", bubbles: true, ...init }));
+  const settle = async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  };
+  try {
+    // 変換中の Enter (Chrome などは isComposing を立てる)。
+    key("keydown", { isComposing: true });
+    field.dispatchEvent(new Event("compositionend", { bubbles: true }));
+    key("keyup");
+    // WebKit は isComposing の無い Enter の keydown を keyCode 229 で送ることがある (compositionend より先に来ても止める)。
+    key("keydown", { keyCode: 229 });
+    field.dispatchEvent(new Event("compositionend", { bubbles: true }));
+    key("keyup");
+    // compositionend の直後の Enter は、keyCode が 13 でも変換の確定として扱う。
+    field.dispatchEvent(new Event("compositionend", { bubbles: true }));
+    key("keydown", { keyCode: 13 });
+    key("keyup");
+    await settle();
+    assert.deepEqual(ran, [], "変換を確定する Enter で題を確定した");
+    assert.equal(q("#pop .title"), field);
+    assert.equal(field.getAttribute("contenteditable"), "plaintext-only");
+
+    // 変換が終わった後の Enter で確定する。
+    key("keydown", { keyCode: 13 });
+    await settle();
+    assert.deepEqual(ran, ["題を直す"]);
+  } finally {
+    window.wails.Call.ByName = byName;
+    delete answers["main.Daemon.Run"];
+    await loadDeps(fixtureDeps);
+  }
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+});
+
 test("作業のノード: 題そのものを押すとその場で直せ、自動で付けた題は chip で分かり、終了したものは一覧から外せる", async () => {
   // 箱の副題には出どころを出さない (そこでは何もできない)。
   assert.doesNotMatch(q('.node[data-key="sid:zeta"] small').textContent, /題/);

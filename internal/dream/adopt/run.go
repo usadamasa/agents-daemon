@@ -64,12 +64,16 @@ func Run(opts Opts) (Plan, error) {
 	resolvedCandidates := opts.CandidatesFile
 	if resolvedCandidates == "" {
 		if opts.Project == "" {
-			return Plan{}, fmt.Errorf("--candidates 未指定時は --project (canonical name) が必要")
+			return Plan{}, fmt.Errorf("--candidates 未指定時は --project (canonical name か絶対パス) が必要")
+		}
+		project, err := dream.ResolveProject(opts.Project, "")
+		if err != nil {
+			return Plan{}, err
 		}
 		if opts.StateDir == "" {
 			return Plan{}, fmt.Errorf("StateDir が未解決 (呼び出し側が apppath で決める)")
 		}
-		resolvedCandidates = candidates.Path(opts.StateDir, opts.Project, resolvedDate)
+		resolvedCandidates = candidates.Path(opts.StateDir, project, resolvedDate)
 	}
 
 	cand, err := candidates.FindByID(resolvedCandidates, opts.CandidateID)

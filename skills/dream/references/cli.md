@@ -171,7 +171,7 @@ cwd の `./tmp/dream/YYYY-MM-DD-<project-slug>.md`。そのセッションで読
 
 | Flag | Default | 説明 |
 | --- | --- | --- |
-| `--project` | (必須) | 対象 project (canonical name) |
+| `--project` | (必須) | 対象 project (canonical name または絶対パス) |
 | `--date` | 今日 | candidates 対象日 |
 | `--candidates` | auto-resolve | candidates.jsonl のパス |
 | `--out` | `./tmp/dream/<date>-<slug>.md` | レポートの出力先 |
@@ -219,7 +219,7 @@ user が明示的に指示するまで push しない (「入力非破壊」原�
 | --- | --- | --- |
 | `--candidate` | (必須) | 対象 candidate ID |
 | `--candidates` | auto-resolve | candidates.jsonl のパス |
-| `--project` | — | canonical name (candidates auto-resolve に必要) |
+| `--project` | — | canonical name または絶対パス (candidates auto-resolve に必要) |
 | `--date` | 今日 | candidates 対象日 |
 | `--dry-run` | `false` | branch 作成を skip し手順だけ表示 |
 

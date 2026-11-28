@@ -20,7 +20,7 @@ func mustRemove(t *testing.T, s Store, before, after Endpoint) {
 // declinedOf は組 (before、after) の「導かない」の記録のファイルの情報。無ければ ok が false。
 func declinedOf(t *testing.T, s Store, before, after string) (os.FileInfo, bool) {
 	t.Helper()
-	info, err := os.Stat(filepath.Join(s.Dir, edgeID(before, after)+".declined"))
+	info, err := os.Stat(declinePath(s.Dir, before, after))
 	if err != nil {
 		return nil, false
 	}
@@ -71,6 +71,29 @@ func TestAnchor_導かないの記録は組ごと(t *testing.T) {
 	mustRemove(t, s, Endpoint{Ref: "pr:o/r#2", CWD: "/h"}, Endpoint{Ref: "task:H/1", CWD: "/h"})
 	if _, found := declinedOf(t, s, "pr:o/r#2", "task:H/1"); found {
 		t.Error("sid → pr でない辺の削除を記録した")
+	}
+}
+
+// 「導かない」の照合は PR の owner/repo の大文字小文字を区別しない (#715)。記録は gh の URL の綴り、待つ辺は
+// 人の書いた綴りで来る。GitHub は区別しない。
+func TestAnchor_導かないの記録は大文字小文字を区別しない(t *testing.T) {
+	s := New(t.TempDir())
+	mustAdd(t, s, Endpoint{Ref: "pr:Owner/Repo#1", CWD: "/h"}, Endpoint{Ref: "task:H/1", CWD: "/h"}, "", testNow)
+	mustAdd(t, s, Endpoint{Ref: "sid:A", CWD: "/a"}, Endpoint{Ref: "pr:Owner/Repo#1", CWD: "/h"}, "", testNow)
+	mustRemove(t, s, Endpoint{Ref: "sid:A", CWD: "/a"}, Endpoint{Ref: "pr:Owner/Repo#1", CWD: "/h"})
+
+	if _, ok := mustAnchor(t, s, "A", "/a", "pr:owner/repo#1"); ok {
+		t.Error("別の綴りの参照から、人が消した組を導き直した")
+	}
+
+	mustAdd(t, s, Endpoint{Ref: "sid:A", CWD: "/a"}, Endpoint{Ref: "pr:owner/repo#1", CWD: "/h"}, "", testNow)
+	mustRemove(t, s, Endpoint{Ref: "sid:A", CWD: "/a"}, Endpoint{Ref: "pr:owner/repo#1", CWD: "/h"})
+	if _, ok := mustAnchor(t, s, "A", "/a", "pr:OWNER/REPO#1"); ok {
+		t.Error("書き直してから消した組を、別の綴りで導き直した")
+	}
+	mustAdd(t, s, Endpoint{Ref: "sid:A", CWD: "/a"}, Endpoint{Ref: "pr:OWNER/REPO#1", CWD: "/h"}, "", testNow)
+	if _, found := declinedOf(t, s, "sid:A", "pr:owner/repo#1"); found {
+		t.Error("別の綴りで書き直した組の記録が残っている")
 	}
 }
 

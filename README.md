@@ -83,9 +83,7 @@ plugin が持つもの:
 
 ## インストール
 
-導入は [agents-marketplace の README](https://github.com/usadamasa/agents-marketplace/blob/main/README.md) の手順に従う。
-
-次のセッションの SessionStart で、hook が `go build` をバックグラウンドで回す。
+plugin を install すると、次のセッションの SessionStart で hook が `go build` をバックグラウンドで回す。
 セッションの開始は待たせず、build が終わると daemon が起きる。
 バイナリは `${XDG_CACHE_HOME:-~/.cache}/agents-daemon/bin/agents-daemon` に置かれ、
 plugin を更新すると次の SessionStart で建て直される。

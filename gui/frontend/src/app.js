@@ -1040,8 +1040,17 @@ function editTitle(title, n) {
   title.addEventListener("input", () => {
     state.draft = title.textContent;
   });
+  // 日本語の変換を確定する Enter は題の確定にしない。WebKit は isComposing の無い keydown を送る (keyCode は 229 の
+  // ことも、compositionend の後の 13 のこともある) ので、compositionend から次の keyup までの Enter も変換の確定とみなす。
+  let composed = false;
+  title.addEventListener("compositionend", () => {
+    composed = true;
+  });
+  title.addEventListener("keyup", () => {
+    composed = false;
+  });
   title.addEventListener("keydown", (e) => {
-    if (e.isComposing) return;
+    if (e.isComposing || e.keyCode === 229 || (composed && e.key === "Enter")) return;
     if (e.key === "Enter") {
       e.preventDefault();
       // 貼り付けで入った改行も題の中の空白に畳む。

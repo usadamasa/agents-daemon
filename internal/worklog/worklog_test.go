@@ -294,6 +294,60 @@ func TestIngest_ghstacksubmitが作ったPRだけを記録に残す(t *testing.T
 	}
 }
 
+// stackLink* は gh stack (0.2.1) の link を Bash ツールから打った stdout の写し。first は PR の無い 2 つの branch を
+// 結んだ回、added は PR のある 2 つに PR の無い branch を 1 つ足した回、opened は既存の 3 つの PR を番号で結び直して
+// --open を付けた回。
+const (
+	stackLinkFirst = "Checking existing stacks...\nPushing 2 branches to origin...\nLooking up PRs for 2 branches...\n" +
+		"Creating 2 PRs...\n" +
+		"✓ Created PR #8 (https://github.com/usadamasa/gh-stack-output-probe/pull/8) for probe-717-link (base: main)\n" +
+		"✓ Created PR #9 (https://github.com/usadamasa/gh-stack-output-probe/pull/9) for probe-717-link2 (base: probe-717-link)\n" +
+		"✓ Created stack with 2 PRs (stack #10)"
+	stackLinkAdded = "Checking existing stacks...\nPushing 3 branches to origin...\nLooking up PRs for 3 branches...\n" +
+		"Found PR #8 (https://github.com/usadamasa/gh-stack-output-probe/pull/8) for branch probe-717-link\n" +
+		"Found PR #9 (https://github.com/usadamasa/gh-stack-output-probe/pull/9) for branch probe-717-link2\n" +
+		"Creating 1 PR...\n" +
+		"✓ Created PR #11 (https://github.com/usadamasa/gh-stack-output-probe/pull/11) for probe-717-link3 (base: probe-717-link2)\n" +
+		"✓ Updated stack to 3 PRs (stack #10)"
+	stackLinkOpened = "Checking existing stacks...\nLooking up PRs for 3 branches...\n" +
+		"✓ Marked PR #8 (https://github.com/usadamasa/gh-stack-output-probe/pull/8) as ready for review\n" +
+		"✓ Marked PR #9 (https://github.com/usadamasa/gh-stack-output-probe/pull/9) as ready for review\n" +
+		"✓ Marked PR #11 (https://github.com/usadamasa/gh-stack-output-probe/pull/11) as ready for review\n" +
+		"✓ Stack with 3 PRs is already up to date"
+)
+
+// gh stack link が PR の無い branch に作った PR も、出したセッションの記録に残す (#717)。既存の PR を結んだだけの行
+// (Found、Marked) は別のセッションが出した PR でありうるので拾わない。
+func TestIngest_ghstacklinkが作ったPRだけを記録に残す(t *testing.T) {
+	s := New(t.TempDir())
+	mustIngest(t, s, hook("UserPromptSubmit", `"prompt": "p"`), now)
+	res := mustIngest(t, s, bash("gh stack link probe-717-link probe-717-link2", stackLinkFirst), now.Add(time.Minute))
+	if !res.Written {
+		t.Errorf("Result = %+v, want Written", res)
+	}
+	want := []string{"pr:usadamasa/gh-stack-output-probe#8", "pr:usadamasa/gh-stack-output-probe#9"}
+	if got := mustGet(t, s, "s1").Prs; !reflect.DeepEqual(got, want) {
+		t.Errorf("Prs = %v, want %v", got, want)
+	}
+
+	// 既存の PR を結び直しただけのセッションには、その PR を残さない。前置きのある打ち方も拾う。
+	other := New(t.TempDir())
+	mustIngest(t, other, hook("UserPromptSubmit", `"prompt": "p"`), now)
+	mustIngest(t, other, bash("git push && gh stack link probe-717-link probe-717-link2 probe-717-link3", stackLinkAdded),
+		now.Add(2*time.Minute))
+	if got, want := mustGet(t, other, "s1").Prs, []string{"pr:usadamasa/gh-stack-output-probe#11"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("結び直した記録の Prs = %v, want %v", got, want)
+	}
+
+	// --open で ready にした既存の PR の行 (Marked) も拾わない。
+	opened := New(t.TempDir())
+	mustIngest(t, opened, hook("UserPromptSubmit", `"prompt": "p"`), now)
+	mustIngest(t, opened, bash("gh stack link 8 9 11 --open", stackLinkOpened), now.Add(2*time.Minute))
+	if got := mustGet(t, opened, "s1").Prs; len(got) != 0 {
+		t.Errorf("--open の記録の Prs = %v, want 空", got)
+	}
+}
+
 // cwd の repo の鍵を記録に残す (#606)。求めるのは記録を作ったときと cwd が変わったときだけで、同じ cwd の hook では
 // 求め直さない。worktree が消えた後の SessionEnd が、worktree のパスになった鍵で上書きしないため。
 func TestIngest_cwdのrepoの鍵を残しworktreeが消えても上書きしない(t *testing.T) {

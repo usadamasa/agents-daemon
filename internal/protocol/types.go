@@ -109,7 +109,7 @@ type Work struct {
 	EndedAt *time.Time `json:"ended_at,omitempty"`
 	// SessionEnd の reason。
 	EndReason string `json:"end_reason,omitempty"`
-	// このセッションが gh pr create か gh stack submit で出した PR の参照 (pr:<owner>/<repo>#<番号>)。daemon が PR からこのセッションへの辺を導くのに使う。
+	// このセッションが gh pr create か gh stack submit / link で出した PR の参照 (pr:<owner>/<repo>#<番号>)。daemon が PR からこのセッションへの辺を導くのに使う。
 	Prs []string `json:"prs,omitempty"`
 }
 

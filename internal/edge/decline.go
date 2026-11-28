@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/ref"
@@ -14,8 +15,9 @@ import (
 // Retention で mtime から消す。手順の性質は models/prlink の NoRederive が持つ。
 const declineExt = ".declined"
 
+// declinePath は記録の置き場。after (pr:) は小文字にそろえ、owner/repo の綴りが違っても同じ記録に当てる (#715)。
 func declinePath(dir, before, after string) string {
-	return filepath.Join(dir, edgeID(before, after)+declineExt)
+	return filepath.Join(dir, edgeID(before, strings.ToLower(after))+declineExt)
 }
 
 // declinable は組が「導かない」を記録する形 (sid:S → pr:P、Anchor が導く形) か。

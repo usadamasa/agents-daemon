@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/edge"
+	"github.com/usadamasa/agents-daemon/internal/refstate"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 	"github.com/usadamasa/agents-daemon/internal/worklog"
 )
@@ -142,6 +143,44 @@ func TestDismiss_sessionEdgesKeptUnlessExited(t *testing.T) {
 	if len(checked) == 0 || !checked[0].Equal(testEdgeTime) {
 		t.Errorf("確かめた時刻 = %v, want %v", checked, testEdgeTime)
 	}
+}
+
+// 済んだ (merged / closed) issue / PR を外すと、それを端点に持つ辺が消え、依存図からカードが消える。済んでいない参照と
+// 写しの無い参照は外さず、辺を残す。
+func TestDismiss_completedRef(t *testing.T) {
+	dir := t.TempDir()
+	edges := edge.New(dir)
+	addEdge(t, edges, "sid:peer", "pr:o/r#1")
+	addEdge(t, edges, "task:s/1", "pr:o/r#1")
+	addEdge(t, edges, "sid:peer", "pr:o/r#2")
+	addEdge(t, edges, "task:s/1", "issue:o/r#4")
+	refs := refstate.New(dir)
+	for r, state := range map[string]string{"pr:o/r#1": refstate.StateMerged, "pr:o/r#2": refstate.StateOpen, "issue:o/r#4": refstate.StateClosed} {
+		if err := refs.Put(refstate.Record{Ref: r, State: state, CheckedAt: testEdgeTime}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	exited := func(string, time.Time) error { return errors.New("呼ばない") }
+	for _, r := range []string{"pr:o/r#1", "issue:o/r#4"} {
+		if err := dismiss(dir, tasklog.New(dir), worklog.New(dir), edges, "viewer", r, exited, time.Now()); err != nil {
+			t.Fatalf("%s: %v", r, err)
+		}
+	}
+	for _, r := range []string{"pr:o/r#2", "pr:o/r#3"} {
+		if err := dismiss(dir, tasklog.New(dir), worklog.New(dir), edges, "viewer", r, exited, time.Now()); err == nil {
+			t.Errorf("%s: 済んでいない参照を外した", r)
+		}
+	}
+	got, err := edges.Find("", "")
+	if err != nil || len(got) != 1 || got[0].After.Ref != "pr:o/r#2" {
+		t.Errorf("残った辺 = %+v, %v", got, err)
+	}
+	equalLines(t, eventLines(t, dir), []string{
+		"ref.dismiss session=viewer ref=pr:o/r#1 edges=2",
+		"ref.dismiss session=viewer ref=issue:o/r#4 edges=1",
+		`ref.dismiss.failed session=viewer ref=pr:o/r#2 reason="pr:o/r#2 は済んでいない (open)"`,
+		`ref.dismiss.failed session=viewer ref=pr:o/r#3 reason="pr:o/r#3 は済んでいない (状態を引いていない)"`,
+	})
 }
 
 // testEdgeTime は addEdge が辺に書く created_at。

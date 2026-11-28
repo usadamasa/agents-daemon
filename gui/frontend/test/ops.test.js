@@ -44,8 +44,12 @@ test("bulkDismissable は生きた待ちのある sid: のカードを除き、t
       node("task:s2/live"),
       node("pr:o/r#1", { state: "completed", session_id: undefined }),
       node("task:s3/gone", { live: false, state: "exited" }),
+      node("pr:o/r#2", { live: false, kind: "ref", ref_kind: "pr", state: "completed", session_id: undefined }),
+      node("issue:o/r#3", { live: false, kind: "ref", ref_kind: "issue", state: "completed", session_id: undefined }),
     ],
     links: [
+      { before: "task:s2/live", after: "pr:o/r#2", kind: "edge" },
+      { before: "issue:o/r#3", after: "task:s2/live", kind: "edge" },
       { before: "sid:waited", after: "task:s2/live", kind: "edge" },
       { before: "sid:done", after: "pr:o/r#1", kind: "edge" },
       { before: "sid:done", after: "task:s3/gone", kind: "edge" },
@@ -58,6 +62,21 @@ test("bulkDismissable は生きた待ちのある sid: のカードを除き、t
   assert.equal(bulkDismissable(g.node("sid:done"), g, data), true);
   assert.equal(bulkDismissable(g.node("task:s1/1"), g, data), true);
   assert.equal(bulkDismissable(g.node("task:s2/live"), g, data), false);
+  // 済んだ PR は待つ側にいるだけなら一括に入る。済んだ参照を待つ辺は daemon の sweep が消すまでの間だけ残り、その間は除く。
+  assert.equal(bulkDismissable(g.node("pr:o/r#2"), g, data), true);
+  assert.equal(bulkDismissable(g.node("issue:o/r#3"), g, data), false);
+});
+
+test("canDismiss は済んだ issue / PR のカードを外せるが、メモにはできない", () => {
+  const data = { updated_at: "2026-11-06T00:00:00Z" };
+  const done = node("pr:o/r#1", { live: false, kind: "ref", ref_kind: "pr", state: "completed", session_id: undefined });
+  assert.equal(canDismiss(done, data), true);
+  assert.equal(canDismiss({ ...done, key: "issue:o/r#1", ref_kind: "issue" }, data), true);
+  assert.equal(canAdopt(done, data), false);
+  for (const state of ["waiting", "dropped", "external"]) {
+    assert.equal(canDismiss({ ...done, state }, data), false, state);
+  }
+  assert.equal(canDismiss(done, {}), false);
 });
 
 test("辺の端点だけの置き場のカードは外せるが、メモにはできない", () => {

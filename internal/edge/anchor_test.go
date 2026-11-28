@@ -174,6 +174,21 @@ func TestAnchorAlone_自分の待ちと外した組には導かない(t *testing
 	}
 }
 
+// RemoveByEndpoint で外した sid:S → pr:P の組も、人が外した組として導き直さない。済んだ PR のカードを外した直後の
+// tick が、PR を出したセッションからの辺を書き戻してカードを戻さないようにする。
+func TestAnchorAlone_端点ごと外した組には導かない(t *testing.T) {
+	s := New(t.TempDir())
+	if _, ok, err := s.AnchorAlone("A", "/a", "", "pr:o/r#1", testNow); !ok || err != nil {
+		t.Fatalf("AnchorAlone() = %v, %v", ok, err)
+	}
+	if removed, err := s.RemoveByEndpoint("pr:o/r#1"); err != nil || len(removed) != 1 {
+		t.Fatalf("RemoveByEndpoint() = %+v, %v", removed, err)
+	}
+	if _, ok, err := s.AnchorAlone("A", "/a", "", "pr:o/r#1", testNow); ok || err != nil {
+		t.Errorf("外した組を導き直した: %v, %v", ok, err)
+	}
+}
+
 // 導いた辺の PR を、別の綴り (owner/repo の大文字小文字違い) の辺が待っても、同じ PR として上流ありと見て導き直さない。
 // GitHub の owner/repo は大文字小文字を区別しない。
 func TestAnchor_綴りの違う同じPRには導き直さない(t *testing.T) {

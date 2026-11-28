@@ -108,3 +108,20 @@ test("layout は辺でつながる隣の段の区切りどうしの間に、ほ�
   });
   assert.deepEqual(between, [], `gh=${JSON.stringify(span(frameOf("a")))} uc=${JSON.stringify(span(frameOf("u")))}`);
 });
+
+// 区切りを寄せると、段を共有しない区切りどうしが同じ横の範囲で上下に積まれる。積んだ区切りの矩形が重ならないことを確かめる。
+test("layout は区切りを寄せても、兄弟の区切りの矩形を重ねない", () => {
+  const { tree, links, depth, windows } = farTree();
+  const { boxes } = layout(tree, links, depth);
+  const rect = (key) => {
+    const b = boxes.get(key);
+    return { key, left: b.x - b.width / 2, right: b.x + b.width / 2, top: b.y - b.height / 2, bottom: b.y + b.height / 2 };
+  };
+  const rects = windows.map(rect);
+  for (const [i, p] of rects.entries()) {
+    for (const q of rects.slice(i + 1)) {
+      const overlap = p.left < q.right && q.left < p.right && p.top < q.bottom && q.top < p.bottom;
+      assert.ok(!overlap, `${JSON.stringify(p)} ${JSON.stringify(q)}`);
+    }
+  }
+});

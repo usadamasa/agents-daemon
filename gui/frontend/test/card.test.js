@@ -1,6 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PR_STAGE, STATE_LABEL, STATE_TONE, acceptanceLine, cardHint, cardText, emphasis, leadStage, mentionLines, toneOf } from "../src/card.js";
+import { PR_STAGE, STATE_LABEL, STATE_TONE, acceptanceLine, cardHint, cardText, emphasis, kindWord, leadStage, mentionLines, toneOf } from "../src/card.js";
+
+test("kindWord は単体ビューの種類の語。辺の端点だけのセッションのノードは Ref ではなく Session (#710)", () => {
+  assert.equal(kindWord({ key: "sid:abc", kind: "ref" }), "Session");
+  assert.equal(kindWord({ key: "session:fix-login", kind: "ref" }), "Session");
+  assert.equal(kindWord({ key: "pr:o/r#1", kind: "ref" }), "Ref");
+  assert.equal(kindWord({ key: "issue:o/r#2", kind: "ref" }), "Ref");
+  assert.equal(kindWord({ key: "sid:abc", kind: "session" }), "Session work");
+  assert.equal(kindWord({ key: "task:abc/1", kind: "task" }), "Task");
+  assert.equal(kindWord({ key: "x", kind: "unknown" }), "unknown");
+});
 
 test("acceptanceLine は受け入れ条件の行を選び、行の途中の印からを返す", () => {
   const task = (description) => ({ kind: "task", description });

@@ -18,7 +18,7 @@ import (
 
 // Opts は stage サブコマンドの実行パラメータ。
 type Opts struct {
-	Project        string // 必須 (canonical name)
+	Project        string // 必須 (canonical name か絶対パス)
 	Date           string // 空なら今日
 	CandidatesFile string // 空なら StateDir/candidates/<slug>-<date>.jsonl
 	OutFile        string // 空なら Cwd/tmp/dream/<date>-<slug>.md
@@ -42,8 +42,13 @@ func Run(opts Opts) (Summary, error) {
 		opts.Stderr = io.Discard
 	}
 	if opts.Project == "" {
-		return Summary{}, errors.New("--project は必須 (canonical name を指定)")
+		return Summary{}, errors.New("--project は必須 (canonical name か絶対パスを指定)")
 	}
+	project, err := dream.ResolveProject(opts.Project, "")
+	if err != nil {
+		return Summary{}, err
+	}
+	opts.Project = project
 
 	resolvedDate := dream.ResolveDate(opts.Date)
 	resolvedCandidates := opts.CandidatesFile

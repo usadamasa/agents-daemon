@@ -318,7 +318,7 @@ func newDreamStageCmd() *cobra.Command {
 		},
 	}
 	f := cmd.Flags()
-	f.StringVar(&opts.Project, "project", "", "対象 project (canonical name)、省略時はエラー")
+	f.StringVar(&opts.Project, "project", "", "対象 project (canonical name または絶対パス)、省略時はエラー")
 	f.StringVar(&opts.Date, "date", "", "candidates 対象日 (YYYY-MM-DD, 省略時は今日)")
 	f.StringVar(&opts.CandidatesFile, "candidates", "", "candidates.jsonl のパス (省略時は state の dream/candidates/<slug>-<date>.jsonl)")
 	f.StringVar(&opts.OutFile, "out", "", "レポートの出力先 (省略時は ./tmp/dream/<date>-<slug>.md)")
@@ -353,7 +353,7 @@ func newDreamAdoptCmd() *cobra.Command {
 	f := cmd.Flags()
 	f.StringVar(&opts.CandidateID, "candidate", "", "対象 candidate ID (必須)")
 	f.StringVar(&opts.CandidatesFile, "candidates", "", "candidates.jsonl のパス (省略時は auto-resolve)")
-	f.StringVar(&opts.Project, "project", "", "対象 project canonical (candidates ファイル自動解決に必要)")
+	f.StringVar(&opts.Project, "project", "", "対象 project (canonical name または絶対パス。candidates ファイル自動解決に必要)")
 	f.StringVar(&opts.Date, "date", "", "candidates 対象日 (YYYY-MM-DD, 省略時は今日)")
 	f.BoolVar(&opts.DryRun, "dry-run", false, "branch 作成を skip し、コマンドだけ表示")
 	return cmd

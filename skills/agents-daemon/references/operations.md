@@ -237,7 +237,7 @@ printf '%s' '{"ref":"pr:<owner>/<repo>#<n>"}' | agents-daemon task dismiss      
   タスクの記録 (完了しているかを問わない) か作業の記録 (`sid:`、#368) を消す
 - `issue:` / `pr:` は写しが merged / closed のものだけ受け、その参照を端点に持つ辺を消す。daemon の掃除が消すのは
   済んだ参照を before に持つ辺だけで、PR を出したセッションから PR への辺のように after に残る辺はこれで外す。
-  外した `sid: → pr:` の組は導き直さない
+  外した PR へは、外した辺の `sid:` からも PR を出したセッションからも導き直さない
 - セッションの終了は動いている daemon の status.json で確かめ、確かめられなければ消さずに exit 1 で理由を出す
 - 消した記録は戻せない。メモとして残すなら `Memo` (`park adopt`。`sid:` も受ける) を使う
 

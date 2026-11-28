@@ -18,6 +18,8 @@
 //	work.set.failed           書き換えられなかった (origin / inferred、reason)
 //	work.dismiss              終了したセッションの作業の記録と端点の辺を消した (from_session、edges)
 //	work.dismiss.failed       作業の記録を消さなかった (ref、reason)
+//	ref.dismiss               済んだ issue / PR を端点に持つ辺を消した (ref、edges)
+//	ref.dismiss.failed        済んでいない参照の辺を消さなかった (ref、reason)
 //	park.add                  メモを置いた (memo、kind、created、task)
 //	park.set                  メモの status を書き換えた (memo、from、to)
 //	park.discard              古い open のメモをまとめて捨てた (days、memos、ids)

@@ -2,6 +2,7 @@ package edge
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,6 +26,19 @@ func declinable(before, after string) bool {
 	_, isSID := ref.ParseSessionID(before)
 	it, isItem := ref.ParseItem(after)
 	return isSID && isItem && it.Kind == "pr"
+}
+
+// Decline は sid:<sessionID> → pr の組を、辺を消さずに「導かない」と記録する。人が PR のカードを外したとき、
+// 外した辺に無かった組 (PR を出したセッションからの組) も導き直さないようにする。
+func (s Store) Decline(sessionID, pr string) error {
+	before := ref.SessionID(sessionID)
+	if s.Dir == "" {
+		return errors.New("edges の置き場所が無い")
+	}
+	if !declinable(before, pr) {
+		return fmt.Errorf("組 %s → %s は sid: → pr: でない", before, pr)
+	}
+	return s.locked(func(dir string) error { return decline(dir, before, pr) })
 }
 
 // decline は組を「導かない」と記録する。中身は人が読むための組だけで、読み手は有無と mtime しか見ない。

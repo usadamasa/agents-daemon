@@ -1,7 +1,10 @@
 package depscli
 
 import (
+	"errors"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -43,7 +46,7 @@ func newTaskCmd() *cobra.Command {
 // sid: はそのセッションを端点に持つ辺も消す (#484)。済んだ issue / PR は、それを端点に持つ辺を消す。
 func dismiss(stateDir string, tasks tasklog.Store, works worklog.Store, edges edge.Store, viewer, r string, exited func(string, time.Time) error, now time.Time) error {
 	if _, ok := ref.ParseItem(r); ok {
-		removed, err := dismissRef(refstate.New(stateDir), edges, r)
+		removed, err := dismissRef(refstate.New(stateDir), works, edges, r)
 		if err != nil {
 			_ = eventlog.Record(stateDir, viewer, "ref.dismiss.failed", []string{kv("ref", r), kv("reason", err)}, now)
 			return err
@@ -74,8 +77,9 @@ func dismiss(stateDir string, tasks tasklog.Store, works worklog.Store, edges ed
 }
 
 // dismissRef は写しが merged / closed の issue / PR を端点に持つ辺を消し、消した辺の数を返す。済んだ参照が after に
-// 残る辺は sweep が消さないので、人が外す。済んでいない参照の辺は待ちが生きているので消さない。
-func dismissRef(refs refstate.Store, edges edge.Store, r string) (int, error) {
+// 残る辺は sweep が消さないので、人が外す。済んでいない参照の辺は待ちが生きているので消さない。PR なら、消した辺の
+// sid: と PR を出した記録のあるセッションからの組を「導かない」と記録し、次の tick がカードを戻さないようにする。
+func dismissRef(refs refstate.Store, works worklog.Store, edges edge.Store, r string) (int, error) {
 	list, err := refs.List()
 	if err != nil {
 		return 0, err
@@ -88,7 +92,32 @@ func dismissRef(refs refstate.Store, edges edge.Store, r string) (int, error) {
 		return 0, fmt.Errorf("%s は済んでいない (%s)", r, rec.State)
 	}
 	removed, err := edges.RemoveByEndpoint(r)
-	return len(removed), err
+	if err != nil {
+		return len(removed), err
+	}
+	if it, _ := ref.ParseItem(r); it.Kind != "pr" {
+		return len(removed), nil
+	}
+	sessions := map[string]bool{}
+	for _, e := range removed {
+		if id, ok := ref.ParseSessionID(e.Before.Ref); ok {
+			sessions[id] = true
+		}
+	}
+	recs, err := works.List()
+	if err != nil {
+		return len(removed), err
+	}
+	for _, w := range recs {
+		if slices.ContainsFunc(w.Prs, func(pr string) bool { return strings.EqualFold(pr, r) }) {
+			sessions[w.SessionID] = true
+		}
+	}
+	var errs []error
+	for id := range sessions {
+		errs = append(errs, edges.Decline(id, r))
+	}
+	return len(removed), errors.Join(errs...)
 }
 
 // dismissSession は終了したセッションの作業の記録と、そのセッションを端点に持つ辺を消し、消した辺の数を返す。

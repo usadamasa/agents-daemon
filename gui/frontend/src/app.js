@@ -3,7 +3,7 @@
 // オブジェクトはタスク (図の箱) とメモ (下の一覧の行)。選ぶとそのそばにポップアップで単体ビューが開く。
 import * as dagre from "./vendor/dagre.esm.js";
 import { Graph } from "./graph.js";
-import { GROUP_W, fitLimit, frameTree, groupByRex, partition, placeGroups, rexTones } from "./column.js";
+import { GROUP_W, fitLimit, frameTree, groupByRex, partition, placeGroups, placeRefs, rexTones } from "./column.js";
 import { fitEdges, spreadPorts } from "./ports.js";
 import { findJumps, jumpPath } from "./jumps.js";
 import { PR_STAGE, STATE_LABEL, cardHint, cardText, emphasis, leadStage, markClass, mentionLabel, mentionLines, toneOf } from "./card.js";
@@ -28,10 +28,13 @@ const KIND_LABEL = { task: "Task", todo: "TodoWrite item", session: "Session wor
 // companion が会話から付けた題 (origin inferred) に添える chip の文 (出どころの説明)。直すのは題そのものを押す (OOUI:
 // 対象を選んでから動詞)。最初の prompt の題、人が直した題、記録の無い pane の名前には何も添えない。
 const INFERRED_CHIP = "Auto-titled";
+const ISOLATED_HINT = "Unlinked: no edges to any session";
 
 const state = {
   data: null,
   graph: null,
+  // refs は参照の置き場 (column.js の placeRefs)。描くたびに全部のノードと辺から決め直す。
+  refs: null,
   error: "",
   showCompleted: false,
   readAt: null,
@@ -351,7 +354,10 @@ function nodeCard(n, highlight, grouped = false) {
   title.textContent = text.title;
   const sub = document.createElement("small");
   sub.textContent = text.sub;
-  const hint = cardHint(n);
+  // どの辺にもつながらない参照は、どの作業から出たかを図で追えないことを縁と tooltip で示す (#727)。
+  const isolated = Boolean(state.refs?.unlinked.has(n.key));
+  if (isolated) b.classList.add("isolated");
+  const hint = [isolated ? ISOLATED_HINT : "", cardHint(n)].filter(Boolean).join("\n");
   if (hint) b.title = hint;
   lb.append(title, sub);
   b.append(dot, lb);
@@ -360,6 +366,8 @@ function nodeCard(n, highlight, grouped = false) {
   if (n.stuck && n.downstream > 0) badges.push(`↓${n.downstream}`);
   if (n.parked > 0) badges.push(`◇${n.parked}`);
   if (n.deadlock) badges.push("⟳");
+  // 縁と outline は状態の強調 (取りやめ、作業中) が使うので、孤立は状態に依らず見える印でも示す。
+  if (isolated) badges.push("⊘");
   if (badges.length > 0) {
     const bd = document.createElement("span");
     bd.className = "bd";
@@ -425,7 +433,8 @@ function renderGraph() {
   const graph = state.data.graph;
   const { nodes, links, depth } = state.graph.view(state.showCompleted);
   const { connected, free, ended } = partition(nodes, links, graph.column_order);
-  const tree = frameTree(connected, free, state.data.rex_placement);
+  state.refs = placeRefs(state.graph.nodes, state.graph.links);
+  const tree = frameTree(connected, free, state.data.rex_placement, state.refs);
   const tones = rexTones(nodes);
   const highlight = highlightKeys();
   renderColumn(ended, highlight);
@@ -515,7 +524,7 @@ function renderFrames(canvas, frames, tones, boxes) {
 // 全体表示がオフでも同じ折り返しにし、拡大縮小で並びを動かさない。枠が無ければ大きさは 0。
 function renderGroups(canvas, free, tones, highlight, graphSize, view) {
   if (free.length === 0) return { width: 0, height: 0 };
-  const groups = groupByRex(free, state.data.rex_placement);
+  const groups = groupByRex(free, state.data.rex_placement, state.refs);
   const top = graphSize.height > 0 ? graphSize.height : MARGIN_Y;
   const limit = fitLimit(groups, { left: MARGIN_X, top, bottom: MARGIN_Y, graph: graphSize, view });
   const { places, right, bottom } = placeGroups(groups, MARGIN_X, top, limit);

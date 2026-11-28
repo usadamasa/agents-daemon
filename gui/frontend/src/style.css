@@ -229,6 +229,8 @@ select { font: inherit; color: inherit; }
 /* 選択は青の二重の輪。box-shadow に置き、手番の枠 (outline) と重ねても互いを消さない */
 .node.sel { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--blue); }
 .node.dim { opacity: 0.45; }
+/* どの辺にもつながらない参照。縁を破線にして、つながりを追えないことを示す */
+.node.isolated { border-style: dashed; border-color: var(--line-strong); }
 .node .lb { flex: 1 1 auto; min-width: 0; }
 .node b { font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .node small {

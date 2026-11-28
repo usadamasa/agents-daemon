@@ -273,17 +273,20 @@ test("完了を隠した既定の図: 線のあるカードも rex の session �
   }
   for (const key of ["task:beta/1", "task:beta/2", "task:beta/3"]) assert.ok(inside(graph.get(key), byLabel("beta-tab")), key);
   for (const key of ["task:alpha/2", "task:beta/3"]) assert.ok(inside(graph.get(key), byLabel("work")), key);
-  // 参照は枠に入れない。
-  assert.ok(!inside(graph.get("pr:usadamasa/agents-daemon#254"), byLabel("work")));
+  // 参照は、待っている側 (作ったセッションの辺が無いので after) の window の小枠に入れる (#727)。
+  assert.ok(inside(graph.get("pr:usadamasa/agents-daemon#254"), byLabel("alpha-tab")));
+  assert.ok(!inside(graph.get("pr:usadamasa/agents-daemon#254"), byLabel("beta-tab")));
+  // 辺のある参照には孤立の印を付けない。
+  assert.equal(count("#graph .node.isolated"), 0);
   // 線のある図の枠に入ったカードは、下のセッションの枠には重ねて出さない。
   assert.deepEqual(groups().flatMap((g) => g.keys).filter((k) => k.startsWith("task:")), []);
 });
 
-test("完了を隠した既定の図: 枠の中の線のあるカードは rex の置き場を副題で繰り返さず、枠の外の参照は今の副題のまま", () => {
+test("完了を隠した既定の図: 枠の中の線のあるカードは rex の置き場を副題で繰り返さず、枠に入れた参照も番号と repo の副題を残す", () => {
   const sub = q('.node[data-key="task:alpha/2"] small').textContent;
   assert.ok(sub.startsWith("Working"), sub);
   assert.equal(sub.includes("›"), false, sub);
-  assert.equal(q('.node[data-key="pr:usadamasa/agents-daemon#254"] small').textContent.includes("›"), false);
+  assert.equal(q('.node[data-key="pr:usadamasa/agents-daemon#254"] small').textContent, "Dropped · PR #254 · usadamasa/agents-daemon");
 });
 
 test("辺のあるノードを持つ rex の枠は、同じ枠の辺の無いノードも線のある図の枠に入れ、下の枠に分けて出さない", async () => {
@@ -325,6 +328,59 @@ test("完了も表示した図: 線の端に残る完了のノードも、rex �
     await snapshot("graph-frames-completed");
   } finally {
     q("#completed-check").click();
+  }
+});
+
+// withRefs は fixture に PR を作ったセッションからの辺 (daemon が導く sid → pr の形) を持つ参照を 3 つ足す。
+// #300 は生きているセッション (beta) が作った PR。#301 は生きているセッション (alpha) の完了したタスクが作った PR で、
+// 完了を隠した図では作ったノードが見えない。#302 は終わったセッション (gamma) が作り、beta が待っている PR。
+function withRefs() {
+  const data = JSON.parse(fixtureDeps);
+  const ref = (n, depth) => ({
+    key: `pr:usadamasa/agents-daemon#${n}`, kind: "ref", state: "waiting", title: `PR ${n}`,
+    ref_kind: "pr", ref_label: `PR #${n} · usadamasa/agents-daemon`, endpoint: true, cwd: "/repo/agents-daemon", live: false,
+    depth, downstream: 0, parked: 0, memos: [], blocked_by: [], deadlock: false, halted: false, stuck: false,
+  });
+  const link = (before, after) => ({ before, after, kind: "edge", edge: { id: `${before}>${after}`, before: { ref: before }, after: { ref: after } } });
+  data.graph.nodes.push(ref(300, 4), ref(301, 1), ref(302, 1));
+  data.graph.links.push(
+    link("task:beta/2", "pr:usadamasa/agents-daemon#300"),
+    link("task:alpha/1", "pr:usadamasa/agents-daemon#301"),
+    link("pr:usadamasa/agents-daemon#301", "task:beta/3"),
+    link("sid:gamma", "pr:usadamasa/agents-daemon#302"),
+    link("pr:usadamasa/agents-daemon#302", "task:beta/3"),
+  );
+  data.graph.folded.nodes.push(
+    { key: "pr:usadamasa/agents-daemon#300", depth: 3 },
+    { key: "pr:usadamasa/agents-daemon#301", depth: 0 },
+    { key: "pr:usadamasa/agents-daemon#302", depth: 1 },
+  );
+  return data;
+}
+
+test("PR の参照は作ったセッションの window の小枠に描き、作ったセッションが終わっていれば待っている側の小枠に描く", async () => {
+  await loadDeps(JSON.stringify(withRefs()));
+  let toggled = false;
+  try {
+    for (const showCompleted of [false, true]) {
+      if (showCompleted) {
+        q("#completed-check").click();
+        toggled = true;
+      }
+      const graph = cards("#graph");
+      const tab = (label) => frames().find((x) => x.label === label);
+      const at = (n) => graph.get(`pr:usadamasa/agents-daemon#${n}`);
+      assert.ok(inside(at(300), tab("beta-tab")), `#300 showCompleted=${showCompleted}`);
+      // 作ったタスクが完了で隠れても、作ったセッションの window に置く。
+      assert.ok(inside(at(301), tab("alpha-tab")), `#301 showCompleted=${showCompleted}`);
+      assert.ok(!inside(at(301), tab("beta-tab")), `#301 showCompleted=${showCompleted}`);
+      assert.ok(inside(at(302), tab("beta-tab")), `#302 showCompleted=${showCompleted}`);
+      assert.equal(count("#graph .node.isolated"), 0);
+    }
+    await snapshot("graph-refs-placed");
+  } finally {
+    if (toggled) q("#completed-check").click();
+    await loadDeps(fixtureDeps);
   }
 });
 
@@ -500,11 +556,18 @@ test("線が 1 本も無い図: 動いているカードをセッションの枠
     assert.equal(count(EDGE), 0);
     assert.equal(count("#graph .empty"), 0);
     // 枠は rex の session ごと。中は window ごとに、column_order で最初に来るカードの順に区切る (#633)。
-    assert.deepEqual(groups().map((g) => g.label).sort(), ["Refs", "Rex placement unknown", "work"]);
-    assert.deepEqual(groups().find((g) => g.label === "Refs").keys, ["pr:usadamasa/agents-daemon#254"]);
+    // どの辺にもつながらない参照は、孤立していることが分かる枠と印で出す (#727)。
+    assert.deepEqual(groups().map((g) => g.label).sort(), ["Rex placement unknown", "Unlinked refs", "work"]);
+    assert.deepEqual(groups().find((g) => g.label === "Unlinked refs").keys, ["pr:usadamasa/agents-daemon#254"]);
     assert.deepEqual(subheads("work"), ["beta-tab", "alpha-tab"]);
     assert.deepEqual(groups().find((g) => g.label === "work").keys, ["task:beta/1", "task:beta/2", "task:beta/3", "task:alpha/2", "task:alpha/4", "task:alpha/5"]);
-    assert.deepEqual(subheads("Refs"), []);
+    assert.deepEqual(subheads("Unlinked refs"), []);
+    const alone = q('.node[data-key="pr:usadamasa/agents-daemon#254"]');
+    assert.ok(alone.classList.contains("isolated"), alone.className);
+    assert.match(alone.title, /no edges/);
+    // 取りやめや作業中の強調は縁と outline を使うので、孤立の印は縁に頼らず、どの状態でも見える印で出す。
+    assert.match(alone.querySelector(".bd")?.textContent ?? "", /⊘/);
+    assert.equal(count("#graph .node.isolated"), 1);
     assert.deepEqual([...cards("#column").keys()], ["sid:gamma"]);
     assert.equal(q("#legend").hidden, false);
     const v = view();

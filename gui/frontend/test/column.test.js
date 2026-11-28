@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { GROUP_W, TONES, fitLimit, frameTree, groupByRex, groupHeight, heads, partition, placeGroups, rexTones } from "../src/column.js";
+import { GROUP_W, TONES, fitLimit, frameTree, groupByRex, groupHeight, heads, partition, placeGroups, placeRefs, rexTones } from "../src/column.js";
 
 const keys = (nodes) => nodes.map((n) => n.key);
 
@@ -79,6 +79,131 @@ test("groupByRex はセッションを持たない参照を「参照」の枠に
     { key: "issue:2", kind: "ref" },
   ]);
   assert.deepEqual(shape(groups), [{ label: "Refs", parts: [["", ["pr:1", "issue:2"]]] }]);
+});
+
+// 参照の置き場 (#727)。PR を作ったセッション (辺の before) の window に置き、作ったセッションが終わっていれば待っている側
+// (after) の window に置く。
+const pr = (key, state = "waiting") => ({ key, kind: "ref", ref_kind: "pr", state });
+const anchorKeys = (refs) => Object.fromEntries([...refs.anchor].map(([k, n]) => [k, n.key]));
+
+test("placeRefs は参照を、生きているセッションの上流のノード (PR を作ったセッション) に結びつける", () => {
+  const nodes = [
+    pr("pr:o/r#1"),
+    { key: "mk", kind: "task", state: "completed", live: true, rex: rex("S1", "w1") },
+    { key: "wait", kind: "task", state: "pending", live: true, rex: rex("S1", "w2") },
+  ];
+  const links = [
+    { before: "mk", after: "pr:o/r#1", kind: "edge" },
+    { before: "pr:o/r#1", after: "wait", kind: "edge" },
+  ];
+  assert.deepEqual(anchorKeys(placeRefs(nodes, links)), { "pr:o/r#1": "mk" });
+});
+
+test("placeRefs は作ったセッションが終わっていれば、待っている側 (下流) のノードに結びつける", () => {
+  const nodes = [
+    pr("pr:o/r#1"),
+    { key: "mk", kind: "task", state: "exited", live: false, rex: rex("S1", "w1") },
+    { key: "wait", kind: "task", state: "pending", live: true, rex: rex("S1", "w2") },
+  ];
+  const links = [
+    { before: "mk", after: "pr:o/r#1", kind: "edge" },
+    { before: "pr:o/r#1", after: "wait", kind: "edge" },
+  ];
+  assert.deepEqual(anchorKeys(placeRefs(nodes, links)), { "pr:o/r#1": "wait" });
+});
+
+test("placeRefs は下流が無ければ終わったセッションの上流に、rex の置き場の無いノードしか無ければ結びつけない", () => {
+  const nodes = [
+    pr("pr:o/r#1"),
+    pr("pr:o/r#2"),
+    { key: "mk", kind: "task", state: "exited", live: false, rex: rex("S1", "w1") },
+    { key: "sid:gone", kind: "ref", state: "exited", live: false },
+  ];
+  const links = [
+    { before: "mk", after: "pr:o/r#1", kind: "edge" },
+    { before: "sid:gone", after: "pr:o/r#2", kind: "edge" },
+  ];
+  assert.deepEqual(anchorKeys(placeRefs(nodes, links)), { "pr:o/r#1": "mk" });
+});
+
+test("placeRefs は同じ順位の候補が複数あれば辺の順で最初のものに結びつける", () => {
+  const nodes = [
+    pr("issue:o/r#3"),
+    { key: "w2", kind: "task", state: "pending", live: true, rex: rex("S1", "w2") },
+    { key: "w1", kind: "task", state: "pending", live: true, rex: rex("S1", "w1") },
+  ];
+  const links = [
+    { before: "issue:o/r#3", after: "w2", kind: "edge" },
+    { before: "issue:o/r#3", after: "w1", kind: "edge" },
+  ];
+  assert.deepEqual(anchorKeys(placeRefs(nodes, links)), { "issue:o/r#3": "w2" });
+});
+
+// 作ったセッションの末端が複数あると、deps は末端を sid: のノード (kind ref) に集めて辺をそこから出す。生きていれば rex を持つ。
+test("frameTree は作ったセッションの末端を集めた sid: のノードと、そこから出た参照を、セッションの window の枠に入れる", () => {
+  const t1 = { key: "task:s/1", kind: "task", state: "pending", live: true, session_id: "s", rex: rex("S1", "w1", "alpha-tab") };
+  const t2 = { key: "task:s/2", kind: "task", state: "pending", live: true, session_id: "s", rex: rex("S1", "w1", "alpha-tab") };
+  const hub = { key: "sid:s", kind: "ref", state: "pending", live: true, session_id: "s", rex: rex("S1", "w1", "alpha-tab") };
+  const ref = pr("pr:o/r#1");
+  const links = [
+    { before: t1.key, after: hub.key, kind: "task" },
+    { before: t2.key, after: hub.key, kind: "task" },
+    { before: hub.key, after: ref.key, kind: "edge" },
+  ];
+  const nodes = [t1, t2, hub, ref];
+  const t = frameTree(nodes, [], true, placeRefs(nodes, links));
+  assert.equal(t.parentOf.get(hub.key), t.parentOf.get(t1.key));
+  assert.equal(t.parentOf.get(ref.key), t.parentOf.get(t1.key));
+});
+
+// 人が足した参照どうしの辺 (#725 → #724) だけでつながる参照は、相手の参照が結びついた枠を借りる。
+test("placeRefs は参照どうしの辺だけでつながる参照を、相手の参照と同じノードに結びつける", () => {
+  const nodes = [
+    pr("pr:o/r#724"),
+    pr("pr:o/r#725"),
+    { key: "mk", kind: "task", state: "working", live: true, rex: rex("S1", "w1") },
+  ];
+  const links = [
+    { before: "mk", after: "pr:o/r#724", kind: "edge" },
+    { before: "pr:o/r#725", after: "pr:o/r#724", kind: "edge" },
+  ];
+  assert.deepEqual(anchorKeys(placeRefs(nodes, links)), { "pr:o/r#724": "mk", "pr:o/r#725": "mk" });
+});
+
+test("placeRefs はどの辺にもつながらない参照を unlinked に入れ、辺のある参照と参照でないノードは入れない", () => {
+  const nodes = [pr("pr:o/r#1"), pr("pr:o/r#2"), { key: "t", kind: "task", state: "pending", live: true }];
+  const refs = placeRefs(nodes, [{ before: "t", after: "pr:o/r#2", kind: "edge" }]);
+  assert.deepEqual([...refs.unlinked], ["pr:o/r#1"]);
+});
+
+test("frameTree は結びつけた参照を、相手のノードと同じ rex の window の枠に入れる", () => {
+  const mk = { key: "mk", kind: "task", state: "working", live: true, rex: rex("S1", "w1", "alpha-tab") };
+  const ref = pr("pr:o/r#1");
+  const refs = placeRefs([mk, ref], [{ before: "mk", after: ref.key, kind: "edge" }]);
+  const t = frameTree([mk, ref], [], true, refs);
+  assert.equal(t.parentOf.get(ref.key), t.parentOf.get("mk"));
+  assert.equal(t.frames.find((f) => f.key === t.parentOf.get(ref.key)).label, "alpha-tab");
+});
+
+test("frameTree は結びつけた先の枠が線のある図に無くても、参照のために枠を作る (相手が完了で隠れているとき)", () => {
+  const ref = pr("pr:o/r#1");
+  const done = { key: "done", kind: "task", state: "completed", live: true, rex: rex("S1", "w1", "alpha-tab") };
+  const wait = { key: "wait", kind: "task", state: "pending", live: true };
+  const refs = placeRefs([ref, done, wait], [{ before: "done", after: ref.key, kind: "edge" }, { before: ref.key, after: "wait", kind: "edge" }]);
+  const t = frameTree([ref, wait], [], true, refs);
+  const { frames, parents } = tree(t);
+  assert.deepEqual(frames[parents[ref.key]], ["alpha-tab", frames[parents[ref.key]][1]]);
+});
+
+test("groupByRex は辺の無い区画に出た参照も、結びつけた先の rex の枠に入れ、どの辺にもつながらない参照は Unlinked refs の枠に分ける", () => {
+  const mk = { key: "mk", kind: "task", state: "completed", live: true, rex: rex("S1", "w1", "alpha-tab") };
+  const linked = pr("pr:o/r#1");
+  const alone = pr("pr:o/r#2");
+  const refs = placeRefs([mk, linked, alone], [{ before: "mk", after: linked.key, kind: "edge" }]);
+  assert.deepEqual(shape(groupByRex([linked, alone], true, refs)), [
+    { label: "S1-label", parts: [["alpha-tab", ["pr:o/r#1"]]] },
+    { label: "Unlinked refs", parts: [["", ["pr:o/r#2"]]] },
+  ]);
 });
 
 // tree は frameTree の枠を key → [見出し, 親の key] で、ノードを key → 親の枠の key で返す。

@@ -11,7 +11,7 @@ import { isStale, kindLabel, lastPlacedAt, stamp } from "./memo.js";
 import { bulkDismissable, canAdopt, canDismiss, canRename, canTell, candidates, isOwnTask, lastSeenAgo, memoDestinations, pathDestination, peerDestinations, spawnDestinations } from "./ops.js";
 import { addBlocker, adopt, askUnlink, discard, discardStale, dismissAll, dismissOne, handOff, handOffTask, instruct, rename, setStatus, start, toParking, unlink } from "./actions.js";
 import { openTarget, pickFolder } from "./daemon.js";
-import { edgeNoteRepo, mentionUrl, refUrl, segments, textNoteRepo } from "./links.js";
+import { edgeNoteKind, edgeNoteRepo, mentionUrl, refUrl, segments, textNoteRepo } from "./links.js";
 import { CONTROLS_BAND, MAX_ZOOM, MIN_ZOOM, centerOffset, clampZoom, fitZoom, overflowCenter, percent, scaledFrame, scrollAfterZoom, stepZoom, topOffset, wheelZoomer } from "./zoom.js";
 import { restore, scrollView, watchUpgrade } from "./restore.js";
 
@@ -780,7 +780,11 @@ function nodeRow(n, link, owner) {
   if (link?.edge?.note) {
     const note = document.createElement("span");
     note.className = "note";
-    appendLinked(note, link.edge.note, { githubRepo: (k) => edgeNoteRepo(link.edge, state.data.repos, k), base: link.edge.after.cwd });
+    appendLinked(note, link.edge.note, {
+      githubRepo: (k) => edgeNoteRepo(link.edge, state.data.repos, k),
+      githubKind: (k, repo) => edgeNoteKind(link.edge, repo, k),
+      base: link.edge.after.cwd,
+    });
     // note の #番号 は daemon が引いた題を tooltip に出す (#474)。
     const hint = mentionLines(link.mentions).join("\n");
     if (hint) note.title = hint;

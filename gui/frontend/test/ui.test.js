@@ -826,14 +826,14 @@ test("タスクの説明: #123 は同じ文の参照と番号が合えばその 
   escape();
 });
 
-test("辺の note: #123 は番号の合う端点の参照の repo で補う", async () => {
+test("辺の note: #123 は番号の合う端点の参照の repo と種類で補う (#709)", async () => {
   q('.node[data-key="pr:usadamasa/agents-daemon#254"]').click();
   const a = q("#pop .lk .note a.ref");
   assert.equal(a.textContent, "#254");
   opened.length = 0;
   a.click();
   await flush();
-  assert.deepEqual(opened, ["https://github.com/usadamasa/agents-daemon/issues/254"]);
+  assert.deepEqual(opened, ["https://github.com/usadamasa/agents-daemon/pull/254"]);
   escape();
 });
 

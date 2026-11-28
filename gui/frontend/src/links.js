@@ -35,7 +35,7 @@ function trimUrl(url) {
 // issue の URL は PR の番号でも GitHub が PR のページへ送るので、pr: と書かれたときだけ pull にする。
 const issueUrl = (repo, number, kind) => `https://github.com/${repo}/${kind === "pr" ? "pull" : "issues"}/${number}`;
 
-function linkOf(m, { githubRepo, base }) {
+function linkOf(m, { githubRepo, githubKind, base }) {
   const g = m.groups;
   if (g.url !== undefined) {
     const url = trimUrl(g.url);
@@ -44,7 +44,7 @@ function linkOf(m, { githubRepo, base }) {
   if (g.repo !== undefined) return { text: m[0], target: issueUrl(g.repo, g.number, g.kind) };
   if (g.bare !== undefined) {
     const repo = githubRepo?.(Number(g.bare));
-    return repo ? { text: m[0], target: issueUrl(repo, g.bare) } : undefined;
+    return repo ? { text: m[0], target: issueUrl(repo, g.bare, githubKind?.(Number(g.bare), repo)) } : undefined;
   }
   if (g.abs !== undefined) return { text: m[0], target: g.abs };
   return base ? { text: m[0], target: `${base}/${g.rel}` } : undefined;
@@ -85,6 +85,18 @@ export function edgeNoteRepo(edge, repos, number) {
   return known && touched.size === 1 ? [...touched][0] : undefined;
 }
 
+// edgeNoteKind は辺の note の #number を repo で補ったときの種類 ("pr" か "issue")。番号と repo の合う端点の参照の
+// 種類で決め、合う参照が無いか pr: と issue: の両方が合えば決めない (リンクは issues/N になる)。
+export function edgeNoteKind(edge, repo, number) {
+  const kinds = new Set(
+    [edge.before, edge.after].flatMap((e) => {
+      const m = REF.exec(e.ref);
+      return m !== null && m.groups.repo === repo && Number(m.groups.number) === number ? [e.ref.startsWith("pr:") ? "pr" : "issue"] : [];
+    }),
+  );
+  return kinds.size === 1 ? [...kinds][0] : undefined;
+}
+
 // textNoteRepo は text の #number を補う owner/repo。text の中の番号の合う pr: / issue: の参照があればその repo
 // (別 repo が 2 つ以上なら決めない)。無ければ fallback。参照は segments がリンクにする位置のものだけを数える。
 export function textNoteRepo(text, number, fallback) {
@@ -98,7 +110,8 @@ export function textNoteRepo(text, number, fallback) {
 }
 
 // segments は text を { text } (素の文字) と { text, target } (リンク。target は URL か絶対パス) の並びにする。
-// ctx.githubRepo は #123 の番号を受けて補う owner/repo を返す関数、ctx.base は相対パスの基準。無いか owner/repo が
+// ctx.githubRepo は #123 の番号を受けて補う owner/repo を返す関数、ctx.githubKind は番号と補った owner/repo を受けて
+// 種類 ("pr" で pull へ) を返す関数 (無ければ issues へ)、ctx.base は相対パスの基準。無いか owner/repo が
 // 分からなければ、その形は素の文字のまま。
 export function segments(text, ctx) {
   const out = [];

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { edgeNoteRepo, refUrl, segments, textNoteRepo } from "../src/links.js";
+import { edgeNoteKind, edgeNoteRepo, refUrl, segments, textNoteRepo } from "../src/links.js";
 
 const ctx = { githubRepo: () => "o/r", base: "/repo/x" };
 const links = (text, c = ctx) => segments(text, c).filter((s) => s.target !== undefined);
@@ -137,6 +137,31 @@ test("edgeNoteRepo: 番号の合う参照が無ければ、辺が触れる repo 
 test("edgeNoteRepo: 両端と参照が同じ repo の session → pr は、番号に依らずその repo (SameRepoStable)", () => {
   const edge = { before: end("sid:abc", "/repo/agents-daemon"), after: end("pr:usadamasa/agents-daemon#10", "/repo/agents-daemon") };
   for (const k of [10, 11]) assert.equal(edgeNoteRepo(edge, repos, k), "usadamasa/agents-daemon", String(k));
+});
+
+test("edgeNoteKind: 番号と repo の合う端点の参照の種類を返す (#709)", () => {
+  const pr = { before: end("sid:abc", "/repo/workspace"), after: end("pr:usadamasa/workspace#53", "/repo/workspace") };
+  assert.equal(edgeNoteKind(pr, "usadamasa/workspace", 53), "pr");
+  const issue = { before: end("issue:usadamasa/workspace#53", "/repo/workspace"), after: end("task:alpha/1", "/repo/workspace") };
+  assert.equal(edgeNoteKind(issue, "usadamasa/workspace", 53), "issue");
+});
+
+test("edgeNoteKind: 番号か repo の合う参照が無ければ、種類を決めない", () => {
+  const pr = { before: end("sid:abc", "/repo/workspace"), after: end("pr:usadamasa/workspace#53", "/repo/workspace") };
+  assert.equal(edgeNoteKind(pr, "usadamasa/workspace", 54), undefined);
+  assert.equal(edgeNoteKind(pr, "usadamasa/agents-daemon", 53), undefined);
+  // 同じ repo・同じ番号で pr: と issue: の両方があれば決めない。
+  const both = { before: end("issue:usadamasa/workspace#5", "/repo/workspace"), after: end("pr:usadamasa/workspace#5", "/repo/workspace") };
+  assert.equal(edgeNoteKind(both, "usadamasa/workspace", 5), undefined);
+});
+
+test("edgeNoteRepo と edgeNoteKind を segments の ctx にすると、PR の端点の #N は pull へリンクされる (#709)", () => {
+  const edge = { before: end("sid:abc", "/repo/workspace"), after: end("pr:usadamasa/workspace#53", "/repo/workspace") };
+  const c = { githubRepo: (k) => edgeNoteRepo(edge, repos, k), githubKind: (k, repo) => edgeNoteKind(edge, repo, k) };
+  assert.deepEqual(
+    links("PR #53 と #7", c).map((s) => s.target),
+    ["https://github.com/usadamasa/workspace/pull/53", "https://github.com/usadamasa/workspace/issues/7"],
+  );
 });
 
 test("textNoteRepo: 同じ文の pr: / issue: の参照と番号が合えば、その参照の repo で補う (#562)", () => {

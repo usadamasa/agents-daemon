@@ -34,8 +34,32 @@ test("spreadPorts は入ってくる辺の終点を上辺へ、出ていく辺�
   assert.deepEqual(got[0].points[0], { x: 600, y: 36 });
 });
 
-test("spreadPorts は入ってくる辺の port を最後の中の点の x の順に割り当て、その点を port の真上へ寄せる (#707)", () => {
+// crosses は線分 p1-p2 と q1-q2 が端以外で交わるか。
+function crosses(p1, p2, q1, q2) {
+  const side = (a, b, c) => Math.sign((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x));
+  return side(p1, p2, q1) * side(p1, p2, q2) < 0 && side(q1, q2, p1) * side(q1, q2, p2) < 0;
+}
+
+// crossingPairs は辺の点列の、末尾 (tail が true) か先頭の 2 区間どうしが交わる辺の組を返す。
+function crossingPairs(edges, tail) {
+  const ends = edges.map((e) => (tail ? e.points.slice(-3) : e.points.slice(0, 3)));
+  const pairs = [];
+  for (let i = 0; i < ends.length; i++) {
+    for (let j = i + 1; j < ends.length; j++) {
+      for (let a = 0; a < 2; a++) {
+        for (let b = 0; b < 2; b++) {
+          if (crosses(ends[i][a], ends[i][a + 1], ends[j][b], ends[j][b + 1])) pairs.push(`${edges[i].before}>${edges[i].after} × ${edges[j].before}>${edges[j].after}`);
+        }
+      }
+    }
+  }
+  return pairs;
+}
+
+test("spreadPorts は入ってくる辺の port を、近づいてくる線の並びで割り当て、端の手前の点を port の真上へ寄せる (#707)", () => {
   // #707 で再現した点列。別の枠から入る点線の中の点は、行き先の中心 (1928) の近くに寄って並ぶ。
+  // 最後の中の点の x の順 (第 1 段、records、dream) に割り当てると、遠くから浅く入る records の点線が
+  // すぐ上から入る第 1 段の実線と交わる。送り元の x の順 (records、dream、第 1 段) では dream と第 1 段が交わる。
   const pos = new Map([
     ["records", { x: 860, y: 0 }],
     ["dream", { x: 1456, y: 0 }],
@@ -50,8 +74,10 @@ test("spreadPorts は入ってくる辺の port を最後の中の点の x の�
   ];
   const got = spreadPorts(edges, pos, W, H);
   const ports = got.map((e) => e.points.at(-1).x);
-  // 中の点が左にある辺ほど左の port に入り、最後の区間は真下を向く (行き先を越えて折り返さない)。
-  assert.deepEqual(ports, [1928, 1988, 1868]);
+  // 行き先の近くで左を通る線ほど左の port に入り、端の手前の 2 区間は交わらない。最後の区間は真下を向く
+  // (行き先を越えて折り返さない)。
+  assert.deepEqual(ports, [1868, 1988, 1928]);
+  assert.deepEqual(crossingPairs(got, true), []);
   for (const [i, e] of got.entries()) {
     assert.deepEqual(e.points.at(-2), { x: ports[i], y: 334 }, e.before);
     assert.deepEqual(e.points.at(-1), { x: ports[i], y: 400 - H / 2 }, e.before);
@@ -60,21 +86,22 @@ test("spreadPorts は入ってくる辺の port を最後の中の点の x の�
   assert.deepEqual(got[0].points.slice(0, 2), edges[0].points.slice(0, 2));
 });
 
-test("spreadPorts は出ていく辺の port を最初の中の点の x の順に割り当て、その点を port の真下へ寄せる (#707)", () => {
+test("spreadPorts は出ていく辺の port を、離れていく線の並びで割り当て、端の次の点を port の真下へ寄せる (#707)", () => {
   const pos = new Map([
     ["S", { x: 1000, y: 0 }],
     ["L", { x: 0, y: 400 }],
     ["R", { x: 2000, y: 400 }],
   ]);
-  // 相手のノードの x の順 (L が左) と、最初の中の点の x の順 (R へ行く辺が左) が食い違う。
+  // 最初の中の点の x の順 (R へ行く辺が左) に割り当てると、2 本が送り元の下で交わる。
   const edges = [
     { before: "S", after: "L", points: [{ x: 1000, y: 36 }, { x: 1050, y: 66 }, { x: 0, y: 334 }, { x: 0, y: 364 }] },
     { before: "S", after: "R", points: [{ x: 1000, y: 36 }, { x: 960, y: 66 }, { x: 2000, y: 334 }, { x: 2000, y: 364 }] },
   ];
   const got = spreadPorts(edges, pos, W, H);
   const left = 1000 - W / 2;
-  assert.deepEqual(got[1].points.slice(0, 2), [{ x: left + W / 3, y: H / 2 }, { x: left + W / 3, y: 66 }]);
-  assert.deepEqual(got[0].points.slice(0, 2), [{ x: left + (2 * W) / 3, y: H / 2 }, { x: left + (2 * W) / 3, y: 66 }]);
+  assert.deepEqual(got[0].points.slice(0, 2), [{ x: left + W / 3, y: H / 2 }, { x: left + W / 3, y: 66 }]);
+  assert.deepEqual(got[1].points.slice(0, 2), [{ x: left + (2 * W) / 3, y: H / 2 }, { x: left + (2 * W) / 3, y: 66 }]);
+  assert.deepEqual(crossingPairs(got, false), []);
   // 行き先の側の点は変えない。
   assert.deepEqual(got[0].points.slice(2), edges[0].points.slice(2));
 });

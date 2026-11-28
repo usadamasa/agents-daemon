@@ -22,7 +22,7 @@ preview が出るので、上げたら changelog と実機の応答をこの rep
 | rex docs | OSC 7501 の仕様 (何が仕様で何が rex 独自か) | [program-status](https://www.superlogical.com/rex/docs/build/program-status) |
 
 前提: superlogical MCP (`list_changelog` / `read_changelog`) が繋がっていること、rex の block の中で動いていること
-(`REX_BLOCK` がある)。
+(確かめ方は `agents-daemon:setup` skill の 2 段目)。rex の場所の環境変数の前提は `rexplace` パッケージの marker が持つ。
 
 着地は「ずれを issue にし、確かめ直した marker の `<version>` を上げる」。挙動が変わる対処をその場で実装しない
 (既存の挙動を変える変更は利用者の判断)。
@@ -94,13 +94,13 @@ changelog 側の点検は無しで、手順 4 へ進む (実機の点検は版�
 
 changelog に該当が無くても行う。欄の追加や名前の変更は changelog に載らないことがある。
 
-worktree 隔離セッション (EnterWorktree の後) では、`$REX_BLOCK` の展開を含む Bash コマンドを
-guard が拒否する。先に `printenv REX_BLOCK` で値を取り、下のコマンドの変数をその値に置き換えて打つ。
+自分の block の ID は `rex --autostart=false whoami --json | jq -r .block_id` で先に取り、下のコマンドの `<block>` を
+その値に置き換えて打つ (変数の展開を含むコマンドは、worktree 隔離セッションで guard が拒否する)。
 Mac の版は app の `Info.plist` の `RexVersion` (`plutil -p /Applications/Rex.app/Contents/Info.plist`) で読む。
 
 手順 1 で回した `doctor` の出力を 2 つの節で読む。
 
-- 「pane 一覧」: 自分の block (`REX_BLOCK` の値) の `pane=` 行を見る。`agent_status=working` で `unknown の理由` の行が
+- 「pane 一覧」: 自分の block (whoami の `block_id`) の `pane=` 行を見る。`agent_status=working` で `unknown の理由` の行が
   付いていなければ、record の `owner.pid` と foreground の process の pid の突き合わせは通っている。
   Bash ツールの実行中は working になる。理由の行が出たら、その文面が欄の有無を言っている (`record に owner.pid が無い`)。
 - 「rex の前提」: コードが読む欄と、対象が無いときの error の code を自分の block に打って名指しで出す。
@@ -164,5 +164,5 @@ rex-premise: <version> <topic> [メモ]
 
 - 見つけたずれをその場で直す。挙動が変わるので利用者の判断。docs の食い違いも同じ PR に混ぜない。
 - 範囲外の版や、Mac の投稿の UI の項目と iOS の投稿の整理。レポートが長くなるだけで判断材料は増えない。
-- 他人の block にコマンドを打つ。点検は自分の block (`$REX_BLOCK`) と、存在しない block ID だけで足りる。
+- 他人の block にコマンドを打つ。点検は自分の block と、存在しない block ID だけで足りる。
 - Discord の URL を組み立てる。MCP の結果に出た link だけを使う。

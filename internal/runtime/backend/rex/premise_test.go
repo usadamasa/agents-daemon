@@ -65,7 +65,7 @@ func ngTexts(findings []multiplexer.PremiseFinding) []string {
 }
 
 // 実測どおりの応答なら全部 OK で、打つ method は api-checks.md の「doctor が見る行」と同じ。
-// 自分の session は自分の block から target.resolve で引く (rex は新しい端末に REX_SESSION を入れない)。
+// 自分の session は自分の block から target.resolve で引く。
 func TestCheckPremises_AllOK(t *testing.T) {
 	f := selfFixtures(t)
 	findings := f.client(staticResolver(nil)).CheckPremises(context.Background(), blockSelfOct18)

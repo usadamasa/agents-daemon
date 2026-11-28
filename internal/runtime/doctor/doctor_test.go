@@ -17,6 +17,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
 	"github.com/usadamasa/agents-daemon/internal/ratelimit"
+	"github.com/usadamasa/agents-daemon/internal/rexplace"
 	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
 	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
@@ -73,7 +74,7 @@ func TestRun(t *testing.T) {
 		out := buf.String()
 
 		for _, want := range []string{
-			"backend: rex (REX_BLOCK あり)",
+			"backend: rex (rex の block の中)",
 			"OK: rex server は稼働しています",
 			"pane=p1", "session_id=session-abc",
 			"state ファイルはまだありません",
@@ -223,7 +224,7 @@ func TestRun(t *testing.T) {
 		if err := Run(context.Background(), &buf, doctorInput(client, sessioncontext.MultiplexerKindRex, apppath.New(t.TempDir(), "", ""), fixedNow)); err != nil {
 			t.Fatalf("Run() error = %v", err)
 		}
-		for _, want := range []string{"backend: rex (REX_BLOCK あり)", "OK: rex server は稼働しています"} {
+		for _, want := range []string{"backend: rex (rex の block の中)", "OK: rex server は稼働しています"} {
 			if !strings.Contains(buf.String(), want) {
 				t.Errorf("出力に %q が無い:\n%s", want, buf.String())
 			}
@@ -257,15 +258,13 @@ func (f *fakePremises) CheckPremises(_ context.Context, paneID string) []multipl
 }
 
 func TestReportPremises(t *testing.T) {
-	t.Run("REX_BLOCK があれば自分の block で点検し OK と ⚠ で出す", func(t *testing.T) {
+	t.Run("rex の block の中なら自分の block で点検し OK と ⚠ で出す", func(t *testing.T) {
 		checker := &fakePremises{findings: []multiplexer.PremiseFinding{
 			{OK: true, Text: "rex_version: 0.0.1 (built_at 2026-10-16T13:55:32Z)"},
 			{OK: false, Text: "program_status の root record に owner.pid が無い"},
 		}}
 		var buf bytes.Buffer
-		writePremises(&buf, *collectPremises(context.Background(), checker, envOf(map[string]string{
-			"REX_BLOCK": "block:self",
-		})))
+		writePremises(&buf, *collectPremises(context.Background(), checker, rexplace.Place{Block: "block:self"}))
 		out := buf.String()
 		for _, want := range []string{"OK: rex_version: 0.0.1", "⚠ program_status の root record に owner.pid が無い"} {
 			if !strings.Contains(out, want) {
@@ -277,21 +276,21 @@ func TestReportPremises(t *testing.T) {
 		}
 	})
 
-	t.Run("REX_BLOCK が無ければ点検せず理由を出す", func(t *testing.T) {
+	t.Run("rex の block の外なら点検せず理由を出す", func(t *testing.T) {
 		checker := &fakePremises{}
 		var buf bytes.Buffer
-		writePremises(&buf, *collectPremises(context.Background(), checker, noEnv))
+		writePremises(&buf, *collectPremises(context.Background(), checker, rexplace.Place{}))
 		if checker.calls != 0 {
-			t.Errorf("REX_BLOCK 無しで CheckPremises が %d 回呼ばれた", checker.calls)
+			t.Errorf("rex の block の外で CheckPremises が %d 回呼ばれた", checker.calls)
 		}
-		if !strings.Contains(buf.String(), "REX_BLOCK") {
-			t.Errorf("REX_BLOCK が無い理由が出ていない:\n%s", buf.String())
+		if !strings.Contains(buf.String(), "rex の block の外") {
+			t.Errorf("点検しない理由が出ていない:\n%s", buf.String())
 		}
 	})
 
 	t.Run("checker が無ければ節の中身だけ省く", func(t *testing.T) {
 		var buf bytes.Buffer
-		writePremises(&buf, *collectPremises(context.Background(), nil, envOf(map[string]string{"REX_BLOCK": "block:self"})))
+		writePremises(&buf, *collectPremises(context.Background(), nil, rexplace.Place{Block: "block:self"}))
 		if !strings.Contains(buf.String(), "点検") {
 			t.Errorf("checker 無しの説明が出ていない:\n%s", buf.String())
 		}
@@ -306,7 +305,7 @@ func TestRunDoctor_PremisesSection(t *testing.T) {
 	checker := &fakePremises{findings: []multiplexer.PremiseFinding{{OK: true, Text: "無い block は not_found"}}}
 	in := Input{
 		Client: client, Kind: sessioncontext.MultiplexerKindRex, Paths: apppath.New(t.TempDir(), "", ""),
-		Now: time.Now(), Getenv: envOf(map[string]string{"REX_BLOCK": "block:self"}),
+		Now: time.Now(), Getenv: noEnv, Place: rexplace.Place{Block: "block:self"},
 		Premises: checker,
 	}
 	var buf bytes.Buffer
@@ -353,7 +352,8 @@ func TestCollectDoctor_JSON(t *testing.T) {
 			},
 		}
 		in := doctorInput(client, sessioncontext.MultiplexerKindRex, p, fixedNow)
-		in.Getenv = envOf(map[string]string{"REX_BLOCK": "block:self", "HOME": home})
+		in.Getenv = envOf(map[string]string{"HOME": home})
+		in.Place = rexplace.Place{Block: "block:self"}
 		in.Premises = &fakePremises{findings: []multiplexer.PremiseFinding{{OK: true, Text: "rex_version: 0.0.1 (built_at x, api_revision 4)"}}}
 		rep, err := Collect(context.Background(), in)
 		if err != nil {

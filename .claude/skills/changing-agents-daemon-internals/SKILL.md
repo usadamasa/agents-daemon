@@ -41,7 +41,7 @@ description: >-
 | pane の状態の変化が daemon に遅れて届く、届かない | `rex/watch` と `rex/blockstate` (購読の cache と張り直し)。切れた理由は daemon.log |
 | `doctor` の pane 一覧が `session_id=(なし)` になる (上限を判定しない) | `sessioncontext` (`context/<sid>.json` の `multiplexer`) と `claudesessions` (登録簿での補い) |
 | `doctor` の pane 一覧に `⚠ transcript を読めない` が出る | `transcript` の package doc (置き場と entry の形) |
-| rex のセッションなのに daemon が起きない | `backend` の `ErrNoRexSession` (`REX_BLOCK` の無い起動では起こさない) |
+| rex のセッションなのに daemon が起きない | `backend` の `ErrNoRexSession` (rex の block の外の起動では起こさない。場所の読み方は `rexplace`) |
 | 依存図のノードの状態や辺がおかしい | `deps/graph` と `edge` (端点の結びつけ) の package doc、`deps/activity.go`。`agents-daemon deps` の JSON を直に読む |
 | アプリからの送達 (指示、メモを渡す) が拒まれる・届かない | `tell` と `parkhand` の package doc。`logs --events` の `tell` と `park.hand` の行 |
 | mod の通知 (辺の書き方、ファイルのメモ) が出ない、park tool が載らない | `hooks/register.ts` と各 `hooks/*.ts` の冒頭。`logs --events` の mod の出来事 |

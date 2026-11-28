@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/usadamasa/agents-daemon/internal/rexplace"
 	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
 	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
@@ -281,7 +282,7 @@ func TestIngestStatuslineWithEnv_multiplexer(t *testing.T) {
 	}{
 		{
 			name: "rex の block を書く",
-			env:  map[string]string{"REX_BLOCK": "block:01a1"},
+			env:  map[string]string{rexplace.BlockEnv: "block:01a1"},
 			want: `{"session_id":"sess-1","used_percentage":12,"observed_at":` + observed +
 				`,"multiplexer":{"kind":"rex","block":"block:01a1"}}` + "\n",
 		},
@@ -305,7 +306,7 @@ func TestIngestStatuslineWithEnv_multiplexer(t *testing.T) {
 
 func TestIngestStatusline_環境変数からmultiplexerを読む(t *testing.T) {
 	clearMultiplexerEnv(t)
-	t.Setenv("REX_BLOCK", "block:01a1")
+	t.Setenv(rexplace.BlockEnv, "block:01a1")
 	s := New(t.TempDir())
 	if err := s.IngestStatusline([]byte(inputNoRateLimits), ingestNow); err != nil {
 		t.Fatalf("IngestStatusline() error = %v", err)

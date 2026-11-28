@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/usadamasa/agents-daemon/internal/rexplace"
 	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
 )
 
@@ -51,13 +52,13 @@ type paneOps interface {
 }
 
 // newSimulateHost は kind の host を作り、使い捨て pane を割り出す基準になる自分の pane が
-// 環境から分かることを確かめる。client は backend.Connect が返した Client で、pane を作る口 (paneOps) を持つこと。
-func newSimulateHost(kind string, getenv func(string) string, client any) (simulateHost, error) {
+// place (rexplace.FromEnv) から分かることを確かめる。client は backend.Connect が返した Client で、pane を作る口 (paneOps) を持つこと。
+func newSimulateHost(kind string, place rexplace.Place, client any) (simulateHost, error) {
 	switch kind {
 	case sessioncontext.MultiplexerKindRex:
-		own := getenv("REX_BLOCK")
+		own := place.Block
 		if own == "" {
-			return nil, errors.New("REX_BLOCK のある rex の block 内で実行してください (使い捨て block を割り出す anchor になる自分の block が要ります)")
+			return nil, errors.New("rex の block の中で実行してください (使い捨て block を割り出す anchor になる自分の block が要ります)")
 		}
 		ops, ok := client.(paneOps)
 		if !ok {
@@ -84,7 +85,7 @@ type rexHost struct {
 // 突き合わせるので、printf は script 自身 (sh の builtin) が出し、その後 exec で同じ pid のまま居座る。
 const claudeProgramStatusCommand = `printf '\033]7501;state=idle:app=claude-code\a'`
 
-// SplitPane は自分の block (REX_BLOCK) の下に block を作り、shell を挟まず script を直接走らせる。
+// SplitPane は自分の block (rexplace.Place) の下に block を作り、shell を挟まず script を直接走らせる。
 // rex の format は可視領域しか返さないので、limit 風の画面が収まる高さ (40%) を取る (高さは rex が決める)。
 // script が落ちたときに画面を読めるよう、終わっても block を残す。
 func (h *rexHost) SplitPane(ctx context.Context, scriptPath, screenPath string) (string, error) {

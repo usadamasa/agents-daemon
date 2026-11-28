@@ -31,16 +31,12 @@ description: >-
 「新しいセッションで」「引き継いで」「別セッションで」「フレッシュな頭で」は、peer を立てて渡す
 作業の依頼として扱う。起動をユーザーへ差し戻さない。
 
-まず、自分が rex の中に居るかを確かめる。
-
-```sh
-printenv REX_BLOCK
-```
+まず、自分が rex の block の中に居るかを確かめる (確かめ方は `agents-daemon:setup` skill の 2 段目)。
 
 | 結果 | 次にすること |
 | ---- | ---- |
-| 値が出る | 下の「足し先の session を決める」で決めた先に、`references/rex.md` の手順で claude を起動する |
-| 空 | rex の session を作れないので、ユーザーへ起動を頼む (下の「モデルの指定」の形でコマンドを渡す) |
+| block の中 | 下の「足し先の session を決める」で決めた先に、`references/rex.md` の手順で claude を起動する |
+| 外 | rex の session を作れないので、ユーザーへ起動を頼む (下の「モデルの指定」の形でコマンドを渡す) |
 
 依頼文を書いてから起こすまでを 1 ターンでやりきる。受領は peer から後で届く。
 
@@ -67,7 +63,7 @@ spawn は `--name` を付けずに起こす。付けると Claude Code が AI �
 ### 足し先の session を決める
 
 **既定は、起こす側の session にタブとして足す。** `agents-daemon spawn` は足し先の欄が無ければ、起こす側の
-`REX_BLOCK` の居る session のタブに起こす。新しい依頼を渡すときも、渡す先が別リポジトリのときも、既定はタブ。rex の session を
+block の居る session のタブに起こす。新しい依頼を渡すときも、渡す先が別リポジトリのときも、既定はタブ。rex の session を
 またいで新しく作るのは、利用者が別の session を明示したときだけにする。
 
 | 状況 | spawn の指定 |

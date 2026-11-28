@@ -5,6 +5,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/usadamasa/agents-daemon/internal/rexplace"
 )
 
 // fakeHost は window を 1 つ持つ rex。block から session を引き、sets は付けた名前を順に持つ。
@@ -18,11 +20,11 @@ type fakeHost struct {
 	sessions      []string
 }
 
-func (h *fakeHost) ResolveSession(_ context.Context, name string) (string, error) {
+func (h *fakeHost) ResolveBlock(_ context.Context, blockID string) (string, error) {
 	if h.resolveErr != nil {
 		return "", h.resolveErr
 	}
-	if name != block {
+	if blockID != block {
 		return "", errors.New("not found")
 	}
 	return session, nil
@@ -52,6 +54,9 @@ const (
 	window  = "window:w"
 )
 
+// here は自分の場所 (block)。
+var here = rexplace.Place{Block: block}
+
 func run(t *testing.T, h *fakeHost, req Request) (Result, error) {
 	t.Helper()
 	return Runner{Host: h}.Run(context.Background(), req)
@@ -68,10 +73,10 @@ func assertSessions(t *testing.T, h *fakeHost) {
 	}
 }
 
-// label を書かなければ今の名前を読むだけで、付けない。session は block から引く (rex は新しい端末に REX_SESSION を入れない)。
+// label を書かなければ今の名前を読むだけで、付けない。session は自分の block から引く。
 func TestRun_Get(t *testing.T) {
 	h := &fakeHost{window: window, label: "release-restart-verify"}
-	got, err := run(t, h, Request{RexBlock: block})
+	got, err := run(t, h, Request{Place: here})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
@@ -84,7 +89,7 @@ func TestRun_Get(t *testing.T) {
 // label を書けば、今の名前が人の付けたものでも付け直す。
 func TestRun_Rename(t *testing.T) {
 	h := &fakeHost{window: window, label: "my-own-name"}
-	got, err := run(t, h, Request{RexBlock: block, Label: "tab-label-sync"})
+	got, err := run(t, h, Request{Place: here, Label: "tab-label-sync"})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
@@ -97,7 +102,7 @@ func TestRun_Rename(t *testing.T) {
 // 付ける名前が今と同じなら付けない。
 func TestRun_Unchanged(t *testing.T) {
 	h := &fakeHost{window: window, label: "tab-label-sync"}
-	got, err := run(t, h, Request{RexBlock: block, Label: "tab-label-sync"})
+	got, err := run(t, h, Request{Place: here, Label: "tab-label-sync"})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
@@ -112,7 +117,7 @@ func TestRun_InvalidLabel(t *testing.T) {
 		" 前に空白", "後ろに空白 ", "改行\nを含む", "タブ\tを含む", "制御\x07文字", strings.Repeat("あ", 65),
 	} {
 		h := &fakeHost{window: window, label: "old-name"}
-		if _, err := run(t, h, Request{RexBlock: block, Label: label}); err == nil {
+		if _, err := run(t, h, Request{Place: here, Label: label}); err == nil {
 			t.Errorf("Run(label=%q) error = nil", label)
 		}
 		if len(h.sets) != 0 {
@@ -121,22 +126,22 @@ func TestRun_InvalidLabel(t *testing.T) {
 	}
 	for _, label := range []string{"タブ名の追従", "Go のソートの違い", "fix-login-redirect", "Python の dataclass の機能の説明", "Go の slices.Sort と sort.Slice の違い", strings.Repeat("あ", 64)} {
 		h := &fakeHost{window: window, label: "old-name"}
-		if _, err := run(t, h, Request{RexBlock: block, Label: label}); err != nil {
+		if _, err := run(t, h, Request{Place: here, Label: label}); err != nil {
 			t.Errorf("Run(label=%q) error = %v", label, err)
 		}
 	}
 }
 
-// 置き場が欠けた依頼と、session や window を引けない・付けられない失敗は error にする。
+// 置き場が欠けた依頼 (rex の block の外) と、session や window を引けない・付けられない失敗は error にする。
 func TestRun_Failures(t *testing.T) {
 	for name, tt := range map[string]struct {
 		h   *fakeHost
 		req Request
 	}{
-		"block 無し":      {&fakeHost{window: window}, Request{}},
-		"session を引けない": {&fakeHost{window: window, resolveErr: errors.New("socket")}, Request{RexBlock: block}},
-		"window を引けない":  {&fakeHost{missing: true}, Request{RexBlock: block}},
-		"付けられない":        {&fakeHost{window: window, label: "old-name", setErr: errors.New("boom")}, Request{RexBlock: block, Label: "new-name"}},
+		"rex の block の外": {&fakeHost{window: window}, Request{}},
+		"session を引けない":  {&fakeHost{window: window, resolveErr: errors.New("socket")}, Request{Place: here}},
+		"window を引けない":   {&fakeHost{missing: true}, Request{Place: here}},
+		"付けられない":         {&fakeHost{window: window, label: "old-name", setErr: errors.New("boom")}, Request{Place: here, Label: "new-name"}},
 	} {
 		if _, err := run(t, tt.h, tt.req); err == nil {
 			t.Errorf("%s: error = nil", name)

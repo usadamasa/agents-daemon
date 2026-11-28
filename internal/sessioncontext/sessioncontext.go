@@ -46,15 +46,6 @@ func (r MultiplexerRef) id() string {
 	return r.Block
 }
 
-// MultiplexerRefFromEnv は statusline の command が Claude Code から継承した環境変数から場所を読む。
-// 空の値は無いものとして扱う。
-func MultiplexerRefFromEnv(getenv func(string) string) (MultiplexerRef, bool) {
-	if block := getenv("REX_BLOCK"); block != "" {
-		return MultiplexerRef{Kind: MultiplexerKindRex, Block: block}, true
-	}
-	return MultiplexerRef{}, false
-}
-
 // Record は context/<session_id>.json に書く 1 回の観測。
 type Record struct {
 	SessionID string

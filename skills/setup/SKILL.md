@@ -40,14 +40,17 @@ command -v rex go jq
 
 ## 2. rex の到達性と、このセッションの block
 
-先に rex の中かを確かめる。
+先に rex の block の中かを確かめる。rex の場所の確かめ方はここ 1 箇所に置き、ほかの skill と README はここを指す。
 
 ```sh
-printenv REX_BLOCK
+rex --autostart=false whoami --json | jq -r '.block_id // empty'
 ```
 
-値が出なければ NG。rex の外 (素のターミナル、IDE) で動いていて、daemon は `REX_BLOCK` の無いセッションの
-SessionStart では起きない (statusline は動く)。rex の block の中で Claude Code を起動し直してもらう。
+<!-- rex-premise: preview.37 cli whoami は rex の block の中でだけ block_id を返す (2026-11-28 実測) -->
+自分の block の ID が出れば OK。daemon と spawn と tab-label も、
+Claude Code が継いだ同じ環境から rex の場所を読む。コマンドが失敗したら block の中かは決まらず、server に
+届いていない。下の到達性の手順へ進む。成功して空なら NG。rex の外 (素のターミナル、IDE) で動いていて、daemon はその SessionStart では起きない (statusline は動く)。
+rex の block の中で Claude Code を起動し直してもらう。
 到達性と sandbox の socket 許可の手順は [rex.md](references/rex.md) にあり、`Read` で開いて従う。
 
 ### このセッションの block と session_id の対応
@@ -58,11 +61,11 @@ daemon は statusline (バイナリの `statusline` か `ingest-statusline`) が
 ```sh
 sid=$("${CLAUDE_PLUGIN_ROOT}/scripts/get-session-id.sh")
 state="${XDG_STATE_HOME:-$HOME/.local/state}/agents-daemon"
-printf 'REX_BLOCK=%s\n' "${REX_BLOCK:-}"
+rex --autostart=false whoami --json | jq -r '.block_id // empty'
 jq -c '.multiplexer' "$state/context/$sid.json"
 ```
 
-- `multiplexer.block` が `REX_BLOCK` と一致すれば OK。
+- `multiplexer.block` が自分の block の ID と一致すれば OK。
 - `context/<sid>.json` が無いなら、この段ではなく 3 段目の NG (statusline の配線) として扱う。
 - ファイルはあるのに `multiplexer` が `null` なら、statusline が呼ぶバイナリが `multiplexer` を書く前の版。
   4 段目のバイナリを建て直せば次の描画から書かれる。
@@ -217,7 +220,7 @@ rex の外 (`doctor` がこの行まで進まない) では、次のコマンド
 agents-daemon setup
 
 - コマンド: rex / go / jq … OK | NG (<無いもの>)
-- rex: <REX_BLOCK あり | 無し>、server <running | 停止>
+- rex: <block の中 | 外>、server <running | 停止>
 - このセッションの block: <block_id | 見つからない | 記録なし (理由)>
 - statusline: context <OK (n 秒前) | NG>、rate-limits <OK | 無し (理由)>
 - バイナリ: <version | NG (build.log の要点)>

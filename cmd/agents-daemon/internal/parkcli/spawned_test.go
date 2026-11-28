@@ -22,32 +22,32 @@ func runSpawnedSession(t *testing.T, args ...string) (string, error) {
 	return out.String(), err
 }
 
-// fakeResolver は block か session の名指しを session の ID に引く。
+// fakeResolver は block をその block の居る session の ID に引く。
 type fakeResolver struct {
 	sessions map[string]string
 	err      error
 }
 
-func (f fakeResolver) ResolveSession(_ context.Context, name string) (string, error) {
+func (f fakeResolver) ResolveBlock(_ context.Context, blockID string) (string, error) {
 	if f.err != nil {
 		return "", f.err
 	}
-	id, ok := f.sessions[name]
+	id, ok := f.sessions[blockID]
 	if !ok {
 		return "", errors.New("not found")
 	}
 	return id, nil
 }
 
-// `spawned-session mark <block|session>` は名指しを session の ID に引いてから印を書き、書いた印を返す。spawn の包みは
-// 自分の REX_BLOCK を渡す (rex は新しい端末に REX_SESSION を入れない)。reaper と close は session の ID で印を引く (#557)。
+// `spawned-session mark <block>` は block の居る session の ID を引いてから印を書き、書いた印を返す。spawn の包みは
+// 自分の block を渡す。reaper と close は session の ID で印を引く (#557)。
 func TestMarkSpawnedSession(t *testing.T) {
 	const (
 		block   = "block:01a1ca60-c767-7aaa-857b-7e167825e669"
 		session = "session:01a1ca60-c767-7aaa-857b-7e167825e668"
 	)
 	store := spawnedsession.New(t.TempDir())
-	got, err := markSpawnedSession(context.Background(), store, fakeResolver{sessions: map[string]string{block: session}}.ResolveSession, block)
+	got, err := markSpawnedSession(context.Background(), store, fakeResolver{sessions: map[string]string{block: session}}.ResolveBlock, block)
 	if err != nil {
 		t.Fatalf("markSpawnedSession() error = %v", err)
 	}
@@ -66,7 +66,7 @@ func TestMarkSpawnedSession(t *testing.T) {
 // 引けなければ印を書かずに error にする (block の名前のまま印を書くと、reaper と close が当たらない)。
 func TestMarkSpawnedSession_ResolveFails(t *testing.T) {
 	store := spawnedsession.New(t.TempDir())
-	if _, err := markSpawnedSession(context.Background(), store, fakeResolver{err: errors.New("socket")}.ResolveSession, "block:x"); err == nil {
+	if _, err := markSpawnedSession(context.Background(), store, fakeResolver{err: errors.New("socket")}.ResolveBlock, "block:x"); err == nil {
 		t.Fatal("markSpawnedSession() error = nil, want error")
 	}
 	if recs, err := store.List(); err != nil || len(recs) != 0 {

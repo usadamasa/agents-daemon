@@ -250,10 +250,11 @@ func (c *execClient) CheckPremises(ctx context.Context, blockID string) []multip
 	return premise.Check(ctx, c.rex, rexBinary, blockID)
 }
 
-// ResolveSession は session の ID か label、block の ID から session の ID を引く (tablabel.Host と spawned-session mark)。
-// block の ID はその block の居る session を指す。
-func (c *execClient) ResolveSession(ctx context.Context, name string) (string, error) {
-	return c.rex.ResolveSession(ctx, name)
+// ResolveBlock は block の ID からその block の居る session の ID を引く (spawn.Host、tablabel.Host、spawned-session mark)。
+// 自分の場所 (rexplace.Place) から session を引く操作はこれ 1 つにする。利用者が名指す session (ID か label) は
+// NewWindow が ResolveSession で引く。
+func (c *execClient) ResolveBlock(ctx context.Context, blockID string) (string, error) {
+	return c.rex.ResolveBlock(ctx, blockID)
 }
 
 // Reachable は server.status で rex server の生死を確かめる。

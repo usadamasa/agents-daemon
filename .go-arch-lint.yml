@@ -32,6 +32,7 @@ components:
       - "internal/multiplexer"
       - "internal/multiplexer/multiplexerfake"
       - "internal/sessioncontext"
+      - "internal/rexplace"
       - "internal/ratelimit"
       - "internal/turnfailure"
       - "internal/quotaresume"

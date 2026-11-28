@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/usadamasa/agents-daemon/internal/rexplace"
 	"github.com/usadamasa/agents-daemon/tools/release-verify/releaseverify"
 )
 
@@ -30,9 +31,8 @@ func newFixture(t *testing.T) *fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 呼び手の env に載っている rex の変数が、隔離の env へ漏れないことを確かめる。
-	t.Setenv("REX_SESSION", "session:caller")
-	t.Setenv("REX_BLOCK", "block:caller")
+	// 呼び手の env に載っている rex の場所が、隔離の env へ漏れないことを確かめる。
+	t.Setenv(rexplace.BlockEnv, "block:caller")
 
 	repo := filepath.Join(tmp, "repo")
 	stub, err := os.ReadFile(filepath.Join("testdata", "fakedaemon", "main.go.txt"))
@@ -334,15 +334,15 @@ func TestCheck_DaemonRunsDryAgainstRealRexAndClaude(t *testing.T) {
 		"XDG_STATE_HOME=" + filepath.Join(home, ".local", "state"),
 		"CLAUDE_CONFIG_DIR=" + f.cfg.SourceClaude,
 		"REX_SERVER=unix://" + f.cfg.RexSocket,
-		"REX_BLOCK=block:release-verify",
+		rexplace.BlockEnv + "=block:release-verify",
 	} {
 		if !slices.Contains(c.Env, kv) {
 			t.Errorf("daemon の env に %q が無い: %q", kv, c.Env)
 		}
 	}
 	for _, kv := range c.Env {
-		if strings.Contains(kv, "caller") || strings.HasPrefix(kv, "REX_SESSION=") {
-			t.Errorf("呼び手の rex の変数か、rex がもう入れない REX_SESSION が入った: %q", kv)
+		if strings.Contains(kv, "caller") {
+			t.Errorf("呼び手の rex の場所が入った: %q", kv)
 		}
 	}
 }

@@ -174,7 +174,7 @@ export type EdgeTarget = {
   cwd?: string
 }
 
-// spawn の stdin。prompt (か prompt_file) を最初のターンにした Claude Code のセッションを、repo を cwd にして rex に起こし、SpawnResult を出す。起こす先は session があればその rex の session のタブ、new_session なら新しい rex の session、どちらも無ければ起こす側の block (REX_BLOCK) の居る rex の session のタブ。REX_BLOCK も無ければ新しい rex の session
+// spawn の stdin。prompt (か prompt_file) を最初のターンにした Claude Code のセッションを、repo を cwd にして rex に起こし、SpawnResult を出す。起こす先は session があればその rex の session のタブ、new_session なら新しい rex の session、どちらも無ければ起こす側の rex の block の居る session のタブ。rex の block の外なら新しい rex の session
 export type SpawnRequest = {
   // 新しいセッションの cwd (絶対パス)
   repo: string
@@ -196,10 +196,8 @@ export type SpawnRequest = {
   label?: string
 }
 
-// tab-label の stdin。rex_block の居る rex の window (タブ) の名前を読み、label があれば付け直して TabLabelResult を出す。session は rex_block から引き、session の名前には触れない
+// tab-label の stdin。tab-label を起こしたプロセスの居る rex の window (タブ) の名前を読み、label があれば付け直して TabLabelResult を出す。場所はバイナリが自分の環境から読み、session の名前には触れない
 export type TabLabelRequest = {
-  // 呼び手の pane の rex の block の ID (REX_BLOCK)
-  rex_block: string
   // 付け直す名前。1 行で 64 文字まで、前後の空白と制御文字を付けない。省くと読むだけ
   label?: string
 }

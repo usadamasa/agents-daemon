@@ -26,6 +26,10 @@ func (h *host) NewSession(_ context.Context, _, cwd string, argv []string) (mult
 	return multiplexer.Placement{SessionID: "session:1", WindowID: "window:1", PaneID: "block:1"}, nil
 }
 
+func (h *host) ResolveBlock(context.Context, string) (string, error) {
+	panic("resume は起こす側の block を使わない")
+}
+
 func (h *host) NewWindow(context.Context, string, string, string, []string) (multiplexer.Placement, error) {
 	panic("resume はタブを足さない")
 }

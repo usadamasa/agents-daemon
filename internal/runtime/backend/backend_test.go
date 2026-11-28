@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/usadamasa/agents-daemon/internal/rexplace"
 	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
 )
 
@@ -14,11 +15,9 @@ func TestDetect(t *testing.T) {
 		want    string
 		wantErr error
 	}{
-		// rex は preview.23 から新しい端末に REX_SESSION を入れず、REX_BLOCK だけを入れる。
-		{"REX_BLOCK があれば rex", map[string]string{"REX_BLOCK": "block:01a1"}, sessioncontext.MultiplexerKindRex, nil},
-		{"REX_BLOCK が空なら rex の外", map[string]string{"REX_BLOCK": ""}, "", ErrNoRexSession},
-		{"REX_SESSION だけでは rex の外", map[string]string{"REX_SESSION": "session:01a1"}, "", ErrNoRexSession},
-		{"何も無ければ rex の外", nil, "", ErrNoRexSession},
+		// 環境の読み方 (空の値、rex が入れなくなった変数) は rexplace のテストが持つ。
+		{"rex の block の中なら rex", map[string]string{rexplace.BlockEnv: "block:01a1"}, sessioncontext.MultiplexerKindRex, nil},
+		{"rex の block の外なら ErrNoRexSession", nil, "", ErrNoRexSession},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -33,7 +32,7 @@ func TestDetect(t *testing.T) {
 func TestConnect(t *testing.T) {
 	contexts := sessioncontext.New(t.TempDir())
 	t.Run("rex の中なら rex の client", func(t *testing.T) {
-		kind, c, err := Connect(func(k string) string { return map[string]string{"REX_BLOCK": "block:01a1"}[k] }, contexts)
+		kind, c, err := Connect(func(k string) string { return map[string]string{rexplace.BlockEnv: "block:01a1"}[k] }, contexts)
 		if err != nil || c == nil || kind != sessioncontext.MultiplexerKindRex {
 			t.Errorf("Connect() = %q, %v, %v; want rex, client, nil", kind, c, err)
 		}

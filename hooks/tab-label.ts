@@ -7,8 +7,8 @@ import type { TabLabelResult } from '../types'
 
 // #722: 共有の rex session にタブとして起きたセッション (spawn のタブ、restarting-session の fork) で、タブ (window) の名前を
 // 作業の内容に追わせる。session の名前には触れない (ほかのタブと共有する)。
-// - 対象はタブの包み (wrap) が AGENTS_DAEMON_SHARED_REX_SESSION を渡したセッションだけ。置き場は REX_BLOCK (session は
-//   tab-label が block から引く。rex は新しい端末に REX_SESSION を入れない)
+// - 対象はタブの包み (wrap) が AGENTS_DAEMON_SHARED_REX_SESSION を渡したセッションだけ。rex の場所は mod が持たず、
+//   tab-label が Claude Code から継いだ自分の環境から読む (rexplace)
 // - main のターンが answer で終わったら数え、最初の 1 ターンの後に 1 回、以後 CHECK_EVERY ターンごとに問う
 // - 問うたびに今の名前を tab-label で読み直し、それを基準に $.model.fork で「合っているか、合わないなら新しい名前」を問う。
 //   人が付け直した名前も基準にし、合わなくなれば付け直す (利用者の選択)
@@ -45,12 +45,9 @@ export async function countTabLabel($: EngineInterface) {
   await update($, pending, n => n + 1)
 }
 
-// place は共有のタブの置き場。対象でなければ undefined。
-async function place($: EngineInterface): Promise<{ rex_block: string } | undefined> {
-  // 印はタブの包み (wrap の sharedSessionEnv) が渡す。
-  const [shared, block] = await Promise.all([$.env.get('AGENTS_DAEMON_SHARED_REX_SESSION'), $.env.get('REX_BLOCK')])
-  if (shared !== '1' || !block) return undefined
-  return { rex_block: block }
+// sharedTab は共有のタブで起きたセッションか。印はタブの包み (wrap の sharedSessionEnv) が渡す。
+async function sharedTab($: EngineInterface): Promise<boolean> {
+  return (await $.env.get('AGENTS_DAEMON_SHARED_REX_SESSION')) === '1'
 }
 
 // tick は数が足りていれば、今の名前を読み、fork で問い、合わなければ付け直す。失敗はログに残すだけでセッションを止めない。
@@ -58,13 +55,12 @@ async function tick($: EngineInterface) {
   if (inflight) return
   const need = (await read($, checked)) ? CHECK_EVERY : 1
   if ((await read($, pending)) < need) return
-  const where = await place($)
-  if (where === undefined) return
+  if (!(await sharedTab($))) return
   inflight = true
   try {
     await update($, pending, () => 0)
     await update($, checked, () => true)
-    const current = await tabLabel($, where)
+    const current = await tabLabel($, {})
     const reply = await $.model.fork({ prompt: prompt(current.label) })
     if (!reply.isAnswered) {
       await logEvent($, 'mod.tab.failed', { reason: reply.reason })
@@ -72,7 +68,7 @@ async function tick($: EngineInterface) {
     }
     const label = firstLine(reply.text)
     if (label === '' || label.toUpperCase() === 'SAME') return
-    const set = await tabLabel($, { ...where, label })
+    const set = await tabLabel($, { label })
     if (set.status === 'renamed') await logEvent($, 'mod.tab.renamed', {})
   } catch (err) {
     await logEvent($, 'mod.tab.failed', { reason: String(err) })
@@ -82,7 +78,7 @@ async function tick($: EngineInterface) {
 }
 
 // tabLabel は tab-label を呼ぶ。失敗は投げる。
-async function tabLabel($: EngineInterface, req: { rex_block: string; label?: string }): Promise<TabLabelResult> {
+async function tabLabel($: EngineInterface, req: { label?: string }): Promise<TabLabelResult> {
   const { exitCode, stdout, stderr } = await runDaemon($, 'tab-label', req)
   if (exitCode !== 0) throw new Error(stderr.trim() || `tab-label: exit ${exitCode}`)
   return JSON.parse(stdout) as TabLabelResult

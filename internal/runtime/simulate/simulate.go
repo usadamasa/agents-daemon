@@ -20,6 +20,7 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
+	"github.com/usadamasa/agents-daemon/internal/rexplace"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend"
 	"github.com/usadamasa/agents-daemon/internal/runtime/config"
 	"github.com/usadamasa/agents-daemon/internal/runtime/detect"
@@ -114,7 +115,7 @@ type Sent struct {
 }
 
 // Run は simulate の本体。使い捨て pane の作成から後始末まで一貫して行う。
-// backend は daemon と同じ規則 (REX_BLOCK があること) で選ぶ。
+// backend は daemon と同じ規則 (rex の block の中であること) で選ぶ。
 func Run(ctx context.Context, w io.Writer, p apppath.Paths, opts Options) (res Result, err error) {
 	res = Result{Send: opts.Send, Ticks: []TickReport{}}
 	kind, execClient, err := backend.Connect(os.Getenv, sessioncontext.New(p.StateDir()))
@@ -123,7 +124,8 @@ func Run(ctx context.Context, w io.Writer, p apppath.Paths, opts Options) (res R
 	}
 	defer backend.Close(execClient)
 	res.Backend = string(kind)
-	host, err := newSimulateHost(kind, os.Getenv, execClient)
+	place, _ := rexplace.FromEnv(os.Getenv)
+	host, err := newSimulateHost(kind, place, execClient)
 	if err != nil {
 		return res, err
 	}

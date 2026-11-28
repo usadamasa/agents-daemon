@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/ratelimit"
+	"github.com/usadamasa/agents-daemon/internal/rexplace"
 	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
 	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
@@ -55,9 +56,8 @@ func (s Store) IngestStatusline(input []byte, now time.Time) error {
 }
 
 // ingestStatuslineWithEnv は IngestStatusline の本体で、環境変数を getenv から読む。
-// statusline の command は Claude Code の子プロセスなので REX_BLOCK を
-// 継承しており、その場所を context/<session_id>.json の multiplexer に書く
-// (sessioncontext.MultiplexerRefFromEnv)。
+// statusline の command は Claude Code の子プロセスなので rex の場所を
+// 継承しており、その場所を context/<session_id>.json の multiplexer に書く (rexplace.FromEnv)。
 func (s Store) ingestStatuslineWithEnv(input []byte, getenv func(string) string, now time.Time) error {
 	var in statuslineInput
 	if err := json.Unmarshal(input, &in); err != nil {
@@ -77,8 +77,8 @@ func (s Store) ingestStatuslineWithEnv(input []byte, getenv func(string) string,
 		UsedPercentage: roundPercent(in.ContextWindow.UsedPercentage),
 		ObservedAt:     now,
 	}
-	if ref, ok := sessioncontext.MultiplexerRefFromEnv(getenv); ok {
-		rec.Multiplexer = &ref
+	if place, ok := rexplace.FromEnv(getenv); ok {
+		rec.Multiplexer = &sessioncontext.MultiplexerRef{Kind: sessioncontext.MultiplexerKindRex, Block: place.Block}
 	}
 	if err := s.Context.Write(rec); err != nil {
 		return err

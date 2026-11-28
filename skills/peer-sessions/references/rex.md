@@ -39,7 +39,7 @@ help と同じ役。docs と feedback の代わりにはならない。
 | ---- | ---- | ---- |
 | session | 1 つの作業空間。`rex ls` で一覧 | `rex session new` |
 | window | session 内のタブ。1 つ以上の block を持つ | `rex run`、`rex window new` |
-| block | 1 つのターミナル (ペイン)。`REX_BLOCK` が自分 | `rex split`、`rex block new` |
+| block | 1 つのターミナル (ペイン)。自分の block は `rex whoami --json` の `block_id` | `rex split`、`rex block new` |
 
 ターゲットは完全 ID (`block:01a1…`)、`rex block ls` が出す末尾 6 桁、`--label` で付けた名前の
 どれでも通る。作ったブロックには `--label` を付け、以後はラベルで指す。
@@ -56,7 +56,7 @@ peer の session は、起こしたときに控えた `rex_session_id` で指す
 - 背景の作業は `--focus=false` を付ける。`run` も `split` も既定ではフォーカスを奪う。
 - `send` `send-key` `capture` `wait` `block call` には `-b <target>` を明示する。省くと「フォーカス中の
   ブロック」になり、それはユーザーが見ているブロックかもしれない。`capture` と `zoom` と `block call` は
-  `REX_BLOCK` を既定にするが、`send` はそうとは書かれていない。block が 1 つの session は `-s <session>` だけで指せる。
+  自分の block を既定にするが、`send` はそうとは書かれていない。block が 1 つの session は `-s <session>` だけで指せる。
 - `--json` を付けて ID を結果から読む。`split` と `run` は `block_ids[0]` に新しいブロックを返す。
   `session new` は `session_id` と `initial_windows[0].window_id`、`initial_windows[0].block_ids[0]` を返す。
 - `split` は同じ window に並べ、`run` は新しい window を作る。別の Claude セッションは `rex` で直に起こさず、
@@ -90,7 +90,7 @@ uuidgen | tr A-Z a-z
 | `label` | タブ (新しい session なら session) の名前を作業名にする | repo の basename |
 | `session_id` | 起こす前に依存の辺を書くとき (SKILL.md「依存の辺を書く」) | spawn が作り、結果で返す |
 | `model` | 定型の横展開で軽いモデルにするとき (SKILL.md「モデルの指定」) | settings の `CLAUDE_CODE_SUBAGENT_MODEL` |
-| `session` | 続きの作業を、控えた `rex_session_id` の session のタブに足すとき | 起こす側の block (`REX_BLOCK`) の居る session のタブ |
+| `session` | 続きの作業を、控えた `rex_session_id` の session のタブに足すとき | 起こす側の block の居る session のタブ |
 | `new_session` | 利用者が session の分離を明示したとき (`true`。`session` とは併用しない) | 同上 |
 
 足し先の選び方は SKILL.md「足し先の session を決める」。

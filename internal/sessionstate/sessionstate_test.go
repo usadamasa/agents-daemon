@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/usadamasa/agents-daemon/internal/rexplace"
 	"github.com/usadamasa/agents-daemon/internal/statefile"
 )
 
@@ -38,7 +39,7 @@ func envOf(m map[string]string) func(string) string {
 // rex の中で go test を打つと継承した値が context file に混ざるため。
 func clearMultiplexerEnv(t *testing.T) {
 	t.Helper()
-	t.Setenv("REX_BLOCK", "")
+	t.Setenv(rexplace.BlockEnv, "")
 }
 
 func mustPath(t *testing.T, s Store, sessionID string) string {

@@ -1,5 +1,12 @@
 # Changelog
 
+## [2026.1128.3](https://github.com/usadamasa/agents-daemon/compare/2026.1128.2...2026.1128.3) - 2026-11-28
+
+### Features
+- agent-tasks からセッションの pane を Rex.app で開けるようにする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/757
+### Bug Fixes
+- 依存図: 同じノードから行き先と逆の順に中の点が並ぶ辺を、ノードの下で交わらせない by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/758
+
 ## [2026.1128.2](https://github.com/usadamasa/agents-daemon/compare/2026.1128.1...2026.1128.2) - 2026-11-28
 
 ### Bug Fixes

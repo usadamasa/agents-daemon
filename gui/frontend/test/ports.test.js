@@ -106,6 +106,66 @@ test("spreadPorts は出ていく辺の port を、離れていく線の並び�
   assert.deepEqual(got[0].points.slice(2), edges[0].points.slice(2));
 });
 
+// polylineCrossings は辺の点列の全区間どうしが交わる辺の組を返す。
+function polylineCrossings(edges) {
+  const pairs = [];
+  for (let i = 0; i < edges.length; i++) {
+    for (let j = i + 1; j < edges.length; j++) {
+      const p = edges[i].points;
+      const q = edges[j].points;
+      let hit = false;
+      for (let a = 0; a + 1 < p.length; a++) {
+        for (let b = 0; b + 1 < q.length; b++) hit ||= crosses(p[a], p[a + 1], q[b], q[b + 1]);
+      }
+      if (hit) pairs.push(`${edges[i].before}>${edges[i].after} × ${edges[j].before}>${edges[j].after}`);
+    }
+  }
+  return pairs;
+}
+
+// mirror は点列と中心の x を axis で折り返す。
+const mirror = (axis) => (p) => ({ ...p, x: 2 * axis - p.x });
+
+test("spreadPorts は 1 段下の中の点が行き先と逆の順に並ぶ辺も、その先の進路の順に port を割り当て、交わらせない (#756)", () => {
+  // #756 を app.js の dagre で描いた点列。s1 の 2 本の中の点 (y=184) は、左の pr へ行く辺が右 (522)、右の task へ行く辺が
+  // 左 (502) に並ぶ。中の点の順に port を割り当てると、2 本が s1 のすぐ下で交わる。
+  const pos = new Map([
+    ["s1", { x: 512, y: 104 }],
+    ["s2", { x: 1024, y: 104 }],
+    ["pr", { x: 184, y: 264 }],
+    ["task", { x: 629, y: 264 }],
+    ["pr42", { x: 1352, y: 264 }],
+  ]);
+  const path = (from, mid, to) => [
+    { x: from, y: 140 },
+    { x: from, y: 162 },
+    { x: mid, y: 184 },
+    { x: to, y: 206 },
+    { x: to, y: 228 },
+  ];
+  const edges = [
+    { before: "s1", after: "pr", points: path(512, 522, 184) },
+    { before: "s1", after: "task", points: path(512, 502, 629) },
+    { before: "s2", after: "task", points: path(1024, 793, 629) },
+    { before: "s2", after: "pr42", points: path(1024, 1091, 1352) },
+  ];
+  for (const [name, axis] of [
+    ["そのまま", null],
+    ["左右を反転", 800],
+  ]) {
+    const flip = axis === null ? (p) => p : mirror(axis);
+    const posIn = new Map([...pos].map(([k, c]) => [k, flip(c)]));
+    const edgesIn = edges.map((e) => ({ ...e, points: e.points.map(flip) }));
+    const got = spreadPorts(edgesIn, posIn, W, H);
+    assert.deepEqual(polylineCrossings(got), [], name);
+    // s1 の port は、左の行き先へ向かう辺が左を取る。
+    const s1 = posIn.get("s1").x;
+    const toPr = got[0].points[0].x;
+    const toTask = got[1].points[0].x;
+    assert.ok(axis === null ? toPr < toTask : toPr > toTask, `${name}: pr=${toPr} task=${toTask} (s1=${s1})`);
+  }
+});
+
 test("spreadPorts は 1 本だけの端を上辺・下辺の中央に置き、元の辺の points を書き換えない", () => {
   const pos = new Map([
     ["S", { x: 100, y: 0 }],

@@ -43,11 +43,13 @@ const state = {
   // selected は選んだオブジェクト。{ type: "node", key } か { type: "memo", id }。
   selected: null,
   // picker はポップアップの中で開いている選択。"blocker" (先に済ませるタスク)、"instruct" (指示の文面)、"hand" (タスクを渡す先)、
-  // "start" (着手の補足)、"task" / "issue" (メモを渡す先)。
+  // "start" (着手の補足)、"task" / "issue" (メモを渡す先)、"rename" (題の欄)。
   picker: null,
-  // note は補足欄、draft は指示の文面の下書き。組み直しても消えないようにここに持つ。
+  // note は補足欄、draft は指示の文面、titleDraft は題の欄の下書き。組み直しても消えないようにここに持つ。
+  // titleDraft は題の欄を閉じたら閉じ方によらず捨てる (setPicker)。
   note: "",
   draft: "",
+  titleDraft: "",
   // refusal は送達が拒まれた理由。文面の下に出し、文面は残す。
   refusal: "",
   // moreRepos は起こす repo の候補を全部出しているか。
@@ -78,7 +80,7 @@ async function act(run) {
   state.notice = typeof result === "string" ? result : result.message;
   state.noticeUntil = Date.now() + NOTICE_MS;
   if (ok) {
-    state.picker = null;
+    setPicker(null);
     state.note = "";
     state.draft = "";
   } else {
@@ -182,7 +184,7 @@ function schedule() {
 
 function select(next) {
   state.selected = next;
-  state.picker = null;
+  setPicker(null);
   state.note = "";
   state.moreRepos = false;
   render();
@@ -1035,9 +1037,9 @@ function editTitle(title, n) {
   title.setAttribute("role", "textbox");
   title.setAttribute("aria-label", "Work title");
   title.spellcheck = false;
-  title.textContent = state.draft === "" ? n.title : state.draft;
+  title.textContent = state.titleDraft === "" ? n.title : state.titleDraft;
   title.addEventListener("input", () => {
-    state.draft = title.textContent;
+    state.titleDraft = title.textContent;
   });
   // 日本語の変換を確定する Enter は題の確定にしない。WebKit は isComposing の無い keydown を送る (keyCode は 229 の
   // ことも、compositionend の後の 13 のこともある) ので、compositionend から次の keyup までの Enter も変換の確定とみなす。
@@ -1060,8 +1062,6 @@ function editTitle(title, n) {
       act(() => rename(n, subject));
     } else if (e.key === "Escape") {
       e.stopPropagation();
-      // 打った字は捨てる。残すと指示の欄 (同じ draft を読む) に持ち越す。
-      state.draft = "";
       toggle("rename")();
     }
   });
@@ -1118,9 +1118,15 @@ function titleOf(n) {
   return title;
 }
 
+// setPicker は開いている選択を替える。題の欄 (rename) から離れたら題の下書きを捨てる。
+function setPicker(name) {
+  state.picker = name;
+  if (name !== "rename") state.titleDraft = "";
+}
+
 function toggle(name) {
   return () => {
-    state.picker = state.picker === name ? null : name;
+    setPicker(state.picker === name ? null : name);
     state.refusal = "";
     renderPopup();
   };
@@ -1648,9 +1654,10 @@ const views = {
   selected: { get: () => state.selected, set: (v) => { state.selected = v; } },
   showCompleted: { get: () => state.showCompleted, set: (v) => { state.showCompleted = v === true; } },
   repoFilter: { get: () => state.repoFilter, set: (v) => { state.repoFilter = String(v); } },
-  // 開いていた選択と、打ちかけの指示と補足。
+  // 開いていた選択と、打ちかけの指示・題・補足。
   picker: { get: () => state.picker, set: (v) => { state.picker = typeof v === "string" ? v : null; } },
   draft: { get: () => state.draft, set: (v) => { state.draft = String(v); } },
+  titleDraft: { get: () => state.titleDraft, set: (v) => { state.titleDraft = String(v); } },
   note: { get: () => state.note, set: (v) => { state.note = String(v); } },
   zoom: { get: () => zoom, set: (v) => { zoom = clampZoom(Number(v) || 1); renderZoom(); } },
   // 全体表示がオンなら拡大率と位置は描き直しの fitAll が決めるので、図のスクロールは戻さない。戻すのは描いた後

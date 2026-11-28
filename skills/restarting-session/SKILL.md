@@ -14,7 +14,7 @@ description: >-
 
 ## 前提
 
-`printenv REX_BLOCK` が値を出すこと。空なら rex のタブを操作できないので、利用者へ次のコマンドを渡して
+rex の block の中で動いていること (確かめ方は `agents-daemon:setup` skill の 2 段目)。外なら rex のタブを操作できないので、利用者へ次のコマンドを渡して
 元の端末を閉じてもらう (`<id>` は `printenv CLAUDE_CODE_SESSION_ID` の値)。
 
 ```sh

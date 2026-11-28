@@ -24,7 +24,7 @@ agents-daemon daemon --foreground --dry-run  # このプロセスで回し、送
 
 `inspect` は結論ではなく判断過程 (読んだ entry、分類、`plan`、起床時刻の出所、通知欄の判定) を、daemon と同じ関数で
 出す。`--file` にはセッションが無いので `--session` で明示する。`inspect --pane` の pane ID は block ID。
-`simulate` は自分の block を割った使い捨ての block だけを触り、`REX_BLOCK` が要る。
+`simulate` は自分の block を割った使い捨ての block だけを触り、rex の block の中で打つ。
 中身は `verify` と `simulate` の package doc。
 
 `doctor` の「rex の前提」の節は、rex を上げた直後に全 pane が `unknown` になったときの最初の手がかりになる

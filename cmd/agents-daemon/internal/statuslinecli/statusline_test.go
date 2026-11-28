@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/usadamasa/agents-daemon/internal/rexplace"
 )
 
 // runStatuslineCmd は statusline を stdin 付きで実行する。HOME と XDG_STATE_HOME は一時ディレクトリへ
@@ -26,7 +28,7 @@ func runStatuslineCmdIn(t *testing.T, root, configDir, stdin, columns, spendCap 
 	t.Setenv("XDG_STATE_HOME", root)
 	t.Setenv("COLUMNS", columns)
 	t.Setenv("CLAUDE_STATUSLINE_SPEND_CAP", spendCap)
-	t.Setenv("REX_BLOCK", "")
+	t.Setenv(rexplace.BlockEnv, "")
 
 	cmd := newStatuslineCmd()
 	var out, errBuf bytes.Buffer

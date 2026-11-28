@@ -21,23 +21,23 @@ import (
 func newSpawnedSessionCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "spawned-session", Short: "起こした rex session の印を扱う (pane が空になったら daemon が閉じる。印のある session は close で閉じられる)"}
 	cmd.AddCommand(&cobra.Command{
-		Use:   "mark <block_id|session_id>",
-		Short: "rex session の印を書き、書いた印を JSON で出す。block の ID はその block の居る session を指す",
+		Use:   "mark <block_id>",
+		Short: "block の居る rex session の印を書き、書いた印を JSON で出す",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return statecmd.Run(cmd, func(p apppath.Paths, _ io.Reader) (any, error) {
 				if args[0] == "" {
-					return nil, errors.New("block か session の ID が空")
+					return nil, errors.New("block の ID が空")
 				}
 				client := backend.ConnectRex(sessioncontext.New(p.StateDir()))
 				defer backend.Close(client)
 				resolver, ok := client.(interface {
-					ResolveSession(ctx context.Context, name string) (string, error)
+					ResolveBlock(ctx context.Context, blockID string) (string, error)
 				})
 				if !ok {
 					return nil, errors.New("この backend は session を引けない")
 				}
-				return markSpawnedSession(cmd.Context(), spawnedsession.New(p.StateDir()), resolver.ResolveSession, args[0])
+				return markSpawnedSession(cmd.Context(), spawnedsession.New(p.StateDir()), resolver.ResolveBlock, args[0])
 			})
 		},
 	})
@@ -68,13 +68,12 @@ func newSpawnedSessionCmd() *cobra.Command {
 	return cmd
 }
 
-// markSpawnedSession は name (block か session の ID) を resolve で session の ID に引いてから印を書き、書いた印を返す。
-// spawn の包みは自分の REX_BLOCK を渡す (rex は新しい端末に REX_SESSION を入れない)。reaper と close は session の ID で
-// 印を引くので、引けなければ印を書かない。
-func markSpawnedSession(ctx context.Context, store spawnedsession.Store, resolve func(context.Context, string) (string, error), name string) (spawnedsession.Record, error) {
-	id, err := resolve(ctx, name)
+// markSpawnedSession は block を resolve で session の ID に引いてから印を書き、書いた印を返す。
+// spawn の包みは自分の block を渡す。reaper と close は session の ID で印を引くので、引けなければ印を書かない。
+func markSpawnedSession(ctx context.Context, store spawnedsession.Store, resolve func(context.Context, string) (string, error), block string) (spawnedsession.Record, error) {
+	id, err := resolve(ctx, block)
 	if err != nil {
-		return spawnedsession.Record{}, fmt.Errorf("%s の居る session を引けない: %w", name, err)
+		return spawnedsession.Record{}, fmt.Errorf("%s の居る session を引けない: %w", block, err)
 	}
 	if err := store.Put(id); err != nil {
 		return spawnedsession.Record{}, err

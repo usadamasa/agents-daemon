@@ -128,7 +128,7 @@ func resume(ctx context.Context, stderr io.Writer, sessionID, cwd string, wait t
 	if err != nil {
 		return spawn.Result{}, err
 	}
-	// Desktop から呼ばれるときは rex の外なので REX_BLOCK を要求しない (ConnectRex)。
+	// Desktop から呼ばれるときは rex の外なので、rex の block の中かを問わない (ConnectRex)。
 	host, ok := backend.ConnectRex(sessioncontext.New(paths.StateDir())).(spawn.Host)
 	if !ok {
 		return spawn.Result{}, errors.New("この backend は session を作れない")

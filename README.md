@@ -66,8 +66,8 @@ plugin が持つもの:
 ## 前提
 
 - **rex**: daemon は rex の control API (server の socket の上の WebSocket) で block を見て送信する。
-  rex の外で動く Claude Code には何も届かず、`REX_BLOCK` の無いセッションの SessionStart では daemon を起こさない
-  (statusline は rex の外でも動く)。server の socket は `~/Library/Application Support/rex/server.sock`。
+  rex の外で動く Claude Code には何も届かず、rex の block の外のセッションの SessionStart では daemon を起こさない
+  (statusline は rex の外でも動く)。block の中かの確かめ方は `agents-daemon:setup` skill の 2 段目にある。server の socket は `~/Library/Application Support/rex/server.sock`。
   sandbox の中から rex を叩くときの設定は「利用者の設定」にある。
   確かめた rex と Claude Code のバージョンは、前提を置いた箇所ごとの `rex-premise:` / `cc-premise:` の marker が持つ。
   marker の書き方は AGENTS.md の「Claude Code の挙動を書くときの決めごと」にある。
@@ -181,8 +181,8 @@ Claude Code の settings の `env` に置く。この plugin は既定値を持�
 次は Claude Code か rex が渡すもので、利用者は置かない。
 
 - `REX_SERVER`: rex の control API の socket (`unix://` の URL)
-- `REX_BLOCK`: 自分のいる rex の pane。rex の中かの判定に使い、session はこの block から引く。`spawn` の足し先の既定は
-  この block の居る session で、無ければ新しい rex session に起こす
+- rex が端末に入れる自分の block: rex の中かの判定と `spawn` の足し先の既定に使う。読むのは `rexplace` パッケージだけで、
+  確かめ方は `agents-daemon:setup` skill の 2 段目にある
 - `CLAUDE_CODE_SESSION_ID`: `deps edge` と `scripts/get-session-id.sh` が自分のセッションを指す
 - `CLAUDE_CODE_MESSAGING_SOCKET` / `CLAUDE_CODE_TMPDIR`: `doctor` が peer messaging の socket を点検する
 - `COLUMNS`: `statusline` の幅

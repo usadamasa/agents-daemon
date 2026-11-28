@@ -10,18 +10,19 @@ import (
 
 	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/jsonflag"
 	"github.com/usadamasa/agents-daemon/internal/daemonstate"
+	"github.com/usadamasa/agents-daemon/internal/rexplace"
 	"github.com/usadamasa/agents-daemon/internal/runtime/daemon"
 	"github.com/usadamasa/agents-daemon/internal/runtime/verify"
 )
 
-// isolate は HOME と XDG を一時ディレクトリへ向け、REX_BLOCK を外す。返り値は state の agents-daemon ディレクトリ。
+// isolate は HOME と XDG を一時ディレクトリへ向け、rex の場所を外す。返り値は state の agents-daemon ディレクトリ。
 func isolate(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
 	t.Setenv("HOME", root)
 	t.Setenv("XDG_STATE_HOME", filepath.Join(root, "state"))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
-	t.Setenv("REX_BLOCK", "")
+	t.Setenv(rexplace.BlockEnv, "")
 	return filepath.Join(root, "state", "agents-daemon")
 }
 

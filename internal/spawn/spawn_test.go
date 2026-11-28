@@ -19,6 +19,7 @@ const (
 	windowID      = "window:01a15e6a-7fe3-7298-af51-8982a808f040"
 	createdRexSID = "session:01a15e6a-7fe3-7298-af51-8982a808f000"
 	callerRexSID  = "session:01a1e34b-42fc-72ea-b04c-1009e911123c"
+	callerBlock   = "block:01a1e34b-42fc-72ea-b04c-1009e9111fff"
 	keptRexSID    = "session:01a1e34b-42fc-72ea-b04c-100900000001"
 	settingsModel = "claude-sonnet-5[1m]"
 	briefPath     = "/src/home/example-repo/tmp/brief-x.md"
@@ -26,9 +27,12 @@ const (
 )
 
 // fakeHost は Host のテスト用実装。fail が nil でなければ session も タブも作れないことにする。
+// block から引ける session は callerBlock の居る callerRexSID だけ。
 type fakeHost struct {
 	fail    error
 	paneGet func(paneID string) (multiplexer.Pane, error)
+	// resolved は ResolveBlock に渡った block。
+	resolved []string
 	// runs は NewSession と NewWindow に渡った引数。NewSession の呼び出しは session が空。
 	runs []runCall
 }
@@ -53,6 +57,14 @@ func (h *fakeHost) NewWindow(_ context.Context, session, label, cwd string, argv
 		return multiplexer.Placement{}, h.fail
 	}
 	return multiplexer.Placement{SessionID: session, WindowID: windowID, PaneID: paneID}, nil
+}
+
+func (h *fakeHost) ResolveBlock(_ context.Context, blockID string) (string, error) {
+	h.resolved = append(h.resolved, blockID)
+	if blockID != callerBlock {
+		return "", errors.New(`block "` + blockID + `" not found`)
+	}
+	return callerRexSID, nil
 }
 
 func (h *fakeHost) PaneGet(_ context.Context, id string) (multiplexer.Pane, error) {
@@ -104,21 +116,22 @@ func argvOf(sid, model, prompt string) []string {
 
 func sameArgv(a, b []string) bool { return strings.Join(a, "\x00") == strings.Join(b, "\x00") }
 
-// 足し先の既定: 指定 (session、new_session) が無ければ、起こす側の rex session (Caller) にタブとして足す。
-// Caller も無ければ (park hand、rex の外のアプリ) 新しい session を作る。new_session は Caller があっても新しい session、
-// session は Caller より優先する。
+// 足し先の既定: 指定 (session、new_session) が無ければ、起こす側の block (CallerBlock) の居る rex session にタブとして足す。
+// CallerBlock も無ければ (park hand、rex の外のアプリ) 新しい session を作る。new_session は CallerBlock があっても新しい
+// session、session は CallerBlock より優先する。
 func TestRunner_Run_Target(t *testing.T) {
 	tests := []struct {
-		name        string
-		req         func(Request) Request
-		wantSession string // NewWindow の足し先。空なら NewSession
-		wantRexSID  string
+		name         string
+		req          func(Request) Request
+		wantSession  string // NewWindow の足し先。空なら NewSession
+		wantRexSID   string
+		wantResolved []string // ResolveBlock に渡る block
 	}{
-		{name: "指定も Caller も無ければ新しい session", req: func(r Request) Request { return r }, wantRexSID: createdRexSID},
-		{name: "Caller があれば Caller のタブ", req: func(r Request) Request { r.Caller = callerRexSID; return r }, wantSession: callerRexSID, wantRexSID: callerRexSID},
-		{name: "session は Caller より優先", req: func(r Request) Request { r.Caller = callerRexSID; r.Session = keptRexSID; return r }, wantSession: keptRexSID, wantRexSID: keptRexSID},
-		{name: "Caller が無くても session のタブ", req: func(r Request) Request { r.Session = keptRexSID; return r }, wantSession: keptRexSID, wantRexSID: keptRexSID},
-		{name: "new_session は Caller があっても新しい session", req: func(r Request) Request { r.Caller = callerRexSID; r.NewSession = true; return r }, wantRexSID: createdRexSID},
+		{name: "指定も CallerBlock も無ければ新しい session", req: func(r Request) Request { return r }, wantRexSID: createdRexSID},
+		{name: "CallerBlock があればその block の居る session のタブ", req: func(r Request) Request { r.CallerBlock = callerBlock; return r }, wantSession: callerRexSID, wantRexSID: callerRexSID, wantResolved: []string{callerBlock}},
+		{name: "session は CallerBlock より優先", req: func(r Request) Request { r.CallerBlock = callerBlock; r.Session = keptRexSID; return r }, wantSession: keptRexSID, wantRexSID: keptRexSID},
+		{name: "CallerBlock が無くても session のタブ", req: func(r Request) Request { r.Session = keptRexSID; return r }, wantSession: keptRexSID, wantRexSID: keptRexSID},
+		{name: "new_session は CallerBlock があっても新しい session", req: func(r Request) Request { r.CallerBlock = callerBlock; r.NewSession = true; return r }, wantRexSID: createdRexSID},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -141,7 +154,24 @@ func TestRunner_Run_Target(t *testing.T) {
 			if want := argvOf(newSID, settingsModel, request().Prompt); !sameArgv(call.argv, want) {
 				t.Errorf("argv = %q, want %q", call.argv, want)
 			}
+			if !sameArgv(host.resolved, tt.wantResolved) {
+				t.Errorf("ResolveBlock の呼び出し = %q, want %q", host.resolved, tt.wantResolved)
+			}
 		})
+	}
+}
+
+// 起こす側の block の居る session を引けなければ、新しい session へ倒さず error にする。
+func TestRunner_Run_CallerBlockNotFoundIsError(t *testing.T) {
+	host := &fakeHost{}
+	req := request()
+	req.CallerBlock = "block:gone"
+	_, err := runner(host).Run(context.Background(), req)
+	if err == nil || !strings.Contains(err.Error(), "block:gone") || !strings.Contains(err.Error(), "not found") {
+		t.Errorf("Run() error = %v, want block:gone の not found", err)
+	}
+	if len(host.runs) != 0 {
+		t.Errorf("Host の呼び出し = %+v, want 起こさない", host.runs)
 	}
 }
 
@@ -150,14 +180,14 @@ func TestRunner_Run_Target(t *testing.T) {
 func TestRunner_Run_SessionNotFoundIsError(t *testing.T) {
 	host := &fakeHost{fail: errors.New(`session target "` + keptRexSID + `" not found`)}
 	req := request()
-	req.Caller = callerRexSID
+	req.CallerBlock = callerBlock
 	req.Session = keptRexSID
 	_, err := runner(host).Run(context.Background(), req)
 	if err == nil || !strings.Contains(err.Error(), "not found") || !strings.Contains(err.Error(), "session を省く") {
 		t.Errorf("Run() error = %v, want not found と「session を省く」の案内", err)
 	}
 	if len(host.runs) != 1 || host.runs[0].session != keptRexSID {
-		t.Errorf("Host の呼び出し = %+v, want 指した session への 1 回だけ (Caller へ倒さない)", host.runs)
+		t.Errorf("Host の呼び出し = %+v, want 指した session への 1 回だけ (CallerBlock へ倒さない)", host.runs)
 	}
 }
 

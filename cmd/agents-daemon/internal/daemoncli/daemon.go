@@ -34,7 +34,7 @@ func newDaemonCmd() *cobra.Command {
 		Short: "監視デーモンを起動する",
 		Long: "--ensure は SessionStart hook から呼ばれる想定で、生存している daemon が\n" +
 			"既にあれば即座に戻り (exit 0)、無ければこのバイナリを detach 起動して戻る。\n" +
-			"hook を絶対にブロックしないための挙動。rex の外 (REX_BLOCK なし) では\n" +
+			"hook を絶対にブロックしないための挙動。rex の block の外では\n" +
 			"監視する block が無いので、stderr に 1 行出して何もせずに戻る。\n" +
 			"--foreground はこのプロセス自身でループを回す (デバッグ・テスト用)。\n" +
 			"どちらか一方を必ず指定する。--json は --ensure が何をしたか (started、already_running、\n" +

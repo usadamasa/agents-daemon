@@ -27,7 +27,7 @@ agents-daemon prune-worktrees [--dry-run]      # 放置された Claude Code の
 agents-daemon edge add|rm|list                 # セッションをまたぐ作業の依存を書く・消す・一覧する (下の「セッションをまたぐ辺を書く」)
 agents-daemon park list|set                    # パーキングのメモを一覧する・書き換える (stdin の JSON で受ける)
 agents-daemon park hand < request.json         # メモを取って渡し、届かなければ戻す (アプリが呼ぶ)
-agents-daemon spawn < request.json             # 本文を最初のターンにした Claude Code を repo を cwd にして rex に起こす (アプリと peer-sessions skill が呼ぶ)。足し先の既定は REX_BLOCK の居る session のタブ、無ければ新しい session
+agents-daemon spawn < request.json             # 本文を最初のターンにした Claude Code を repo を cwd にして rex に起こす (アプリと peer-sessions skill が呼ぶ)。足し先の既定は起こす側の block の居る session のタブ、rex の block の外なら新しい session
 agents-daemon tell < request.json              # 生きているセッションの入力欄に文面を打つ (アプリが呼ぶ)
 agents-daemon desktop list|resume              # Desktop で始めたセッションを rex で続ける (下の「Desktop のセッションを rex で続ける」)
 ```
@@ -292,7 +292,7 @@ agents-daemon daemon --foreground --dry-run  # 送信せずに検知だけを流
 
 `doctor` は rex の server への到達性と、Claude pane の一覧 (`session_id` が引けなければ `(なし)`、block の高さ) を出す。
 peer messaging と dream の規約 (config.json の `dream.policy` が読めるか) も出す。
-rex の外 (`REX_BLOCK` なし) では exit 1 で止まる。
+rex の block の外では exit 1 で止まる (確かめ方は `agents-daemon:setup` skill の 2 段目)。
 「rex の前提」の節に `⚠` が出たら、rex の版で daemon が読む欄が変わった疑いがある。daemon 側の追従が要るので
 issue にする。
 
@@ -345,10 +345,10 @@ dream が読む `dream.policy` は、daemon の設定と違って既定値に落
 - **Go が無いとバイナリが建たない。** SessionStart hook は `go build` でバイナリを用意する。
   `go` が PATH に無ければ `$STATE/logs/build.log` に ERROR を残し、デーモンは起きない。
   go が古いだけなら toolchain を取りに行く。取得にも失敗したときは「build の失敗から建て直す」。
-- **rex が要る。** rex の server に到達できないときデーモンは起動せず、`REX_BLOCK` の無いセッションの
+- **rex が要る。** rex の server に到達できないときデーモンは起動せず、rex の block の外のセッションの
   SessionStart では起こさない。Ghostty 単体では pane へキーを送る手段が無いため、この機能は成立しない。
 - **session_id が引けない pane は上限を判定しない。** block とセッションの対応は `context/<sid>.json` の
-  `multiplexer` (statusline が環境変数の `REX_BLOCK` から書く) で引き、無ければ rex の前景の pid で Claude Code の
+  `multiplexer` (statusline が継いだ環境の rex の block を書く) で引き、無ければ rex の前景の pid で Claude Code の
   登録簿 (`~/.claude/sessions/<pid>.json`) から補う。どちらも引けなければ transcript を読めないので手を出さない
   (`doctor` の pane 一覧に `⚠`、status.json に `detect_reason`)。claude を wrapper の shell から起動すると
   pid が合わず、statusline の配線が要る。

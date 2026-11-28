@@ -10,6 +10,7 @@ import (
 	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/statecmd"
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/protocol"
+	"github.com/usadamasa/agents-daemon/internal/rexplace"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend"
 	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
 	"github.com/usadamasa/agents-daemon/internal/spawn"
@@ -26,25 +27,25 @@ func newSpawnCmd() *cobra.Command {
 			"無ければ Claude Code の settings.json の env." + spawn.SubagentModelKey + " から読む。\n" +
 			"fork_from があれば `--resume <fork_from> --fork-session` を足し、元の会話を写した新しいセッションとして起こす。\n" +
 			"起こす先は session の欄があればその rex の session のタブ、new_session なら新しい rex の session、\n" +
-			"どちらも無ければ REX_BLOCK (起こす側の block) の居る session のタブ、REX_BLOCK も無ければ新しい rex の session。\n" +
+			"どちらも無ければ起こす側の rex の block の居る session のタブ、rex の block の外なら新しい rex の session。\n" +
 			"claude が前景になってから SpawnResult を JSON で出す。待ち切れたときは session を残したまま\n" +
 			"foreground=false と detail を出す (error にするのは session を作れなかったときだけ)。",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return statecmd.Run(cmd, statecmd.Decoded("SpawnRequest", func(paths apppath.Paths, req protocol.SpawnRequest) (any, error) {
-				return spawnSession(cmd.Context(), paths, spawnCommandRequest(req))
+				place, _ := rexplace.FromEnv(os.Getenv)
+				return spawnSession(cmd.Context(), paths, spawnCommandRequest(req, place))
 			}))
 		},
 	}
 }
 
-// spawnCommandRequest は spawn サブコマンドの stdin を spawn.Request にする。起こす側の block (REX_BLOCK) の居る
-// rex session を足し先の既定にするのはこのサブコマンドだけ。rex は session の位置に block ID を受け、NewWindow が
-// その block の居る session を引く。依存図のアプリは launchd から起き、REX_BLOCK を持たない。
-func spawnCommandRequest(req protocol.SpawnRequest) spawn.Request {
+// spawnCommandRequest は spawn サブコマンドの stdin を spawn.Request にする。起こす側の block (place) の居る
+// rex session を足し先の既定にするのはこのサブコマンドだけ。依存図のアプリは launchd から起き、place はゼロ値になる。
+func spawnCommandRequest(req protocol.SpawnRequest, place rexplace.Place) spawn.Request {
 	return spawn.Request{
 		Repo: req.Repo, Prompt: req.Prompt, PromptFile: req.PromptFile, Session: req.Session, NewSession: req.NewSession,
-		SessionID: req.SessionID, ForkFrom: req.ForkFrom, Model: req.Model, Label: req.Label, Caller: os.Getenv("REX_BLOCK"),
+		SessionID: req.SessionID, ForkFrom: req.ForkFrom, Model: req.Model, Label: req.Label, CallerBlock: place.Block,
 	}
 }
 
@@ -54,7 +55,7 @@ func handSpawnRequest(repo, prompt string) spawn.Request {
 	return spawn.Request{Repo: repo, Prompt: prompt}
 }
 
-// spawnSession は req のセッションを起こす。依存図のアプリは rex の外で起きるので REX_BLOCK を要求しない
+// spawnSession は req のセッションを起こす。依存図のアプリは rex の外で起きるので、rex の block の中かを問わない
 // (ConnectRex)。req.Model が空なら settings の subagent 用のモデルを使う。
 func spawnSession(ctx context.Context, paths apppath.Paths, req spawn.Request) (spawn.Result, error) {
 	client := backend.ConnectRex(sessioncontext.New(paths.StateDir()))

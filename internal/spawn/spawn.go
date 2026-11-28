@@ -9,7 +9,7 @@
 // 起こす先と包みは ForkFrom の無いときと同じ。
 //
 // 起こす先は target が決める。足し先 (Request.Session) があればその session のタブ、NewSession なら新しい session、
-// どちらも無ければ起こす側の session (Request.Caller) のタブ、Caller も無ければ (park hand、rex の外のアプリ) 新しい
+// どちらも無ければ起こす側の block (Request.CallerBlock) の居る session のタブ、CallerBlock も無ければ (park hand、rex の外のアプリ) 新しい
 // session。peer-sessions skill の「足し先の既定は起こす側の session のタブ」をここで決める (#636)。指した session に
 // 足せなければ、ほかへ倒さず error にする (控えた ID が古いことを黙って隠さない)。
 //
@@ -21,7 +21,7 @@
 // 起こし方は 2 通りで、印・閉じる主体・rename の扱いが違う。この一覧の実体はここだけに置き、peer-sessions skill の
 // references/rex.md、wrap、reaper、spawnedsession はここを指す (#634)。
 //
-// 新しい session (Host.NewSession。NewSession の指定か、Session も Caller も無いとき):
+// 新しい session (Host.NewSession。NewSession の指定か、Session も CallerBlock も無いとき):
 //   - 包み: wrap.SessionCommand。claude を起こす前に印 (spawnedsession) を書く。
 //   - claude が終わったとき: session の block が包みの 1 つだけなら、包みが session を閉じる。後から開いた pane や
 //     タブがあれば自分の pane だけ閉じる。
@@ -29,7 +29,7 @@
 //   - 起こした側が畳む口: `spawned-session close <rex_session_id>`。印の無い session は拒否する。
 //   - rename: Rex の SessionStart の hook が session の rename を案内し、plugin は止めない (session は peer だけが使う)。
 //
-// 既存の session のタブ (Host.NewWindow。Session の指定か、無ければ Caller):
+// 既存の session のタブ (Host.NewWindow。Session の指定か、無ければ CallerBlock の居る session):
 //   - 包み: wrap.TabCommand。印を書かず、session を閉じない。
 //   - claude が終わったとき: pane が閉じ、最後の pane を失った window を rex が閉じる。session とほかのタブは残る。
 //   - 空になった後: 足し先に印があれば (NewSession で起こした session) reaper が閉じる。印が無ければ
@@ -74,6 +74,8 @@ type Host interface {
 	// NewWindow は既存の session にタブを足し、その pane で argv を起こして pane の置き場を返す。コマンドが終われば自分の
 	// タブだけが閉じ、session とほかのタブは残る。異常終了の扱いと返るときは NewSession と同じ。label はタブの名前。
 	NewWindow(ctx context.Context, session, label, cwd string, argv []string) (multiplexer.Placement, error)
+	// ResolveBlock は block の ID からそれを持つ session の ID を引く。起こす側の block の居る session を足し先にするのに使う。
+	ResolveBlock(ctx context.Context, blockID string) (string, error)
 	// PaneGet は pane の今の前景 (multiplexer.Client と同じ)。起こした pane で claude が前景になるのを待つのに使う。
 	PaneGet(ctx context.Context, paneID string) (multiplexer.Pane, error)
 }
@@ -92,10 +94,10 @@ type Request struct {
 	Session string
 	// NewSession は新しい session を作る。Session とは併用しない。
 	NewSession bool
-	// Caller は起こす側の多重化ツールの session。Session も NewSession も無ければ、ここにタブとして起こす。
-	// spawn サブコマンドだけが REX_BLOCK (session の位置に置くと rex がその block の居る session を指す) を入れ、
-	// park hand は入れない (rex の中から呼ばれても新しい session に起こす)。
-	Caller string
+	// CallerBlock は起こす側の pane の block。Session も NewSession も無ければ、この block の居る session にタブとして起こす。
+	// spawn サブコマンドだけが自分の場所 (rexplace.FromEnv) を入れ、park hand は入れない (rex の中から呼ばれても新しい
+	// session に起こす)。
+	CallerBlock string
 	// SessionID は新しいセッションの ID (UUID)。空なら Runner.NewSessionID。起こす前に依存の辺を書くのに使う。
 	SessionID string
 	// ForkFrom は会話を写す元のセッションの ID (UUID)。あれば元の会話を持った別の ID のセッションとして起こす
@@ -156,34 +158,50 @@ func (r Runner) Run(ctx context.Context, req Request) (Result, error) {
 
 // place は target の決めた先 (新しい session かタブ) に argv を起こす。
 func (r Runner) place(ctx context.Context, req Request, label string, argv []string) (multiplexer.Placement, error) {
-	into := target(req)
-	if into == "" {
+	switch target(req) {
+	case targetSession:
+		placed, err := r.Host.NewWindow(ctx, req.Session, label, req.Repo, argv)
+		if err != nil {
+			return placed, fmt.Errorf("多重化ツールの session %s にタブを足せない (session を省くと起こす側の session に足す): %w", req.Session, err)
+		}
+		return placed, nil
+	case targetCaller:
+		into, err := r.Host.ResolveBlock(ctx, req.CallerBlock)
+		if err != nil {
+			return multiplexer.Placement{}, fmt.Errorf("起こす側の block %s の居る session を引けない: %w", req.CallerBlock, err)
+		}
+		placed, err := r.Host.NewWindow(ctx, into, label, req.Repo, argv)
+		if err != nil {
+			return placed, fmt.Errorf("起こす側の多重化ツールの session %s にタブを足せない: %w", into, err)
+		}
+		return placed, nil
+	default:
 		placed, err := r.Host.NewSession(ctx, label, req.Repo, argv)
 		if err != nil {
 			return placed, fmt.Errorf("多重化ツールの session を作れない: %w", err)
 		}
 		return placed, nil
 	}
-	placed, err := r.Host.NewWindow(ctx, into, label, req.Repo, argv)
-	switch {
-	case err == nil:
-		return placed, nil
-	case req.Session != "":
-		return placed, fmt.Errorf("多重化ツールの session %s にタブを足せない (session を省くと起こす側の session に足す): %w", req.Session, err)
-	default:
-		return placed, fmt.Errorf("起こす側の多重化ツールの session %s にタブを足せない: %w", into, err)
-	}
 }
 
-// target はタブを足す先の session を返す。空なら新しい session を作る。
-func target(req Request) string {
+// 起こす先の種類。
+const (
+	targetNew     = iota // 新しい session
+	targetSession        // 指した session のタブ
+	targetCaller         // 起こす側の block の居る session のタブ
+)
+
+// target は起こす先の種類を返す。
+func target(req Request) int {
 	switch {
 	case req.NewSession:
-		return ""
+		return targetNew
 	case req.Session != "":
-		return req.Session
+		return targetSession
+	case req.CallerBlock != "":
+		return targetCaller
 	default:
-		return req.Caller
+		return targetNew
 	}
 }
 

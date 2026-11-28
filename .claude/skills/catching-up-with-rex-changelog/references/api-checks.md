@@ -7,7 +7,7 @@
 
 ## doctor が見る行
 
-`go run ./cmd/agents-daemon doctor` の「rex の前提」の節が、自分の block (`REX_BLOCK`) に打って
+`go run ./cmd/agents-daemon doctor` の「rex の前提」の節が、自分の block に打って
 欄の有無と失敗の形を名指しで出す (`rex/premise`)。人が打ち直す必要は無い。
 節の `⚠` の行がずれで、`rex_version` と `built_at` と `api_revision` の行が `last-checked.md` に書く値。
 
@@ -34,7 +34,7 @@ socket は `REX_SERVER` の `unix://` の後ろ (percent-encoded) で、既定�
 | ---- | ---- | ---- |
 | `timeout 10 rex --autostart=false events --all --json` | daemon の購読 (`session.attach_all` の `event_scope: all`) と同じ event の payload。`block_event` の `name` と payload (`program_status_changed` の `id` / `record`、`program_status_removed` の `ids`、`process_changed` の `foreground`、`state=idle` で終わった block の `child_exited` の後に record が残るか)、`block_created` / `block_closed` の `block_id`、`session_destroyed` の `session_id` | `blockstate` の `cache.go`、`wire` の `Event`、`testdata/2026-10-27_…/events.jsonl` |
 | `curl -s --unix-socket <socket> http://localhost/api/help` の `.methods[].name` と、daemon が打つ method の `input_schema` / `output_schema` | 前回の実測 (`testdata/<日付>/api-list.json`。`rex api list --json` と同じ応答) に無い method、daemon が打つ method の schema の変化 | daemon の polling や画面の読み取りを置き換えられるか (アイデアとして issue へ)。schema の変化はずれ |
-| `session.describe_block` の `.api.methods` / `.api.events` の key 一覧 (CLI なら `rex --autostart=false block inspect "$REX_BLOCK" --json`) | 前回の実測 (`testdata/<日付>/block-inspect.json`) に無い method や event | 同上 |
+| `session.describe_block` の `.api.methods` / `.api.events` の key 一覧 (CLI なら `rex --autostart=false block inspect <block> --json`。`<block>` は SKILL.md の手順 4 で取った自分の block) | 前回の実測 (`testdata/<日付>/block-inspect.json`) に無い method や event | 同上 |
 | `curl -s --unix-socket <socket> http://localhost/llms.txt` の「API Revisions」と「Combining Results With Events」の節 | `server.version` の `api_revision` が前回 (`last-checked.md`) から上がったとき、daemon の revision (14) の応答の形が変わらないか、event と応答の `seq` の決めごとが変わらないか | `control` の `APIRevision`、`watch` の `once` (購読を張った後に全列挙し、溜まった event を全部当て直す論法) |
 
 ## 打ち方の注意

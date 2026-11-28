@@ -23,4 +23,4 @@ rex --autostart=false api call server.status | jq -c '{pid, session_count}'
 
 ## block と session_id の対応
 
-この block は `REX_BLOCK`、記録は `context/<sid>.json` の `multiplexer.block`。一致すれば OK。
+この block は `rex whoami --json` の `block_id`、記録は `context/<sid>.json` の `multiplexer.block`。一致すれば OK。

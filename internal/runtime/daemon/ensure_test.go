@@ -65,7 +65,7 @@ func TestEnsureDaemon_LockFreeSpawnsAndReleases(t *testing.T) {
 
 func TestRunForeground_LockHeldReturnsErrAlreadyRunning(t *testing.T) {
 	p := lockedPaths(t)
-	// lock の判定は設定の読み込みや rex への到達確認より前。REX_BLOCK が無くてもここで戻る。
+	// lock の判定は設定の読み込みや rex への到達確認より前。rex の block の外でもここで戻る。
 	err := RunForeground(context.Background(), p, false)
 	if !errors.Is(err, daemonstate.ErrAlreadyRunning) {
 		t.Fatalf("RunForeground() error = %v, want ErrAlreadyRunning", err)

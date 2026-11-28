@@ -10,20 +10,19 @@ import (
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
+	"github.com/usadamasa/agents-daemon/internal/rexplace"
 	"github.com/usadamasa/agents-daemon/internal/sessioncontext"
 )
 
 func TestNewSimulateHost_前提チェック(t *testing.T) {
-	t.Run("rex は REX_BLOCK が要る", func(t *testing.T) {
-		env := map[string]string{}
-		_, err := newSimulateHost(sessioncontext.MultiplexerKindRex, func(k string) string { return env[k] }, &fakeOps{})
-		if err == nil || !strings.Contains(err.Error(), "REX_BLOCK") {
-			t.Fatalf("newSimulateHost(rex) error = %v, want REX_BLOCK に触れるエラー", err)
+	t.Run("rex は自分の block が要る", func(t *testing.T) {
+		_, err := newSimulateHost(sessioncontext.MultiplexerKindRex, rexplace.Place{}, &fakeOps{})
+		if err == nil || !strings.Contains(err.Error(), "rex の block の中") {
+			t.Fatalf("newSimulateHost(rex) error = %v, want rex の block の中で打つよう促すエラー", err)
 		}
 	})
-	t.Run("rex は REX_BLOCK を anchor に持つ", func(t *testing.T) {
-		env := map[string]string{"REX_BLOCK": "block:mine"}
-		host, err := newSimulateHost(sessioncontext.MultiplexerKindRex, func(k string) string { return env[k] }, &fakeOps{})
+	t.Run("rex は自分の block を anchor に持つ", func(t *testing.T) {
+		host, err := newSimulateHost(sessioncontext.MultiplexerKindRex, rexplace.Place{Block: "block:mine"}, &fakeOps{})
 		if err != nil {
 			t.Fatalf("newSimulateHost(rex) error = %v", err)
 		}
@@ -36,14 +35,13 @@ func TestNewSimulateHost_前提チェック(t *testing.T) {
 		}
 	})
 	t.Run("pane を作れない client は error", func(t *testing.T) {
-		env := map[string]string{"REX_BLOCK": "block:mine"}
-		_, err := newSimulateHost(sessioncontext.MultiplexerKindRex, func(k string) string { return env[k] }, &multiplexerfake.Client{})
+		_, err := newSimulateHost(sessioncontext.MultiplexerKindRex, rexplace.Place{Block: "block:mine"}, &multiplexerfake.Client{})
 		if err == nil || !strings.Contains(err.Error(), "pane を作れない") {
 			t.Fatalf("newSimulateHost(rex) error = %v, want pane を作れない error", err)
 		}
 	})
 	t.Run("未対応の kind は error", func(t *testing.T) {
-		_, err := newSimulateHost("tmux", func(string) string { return "" }, &fakeOps{})
+		_, err := newSimulateHost("tmux", rexplace.Place{}, &fakeOps{})
 		if err == nil || !strings.Contains(err.Error(), "未対応") {
 			t.Fatalf("newSimulateHost(tmux) error = %v, want 未対応の error", err)
 		}

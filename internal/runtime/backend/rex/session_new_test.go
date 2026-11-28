@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
+	"github.com/usadamasa/agents-daemon/internal/rexplace"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/api/control/controltest"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/wire"
 	"github.com/usadamasa/agents-daemon/internal/runtime/backend/rex/wrap"
@@ -235,7 +236,7 @@ func runWrapped(t *testing.T, argv []string, env []string, exit int, interrupt b
 	return out.String(), err
 }
 
-// TestExecClient_NewSession_ClosesOnExit は rex が起こす argv を実際に走らせ、自分 (REX_BLOCK) の居る session に残る block が
+// TestExecClient_NewSession_ClosesOnExit は rex が起こす argv を実際に走らせ、自分の block の居る session に残る block が
 // 自分だけのときだけ session を閉じ、exit code をそのまま返すことを見る。0 以外で終わったときは終わり方を
 // 出して Enter を待ち、押されるまで失敗の画面を残す。後から開いた pane があれば巻き込まないよう閉じない (#391)。
 // どの場合も、コマンドを起こす前に agents-daemon で session の印を書く (後から pane が空になった session を
@@ -245,7 +246,7 @@ func TestExecClient_NewSession_ClosesOnExit(t *testing.T) {
 		own   = `{"block_id":"block:own","window_id":"window:1"}`
 		other = `{"block_id":"block:other","window_id":"window:2"}`
 	)
-	// rex は新しい端末に REX_SESSION を入れないので、session の位置に REX_BLOCK を渡す (rex がその block の居る session を引く)。
+	// 包みは session の位置に自分の block を渡す (rex がその block の居る session を引く)。
 	blockLs := []string{"--autostart=false", "block", "ls", "-s", "block:own", "--json"}
 	kill := []string{"--autostart=false", "session", "kill", "block:own"}
 	tests := []struct {
@@ -275,7 +276,7 @@ func TestExecClient_NewSession_ClosesOnExit(t *testing.T) {
 			if _, err := f.client(staticResolver(nil)).NewSession(context.Background(), "x", "/w/x", inner); err != nil {
 				t.Fatalf("NewSession() error = %v", err)
 			}
-			runWrapped(t, spawnedArgv(t, f), []string{"REX_BLOCK=block:own"}, tt.exit, tt.interrupt, rex)
+			runWrapped(t, spawnedArgv(t, f), []string{rexplace.BlockEnv + "=block:own"}, tt.exit, tt.interrupt, rex)
 
 			if got := splitArgs(t, readLines(t, filepath.Join(rex.dir, "calls.log"))); !slices.EqualFunc(got, tt.wantAfter, slices.Equal[[]string]) {
 				t.Errorf("calls =\n%q\nwant\n%q", got, tt.wantAfter)
@@ -308,7 +309,7 @@ func TestExecClient_NewSession_OwnProcessGroup(t *testing.T) {
 	}
 	argv := spawnedArgv(t, f)
 	cmd := exec.Command(argv[0], argv[1:]...) // #nosec G204 -- テストが組んだ argv
-	cmd.Env = append(os.Environ(), "REX_BLOCK=block:own")
+	cmd.Env = append(os.Environ(), rexplace.BlockEnv+"=block:own")
 	out, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("包んだ argv の実行 error = %v", err)
@@ -442,7 +443,7 @@ func TestExecClient_NewWindow_LabelMatching(t *testing.T) {
 			t.Fatalf("NewWindow() error = %v", err)
 		}
 	})
-	// 起こす側は REX_BLOCK を足し先に渡す (rex は新しい端末に REX_SESSION を入れない)。
+	// spawn は起こす側の block を ResolveBlock で session に引いてから渡すが、block ID のまま渡しても同じ session に当たる。
 	// rex-premise: preview.37 api target.resolve の kinds=[session] は block ID を受け、その block の居る session を返す (2026-11-28 実測)
 	t.Run("block ID で指せば block の居る session", func(t *testing.T) {
 		f := windowAPI(t)
@@ -512,7 +513,7 @@ func TestExecClient_NewWindow_ExitKeepsSession(t *testing.T) {
 			}
 			var req newWindowRequest
 			f.payloadOf(t, "session.new_window", &req)
-			runWrapped(t, req.Layout.Block.Options.Command, []string{"REX_BLOCK=block:own"}, tt.exit, tt.interrupt, rex)
+			runWrapped(t, req.Layout.Block.Options.Command, []string{rexplace.BlockEnv + "=block:own"}, tt.exit, tt.interrupt, rex)
 
 			if got := readLines(t, filepath.Join(rex.dir, "calls.log")); len(got) != 0 {
 				t.Errorf("包みが rex を呼んだ (共有の session に触れない): %q", got)

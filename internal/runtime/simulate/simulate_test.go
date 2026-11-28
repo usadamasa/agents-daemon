@@ -13,6 +13,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/apppath"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer/multiplexerfake"
+	"github.com/usadamasa/agents-daemon/internal/rexplace"
 )
 
 func TestRunSimulate_前提が無ければ止める(t *testing.T) {
@@ -21,11 +22,11 @@ func TestRunSimulate_前提が無ければ止める(t *testing.T) {
 		block string
 		want  string
 	}{
-		{"rex の外", "", "REX_BLOCK"},
+		{"rex の外", "", "rex の block の外"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("REX_BLOCK", tc.block)
+			t.Setenv(rexplace.BlockEnv, tc.block)
 			var buf bytes.Buffer
 			_, err := Run(context.Background(), &buf, apppath.New(t.TempDir(), "", ""), Options{})
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
@@ -215,7 +216,7 @@ func assertPaneNotOwned(t *testing.T, err error) {
 // 打ち込むのは避けたい。
 const realRexSimulateEnv = "AGENTS_DAEMON_REAL_REX_SIMULATE"
 
-// TestRunSimulate_RealRex は実 rex に対する統合テスト。rex の block 内 (REX_BLOCK あり) で
+// TestRunSimulate_RealRex は実 rex に対する統合テスト。rex の block の中で
 // realRexSimulateEnv=1 を付けて打つ。
 //
 // これは「simulate が本当に実 pane に対して検知〜送信の経路を通せる」ことを保証する
@@ -226,8 +227,8 @@ func TestRunSimulate_RealRex(t *testing.T) {
 	if os.Getenv(realRexSimulateEnv) != "1" {
 		t.Skipf("%s=1 が無いので skip する", realRexSimulateEnv)
 	}
-	if os.Getenv("REX_BLOCK") == "" {
-		t.Skip("rex の block 内 (REX_BLOCK あり) でないので skip する")
+	if _, ok := rexplace.FromEnv(os.Getenv); !ok {
+		t.Skip("rex の block の中でないので skip する")
 	}
 	if _, err := exec.LookPath("rex"); err != nil {
 		t.Skip("rex が PATH に無いので skip する")

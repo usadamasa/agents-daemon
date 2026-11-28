@@ -17,38 +17,6 @@ func TestNew_ディレクトリ名が固定されている(t *testing.T) {
 	}
 }
 
-// envOf は map を getenv の形へ写す。無いキーは空文字列になる (os.Getenv と同じ)。
-func envOf(m map[string]string) func(string) string {
-	return func(key string) string { return m[key] }
-}
-
-func TestMultiplexerRefFromEnv(t *testing.T) {
-	for _, tt := range []struct {
-		name   string
-		env    map[string]string
-		want   MultiplexerRef
-		wantOK bool
-	}{
-		{
-			name:   "REX_BLOCK があれば rex",
-			env:    map[string]string{"REX_BLOCK": "block:01a1"},
-			want:   MultiplexerRef{Kind: MultiplexerKindRex, Block: "block:01a1"},
-			wantOK: true,
-		},
-		{
-			name: "REX_BLOCK が無ければ無し",
-			env:  map[string]string{},
-		},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			got, ok := MultiplexerRefFromEnv(envOf(tt.env))
-			if ok != tt.wantOK || got != tt.want {
-				t.Errorf("MultiplexerRefFromEnv() = %+v, %v, want %+v, %v", got, ok, tt.want, tt.wantOK)
-			}
-		})
-	}
-}
-
 func TestWrite(t *testing.T) {
 	observedAt := time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC)
 	observed := strconv.FormatInt(observedAt.Unix(), 10)

@@ -20,6 +20,7 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/daemonstate"
 	"github.com/usadamasa/agents-daemon/internal/multiplexer"
 	"github.com/usadamasa/agents-daemon/internal/ratelimit"
+	"github.com/usadamasa/agents-daemon/internal/rexplace"
 	"github.com/usadamasa/agents-daemon/internal/runtime/claudesessions"
 	"github.com/usadamasa/agents-daemon/internal/runtime/config"
 	"github.com/usadamasa/agents-daemon/internal/runtime/detect"
@@ -47,7 +48,9 @@ type Input struct {
 	// 空なら pane の session を補えず、transcript も読めない。
 	ClaudeConfigDir string
 	Now             time.Time
-	Getenv          func(string) string // peer messaging と rex の前提 (REX_BLOCK) に使う環境 (通常は os.Getenv)
+	Getenv          func(string) string // peer messaging に使う環境 (通常は os.Getenv)
+	// Place は自分の居る rex の場所 (rexplace.FromEnv)。rex の前提を自分の block で点検する。ゼロ値なら点検しない。
+	Place rexplace.Place
 	// Premises は rex の前提の点検。Client がその口を持たなければ nil。
 	Premises multiplexer.PremiseChecker
 	// DreamPolicy は dream の規約 (config.json の dream.policy) を読み、読めた規約のパスを返す。
@@ -255,7 +258,7 @@ func Collect(ctx context.Context, in Input) (Report, error) {
 		return rep, fmt.Errorf("%s の pane 一覧の取得に失敗しました (%s には到達できるのに異常): %w", in.Kind, in.Kind, err)
 	}
 	rep.Panes = collectPanes(ctx, in.Client, panes, in.ClaudeConfigDir, in.Now)
-	rep.Premises = collectPremises(ctx, in.Premises, in.Getenv)
+	rep.Premises = collectPremises(ctx, in.Premises, in.Place)
 	rep.RateLimits = collectRateLimitStates(in.Paths, rep.Panes.Claude, in.Now)
 	rep.Config = collectConfigState(in.Paths)
 	rep.DreamPolicy = collectDreamPolicy(in.DreamPolicy)
@@ -339,21 +342,20 @@ func (p PaneReport) recordLabel() string {
 	return multiplexer.RecordLabel(multiplexer.Pane{AgentStatus: p.AgentStatus, AgentKind: p.AgentKind, AgentMessage: p.AgentMessage})
 }
 
-// collectPremises は rex の control API の応答の形が rex の読む形のままかを、自分の block (REX_BLOCK) に
+// collectPremises は rex の control API の応答の形が rex の読む形のままかを、自分の block (place) に
 // 固定の呼び出しを打って集める。ずれは OK=false の finding で、doctor の exit code には響かない
 // (rex を上げた直後に全 pane が unknown になる原因を、changelog を読む前に名指しで見るため)。
-func collectPremises(ctx context.Context, checker multiplexer.PremiseChecker, getenv func(string) string) *PremisesReport {
+func collectPremises(ctx context.Context, checker multiplexer.PremiseChecker, place rexplace.Place) *PremisesReport {
 	rep := &PremisesReport{Findings: []multiplexer.PremiseFinding{}}
 	if checker == nil {
 		rep.Skipped = "この backend には点検の口が無いため省きます"
 		return rep
 	}
-	blockID := getenv("REX_BLOCK")
-	if blockID == "" {
-		rep.Skipped = "REX_BLOCK が無いため点検しません (rex の block の中の Bash ツールから呼ぶと自分の block で点検します)"
+	if place.Block == "" {
+		rep.Skipped = "rex の block の外なので点検しません (rex の block の中の Bash ツールから呼ぶと自分の block で点検します)"
 		return rep
 	}
-	rep.Findings = append(rep.Findings, checker.CheckPremises(ctx, blockID)...)
+	rep.Findings = append(rep.Findings, checker.CheckPremises(ctx, place.Block)...)
 	return rep
 }
 

@@ -1,5 +1,15 @@
 # Changelog
 
+## [2026.1128.0](https://github.com/usadamasa/agents-daemon/compare/2026.1122.0...2026.1128.0) - 2026-11-28
+
+### Bug Fixes
+- rex が REX_SESSION を入れなくなったのに追従し、REX_BLOCK から session を引く by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/736
+### Documentation
+- docs: plugin から marketplace の名前とリポジトリを名指す箇所を無くす by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/741
+### Dependencies
+- Bump actions/create-github-app-token from 3.3.0 to 3.4.0 by @dependabot[bot] in https://github.com/usadamasa/agents-daemon/pull/737
+- Bump nixpkgs from `d5cc683` to `2786a2a` by @dependabot[bot] in https://github.com/usadamasa/agents-daemon/pull/738
+
 ## [2026.1122.0](https://github.com/usadamasa/agents-daemon/compare/2026.1121.1...2026.1122.0) - 2026-11-22
 
 ### Features

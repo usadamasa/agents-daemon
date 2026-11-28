@@ -1,5 +1,13 @@
 # Changelog
 
+## [2026.1128.6](https://github.com/usadamasa/agents-daemon/compare/2026.1128.5...2026.1128.6) - 2026-11-28
+
+### Features
+- 依存図の Tell の文面に出どころと対象を前置きする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/764
+- 依存図: 枠をまたぐ辺を枠の線から真っすぐ伸ばしてから曲げる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/767
+### Bug Fixes
+- 依存図で辺でつながる区切りどうしを寄せて並べる by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/766
+
 ## [2026.1128.5](https://github.com/usadamasa/agents-daemon/compare/2026.1128.4...2026.1128.5) - 2026-11-28
 
 ### Features

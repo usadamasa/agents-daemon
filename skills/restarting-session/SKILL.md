@@ -69,7 +69,8 @@ fork は会話を写すが、タスク (`TaskList`) は写さない。新しい�
 1. 再起動であることと、元の session ID
 2. SessionStart の確かめ。`~/.local/state/agents-daemon/logs/events.log` に
    `ingest-work session=<新しい session ID> event=SessionStart source=fork plugin_version=<v>` の行があり、`<v>` が
-   `jq -r '.plugins["agents-daemon@usadamasa"][0].version' ~/.claude/plugins/installed_plugins.json` と同じこと。
+   `jq -r '.plugins | to_entries[] | select(.key | startswith("agents-daemon@")) | .value[0].version' ~/.claude/plugins/installed_plugins.json`
+   と同じこと。
    行が無いかバージョンが違えば、確かめられなかったと報告し、元のタブは閉じない
 3. 引き継ぐタスク。元の `TaskList` の未完了を subject と状態の行で並べ、`TaskCreate` で作り直すよう書く
 4. 元のタブを閉じる。`rex whoami --json` の `window_id` が元の window と違うことを確かめてから

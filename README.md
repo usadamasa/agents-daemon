@@ -83,10 +83,7 @@ plugin が持つもの:
 
 ## インストール
 
-```sh
-claude plugin marketplace add usadamasa/agents-marketplace
-claude plugin install agents-daemon@usadamasa
-```
+導入は [agents-marketplace の README](https://github.com/usadamasa/agents-marketplace/blob/main/README.md) の手順に従う。
 
 次のセッションの SessionStart で、hook が `go build` をバックグラウンドで回す。
 セッションの開始は待たせず、build が終わると daemon が起きる。
@@ -275,9 +272,10 @@ claude plugin validate --strict .
 clone をそのまま読み込ませると、hook と skill の編集は install し直さずに反映される。
 このリポジトリは marketplace.json を持たないので、`--plugin-dir` でセッション単位に読み込む。
 install 済みの版と二重に hook が走らないよう、確認中は install 済みの plugin を無効にしておく。
+`<marketplace>` は `claude plugin list` が示す `agents-daemon@` の後ろの名前。
 
 ```sh
-claude plugin disable agents-daemon@usadamasa
+claude plugin disable agents-daemon@<marketplace>
 claude --plugin-dir "$PWD"
 ```
 

@@ -997,6 +997,46 @@ test("作業のノード: 日本語の変換を確定する Enter では題を�
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
 });
 
+test("作業のノード: 題の欄で打った字は、Esc 以外で閉じても指示の欄と次の題の欄に残らない (#714)", () => {
+  const tell = () => [...q("#pop").querySelectorAll(".acts .act")].find((b) => b.textContent === "Tell").click();
+  const instruction = () => q("#pop textarea")?.value;
+  // typeTitle は開いている単体ビューの題の欄を開いて字を打つ。
+  const typeTitle = () => {
+    q("#pop .title").click();
+    const field = q("#pop .title");
+    field.textContent = "打ちかけの題";
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+  try {
+    // 題を打ったまま Tell を開く。
+    q('.node[data-key="sid:zeta"]').click();
+    typeTitle();
+    tell();
+    assert.equal(instruction(), "");
+    tell();
+    // 題の欄を開き直すと、打ちかけではなく今の題から始まる。
+    q("#pop .title").click();
+    assert.equal(q("#pop .title").textContent, "zeta");
+
+    // 題を打ったまま単体ビューを × で閉じる。
+    q("#pop .title").textContent = "打ちかけの題";
+    q("#pop .title").dispatchEvent(new Event("input", { bubbles: true }));
+    q("#pop .x").click();
+    q('.node[data-key="sid:zeta"]').click();
+    tell();
+    assert.equal(instruction(), "");
+    tell();
+
+    // 題を打ったまま別のノードを選ぶ。
+    typeTitle();
+    q('.node[data-key="task:beta/1"]').click();
+    tell();
+    assert.equal(instruction(), "");
+  } finally {
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+  }
+});
+
 test("作業のノード: 題そのものを押すとその場で直せ、自動で付けた題は chip で分かり、終了したものは一覧から外せる", async () => {
   // 箱の副題には出どころを出さない (そこでは何もできない)。
   assert.doesNotMatch(q('.node[data-key="sid:zeta"] small').textContent, /題/);

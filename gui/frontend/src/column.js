@@ -29,19 +29,66 @@ export function partition(nodes, links, order) {
 // window に置かれていない block と参照の区切りは小見出しを持たない。生きているノードは rex の block からしか立たない
 // ので、置き場が無いのは daemon が置き場を書けていないとき (#662)。placement (deps の rex_placement) が無ければ
 // daemon が置き場を書く前のものなので、見出しで更新を促す。
-function frameOf(n, placement) {
-  if (n.kind === "ref") return { key: "ref", label: "Refs", part: "", partLabel: "" };
+// refs (placeRefs) を渡すと、issue / PR の参照は結びつけたノードの枠と区切りに入り、どの辺にもつながらない参照は
+// 孤立を示す枠に入る (#727)。rex の置き場を持つ置き場のノード (末端を集めた生きているセッションの sid:) は、その rex の枠に入る。
+function frameOf(n, placement, refs) {
+  const anchor = refs?.anchor.get(n.key);
+  if (anchor) return frameOf(anchor, placement);
+  if (refs?.unlinked.has(n.key)) return { key: "unlinked", label: UNLINKED_LABEL, part: "", partLabel: "" };
   if (n.rex) return { key: `rex:${n.rex.session_id}`, label: n.rex.session_label, part: n.rex.window_id ?? "", partLabel: n.rex.window_label ?? "", rex: n.rex.session_id };
+  if (n.kind === "ref") return { key: "ref", label: "Refs", part: "", partLabel: "" };
   const label = placement ? "Rex placement unknown" : "Rex placement unknown: update the daemon";
   return { key: "unplaced", label, part: n.session_id, partLabel: n.session };
 }
 
+export const UNLINKED_LABEL = "Unlinked refs";
+
+// placeRefs は issue / PR の参照 (ref_kind を持つノード) の置き場を、完了を隠すかに関わらず全部のノードと辺から決める。
+// anchor は参照の key → 枠を借りるノードで、次の順に最初に当たるものにする (同じ順位なら links の順)。
+//   1. 上流 (辺の before。daemon が導く辺なら PR を作ったセッションのタスク) のうち、セッションが生きていて rex の置き場のあるもの
+//   2. 下流 (参照を待っている側) のうち、rex の置き場のあるもの
+//   3. 上流のうち、rex の置き場のあるもの (作ったセッションが終わっていて、待っている側が無いとき)
+// どれにも当たらない参照は、辺でつながる参照 (上流、下流の順) が結びついたノードを借りる。
+// unlinked はどの辺にもつながらない参照の key。
+export function placeRefs(nodes, links) {
+  const byKey = new Map(nodes.map((n) => [n.key, n]));
+  const anchor = new Map();
+  const unlinked = new Set();
+  const placed = (n) => Boolean(n?.rex);
+  const rest = [];
+  for (const n of nodes) {
+    if (!n.ref_kind) continue;
+    const ups = links.filter((l) => l.after === n.key).map((l) => byKey.get(l.before)).filter(Boolean);
+    const downs = links.filter((l) => l.before === n.key).map((l) => byKey.get(l.after)).filter(Boolean);
+    if (ups.length === 0 && downs.length === 0) {
+      unlinked.add(n.key);
+      continue;
+    }
+    const to = ups.find((u) => placed(u) && u.live) ?? downs.find(placed) ?? ups.find(placed);
+    if (to) anchor.set(n.key, to);
+    else rest.push({ key: n.key, near: [...ups, ...downs].filter((m) => m.ref_kind) });
+  }
+  // 参照どうしの鎖は、結びついた参照から 1 段ずつ広げる。
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const r of rest) {
+      if (anchor.has(r.key)) continue;
+      const via = r.near.find((m) => anchor.has(m.key));
+      if (via) {
+        anchor.set(r.key, anchor.get(via.key));
+        changed = true;
+      }
+    }
+  }
+  return { anchor, unlinked };
+}
+
 // groupByRex は辺の無い動いているノードを枠にまとめ、枠の中を区切りに分ける。枠と区切りの順は最初のカードの順
-// (column_order)。nodes は枠の中のカードを区切りの順に並べたもの。placement は deps の rex_placement。
-export function groupByRex(nodes, placement) {
+// (column_order)。nodes は枠の中のカードを区切りの順に並べたもの。placement は deps の rex_placement、refs は placeRefs。
+export function groupByRex(nodes, placement, refs) {
   const groups = new Map();
   for (const n of nodes) {
-    const f = frameOf(n, placement);
+    const f = frameOf(n, placement, refs);
     if (!groups.has(f.key)) groups.set(f.key, { key: f.key, label: f.label, rex: f.rex, parts: new Map() });
     const parts = groups.get(f.key).parts;
     if (!parts.has(f.part)) parts.set(f.part, { label: f.partLabel, nodes: [] });
@@ -55,15 +102,17 @@ export function groupByRex(nodes, placement) {
 
 // frameTree は線のある図 (dagre) で描く枠を決める。辺のあるノードを frameOf の枠 (session) と区切り (window) に入れ、
 // その枠に属する辺の無いノード (free) も同じ枠へ引き入れる。終わったノードは rex の置き場があるときだけ枠に入れ、
-// 同じ window の線が枠の外から長く横切らないようにする。参照と、置き場の無い終わったノードは枠に入れない。
+// 同じ window の線が枠の外から長く横切らないようにする。参照は placeRefs が結びつけたノードの枠に入れる。結びつけた
+// ノードが完了で隠れていても、その枠を作って参照を入れる。rex の置き場を持つ置き場のノード (sid:) も枠に入れる。
+// 結びつけていない参照と、置き場の無い終わったノードは枠に入れない。
 // frames は枠の { key, label, level, parent, rex } (level は h2 / h3、rex は rex の session の id)、parentOf はノードの
 // key → 直の親の枠の key。
 // 小見出しの無い区切りは枠を作らず、ノードを session の枠へ直に入れる。nodes は図に入るノード (linked の後ろに
 // 引き入れた free を順に足す)、free は下の枠に残るもの。枠の key は "\0" で始め、ノードの key と重ならない。
-// placement は deps の rex_placement。
-export function frameTree(linked, free, placement) {
-  const framable = (n) => n.kind !== "ref" && (!ENDED.has(n.state) || Boolean(n.rex));
-  const frameIn = (n) => frameOf(n, placement);
+// placement は deps の rex_placement、refs は placeRefs。
+export function frameTree(linked, free, placement, refs) {
+  const framable = (n) => (n.kind === "ref" ? Boolean(refs?.anchor.has(n.key) || n.rex) : !ENDED.has(n.state) || Boolean(n.rex));
+  const frameIn = (n) => frameOf(n, placement, refs);
   const used = new Set(linked.filter(framable).map((n) => frameIn(n).key));
   const pulled = free.filter((n) => used.has(frameIn(n).key));
   const nodes = [...linked, ...pulled];

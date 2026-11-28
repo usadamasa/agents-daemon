@@ -31,14 +31,14 @@ func writeInstalled(t *testing.T, configDir string, plugins map[string]string) {
 func TestUpdate_runsStepsInOrder(t *testing.T) {
 	config := t.TempDir()
 	writeInstalled(t, config, map[string]string{
-		"agents-daemon@usadamasa": "/c/agents-daemon/2026.1025.0",
-		"other@usadamasa":         "/c/other/1.0.0",
+		"agents-daemon@mkt": "/c/agents-daemon/2026.1025.0",
+		"other@mkt":         "/c/other/1.0.0",
 	})
 	var calls [][]string
 	run := func(name string, args ...string) error {
 		calls = append(calls, append([]string{name}, args...))
 		if len(args) >= 2 && args[0] == "plugin" && args[1] == "update" {
-			writeInstalled(t, config, map[string]string{"agents-daemon@usadamasa": "/c/agents-daemon/2026.1025.1"})
+			writeInstalled(t, config, map[string]string{"agents-daemon@mkt": "/c/agents-daemon/2026.1025.1"})
 		}
 		return nil
 	}
@@ -46,8 +46,8 @@ func TestUpdate_runsStepsInOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := [][]string{
-		{"claude", "plugin", "marketplace", "update", "usadamasa"},
-		{"claude", "plugin", "update", "agents-daemon@usadamasa"},
+		{"claude", "plugin", "marketplace", "update", "mkt"},
+		{"claude", "plugin", "update", "agents-daemon@mkt"},
 		{"/c/agents-daemon/2026.1025.1/hooks/build-daemon.sh"},
 	}
 	if !reflect.DeepEqual(calls, want) {
@@ -58,7 +58,7 @@ func TestUpdate_runsStepsInOrder(t *testing.T) {
 // 段が失敗したら、その後の段を走らせずに、どの段で落ちたかを返す。
 func TestUpdate_stopsAtFailedStep(t *testing.T) {
 	config := t.TempDir()
-	writeInstalled(t, config, map[string]string{"agents-daemon@usadamasa": "/c/agents-daemon/2026.1025.0"})
+	writeInstalled(t, config, map[string]string{"agents-daemon@mkt": "/c/agents-daemon/2026.1025.0"})
 	var calls int
 	run := func(name string, args ...string) error {
 		calls++
@@ -68,7 +68,7 @@ func TestUpdate_stopsAtFailedStep(t *testing.T) {
 		return nil
 	}
 	err := Update(Options{ConfigDir: config, Run: run})
-	if err == nil || !strings.Contains(err.Error(), "claude plugin update agents-daemon@usadamasa") {
+	if err == nil || !strings.Contains(err.Error(), "claude plugin update agents-daemon@mkt") {
 		t.Errorf("err = %v, want plugin update の段の失敗", err)
 	}
 	if calls != 2 {
@@ -79,8 +79,8 @@ func TestUpdate_stopsAtFailedStep(t *testing.T) {
 // install されていなければ、何も走らせずに理由を返す。installPath が絶対パスでなければ build を走らせない。
 func TestUpdate_rejectsMissingOrRelativeInstall(t *testing.T) {
 	for name, plugins := range map[string]map[string]string{
-		"未 install": {"other@usadamasa": "/c/other/1.0.0"},
-		"相対パス":      {"agents-daemon@usadamasa": "cache/agents-daemon/2026.1025.0"},
+		"未 install": {"other@mkt": "/c/other/1.0.0"},
+		"相対パス":      {"agents-daemon@mkt": "cache/agents-daemon/2026.1025.0"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			config := t.TempDir()

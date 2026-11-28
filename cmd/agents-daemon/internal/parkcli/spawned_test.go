@@ -47,7 +47,7 @@ func TestMarkSpawnedSession(t *testing.T) {
 		session = "session:01a1ca60-c767-7aaa-857b-7e167825e668"
 	)
 	store := spawnedsession.New(t.TempDir())
-	got, err := markSpawnedSession(context.Background(), store, fakeResolver{sessions: map[string]string{block: session}}, block)
+	got, err := markSpawnedSession(context.Background(), store, fakeResolver{sessions: map[string]string{block: session}}.ResolveSession, block)
 	if err != nil {
 		t.Fatalf("markSpawnedSession() error = %v", err)
 	}
@@ -66,7 +66,7 @@ func TestMarkSpawnedSession(t *testing.T) {
 // 引けなければ印を書かずに error にする (block の名前のまま印を書くと、reaper と close が当たらない)。
 func TestMarkSpawnedSession_ResolveFails(t *testing.T) {
 	store := spawnedsession.New(t.TempDir())
-	if _, err := markSpawnedSession(context.Background(), store, fakeResolver{err: errors.New("socket")}, "block:x"); err == nil {
+	if _, err := markSpawnedSession(context.Background(), store, fakeResolver{err: errors.New("socket")}.ResolveSession, "block:x"); err == nil {
 		t.Fatal("markSpawnedSession() error = nil, want error")
 	}
 	if recs, err := store.List(); err != nil || len(recs) != 0 {

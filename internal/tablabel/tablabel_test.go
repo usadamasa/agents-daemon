@@ -133,7 +133,7 @@ func TestRun_Failures(t *testing.T) {
 		h   *fakeHost
 		req Request
 	}{
-		"block 無し":       {&fakeHost{window: window}, Request{}},
+		"block 無し":      {&fakeHost{window: window}, Request{}},
 		"session を引けない": {&fakeHost{window: window, resolveErr: errors.New("socket")}, Request{RexBlock: block}},
 		"window を引けない":  {&fakeHost{missing: true}, Request{RexBlock: block}},
 		"付けられない":        {&fakeHost{window: window, label: "old-name", setErr: errors.New("boom")}, Request{RexBlock: block, Label: "new-name"}},

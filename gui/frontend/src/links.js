@@ -109,6 +109,18 @@ export function textNoteRepo(text, number, fallback) {
   return matched.size === 1 ? [...matched][0] : undefined;
 }
 
+// textNoteKind は text の #number を repo で補ったときの種類 ("pr" か "issue")。text の中の番号と repo の合う
+// pr: / issue: の参照の種類で決め、合う参照が無いか両方が合えば決めない (リンクは issues/N になる)。
+// 参照は textNoteRepo と同じく segments がリンクにする位置のものだけを数える。
+export function textNoteKind(text, repo, number) {
+  const kinds = new Set();
+  for (const m of text.matchAll(PATTERN)) {
+    const g = m.groups;
+    if (g.kind !== undefined && g.repo === repo && Number(g.number) === number) kinds.add(g.kind);
+  }
+  return kinds.size === 1 ? [...kinds][0] : undefined;
+}
+
 // segments は text を { text } (素の文字) と { text, target } (リンク。target は URL か絶対パス) の並びにする。
 // ctx.githubRepo は #123 の番号を受けて補う owner/repo を返す関数、ctx.githubKind は番号と補った owner/repo を受けて
 // 種類 ("pr" で pull へ) を返す関数 (無ければ issues へ)、ctx.base は相対パスの基準。無いか owner/repo が

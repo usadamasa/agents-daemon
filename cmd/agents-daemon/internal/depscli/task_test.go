@@ -154,6 +154,7 @@ func TestDismiss_completedRef(t *testing.T) {
 	addEdge(t, edges, "task:s/1", "pr:o/r#1")
 	addEdge(t, edges, "sid:peer", "pr:o/r#2")
 	addEdge(t, edges, "task:s/1", "issue:o/r#4")
+	writeFile(t, filepath.Join(dir, "work", "issuer.json"), `{"session_id": "issuer", "cwd": "/w", "subject": "s", "turns": 1, "prs": ["pr:O/r#1"], "started_at": "2026-10-18T09:00:00Z", "updated_at": "2026-10-18T09:00:00Z"}`)
 	refs := refstate.New(dir)
 	for r, state := range map[string]string{"pr:o/r#1": refstate.StateMerged, "pr:o/r#2": refstate.StateOpen, "issue:o/r#4": refstate.StateClosed} {
 		if err := refs.Put(refstate.Record{Ref: r, State: state, CheckedAt: testEdgeTime}); err != nil {
@@ -174,6 +175,12 @@ func TestDismiss_completedRef(t *testing.T) {
 	got, err := edges.Find("", "")
 	if err != nil || len(got) != 1 || got[0].After.Ref != "pr:o/r#2" {
 		t.Errorf("残った辺 = %+v, %v", got, err)
+	}
+	// 外した PR へは、PR を出したセッション (作業の記録の prs) からも、外した辺の sid: からも導き直さない。
+	for _, sessionID := range []string{"issuer", "peer"} {
+		if _, ok, err := edges.AnchorAlone(sessionID, "/w", "", "pr:o/r#1", time.Now()); ok || err != nil {
+			t.Errorf("%s から外した PR へ導き直した: %v, %v", sessionID, ok, err)
+		}
 	}
 	equalLines(t, eventLines(t, dir), []string{
 		"ref.dismiss session=viewer ref=pr:o/r#1 edges=2",

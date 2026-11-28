@@ -1181,6 +1181,28 @@ test("辺の端点だけの置き場のカード: 単体で外せてメモには
   }
 });
 
+test("済んだ PR のカード: 単体で外せてメモにはできず、待つ側にいるだけなら一括の数に入る", async () => {
+  q("#completed-check").click();
+  const base = q("#dismiss-ended").textContent;
+  const data = JSON.parse(fixtureDeps);
+  const pr = data.graph.nodes.find((n) => n.key === "pr:usadamasa/agents-daemon#254");
+  const merged = "pr:usadamasa/agents-daemon#9";
+  data.graph.nodes.push({ ...pr, key: merged, state: "completed", title: "済んだ PR", ref_label: "PR #9 · usadamasa/agents-daemon", downstream: 0, halted: false, stuck: false });
+  data.graph.links.push({ before: "task:alpha/5", after: merged, kind: "edge" });
+  await loadDeps(JSON.stringify(data));
+  try {
+    const n = (text) => Number(/\((\d+)\)/.exec(text)?.[1] ?? 0);
+    assert.equal(n(q("#dismiss-ended").textContent), n(base) + 1);
+    q(`.node[data-key="${merged}"]`).click();
+    const verbs = [...q("#pop").querySelectorAll(".acts .act")].map((b) => b.textContent);
+    assert.ok(verbs.includes("Remove") && !verbs.includes("Memo"), verbs.join(" / "));
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+  } finally {
+    q("#completed-check").click();
+    await loadDeps(fixtureDeps);
+  }
+});
+
 test("完了も表示した図: 完了したノードも描き、通り抜けていた辺を元の辺で描く", async () => {
   q("#completed-check").click();
   try {

@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026.1128.5](https://github.com/usadamasa/agents-daemon/compare/2026.1128.4...2026.1128.5) - 2026-11-28
+
+### Features
+- 依存図: 済んだ issue / PR のカードを外せるようにする by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/762
+
 ## [2026.1128.4](https://github.com/usadamasa/agents-daemon/compare/2026.1128.3...2026.1128.4) - 2026-11-28
 
 ### Bug Fixes

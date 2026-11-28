@@ -93,7 +93,8 @@ type Request struct {
 	// NewSession は新しい session を作る。Session とは併用しない。
 	NewSession bool
 	// Caller は起こす側の多重化ツールの session。Session も NewSession も無ければ、ここにタブとして起こす。
-	// spawn サブコマンドだけが REX_SESSION を入れ、park hand は入れない (rex の中から呼ばれても新しい session に起こす)。
+	// spawn サブコマンドだけが REX_BLOCK (session の位置に置くと rex がその block の居る session を指す) を入れ、
+	// park hand は入れない (rex の中から呼ばれても新しい session に起こす)。
 	Caller string
 	// SessionID は新しいセッションの ID (UUID)。空なら Runner.NewSessionID。起こす前に依存の辺を書くのに使う。
 	SessionID string

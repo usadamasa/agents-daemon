@@ -16,7 +16,8 @@ Server & CLI の版 (`rex_version`) は書かない。
 <!-- rex-premise: preview.30 api 2026-10-27 の events.jsonl は event の payload を 1 行 1 event で並べたもの (events --all --json の出力と同じ形)。自分の session と使い捨ての block の分だけを抜き、process_changed の ancestors は落としてある -->
 <!-- rex-premise: preview.30 api 2026-10-27 の events-session-new.jsonl は session new の直後の行。最初の block には block_created が来ず、session_created の後にいきなりその block の event が流れる (2026-11-18 に session.create と event_scope all の接続でも同じ) -->
 <!-- rex-premise: preview.30 api 2026-11-03 の block-inspect.json と api-list.json は 2026-11-15 の基準の前の版。api_revision 10 で server に session.set_layer_state が増え、block の api は program_status_removed.reason の説明に foreground が載っただけ -->
-<!-- rex-premise: preview.30 api 2026-11-15 の block-inspect.json と api-list.json は次回の増減の基準。api_revision 14 で block に download_begin / upload_begin、server.status に listeners が増え、daemon が読む method と event の schema は 2026-11-03 と同じ -->
+<!-- rex-premise: preview.30 api 2026-11-15 の block-inspect.json と api-list.json は 2026-11-28 の基準の前の版。api_revision 14 で block に download_begin / upload_begin、server.status に listeners が増え、daemon が読む method と event の schema は 2026-11-03 と同じ -->
+<!-- rex-premise: preview.37 api 2026-11-28 の block-inspect.json と api-list.json は次回の増減の基準。api_revision 24 で server に client.undo_close / focus_history.reverse / session.transfer_window、block に ports / program_resume_records と event ports_changed / program_resume_changed が増えた。daemon は revision 14 で繋ぎ、server がその形へ訳す -->
 <!-- rex-premise: preview.30 api 2026-11-18 の server-version.json は server.version の応答で、doctor の点検が rex_version、built_at、api_revision を読む -->
 <!-- rex-premise: preview.25 api 2026-11-03 の events-close-working.jsonl は state=working の block を block close で閉じた行。program_status_removed も child_exited も来ず、block_closed で終わる -->
 

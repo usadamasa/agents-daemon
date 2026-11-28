@@ -353,11 +353,18 @@ func (s *Server) resolve(p json.RawMessage) (any, error) {
 	return map[string]any{"results": results}, nil
 }
 
-// resolveSession は実機と同じく、完全な ID を先に、無ければ label を大小文字を区別せずに引く。label が 2 つ以上に
-// 当たれば ambiguous。s.mu を持って呼ぶ。
+// resolveSession は実機と同じく、完全な session ID を先に、次に block ID (その block の居る session)、無ければ label を
+// 大小文字を区別せずに引く。label が 2 つ以上に当たれば ambiguous。s.mu を持って呼ぶ。
 func (s *Server) resolveSession(q string) map[string]any {
 	if _, ok := s.blocks[q]; ok {
 		return map[string]any{"query": q, "status": "resolved", "target": map[string]any{"kind": "session", "session_id": q, "label": s.labels[q]}}
+	}
+	for session, blocks := range s.blocks {
+		for _, b := range blocks {
+			if b[0] == q {
+				return map[string]any{"query": q, "status": "resolved", "target": map[string]any{"kind": "session", "session_id": session, "label": s.labels[session]}}
+			}
+		}
 	}
 	var matched []string
 	for session, label := range s.labels {

@@ -36,7 +36,7 @@ func tabLabel(ctx context.Context, paths apppath.Paths, req protocol.TabLabelReq
 	if !ok {
 		return protocol.TabLabelResult{}, errors.New("この backend はタブの名前を扱えない")
 	}
-	res, err := tablabel.Runner{Host: host}.Run(ctx, tablabel.Request{RexSession: req.RexSession, RexBlock: req.RexBlock, Label: req.Label})
+	res, err := tablabel.Runner{Host: host}.Run(ctx, tablabel.Request{RexBlock: req.RexBlock, Label: req.Label})
 	if err != nil {
 		return protocol.TabLabelResult{}, err
 	}

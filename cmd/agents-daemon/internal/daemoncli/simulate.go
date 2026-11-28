@@ -26,7 +26,7 @@ func newSimulateCmd() *cobra.Command {
 			"5 時間ウィンドウの上限。--turn-file で差し替え) を monitor に読ませる。利用者の ~/.claude には書かない。\n" +
 			"既定では dry-run (--send を付けると使い捨て pane に限って実際に送信する)。使い捨て pane の前景は\n" +
 			"画面を cat したあと cat -v で居座る script で、送った esc・文字列・enter を解釈せずそのまま画面に書く。\n" +
-			"REX_SESSION と REX_BLOCK のある rex の block 内で打つ。script が Claude Code と同じ\n" +
+			"REX_BLOCK のある rex の block 内で打つ。script が Claude Code と同じ\n" +
 			"OSC 7501 を printf して program_status に載せ、Claude agent (idle) に見せる。\n\n" +
 			"simulate は自分が作った pane 以外には構造的に一切書き込めない (pane を読む・送る操作を\n" +
 			"scopedClient で包み、作成した pane_id 以外への呼び出しを拒否する)。実 Claude\n" +

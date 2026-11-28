@@ -3,9 +3,7 @@ package parkcli
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -24,25 +22,55 @@ func runSpawnedSession(t *testing.T, args ...string) (string, error) {
 	return out.String(), err
 }
 
-// `spawned-session mark <id>` は state に印を書き、書いた印を JSON で出す。spawn と peer-sessions skill の手順が
-// 起こした session の中から呼ぶ (#557)。
-func TestSpawnedSessionMark(t *testing.T) {
-	root := parkTestEnv(t)
-	const id = "session:01a1ca60-c767-7aaa-857b-7e167825e668"
-	out, err := runSpawnedSession(t, "mark", id)
+// fakeResolver は block か session の名指しを session の ID に引く。
+type fakeResolver struct {
+	sessions map[string]string
+	err      error
+}
+
+func (f fakeResolver) ResolveSession(_ context.Context, name string) (string, error) {
+	if f.err != nil {
+		return "", f.err
+	}
+	id, ok := f.sessions[name]
+	if !ok {
+		return "", errors.New("not found")
+	}
+	return id, nil
+}
+
+// `spawned-session mark <block|session>` は名指しを session の ID に引いてから印を書き、書いた印を返す。spawn の包みは
+// 自分の REX_BLOCK を渡す (rex は新しい端末に REX_SESSION を入れない)。reaper と close は session の ID で印を引く (#557)。
+func TestMarkSpawnedSession(t *testing.T) {
+	const (
+		block   = "block:01a1ca60-c767-7aaa-857b-7e167825e669"
+		session = "session:01a1ca60-c767-7aaa-857b-7e167825e668"
+	)
+	store := spawnedsession.New(t.TempDir())
+	got, err := markSpawnedSession(context.Background(), store, fakeResolver{sessions: map[string]string{block: session}}.ResolveSession, block)
 	if err != nil {
-		t.Fatalf("mark error = %v", err)
+		t.Fatalf("markSpawnedSession() error = %v", err)
 	}
-	var got spawnedsession.Record
-	if err := json.Unmarshal([]byte(out), &got); err != nil || got.SessionID != id || got.CreatedAt.IsZero() {
-		t.Errorf("stdout = %q (%v), want session_id %q と書いた時刻", out, err, id)
+	if got.SessionID != session || got.CreatedAt.IsZero() {
+		t.Errorf("markSpawnedSession() = %+v, want session_id %q と書いた時刻", got, session)
 	}
-	recs, err := spawnedsession.New(filepath.Join(root, "state", "agents-daemon")).List()
+	recs, err := store.List()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(recs) != 1 || recs[0].SessionID != id {
-		t.Errorf("印 = %+v, want %q の 1 つ", recs, id)
+	if len(recs) != 1 || recs[0].SessionID != session {
+		t.Errorf("印 = %+v, want %q の 1 つ", recs, session)
+	}
+}
+
+// 引けなければ印を書かずに error にする (block の名前のまま印を書くと、reaper と close が当たらない)。
+func TestMarkSpawnedSession_ResolveFails(t *testing.T) {
+	store := spawnedsession.New(t.TempDir())
+	if _, err := markSpawnedSession(context.Background(), store, fakeResolver{err: errors.New("socket")}.ResolveSession, "block:x"); err == nil {
+		t.Fatal("markSpawnedSession() error = nil, want error")
+	}
+	if recs, err := store.List(); err != nil || len(recs) != 0 {
+		t.Errorf("印 = %+v (%v), want 無し", recs, err)
 	}
 }
 

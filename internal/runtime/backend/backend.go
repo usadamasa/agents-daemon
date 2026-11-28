@@ -14,11 +14,12 @@ import (
 // daemon --ensure はこれを受けて何もせずに終わる (素の端末の SessionStart で毎回 daemon を起こさない)。
 // hook はこの判定を持たず、バイナリの build は常に行う。同じバイナリの statusline / ingest-statusline は
 // 多重化ツールを要らないため。
-var ErrNoRexSession = errors.New("REX_SESSION が無いため rex の block を監視できません (rex の外で起動されました)")
+var ErrNoRexSession = errors.New("REX_BLOCK が無いため rex の block を監視できません (rex の外で起動されました)")
 
-// Detect は使う backend の種類を返す。REX_SESSION があれば rex、無ければ ErrNoRexSession。
+// Detect は使う backend の種類を返す。REX_BLOCK があれば rex、無ければ ErrNoRexSession。
+// rex-premise: preview.37 cli 新しい端末には REX_BLOCK だけが入り、REX_SESSION は入らない (Server & CLI preview.23)
 func Detect(getenv func(string) string) (string, error) {
-	if getenv("REX_SESSION") != "" {
+	if getenv("REX_BLOCK") != "" {
 		return sessioncontext.MultiplexerKindRex, nil
 	}
 	return "", ErrNoRexSession
@@ -44,7 +45,7 @@ func Close(c any) {
 	}
 }
 
-// ConnectRex は REX_SESSION を確かめずに rex の Client を作る。依存図のアプリ (gui/) は rex の外で起きて spawn / tell /
+// ConnectRex は REX_BLOCK を確かめずに rex の Client を作る。依存図のアプリ (gui/) は rex の外で起きて spawn / tell /
 // park hand を呼ぶので、自分が rex の block にいるかは問わず、rex の server に届くかだけが問われる (届かなければ
 // 呼び出しが失敗する)。daemon は Detect 付きの Connect を使う。
 func ConnectRex(contexts sessioncontext.Store) multiplexer.Client {

@@ -51,7 +51,7 @@ func write(w io.Writer, rep Report) {
 }
 
 func writeBackend(w io.Writer, rep BackendReport) {
-	_, _ = fmt.Fprintf(w, "  backend: %s (REX_SESSION あり)\n", rep.Kind)
+	_, _ = fmt.Fprintf(w, "  backend: %s (REX_BLOCK あり)\n", rep.Kind)
 	if !rep.Reachable {
 		_, _ = fmt.Fprintf(w, "  NG: %s に到達できません: %s\n", rep.Kind, rep.Error)
 		return

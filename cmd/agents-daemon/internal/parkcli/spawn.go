@@ -26,7 +26,7 @@ func newSpawnCmd() *cobra.Command {
 			"無ければ Claude Code の settings.json の env." + spawn.SubagentModelKey + " から読む。\n" +
 			"fork_from があれば `--resume <fork_from> --fork-session` を足し、元の会話を写した新しいセッションとして起こす。\n" +
 			"起こす先は session の欄があればその rex の session のタブ、new_session なら新しい rex の session、\n" +
-			"どちらも無ければ REX_SESSION (起こす側の session) のタブ、REX_SESSION も無ければ新しい rex の session。\n" +
+			"どちらも無ければ REX_BLOCK (起こす側の block) の居る session のタブ、REX_BLOCK も無ければ新しい rex の session。\n" +
 			"claude が前景になってから SpawnResult を JSON で出す。待ち切れたときは session を残したまま\n" +
 			"foreground=false と detail を出す (error にするのは session を作れなかったときだけ)。",
 		Args: cobra.NoArgs,
@@ -38,12 +38,13 @@ func newSpawnCmd() *cobra.Command {
 	}
 }
 
-// spawnCommandRequest は spawn サブコマンドの stdin を spawn.Request にする。起こす側の rex session (REX_SESSION) を
-// 足し先の既定にするのはこのサブコマンドだけ。依存図のアプリは launchd から起き、REX_SESSION を持たない。
+// spawnCommandRequest は spawn サブコマンドの stdin を spawn.Request にする。起こす側の block (REX_BLOCK) の居る
+// rex session を足し先の既定にするのはこのサブコマンドだけ。rex は session の位置に block ID を受け、NewWindow が
+// その block の居る session を引く。依存図のアプリは launchd から起き、REX_BLOCK を持たない。
 func spawnCommandRequest(req protocol.SpawnRequest) spawn.Request {
 	return spawn.Request{
 		Repo: req.Repo, Prompt: req.Prompt, PromptFile: req.PromptFile, Session: req.Session, NewSession: req.NewSession,
-		SessionID: req.SessionID, ForkFrom: req.ForkFrom, Model: req.Model, Label: req.Label, Caller: os.Getenv("REX_SESSION"),
+		SessionID: req.SessionID, ForkFrom: req.ForkFrom, Model: req.Model, Label: req.Label, Caller: os.Getenv("REX_BLOCK"),
 	}
 }
 
@@ -53,7 +54,7 @@ func handSpawnRequest(repo, prompt string) spawn.Request {
 	return spawn.Request{Repo: repo, Prompt: prompt}
 }
 
-// spawnSession は req のセッションを起こす。依存図のアプリは rex の外で起きるので REX_SESSION を要求しない
+// spawnSession は req のセッションを起こす。依存図のアプリは rex の外で起きるので REX_BLOCK を要求しない
 // (ConnectRex)。req.Model が空なら settings の subagent 用のモデルを使う。
 func spawnSession(ctx context.Context, paths apppath.Paths, req spawn.Request) (spawn.Result, error) {
 	client := backend.ConnectRex(sessioncontext.New(paths.StateDir()))

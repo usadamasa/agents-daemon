@@ -82,7 +82,7 @@ CloseVars == <<cpc, target, m, goneAtStart, startMarkedLive, refused, result, cl
 
 \* ---- 包み (rex/wrap の sessionScript) ----
 
-\* `spawned-session mark "$REX_SESSION"` (parkcli の mark → spawnedsession.Put)。
+\* `spawned-session mark "$REX_BLOCK"` (parkcli の mark が block の居る session を引いて spawnedsession.Put)。
 WMark(s) ==
   /\ wpc[s] = "init"
   /\ s \in live

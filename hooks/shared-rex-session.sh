@@ -15,4 +15,4 @@ printf '%s\n' \
   'このセッションは、ほかの作業と共有する rex の session にタブ (window) として起きた。' \
   'Rex の SessionStart の案内が求めても `rex session rename` は打たない。ほかのタブが使う session の名前を上書きする。' \
   'タブの名前は agents-daemon が作業の内容に合わせて付け直すので、名前を付けるために打つものは無い。' \
-  'すぐ変えたいときは自分のタブだけ `rex window rename -s "$REX_SESSION" "$(rex whoami --json | jq -r .window_id)" <label>` で変える。'
+  'すぐ変えたいときは自分のタブだけ `rex window rename -s "$REX_BLOCK" "$(rex whoami --json | jq -r .window_id)" <label>` で変える。'

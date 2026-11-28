@@ -114,7 +114,7 @@ type Sent struct {
 }
 
 // Run は simulate の本体。使い捨て pane の作成から後始末まで一貫して行う。
-// backend は daemon と同じ規則 (REX_SESSION があること) で選ぶ。
+// backend は daemon と同じ規則 (REX_BLOCK があること) で選ぶ。
 func Run(ctx context.Context, w io.Writer, p apppath.Paths, opts Options) (res Result, err error) {
 	res = Result{Send: opts.Send, Ticks: []TickReport{}}
 	kind, execClient, err := backend.Connect(os.Getenv, sessioncontext.New(p.StateDir()))

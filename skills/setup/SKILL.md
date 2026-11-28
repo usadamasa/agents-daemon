@@ -43,10 +43,10 @@ command -v rex go jq
 先に rex の中かを確かめる。
 
 ```sh
-printenv REX_SESSION
+printenv REX_BLOCK
 ```
 
-値が出なければ NG。rex の外 (素のターミナル、IDE) で動いていて、daemon は `REX_SESSION` の無いセッションの
+値が出なければ NG。rex の外 (素のターミナル、IDE) で動いていて、daemon は `REX_BLOCK` の無いセッションの
 SessionStart では起きない (statusline は動く)。rex の block の中で Claude Code を起動し直してもらう。
 到達性と sandbox の socket 許可の手順は [rex.md](references/rex.md) にあり、`Read` で開いて従う。
 
@@ -62,8 +62,6 @@ printf 'REX_BLOCK=%s\n' "${REX_BLOCK:-}"
 jq -c '.multiplexer' "$state/context/$sid.json"
 ```
 
-- `REX_BLOCK` が空なら NG。`REX_SESSION` はあるのに `REX_BLOCK` が無いのは、block の外で起動した
-  プロセス (`rex run` を経ない起動) で、この段では直せない。rex の block の中で Claude Code を起動し直してもらう。
 - `multiplexer.block` が `REX_BLOCK` と一致すれば OK。
 - `context/<sid>.json` が無いなら、この段ではなく 3 段目の NG (statusline の配線) として扱う。
 - ファイルはあるのに `multiplexer` が `null` なら、statusline が呼ぶバイナリが `multiplexer` を書く前の版。
@@ -219,7 +217,7 @@ rex の外 (`doctor` がこの行まで進まない) では、次のコマンド
 agents-daemon setup
 
 - コマンド: rex / go / jq … OK | NG (<無いもの>)
-- rex: <REX_SESSION あり | 無し>、server <running | 停止>
+- rex: <REX_BLOCK あり | 無し>、server <running | 停止>
 - このセッションの block: <block_id | 見つからない | 記録なし (理由)>
 - statusline: context <OK (n 秒前) | NG>、rate-limits <OK | 無し (理由)>
 - バイナリ: <version | NG (build.log の要点)>

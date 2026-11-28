@@ -280,10 +280,10 @@ func TestIngestStatuslineWithEnv_multiplexer(t *testing.T) {
 		want string
 	}{
 		{
-			name: "rex の block と session を書く",
-			env:  map[string]string{"REX_SESSION": "session:01a1", "REX_BLOCK": "block:01a1"},
+			name: "rex の block を書く",
+			env:  map[string]string{"REX_BLOCK": "block:01a1"},
 			want: `{"session_id":"sess-1","used_percentage":12,"observed_at":` + observed +
-				`,"multiplexer":{"kind":"rex","session":"session:01a1","block":"block:01a1"}}` + "\n",
+				`,"multiplexer":{"kind":"rex","block":"block:01a1"}}` + "\n",
 		},
 		{
 			name: "多重化ツールの外なら multiplexer を書かない",
@@ -305,7 +305,6 @@ func TestIngestStatuslineWithEnv_multiplexer(t *testing.T) {
 
 func TestIngestStatusline_環境変数からmultiplexerを読む(t *testing.T) {
 	clearMultiplexerEnv(t)
-	t.Setenv("REX_SESSION", "session:01a1")
 	t.Setenv("REX_BLOCK", "block:01a1")
 	s := New(t.TempDir())
 	if err := s.IngestStatusline([]byte(inputNoRateLimits), ingestNow); err != nil {

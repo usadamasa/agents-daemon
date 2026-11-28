@@ -334,15 +334,15 @@ func TestCheck_DaemonRunsDryAgainstRealRexAndClaude(t *testing.T) {
 		"XDG_STATE_HOME=" + filepath.Join(home, ".local", "state"),
 		"CLAUDE_CONFIG_DIR=" + f.cfg.SourceClaude,
 		"REX_SERVER=unix://" + f.cfg.RexSocket,
-		"REX_SESSION=session:release-verify",
+		"REX_BLOCK=block:release-verify",
 	} {
 		if !slices.Contains(c.Env, kv) {
 			t.Errorf("daemon の env に %q が無い: %q", kv, c.Env)
 		}
 	}
 	for _, kv := range c.Env {
-		if strings.Contains(kv, "caller") || strings.HasPrefix(kv, "REX_BLOCK=") {
-			t.Errorf("呼び手の rex の変数が漏れた: %q", kv)
+		if strings.Contains(kv, "caller") || strings.HasPrefix(kv, "REX_SESSION=") {
+			t.Errorf("呼び手の rex の変数か、rex がもう入れない REX_SESSION が入った: %q", kv)
 		}
 	}
 }

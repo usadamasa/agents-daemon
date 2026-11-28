@@ -15,14 +15,14 @@ import (
 
 func TestNewSimulateHost_前提チェック(t *testing.T) {
 	t.Run("rex は REX_BLOCK が要る", func(t *testing.T) {
-		env := map[string]string{"REX_SESSION": "session:01a1"}
+		env := map[string]string{}
 		_, err := newSimulateHost(sessioncontext.MultiplexerKindRex, func(k string) string { return env[k] }, &fakeOps{})
 		if err == nil || !strings.Contains(err.Error(), "REX_BLOCK") {
 			t.Fatalf("newSimulateHost(rex) error = %v, want REX_BLOCK に触れるエラー", err)
 		}
 	})
 	t.Run("rex は REX_BLOCK を anchor に持つ", func(t *testing.T) {
-		env := map[string]string{"REX_SESSION": "session:01a1", "REX_BLOCK": "block:mine"}
+		env := map[string]string{"REX_BLOCK": "block:mine"}
 		host, err := newSimulateHost(sessioncontext.MultiplexerKindRex, func(k string) string { return env[k] }, &fakeOps{})
 		if err != nil {
 			t.Fatalf("newSimulateHost(rex) error = %v", err)
@@ -36,7 +36,7 @@ func TestNewSimulateHost_前提チェック(t *testing.T) {
 		}
 	})
 	t.Run("pane を作れない client は error", func(t *testing.T) {
-		env := map[string]string{"REX_SESSION": "session:01a1", "REX_BLOCK": "block:mine"}
+		env := map[string]string{"REX_BLOCK": "block:mine"}
 		_, err := newSimulateHost(sessioncontext.MultiplexerKindRex, func(k string) string { return env[k] }, &multiplexerfake.Client{})
 		if err == nil || !strings.Contains(err.Error(), "pane を作れない") {
 			t.Fatalf("newSimulateHost(rex) error = %v, want pane を作れない error", err)

@@ -35,11 +35,10 @@ func New(stateDir string) Store {
 	return Store{Dir: filepath.Join(stateDir, "context")}
 }
 
-// MultiplexerRef は Claude Code が動いている端末多重化ツールの場所 (rex の Session と Block)。
+// MultiplexerRef は Claude Code が動いている端末多重化ツールの場所 (rex の Block)。
 type MultiplexerRef struct {
-	Kind    string
-	Session string
-	Block   string
+	Kind  string
+	Block string
 }
 
 // id は kind の中で場所を指す ID (rex は block)。
@@ -51,7 +50,7 @@ func (r MultiplexerRef) id() string {
 // 空の値は無いものとして扱う。
 func MultiplexerRefFromEnv(getenv func(string) string) (MultiplexerRef, bool) {
 	if block := getenv("REX_BLOCK"); block != "" {
-		return MultiplexerRef{Kind: MultiplexerKindRex, Session: getenv("REX_SESSION"), Block: block}, true
+		return MultiplexerRef{Kind: MultiplexerKindRex, Block: block}, true
 	}
 	return MultiplexerRef{}, false
 }
@@ -81,20 +80,19 @@ type contextFile struct {
 
 // multiplexerFile は context/<session_id>.json の multiplexer の生の形。
 type multiplexerFile struct {
-	Kind    string `json:"kind"`
-	Session string `json:"session,omitempty"`
-	Block   string `json:"block,omitempty"`
+	Kind  string `json:"kind"`
+	Block string `json:"block,omitempty"`
 }
 
 func newMultiplexerFile(ref *MultiplexerRef) *multiplexerFile {
 	if ref == nil {
 		return nil
 	}
-	return &multiplexerFile{Kind: ref.Kind, Session: ref.Session, Block: ref.Block}
+	return &multiplexerFile{Kind: ref.Kind, Block: ref.Block}
 }
 
 func (m *multiplexerFile) ref() MultiplexerRef {
-	return MultiplexerRef{Kind: m.Kind, Session: m.Session, Block: m.Block}
+	return MultiplexerRef{Kind: m.Kind, Block: m.Block}
 }
 
 // Write は rec を context/<session_id>.json へ書く。

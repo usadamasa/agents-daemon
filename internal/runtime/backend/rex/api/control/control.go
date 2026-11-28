@@ -18,7 +18,7 @@ import (
 )
 
 // APIRevision は hello で名乗る API revision。server はこの revision の形へ訳して返すので、応答の形はこの値で決まる。
-// rex-premise: preview.30 api control API は revision 14。hello の api_revision に合わせて server が形を訳す
+// rex-premise: preview.37 api control API は revision 14。hello の api_revision に合わせて server が形を訳す
 const APIRevision = 14
 
 // subprotocol は control 接続の WebSocket の subprotocol。
@@ -52,7 +52,7 @@ func (e *apiError) Error() string {
 
 // IsNotFound は err が対象 (block、window、session) が無いことによる失敗かを返す。
 // 閉じた block や session を読み飛ばす判定に使う。
-// rex-premise: preview.30 api 無い block は not_found、無い session は session_not_found (status 404)
+// rex-premise: preview.37 api 無い block は not_found、無い session は session_not_found (status 404)
 func IsNotFound(err error) bool {
 	var e *apiError
 	return errors.As(err, &e) && (e.code == "not_found" || e.code == "session_not_found")
@@ -174,7 +174,7 @@ func Dial(ctx context.Context, socketPath string, opts Options) (*Conn, error) {
 // 同じにして、server に古い revision へ落とさせない (応答の形が daemon の読む形と変わる)。落とせない server は
 // 1008 で接続を断り、welcome の Read が理由を添えて失敗する。api_min_revision を知らない古い server は
 // 別の revision を選びうるので、welcome の revision も確かめる。
-// rex-premise: preview.30 api hello の api_min_revision を server が対応できなければ 1008 で閉じる。welcome の api_revision が選ばれた revision
+// rex-premise: preview.37 api hello の api_min_revision を server が対応できなければ 1008 で閉じる。welcome の api_revision が選ばれた revision
 func handshake(ctx context.Context, ws *websocket.Conn, opts Options) (welcome, error) {
 	hello, err := json.Marshal(map[string]any{
 		"type":             "hello",
@@ -215,7 +215,7 @@ func (c *Conn) Call(ctx context.Context, method string, payload, out any) error 
 
 // CallSeq は Call と同じく呼び、応答の seq も返す。seq は server が request を始めた時点でこの接続に積んでいた
 // 最後の event の seq で、結果はそこまでの event を含む。応答はまだ届いていない event を追い越しうる。
-// rex-premise: preview.30 api 応答の seq は request を始めた時点で積んでいた最後の event の seq (無ければ 0)
+// rex-premise: preview.37 api 応答の seq は request を始めた時点で積んでいた最後の event の seq (無ければ 0)
 func (c *Conn) CallSeq(ctx context.Context, method string, payload, out any) (int64, error) {
 	id := strconv.FormatUint(c.nextID.Add(1), 10)
 	ch := make(chan response, 1)

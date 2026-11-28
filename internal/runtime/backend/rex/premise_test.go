@@ -65,9 +65,10 @@ func ngTexts(findings []multiplexer.PremiseFinding) []string {
 }
 
 // 実測どおりの応答なら全部 OK で、打つ method は api-checks.md の「doctor が見る行」と同じ。
+// 自分の session は自分の block から target.resolve で引く (rex は新しい端末に REX_SESSION を入れない)。
 func TestCheckPremises_AllOK(t *testing.T) {
 	f := selfFixtures(t)
-	findings := f.client(staticResolver(nil)).CheckPremises(context.Background(), blockSelfOct18, sessionSelfOct18)
+	findings := f.client(staticResolver(nil)).CheckPremises(context.Background(), blockSelfOct18)
 
 	for _, fd := range findings {
 		if !fd.OK {
@@ -94,6 +95,7 @@ func TestCheckPremises_AllOK(t *testing.T) {
 	}
 	f.assertCalls(t,
 		"server.version",
+		"target.resolve "+blockSelfOct18,
 		"target.resolve "+premise.ProbeMissingBlock,
 		"program_status "+premise.ProbeMissingBlock,
 		"session.list_blocks "+premise.ProbeMissingSession,
@@ -159,7 +161,7 @@ func TestCheckPremises_NamesMissingField(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			f := selfFixtures(t)
 			tt.degrade(t, f)
-			findings := f.client(staticResolver(nil)).CheckPremises(context.Background(), blockSelfOct18, sessionSelfOct18)
+			findings := f.client(staticResolver(nil)).CheckPremises(context.Background(), blockSelfOct18)
 
 			ng := ngTexts(findings)
 			if len(ng) != 1 {
@@ -172,23 +174,11 @@ func TestCheckPremises_NamesMissingField(t *testing.T) {
 	}
 }
 
-// session が分からなければ (REX_SESSION の無い呼び出し) 自分の block から target.resolve で引き、全部を点検する。
-func TestCheckPremises_ResolvesSession(t *testing.T) {
-	f := selfFixtures(t)
-	findings := f.client(staticResolver(nil)).CheckPremises(context.Background(), blockSelfOct18, "")
-	if ng := ngTexts(findings); len(ng) != 0 {
-		t.Errorf("session を引けるのに NG がある: %q", ng)
-	}
-	if calls := f.Calls(); len(calls) < 2 || calls[1] != "target.resolve "+blockSelfOct18 {
-		t.Errorf("calls = %v, want server.version の次に自分の block の target.resolve", calls)
-	}
-}
-
 // 自分の block の session を引けなければ、その理由を NG 1 件で残し、session の要る点検を飛ばす。
 func TestCheckPremises_UnresolvableSession(t *testing.T) {
 	f := selfFixtures(t)
 	f.SetBlocks(sessionSelfOct18)
-	findings := f.client(staticResolver(nil)).CheckPremises(context.Background(), blockSelfOct18, "")
+	findings := f.client(staticResolver(nil)).CheckPremises(context.Background(), blockSelfOct18)
 	ng := ngTexts(findings)
 	if len(ng) != 1 || !strings.Contains(ng[0], "session") {
 		t.Errorf("NG = %q, want session を引けない旨の 1 件", ng)

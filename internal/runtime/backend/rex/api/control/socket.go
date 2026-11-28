@@ -9,7 +9,7 @@ import (
 // SocketPath は control 接続の socket のパスを返す。REX_SERVER (`unix://` の URL、パスは percent-encoded) があれば
 // それを使い、無ければ macOS の既定の場所 (home の下) を返す。daemon や依存図のアプリは rex の外で起きると
 // REX_SERVER を持たないので、既定の場所は CLI に聞かずにここで持つ。
-// rex-premise: preview.30 api REX_SERVER は unix:// の URL。既定の socket は ~/Library/Application Support/rex/server.sock
+// rex-premise: preview.37 api REX_SERVER は unix:// の URL。既定の socket は ~/Library/Application Support/rex/server.sock
 func SocketPath(getenv func(string) string, home string) (string, error) {
 	raw := getenv("REX_SERVER")
 	if raw == "" {

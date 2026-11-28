@@ -38,9 +38,7 @@ func envOf(m map[string]string) func(string) string {
 // rex の中で go test を打つと継承した値が context file に混ざるため。
 func clearMultiplexerEnv(t *testing.T) {
 	t.Helper()
-	for _, key := range []string{"REX_SESSION", "REX_BLOCK"} {
-		t.Setenv(key, "")
-	}
+	t.Setenv("REX_BLOCK", "")
 }
 
 func mustPath(t *testing.T, s Store, sessionID string) string {

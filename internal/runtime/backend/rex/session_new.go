@@ -22,8 +22,8 @@ var rexBinary = wrap.Locate
 // NewSession は新しい rex session を作り、その最初の pane で argv を起こして pane の置き場を返す (spawn.Host)。label は
 // session と window の名前。argv は wrap の包みで起こし、終わったら session を閉じる。異常終了では包みが Enter まで画面を
 // 残すので、block は終わったら閉じる (rex の既定)。login shell の環境で起こし、CLI の session new と同じ環境と引数になる
-// (2026-11-17 に PATH と空白・`$` を含む引数が CLI と同じことを実機で確かめた)。起きたコマンドの REX_SESSION と
-// REX_BLOCK は新しい session と block になる。label の先頭の `-` は外す (CLI が flag と読んで拒んだ名残で、名前を揃える)。
+// (2026-11-17 に PATH と空白・`$` を含む引数が CLI と同じことを実機で確かめた)。起きたコマンドの REX_BLOCK は
+// 新しい session の block になる。label の先頭の `-` は外す (CLI が flag と読んで拒んだ名残で、名前を揃える)。
 // 外して空なら label を付けない (rex の既定の名前になる)。
 func (c *execClient) NewSession(ctx context.Context, label, cwd string, argv []string) (multiplexer.Placement, error) {
 	bin, err := rexBinary()

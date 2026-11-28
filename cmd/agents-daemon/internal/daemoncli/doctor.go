@@ -24,7 +24,7 @@ func newDoctorCmd() *cobra.Command {
 			"rex の control API の応答の形 (自分の block に固定の呼び出しを打ち、コードが読む欄と error の code が変わっていないか)、statusline state、\n" +
 			"設定ファイルの状態、dream の規約 (config.json の dream.policy) が読めるか、daemon の稼働状況、\n" +
 			"peer messaging の socket (CLAUDE_CODE_MESSAGING_SOCKET)、\n" +
-			"解決済みパスを順に確認して報告する。rex の外 (REX_SESSION なし) と、rex の server へ\n" +
+			"解決済みパスを順に確認して報告する。rex の外 (REX_BLOCK なし) と、rex の server へ\n" +
 			"到達できない場合のみ実際に壊れているとみなし exit 1 にする。他の項目は情報提供のみで\n" +
 			"exit 0 (state ファイルがまだ無い、daemon が起動していない等)。",
 		RunE: func(cmd *cobra.Command, args []string) error {

@@ -22,7 +22,7 @@ const (
 )
 
 // describeMethods は rex が打つ block の method。
-// rex-premise: preview.30 api session.describe_block は api.methods と api.events を method 名 / event 名を key にした object で返す
+// rex-premise: preview.37 api session.describe_block は api.methods と api.events を method 名 / event 名を key にした object で返す
 var describeMethods = []string{"program_status", "process", "size", "modes"}
 
 // addFinding は点検 1 件を積む。
@@ -35,23 +35,21 @@ type checker struct {
 }
 
 // Check は自分の block に固定の method を打ち、応答の形が rex の読む形のままかを点検する。点検の失敗は error でなく
-// OK=false の finding にする。locate は spawn の包みが叩く rex を引く (fork しない)。sessionID が空なら blockID から引く。
+// OK=false の finding にする。locate は spawn の包みが叩く rex を引く (fork しない)。自分の session は blockID から引く。
 // 打つ method の一覧は .claude/skills/catching-up-with-rex-changelog/references/api-checks.md が持つ (method を足す・
 // 変えるときはそちらも同じ PR で変える)。
-func Check(ctx context.Context, rex *api.Client, locate func() (string, error), blockID, sessionID string) []multiplexer.PremiseFinding {
+func Check(ctx context.Context, rex *api.Client, locate func() (string, error), blockID string) []multiplexer.PremiseFinding {
 	var out []multiplexer.PremiseFinding
 	c := checker{rex: rex, add: func(ok bool, format string, a ...any) {
 		out = append(out, multiplexer.PremiseFinding{OK: ok, Text: fmt.Sprintf(format, a...)})
 	}}
 	c.checkVersion(ctx)
 	c.checkWrapRex(locate)
-	if sessionID == "" {
-		var err error
-		if sessionID, err = rex.ResolveBlock(ctx, blockID); err != nil {
-			c.add(false, "自分の block (%s) の session を引けないため、block の点検を飛ばした: %v", blockID, err)
-			c.checkMissingTarget(ctx, "")
-			return out
-		}
+	sessionID, err := rex.ResolveBlock(ctx, blockID)
+	if err != nil {
+		c.add(false, "自分の block (%s) の session を引けないため、block の点検を飛ばした: %v", blockID, err)
+		c.checkMissingTarget(ctx, "")
+		return out
 	}
 	c.checkMissingTarget(ctx, sessionID)
 	c.checkProgramStatus(ctx, sessionID, blockID)
@@ -65,7 +63,7 @@ func Check(ctx context.Context, rex *api.Client, locate func() (string, error), 
 // checkVersion は server の版を出し、server が対応する API revision の幅に daemon の revision が入るかを見る。
 // changelog との突き合わせの起点 (last-checked.md の rex_version と built_at と api_revision)。幅を外れると hello が
 // 断られ、daemon は rex を一切操作できない。
-// rex-premise: preview.30 api server.version は rex_version、built_at、api_revision、api_min_revision (0 なら欄無し) を返す
+// rex-premise: preview.37 api server.version は rex_version、built_at、api_revision、api_min_revision (0 なら欄無し) を返す
 func (c checker) checkVersion(ctx context.Context) {
 	m, err := c.rex.Raw(ctx, "server.version", nil)
 	if err != nil {

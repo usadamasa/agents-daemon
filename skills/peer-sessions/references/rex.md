@@ -90,7 +90,7 @@ uuidgen | tr A-Z a-z
 | `label` | タブ (新しい session なら session) の名前を作業名にする | repo の basename |
 | `session_id` | 起こす前に依存の辺を書くとき (SKILL.md「依存の辺を書く」) | spawn が作り、結果で返す |
 | `model` | 定型の横展開で軽いモデルにするとき (SKILL.md「モデルの指定」) | settings の `CLAUDE_CODE_SUBAGENT_MODEL` |
-| `session` | 続きの作業を、控えた `rex_session_id` の session のタブに足すとき | 起こす側の session (`REX_SESSION`) のタブ |
+| `session` | 続きの作業を、控えた `rex_session_id` の session のタブに足すとき | 起こす側の block (`REX_BLOCK`) の居る session のタブ |
 | `new_session` | 利用者が session の分離を明示したとき (`true`。`session` とは併用しない) | 同上 |
 
 足し先の選び方は SKILL.md「足し先の session を決める」。

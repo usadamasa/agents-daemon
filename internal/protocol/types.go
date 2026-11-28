@@ -174,7 +174,7 @@ type EdgeTarget struct {
 	CWD string `json:"cwd,omitempty"`
 }
 
-// SpawnRequest は spawn の stdin。prompt (か prompt_file) を最初のターンにした Claude Code のセッションを、repo を cwd にして rex に起こし、SpawnResult を出す。起こす先は session があればその rex の session のタブ、new_session なら新しい rex の session、どちらも無ければ起こす側の rex の session (REX_SESSION) のタブ。REX_SESSION も無ければ新しい rex の session。
+// SpawnRequest は spawn の stdin。prompt (か prompt_file) を最初のターンにした Claude Code のセッションを、repo を cwd にして rex に起こし、SpawnResult を出す。起こす先は session があればその rex の session のタブ、new_session なら新しい rex の session、どちらも無ければ起こす側の block (REX_BLOCK) の居る rex の session のタブ。REX_BLOCK も無ければ新しい rex の session。
 type SpawnRequest struct {
 	// 新しいセッションの cwd (絶対パス)。
 	Repo string `json:"repo"`
@@ -196,10 +196,8 @@ type SpawnRequest struct {
 	Label string `json:"label,omitempty"`
 }
 
-// TabLabelRequest は tab-label の stdin。rex_block の居る rex の window (タブ) の名前を読み、label があれば付け直して TabLabelResult を出す。session の名前には触れない。
+// TabLabelRequest は tab-label の stdin。rex_block の居る rex の window (タブ) の名前を読み、label があれば付け直して TabLabelResult を出す。session は rex_block から引き、session の名前には触れない。
 type TabLabelRequest struct {
-	// タブのある rex の session の ID (呼び手の REX_SESSION)。
-	RexSession string `json:"rex_session"`
 	// 呼び手の pane の rex の block の ID (REX_BLOCK)。
 	RexBlock string `json:"rex_block"`
 	// 付け直す名前。1 行で 64 文字まで、前後の空白と制御文字を付けない。省くと読むだけ。

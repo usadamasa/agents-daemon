@@ -13,12 +13,13 @@ import (
 	"github.com/usadamasa/agents-daemon/internal/eventlog"
 	"github.com/usadamasa/agents-daemon/internal/protocol"
 	"github.com/usadamasa/agents-daemon/internal/ref"
+	"github.com/usadamasa/agents-daemon/internal/refstate"
 	"github.com/usadamasa/agents-daemon/internal/tasklog"
 	"github.com/usadamasa/agents-daemon/internal/worklog"
 )
 
 // newTaskCmd は `agents-daemon task dismiss` を組み立てる。依存図のアプリが、終了したセッションのタスク (task:) か
-// タスクの無いセッションの作業 (sid:、#368) を一覧から外すのに使う (#337)。入力は stdin の JSON で受け、成功は {} を出す。
+// タスクの無いセッションの作業 (sid:、#368)、済んだ issue / PR (issue: / pr:) を一覧から外すのに使う (#337)。入力は stdin の JSON で受け、成功は {} を出す。
 func newTaskCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "task", Short: "依存図に出るタスクと作業の記録を操作する"}
 	dismiss := &cobra.Command{
@@ -39,8 +40,17 @@ func newTaskCmd() *cobra.Command {
 }
 
 // dismiss は参照のタスク (task:) か作業 (sid:) の記録を消し、結果を出来事のログに書く。viewer は操作したセッション。
-// sid: はそのセッションを端点に持つ辺も消す (#484)。
+// sid: はそのセッションを端点に持つ辺も消す (#484)。済んだ issue / PR は、それを端点に持つ辺を消す。
 func dismiss(stateDir string, tasks tasklog.Store, works worklog.Store, edges edge.Store, viewer, r string, exited func(string, time.Time) error, now time.Time) error {
+	if _, ok := ref.ParseItem(r); ok {
+		removed, err := dismissRef(refstate.New(stateDir), edges, r)
+		if err != nil {
+			_ = eventlog.Record(stateDir, viewer, "ref.dismiss.failed", []string{kv("ref", r), kv("reason", err)}, now)
+			return err
+		}
+		_ = eventlog.Record(stateDir, viewer, "ref.dismiss", []string{kv("ref", r), kv("edges", removed)}, now)
+		return nil
+	}
 	if sessionID, ok := ref.ParseSessionID(r); ok {
 		removed, err := dismissSession(works, edges, sessionID, r, exited)
 		if err != nil {
@@ -51,7 +61,7 @@ func dismiss(stateDir string, tasks tasklog.Store, works worklog.Store, edges ed
 		return nil
 	}
 	sessionID, taskID, ok := ref.ParseTask(r)
-	err := fmt.Errorf("参照 %q は task:<session_id>/<task_id> か sid:<session_id> の形でない", r)
+	err := fmt.Errorf("参照 %q は task:<session_id>/<task_id> か sid:<session_id> か issue / PR の形でない", r)
 	if ok {
 		err = tasks.Dismiss(sessionID, taskID, exited)
 	}
@@ -61,6 +71,24 @@ func dismiss(stateDir string, tasks tasklog.Store, works worklog.Store, edges ed
 	}
 	_ = eventlog.Record(stateDir, viewer, "task.dismiss", []string{kv("from_session", sessionID), kv("task", taskID)}, now)
 	return nil
+}
+
+// dismissRef は写しが merged / closed の issue / PR を端点に持つ辺を消し、消した辺の数を返す。済んだ参照が after に
+// 残る辺は sweep が消さないので、人が外す。済んでいない参照の辺は待ちが生きているので消さない。
+func dismissRef(refs refstate.Store, edges edge.Store, r string) (int, error) {
+	list, err := refs.List()
+	if err != nil {
+		return 0, err
+	}
+	rec, found := list[r]
+	if !found {
+		return 0, fmt.Errorf("%s は済んでいない (状態を引いていない)", r)
+	}
+	if !refstate.Done(rec.State) {
+		return 0, fmt.Errorf("%s は済んでいない (%s)", r, rec.State)
+	}
+	removed, err := edges.RemoveByEndpoint(r)
+	return len(removed), err
 }
 
 // dismissSession は終了したセッションの作業の記録と、そのセッションを端点に持つ辺を消し、消した辺の数を返す。

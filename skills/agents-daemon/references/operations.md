@@ -225,15 +225,19 @@ printf '%s' '{"id":"<id>","status":"open"}' | agents-daemon park set            
 - メモを渡すのはアプリの `Task` と `Issue` (`park hand`)。取る (handed)、送る (生きているセッションの
   入力欄に `tell` で打つか、`spawn` で新しいセッションを起こす)、届かなければ戻す (open) を 1 回で行う
 
-### 終了したセッションのタスクと作業を一覧から外す
+### 終了したセッションのタスクと作業、済んだ issue / PR を一覧から外す
 
 ```sh
 printf '%s' '{"ref":"task:<session_id>/<task_id>"}' | agents-daemon task dismiss   # TaskDismissRequest → {}
 printf '%s' '{"ref":"sid:<session_id>"}' | agents-daemon task dismiss              # セッションの作業と、それを端点に持つ辺
+printf '%s' '{"ref":"pr:<owner>/<repo>#<n>"}' | agents-daemon task dismiss         # 済んだ issue / PR を端点に持つ辺
 ```
 
 - アプリの `Remove` と `Dismiss ended (n)` (1 つずつ呼ぶ) が使う。終了したセッションの
   タスクの記録 (完了しているかを問わない) か作業の記録 (`sid:`、#368) を消す
+- `issue:` / `pr:` は写しが merged / closed のものだけ受け、その参照を端点に持つ辺を消す。daemon の掃除が消すのは
+  済んだ参照を before に持つ辺だけで、PR を出したセッションから PR への辺のように after に残る辺はこれで外す。
+  外した PR へは、外した辺の `sid:` からも PR を出したセッションからも導き直さない
 - セッションの終了は動いている daemon の status.json で確かめ、確かめられなければ消さずに exit 1 で理由を出す
 - 消した記録は戻せない。メモとして残すなら `Memo` (`park adopt`。`sid:` も受ける) を使う
 

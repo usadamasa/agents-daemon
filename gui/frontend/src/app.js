@@ -1374,7 +1374,7 @@ function renderBulk() {
   const dismissBtn = el("dismiss-ended");
   dismissBtn.hidden = ended.length === 0;
   dismissBtn.textContent = `Dismiss ended (${ended.length})`;
-  dismissBtn.title = "Remove the tasks and work of ended sessions from the list";
+  dismissBtn.title = "Remove the tasks and work of ended sessions, and completed issues and PRs, from the list";
   dismissBtn.disabled = state.busy;
   dismissBtn.onclick = () => act(() => dismissAll(ended));
 

@@ -149,7 +149,8 @@ func (s Store) Remove(before, after Endpoint) (Removed, error) {
 	return removed, err
 }
 
-// RemoveByEndpoint は今の参照がどちらかの端点に一致する辺を消し、消した辺を返す。
+// RemoveByEndpoint は今の参照がどちらかの端点に一致する辺を消し、消した辺を返す。「導かない」は記録しない
+// (要る呼び手は Decline を呼ぶ)。
 func (s Store) RemoveByEndpoint(r string) ([]Edge, error) {
 	var removed []Edge
 	err := s.locked(func(dir string) error {

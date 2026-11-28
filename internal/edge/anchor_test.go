@@ -174,6 +174,30 @@ func TestAnchorAlone_自分の待ちと外した組には導かない(t *testing
 	}
 }
 
+// Decline で記録した組は、辺が無くても導かない。RemoveByEndpoint は記録しない (終了したセッションを外した後に
+// resume したセッションの辺は導き直す、#484)。
+func TestDecline_記録した組には導かない(t *testing.T) {
+	s := New(t.TempDir())
+	if _, ok, err := s.AnchorAlone("A", "/a", "", "pr:o/r#1", testNow); !ok || err != nil {
+		t.Fatalf("AnchorAlone() = %v, %v", ok, err)
+	}
+	if removed, err := s.RemoveByEndpoint("pr:o/r#1"); err != nil || len(removed) != 1 {
+		t.Fatalf("RemoveByEndpoint() = %+v, %v", removed, err)
+	}
+	if _, ok, err := s.AnchorAlone("A", "/a", "", "pr:o/r#1", testNow); !ok || err != nil {
+		t.Fatalf("RemoveByEndpoint の後に導かなかった: %v, %v", ok, err)
+	}
+	if _, err := s.RemoveByEndpoint("pr:o/r#1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Decline("B", "pr:O/r#2"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := s.AnchorAlone("B", "/b", "", "pr:o/r#2", testNow); ok || err != nil {
+		t.Errorf("記録した組を導いた: %v, %v", ok, err)
+	}
+}
+
 // 導いた辺の PR を、別の綴り (owner/repo の大文字小文字違い) の辺が待っても、同じ PR として上流ありと見て導き直さない。
 // GitHub の owner/repo は大文字小文字を区別しない。
 func TestAnchor_綴りの違う同じPRには導き直さない(t *testing.T) {

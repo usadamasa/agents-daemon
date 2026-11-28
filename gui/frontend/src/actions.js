@@ -24,6 +24,8 @@ export async function unlink(link, io = defaultIO) {
 
 // noun はノードの呼び名。タスクの無いセッションのノードは work (#368)、辺の端点だけの置き場は session (#484)。
 function noun(node) {
+  if (node.ref_kind === "pr") return "PR";
+  if (node.ref_kind === "issue") return "issue";
   if (node.kind === "ref") return "session";
   return node.kind === "session" ? "work" : "task";
 }

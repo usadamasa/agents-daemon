@@ -5,6 +5,7 @@ import (
 
 	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/daemoncli"
 	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/depscli"
+	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/desktopcli"
 	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/dreamcli"
 	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/jsonflag"
 	"github.com/usadamasa/agents-daemon/cmd/agents-daemon/internal/parkcli"
@@ -50,7 +51,7 @@ func newRootCmd() *cobra.Command {
 	jsonflag.Add(root)
 	// コマンドの組み立ては機能ごとの <family>cli が持ち、ここは登録だけにする。
 	for _, family := range [][]*cobra.Command{
-		daemoncli.Commands(), statuslinecli.Commands(), depscli.Commands(), parkcli.Commands(), dreamcli.Commands(), worktreecli.Commands(),
+		daemoncli.Commands(), statuslinecli.Commands(), depscli.Commands(), parkcli.Commands(), dreamcli.Commands(), worktreecli.Commands(), desktopcli.Commands(),
 	} {
 		root.AddCommand(family...)
 	}

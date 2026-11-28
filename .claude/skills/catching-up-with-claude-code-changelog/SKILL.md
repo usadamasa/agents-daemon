@@ -177,6 +177,7 @@ rg -n -o 'cc-premise: [0-9.]+ [a-z0-9-]+.*' --glob '!tmp/**' . | sort -t' ' -k3,
 | `plugins` | `dream check` が名前空間つきの skill 名を引く `plugins/installed_plugins.json` の形と、plugin の `skills/<name>`・`commands/<name>.md` の置き場 | installed_plugins, installPath, plugin cache, plugin skills, plugin commands |
 | `cli` | `spawn` が組む `claude` の引数 (`--session-id`、`--model`、最初のターンの本文、`--resume` と `--fork-session`) | --session-id, --resume, --fork-session, --model, --name, prompt argument |
 | `remote-control` | セッションの再起動 (restarting-session skill) で Remote Control がどのプロセスに付くか | Remote Control, remote-control, bridge |
+| `desktop` | Desktop で始めたセッションを rex で続ける (`desktop list` / `resume`): 登録簿の `entrypoint`、transcript の置き場と `cwd`、`--resume` と `/desktop` での行き来 | Desktop, claude-desktop, entrypoint, --resume, /desktop, --desktop, teleport, sessions |
 | `input-line` | `tell` が送る前に読む入力欄 (`❯` の行、空なら NBSP、複数行は bracketed paste、次の prompt の提案は薄字で打つと消える) | prompt input, input box, placeholder, paste, bracketed paste, multiline, suggestion, suggested prompt, ghost text, dim |
 
 ## やらないこと

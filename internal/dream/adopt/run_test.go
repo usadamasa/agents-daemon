@@ -40,6 +40,20 @@ func TestRun_RejectsUnhomedCandidate(t *testing.T) {
 	}
 }
 
+// --project は mine と同じく絶対パスも受け、canonical name に直してから candidates を引く (#703)。
+func TestRun_絶対パスの_projectでcandidatesを引く(t *testing.T) {
+	stateDir := t.TempDir()
+	cand := candidates.Candidate{ID: "dream-candidate-x-001", Kind: "unhomed", MemoryPath: "/mem/x.md"}
+	if err := candidates.Write(candidates.Path(stateDir, "-tmp-fxproj", "2026-11-21"), []candidates.Candidate{cand}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Run(Opts{CandidateID: cand.ID, Project: "/tmp/fxproj", Date: "2026-11-21", StateDir: stateDir, DryRun: true})
+	// 候補を引けたら unhomed で拒まれる。引けなければ読み込みの失敗になる。
+	if err == nil || !strings.Contains(err.Error(), "行き先未定") {
+		t.Fatalf("絶対パスの --project で候補を引けていない: %v", err)
+	}
+}
+
 // Run は stdout に出す手順と同じ中身を Plan で返す (--json が出す)。dry-run は branch を作らない。
 func TestRun_ReturnsPlan(t *testing.T) {
 	repo := t.TempDir()

@@ -21,9 +21,13 @@ const sid = "8cb3bbba-74de-4582-b9e3-9c94f6fe2843"
 // host は spawn.Host のテスト用実装。NewSession に渡った引数を残し、pane は常に claude が前景。
 type host struct{ runs [][]string }
 
-func (h *host) NewSession(_ context.Context, _, cwd string, argv []string) (string, error) {
+func (h *host) NewSession(_ context.Context, _, cwd string, argv []string) (multiplexer.Placement, error) {
 	h.runs = append(h.runs, append([]string{cwd}, argv...))
-	return "block:1", nil
+	return multiplexer.Placement{SessionID: "session:1", WindowID: "window:1", PaneID: "block:1"}, nil
+}
+
+func (h *host) NewWindow(context.Context, string, string, string, []string) (multiplexer.Placement, error) {
+	panic("resume はタブを足さない")
 }
 
 func (h *host) PaneGet(_ context.Context, id string) (multiplexer.Pane, error) {
@@ -72,7 +76,7 @@ func TestResume_closed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run() error = %v", err)
 	}
-	if want := (spawn.Result{SessionID: sid, PaneID: "block:1", Foreground: true}); got != want {
+	if want := (spawn.Result{SessionID: sid, PaneID: "block:1", RexSessionID: "session:1", WindowID: "window:1", Foreground: true}); got != want {
 		t.Errorf("run() = %+v, want %+v", got, want)
 	}
 	if want := [][]string{{repo, "claude", "--resume", sid}}; !reflect.DeepEqual(h.runs, want) {

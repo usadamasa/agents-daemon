@@ -30,12 +30,12 @@ func (r Runner) Resume(ctx context.Context, req ResumeRequest) (Result, error) {
 		return Result{}, err
 	}
 	argv := []string{"claude", "--resume", req.SessionID}
-	paneID, err := r.Host.NewSession(ctx, filepath.Base(req.Cwd), req.Cwd, argv)
+	placed, err := r.Host.NewSession(ctx, filepath.Base(req.Cwd), req.Cwd, argv)
 	if err != nil {
 		return Result{}, fmt.Errorf("多重化ツールの session を作れない: %w", err)
 	}
-	res := Result{SessionID: req.SessionID, PaneID: paneID, Foreground: true}
-	if err := r.waitForClaude(ctx, paneID); err != nil {
+	res := Result{SessionID: req.SessionID, PaneID: placed.PaneID, RexSessionID: placed.SessionID, WindowID: placed.WindowID, Foreground: true}
+	if err := r.waitForClaude(ctx, placed.PaneID); err != nil {
 		if ctx.Err() != nil {
 			return Result{}, err
 		}

@@ -15,18 +15,18 @@ const desktopSID = "8cb3bbba-74de-4582-b9e3-9c94f6fe2843"
 // 成功: cwd を cwd にした新しい多重化ツールの session で `claude --resume <id>` を起こし、claude が前景になってから
 // 開いた session ID と pane を返す。新しい session ID は作らない (同じ会話を続けるため)。
 func TestRunner_Resume(t *testing.T) {
-	host := &fakeHost{run: opened, paneGet: claudePane}
+	host := &fakeHost{}
 	r := runner(host)
 	r.NewSessionID = func() (string, error) { t.Fatal("resume で新しい session ID を作った"); return "", nil }
 	got, err := r.Resume(context.Background(), ResumeRequest{SessionID: desktopSID, Cwd: repoHome})
 	if err != nil {
 		t.Fatalf("Resume() error = %v", err)
 	}
-	want := Result{SessionID: desktopSID, PaneID: paneID, Foreground: true}
+	want := Result{SessionID: desktopSID, PaneID: paneID, RexSessionID: createdRexSID, WindowID: windowID, Foreground: true}
 	if got != want {
 		t.Errorf("Resume() = %+v, want %+v", got, want)
 	}
-	wantRuns := []runCall{{label: "claude-config", cwd: repoHome, argv: []string{"claude", "--resume", desktopSID}}}
+	wantRuns := []runCall{{label: "example-repo", cwd: repoHome, argv: []string{"claude", "--resume", desktopSID}}}
 	if !reflect.DeepEqual(host.runs, wantRuns) {
 		t.Errorf("NewSession の引数 = %+v, want %+v", host.runs, wantRuns)
 	}
@@ -34,7 +34,7 @@ func TestRunner_Resume(t *testing.T) {
 
 // claude が前景にならなければ session を残したまま Foreground=false と理由を返す (Run と同じ)。
 func TestRunner_Resume_notForeground(t *testing.T) {
-	host := &fakeHost{run: opened, paneGet: func(id string) (multiplexer.Pane, error) {
+	host := &fakeHost{paneGet: func(id string) (multiplexer.Pane, error) {
 		return multiplexer.Pane{PaneID: id, Agent: "zsh"}, nil
 	}}
 	got, err := runner(host).Resume(context.Background(), ResumeRequest{SessionID: desktopSID, Cwd: repoHome})
@@ -60,7 +60,7 @@ func TestRunner_Resume_rejects(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			host := &fakeHost{run: opened, paneGet: claudePane}
+			host := &fakeHost{}
 			_, err := runner(host).Resume(context.Background(), tc.req)
 			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 				t.Fatalf("Resume() error = %v, want %q を含む", err, tc.wantErr)
@@ -74,7 +74,7 @@ func TestRunner_Resume_rejects(t *testing.T) {
 
 // session を作れなければ error。
 func TestRunner_Resume_newSessionFails(t *testing.T) {
-	host := &fakeHost{run: func(string, string, []string) (string, error) { return "", errors.New("rex down") }}
+	host := &fakeHost{fail: errors.New("rex down")}
 	if _, err := runner(host).Resume(context.Background(), ResumeRequest{SessionID: desktopSID, Cwd: repoHome}); err == nil || !strings.Contains(err.Error(), "rex down") {
 		t.Fatalf("Resume() error = %v, want rex down", err)
 	}

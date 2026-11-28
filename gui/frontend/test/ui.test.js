@@ -1053,7 +1053,7 @@ test("作業のノード: 題そのものを押すとその場で直せ、自動
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
 });
 
-test("辺の端点だけの置き場のカード: 単体で外せてメモにはできず、生きた下流が待つものは一括の数に入らない", async () => {
+test("辺の端点だけの置き場のカード: 単体で外せてメモにはできず、種類の行は Session で、生きた下流が待つものは一括の数に入らない", async () => {
   const data = JSON.parse(fixtureDeps);
   const gamma = data.graph.nodes.find((n) => n.key === "sid:gamma");
   for (const key of ["sid:ghost-idle", "sid:ghost-waited"]) {
@@ -1069,6 +1069,11 @@ test("辺の端点だけの置き場のカード: 単体で外せてメモには
     q('.node[data-key="sid:ghost-waited"]').click();
     const verbs = [...q("#pop").querySelectorAll(".acts .act")].map((b) => b.textContent);
     assert.ok(verbs.includes("Remove") && !verbs.includes("Memo"), verbs.join(" / "));
+    // 種類の行は PR / issue の Ref ではなく Session (#710)。
+    assert.equal(q("#pop .head .ph").textContent, "Session");
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    q('.node[data-key="pr:usadamasa/agents-daemon#254"]').click();
+    assert.equal(q("#pop .head .ph").textContent, "Ref");
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
   } finally {
     await loadDeps(fixtureDeps);

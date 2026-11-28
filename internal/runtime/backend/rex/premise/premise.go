@@ -22,7 +22,7 @@ const (
 )
 
 // describeMethods は rex が打つ block の method。
-// rex-premise: preview.30 api session.describe_block は api.methods と api.events を method 名 / event 名を key にした object で返す
+// rex-premise: preview.37 api session.describe_block は api.methods と api.events を method 名 / event 名を key にした object で返す
 var describeMethods = []string{"program_status", "process", "size", "modes"}
 
 // addFinding は点検 1 件を積む。
@@ -65,7 +65,7 @@ func Check(ctx context.Context, rex *api.Client, locate func() (string, error), 
 // checkVersion は server の版を出し、server が対応する API revision の幅に daemon の revision が入るかを見る。
 // changelog との突き合わせの起点 (last-checked.md の rex_version と built_at と api_revision)。幅を外れると hello が
 // 断られ、daemon は rex を一切操作できない。
-// rex-premise: preview.30 api server.version は rex_version、built_at、api_revision、api_min_revision (0 なら欄無し) を返す
+// rex-premise: preview.37 api server.version は rex_version、built_at、api_revision、api_min_revision (0 なら欄無し) を返す
 func (c checker) checkVersion(ctx context.Context) {
 	m, err := c.rex.Raw(ctx, "server.version", nil)
 	if err != nil {

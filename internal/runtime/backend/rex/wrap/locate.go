@@ -16,7 +16,7 @@ const installedBinDir = "Rex Server.app/Contents/MacOS"
 // `Current` は symlink ではなく build の複製のディレクトリで、更新のたびに中身だけ入れ替わる。
 // 前の数字名の build は次の更新で消え、ダウンロードの途中経過 `.staging-<UUID>/` が残ることがある。
 // rex-premise: preview.30 cli block の PATH は Versions/Current/… の 1 項だけ。Current は更新で中身が入れ替わり、前の build は次の更新で消える
-// rex-premise: preview.30 cli 既定の置き場は ~/Library/Application Support/com.superlogical.rex/RexServer/Versions/{Current,<build>}/Rex Server.app/Contents/MacOS/rex。ログインシェルの PATH には載らない
+// rex-premise: preview.37 cli 既定の置き場は ~/Library/Application Support/com.superlogical.rex/RexServer/Versions/{Current,<build>}/Rex Server.app/Contents/MacOS/rex。ログインシェルの PATH には載らない
 func defaultVersionsDir() (string, bool) {
 	home, err := os.UserHomeDir()
 	if err != nil {

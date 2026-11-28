@@ -21,7 +21,7 @@ import (
 const clientName = "agents-daemon"
 
 // terminalPrefix は terminal の block の method の接頭辞。block の method は `<creator>.<method>` で呼ぶ。
-// rex-premise: preview.30 api block の method は com.superlogical.terminal.<名前> で、session_id と block_id と args を取る
+// rex-premise: preview.37 api block の method は com.superlogical.terminal.<名前> で、session_id と block_id と args を取る
 const terminalPrefix = "com.superlogical.terminal."
 
 // errBlockNotFound は target.resolve が block を見つけられなかったことを表す。
@@ -106,7 +106,7 @@ func (c *Client) ListSessions(ctx context.Context) ([]string, error) {
 }
 
 // ListBlocks は session の block を flavor を問わず返す。
-// rex-premise: preview.30 api session.list_blocks は session の全 window と detached の block を返し、無い session は session_not_found
+// rex-premise: preview.37 api session.list_blocks は session の全 window と detached の block を返し、無い session は session_not_found
 func (c *Client) ListBlocks(ctx context.Context, session string) (wire.BlockList, error) {
 	var blocks wire.BlockList
 	err := c.call(ctx, "session.list_blocks", map[string]any{"session_id": session}, &blocks)
@@ -133,7 +133,7 @@ func (c *Client) ResolveBlock(ctx context.Context, blockID string) (string, erro
 
 // resolve は target.resolve で kind の query 1 つを引き、それを持つ (session なら自身の) session の ID を返す。
 // 文脈を渡さないと全 session を探す (文脈の session を渡すとその中に閉じ、別 session の block が not_found になる)。
-// rex-premise: preview.30 api target.resolve は context が無ければ全 session から引き、target.session_id を返す
+// rex-premise: preview.37 api target.resolve は context が無ければ全 session から引き、target.session_id を返す
 func (c *Client) resolve(ctx context.Context, kind, query string, notFound error) (string, error) {
 	var res struct {
 		Results []struct {
@@ -151,7 +151,7 @@ func (c *Client) resolve(ctx context.Context, kind, query string, notFound error
 	if err := c.call(ctx, "target.resolve", map[string]any{"kinds": []string{kind}, "queries": []string{query}}, &res); err != nil {
 		return "", err
 	}
-	// rex-premise: preview.30 api target.resolve の status は resolved / not_found / ambiguous。知らない値は not_found と読む
+	// rex-premise: preview.37 api target.resolve の status は resolved / not_found / ambiguous。知らない値は not_found と読む
 	if len(res.Results) == 1 && res.Results[0].Status == "ambiguous" {
 		var names []string
 		for _, cand := range res.Results[0].Candidates {
@@ -170,7 +170,7 @@ func (c *Client) resolve(ctx context.Context, kind, query string, notFound error
 }
 
 // ProgramStatus は block の program_status (OSC 7501 の record) を呼ぶ。
-// rex-premise: preview.30 api program_status と process の結果は CLI の block call と同じ形
+// rex-premise: preview.37 api program_status と process の結果は CLI の block call と同じ形
 func (c *Client) ProgramStatus(ctx context.Context, session, blockID string) (wire.ProgramStatus, error) {
 	var ps wire.ProgramStatus
 	err := c.blockCall(ctx, session, blockID, "program_status", nil, &ps)
@@ -193,7 +193,7 @@ func (c *Client) Size(ctx context.Context, session, blockID string) (wire.Size, 
 }
 
 // Modes は block の端末の mode を呼ぶ。modes は idle の terminal を起こさない。
-// rex-premise: preview.30 api modes は screen (primary / alternate) を返す
+// rex-premise: preview.37 api modes は screen (primary / alternate) を返す
 func (c *Client) Modes(ctx context.Context, session, blockID string) (wire.Modes, error) {
 	var m wire.Modes
 	err := c.blockCall(ctx, session, blockID, "modes", nil, &m)

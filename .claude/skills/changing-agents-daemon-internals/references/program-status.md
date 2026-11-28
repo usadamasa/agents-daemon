@@ -8,7 +8,7 @@ record から Agent と `agent_status` を決める条件は `rex/blockstate` �
 ## 状況と record の対応
 
 <!-- cc-premise: 2.1.316 osc7501 state / app / kind の値と画面の状況の対応 (バイナリの builder と実測) -->
-<!-- rex-premise: preview.30 program_status rex は process 名から record を補わない。owner.pid が record に付く -->
+<!-- rex-premise: preview.37 program_status rex は process 名から record を補わない。owner.pid が record に付く -->
 
 2.1.302 のバイナリと実測 (2026-10-17、rex preview.15) から読み、2.1.316 のバイナリで読み直したもの。
 

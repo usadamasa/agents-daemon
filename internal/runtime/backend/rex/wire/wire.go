@@ -10,7 +10,7 @@ import (
 )
 
 // ShellFlavor は terminal の block の flavor。これ以外の block は program_status を持たない。
-// rex-premise: preview.30 api list_blocks の flavor の値
+// rex-premise: preview.37 api list_blocks の flavor の値
 const ShellFlavor = "com.superlogical.terminal.shell"
 
 // ScreenAlternate は modes の screen が alternate screen を指す値。これ以外は primary と見る (output_schema の指示)。
@@ -187,7 +187,7 @@ type BlockEvent struct {
 }
 
 // ProgramStatusChanged と ProgramStatusRemoved は block_event の payload。
-// rex-premise: preview.30 api program_status_changed は {id, record, reason}、program_status_removed は {ids, reason}、process_changed は {generation, foreground}
+// rex-premise: preview.37 api program_status_changed は {id, record, reason}、program_status_removed は {ids, reason}、process_changed は {generation, foreground}
 type (
 	ProgramStatusChanged struct {
 		ID     string `json:"id"`

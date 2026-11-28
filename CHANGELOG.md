@@ -1,5 +1,10 @@
 # Changelog
 
+## [2026.1128.4](https://github.com/usadamasa/agents-daemon/compare/2026.1128.3...2026.1128.4) - 2026-11-28
+
+### Bug Fixes
+- 依存図で隣どうしの箱を入れ替えて辺の交差を減らす by @usadamasa in https://github.com/usadamasa/agents-daemon/pull/760
+
 ## [2026.1128.3](https://github.com/usadamasa/agents-daemon/compare/2026.1128.2...2026.1128.3) - 2026-11-28
 
 ### Features

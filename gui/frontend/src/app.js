@@ -6,7 +6,7 @@ import { Graph } from "./graph.js";
 import { GROUP_W, fitLimit, frameTree, groupByRex, partition, placeGroups, placeRefs, rexTones } from "./column.js";
 import { fitEdges, spreadPorts } from "./ports.js";
 import { findJumps, jumpPath } from "./jumps.js";
-import { PR_STAGE, STATE_LABEL, cardHint, cardText, emphasis, leadStage, markClass, mentionLabel, mentionLines, toneOf } from "./card.js";
+import { PR_STAGE, STATE_LABEL, cardHint, cardText, emphasis, kindWord, leadStage, markClass, mentionLabel, mentionLines, toneOf } from "./card.js";
 import { isStale, kindLabel, lastPlacedAt, stamp } from "./memo.js";
 import { bulkDismissable, canAdopt, canDismiss, canRename, canTell, candidates, isOwnTask, lastSeenAgo, memoDestinations, pathDestination, peerDestinations, spawnDestinations } from "./ops.js";
 import { addBlocker, adopt, askUnlink, discard, discardStale, dismissAll, dismissOne, handOff, handOffTask, instruct, rename, setStatus, start, toParking, unlink } from "./actions.js";
@@ -24,7 +24,6 @@ const POLL_MS = 3000;
 const POLL_HIDDEN_MS = 15000;
 
 const REF_KIND_LABEL = { issue: "issue", pr: "PR" };
-const KIND_LABEL = { task: "Task", todo: "TodoWrite item", session: "Session work", ref: "Ref" };
 // companion が会話から付けた題 (origin inferred) に添える chip の文 (出どころの説明)。直すのは題そのものを押す (OOUI:
 // 対象を選んでから動詞)。最初の prompt の題、人が直した題、記録の無い pane の名前には何も添えない。
 const INFERRED_CHIP = "Auto-titled";
@@ -1144,7 +1143,7 @@ function nodePopup(n) {
   head.className = "head";
   const ph = document.createElement("span");
   ph.className = "ph";
-  ph.textContent = [KIND_LABEL[n.kind] ?? n.kind, n.task_id].filter(Boolean).join(" · ");
+  ph.textContent = [kindWord(n), n.task_id].filter(Boolean).join(" · ");
   const title = titleOf(n);
   if (title.classList.contains("editing")) ph.append(renameHint());
   const chips = document.createElement("div");

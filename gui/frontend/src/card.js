@@ -17,6 +17,15 @@ export const STATE_LABEL = {
   dropped: "Dropped",
 };
 
+const KIND_LABEL = { task: "Task", todo: "TodoWrite item", session: "Session work", ref: "Ref" };
+
+// kindWord は単体ビューの種類の語。辺の端点だけのノード (kind ref) のうち、鍵がセッション (sid: / session:) のものは
+// PR / issue と分けて Session にする。
+export function kindWord(n) {
+  if (n.kind === "ref" && /^(?:sid|session):/.test(n.key)) return "Session";
+  return KIND_LABEL[n.kind] ?? n.kind;
+}
+
 // 丸と chip の色の鍵。無い状態は既定の灰。
 export const STATE_TONE = {
   working: "working",

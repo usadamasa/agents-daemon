@@ -811,7 +811,7 @@ test("メモのファイル: 形を問わず 1 件ずつリンクにし、相対
   }
 });
 
-test("タスクの説明: #123 は同じ文の参照と番号が合えばその repo、合わなければタスクの repo で補う (#562)", async () => {
+test("タスクの説明: #123 は同じ文の参照と番号が合えばその repo と種類、合わなければタスクの repo で補う (#562)", async () => {
   q('.node[data-key="task:alpha/4"]').click();
   const as = [...q("#pop").querySelectorAll("p a.ref")];
   assert.deepEqual(as.map((a) => a.textContent), ["pr:usadamasa/workspace#3", "#3", "#9"]);
@@ -820,7 +820,7 @@ test("タスクの説明: #123 は同じ文の参照と番号が合えばその 
   await flush();
   assert.deepEqual(opened, [
     "https://github.com/usadamasa/workspace/pull/3",
-    "https://github.com/usadamasa/workspace/issues/3",
+    "https://github.com/usadamasa/workspace/pull/3",
     "https://github.com/usadamasa/agents-daemon/issues/9",
   ]);
   escape();

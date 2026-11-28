@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { edgeNoteKind, edgeNoteRepo, refUrl, segments, textNoteRepo } from "../src/links.js";
+import { edgeNoteKind, edgeNoteRepo, refUrl, segments, textNoteKind, textNoteRepo } from "../src/links.js";
 
 const ctx = { githubRepo: () => "o/r", base: "/repo/x" };
 const links = (text, c = ctx) => segments(text, c).filter((s) => s.target !== undefined);
@@ -186,11 +186,29 @@ test("textNoteRepo: 接頭辞の無い owner/repo#N と、URL の中の参照は
   assert.equal(textNoteRepo("https://x.example/pr:a/b#5 と #5", 5, "o/r"), "o/r");
 });
 
-test("textNoteRepo を segments の ctx にすると、#N は同じ文の参照の repo へリンクされる", () => {
-  const text = "pr:usadamasa/agents-daemon#555 と #555";
-  const c = { githubRepo: (k) => textNoteRepo(text, k, "usadamasa/workspace") };
+test("textNoteKind: 同じ文の番号と repo の合う pr: / issue: の参照の種類を返す", () => {
+  assert.equal(textNoteKind("pr:a/b#5 と #5", "a/b", 5), "pr");
+  assert.equal(textNoteKind("issue:a/b#5 と #5", "a/b", 5), "issue");
+});
+
+test("textNoteKind: 番号か repo の合う参照が無いか、pr: と issue: の両方が合えば決めない", () => {
+  assert.equal(textNoteKind("pr:a/b#5 と #6", "a/b", 6), undefined);
+  assert.equal(textNoteKind("pr:a/b#5 と #5", "c/d", 5), undefined);
+  assert.equal(textNoteKind("pr:a/b#5 と issue:a/b#5 と #5", "a/b", 5), undefined);
+  // 接頭辞の無い owner/repo#N と URL の中の参照は、textNoteRepo と同じく数えない。
+  assert.equal(textNoteKind("a/b#5 と #5", "a/b", 5), undefined);
+  assert.equal(textNoteKind("https://x.example/pr:a/b#5 と #5", "a/b", 5), undefined);
+});
+
+test("textNoteRepo と textNoteKind を segments の ctx にすると、#N は同じ文の参照の repo と種類へリンクされる", () => {
+  const text = "pr:usadamasa/agents-daemon#555 と #555 と #7";
+  const c = { githubRepo: (k) => textNoteRepo(text, k, "usadamasa/workspace"), githubKind: (k, repo) => textNoteKind(text, repo, k) };
   assert.deepEqual(
     links(text, c).map((s) => s.target),
-    ["https://github.com/usadamasa/agents-daemon/pull/555", "https://github.com/usadamasa/agents-daemon/issues/555"],
+    [
+      "https://github.com/usadamasa/agents-daemon/pull/555",
+      "https://github.com/usadamasa/agents-daemon/pull/555",
+      "https://github.com/usadamasa/workspace/issues/7",
+    ],
   );
 });

@@ -11,7 +11,7 @@ import { isStale, kindLabel, lastPlacedAt, stamp } from "./memo.js";
 import { bulkDismissable, canAdopt, canDismiss, canRename, canTell, candidates, isOwnTask, lastSeenAgo, memoDestinations, pathDestination, peerDestinations, spawnDestinations } from "./ops.js";
 import { addBlocker, adopt, askUnlink, discard, discardStale, dismissAll, dismissOne, handOff, handOffTask, instruct, rename, setStatus, start, toParking, unlink } from "./actions.js";
 import { openTarget, pickFolder } from "./daemon.js";
-import { edgeNoteKind, edgeNoteRepo, mentionUrl, refUrl, segments, textNoteRepo } from "./links.js";
+import { edgeNoteKind, edgeNoteRepo, mentionUrl, refUrl, segments, textNoteKind, textNoteRepo } from "./links.js";
 import { CONTROLS_BAND, MAX_ZOOM, MIN_ZOOM, centerOffset, clampZoom, fitZoom, overflowCenter, percent, scaledFrame, scrollAfterZoom, stepZoom, topOffset, wheelZoomer } from "./zoom.js";
 import { restore, scrollView, watchUpgrade } from "./restore.js";
 
@@ -101,11 +101,11 @@ async function openLink(target) {
   setTimeout(renderFoot, NOTICE_MS + 100);
 }
 
-// linkContext は text をリンクにする segments の ctx。#123 は text の中の番号の合う参照の repo、無ければ repo の鍵
-// で引く owner/repo で補う。base は相対パスの基準。
+// linkContext は text をリンクにする segments の ctx。#123 は text の中の番号の合う参照の repo と種類、無ければ
+// repo の鍵で引く owner/repo で補う。base は相対パスの基準。
 function linkContext(text, repo, base) {
   const githubRepo = state.data.repos.find((r) => r.repo === repo)?.github_repo;
-  return { githubRepo: (k) => textNoteRepo(text, k, githubRepo), base };
+  return { githubRepo: (k) => textNoteRepo(text, k, githubRepo), githubKind: (k, r) => textNoteKind(text, r, k), base };
 }
 
 // appendLinked は text の URL、issue / PR の参照、ファイルパスをリンクにして parent に足す。

@@ -26,9 +26,7 @@ func runStatuslineCmdIn(t *testing.T, root, configDir, stdin, columns, spendCap 
 	t.Setenv("XDG_STATE_HOME", root)
 	t.Setenv("COLUMNS", columns)
 	t.Setenv("CLAUDE_STATUSLINE_SPEND_CAP", spendCap)
-	for _, key := range []string{"REX_SESSION", "REX_BLOCK"} {
-		t.Setenv(key, "")
-	}
+	t.Setenv("REX_BLOCK", "")
 
 	cmd := newStatuslineCmd()
 	var out, errBuf bytes.Buffer

@@ -17,17 +17,14 @@ import (
 
 func TestRunSimulate_前提が無ければ止める(t *testing.T) {
 	cases := []struct {
-		name    string
-		session string
-		block   string
-		want    string
+		name  string
+		block string
+		want  string
 	}{
-		{"rex の外", "", "", "REX_SESSION"},
-		{"rex の中だが REX_BLOCK が無い", "session:01a12439-0839-7829-a4cb-aeac453570c1", "", "REX_BLOCK"},
+		{"rex の外", "", "REX_BLOCK"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("REX_SESSION", tc.session)
 			t.Setenv("REX_BLOCK", tc.block)
 			var buf bytes.Buffer
 			_, err := Run(context.Background(), &buf, apppath.New(t.TempDir(), "", ""), Options{})
@@ -218,8 +215,8 @@ func assertPaneNotOwned(t *testing.T, err error) {
 // 打ち込むのは避けたい。
 const realRexSimulateEnv = "AGENTS_DAEMON_REAL_REX_SIMULATE"
 
-// TestRunSimulate_RealRex は実 rex に対する統合テスト。rex の block 内 (REX_SESSION と REX_BLOCK
-// あり) で realRexSimulateEnv=1 を付けて打つ。
+// TestRunSimulate_RealRex は実 rex に対する統合テスト。rex の block 内 (REX_BLOCK あり) で
+// realRexSimulateEnv=1 を付けて打つ。
 //
 // これは「simulate が本当に実 pane に対して検知〜送信の経路を通せる」ことを保証する
 // 最終防衛線。実 Claude セッションへ触れないことはここでは確認しない。それは
@@ -229,8 +226,8 @@ func TestRunSimulate_RealRex(t *testing.T) {
 	if os.Getenv(realRexSimulateEnv) != "1" {
 		t.Skipf("%s=1 が無いので skip する", realRexSimulateEnv)
 	}
-	if os.Getenv("REX_SESSION") == "" || os.Getenv("REX_BLOCK") == "" {
-		t.Skip("rex の block 内 (REX_SESSION と REX_BLOCK あり) でないので skip する")
+	if os.Getenv("REX_BLOCK") == "" {
+		t.Skip("rex の block 内 (REX_BLOCK あり) でないので skip する")
 	}
 	if _, err := exec.LookPath("rex"); err != nil {
 		t.Skip("rex が PATH に無いので skip する")

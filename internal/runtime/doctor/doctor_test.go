@@ -73,7 +73,7 @@ func TestRun(t *testing.T) {
 		out := buf.String()
 
 		for _, want := range []string{
-			"backend: rex (REX_SESSION あり)",
+			"backend: rex (REX_BLOCK あり)",
 			"OK: rex server は稼働しています",
 			"pane=p1", "session_id=session-abc",
 			"state ファイルはまだありません",
@@ -223,7 +223,7 @@ func TestRun(t *testing.T) {
 		if err := Run(context.Background(), &buf, doctorInput(client, sessioncontext.MultiplexerKindRex, apppath.New(t.TempDir(), "", ""), fixedNow)); err != nil {
 			t.Fatalf("Run() error = %v", err)
 		}
-		for _, want := range []string{"backend: rex (REX_SESSION あり)", "OK: rex server は稼働しています"} {
+		for _, want := range []string{"backend: rex (REX_BLOCK あり)", "OK: rex server は稼働しています"} {
 			if !strings.Contains(buf.String(), want) {
 				t.Errorf("出力に %q が無い:\n%s", want, buf.String())
 			}
@@ -247,25 +247,24 @@ func TestRun(t *testing.T) {
 type fakePremises struct {
 	findings []multiplexer.PremiseFinding
 	paneID   string
-	session  string
 	calls    int
 }
 
-func (f *fakePremises) CheckPremises(_ context.Context, paneID, sessionID string) []multiplexer.PremiseFinding {
+func (f *fakePremises) CheckPremises(_ context.Context, paneID string) []multiplexer.PremiseFinding {
 	f.calls++
-	f.paneID, f.session = paneID, sessionID
+	f.paneID = paneID
 	return f.findings
 }
 
 func TestReportPremises(t *testing.T) {
-	t.Run("REX_BLOCK があれば自分の block と session で点検し OK と ⚠ で出す", func(t *testing.T) {
+	t.Run("REX_BLOCK があれば自分の block で点検し OK と ⚠ で出す", func(t *testing.T) {
 		checker := &fakePremises{findings: []multiplexer.PremiseFinding{
 			{OK: true, Text: "rex_version: 0.0.1 (built_at 2026-10-16T13:55:32Z)"},
 			{OK: false, Text: "program_status の root record に owner.pid が無い"},
 		}}
 		var buf bytes.Buffer
 		writePremises(&buf, *collectPremises(context.Background(), checker, envOf(map[string]string{
-			"REX_BLOCK": "block:self", "REX_SESSION": "session:self",
+			"REX_BLOCK": "block:self",
 		})))
 		out := buf.String()
 		for _, want := range []string{"OK: rex_version: 0.0.1", "⚠ program_status の root record に owner.pid が無い"} {
@@ -273,8 +272,8 @@ func TestReportPremises(t *testing.T) {
 				t.Errorf("出力に %q が無い:\n%s", want, out)
 			}
 		}
-		if checker.paneID != "block:self" || checker.session != "session:self" {
-			t.Errorf("CheckPremises(%q, %q), want (block:self, session:self)", checker.paneID, checker.session)
+		if checker.paneID != "block:self" {
+			t.Errorf("CheckPremises(%q), want block:self", checker.paneID)
 		}
 	})
 
@@ -307,7 +306,7 @@ func TestRunDoctor_PremisesSection(t *testing.T) {
 	checker := &fakePremises{findings: []multiplexer.PremiseFinding{{OK: true, Text: "無い block は not_found"}}}
 	in := Input{
 		Client: client, Kind: sessioncontext.MultiplexerKindRex, Paths: apppath.New(t.TempDir(), "", ""),
-		Now: time.Now(), Getenv: envOf(map[string]string{"REX_BLOCK": "block:self", "REX_SESSION": "session:self"}),
+		Now: time.Now(), Getenv: envOf(map[string]string{"REX_BLOCK": "block:self"}),
 		Premises: checker,
 	}
 	var buf bytes.Buffer

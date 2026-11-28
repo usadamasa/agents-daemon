@@ -6,15 +6,15 @@ import type { Engine } from 'claude-code/testing'
 // $.model.fork で今の作業に合うかを問い、合わなければ tab-label で付け直す。最初の answer の後に 1 回、以後 4 ターンごと。
 
 const POLL = 20_000
-const REX_SESSION = 'session:s'
+// rex は新しい端末に REX_SESSION を入れず REX_BLOCK だけを入れる。session は tab-label が block から引く。
 const REX_BLOCK = 'block:b'
-const SHARED_ENV = { HOME: '/home/u', AGENTS_DAEMON_SHARED_REX_SESSION: '1', REX_SESSION, REX_BLOCK }
+const SHARED_ENV = { HOME: '/home/u', AGENTS_DAEMON_SHARED_REX_SESSION: '1', REX_BLOCK }
 
 function output(stdout: string, exitCode = 0, stderr = ''): ProcessRunResult {
   return { exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false }
 }
 
-type TabReq = { rex_session: string; rex_block: string; label?: string }
+type TabReq = { rex_block: string; label?: string }
 
 // world は plugin の下の engine の代わり。tab-label は state.label を読み、label があれば付ける (形が外れれば exit 1)。
 // model.fork は state.replies を順に返す。tab-label の stdin と fork の prompt を残す。
@@ -68,7 +68,7 @@ test('最初の answer の後にタブの名前を読み、作業に合わなけ
 
   await answered($)
   await w.clock.advance(POLL)
-  expect(w.state.tabs[0]).toEqual({ rex_session: REX_SESSION, rex_block: REX_BLOCK })
+  expect(w.state.tabs[0]).toEqual({ rex_block: REX_BLOCK })
   expect(w.state.prompts).toHaveLength(1)
   expect(w.state.prompts[0]).toContain('release-restart-verify')
   expect(sets(w.state.tabs)).toEqual(['タブ名の追従'])
@@ -108,9 +108,8 @@ test('2 回目からは 4 ターンごとに問い、そのたびに今の名前
 })
 
 for (const [name, env] of [
-  ['共有のタブの印', { HOME: '/home/u', REX_SESSION, REX_BLOCK }],
-  ['REX_SESSION', { HOME: '/home/u', AGENTS_DAEMON_SHARED_REX_SESSION: '1', REX_BLOCK }],
-  ['REX_BLOCK', { HOME: '/home/u', AGENTS_DAEMON_SHARED_REX_SESSION: '1', REX_SESSION }],
+  ['共有のタブの印', { HOME: '/home/u', REX_BLOCK }],
+  ['REX_BLOCK', { HOME: '/home/u', AGENTS_DAEMON_SHARED_REX_SESSION: '1' }],
 ] as const) {
   test(`${name} が無ければ何もしない`, async ($, on) => {
     const w = world(on, env)

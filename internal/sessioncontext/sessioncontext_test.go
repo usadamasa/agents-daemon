@@ -31,8 +31,8 @@ func TestMultiplexerRefFromEnv(t *testing.T) {
 	}{
 		{
 			name:   "REX_BLOCK があれば rex",
-			env:    map[string]string{"REX_SESSION": "session:01a1", "REX_BLOCK": "block:01a1"},
-			want:   MultiplexerRef{Kind: MultiplexerKindRex, Session: "session:01a1", Block: "block:01a1"},
+			env:    map[string]string{"REX_BLOCK": "block:01a1"},
+			want:   MultiplexerRef{Kind: MultiplexerKindRex, Block: "block:01a1"},
 			wantOK: true,
 		},
 		{
@@ -59,10 +59,10 @@ func TestWrite(t *testing.T) {
 		want string
 	}{
 		{
-			name: "rex の block と session を書く",
-			mux:  &MultiplexerRef{Kind: MultiplexerKindRex, Session: "session:01a1", Block: "block:01a1"},
+			name: "rex の block を書く",
+			mux:  &MultiplexerRef{Kind: MultiplexerKindRex, Block: "block:01a1"},
 			want: `{"session_id":"sess-1","used_percentage":12,"observed_at":` + observed +
-				`,"multiplexer":{"kind":"rex","session":"session:01a1","block":"block:01a1"}}` + "\n",
+				`,"multiplexer":{"kind":"rex","block":"block:01a1"}}` + "\n",
 		},
 		{
 			name: "多重化ツールの外なら multiplexer を書かない",
